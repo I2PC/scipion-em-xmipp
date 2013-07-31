@@ -24,28 +24,37 @@
 # *
 # **************************************************************************
 """
-This sub-package will contains Xmipp3.0 specific protocols
+This modules contains constants related to Xmipp3 protocols
 """
 
-from xmipp3 import *
-from data import *
-from convert import *
-from viewer import XmippViewer
-from plotter import XmippPlotter
-from protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
-from protocol_ctf_micrographs import XmippProtCTFMicrographs
-from protocol_particle_pick import XmippProtParticlePicking 
-from protocol_extract_particles import XmippProtExtractParticles
-from protocol_ml2d import XmippProtML2D
-from protocol_cl2d import XmippProtCL2D
-from protocol_cl2d_align import XmippProtCL2DAlign
-from protocol_kerdensom import XmippProtKerdensom
-from protocol_rotational_spectra import XmippProtRotSpectra 
-from protocol_ml3d import XmippProtML3D
-from protocol_projmatch import XmippProtProjMatch
-from protocol_filters import XmippProtFourierFilter
-from protocol_filters import XmippProtGaussianFilter
-from protocol_filters import XmippProtMask, XmippProtResize
+#------------------ Constants values --------------------------------------
 
-# Wizards
-from wizard import *
+MASK_NONE = 0
+MASK_RAISED_COSINE = 0
+MASK_CIRCULAR = 1
+MASK_FILE = 2
+
+MASK_FILL_VALUE = 0
+MASK_FILL_MIN = 1
+MASK_FILL_MAX = 2
+MASK_FILL_AVG = 3
+
+PROJECT_FOURIER = 0
+PROJECT_REALSPACE = 1
+
+KERNEL_NEAREST = 0
+KERNEL_LINEAR = 1
+KERNEL_BSPLINE = 2
+
+SELECT_NONE = 0
+SELECT_MAXCC = 1
+SELECT_PERCENTAGE = 2
+SELECT_CLASSPERCENTAGE = 3
+
+RECONSTRUCT_FOURIER = 0
+RECONSTRUCT_ART = 1
+RECONSTRUCT_WBP = 2
+
+FILTER_LOW_PASS = 0
+FILTER_HIGH_PASS = 1
+FILTER_BAND_PASS = 2
