@@ -27,20 +27,31 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.viewer import DataView, ChimeraView
-from pyworkflow.em.packages.xmipp3.viewer import XmippViewer
+from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
+from pyworkflow.em.packages.xmipp3.viewer import XmippViewer, ObjectView, DataView
+import pyworkflow.em.showj as showj
+import xmipp
 
-from protocol_pseudoatoms import XmippProtConvertToPseudoAtoms
+from protocol_reconstruct_swarm import XmippProtReconstructSwarm
 
-
-
-class XmippPseudoAtomsViewer(XmippViewer):
-    """ Visualize the output of protocol Convert to PseudoAtoms """
-    _label = 'pseudoatoms viewer'
-    _targets = [XmippProtConvertToPseudoAtoms]
+class XmippReconstructSwarmViewer(XmippViewer):
+    """ Visualize the output of protocol reconstruct swarm """
+    _label = 'viewer reconstruct swarm'
+    _targets = [XmippProtReconstructSwarm]
+    _environments = [DESKTOP_TKINTER, WEB_DJANGO]
     
-    def _visualize(self, obj, **args):
-        self._views.append(ChimeraView(obj.outputPdb._chimeraScript))
-        self._views.append(DataView(obj._getExtraPath(
-            'pseudoatoms_approximation.mrc')))
+    def __init__(self, **args):
+        XmippViewer.__init__(self, **args)
 
+    def _visualize(self, obj, **args):
+        import os
+        fnVolume = self.protocol._getExtraPath("volumeAvg.vol")
+        if os.path.exists(fnVolume):
+            fnDir = self.protocol._getExtraPath()
+            samplingRate=self.protocol.readInfoField(fnDir,"sampling",xmipp.MDL_SAMPLINGRATE)
+            self._views.append(ObjectView(self._project, None, fnVolume, viewParams={showj.RENDER: 'image', showj.SAMPLINGRATE: samplingRate}))
+        
+        fnSwarm = self.protocol._getExtraPath("swarm.xmd")
+        if os.path.exists(fnSwarm):
+            self._views.append(DataView('bestByVolume@' + fnSwarm, viewParams = {showj.MODE: showj.MODE_MD}))
+        
