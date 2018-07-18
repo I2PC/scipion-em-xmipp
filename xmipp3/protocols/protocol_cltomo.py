@@ -27,6 +27,7 @@
 from pyworkflow.em import *  
 from constants import *
 from convert import writeSetOfVolumes, readSetOfClassesVol, readSetOfVolumes
+
 from xmipp import MetaData
 from xmipp3 import getEnviron
 

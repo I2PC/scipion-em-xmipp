@@ -29,6 +29,8 @@ This modules contains constants related to Xmipp3 protocols
 
 # ------------------ Constants values --------------------------------------
 
+XMIPP_HOME = 'XMIPP_HOME'
+
 MASK_FILL_VALUE = 0
 MASK_FILL_MIN = 1
 MASK_FILL_MAX = 2
@@ -92,12 +94,14 @@ RECONSTRUCT_WSLART = 1
 SAME_AS_PICKING = 0
 OTHER = 1
 
-SYM_URL = \
-    "[[http://xmipp.i2pc.es/twiki/bin/view/Xmipp/Symmetry][Symmetry]]"
+SYM_URL = "[[http://xmipp.i2pc.es/twiki/bin/view/Xmipp/Symmetry][Symmetry]]"
 
 # symmetry dictionary
-from pyworkflow.em.constants import SYM_CYCLIC, SYM_DIHEDRAL, SYM_TETRAHEDRAL, \
-    SYM_OCTAHEDRAL, SYM_I222, SYM_I222r, SYM_In25, SYM_In25r
+#FIXME: This should not be imported here and exposed as this module constants
+from pyworkflow.em.constants import (
+    SYM_CYCLIC, SYM_DIHEDRAL, SYM_TETRAHEDRAL, SYM_OCTAHEDRAL, SYM_I222,
+    SYM_I222r, SYM_In25, SYM_In25r)
+
 XMIPP_SYM_NAME = {}
 XMIPP_SYM_NAME[SYM_CYCLIC] = 'Cn'
 XMIPP_SYM_NAME[SYM_DIHEDRAL] = 'Dn'

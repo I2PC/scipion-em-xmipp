@@ -25,42 +25,44 @@
 # **************************************************************************
 
 import os
+from os.path import dirname, join
 
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO, CommandView
 from pyworkflow.em.data import *
 from pyworkflow.em.protocol import *
 
-from xmipp3 import getXmippPath, getEnviron
 from pyworkflow.em.data_tiltpairs import MicrographsTiltPair, ParticlesTiltPair, CoordinatesTiltPair
-from convert import *
-from os.path import dirname, join
 from pyworkflow.utils import makePath, runJob, copyTree, cleanPath
 import pyworkflow as pw
-import xmipp
+from pyworkflow.em.showj import *
 import pyworkflow.gui.dialog as dialog
 
-from protocol_cl2d_align import XmippProtCL2DAlign
-from protocol_cl2d import XmippProtCL2D
-from protocol_compare_reprojections import XmippProtCompareReprojections
-from protocol_compare_angles import XmippProtCompareAngles
-from protocol_ctf_discrepancy import XmippProtCTFDiscrepancy
-from protocol_extract_particles import XmippProtExtractParticles
-from protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
-from protocol_helical_parameters import XmippProtHelicalParameters
-from protocol_kerdensom import XmippProtKerdensom
-from protocol_particle_pick_automatic import XmippParticlePickingAutomatic
-from protocol_particle_pick import XmippProtParticlePicking
-from protocol_particle_pick_pairs import XmippProtParticlePickingPairs
-from protocol_preprocess import XmippProtPreprocessVolumes
-from protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
-from protocol_rotational_spectra import XmippProtRotSpectra
-from protocol_screen_particles import XmippProtScreenParticles
-from protocol_ctf_micrographs import XmippProtCTFMicrographs
-from pyworkflow.em.showj import *
-from protocol_validate_nontilt import XmippProtValidateNonTilt
-from protocol_multireference_alignability import XmippProtMultiRefAlignability
-from protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
-from protocol_movie_gain import XmippProtMovieGain
+import xmipp
+import xmipp3
+from xmipp3.convert import *
+
+# from protocol_cl2d_align import XmippProtCL2DAlign
+# from protocol_cl2d import XmippProtCL2D
+# from protocol_compare_reprojections import XmippProtCompareReprojections
+# from protocol_compare_angles import XmippProtCompareAngles
+# from protocol_ctf_discrepancy import XmippProtCTFDiscrepancy
+# from protocol_extract_particles import XmippProtExtractParticles
+# from protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
+# from protocol_helical_parameters import XmippProtHelicalParameters
+# from protocol_kerdensom import XmippProtKerdensom
+# from protocol_particle_pick_automatic import XmippParticlePickingAutomatic
+# from protocol_particle_pick import XmippProtParticlePicking
+# from protocol_particle_pick_pairs import XmippProtParticlePickingPairs
+# from protocol_preprocess import XmippProtPreprocessVolumes
+# from protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
+# from protocol_rotational_spectra import XmippProtRotSpectra
+# from protocol_screen_particles import XmippProtScreenParticles
+# from protocol_ctf_micrographs import XmippProtCTFMicrographs
+#
+# from protocol_validate_nontilt import XmippProtValidateNonTilt
+# from protocol_multireference_alignability import XmippProtMultiRefAlignability
+# from protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
+# from protocol_movie_gain import XmippProtMovieGain
 
 
 class XmippViewer(Viewer):
@@ -80,22 +82,22 @@ class XmippViewer(Viewer):
                 SetOfImages,
                 SetOfMovies,
                 SetOfNormalModes,
-                SetOfPDBs,
-                XmippProtCompareReprojections,
-                XmippProtCompareAngles,
-                XmippParticlePickingAutomatic,
-                XmippProtExtractParticles,
-                XmippProtExtractParticlesPairs,
-                XmippProtKerdensom,
-                ProtParticlePicking,
-                XmippProtParticlePickingPairs,
-                XmippProtRotSpectra,
-                XmippProtScreenParticles,
-                XmippProtCTFMicrographs,
-                XmippProtValidateNonTilt,
-                XmippProtAssignmentTiltPair,
-                XmippProtMultiRefAlignability,
-                XmippProtMovieGain
+                SetOfPDBs #,
+                # XmippProtCompareReprojections,
+                # XmippProtCompareAngles,
+                # XmippParticlePickingAutomatic,
+                # XmippProtExtractParticles,
+                # XmippProtExtractParticlesPairs,
+                # XmippProtKerdensom,
+                # ProtParticlePicking,
+                # XmippProtParticlePickingPairs,
+                # XmippProtRotSpectra,
+                # XmippProtScreenParticles,
+                # XmippProtCTFMicrographs,
+                # XmippProtValidateNonTilt,
+                # XmippProtAssignmentTiltPair,
+                # XmippProtMultiRefAlignability,
+                # XmippProtMovieGain
                 ]
 
     def __init__(self, **kwargs):

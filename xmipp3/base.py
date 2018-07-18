@@ -1,9 +1,9 @@
 # **************************************************************************
 # *
-# * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
+# * Authors:     J.M. De la Rosa Trevin [1]
 # *              Adrian Quintana (aquintana@cnb.csic.es)
 # *            
-# * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * [1] SciLifeLab, Stockholm University
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -29,21 +29,23 @@ from __future__ import print_function
 import os
 import sys
 import platform
-from os.path import join
 from collections import OrderedDict
-from constants import *
+from .constants import *
 
 import xmipp
 import pyworkflow.dataset as ds
 from pyworkflow.object import ObjectWrap
 
-from pyworkflow.utils import Environ, runJob
-from pyworkflow.dataset import COL_RENDER_CHECKBOX, COL_RENDER_TEXT, COL_RENDER_IMAGE,\
-    COL_RENDER_VOLUME
+from pyworkflow.dataset import (
+    COL_RENDER_CHECKBOX, COL_RENDER_TEXT, COL_RENDER_IMAGE, COL_RENDER_VOLUME)
 
-from xmipp import MetaData, MetaDataInfo, MDL_IMAGE, MDL_IMAGE1, MDL_IMAGE_REF, MDL_ANGLE_ROT, MDL_ANGLE_TILT, MDL_ANGLE_PSI, MDL_REF, \
-        MDL_SHIFT_X, MDL_SHIFT_Y, MDL_FLIP, MD_APPEND, MDL_MAXCC, MDL_ENABLED, MDL_CTF_MODEL, MDL_SAMPLINGRATE, DT_DOUBLE, \
-        MDL_ANGLE_ROT, MDL_SHIFT_Z, Euler_angles2matrix, Image, FileName, getBlocksInMetaDataFile, label2Str
+from xmipp import (
+    MetaData, MetaDataInfo, MDL_IMAGE, MDL_IMAGE1, MDL_IMAGE_REF,
+    MDL_ANGLE_ROT, MDL_ANGLE_TILT, MDL_ANGLE_PSI, MDL_REF, MDL_SHIFT_X,
+    MDL_SHIFT_Y, MDL_FLIP, MD_APPEND, MDL_MAXCC, MDL_ENABLED, MDL_CTF_MODEL,
+    MDL_SAMPLINGRATE, DT_DOUBLE, MDL_ANGLE_ROT, MDL_SHIFT_Z,
+    Euler_angles2matrix, Image, FileName, getBlocksInMetaDataFile, label2Str)
+
 
 LABEL_TYPES = { 
                xmipp.LABEL_SIZET: long,
@@ -52,53 +54,22 @@ LABEL_TYPES = {
                xmipp.LABEL_BOOL: bool              
                }
 
-def getEnviron(xmippFirst=True):
-    """ Create the needed environment for Xmipp programs. """
-    environ = Environ(os.environ)
-    pos = Environ.BEGIN if xmippFirst else Environ.END
-    environ.update({
-            'PATH': join(os.environ['XMIPP_HOME'], 'bin'),
-            'LD_LIBRARY_PATH': join(os.environ['XMIPP_HOME'], 'lib'),
-            }, position=pos)
-    if  os.environ['CUDA']!='False':#environ variables are strings not booleans
-        environ.update({
-            'LD_LIBRARY_PATH': os.environ['NVCC_LIBDIR']
-            }, position=pos)
 
-    return environ
+def getXmippPath(*paths):
+    '''Return the path the the Xmipp installation folder
+    if a subfolder is provided, will be concatenated to the path'''
+    if os.environ.has_key(XMIPP_HOME):
+        return os.path.join(os.environ[XMIPP_HOME], *paths)
+    else:
+        raise Exception('XMIPP_HOME environment variable not set')
 
-def runXmippProgram(program, args=""):
-    """ Internal shortcut function to launch a Xmipp program. """
-    runJob(None, program, args, env=getEnviron())
-    
+
 def getLabelPythonType(label):
     """ From xmipp label to python variable type """
     labelType = xmipp.labelType(label)
     return LABEL_TYPES.get(labelType, str)
 
-def getXmippPath(*paths):
-    '''Return the path the the Xmipp installation folder
-    if a subfolder is provided, will be concatenated to the path'''
-    if os.environ.has_key('XMIPP_HOME'):
-        return os.path.join(os.environ['XMIPP_HOME'], *paths)  
-    else:
-        raise Exception('XMIPP_HOME environment variable not set')
-    
-def getMatlabEnviron(*toolPaths):
-    """ Return an Environment prepared for launching Matlab
-    scripts using the Xmipp binding.
-    """
-    env = getEnviron()
-    env.set('PATH', os.environ['MATLAB_BINDIR'], Environ.BEGIN)
-    env.set('LD_LIBRARY_PATH', os.environ['MATLAB_LIBDIR'], Environ.BEGIN)
-    for toolpath in toolPaths:
-        env.set('MATLABPATH', toolpath, Environ.BEGIN)
-    env.set('MATLABPATH', os.path.join(os.environ['XMIPP_HOME'], 'libraries', 'bindings', 'matlab'),
-            Environ.BEGIN)
-    
-    return env
-    
-    
+
 class XmippProtocol():
     """ This class groups some common functionalities that
     share some Xmipp protocols, like converting steps.
@@ -405,7 +376,6 @@ class XmippDataSet(ds.DataSet):
             return COL_RENDER_CHECKBOX
         
         return COL_RENDER_TEXT
-        
         
     def _convertLabelToColumn(self, label, md):
         """ From an Xmipp label, create the corresponding column. """
@@ -763,7 +733,8 @@ def getArchitecture():
         if a in arch:
             return a
     return 'NO_ARCH' 
-    
+
+
 def getJavaIJappCmd(memory, appName, args, batchMode=False):
     '''Launch an Java application based on ImageJ '''
     if len(memory) == 0:
@@ -779,15 +750,16 @@ def getJavaIJappCmd(memory, appName, args, batchMode=False):
         cmd += " &"
     return cmd
     
+
 def runJavaIJapp(memory, appName, args, batchMode=True):
     cmd = getJavaIJappCmd(memory, appName, args, batchMode)
-    print (cmd)
+    print(cmd)
     os.system(cmd)
     
+
 def runJavaJar(memory, jarName, args, batchMode=True):
     jarPath = getXmippPath(jarName)
     runJavaIJapp(memory, '-jar %s' % jarPath, args, batchMode)
-
 
 
 class ScriptShowJ(ScriptAppIJ):

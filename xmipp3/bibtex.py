@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 # **************************************************************************
 # *
-# * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
+# * Authors:     J.M. De la Rosa Trevin (delarosatrevin@scilifelab.se) [1]
 # *
-# * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * [1] SciLifeLab, Stockholm University
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -25,10 +25,6 @@
 # *
 # **************************************************************************
 """
-Bibtex string file for Xmipp package.
-"""
-
-_bibtexStr = """
 
 @article{Abrishami2013,
 author = {Abrishami, V. and Zaldívar-Peraza, A. and de la Rosa-Trevín, J. M. and Vargas, J. and Otón, J. and Marabini, R. and Shkolnisky, Y. and Carazo, J. M. and Sorzano, C. O. S.},
@@ -575,8 +571,3 @@ keywords = ""
 
 """
 
-
-
-from pyworkflow.utils import parseBibTex
-
-_bibtex = parseBibTex(_bibtexStr)  

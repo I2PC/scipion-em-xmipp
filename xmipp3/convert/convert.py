@@ -36,12 +36,12 @@ from collections import OrderedDict
 from itertools import izip
 import numpy
 
-import xmipp
-from pyworkflow.em.packages.xmipp3.utils import iterMdRows
-from xmipp3 import XmippMdRow, getLabelPythonType, RowMetaData
-from pyworkflow.em import *
 from pyworkflow.utils.path import replaceBaseExt, removeExt, findRootFrom
 import pyworkflow.em.metadata as md
+import xmipp
+from xmipp3 import XmippMdRow, getLabelPythonType, RowMetaData
+from xmipp3.utils import iterMdRows
+from pyworkflow.em import *
 
 
 # This dictionary will be used to map
