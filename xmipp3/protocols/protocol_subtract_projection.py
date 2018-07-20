@@ -190,9 +190,9 @@ class XmippProtSubtractProjection(ProtOperateParticles):
             if self.projType == self.CORRECT_NONE:
                 pass
             elif self.projType == self.CORRECT_FULL_CTF:
-                projection.applyCTF(md, samplingRate, id, False)
+                applyCTF(projection, md, samplingRate, id, False)
             elif self.projType == self.CORRECT_PHASE_FLIP:
-                projection.applyCTF(md, samplingRate, id, True)
+                applyCTF(projection, md, samplingRate, id, True)
             else:
                 raise Exception("ERROR: Unknown projection mode: %d" % self.projType)
 

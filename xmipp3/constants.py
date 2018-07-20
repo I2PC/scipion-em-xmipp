@@ -94,7 +94,7 @@ RECONSTRUCT_WSLART = 1
 SAME_AS_PICKING = 0
 OTHER = 1
 
-SYM_URL = "[[http://xmipp.i2pc.es/twiki/bin/view/Xmipp/Symmetry][Symmetry]]"
+SYM_URL = "[[http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry][Symmetry]]"
 
 # symmetry dictionary
 #FIXME: This should not be imported here and exposed as this module constants
