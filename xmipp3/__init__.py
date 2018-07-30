@@ -39,6 +39,10 @@ class Plugin(pyworkflow.em.Plugin):
     _supportedVersions = []
 
     @classmethod
+    def _defineVariables(cls):
+        cls._defineEmVar(XMIPP_HOME, 'xmipp')
+
+    @classmethod
     def getEnviron(cls, xmippFirst=True):
         """ Create the needed environment for Xmipp programs. """
         environ = pwutils.Environ(os.environ)
