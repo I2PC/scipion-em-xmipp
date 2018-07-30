@@ -24,7 +24,6 @@
 # *
 # **************************************************************************
 
-import os
 import pyworkflow.em
 import pyworkflow.utils as pwutils
 from .constants import XMIPP_HOME
@@ -33,12 +32,11 @@ from base import *
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
 
-# The following class is required for Scipion to detect this Python module
-# as a Scipion Plugin. It needs to specify the PluginMeta __metaclass__
-# Some function related to the underlying package binaries need to be
-# implemented
-class Plugin:
-    __metaclass__ = pyworkflow.em.PluginMeta
+
+class Plugin(pyworkflow.em.Plugin):
+    _homeVar = XMIPP_HOME
+    _pathVars = [XMIPP_HOME]
+    _supportedVersions = []
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
@@ -57,29 +55,7 @@ class Plugin:
 
         return environ
 
-    @classmethod
-    def getActiveVersion(cls):
-        """ Return the version of the Relion binaries that is currently active.
-        In the current implementation it will be inferred from the RELION_HOME
-        variable, so it should contain the version number in it. """
-        return ''
-
-    @classmethod
-    def getSupportedVersions(cls):
-        """ Return the list of supported binary versions. """
-        return []
-
-    @classmethod
-    def validateInstallation(cls):
-        """ This function will be used to check if Xmipp binaries are
-        properly installed. """
-        environ = cls.getEnviron()
-        missingPaths = ["%s: %s" % (var, environ[var])
-                        for var in [XMIPP_HOME]
-                        if not os.path.exists(environ[var])]
-
-        return (["Missing variables:"] + missingPaths) if missingPaths else []
-
+    #TODO: Standardize to just: runProgram
     @classmethod
     def runXmippProgram(cls, program, args=""):
         """ Internal shortcut function to launch a Xmipp program. """
@@ -99,3 +75,6 @@ class Plugin:
                 pwutils.Environ.BEGIN)
 
         return env
+
+
+pyworkflow.em.Domain.registerPlugin(__name__)
