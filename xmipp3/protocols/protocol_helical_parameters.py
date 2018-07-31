@@ -29,7 +29,7 @@ import pyworkflow.object as pwobj
 from pyworkflow.em import *  
 from xmipp import MetaData, MDL_ANGLE_ROT, MDL_SHIFT_Z
 from xmipp3 import HelicalFinder
-from pyworkflow.em.packages.xmipp3.convert import getImageLocation
+from xmipp3.convert import getImageLocation
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
 

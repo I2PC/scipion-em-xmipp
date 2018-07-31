@@ -28,8 +28,8 @@ from pyworkflow.em import *
 from pyworkflow.utils import *  
 from math import floor
 from xmipp3 import XmippProtocol
-from convert import createXmippInputVolumes, readSetOfVolumes, locationToXmipp
-from pyworkflow.em.packages.xmipp3.convert import getImageLocation
+from xmipp3.convert import createXmippInputVolumes, readSetOfVolumes, locationToXmipp
+from xmipp3.convert import getImageLocation
 import pyworkflow.em.metadata as md
 from os.path import exists 
 

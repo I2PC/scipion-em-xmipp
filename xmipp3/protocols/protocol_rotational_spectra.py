@@ -33,8 +33,8 @@ from pyworkflow.gui.plotter import Plotter
 from pyworkflow.protocol.params import EnumParam, IntParam
 import xmipp, xmipp3
 
-from protocol_kerdensom import KendersomBaseClassify
-from convert import readSetOfClasses2D
+from xmipp3.protocols.protocol_kerdensom import KendersomBaseClassify
+from xmipp3.convert import readSetOfClasses2D
 
         
 class XmippProtRotSpectra(KendersomBaseClassify):

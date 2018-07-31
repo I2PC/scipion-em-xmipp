@@ -23,7 +23,7 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-from pyworkflow.em.packages.xmipp3.nma.data import PathData
+from xmipp3.protocols.nma.data import PathData
 """
 This module implement the wrappers aroung Xmipp CL2D protocol
 visualization program.
@@ -40,7 +40,7 @@ from pyworkflow.utils.process import runJob
 from pyworkflow.em.viewer import VmdView
 from pyworkflow.gui.browser import FileBrowserWindow
 
-from protocol_nma_dimred import XmippProtDimredNMA, DIMRED_MAPPINGS
+from xmipp3.protocols.nma.protocol_nma_dimred import XmippProtDimredNMA, DIMRED_MAPPINGS
 from data import Point, Data
 from plotter import XmippNmaPlotter
 from gui import ClusteringWindow, TrajectoriesWindow
@@ -167,7 +167,7 @@ class XmippDimredNMAViewer(ProtocolViewer):
         partSet.write()
         partSet.close()
                 
-        from protocol_batch_cluster import BatchProtNMACluster
+        from xmipp3.protocols.protocol_batch_cluster import BatchProtNMACluster
         newProt = project.newProtocol(BatchProtNMACluster)
         clusterName = self.clusterWindow.getClusterName()
         if clusterName:

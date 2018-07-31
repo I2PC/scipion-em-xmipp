@@ -27,7 +27,7 @@
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pyworkflow.em.protocol import ProtImportParticles, ProtImportVolumes, ProtSubSet
-from pyworkflow.em.packages.xmipp3 import XmippProtMultiRefAlignability
+from xmipp3.protocol import XmippProtMultiRefAlignability
 
 
 class TestMultireferenceAlignability(BaseTest):

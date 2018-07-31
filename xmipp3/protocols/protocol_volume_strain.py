@@ -32,7 +32,7 @@ from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam
 from pyworkflow.em.protocol.protocol import EMProtocol
 from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
 from pyworkflow.utils import cleanPath
-from xmipp3 import getMatlabEnviron
+from xmipp3 import Plugin
 # import xmipp
 
         

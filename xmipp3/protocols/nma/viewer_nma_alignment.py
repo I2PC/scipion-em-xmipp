@@ -34,7 +34,7 @@ from os.path import join, dirname, basename
 from pyworkflow.viewer import (ProtocolViewer, CommandView,
                                DESKTOP_TKINTER, WEB_DJANGO)
 from pyworkflow.protocol.params import StringParam, BooleanParam
-from protocol_nma_alignment import XmippProtAlignmentNMA
+from xmipp3.protocols.nma.protocol_nma_alignment import XmippProtAlignmentNMA
 from data import Point, Data
 import xmipp
 

@@ -30,7 +30,7 @@ import unittest, sys
 from pyworkflow.em import *
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 from pyworkflow.em.protocol import ProtImportVolumes, ProtImportMask
-from pyworkflow.em.packages.xmipp3 import XmippProtMultipleFSCs
+from xmipp3.protocols import XmippProtMultipleFSCs
 
 
 

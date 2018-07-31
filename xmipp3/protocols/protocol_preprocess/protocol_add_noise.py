@@ -33,7 +33,7 @@ from pyworkflow.protocol.params import (PointerParam, EnumParam, FloatParam, LEV
 from pyworkflow.em.protocol.protocol_3d import ProtRefine3D
 from pyworkflow.em.data import Volume
 import pyworkflow.em as em
-from pyworkflow.em.packages.xmipp3.convert import writeSetOfParticles 
+from xmipp3.convert import writeSetOfParticles
 
 
 

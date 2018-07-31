@@ -30,7 +30,7 @@ visualization program.
 
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.em import *
-from protocol_cltomo import XmippProtCLTomo
+from xmipp3.protocols.protocol_cltomo import XmippProtCLTomo
 from pyworkflow.gui.text import *
 from pyworkflow.protocol.params import LabelParam
 from pyworkflow.gui.dialog import showError, showWarning

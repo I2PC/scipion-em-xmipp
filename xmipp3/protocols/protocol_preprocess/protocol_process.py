@@ -27,8 +27,8 @@
 from pyworkflow.em.constants import ALIGN_NONE
 from pyworkflow.em.protocol import ProtProcessParticles, ProtPreprocessVolumes
 from pyworkflow.em.data import Volume
-from ..convert import writeSetOfParticles, xmippToLocation
-from ..convert import writeSetOfVolumes, getImageLocation
+from ...convert import writeSetOfParticles, xmippToLocation
+from ...convert import writeSetOfVolumes, getImageLocation
 import pyworkflow.em.metadata as md
 
 

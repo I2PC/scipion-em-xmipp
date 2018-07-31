@@ -30,7 +30,9 @@ from os.path import join, basename
 
 from pyworkflow.em import *
 from pyworkflow.tests import *
-from pyworkflow.em.packages.xmipp3 import *
+from xmipp3.base import *
+from xmipp3.convert import *
+from xmipp3.constants import *
 from pyworkflow.protocol import getProtocolFromDb
 import pyworkflow.utils as pwutils
 

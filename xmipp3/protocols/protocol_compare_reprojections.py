@@ -34,13 +34,13 @@ from pyworkflow.em.constants import ALIGN_PROJ
 from pyworkflow.utils.path import cleanPath
 from pyworkflow.em.protocol import ProtAnalysis3D
 from pyworkflow.em.data import SetOfClasses2D, Image, SetOfAverages, SetOfParticles, Class2D
-from pyworkflow.em.packages.xmipp3.convert import setXmippAttributes, xmippToLocation
+from xmipp3.convert import setXmippAttributes, xmippToLocation
 import pyworkflow.em.metadata as md
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
 import xmipp
 from xmipp3 import ProjMatcher
-from pyworkflow.em.packages.xmipp3.convert import rowToAlignment
+from xmipp3.convert import rowToAlignment
 
         
 class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
@@ -99,7 +99,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self, imgsFn):
-        from convert import writeSetOfClasses2D, writeSetOfParticles
+        from xmipp3.convert import writeSetOfClasses2D, writeSetOfParticles
         imgSet = self.inputSet.get()
         if isinstance(imgSet, SetOfClasses2D):
             writeSetOfClasses2D(imgSet, self.imgsFn, writeParticles=True)

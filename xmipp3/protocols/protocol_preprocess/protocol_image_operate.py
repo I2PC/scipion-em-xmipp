@@ -33,8 +33,8 @@ from collections import OrderedDict
 from pyworkflow.em.constants import ALIGN_NONE
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtOperateParticles, ProtOperateVolumes
-from protocol_process import XmippProcessParticles, XmippProcessVolumes
-from pyworkflow.em.packages.xmipp3.convert import (writeSetOfParticles,
+from xmipp3.protocols.protocol_preprocess.protocol_process import XmippProcessParticles, XmippProcessVolumes
+from xmipp3.convert import (writeSetOfParticles,
                                                    writeSetOfVolumes,
                                                    getImageLocation)
 

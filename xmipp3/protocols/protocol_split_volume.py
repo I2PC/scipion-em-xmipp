@@ -32,7 +32,7 @@ from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, Strin
 from pyworkflow.em.protocol import ProtClassify3D
 from pyworkflow.em.data import Volume
 from pyworkflow.em.convert import ImageHandler
-from convert import writeSetOfParticles
+from xmipp3.convert import writeSetOfParticles
 
 class XmippProtSplitvolume(ProtClassify3D):
     """Split volume in two"""

@@ -29,12 +29,12 @@ from pyworkflow.em import *
 from pyworkflow.utils import *  
 # import xmipp
 from geometrical_mask import XmippGeometricalMask3D, XmippGeometricalMask2D
-from protocol_process import XmippProcessParticles, XmippProcessVolumes
+from xmipp3.protocols.protocol_preprocess.protocol_process import XmippProcessParticles, XmippProcessVolumes
 from pyworkflow.em.constants import *
 
-from ..convert import getImageLocation
+from xmipp3.convert import getImageLocation
 
-from ..constants import *
+from xmipp3.constants import *
 
 
 class XmippProtMask():

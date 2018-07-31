@@ -30,7 +30,7 @@
 from pyworkflow.protocol.params import BooleanParam, EnumParam, FloatParam, IntParam
 from pyworkflow.em.data import Volume
 
-from protocol_process import XmippProcessParticles, XmippProcessVolumes
+from xmipp3.protocols.protocol_preprocess.protocol_process import XmippProcessParticles, XmippProcessVolumes
 
 
 

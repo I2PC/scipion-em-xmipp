@@ -38,7 +38,7 @@ from pyworkflow.object import String, Set, Float
 from pyworkflow.protocol.params import (EnumParam, IntParam, Positive,
                                         Range, LEVEL_ADVANCED, FloatParam,
                                         BooleanParam)
-from convert import readSetOfParticles, writeSetOfParticles, setXmippAttributes
+from xmipp3.convert import readSetOfParticles, writeSetOfParticles, setXmippAttributes
 
 
 class XmippProtScreenParticles(ProtProcessParticles):

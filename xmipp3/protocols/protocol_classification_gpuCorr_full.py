@@ -30,7 +30,7 @@ import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
 from pyworkflow.em.metadata.utils import iterRows, getSize
 from xmipp import Image, MD_APPEND, DT_DOUBLE
-from pyworkflow.em.packages.xmipp3.convert import writeSetOfParticles, \
+from xmipp3.convert import writeSetOfParticles, \
     xmippToLocation, rowToAlignment, rowToParticle
 from shutil import copy, copytree
 from os.path import exists, getmtime

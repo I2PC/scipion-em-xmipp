@@ -30,9 +30,9 @@ import Tkinter as tk
 import pyworkflow.gui as gui
 from pyworkflow.gui.widgets import Button, HotButton
 
-from pyworkflow.em.packages.xmipp3.nma.data import Point
-from pyworkflow.em.packages.xmipp3.nma.gui import PointSelector 
-from pyworkflow.em.packages.xmipp3.nma.plotter import XmippNmaPlotter
+from xmipp3.protocols.nma.data import Point
+from xmipp3.protocols.nma.gui import PointSelector
+from xmipp3.protocols.nma.plotter import XmippNmaPlotter
 
  
     

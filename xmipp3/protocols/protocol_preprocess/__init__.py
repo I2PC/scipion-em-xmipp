@@ -24,31 +24,31 @@
 # *
 # **************************************************************************
 
-from protocol_crop_resize import XmippResizeHelper
-from protocol_crop_resize import XmippProtCropResizeParticles
-from protocol_crop_resize import XmippProtCropResizeVolumes
+from xmipp3.protocols.protocol_preprocess.protocol_crop_resize import XmippResizeHelper
+from xmipp3.protocols.protocol_preprocess.protocol_crop_resize import XmippProtCropResizeParticles
+from xmipp3.protocols.protocol_preprocess.protocol_crop_resize import XmippProtCropResizeVolumes
 
-from protocol_filter import XmippFilterHelper
-from protocol_filter import XmippProtFilterParticles
-from protocol_filter import XmippProtFilterVolumes
+from xmipp3.protocols.protocol_preprocess.protocol_filter import XmippFilterHelper
+from xmipp3.protocols.protocol_preprocess.protocol_filter import XmippProtFilterParticles
+from xmipp3.protocols.protocol_preprocess.protocol_filter import XmippProtFilterVolumes
 
-from protocol_mask import XmippProtMaskParticles
-from protocol_mask import XmippProtMaskVolumes
+from xmipp3.protocols.protocol_preprocess.protocol_mask import XmippProtMaskParticles
+from xmipp3.protocols.protocol_preprocess.protocol_mask import XmippProtMaskVolumes
 
-from protocol_preprocess import XmippProtPreprocessParticles
-from protocol_preprocess import XmippProtPreprocessVolumes
+from xmipp3.protocols.protocol_preprocess.protocol_preprocess import XmippProtPreprocessParticles
+from xmipp3.protocols.protocol_preprocess.protocol_preprocess import XmippProtPreprocessVolumes
 
-from protocol_image_operate import XmippOperateHelper
-from protocol_image_operate import XmippProtImageOperateParticles
-from protocol_image_operate import XmippProtImageOperateVolumes
-from protocol_image_operate import OP_PLUS, OP_MINUS, OP_MULTIPLY, \
+from xmipp3.protocols.protocol_preprocess.protocol_image_operate import XmippOperateHelper
+from xmipp3.protocols.protocol_preprocess.protocol_image_operate import XmippProtImageOperateParticles
+from xmipp3.protocols.protocol_preprocess.protocol_image_operate import XmippProtImageOperateVolumes
+from xmipp3.protocols.protocol_preprocess.protocol_image_operate import OP_PLUS, OP_MINUS, OP_MULTIPLY, \
                                    OP_DIVIDE, OP_MINIMUM, OP_MAXIMUM, \
                                    OP_DOTPRODUCT, OP_LOG, OP_LOG10, \
                                    OP_SQRT, OP_ABS, OP_POW, OP_SLICE, \
                                    OP_COLUNM, OP_ROW, OP_RADIAL, OP_RESET
 
-from protocol_create_mask3d import XmippProtCreateMask3D
-from protocol_create_mask2d import XmippProtCreateMask2D
+from xmipp3.protocols.protocol_preprocess.protocol_create_mask3d import XmippProtCreateMask3D
+from xmipp3.protocols.protocol_preprocess.protocol_create_mask2d import XmippProtCreateMask2D
 
-from protocol_movie_resize import XmippProtMovieResize
+from xmipp3.protocols.protocol_preprocess.protocol_movie_resize import XmippProtMovieResize
 

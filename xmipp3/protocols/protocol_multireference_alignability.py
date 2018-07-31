@@ -37,7 +37,7 @@ from pyworkflow.utils.path import moveFile, makePath
 from pyworkflow.gui.plotter import Plotter
 
 
-from pyworkflow.em.packages.xmipp3.convert import (writeSetOfParticles,
+from xmipp3.convert import (writeSetOfParticles,
                                                    writeSetOfVolumes,
                                                    getImageLocation)
 

@@ -27,10 +27,9 @@
 
 
 from pyworkflow.tests import *
-from pyworkflow.em.packages.xmipp3 import ProtImportMovies
+from pyworkflow.em.protocol.import_protocol import ProtImportMovies
 from pyworkflow.protocol import getProtocolFromDb
-from pyworkflow.em.packages.xmipp3.protocol_preprocess import \
-    XmippProtMovieResize
+from xmipp3.protocols.protocol_preprocess import XmippProtMovieResize
 from pyworkflow.em.protocol import ProtCreateStreamData
 from pyworkflow.em.protocol.protocol_create_stream_data import \
     SET_OF_MOVIES

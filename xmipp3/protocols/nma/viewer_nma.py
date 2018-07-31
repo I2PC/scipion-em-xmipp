@@ -32,7 +32,7 @@ from pyworkflow.gui.project import ProjectWindow
 from pyworkflow.protocol.params import LabelParam, IntParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.em.viewer import ObjectView, VmdView
-from protocol_nma import XmippProtNMA
+from xmipp3.protocols.nma.protocol_nma import XmippProtNMA
 from plotter import XmippNmaPlotter
 import xmipp
 

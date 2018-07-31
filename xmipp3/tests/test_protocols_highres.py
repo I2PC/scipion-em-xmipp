@@ -28,7 +28,7 @@ import unittest, sys
 
 from pyworkflow.em import exists
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
-from pyworkflow.em.packages.xmipp3 import XmippProtReconstructHighRes
+from xmipp3.protocol import XmippProtReconstructHighRes
 from pyworkflow.em.protocol import ProtImportVolumes, ProtImportParticles
 from pyworkflow.em.protocol.protocol_sets import ProtSubSet
 import xmipp

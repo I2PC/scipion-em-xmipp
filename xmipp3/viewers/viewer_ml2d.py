@@ -32,7 +32,7 @@ import os
 
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import LabelParam
-from protocol_ml2d import XmippProtML2D
+from xmipp3.protocols.protocol_ml2d import XmippProtML2D
 import pyworkflow.em as em
 import pyworkflow.em.showj as showj
 from pyworkflow.protocol.params import EnumParam, StringParam
@@ -125,7 +125,7 @@ class XmippML2DViewer(ProtocolViewer):
 
 def createPlots(protML, selectedPlots):
     ''' Launch some plot for an ML2D protocol run '''
-    from pyworkflow.em.packages.xmipp3.plotter import XmippPlotter
+    from xmipp3.viewers.plotter import XmippPlotter
     import xmipp
     
     protML._plot_count = 0

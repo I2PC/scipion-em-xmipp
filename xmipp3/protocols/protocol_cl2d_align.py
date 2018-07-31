@@ -28,7 +28,7 @@ import pyworkflow.em as em
 import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
 
-from convert import createItemMatrix, writeSetOfParticles, getImageLocation
+from xmipp3.convert import createItemMatrix, writeSetOfParticles, getImageLocation
 
 
 class XmippProtCL2DAlign(em.ProtAlign2D):

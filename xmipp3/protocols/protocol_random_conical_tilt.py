@@ -35,7 +35,7 @@ from pyworkflow.em.protocol import ProtInitialVolume
 from pyworkflow.em.data import Volume, SetOfParticles
 from pyworkflow.em.constants import ALIGN_2D
 
-from convert import getImageLocation, alignmentToRow
+from xmipp3.convert import getImageLocation, alignmentToRow
 from xmipp3 import XmippMdRow
 
 

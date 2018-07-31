@@ -27,7 +27,7 @@
 # **************************************************************************
 
 import os
-import convert
+import xmipp3.convert
 import xmipp
 from pyworkflow.em.data import SetOfCTF
 from pyworkflow.object import Set, Float

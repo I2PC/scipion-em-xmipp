@@ -29,9 +29,9 @@ import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
 from pyworkflow.em.metadata.utils import iterRows, getSize
 from xmipp import MD_APPEND
-from pyworkflow.em.packages.xmipp3.convert import rowToAlignment, \
+from xmipp3.convert import rowToAlignment, \
     xmippToLocation
-from convert import writeSetOfParticles, writeSetOfClasses2D
+from xmipp3.convert import writeSetOfParticles, writeSetOfClasses2D
 from shutil import copy
 from os.path import join, exists
 from os import mkdir, remove, listdir

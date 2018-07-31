@@ -36,8 +36,8 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
 from pyworkflow.em.protocol import ProtInitialVolume
 from pyworkflow.em.data import SetOfClasses2D
 
-from convert import writeSetOfClasses2D, readSetOfVolumes, writeSetOfParticles
-from utils import isMdEmpty
+from xmipp3.convert import writeSetOfClasses2D, readSetOfVolumes, writeSetOfParticles
+from xmipp3.utils import isMdEmpty
 from pyworkflow.em.convert import ImageHandler
 
 

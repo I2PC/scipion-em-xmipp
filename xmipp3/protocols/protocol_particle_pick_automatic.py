@@ -30,7 +30,7 @@ from pyworkflow.utils.path import *
 import xmipp
 from xmipp3 import XmippProtocol
 
-from convert import readSetOfCoordinates
+from xmipp3.convert import readSetOfCoordinates
 
 
 MICS_SAMEASPICKING = 0

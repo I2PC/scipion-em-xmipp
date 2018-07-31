@@ -33,7 +33,7 @@ from pyworkflow.em.data_tiltpairs import CoordinatesTiltPair
 from pyworkflow.em.showj import launchTiltPairPickerGUI
 
 from xmipp3 import XmippProtocol
-import convert
+import xmipp3.convert
 
 
 

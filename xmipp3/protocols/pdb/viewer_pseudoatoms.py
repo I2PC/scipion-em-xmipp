@@ -28,9 +28,9 @@
 # **************************************************************************
 
 from pyworkflow.em.viewer import DataView, ChimeraView
-from pyworkflow.em.packages.xmipp3.viewer import XmippViewer
+from xmipp3.viewers import XmippViewer
 
-from protocol_pseudoatoms import XmippProtConvertToPseudoAtoms
+from xmipp3.protocols.pdb.protocol_pseudoatoms import XmippProtConvertToPseudoAtoms
 
 
 

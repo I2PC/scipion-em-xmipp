@@ -27,7 +27,7 @@
 from pyworkflow.object import String
 from pyworkflow.protocol.params import StringParam
 from pyworkflow.em.protocol import ProtProcessParticles
-from convert import writeSetOfParticles
+from xmipp3.convert import writeSetOfParticles
 import pyworkflow.em.metadata as md
 
  
@@ -125,7 +125,7 @@ class XmippProtAngBreakSymmetry(ProtProcessParticles):
 
     #--------------------------- Utils functions --------------------------------------------                
     def _createItemMatrix(self, item, row):
-        from pyworkflow.em.packages.xmipp3.convert import createItemMatrix
+        from xmipp3.convert import createItemMatrix
         import pyworkflow.em as em
         
         createItemMatrix(item, row, align=em.ALIGN_PROJ)

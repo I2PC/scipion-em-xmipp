@@ -28,7 +28,7 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         StringParam, BooleanParam, LEVEL_ADVANCED)
 from pyworkflow.em.data import Volume
 from pyworkflow.em.protocol import ProtReconstruct3D
-from pyworkflow.em.packages.xmipp3.convert import writeSetOfParticles
+from xmipp3.convert import writeSetOfParticles
 
 class XmippProtReconstructFourier(ProtReconstruct3D):
     """    

@@ -176,7 +176,7 @@
 #         numberOfClasses = 64
 #
 #         if protocol.inputParticles.hasValue():
-#             from protocol_cl2d import IMAGES_PER_CLASS
+#             from xmipp3.protocols.protocol_cl2d import IMAGES_PER_CLASS
 #             numberOfClasses = int(protocol.inputParticles.get().getSize()/IMAGES_PER_CLASS)
 #
 #         return numberOfClasses

@@ -33,7 +33,7 @@ import pyworkflow.protocol.params as param
 import pyworkflow.protocol.constants as const
 from pyworkflow.em.protocol import ProtClassify2D, SetOfClasses2D
 from pyworkflow.utils.path import cleanPath, makePath
-from pyworkflow.em.packages.xmipp3.convert import writeSetOfParticles, \
+from xmipp3.convert import writeSetOfParticles, \
     createItemMatrix, writeSetOfClasses2D, xmippToLocation, rowToAlignment
 
 # Comparison methods enum

@@ -26,10 +26,10 @@
 
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.em.viewer import DataView, ChimeraView
-from pyworkflow.em.packages.xmipp3.viewer import XmippViewer
+from xmipp3.viewers import XmippViewer
 from pyworkflow.protocol.params import PointerParam, LabelParam
 
-from protocol_normalize_strain import XmippProtNormalizeStrain
+from xmipp3.protocols.protocol_normalize_strain import XmippProtNormalizeStrain
 
 class XmippNormalizeStrainViewer(ProtocolViewer):
     """ Visualize the output of protocol volume strain """

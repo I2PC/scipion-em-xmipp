@@ -24,8 +24,8 @@
 # *
 # **************************************************************************
 
-from protocol_convert_to_pseudoatoms_base import *
-from protocol_nma_base import *
+from xmipp3.protocols.protocol_convert_to_pseudoatoms_base import *
+from xmipp3.protocols.protocol_nma_base import *
 from pyworkflow.utils.path import createLink, cleanPath
 from pyworkflow.protocol.params import BooleanParam
 from xmipp import MetaData, MDL_NMA, MDL_ENABLED, MDL_NMA_MINRANGE, \

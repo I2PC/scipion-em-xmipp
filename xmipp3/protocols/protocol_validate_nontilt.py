@@ -31,7 +31,7 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam, STEPS_PARALLEL
 from pyworkflow.em.data import Volume
 from pyworkflow.em.protocol import ProtAnalysis3D
 from pyworkflow.utils.path import moveFile, makePath
-from pyworkflow.em.packages.xmipp3.convert import writeSetOfParticles
+from xmipp3.convert import writeSetOfParticles
 import pyworkflow.em.metadata as md
 
 

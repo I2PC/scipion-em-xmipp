@@ -40,9 +40,9 @@ from pyworkflow.em.protocol import ProtRefine3D
 from pyworkflow.em.data import SetOfVolumes, Volume
 from pyworkflow.em.metadata.utils import getFirstRow, getSize
 from pyworkflow.utils.utils import getFloatListFromValues
-from convert import writeSetOfParticles
+from xmipp3.convert import writeSetOfParticles
 from os.path import join, exists, split
-from pyworkflow.em.packages.xmipp3.convert import createItemMatrix, setXmippAttributes
+from xmipp3.convert import createItemMatrix, setXmippAttributes
 from pyworkflow.em.convert import ImageHandler
 import pyworkflow.em.metadata as md
 import pyworkflow.em as em

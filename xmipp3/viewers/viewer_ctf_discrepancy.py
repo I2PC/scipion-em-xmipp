@@ -25,7 +25,7 @@
 # **************************************************************************
 
 
-from protocol_ctf_discrepancy import XmippProtCTFDiscrepancy
+from xmipp3.protocols.protocol_ctf_discrepancy import XmippProtCTFDiscrepancy
 from pyworkflow.em import data
 from pyworkflow.em.plotter import EmPlotter
 from pyworkflow.em.viewer import ObjectView

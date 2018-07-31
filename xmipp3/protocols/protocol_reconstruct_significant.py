@@ -30,9 +30,9 @@ import math
 from pyworkflow.utils import Timer
 from pyworkflow.utils.path import cleanPattern, cleanPath
 from pyworkflow.em import *
-from pyworkflow.em.packages.xmipp3.convert import volumeToRow
-from pyworkflow.em.packages.xmipp3.xmipp3 import XmippMdRow
-from convert import writeSetOfClasses2D, writeSetOfParticles
+from xmipp3.convert import volumeToRow
+from xmipp3.base import XmippMdRow
+from xmipp3.convert import writeSetOfClasses2D, writeSetOfParticles
 import pyworkflow.em.metadata as metadata
 from pyworkflow.protocol.params import *
 import xmipp

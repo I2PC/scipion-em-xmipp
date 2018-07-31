@@ -35,13 +35,13 @@ from pyworkflow.utils import isPower2, getListFromRangeString
 from pyworkflow.utils.path import copyFile, cleanPath 
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtAnalysis3D
-from pyworkflow.em.packages.xmipp3 import XmippMdRow
-from pyworkflow.em.packages.xmipp3.convert import writeSetOfParticles,\
-     xmippToLocation, getImageLocation, createItemMatrix, setXmippAttributes
+from xmipp3.base import XmippMdRow
+from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
+                         getImageLocation, createItemMatrix, setXmippAttributes)
 from pyworkflow.protocol.params import NumericRangeParam
 import pyworkflow.em as em
 
-from convert import modeToRow
+from xmipp3.protocols.nma.convert import modeToRow
 
 import pyworkflow.em.metadata as md
 

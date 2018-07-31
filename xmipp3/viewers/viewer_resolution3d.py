@@ -41,8 +41,8 @@ from plotter import XmippPlotter
 
 import xmipp
 
-from convert import getImageLocation
-from protocol_resolution3d import XmippProtResolution3D
+from xmipp3.convert import getImageLocation
+from xmipp3.protocols.protocol_resolution3d import XmippProtResolution3D
 
 
 FREQ_LABEL = 'frequency (1/A)'
@@ -136,7 +136,7 @@ class XmippResolution3DViewer(ProtocolViewer):
         f.close()
             
     def _loadData(self):
-        from pyworkflow.em.packages.xmipp3.nma.data import PathData
+        from xmipp3.protocols.nma.data import PathData
         data = PathData(dim=2)
         bfactorFile = self.protocol._getPath('bfactor.txt')
         if os.path.exists(bfactorFile):

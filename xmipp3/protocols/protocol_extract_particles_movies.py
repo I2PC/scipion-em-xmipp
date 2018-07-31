@@ -32,7 +32,7 @@ import os
 import pyworkflow.em.metadata as md
 
 from pyworkflow.em import SetOfCoordinates
-from pyworkflow.em.packages.xmipp3.convert import (readSetOfMovieParticles,
+from xmipp3.convert import (readSetOfMovieParticles,
                                                    xmippToLocation)
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.em.protocol import ProtExtractMovieParticles, ProtProcessMovies
@@ -42,7 +42,8 @@ from pyworkflow.protocol.params import (PointerParam, IntParam, BooleanParam,
 
 from pyworkflow.utils.path import cleanPath
 
-from pyworkflow.em.packages.xmipp3 import coordinateToRow, XmippMdRow
+from xmipp3.convert import coordinateToRow
+from xmipp3.base import XmippMdRow
 
 
 

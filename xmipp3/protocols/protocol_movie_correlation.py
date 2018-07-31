@@ -36,7 +36,7 @@ from pyworkflow import VERSION_1_1
 from pyworkflow.em.protocol import ProtAlignMovies
 from pyworkflow.em.protocol.protocol_align_movies import createAlignmentPlot
 import pyworkflow.em.metadata as md
-from convert import writeMovieMd
+from xmipp3.convert import writeMovieMd
 
 
 class XmippProtMovieCorr(ProtAlignMovies):
@@ -189,7 +189,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
         return self._getExtraPath(self._getMovieRoot(movie) + '_shifts.xmd')
 
     def _getMovieShifts(self, movie):
-        from convert import readShiftsMovieAlignment
+        from xmipp3.convert import readShiftsMovieAlignment
         """ Returns the x and y shifts for the alignment of this movie.
          The shifts should refer to the original micrograph without any binning.
          In case of a bining greater than 1, the shifts should be scaled.

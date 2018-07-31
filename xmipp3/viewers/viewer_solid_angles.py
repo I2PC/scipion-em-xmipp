@@ -33,7 +33,7 @@ from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.em.viewer import ObjectView
 import pyworkflow.em.showj as showj 
 
-from protocol_solid_angles import XmippProtSolidAngles
+from xmipp3.protocols.protocol_solid_angles import XmippProtSolidAngles
 
 
 

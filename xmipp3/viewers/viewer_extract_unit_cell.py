@@ -31,7 +31,7 @@ from os.path import exists
 
 import pyworkflow.em as em
 import pyworkflow.protocol.params as params
-from protocol_extract_unit_cell import XmippProtExtractUnit
+from xmipp3.protocols.protocol_extract_unit_cell import XmippProtExtractUnit
 from pyworkflow.em.constants import SYM_I222
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.em.data import (SetOfVolumes)

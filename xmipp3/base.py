@@ -30,7 +30,7 @@ import os
 import sys
 import platform
 from collections import OrderedDict
-from .constants import *
+from xmipp3.constants import *
 
 import xmipp
 import pyworkflow.dataset as ds

@@ -27,7 +27,7 @@
 
 from pyworkflow.protocol.params import (IntParam, EnumParam, FloatParam,
                                         BooleanParam)
-from ..constants import *
+from xmipp3.constants import *
 
 
 class XmippGeometricalMask3D:

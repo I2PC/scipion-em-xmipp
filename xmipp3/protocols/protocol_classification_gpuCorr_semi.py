@@ -31,7 +31,7 @@ from pyworkflow.em.protocol import ProtAlign2D
 import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
 from pyworkflow.em.metadata.utils import iterRows
-from pyworkflow.em.packages.xmipp3.convert import writeSetOfParticles, \
+from xmipp3.convert import writeSetOfParticles, \
     rowToAlignment, writeSetOfClasses2D
 from os.path import getmtime
 from datetime import datetime

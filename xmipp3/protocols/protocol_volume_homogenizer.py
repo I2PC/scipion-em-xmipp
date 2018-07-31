@@ -29,7 +29,7 @@
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_1
 from pyworkflow.em.protocol import ProtProcessParticles
-from pyworkflow.em.packages.xmipp3.convert import (writeSetOfParticles, 
+from xmipp3.convert import (writeSetOfParticles,
                                                    readSetOfParticles,
                                                    geometryFromMatrix,
                                                    SetOfParticles)

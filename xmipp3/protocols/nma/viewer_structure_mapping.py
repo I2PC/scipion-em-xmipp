@@ -27,7 +27,7 @@
 
 import os
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-from protocol_structure_mapping import XmippProtStructureMapping
+from xmipp3.protocols.nma.protocol_structure_mapping import XmippProtStructureMapping
 from pyworkflow.gui.plotter import plt
 import numpy as np
 from mpl_toolkits.mplot3d import proj3d

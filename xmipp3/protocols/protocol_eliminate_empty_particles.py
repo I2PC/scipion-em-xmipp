@@ -34,7 +34,7 @@ from pyworkflow.em.protocol import ProtClassify2D
 from pyworkflow.em.data import SetOfParticles
 from pyworkflow.object import Set
 from pyworkflow.utils.properties import Message
-from pyworkflow.em.packages.xmipp3.convert import writeSetOfParticles, \
+from xmipp3.convert import writeSetOfParticles, \
     readSetOfParticles, setXmippAttributes
 
 

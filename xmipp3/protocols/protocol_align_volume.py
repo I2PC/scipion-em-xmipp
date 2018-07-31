@@ -27,7 +27,7 @@ import time
 
 import pyworkflow.protocol.params as params
 import pyworkflow.em as em
-from pyworkflow.em.packages.xmipp3.convert import getImageLocation
+from xmipp3.convert import getImageLocation
 import numpy as np
 
 

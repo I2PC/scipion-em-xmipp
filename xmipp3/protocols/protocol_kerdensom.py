@@ -29,7 +29,7 @@ from pyworkflow.em import *
 import xmipp
 
 import xmipp3
-from convert import writeSetOfParticles, readSetOfClasses2D, xmippToLocation
+from xmipp3.convert import writeSetOfParticles, readSetOfClasses2D, xmippToLocation
 from glob import glob
 
 

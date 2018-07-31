@@ -32,11 +32,11 @@ from pyworkflow.em import ProtClassify3D, ALIGN_PROJ, Float
 from pyworkflow.em.data import SetOfVolumes, SetOfClassesVol
 from pyworkflow.em.constants import ALIGN_NONE
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from xmipp3 import getEnviron
+from xmipp3 import Plugin
 import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
-from convert import (readSetOfClassesVol, getImageLocation,
+from xmipp3.convert import (readSetOfClassesVol, getImageLocation,
                      writeSetOfVolumes, rowToAlignment)
 
 
@@ -481,14 +481,14 @@ class XmippProtMLTomo(ProtClassify3D):
 
     #--------------------------- UTILS functions ------------------------------
     def getMLTomoEnviron(self):
-        env = getEnviron()
+        env = Plugin.getEnviron()
         return env
 
     def isSetOfVolumes(self):
         return isinstance(self.inputRefVols.get(), SetOfVolumes)
 
     def _postprocessVolumeRow(self, img, imgRow):
-        # explicitly set this from protocol input
+        # explicitly set this from xmipp3.protocols.protocol input
         # to avoid conflict with input metadata
         missNum = self.missingDataType.get()
         imgRow.setValue(md.MDL_MISSINGREGION_NR, missNum + 1)

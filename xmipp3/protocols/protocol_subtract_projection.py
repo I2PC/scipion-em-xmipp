@@ -30,7 +30,7 @@ from pyworkflow.protocol.params import PointerParam, EnumParam, BooleanParam
 
 from pyworkflow.em.protocol import ProtOperateParticles
 from pyworkflow.protocol.constants import STEPS_PARALLEL
-from pyworkflow.em.packages.xmipp3.convert import (XmippMdRow, particleToRow,
+from xmipp3.convert import (XmippMdRow, particleToRow,
                                                    getImageLocation,
                                                    geometryFromMatrix)
 import xmipp

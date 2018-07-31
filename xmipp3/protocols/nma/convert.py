@@ -29,7 +29,7 @@ from collections import OrderedDict
 
 from pyworkflow.utils import Environ
 from pyworkflow.em.data import NormalMode
-from pyworkflow.em.packages.xmipp3.convert import rowToObject, objectToRow
+from xmipp3.convert import rowToObject, objectToRow
 import xmipp
 
             
@@ -56,7 +56,7 @@ def modeToRow(mode, row):
     
 def getNMAEnviron():
     """ Create the needed environment for NMA programs. """
-    from pyworkflow.em.packages.xmipp3 import getEnviron
-    environ = getEnviron()
+    from xmipp3 import Plugin
+    environ = Plugin.getEnviron()
     environ.update({'PATH': os.environ['NMA_HOME']}, position=Environ.BEGIN)
     return environ

@@ -28,11 +28,11 @@
 # **************************************************************************
 
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.em.packages.xmipp3.viewer import XmippViewer, ObjectView, DataView
+from xmipp3.viewers import XmippViewer, ObjectView, DataView
 import pyworkflow.em.showj as showj
 import xmipp
 
-from protocol_reconstruct_swarm import XmippProtReconstructSwarm
+from xmipp3.protocols.protocol_reconstruct_swarm import XmippProtReconstructSwarm
 
 class XmippReconstructSwarmViewer(XmippViewer):
     """ Visualize the output of protocol reconstruct swarm """

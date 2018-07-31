@@ -29,7 +29,7 @@ This file implements CTF defocus groups using xmipp 3.1
 """
 from pyworkflow.em import *  
 from pyworkflow.utils import *  
-from convert import writeSetOfParticles, writeSetOfDefocusGroups
+from xmipp3.convert import writeSetOfParticles, writeSetOfDefocusGroups
 import xmipp
 from math import pi
 from pyworkflow.protocol.params import GE

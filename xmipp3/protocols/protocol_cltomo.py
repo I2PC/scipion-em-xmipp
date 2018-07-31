@@ -25,11 +25,11 @@
 # **************************************************************************
 
 from pyworkflow.em import *  
-from constants import *
-from convert import writeSetOfVolumes, readSetOfClassesVol, readSetOfVolumes
+from xmipp3.constants import *
+from xmipp3.convert import writeSetOfVolumes, readSetOfClassesVol, readSetOfVolumes
 
 from xmipp import MetaData
-from xmipp3 import getEnviron
+from xmipp3 import Plugin
 
 
 class XmippProtCLTomo(ProtClassify3D):
@@ -181,7 +181,7 @@ class XmippProtCLTomo(ProtClassify3D):
 
     #--------------------------- UTILS functions --------------------------------------------
     def getCLTomoEnviron(self):
-        env = getEnviron()
+        env = Plugin.getEnviron()
         env.set('PYTHONPATH', os.path.join(os.environ['SCIPION_HOME'], 'software','lib','python2.7','site-packages','sh_alignment'),
                 Environ.BEGIN)
         return env
