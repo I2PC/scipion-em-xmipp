@@ -532,7 +532,7 @@ class ProjMatcher():
             imgRef.read(MDout.getValue(xmipp.MDL_IMAGE_REF,i))
             if hasCTF and volumeIsCTFCorrected:
                 fnCTF = MDout.getValue(xmipp.MDL_CTF_MODEL,i)
-                imgRef.applyCTF(fnCTF,Ts)
+                applyCTF(imgRef, fnCTF,Ts)
                 img.convert2DataType(DT_DOUBLE)
             imgDiff = img-imgRef
             imgDiff.write(MDout.getValue(xmipp.MDL_IMAGE1,i))
