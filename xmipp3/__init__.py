@@ -28,8 +28,10 @@
 
 import pyworkflow.em
 import pyworkflow.utils as pwutils
-from xmipp3.constants import XMIPP_HOME
-from base import *
+
+from .base import *
+from .constants import XMIPP_HOME
+
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']

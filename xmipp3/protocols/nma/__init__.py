@@ -24,15 +24,15 @@
 # *
 # **************************************************************************
 
-from xmipp3.protocols.nma.protocol_nma import XmippProtNMA
-from xmipp3.protocols.nma.protocol_nma_alignment import XmippProtAlignmentNMA
-from xmipp3.protocols.nma.protocol_nma_base import NMA_CUTOFF_ABS, NMA_CUTOFF_REL
-#from xmipp3.protocols.nma.protocol_nma_choose import XmippProtNMAChoose
-from xmipp3.protocols.nma.protocol_nma_dimred import XmippProtDimredNMA
-from xmipp3.protocols.nma.protocol_batch_cluster import BatchProtNMACluster
-from xmipp3.protocols.nma.protocol_structure_mapping import XmippProtStructureMapping
+from .protocol_nma import XmippProtNMA
+from .protocol_nma_alignment import XmippProtAlignmentNMA
+from .protocol_nma_base import NMA_CUTOFF_ABS, NMA_CUTOFF_REL
+#.protocol_nma_choose import XmippProtNMAChoose
+from .protocol_nma_dimred import XmippProtDimredNMA
+from .protocol_batch_cluster import BatchProtNMACluster
+from .protocol_structure_mapping import XmippProtStructureMapping
 
-from viewer_nma import XmippNMAViewer
-from viewer_nma_alignment import XmippAlignmentNMAViewer
-from viewer_nma_dimred import XmippDimredNMAViewer
-from viewer_structure_mapping import XmippProtStructureMappingViewer
+from .viewer_nma import XmippNMAViewer
+from .viewer_nma_alignment import XmippAlignmentNMAViewer
+from .viewer_nma_dimred import XmippDimredNMAViewer
+from .viewer_structure_mapping import XmippProtStructureMappingViewer

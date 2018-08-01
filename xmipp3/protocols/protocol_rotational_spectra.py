@@ -31,12 +31,13 @@ import pyworkflow.em as em
 from pyworkflow.utils.path import makePath
 from pyworkflow.gui.plotter import Plotter
 from pyworkflow.protocol.params import EnumParam, IntParam
-import xmipp, xmipp3
 
-from xmipp3.protocols.protocol_kerdensom import KendersomBaseClassify
-from xmipp3.convert import readSetOfClasses2D
+import xmipp
+import xmipp3
+from ..convert import readSetOfClasses2D
+from .protocol_kerdensom import KendersomBaseClassify
 
-        
+
 class XmippProtRotSpectra(KendersomBaseClassify):
     """Protocol to compute the rotational spectrum of the given particles.
     """

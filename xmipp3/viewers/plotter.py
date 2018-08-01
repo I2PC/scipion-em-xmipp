@@ -26,6 +26,7 @@
 """
 This module implement the classes to create plots on xmipp.
 """
+
 #from pyworkflow.gui.plotter import Plotter
 from pyworkflow.em.plotter import EmPlotter
 

@@ -24,14 +24,16 @@
 # *
 # **************************************************************************
 
+from math import floor
+from os.path import exists
+
 from pyworkflow.em import *  
 from pyworkflow.utils import *  
-from math import floor
-from xmipp3 import XmippProtocol
-from xmipp3.convert import createXmippInputVolumes, readSetOfVolumes, locationToXmipp
-from xmipp3.convert import getImageLocation
 import pyworkflow.em.metadata as md
-from os.path import exists 
+
+from ..base import XmippProtocol
+from ..convert import (createXmippInputVolumes, readSetOfVolumes,
+                       locationToXmipp, getImageLocation)
 
 
 class XmippProtResolution3D(ProtAnalysis3D):

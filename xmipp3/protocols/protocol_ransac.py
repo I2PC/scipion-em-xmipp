@@ -27,18 +27,18 @@
 import os
 from math import floor
 
-import xmipp
 from pyworkflow.object import Float
 from pyworkflow.utils.path import cleanPath, copyFile, cleanPattern
+from pyworkflow.em.convert import ImageHandler
+from pyworkflow.em.protocol import ProtInitialVolume
+from pyworkflow.em.data import SetOfClasses2D
 from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
                                         IntParam, StringParam, 
                                         STEPS_PARALLEL, LEVEL_ADVANCED)
-from pyworkflow.em.protocol import ProtInitialVolume
-from pyworkflow.em.data import SetOfClasses2D
+import xmipp
+from ..convert import writeSetOfClasses2D, readSetOfVolumes, writeSetOfParticles
+from ..utils import isMdEmpty
 
-from xmipp3.convert import writeSetOfClasses2D, readSetOfVolumes, writeSetOfParticles
-from xmipp3.utils import isMdEmpty
-from pyworkflow.em.convert import ImageHandler
 
 
 class XmippProtRansac(ProtInitialVolume):

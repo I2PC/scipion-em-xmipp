@@ -24,25 +24,25 @@
 # *
 # **************************************************************************
 
-from viewer import XmippViewer
-from plotter import XmippPlotter
+from .viewer import XmippViewer
+from .plotter import XmippPlotter
 
-from viewer_cl2d import XmippCL2DViewer
-from viewer_cltomo import XmippCLTomoViewer
-from viewer_ctf_discrepancy import XmippCTFDiscrepancyViewer
-from viewer_ml2d import XmippML2DViewer
-from viewer_mltomo import XmippMLTomoViewer
-from viewer_movie_alignment import XmippMovieAlignViewer
-from viewer_normalize_strain import XmippNormalizeStrainViewer
-from viewer_resolution3d import XmippResolution3DViewer
-from viewer_resolution_monogenic_signal import XmippMonoResViewer
-from viewer_validate_nontilt import XmippValidateNonTiltViewer
-from viewer_split_volume import XmippViewerSplitVolume
-from viewer_validate_overfitting import XmippValidateOverfittingViewer
-from viewer_volume_strain import XmippVolumeStrainViewer
-from viewer_reconstruct_highres import XmippReconstructHighResViewer
-from viewer_solid_angles import SolidAnglesViewer
-from viewer_extract_unit_cell import viewerXmippProtExtractUnit
+from .viewer_cl2d import XmippCL2DViewer
+from .viewer_cltomo import XmippCLTomoViewer
+from .viewer_ctf_discrepancy import XmippCTFDiscrepancyViewer
+from .viewer_ml2d import XmippML2DViewer
+from .viewer_mltomo import XmippMLTomoViewer
+from .viewer_movie_alignment import XmippMovieAlignViewer
+from .viewer_normalize_strain import XmippNormalizeStrainViewer
+from .viewer_resolution3d import XmippResolution3DViewer
+from .viewer_resolution_monogenic_signal import XmippMonoResViewer
+from .viewer_validate_nontilt import XmippValidateNonTiltViewer
+from .viewer_split_volume import XmippViewerSplitVolume
+from .viewer_validate_overfitting import XmippValidateOverfittingViewer
+from .viewer_volume_strain import XmippVolumeStrainViewer
+from .viewer_reconstruct_highres import XmippReconstructHighResViewer
+from .viewer_solid_angles import SolidAnglesViewer
+from .viewer_extract_unit_cell import viewerXmippProtExtractUnit
 
 
 

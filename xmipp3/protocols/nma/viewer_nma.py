@@ -32,9 +32,11 @@ from pyworkflow.gui.project import ProjectWindow
 from pyworkflow.protocol.params import LabelParam, IntParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.em.viewer import ObjectView, VmdView
-from xmipp3.protocols.nma.protocol_nma import XmippProtNMA
-from plotter import XmippNmaPlotter
+
 import xmipp
+from .protocol_nma import XmippProtNMA
+from .plotter import XmippNmaPlotter
+
 
 OBJCMD_NMA_PLOTDIST = "Plot distance profile"
 OBJCMD_NMA_VMD = "Display VMD animation"

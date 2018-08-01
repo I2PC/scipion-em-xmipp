@@ -26,15 +26,16 @@
 # *
 # **************************************************************************
 
+import numpy as np
+
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_1
 from pyworkflow.em.protocol import ProtProcessParticles
-from xmipp3.convert import (writeSetOfParticles,
-                                                   readSetOfParticles,
-                                                   geometryFromMatrix,
-                                                   SetOfParticles)
 from pyworkflow.utils import getExt
-import numpy as np
+
+from ..convert import (writeSetOfParticles, readSetOfParticles,
+                       geometryFromMatrix, SetOfParticles)
+
 
 class XmippProtVolumeHomogenizer(ProtProcessParticles):
     

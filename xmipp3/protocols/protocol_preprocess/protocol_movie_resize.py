@@ -23,16 +23,19 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+
+from os.path import exists
+
 from pyworkflow import VERSION_1_2
 from pyworkflow.utils.properties import Message
 from pyworkflow.protocol.params import PointerParam, FloatParam, EnumParam, \
-    IntParam
+                                       IntParam
 from pyworkflow.em.protocol import EMProtocol, ProtProcessMovies
 from pyworkflow.object import Set
 import pyworkflow.protocol.constants as cons
 from pyworkflow.em import STEPS_PARALLEL
 from pyworkflow.em.data import SetOfMovies, Movie
-from os.path import exists
+
 
 RESIZE_SAMPLINGRATE = 0
 RESIZE_DIMENSIONS = 1

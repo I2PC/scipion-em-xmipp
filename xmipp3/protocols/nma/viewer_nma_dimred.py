@@ -40,10 +40,10 @@ from pyworkflow.utils.process import runJob
 from pyworkflow.em.viewer import VmdView
 from pyworkflow.gui.browser import FileBrowserWindow
 
-from xmipp3.protocols.nma.protocol_nma_dimred import XmippProtDimredNMA, DIMRED_MAPPINGS
-from data import Point, Data
-from plotter import XmippNmaPlotter
-from gui import ClusteringWindow, TrajectoriesWindow
+from .protocol_nma_dimred import XmippProtDimredNMA, DIMRED_MAPPINGS
+from .data import Point, Data
+from .plotter import XmippNmaPlotter
+from .gui import ClusteringWindow, TrajectoriesWindow
 
         
 class XmippDimredNMAViewer(ProtocolViewer):
@@ -167,7 +167,7 @@ class XmippDimredNMAViewer(ProtocolViewer):
         partSet.write()
         partSet.close()
                 
-        from xmipp3.protocols.protocol_batch_cluster import BatchProtNMACluster
+        from ..protocols.protocol_batch_cluster import BatchProtNMACluster
         newProt = project.newProtocol(BatchProtNMACluster)
         clusterName = self.clusterWindow.getClusterName()
         if clusterName:

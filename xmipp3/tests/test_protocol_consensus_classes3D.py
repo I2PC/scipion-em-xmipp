@@ -29,13 +29,11 @@
 import random
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
-
 from pyworkflow.utils import redStr, greenStr, magentaStr
 from pyworkflow.em.data import Class3D
-
 from pyworkflow.em.protocol.protocol_import import ProtImportParticles
-from xmipp3.protocol.protocol_consensus_classes3D import \
-                                                     XmippProtConsensusClasses3D
+
+from ..protocols import XmippProtConsensusClasses3D
 
 class TestConsensusClasses3D(BaseTest):
 

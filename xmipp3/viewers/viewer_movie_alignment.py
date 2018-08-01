@@ -27,10 +27,10 @@
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
 import pyworkflow.em.showj as showj
 
-from xmipp3.protocols.protocol_movie_opticalflow import (XmippProtOFAlignment,
+from ..protocols.protocol_movie_opticalflow import (XmippProtOFAlignment,
                                         OBJCMD_MOVIE_ALIGNCARTESIAN)
-from xmipp3.protocols.protocol_movie_correlation import XmippProtMovieCorr
-from xmipp3.protocols.protocol_movie_max_shift import XmippProtMovieMaxShift
+from ..protocols.protocol_movie_correlation import XmippProtMovieCorr
+from ..protocols.protocol_movie_max_shift import XmippProtMovieMaxShift
 
 class XmippMovieAlignViewer(Viewer):
     _targets = [XmippProtOFAlignment, XmippProtMovieCorr, XmippProtMovieMaxShift]

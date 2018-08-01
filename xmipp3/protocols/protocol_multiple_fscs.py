@@ -23,13 +23,14 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.constants import STEPS_PARALLEL
 import pyworkflow.protocol.params as params
-
 import pyworkflow.em as em
 import pyworkflow.em.metadata as md
-from xmipp3.convert import locationToXmipp
+
+from ..convert import locationToXmipp
 
 
 class XmippProtMultipleFSCs(em.ProtAnalysis3D):

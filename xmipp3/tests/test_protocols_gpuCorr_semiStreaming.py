@@ -21,21 +21,22 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # ***************************************************************************/
 
+import time
+
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
-from pyworkflow.em.protocol import ProtImportAverages, ProtImportMicrographs, \
-    ProtCreateStreamData
-from pyworkflow.em.protocol.protocol_create_stream_data import \
-    SET_OF_MICROGRAPHS
+from pyworkflow.em.protocol import (ProtImportAverages, ProtImportMicrographs,
+                                    ProtCreateStreamData)
+from pyworkflow.em.protocol.protocol_create_stream_data import SET_OF_MICROGRAPHS
 from pyworkflow.protocol import getProtocolFromDb
 from pyworkflow.em.packages.grigoriefflab import ProtCTFFind
+
+from ..protocols.protocol_extract_particles import *
+from ..protocols.protocol_classification_gpuCorr_semi import *
+
 try:
     from eman2.protocol_autopick import *
 except:
     print("Eman is needed to do this test")
-
-from xmipp3.protocols.protocol_extract_particles import *
-from xmipp3.protocol_classification_gpuCorr_semi import *
-import time
 
 
 # Number of mics to be processed

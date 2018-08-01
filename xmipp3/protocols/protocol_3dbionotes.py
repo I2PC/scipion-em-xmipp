@@ -25,13 +25,14 @@
 # *
 # **************************************************************************
 
+import requests
+import webbrowser
+
 from pyworkflow.em import *
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.em.packages.ccp4.convert import Ccp4Header
-import requests
-import webbrowser
-from pyworkflow.em.packages.ccp4 import Ccp4Header
+from pyworkflow.em.convert_header.CCP4.convert import Ccp4Header
+
 
 class XmippProt3DBionotes(ProtAnalysis3D):
     """ Protocol for checking annotations

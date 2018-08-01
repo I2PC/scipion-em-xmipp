@@ -26,16 +26,14 @@
 # **************************************************************************
 
 from pyworkflow.em import *
-from pyworkflow.utils import *  
-# import xmipp
-from geometrical_mask import XmippGeometricalMask3D, XmippGeometricalMask2D
-from xmipp3.protocols.protocol_preprocess.protocol_process import XmippProcessParticles, XmippProcessVolumes
+from pyworkflow.utils import *
 from pyworkflow.em.constants import *
 
-from xmipp3.convert import getImageLocation
-
-from xmipp3.constants import *
-
+# import xmipp
+from ...convert import getImageLocation
+from ...constants import *
+from .geometrical_mask import XmippGeometricalMask3D, XmippGeometricalMask2D
+from .protocol_process import XmippProcessParticles, XmippProcessVolumes
 
 class XmippProtMask():
     """ This class implement the common features for applying a mask with Xmipp either SetOfParticles, Volume or SetOfVolumes objects.

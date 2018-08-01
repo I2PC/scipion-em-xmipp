@@ -25,22 +25,25 @@
 # *
 # **************************************************************************
 
+import numpy as np
+import os
+import math
+
 from pyworkflow import VERSION_1_1
 from pyworkflow.em.data import SetOfMovies, Movie
 from pyworkflow.em.protocol import EMProtocol, ProtProcessMovies
-from pyworkflow.em.protocol.monitors import MonitorMovieGain, \
-    MovieGainMonitorPlotter
+from pyworkflow.em.protocol.monitors import (MonitorMovieGain,
+                                             MovieGainMonitorPlotter)
 from pyworkflow.object import Set
-from pyworkflow.protocol.params import PointerParam, IntParam, \
-    BooleanParam, LEVEL_ADVANCED
+from pyworkflow.protocol.params import (PointerParam, IntParam,
+                                        BooleanParam, LEVEL_ADVANCED)
 from pyworkflow.utils.properties import Message
 from pyworkflow.utils.path import cleanPath
 import pyworkflow.protocol.constants as cons
 import pyworkflow.em as em
-import numpy as np
-import os
-import math
+
 import xmipp
+
 
 class XmippProtMovieGain(ProtProcessMovies):
     """

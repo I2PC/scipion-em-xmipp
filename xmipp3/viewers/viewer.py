@@ -30,7 +30,6 @@ from os.path import dirname, join
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO, CommandView
 from pyworkflow.em.data import *
 from pyworkflow.em.protocol import *
-
 from pyworkflow.em.data_tiltpairs import MicrographsTiltPair, ParticlesTiltPair, CoordinatesTiltPair
 from pyworkflow.utils import makePath, runJob, copyTree, cleanPath
 import pyworkflow as pw
@@ -39,30 +38,28 @@ import pyworkflow.gui.dialog as dialog
 
 import xmipp
 import xmipp3
-from xmipp3.convert import *
-
-from xmipp3.protocols.protocol_cl2d_align import XmippProtCL2DAlign
-from xmipp3.protocols.protocol_cl2d import XmippProtCL2D
-from xmipp3.protocols.protocol_compare_reprojections import XmippProtCompareReprojections
-from xmipp3.protocols.protocol_compare_angles import XmippProtCompareAngles
-from xmipp3.protocols.protocol_ctf_discrepancy import XmippProtCTFDiscrepancy
-from xmipp3.protocols.protocol_extract_particles import XmippProtExtractParticles
-from xmipp3.protocols.protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
-from xmipp3.protocols.protocol_helical_parameters import XmippProtHelicalParameters
-from xmipp3.protocols.protocol_kerdensom import XmippProtKerdensom
-from xmipp3.protocols.protocol_particle_pick_automatic import XmippParticlePickingAutomatic
-from xmipp3.protocols.protocol_particle_pick import XmippProtParticlePicking
-from xmipp3.protocols.protocol_particle_pick_pairs import XmippProtParticlePickingPairs
-from xmipp3.protocols.protocol_preprocess import XmippProtPreprocessVolumes
-from xmipp3.protocols.protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
-from xmipp3.protocols.protocol_rotational_spectra import XmippProtRotSpectra
-from xmipp3.protocols.protocol_screen_particles import XmippProtScreenParticles
-from xmipp3.protocols.protocol_ctf_micrographs import XmippProtCTFMicrographs
-
-from xmipp3.protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
-from xmipp3.protocols.protocol_multireference_alignability import XmippProtMultiRefAlignability
-from xmipp3.protocols.protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
-from xmipp3.protocols.protocol_movie_gain import XmippProtMovieGain
+from ..convert import *
+from ..protocols.protocol_cl2d_align import XmippProtCL2DAlign
+from ..protocols.protocol_cl2d import XmippProtCL2D
+from ..protocols.protocol_compare_reprojections import XmippProtCompareReprojections
+from ..protocols.protocol_compare_angles import XmippProtCompareAngles
+from ..protocols.protocol_ctf_discrepancy import XmippProtCTFDiscrepancy
+from ..protocols.protocol_extract_particles import XmippProtExtractParticles
+from ..protocols.protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
+from ..protocols.protocol_helical_parameters import XmippProtHelicalParameters
+from ..protocols.protocol_kerdensom import XmippProtKerdensom
+from ..protocols.protocol_particle_pick_automatic import XmippParticlePickingAutomatic
+from ..protocols.protocol_particle_pick import XmippProtParticlePicking
+from ..protocols.protocol_particle_pick_pairs import XmippProtParticlePickingPairs
+from ..protocols.protocol_preprocess import XmippProtPreprocessVolumes
+from ..protocols.protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
+from ..protocols.protocol_rotational_spectra import XmippProtRotSpectra
+from ..protocols.protocol_screen_particles import XmippProtScreenParticles
+from ..protocols.protocol_ctf_micrographs import XmippProtCTFMicrographs
+from ..protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
+from ..protocols.protocol_multireference_alignability import XmippProtMultiRefAlignability
+from ..protocols.protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
+from ..protocols.protocol_movie_gain import XmippProtMovieGain
 
 
 class XmippViewer(Viewer):

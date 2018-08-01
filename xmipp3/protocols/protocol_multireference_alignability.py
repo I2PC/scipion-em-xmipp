@@ -26,6 +26,7 @@
 
 from os.path import join, isfile
 from shutil import copyfile
+
 from pyworkflow.object import Float, String
 from pyworkflow.protocol.params import (PointerParam, FloatParam, STEPS_PARALLEL,
                                         StringParam, BooleanParam, IntParam, LEVEL_ADVANCED)
@@ -36,10 +37,7 @@ from pyworkflow.em.protocol import ProtAnalysis3D
 from pyworkflow.utils.path import moveFile, makePath
 from pyworkflow.gui.plotter import Plotter
 
-
-from xmipp3.convert import (writeSetOfParticles,
-                                                   writeSetOfVolumes,
-                                                   getImageLocation)
+from ..convert import writeSetOfParticles, writeSetOfVolumes, getImageLocation
 
 
 class XmippProtMultiRefAlignability(ProtAnalysis3D):

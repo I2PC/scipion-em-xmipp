@@ -23,7 +23,8 @@
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pyworkflow.em.protocol import ProtImportParticles, ProtImportVolumes
-from xmipp3.protocols.protocol_validate_overfitting import XmippProtValidateOverfitting
+
+from ..protocols import XmippProtValidateOverfitting
        
     
 class TestValidateOverfitting(BaseTest):

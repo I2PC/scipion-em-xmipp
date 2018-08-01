@@ -35,8 +35,7 @@ from pyworkflow.protocol.params import (PointerParam, BooleanParam, IntParam,
                                         FloatParam, StringParam, Positive, GE,
                                         EnumParam, NumericListParam, TextParam,
                                         DigFreqParam)
-
-from xmipp3.constants import *
+from ...constants import *
                                         
 
 def _defineProjectionMatchingParams(self, form):

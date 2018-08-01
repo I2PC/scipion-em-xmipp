@@ -27,7 +27,8 @@
 
 from pyworkflow.tests import *
 from pyworkflow.em.protocol.protocol_import import ProtImportPdb
-from xmipp3.protocols.pdb.protocol_combine_pdb import XmippProtCombinePdb
+
+from ..protocols import XmippProtCombinePdb
 
 class TestCombinePdb(BaseTest):     
     @classmethod

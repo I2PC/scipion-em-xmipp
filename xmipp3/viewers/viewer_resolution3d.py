@@ -37,12 +37,11 @@ from pyworkflow.protocol.params import LabelParam
 import pyworkflow.em as em
 from pyworkflow.gui.widgets import Button, HotButton
 import pyworkflow.gui.dialog as dialog
-from plotter import XmippPlotter
 
 import xmipp
-
-from xmipp3.convert import getImageLocation
-from xmipp3.protocols.protocol_resolution3d import XmippProtResolution3D
+from .plotter import XmippPlotter
+from ..convert import getImageLocation
+from ..protocols.protocol_resolution3d import XmippProtResolution3D
 
 
 FREQ_LABEL = 'frequency (1/A)'

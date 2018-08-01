@@ -28,18 +28,20 @@
 # **************************************************************************
 
 from os.path import basename, join, abspath
+import os
 
 from pyworkflow.object import String
 from pyworkflow.utils.path import cleanPattern, createLink, moveFile
 from pyworkflow.protocol.params import EnumParam, PointerParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.em.protocol import Prot3D
-from xmipp3.convert import getImageLocation
 from pyworkflow.em.viewers.chimera_utils import \
     createCoordinateAxisFile
-import os
 
-# from xmipp3 import XmippProtocol
+from ...convert import getImageLocation
+# from ...base import XmippProtocol
+
+
 NMA_MASK_NONE = 0
 NMA_MASK_THRE = 1
 NMA_MASK_FILE = 2

@@ -28,13 +28,15 @@ This module implement the wrappers aroung Xmipp CLtomo protocol
 visualization program.
 """
 
-from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
+import glob
+
 from pyworkflow.em import *
-from xmipp3.protocols.protocol_cltomo import XmippProtCLTomo
 from pyworkflow.gui.text import *
 from pyworkflow.protocol.params import LabelParam
 from pyworkflow.gui.dialog import showError, showWarning
-import glob
+from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
+
+from ..protocols.protocol_cltomo import XmippProtCLTomo
 
 
 class XmippCLTomoViewer(ProtocolViewer):

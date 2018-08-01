@@ -35,15 +35,15 @@ from pyworkflow.utils import isPower2, getListFromRangeString
 from pyworkflow.utils.path import copyFile, cleanPath 
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtAnalysis3D
-from xmipp3.base import XmippMdRow
-from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
-                         getImageLocation, createItemMatrix, setXmippAttributes)
+
 from pyworkflow.protocol.params import NumericRangeParam
 import pyworkflow.em as em
-
-from xmipp3.protocols.nma.convert import modeToRow
-
 import pyworkflow.em.metadata as md
+
+from .convert import modeToRow
+from ...base import XmippMdRow
+from ...convert import (writeSetOfParticles, xmippToLocation,
+                        getImageLocation, createItemMatrix, setXmippAttributes)
 
 
 NMA_ALIGNMENT_WAV = 0

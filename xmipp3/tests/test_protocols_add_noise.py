@@ -28,8 +28,9 @@ import unittest, sys
 
 from pyworkflow.em import exists
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
-from xmipp3.protocol import XmippProtAddNoiseVolumes, XmippProtAddNoiseParticles
 from pyworkflow.em.protocol import ProtImportVolumes, ProtImportParticles
+
+from ..protocols import XmippProtAddNoiseVolumes, XmippProtAddNoiseParticles
 
 
 class TestAddNoiseBase(BaseTest):

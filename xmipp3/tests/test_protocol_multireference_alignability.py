@@ -22,12 +22,10 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # ***************************************************************************/
 
-#import os
-#from itertools import izip
-
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pyworkflow.em.protocol import ProtImportParticles, ProtImportVolumes, ProtSubSet
-from xmipp3.protocol import XmippProtMultiRefAlignability
+
+from ..protocols import XmippProtMultiRefAlignability
 
 
 class TestMultireferenceAlignability(BaseTest):

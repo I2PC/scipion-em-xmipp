@@ -29,7 +29,8 @@ from pyworkflow.em.viewer import DataView, ChimeraView
 from xmipp3.viewers import XmippViewer
 from pyworkflow.protocol.params import PointerParam, LabelParam
 
-from xmipp3.protocols.protocol_normalize_strain import XmippProtNormalizeStrain
+from ..protocols.protocol_normalize_strain import XmippProtNormalizeStrain
+
 
 class XmippNormalizeStrainViewer(ProtocolViewer):
     """ Visualize the output of protocol volume strain """

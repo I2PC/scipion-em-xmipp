@@ -31,24 +31,22 @@ import math
 import os
 from tempfile import mkstemp
 
-from pyworkflow.em.constants import SYM_I222r, SYM_I222, SCIPION_SYM_NAME, \
-    SYM_In25, SYM_In25r, SYM_CYCLIC, SYM_DIHEDRAL, SYM_TETRAHEDRAL, \
-    SYM_OCTAHEDRAL
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.em.data import Transform
 from pyworkflow.em.headers import Ccp4Header
-from xmipp3 import Plugin
-from xmipp3.constants import XMIPP_SYM_NAME
-from xmipp3.protocols.pdb.protocol_pseudoatoms \
-    import XmippProtConvertToPseudoAtoms
-from xmipp3.protocols.pdb.protocol_pseudoatoms_base \
-    import NMA_MASK_THRE
-from xmipp3.protocol.protocol_extract_unit_cell \
-    import XmippProtExtractUnit
 from pyworkflow.em.protocol import ProtImportVolumes
 from pyworkflow.em.symmetry import Icosahedron
 from pyworkflow.tests import BaseTest, setupTestProject
 from pyworkflow.utils import runJob
+from pyworkflow.em.constants import (SYM_I222r, SYM_I222, SCIPION_SYM_NAME,
+                                     SYM_In25, SYM_In25r, SYM_CYCLIC,
+                                     SYM_DIHEDRAL, SYM_TETRAHEDRAL,
+                                     SYM_OCTAHEDRAL)
+from .. import Plugin
+from ..constants import XMIPP_SYM_NAME
+from ..protocols import XmippProtConvertToPseudoAtoms, XmippProtExtractUnit
+from ..protocols.pdb.protocol_pseudoatoms_base import NMA_MASK_THRE
+
 
 OFFSET = 22.5
 

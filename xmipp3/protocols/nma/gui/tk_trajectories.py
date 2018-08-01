@@ -31,10 +31,9 @@ import pyworkflow.gui as gui
 from pyworkflow.utils.properties import Icon
 from pyworkflow.gui.widgets import Button, HotButton
 
-from xmipp3.protocols.nma.data import Point, PathData
-from xmipp3.protocols.nma.gui import PointPath
-from xmipp3.protocols.nma.plotter import XmippNmaPlotter
-
+from ..data import Point, PathData
+from ..plotter import XmippNmaPlotter
+from . import PointPath
  
     
 class TrajectoriesWindow(gui.Window):

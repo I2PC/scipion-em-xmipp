@@ -24,7 +24,7 @@
 # *
 # **************************************************************************
 
-from xmipp3.protocols.nma.plotter import plotArray2D
+from ..plotter import plotArray2D
 
 
         

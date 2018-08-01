@@ -23,12 +23,11 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-import time
 
+import numpy as np
 import pyworkflow.protocol.params as params
 import pyworkflow.em as em
-from xmipp3.convert import getImageLocation
-import numpy as np
+from ..convert import getImageLocation
 
 
 ALIGN_MASK_CIRCULAR = 0

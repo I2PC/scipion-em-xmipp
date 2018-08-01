@@ -27,11 +27,12 @@
 
 from pyworkflow.em import *
 from pyworkflow.protocol.launch import launch
-from pyworkflow.utils.path import *  
-import xmipp
-from xmipp3 import XmippProtocol
+from pyworkflow.utils.path import *
 from pyworkflow.em.showj import launchSupervisedPickerGUI
-from xmipp3.convert import writeSetOfMicrographs, readSetOfCoordinates
+
+import xmipp
+from ..base import XmippProtocol
+from ..convert import writeSetOfMicrographs, readSetOfCoordinates
 
 
 class XmippProtParticlePicking(ProtParticlePicking, XmippProtocol):

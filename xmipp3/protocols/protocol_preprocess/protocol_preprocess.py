@@ -28,12 +28,14 @@
 from pyworkflow.em import *
 from pyworkflow.utils import *  
 from pyworkflow.protocol.params import *
-from xmipp3.protocols.protocol_preprocess.protocol_process import XmippProcessParticles, XmippProcessVolumes
 from pyworkflow.utils.path import cleanPath
-from xmipp3.constants import *
-from xmipp3.convert import getImageLocation
-from ...convert import locationToXmipp, writeSetOfParticles
 from pyworkflow.em import Volume
+
+from ...constants import *
+from ...convert import getImageLocation
+from ...convert import locationToXmipp, writeSetOfParticles
+from .protocol_process import XmippProcessParticles, XmippProcessVolumes
+
 
 class XmippPreprocessHelper():
     """ 

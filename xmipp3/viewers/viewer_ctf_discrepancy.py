@@ -24,8 +24,8 @@
 # *
 # **************************************************************************
 
+import numpy as np
 
-from xmipp3.protocols.protocol_ctf_discrepancy import XmippProtCTFDiscrepancy
 from pyworkflow.em import data
 from pyworkflow.em.plotter import EmPlotter
 from pyworkflow.em.viewer import ObjectView
@@ -33,7 +33,8 @@ from pyworkflow.em.showj import MODE, MODE_MD, ORDER, VISIBLE
 from pyworkflow.protocol.params import FloatParam, IntParam, LabelParam
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pyworkflow.utils.path import cleanPath
-import numpy as np
+
+from ..protocols.protocol_ctf_discrepancy import XmippProtCTFDiscrepancy
 
 
 class XmippCTFDiscrepancyViewer(ProtocolViewer):

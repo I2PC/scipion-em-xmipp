@@ -29,14 +29,13 @@ from os.path import join, exists
 import pyworkflow.em.data as data
 import pyworkflow.em.metadata as md
 import pyworkflow.utils.path as path
-
 from pyworkflow.em.protocol import ProtClassify2D
 from pyworkflow.em.constants import ALIGN_2D
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, IntParam,
                                         FloatParam)
-from xmipp3.convert import writeSetOfParticles, rowToAlignment, xmippToLocation
 
+from ..convert import writeSetOfParticles, rowToAlignment, xmippToLocation
 
 
 class XmippProtML2D(ProtClassify2D):

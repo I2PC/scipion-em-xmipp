@@ -32,10 +32,12 @@ import os
 
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import LabelParam
-from xmipp3.protocols.protocol_ml2d import XmippProtML2D
 import pyworkflow.em as em
 import pyworkflow.em.showj as showj
 from pyworkflow.protocol.params import EnumParam, StringParam
+
+from ..protocols.protocol_ml2d import XmippProtML2D
+
 
 ITER_LAST = 0
 ITER_SEL = 1

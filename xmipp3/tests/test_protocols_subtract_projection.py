@@ -20,21 +20,24 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *******
 import os
+import random
+import numpy as np
 
 from pyworkflow.tests import BaseTest, setupTestProject
-import xmipp
-from xmipp3.convert import writeSetOfParticles
 from pyworkflow.em.data import SetOfParticles
 from pyworkflow.em.constants import ALIGN_PROJ
-import numpy as np
 from pyworkflow.em.data import Acquisition, Particle, Transform
-import random
 from pyworkflow.em.data import CTFModel
-from xmipp3 import Plugin
 from pyworkflow.em.protocol import ProtImportParticles, ProtImportMask, ProtImportVolumes
-from xmipp3.protocol import XmippProtSubtractProjection
 from pyworkflow.em.data import  VolumeMask
 from pyworkflow.em.packages.relion import ProtRelionSubtract
+
+import xmipp
+from .. import Plugin
+from ..convert import writeSetOfParticles
+from ..protocols import XmippProtSubtractProjection
+
+
 proj1 = [(0, 0, 53, 55, 0.5), (0, 0, 53, 56, 1.0), (0, 0, 53, 57, 0.5), (0, 0, 53, 63, 0.5), (0, 0, 53, 64, 1.0),
          (0, 0, 53, 65, 0.5), (0, 0, 54, 54, 1.75), (0, 0, 54, 55, 4.0), (0, 0, 54, 56, 4.5), (0, 0, 54, 57, 4.0),
          (0, 0, 54, 58, 1.75), (0, 0, 54, 62, 1.75), (0, 0, 54, 63, 4.0), (0, 0, 54, 64, 4.5), (0, 0, 54, 65, 4.0),

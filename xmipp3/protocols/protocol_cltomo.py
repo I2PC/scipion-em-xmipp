@@ -25,11 +25,11 @@
 # **************************************************************************
 
 from pyworkflow.em import *  
-from xmipp3.constants import *
-from xmipp3.convert import writeSetOfVolumes, readSetOfClassesVol, readSetOfVolumes
 
 from xmipp import MetaData
-from xmipp3 import Plugin
+from .. import Plugin
+from ..constants import *
+from ..convert import writeSetOfVolumes, readSetOfClassesVol, readSetOfVolumes
 
 
 class XmippProtCLTomo(ProtClassify3D):

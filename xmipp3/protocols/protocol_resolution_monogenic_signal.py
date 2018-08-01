@@ -24,21 +24,23 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+
+import numpy as np
+
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.params import (PointerParam, StringParam, 
-                                        BooleanParam, FloatParam, LEVEL_ADVANCED)
+                                        BooleanParam, FloatParam,
+                                        LEVEL_ADVANCED)
 from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
 from pyworkflow.object import Float
 from pyworkflow.em import ImageHandler
 from pyworkflow.utils import getExt
 from pyworkflow.em.data import Volume
-import numpy as np
 import pyworkflow.em.metadata as md
 
+
 CHIMERA_RESOLUTION_VOL = 'MG_Chimera_resolution.vol'
-
 MONORES_METHOD_URL = 'http://github.com/I2PC/scipion/wiki/XmippProtMonoRes'
-
 OUTPUT_RESOLUTION_FILE = 'resolutionMap'
 FN_FILTERED_MAP = 'filteredMap'
 OUTPUT_RESOLUTION_FILE_CHIMERA = 'outputChimera'

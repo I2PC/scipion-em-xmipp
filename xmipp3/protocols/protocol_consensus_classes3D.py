@@ -28,6 +28,7 @@ from pyworkflow.em.protocol.protocol import EMProtocol
 from pyworkflow.protocol.params import MultiPointerParam
 from pyworkflow.em import Class3D
 
+
 class XmippProtConsensusClasses3D(EMProtocol):
     """ Compare several SetOfClasses3D.
         Return the intersection of the input classes.

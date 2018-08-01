@@ -32,6 +32,7 @@ import math
 import random
 from itertools import izip
 
+
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam, IntParam, EnumParam, NumericListParam
@@ -40,17 +41,14 @@ from pyworkflow.em.protocol import ProtRefine3D
 from pyworkflow.em.data import SetOfVolumes, Volume
 from pyworkflow.em.metadata.utils import getFirstRow, getSize
 from pyworkflow.utils.utils import getFloatListFromValues
-from xmipp3.convert import writeSetOfParticles
-from os.path import join, exists, split
-from xmipp3.convert import createItemMatrix, setXmippAttributes, getImageLocation
 from pyworkflow.em.convert import ImageHandler
 import pyworkflow.em.metadata as md
 import pyworkflow.em as em
 
 import xmipp
-
-from xmipp3 import HelicalFinder
-
+from ..base import HelicalFinder
+from ..convert import (writeSetOfParticles, createItemMatrix,
+                       setXmippAttributes, getImageLocation)
 
 
 class XmippProtReconstructSwarm(ProtRefine3D):

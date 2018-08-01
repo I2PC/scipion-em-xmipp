@@ -31,14 +31,15 @@ from os.path import exists
 
 import pyworkflow.em as em
 import pyworkflow.protocol.params as params
-from xmipp3.protocols.protocol_extract_unit_cell import XmippProtExtractUnit
 from pyworkflow.em.constants import SYM_I222
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.em.data import (SetOfVolumes)
-from pyworkflow.em.viewers.chimera_utils import \
-    createCoordinateAxisFile, \
-    symMapperScipionchimera, getProgram
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
+from pyworkflow.em.viewers.chimera_utils import (createCoordinateAxisFile,
+                                                 symMapperScipionchimera,
+                                                 getProgram)
+from ..protocols.protocol_extract_unit_cell import XmippProtExtractUnit
+
 
 VOLUME_SLICES = 1
 VOLUME_CHIMERA = 0

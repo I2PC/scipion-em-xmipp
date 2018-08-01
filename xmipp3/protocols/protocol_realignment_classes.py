@@ -24,17 +24,18 @@
 # *
 # ******************************************************************************
 
+import numpy as np
+
+from pyworkflow.em import ALIGN_2D
+from pyworkflow.em.data import Class2D, Particle, Coordinate
 from pyworkflow.em.protocol import ProtClassify2D
 import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
 from pyworkflow.em.data import Transform
+
 from xmipp import MD_APPEND
-from xmipp3.convert import rowToAlignment, \
-    alignmentToRow, rowToParticle
-from xmipp3.convert import writeSetOfClasses2D
-from pyworkflow.em import ALIGN_2D
-from pyworkflow.em.data import Class2D, Particle, Coordinate
-import numpy as np
+from ..convert import (rowToAlignment, alignmentToRow,
+                       rowToParticle, writeSetOfClasses2D)
 
 
 class XmippProtReAlignClasses(ProtClassify2D):

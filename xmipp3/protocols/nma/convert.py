@@ -29,8 +29,9 @@ from collections import OrderedDict
 
 from pyworkflow.utils import Environ
 from pyworkflow.em.data import NormalMode
-from xmipp3.convert import rowToObject, objectToRow
+
 import xmipp
+from ...convert import rowToObject, objectToRow
 
             
 MODE_DICT = OrderedDict([ 

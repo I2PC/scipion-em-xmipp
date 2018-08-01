@@ -26,19 +26,13 @@
 # *
 # **************************************************************************
 
-
 from pyworkflow.em.data import SetOfVolumes
-
-
-# import xmipp
-# from xmipp3 import *
-from xmipp3.base import *
-from xmipp3.convert import *
-from xmipp.constants import *
 from pyworkflow.tests import *
-
-import subprocess
 from pyworkflow.utils.properties import colorText
+
+from ..base import *
+from ..convert import *
+from ..constants import *
 
 
 class TestBasic(BaseTest):
