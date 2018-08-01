@@ -24,11 +24,11 @@
 # *
 # **************************************************************************
 
-import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_1
-
+import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtProcessParticles
 from pyworkflow.protocol.params import IntParam
+
 
 class XmippProtWriteTestC(ProtProcessParticles):
     """    

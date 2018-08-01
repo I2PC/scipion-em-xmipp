@@ -27,14 +27,17 @@
 import re
 from os.path import join, dirname, exists
 from glob import glob
+
 import pyworkflow.em as em
 import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as param
 import pyworkflow.protocol.constants as const
 from pyworkflow.em.protocol import ProtClassify2D, SetOfClasses2D
 from pyworkflow.utils.path import cleanPath, makePath
-from pyworkflow.em.packages.xmipp3.convert import writeSetOfParticles, \
-    createItemMatrix, writeSetOfClasses2D, xmippToLocation, rowToAlignment
+
+from ..convert import (writeSetOfParticles, createItemMatrix, writeSetOfClasses2D,
+                       xmippToLocation, rowToAlignment)
+
 
 # Comparison methods enum
 CMP_CORRELATION = 0

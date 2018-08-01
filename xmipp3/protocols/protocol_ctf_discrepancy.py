@@ -27,14 +27,16 @@
 # **************************************************************************
 
 import os
-import convert
-import xmipp
+
 from pyworkflow.em.data import SetOfCTF
 from pyworkflow.object import Set, Float
 import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as params
 import pyworkflow.em as em
 from pyworkflow.em.metadata import Row, MetaData
+
+import xmipp
+from .. import convert
 
 
 class XmippProtCTFDiscrepancy(em.ProtCTFMicrographs):

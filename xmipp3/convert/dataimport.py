@@ -31,7 +31,7 @@ from pyworkflow.utils.path import findRootFrom, copyTree, createLink, replaceExt
 from pyworkflow.em.data import Micrograph
 import pyworkflow.em.metadata as md
 
-from .convert import *
+from ..convert import *
 
 
 

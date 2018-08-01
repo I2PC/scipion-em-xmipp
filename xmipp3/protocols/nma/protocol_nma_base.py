@@ -37,8 +37,10 @@ from pyworkflow.utils import *
 from pyworkflow.utils.path import copyFile, createLink, makePath, cleanPath, moveFile
 from pyworkflow.protocol.params import PointerParam, IntParam, FloatParam, LEVEL_ADVANCED, EnumParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, LEVEL_ADVANCED
-from convert import getNMAEnviron
+
 import xmipp
+from .convert import getNMAEnviron
+
 
 #from xmipp3 import XmippProtocol
 NMA_CUTOFF_ABS = 0

@@ -33,7 +33,6 @@ import pyworkflow.em as em
 from pyworkflow.em.protocol.protocol_movies import ProtProcessMovies
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
-
 from pyworkflow.mapper import Mapper
 from pyworkflow.object import Set
 from pyworkflow.protocol.constants import (STATUS_NEW)

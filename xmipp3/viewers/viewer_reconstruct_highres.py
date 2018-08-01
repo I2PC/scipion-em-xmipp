@@ -27,17 +27,21 @@
 # *
 # **************************************************************************
 
+from glob import glob
+from os.path import exists, join
+
+from pyworkflow.protocol.params import EnumParam, NumericRangeParam, LabelParam, IntParam, FloatParam
+from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pyworkflow.em.viewer import ObjectView, DataView, ChimeraClientView
 import pyworkflow.em.showj as showj
-from protocol_reconstruct_highres import XmippProtReconstructHighRes
-from plotter import XmippPlotter
-from glob import glob
-from os.path import exists, join
-from pyworkflow.em.packages.xmipp3.convert import getImageLocation
-from pyworkflow.protocol.params import EnumParam, NumericRangeParam, LabelParam, IntParam, FloatParam
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from xmipp import MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT, MDL_RESOLUTION_FREQ, MDL_RESOLUTION_FRC, MetaData
+
+from xmipp import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
+                   MDL_RESOLUTION_FREQ, MDL_RESOLUTION_FRC, MetaData)
+from .plotter import XmippPlotter
+from ..convert import getImageLocation
+from ..protocols.protocol_reconstruct_highres import XmippProtReconstructHighRes
+
 
 ITER_LAST = 0
 ITER_SELECTION = 1

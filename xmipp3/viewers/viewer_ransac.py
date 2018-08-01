@@ -27,10 +27,13 @@
 This module implement the wrappers aroung Xmipp Ransac Protocol
 visualization program.
 """
+
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.em import *
-from protocol_ransac import XmippProtRansac
-from pyworkflow.em.packages.xmipp3.viewer import XmippViewer
+
+from ..viewers import XmippViewer
+from ..protocols.protocol_ransac import XmippProtRansac
+
 
 class XmippViewerRansac(XmippViewer):
     """ Wrapper to visualize Ransac results """

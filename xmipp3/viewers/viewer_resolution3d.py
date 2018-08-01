@@ -37,12 +37,11 @@ from pyworkflow.protocol.params import LabelParam
 import pyworkflow.em as em
 from pyworkflow.gui.widgets import Button, HotButton
 import pyworkflow.gui.dialog as dialog
-from plotter import XmippPlotter
 
 import xmipp
-
-from convert import getImageLocation
-from protocol_resolution3d import XmippProtResolution3D
+from .plotter import XmippPlotter
+from ..convert import getImageLocation
+from ..protocols.protocol_resolution3d import XmippProtResolution3D
 
 
 FREQ_LABEL = 'frequency (1/A)'
@@ -136,7 +135,7 @@ class XmippResolution3DViewer(ProtocolViewer):
         f.close()
             
     def _loadData(self):
-        from pyworkflow.em.packages.xmipp3.nma.data import PathData
+        from xmipp3.protocols.nma.data import PathData
         data = PathData(dim=2)
         bfactorFile = self.protocol._getPath('bfactor.txt')
         if os.path.exists(bfactorFile):

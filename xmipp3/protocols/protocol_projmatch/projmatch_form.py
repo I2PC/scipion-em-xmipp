@@ -35,12 +35,10 @@ from pyworkflow.protocol.params import (PointerParam, BooleanParam, IntParam,
                                         FloatParam, StringParam, Positive, GE,
                                         EnumParam, NumericListParam, TextParam,
                                         DigFreqParam)
-
-from pyworkflow.em.packages.xmipp3.constants import SYM_URL
+from ...constants import *
                                         
 
 def _defineProjectionMatchingParams(self, form):
-    import pyworkflow.em.packages.xmipp3 as xmipp3
     
     form.addSection(label='Input')
     
@@ -121,7 +119,7 @@ def _defineProjectionMatchingParams(self, form):
     
     # doMask, doSphericalMask now merged into maskType
     
-    groupMask.addParam('maskType', EnumParam, choices=['None', 'circular', 'mask object'], default=xmipp3.MASK2D_CIRCULAR, 
+    groupMask.addParam('maskType', EnumParam, choices=['None', 'circular', 'mask object'], default=MASK2D_CIRCULAR,
                  label="Mask reference volumes", display=EnumParam.DISPLAY_COMBO,
                  help='Masking the reference volume will increase the signal to noise ratio. \n '
                       'Do not provide a very tight mask. \n ')
@@ -222,21 +220,21 @@ def _defineProjectionMatchingParams(self, form):
     
     # Changed from String to Int 
     form.addParam('projectionMethod', EnumParam, choices=['fourier', 'real_space'], 
-                 default=xmipp3.PROJECT_REALSPACE, expertLevel=LEVEL_ADVANCED, 
+                 default=PROJECT_REALSPACE, expertLevel=LEVEL_ADVANCED,
                  label="Projection method", display=EnumParam.DISPLAY_COMBO,
                  help='select projection method, by default Fourier with padding 1 and interpolation bspline')        
     
     
     form.addParam('paddingAngularProjection', FloatParam, default=1, expertLevel=LEVEL_ADVANCED,  
-                 condition='projectionMethod == %d' % xmipp3.PROJECT_FOURIER,
+                 condition='projectionMethod == %d' % PROJECT_FOURIER,
                  label='Padding factor for projection', validators=[GE(1)],
                  help="""Increase the padding factor will improve projection quality but 
     projection generation will be slower. In general padding 1 and spline is OK
     """)       
     # Changed from String to Int 
     form.addParam('kernelAngularProjection', EnumParam, choices=['neareast', 'linear', 'bspline'],
-                 default=xmipp3.KERNEL_BSPLINE, expertLevel=LEVEL_ADVANCED,  
-                 condition='projectionMethod == %d' % xmipp3.PROJECT_FOURIER,
+                 default=KERNEL_BSPLINE, expertLevel=LEVEL_ADVANCED,
+                 condition='projectionMethod == %d' % PROJECT_FOURIER,
                  label='Interpolation kernel for projection', 
                  help=""" Interpolation kernel for the generation of projections.
     """)
@@ -327,7 +325,7 @@ def _defineProjectionMatchingParams(self, form):
     
     form.addParam('discardImages', EnumParam, 
                  choices=['None', 'maxCC', 'percentage', 'classPercentage'],
-                 default=xmipp3.SELECT_NONE, display=EnumParam.DISPLAY_COMBO,
+                 default=SELECT_NONE, display=EnumParam.DISPLAY_COMBO,
                  label='Discard images?', 
                  help=""" 
     None : No images will be discarded.
@@ -338,7 +336,7 @@ def _defineProjectionMatchingParams(self, form):
     """)
     form.addParam('minimumCrossCorrelation', NumericListParam, default='0.1', 
                  label='discard image if CC below', 
-                 condition='discardImages==%d' % xmipp3.SELECT_MAXCC,
+                 condition='discardImages==%d' % SELECT_MAXCC,
                  help=""" 
     Discard images with cross-correlation (CC) below this value.
     Provide a sequence of numbers (for instance, "0.3 0.3 0.5 0.5" specifies 4 iterations,
@@ -350,7 +348,7 @@ def _defineProjectionMatchingParams(self, form):
     
     form.addParam('discardPercentage', NumericListParam, default='10', 
                  label='discard image percentage with less CC',
-                 condition='discardImages==%d'%xmipp3.SELECT_PERCENTAGE,
+                 condition='discardImages==%d'%SELECT_PERCENTAGE,
                  help=""" 
     Discard this percentage of images with less cross-correlation (CC)
     Provide a sequence of numbers (for instance, "20 20 10 10" specifies 4 iterations,
@@ -363,7 +361,7 @@ def _defineProjectionMatchingParams(self, form):
     
     form.addParam('discardPercentagePerClass', NumericListParam, default='10', 
                  label='discard image percentage in class with less CC',
-                 condition='discardImages==%d'%xmipp3.SELECT_CLASSPERCENTAGE,
+                 condition='discardImages==%d'%SELECT_CLASSPERCENTAGE,
                  help=""" 
     Discard this percentage of images in each class(projection direction)
     with less cross-correlation (CC)    
@@ -483,7 +481,7 @@ def _defineProjectionMatchingParams(self, form):
     
     form.addParam('reconstructionMethod', EnumParam, expertLevel=LEVEL_ADVANCED,
                  choices=['fourier', 'art', 'wbp'],
-                 default=xmipp3.RECONSTRUCT_FOURIER, display=EnumParam.DISPLAY_COMBO,
+                 default=RECONSTRUCT_FOURIER, display=EnumParam.DISPLAY_COMBO,
                  label='Reconstruction method', 
                  help=""" Select what reconstruction method to use.
     fourier: Fourier space interpolation (with griding).
@@ -492,20 +490,20 @@ def _defineProjectionMatchingParams(self, form):
     """)
     
     form.addParam('fourierMaxFrequencyOfInterest', DigFreqParam, default=0.25,
-                 condition='reconstructionMethod == %d' % xmipp3.RECONSTRUCT_FOURIER,
+                 condition='reconstructionMethod == %d' % RECONSTRUCT_FOURIER,
                  label='Initial maximum frequency', expertLevel=LEVEL_ADVANCED,
                  help=""" This number is only used in the first iteration. 
     From then on, it will be set to resolution computed in the resolution section
     """)         
     form.addParam('fourierReconstructionExtraCommand', StringParam, default='',
-                 condition='reconstructionMethod == %d' % xmipp3.RECONSTRUCT_FOURIER,
+                 condition='reconstructionMethod == %d' % RECONSTRUCT_FOURIER,
                  label='Additional parameters for fourier', expertLevel=LEVEL_ADVANCED,
                  help=""" For details see:
     [[http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Fourier][fourier]]
     """)          
     
     form.addParam('artLambda', NumericListParam, default='0.2', 
-                 condition='reconstructionMethod == %d' % xmipp3.RECONSTRUCT_ART,
+                 condition='reconstructionMethod == %d' % RECONSTRUCT_ART,
                  label='Values of lambda for ART', expertLevel=LEVEL_ADVANCED,
                  help=""" *IMPORTANT:* ou must specify a value of lambda for each iteration even
     if ART has not been selected.
@@ -524,14 +522,14 @@ def _defineProjectionMatchingParams(self, form):
     """)   
     
     form.addParam('artReconstructionExtraCommand', StringParam, default='-k 0.5 -n 10 ',
-                 condition='reconstructionMethod == %d' % xmipp3.RECONSTRUCT_ART,
+                 condition='reconstructionMethod == %d' % RECONSTRUCT_ART,
                  label='Additional parameters for ART', expertLevel=LEVEL_ADVANCED,
                  help=""" For details see:
     [[http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Art][xmipp art]]
     """)          
     
     form.addParam('wbpReconstructionExtraCommand', StringParam, default='',
-                 condition='reconstructionMethod == %d' % xmipp3.RECONSTRUCT_WBP,
+                 condition='reconstructionMethod == %d' % RECONSTRUCT_WBP,
                  label='Additional parameters for WBP', expertLevel=LEVEL_ADVANCED,
                  help=""" For details see:
     [[http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Wbp][xmipp wbp]]

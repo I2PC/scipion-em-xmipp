@@ -26,9 +26,9 @@
 
 import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
-
 from pyworkflow.em.protocol import ProtProcessParticles
-from pyworkflow.em.packages.xmipp3.convert import (writeSetOfParticles, xmippToLocation)
+
+from ..convert import writeSetOfParticles, xmippToLocation
 
 
 class XmippProtCTFCorrectWiener2D(ProtProcessParticles):

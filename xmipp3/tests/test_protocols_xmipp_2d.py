@@ -31,11 +31,14 @@ from __future__ import print_function
 from pyworkflow.tests.test_utils import wait
 from pyworkflow.utils import magentaStr
 from pyworkflow.tests import *
-from pyworkflow.em.packages.xmipp3 import *
-from pyworkflow.em.packages.xmipp3 import XmippFilterHelper as xfh
-from pyworkflow.em.packages.xmipp3 import XmippResizeHelper as xrh
-from pyworkflow.em.packages.xmipp3.protocol_preprocess import (
-    OP_DOTPRODUCT, OP_MULTIPLY, OP_SQRT)
+from pyworklow.em.protocol.protocol_import import *
+
+from ..base import *
+from ..convert import *
+from ..constants import *
+from ..protocols import XmippFilterHelper as xfh
+from ..protocols import XmippResizeHelper as xrh
+from ..protocols import OP_DOTPRODUCT, OP_MULTIPLY, OP_SQRT
 
 
 # Some utility functions to import particles that are used

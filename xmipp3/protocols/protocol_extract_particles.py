@@ -33,7 +33,6 @@ from os.path import exists, basename
 
 import pyworkflow.em.metadata as md
 import pyworkflow.utils as pwutils
-from pyworkflow.em.packages.xmipp3.constants import SAME_AS_PICKING, OTHER
 from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
                                            STATUS_FINISHED)
 import pyworkflow.protocol.params as params
@@ -41,9 +40,10 @@ from pyworkflow.em.protocol import ProtExtractParticles
 from pyworkflow.em.data import Particle
 from pyworkflow.em.constants import RELATION_CTF
 
-from convert import (micrographToCTFParam, writeMicCoordinates, xmippToLocation,
-                     setXmippAttributes)
-from xmipp3 import XmippProtocol
+from ..base import XmippProtocol
+from ..convert import (micrographToCTFParam, writeMicCoordinates,
+                       xmippToLocation, setXmippAttributes)
+from ..constants import SAME_AS_PICKING, OTHER
 
 
 class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
@@ -450,7 +450,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         return self._getPath('images.xmd')
 
     def createParticles(self, item, row):
-        from pyworkflow.em.packages.xmipp3.convert import rowToParticle
+        from ..convert import rowToParticle
         
         particle = rowToParticle(row, readCtf=self._useCTF())
         coord = particle.getCoordinate()

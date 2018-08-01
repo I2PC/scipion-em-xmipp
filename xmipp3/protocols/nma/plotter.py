@@ -25,7 +25,7 @@
 # **************************************************************************
 
 import numpy as np
-from pyworkflow.em.packages.xmipp3.plotter import XmippPlotter
+from ...viewers.plotter import XmippPlotter
 
 
 class XmippNmaPlotter(XmippPlotter):

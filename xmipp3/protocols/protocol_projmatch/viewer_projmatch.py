@@ -30,22 +30,23 @@ This module implement the wrappers aroung Xmipp ML2D protocol
 visualization program.
 """
 
+import numpy as np
 
 from pyworkflow.protocol.executor import StepExecutor
 from pyworkflow.viewer import CommandView, Viewer, ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.em.viewer import DataView, ClassesView, Classes3DView
 from pyworkflow.utils import createUniqueFileName, cleanPattern
-from protocol_projmatch import XmippProtProjMatch
-# from projmatch_initialize import createFilenameTemplates
-from pyworkflow.em.packages.xmipp3.convert import * # change this
 from pyworkflow.em.viewer import ChimeraDataView
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (LabelParam, IntParam, FloatParam,
                                         StringParam, EnumParam, NumericRangeParam)
-import xmipp
 from pyworkflow.em.plotter import EmPlotter
-from pyworkflow.em.packages.xmipp3.plotter import XmippPlotter
-import numpy as np
+
+import xmipp
+from ...convert import *
+from ...viewers.plotter import XmippPlotter
+from .protocol_projmatch import XmippProtProjMatch
+# from .projmatch_initialize import createFilenameTemplates
 
 
 ITER_LAST = 0

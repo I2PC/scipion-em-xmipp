@@ -25,12 +25,12 @@
 # **************************************************************************
 
 import unittest, sys
-# import numpy as np
+
 from pyworkflow.em import exists
-#from pyworkflow.em.packages.xmipp3.protocol_resolution_monogenic_signal import OUTPUT_RESOLUTION_FILE
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
-from pyworkflow.em.packages.xmipp3 import XmippProtMonoRes, XmippProtCreateMask3D
 from pyworkflow.em.protocol import ProtImportVolumes
+
+from ..protocols import XmippProtMonoRes, XmippProtCreateMask3D
 
 
 class TestMonoResBase(BaseTest):

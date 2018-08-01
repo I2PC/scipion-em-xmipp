@@ -32,14 +32,18 @@ from itertools import izip
 from pyworkflow.utils import redStr, greenStr, magentaStr
 from pyworkflow.tests import *
 from pyworkflow.em import *
-from pyworkflow.em.packages.xmipp3 import *
-from pyworkflow.em.packages.xmipp3 import (XmippFilterHelper as xfh,
-                                           XmippResizeHelper as xrh)
-from pyworkflow.em.packages.xmipp3.protocol_align_volume import (
-    ALIGN_ALGORITHM_EXHAUSTIVE, ALIGN_ALGORITHM_EXHAUSTIVE_LOCAL,
-    ALIGN_ALGORITHM_LOCAL)
-from pyworkflow.em.packages.xmipp3.protocol_preprocess import (
-    OP_COLUNM, OP_DOTPRODUCT, OP_MULTIPLY, OP_SQRT, OP_RADIAL, OP_ROW)
+
+from ..base import *
+from ..convert import *
+from ..constants import *
+from ..protocols import (XmippFilterHelper as xfh,
+                         XmippResizeHelper as xrh,
+                         OP_COLUNM, OP_DOTPRODUCT, OP_MULTIPLY,
+                         OP_SQRT, OP_RADIAL, OP_ROW)
+from ..protocols.protocol_align_volume import (ALIGN_ALGORITHM_EXHAUSTIVE,
+                                               ALIGN_ALGORITHM_EXHAUSTIVE_LOCAL,
+                                               ALIGN_ALGORITHM_LOCAL)
+
 
 class TestXmippBase(BaseTest):
     """ Some utility functions to import volumes that are used in several tests."""

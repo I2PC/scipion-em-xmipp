@@ -36,7 +36,9 @@ import pyworkflow.em.showj as showj
 import pyworkflow.em.metadata as md
 from pyworkflow.protocol.params import EnumParam, NumericRangeParam, LabelParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from protocol_mltomo import XmippProtMLTomo
+
+from ..protocols.protocol_mltomo import XmippProtMLTomo
+
 
 ITER_LAST = 0
 ITER_SELECTION = 1

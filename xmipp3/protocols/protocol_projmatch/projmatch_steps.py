@@ -33,13 +33,13 @@ form definition, we have separated in this sub-module.
 import math
 from os.path import exists, join
 
-import xmipp
 from pyworkflow.object import Float
 from pyworkflow.em.data import Volume, SetOfClasses3D
 from pyworkflow.utils import getMemoryAvailable, replaceExt, removeExt, cleanPath, makePath, copyFile
 
-from pyworkflow.em.packages.xmipp3.convert import createClassesFromImages
-from pyworkflow.em.packages.xmipp3.utils import isMdEmpty
+import xmipp
+from ...convert import createClassesFromImages
+from ...utils import isMdEmpty
 
 
 ctfBlockName = 'ctfGroup'

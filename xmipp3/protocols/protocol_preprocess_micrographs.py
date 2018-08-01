@@ -27,6 +27,7 @@
 
 import os
 from os.path import basename
+
 from pyworkflow.utils import getExt, replaceExt
 from pyworkflow.protocol.constants import STEPS_PARALLEL, LEVEL_ADVANCED
 import pyworkflow.protocol.constants as cons

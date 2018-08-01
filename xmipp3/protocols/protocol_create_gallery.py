@@ -28,8 +28,9 @@ import pyworkflow
 import pyworkflow.object as pwobj
 from pyworkflow.em import *  
 from xmipp import MetaData, MDL_ANGLE_ROT, MDL_ANGLE_TILT
-from pyworkflow.em.packages.xmipp3.convert import readSetOfParticles
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
+
+from ..convert import readSetOfParticles
 
 
 class XmippProtCreateGallery(ProtAnalysis3D):

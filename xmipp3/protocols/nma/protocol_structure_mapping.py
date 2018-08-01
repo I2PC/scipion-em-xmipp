@@ -26,22 +26,25 @@
 # **************************************************************************
 
 import os
-from glob import glob
+# from glob import glob
 import numpy as np
+
 import pyworkflow.em.metadata as md
 import pyworkflow.em as em
 from pyworkflow.em.protocol import EMProtocol
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_1
-from pyworkflow.em.packages.xmipp3.convert import getImageLocation
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 from pyworkflow.utils.path import cleanPattern, createLink, moveFile, copyFile, makePath, cleanPath
-from pyworkflow.object import String
-from pyworkflow.em.data import SetOfNormalModes
-from pyworkflow.em.packages.xmipp3 import XmippMdRow
-from pyworkflow.em.packages.xmipp3.pdb.protocol_pseudoatoms_base import XmippProtConvertToPseudoAtomsBase
+# from pyworkflow.object import String
+# from pyworkflow.em.data import SetOfNormalModes
+
 import xmipp
-from pyworkflow.em.packages.xmipp3.nma.protocol_nma_base import XmippProtNMABase, NMA_CUTOFF_REL
+from ...convert import getImageLocation
+# from ...base import XmippMdRow
+from ..pdb.protocol_pseudoatoms_base import XmippProtConvertToPseudoAtomsBase
+from .protocol_nma_base import XmippProtNMABase, NMA_CUTOFF_REL
+
 
 def mds(d, dimensions = 2):
     """

@@ -25,6 +25,7 @@
 # *****************************************************************************
 
 import os
+
 import pyworkflow.em as em
 import pyworkflow.em.metadata as md
 import pyworkflow.protocol.constants as cons
@@ -34,8 +35,8 @@ from pyworkflow.em.protocol import ProtClassify2D
 from pyworkflow.em.data import SetOfParticles
 from pyworkflow.object import Set
 from pyworkflow.utils.properties import Message
-from pyworkflow.em.packages.xmipp3.convert import writeSetOfParticles, \
-    readSetOfParticles, setXmippAttributes
+
+from ..convert import writeSetOfParticles, readSetOfParticles, setXmippAttributes
 
 
 class XmippProtEliminateEmptyParticles(ProtClassify2D):

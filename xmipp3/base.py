@@ -30,21 +30,19 @@ import os
 import sys
 import platform
 from collections import OrderedDict
-from .constants import *
 
-import xmipp
 import pyworkflow.dataset as ds
 from pyworkflow.object import ObjectWrap
-
 from pyworkflow.dataset import (
     COL_RENDER_CHECKBOX, COL_RENDER_TEXT, COL_RENDER_IMAGE, COL_RENDER_VOLUME)
 
-from xmipp import (
-    MetaData, MetaDataInfo, MDL_IMAGE, MDL_IMAGE1, MDL_IMAGE_REF,
+import xmipp
+from xmipp import (MetaData, MetaDataInfo, MDL_IMAGE, MDL_IMAGE1, MDL_IMAGE_REF,
     MDL_ANGLE_ROT, MDL_ANGLE_TILT, MDL_ANGLE_PSI, MDL_REF, MDL_SHIFT_X,
     MDL_SHIFT_Y, MDL_FLIP, MD_APPEND, MDL_MAXCC, MDL_ENABLED, MDL_CTF_MODEL,
     MDL_SAMPLINGRATE, DT_DOUBLE, MDL_ANGLE_ROT, MDL_SHIFT_Z,
     Euler_angles2matrix, Image, FileName, getBlocksInMetaDataFile, label2Str)
+from .constants import *
 
 
 LABEL_TYPES = { 

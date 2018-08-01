@@ -28,9 +28,9 @@
 
 from pyworkflow.em import *  
 
-from ..convert import getImageLocation
-from ..constants import *
-from geometrical_mask import *
+from ...convert import getImageLocation
+from ...constants import *
+from .geometrical_mask import *
 
 SOURCE_VOLUME=0
 SOURCE_GEOMETRY=1

@@ -29,14 +29,14 @@ Consensus picking protocol
 """
 import os, time
 from math import sqrt
+import numpy as np
+
 from pyworkflow.object import Set, String
 import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtParticlePicking
 from pyworkflow.protocol.constants import *
 from pyworkflow.em.data import SetOfCoordinates, Coordinate
-
-import numpy as np
 
 
 class XmippProtConsensusPicking(ProtParticlePicking):

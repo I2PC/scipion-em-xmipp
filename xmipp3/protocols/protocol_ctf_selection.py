@@ -32,9 +32,8 @@ from datetime import datetime
 import pyworkflow.em as em
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
-
 from pyworkflow.object import Set
-from pyworkflow.protocol.constants import (STATUS_NEW)
+from pyworkflow.protocol.constants import STATUS_NEW
 
 
 class XmippProtCTFSelection(em.ProtCTFMicrographs):

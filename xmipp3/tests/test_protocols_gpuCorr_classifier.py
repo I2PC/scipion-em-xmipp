@@ -26,8 +26,9 @@ from pyworkflow.em.protocol import ProtImportAverages, ProtImportMicrographs
 from pyworkflow.em.protocol.protocol_sets import ProtSubSet
 from pyworkflow.em.packages.grigoriefflab import ProtCTFFind
 from pyworkflow.em.packages.eman2.protocol_autopick import *
-from pyworkflow.em.packages.xmipp3.protocol_extract_particles import *
-from pyworkflow.em.packages.xmipp3.protocol_classification_gpuCorr import *
+
+from ..protocols.protocol_extract_particles import *
+from ..protocols.protocol_classification_gpuCorr import *
 
 
 # Number of mics to be processed

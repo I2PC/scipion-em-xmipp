@@ -28,11 +28,9 @@
 from os.path import basename
 
 from pyworkflow.object import String
-from pyworkflow.protocol.params import (PointerParam, StringParam, EnumParam, IntParam,
-                                        LEVEL_ADVANCED)
+from pyworkflow.protocol.params import (PointerParam, StringParam, EnumParam,
+                                        IntParam, LEVEL_ADVANCED)
 from pyworkflow.em.protocol import ProtAnalysis3D
-import xmipp 
-
 
 
 DIMRED_PCA = 0

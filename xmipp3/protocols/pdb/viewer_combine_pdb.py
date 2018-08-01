@@ -26,9 +26,9 @@
 # **************************************************************************
 
 from pyworkflow.em.viewer import DataView, ChimeraView
-from pyworkflow.em.packages.xmipp3.viewer import XmippViewer
 
-from protocol_combine_pdb import XmippProtCombinePdb
+from ...viewers import XmippViewer
+from .protocol_combine_pdb import XmippProtCombinePdb
 
 
 class XmippProtCombinePdbViewer(XmippViewer):

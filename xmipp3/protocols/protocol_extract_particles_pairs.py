@@ -32,16 +32,17 @@ from os.path import exists
 
 import pyworkflow.em.metadata as md
 import pyworkflow.utils as pwutils
-from pyworkflow.em.packages.xmipp3 import XmippProtocol
-from pyworkflow.em.packages.xmipp3.constants import OTHER
 from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
                                            STATUS_FINISHED)
 from pyworkflow.protocol.params import (PointerParam, EnumParam, FloatParam,
                                         IntParam, BooleanParam, Positive, GE)
 from pyworkflow.em.protocol import ProtExtractParticlesPair
-from convert import writeSetOfCoordinates, readSetOfParticles
 from pyworkflow.em.data_tiltpairs import ParticlesTiltPair, TiltPair
 from pyworkflow.em.data import SetOfMicrographs, SetOfParticles
+
+from ..base import XmippProtocol
+from ..convert import writeSetOfCoordinates, readSetOfParticles
+from ..constants import OTHER
 
 
 class XmippProtExtractParticlesPairs(ProtExtractParticlesPair, XmippProtocol):

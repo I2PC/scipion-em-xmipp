@@ -26,15 +26,16 @@
 # *
 # **************************************************************************
 
-import xmipp
+
 from pyworkflow.object import Integer
 from pyworkflow.utils.path import makePath, copyFile
 from pyworkflow.utils import getFloatListFromValues, getBoolListFromValues, getStringListFromValues
 from pyworkflow.em import ProtRefine3D, ProtClassify3D
 
-from projmatch_initialize import *
-from projmatch_form import _defineProjectionMatchingParams
-from projmatch_steps import *
+import xmipp
+from .projmatch_initialize import *
+from .projmatch_form import _defineProjectionMatchingParams
+from .projmatch_steps import *
 
 
 
@@ -64,7 +65,7 @@ class XmippProtProjMatch(ProtRefine3D, ProtClassify3D):
         initializeLists(self)
 
     def _loadInputInfo(self):
-        from pyworkflow.em.packages.xmipp3 import getImageLocation
+        from ...convert import getImageLocation
         
         reference = self.input3DReferences.get() # Input can be either a single volume or a set of volumes.
         
@@ -151,7 +152,7 @@ class XmippProtProjMatch(ProtRefine3D, ProtClassify3D):
         by projection matching. And copy the generated file to be
         used as initial docfile for further iterations.
         """
-        from pyworkflow.em.packages.xmipp3 import writeSetOfParticles
+        from ...convert import writeSetOfParticles
         writeSetOfParticles(self.inputParticles.get(), self.selFileName, 
                             blockName=self.blockWithAllExpImages)
         #copyFile(self.selFileName, self._getFileName('inputParticlesDoc'))
@@ -394,7 +395,7 @@ class XmippProtProjMatch(ProtRefine3D, ProtClassify3D):
                             itemDataIterator=md.iterRows(imgFn, sortByLabel=md.MDL_ITEM_ID))
     
     def _createItemMatrix(self, item, row):
-        from pyworkflow.em.packages.xmipp3.convert import createItemMatrix
+        from ...convert import createItemMatrix
         import pyworkflow.em as em
         
         createItemMatrix(item, row, align=em.ALIGN_PROJ)

@@ -24,24 +24,25 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # ******************************************************************************
+
+from os.path import getmtime
+from datetime import datetime
+from os.path import exists
+
 from pyworkflow import VERSION_1_2
-from pyworkflow.em import SetOfParticles, SetOfClasses2D, \
-    ALIGN_2D, ALIGN_NONE
+from pyworkflow.em import SetOfParticles, SetOfClasses2D, ALIGN_2D, ALIGN_NONE
 from pyworkflow.em.protocol import ProtAlign2D
 import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
 from pyworkflow.em.metadata.utils import iterRows
-from pyworkflow.em.packages.xmipp3.convert import writeSetOfParticles, \
-    rowToAlignment, writeSetOfClasses2D
-from os.path import getmtime
-from datetime import datetime
 from pyworkflow.utils import prettyTime
 from pyworkflow.object import Set
 from pyworkflow.protocol.constants import STATUS_NEW
 from pyworkflow.em.data import Class2D
 from pyworkflow.object import Float, String
 import pyworkflow.protocol.constants as const
-from os.path import exists
+
+from ..convert import writeSetOfParticles, rowToAlignment, writeSetOfClasses2D
 
 
 REF_CLASSES = 0

@@ -24,15 +24,16 @@
 # *
 # **************************************************************************
 
-
 import os
 import time
 from datetime import datetime
+
 import pyworkflow.protocol.constants as cons
 from pyworkflow.em.data import SetOfParticles
 from pyworkflow.em.protocol import ProtProcessParticles
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import (BooleanParam, IntParam)
+
 
 class XmippProtTriggerData(ProtProcessParticles):
     """ Waits until certain number of particles is prepared and then

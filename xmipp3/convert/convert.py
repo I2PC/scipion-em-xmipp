@@ -38,10 +38,12 @@ import numpy
 
 from pyworkflow.utils.path import replaceBaseExt, removeExt, findRootFrom
 import pyworkflow.em.metadata as md
-import xmipp
-from xmipp3 import XmippMdRow, getLabelPythonType, RowMetaData
-from xmipp3.utils import iterMdRows
 from pyworkflow.em import *
+
+import xmipp
+from ..base import XmippMdRow, getLabelPythonType, RowMetaData
+from ..utils import iterMdRows
+
 
 
 # This dictionary will be used to map

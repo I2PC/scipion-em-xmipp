@@ -27,7 +27,6 @@
 
 from os.path import exists
 
-import xmipp
 from pyworkflow.object import String
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 import pyworkflow.protocol.params as params
@@ -35,8 +34,10 @@ from pyworkflow.em.protocol import ProtInitialVolume
 from pyworkflow.em.data import Volume, SetOfParticles
 from pyworkflow.em.constants import ALIGN_2D
 
-from convert import getImageLocation, alignmentToRow
-from xmipp3 import XmippMdRow
+import xmipp
+from ..base import XmippMdRow
+from ..convert import getImageLocation, alignmentToRow
+
 
 
 class XmippProtRCT(ProtInitialVolume):

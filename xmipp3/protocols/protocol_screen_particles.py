@@ -28,17 +28,19 @@
 # **************************************************************************
 
 import os
+from datetime import datetime
+
 import pyworkflow.em as em
 import pyworkflow.em.metadata as md
 import pyworkflow.protocol.constants as cons
-from datetime import datetime
+
 from pyworkflow.em.data import SetOfParticles
 from pyworkflow.em.protocol import ProtProcessParticles
 from pyworkflow.object import String, Set, Float
 from pyworkflow.protocol.params import (EnumParam, IntParam, Positive,
                                         Range, LEVEL_ADVANCED, FloatParam,
                                         BooleanParam)
-from convert import readSetOfParticles, writeSetOfParticles, setXmippAttributes
+from ..convert import readSetOfParticles, writeSetOfParticles, setXmippAttributes
 
 
 class XmippProtScreenParticles(ProtProcessParticles):

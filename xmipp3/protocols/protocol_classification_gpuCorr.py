@@ -24,19 +24,20 @@
 # *
 # ******************************************************************************
 
+from shutil import copy
+from os.path import join, exists
+from os import mkdir, remove, listdir
+
 from pyworkflow.em.protocol import ProtAlign2D
 import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
 from pyworkflow.em.metadata.utils import iterRows, getSize
-from xmipp import MD_APPEND
-from pyworkflow.em.packages.xmipp3.convert import rowToAlignment, \
-    xmippToLocation
-from convert import writeSetOfParticles, writeSetOfClasses2D
-from shutil import copy
-from os.path import join, exists
-from os import mkdir, remove, listdir
 import pyworkflow.protocol.constants as const
 from pyworkflow.em import SetOfClasses2D, ALIGN_2D, ALIGN_NONE
+
+from xmipp import MD_APPEND
+from ..convert import rowToAlignment, xmippToLocation
+from ..convert import writeSetOfParticles, writeSetOfClasses2D
 
 
 class XmippProtGpuCrrCL2D(ProtAlign2D):

@@ -32,10 +32,10 @@ from pyworkflow.utils.path import makePath, removeBaseExt
 from pyworkflow.em.data import SetOfParticles
 from pyworkflow.em.data_tiltpairs import TiltPair, CoordinatesTiltPair
 
-from convert import readAnglesFromMicrographs
-from protocol_particle_pick_pairs import XmippProtParticlePickingPairs
-
-from convert import readSetOfCoordinates, writeSetOfCoordinates
+from ..convert import (readAnglesFromMicrographs, readSetOfCoordinates,
+                       writeSetOfCoordinates)
+from ..protocols.protocol_particle_pick_pairs import XmippProtParticlePickingPairs
+from ..convert import *
 
 TYPE_COORDINATES = 0
 TYPE_PARTICLES = 1

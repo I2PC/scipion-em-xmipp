@@ -20,21 +20,24 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *******
 import os
+import random
+import numpy as np
 
 from pyworkflow.tests import BaseTest, setupTestProject
-import xmipp
-from pyworkflow.em.packages.xmipp3 import writeSetOfParticles
 from pyworkflow.em.data import SetOfParticles
 from pyworkflow.em.constants import ALIGN_PROJ
-import numpy as np
 from pyworkflow.em.data import Acquisition, Particle, Transform
-import random
 from pyworkflow.em.data import CTFModel
-from pyworkflow.em.packages.xmipp3 import getEnviron, runXmippProgram
 from pyworkflow.em.protocol import ProtImportParticles, ProtImportMask, ProtImportVolumes
-from pyworkflow.em.packages.xmipp3 import XmippProtSubtractProjection
 from pyworkflow.em.data import  VolumeMask
 from pyworkflow.em.packages.relion import ProtRelionSubtract
+
+import xmipp
+from .. import Plugin
+from ..convert import writeSetOfParticles
+from ..protocols import XmippProtSubtractProjection
+
+
 proj1 = [(0, 0, 53, 55, 0.5), (0, 0, 53, 56, 1.0), (0, 0, 53, 57, 0.5), (0, 0, 53, 63, 0.5), (0, 0, 53, 64, 1.0),
          (0, 0, 53, 65, 0.5), (0, 0, 54, 54, 1.75), (0, 0, 54, 55, 4.0), (0, 0, 54, 56, 4.5), (0, 0, 54, 57, 4.0),
          (0, 0, 54, 58, 1.75), (0, 0, 54, 62, 1.75), (0, 0, 54, 63, 4.0), (0, 0, 54, 64, 4.5), (0, 0, 54, 65, 4.0),
@@ -461,13 +464,13 @@ class TestSubProj(BaseTest):
         args += " -o %s"%self.proj.getTmpPath(setPartCtfName)
         args += " -f ctf %s"%baseFnCtf
         args += " --sampling %f"%samplingRate
-        runXmippProgram("xmipp_transform_filter", args)
+        Plugin.runXmippProgram("xmipp_transform_filter", args)
 
         args  = " -i %s"%setPartMd
         args += " -o %s"%self.proj.getTmpPath(setPartCtfPosName)
         args += " -f ctfpos %s"%baseFnCtf
         args += " --sampling %f"%samplingRate
-        runXmippProgram("xmipp_transform_filter", args)
+        Plugin.runXmippProgram("xmipp_transform_filter", args)
 
     def importData(self, baseFn, objLabel, protType, importFrom):
         prot = self.newProtocol(protType,

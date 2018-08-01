@@ -23,25 +23,28 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # ******************************************************************************
+
+from shutil import copy, copytree
+from os.path import exists, getmtime
+from datetime import datetime
+from os import system, popen, mkdir, listdir
+from os.path import join
+from random import randint
+
 from pyworkflow import VERSION_1_2
 from pyworkflow.em import SetOfParticles, ALIGN_2D, ALIGN_NONE
 from pyworkflow.em.protocol import ProtAlign2D
 import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
 from pyworkflow.em.metadata.utils import iterRows, getSize
-from xmipp import Image, MD_APPEND, DT_DOUBLE
-from pyworkflow.em.packages.xmipp3.convert import writeSetOfParticles, \
-    xmippToLocation, rowToAlignment, rowToParticle
-from shutil import copy, copytree
-from os.path import exists, getmtime
-from datetime import datetime
 from pyworkflow.utils import prettyTime, cleanPath
 from pyworkflow.object import Set
 from pyworkflow.protocol.constants import STATUS_NEW
-from random import randint
 import pyworkflow.protocol.constants as const
-from os import system, popen, mkdir, listdir
-from os.path import join
+
+from xmipp import Image, MD_APPEND, DT_DOUBLE
+from ..convert import (writeSetOfParticles, xmippToLocation, rowToAlignment,
+                       rowToParticle)
 
 
 HASH_SIZE = 100

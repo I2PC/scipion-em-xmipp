@@ -36,11 +36,13 @@ from pyworkflow.utils.path import copyFile, createLink, makePath, cleanPath, mov
 from pyworkflow.protocol.params import (PointerParam, IntParam, FloatParam, 
                                         LEVEL_ADVANCED)
 from pyworkflow.em.data import SetOfNormalModes
-from pyworkflow.em.packages.xmipp3 import XmippMdRow
+
 import xmipp
-from protocol_nma_base import XmippProtNMABase, NMA_CUTOFF_REL
-from convert import rowToMode, getNMAEnviron
-        
+from ...base import XmippMdRow
+from .protocol_nma_base import XmippProtNMABase, NMA_CUTOFF_REL
+from .convert import rowToMode, getNMAEnviron
+
+
 class XmippProtNMA(XmippProtNMABase):
     """ Flexible angular alignment using normal modes """
     _label = 'nma analysis'

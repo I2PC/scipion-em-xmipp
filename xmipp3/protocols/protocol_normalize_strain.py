@@ -26,11 +26,14 @@
 """
 This sub-package contains the XmippProtNormalizeStrain protocol
 """
+
+import os
+
 from pyworkflow import VERSION_1_1
 from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
 from pyworkflow.protocol.params import MultiPointerParam
 from pyworkflow.utils.path import createLink
-import os
+
 import xmipp
 
 

@@ -28,8 +28,7 @@ from pyworkflow.em.protocol import (ProtImportParticles, ProtImportVolumes,
                                     ProtSubSet)
 from pyworkflow.em import ProtUserSubSet
 
-
-from pyworkflow.em.packages.xmipp3 import XmippProtSolidAngles, XmippProtSplitvolume
+from ..protocols import XmippProtSolidAngles, XmippProtSplitvolume
 
 
 class TestDirectionalClasses(BaseTest):

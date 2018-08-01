@@ -24,20 +24,22 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+
+from math import sqrt
+import glob
+
 from pyworkflow import VERSION_1_1
+from pyworkflow.utils import getFloatListFromValues
+from pyworkflow.utils.path import cleanPattern, cleanPath, copyFile
+from pyworkflow.em.data import Volume
+from pyworkflow.object import Float, String
+from pyworkflow.em.protocol import ProtReconstruct3D
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         NumericListParam, IntParam,
                                         StringParam, BooleanParam,
                                         LEVEL_ADVANCED)
-from pyworkflow.em.data import Volume
-from pyworkflow.em.protocol import ProtReconstruct3D
-from pyworkflow.em.packages.xmipp3.convert import writeSetOfParticles
-from pyworkflow.utils import getFloatListFromValues
-from pyworkflow.utils.path import cleanPattern, cleanPath, copyFile
 import xmipp
-import glob
-from pyworkflow.object import Float, String
-from math import sqrt
+from ..convert import writeSetOfParticles
 
 
 class XmippProtValidateOverfitting(ProtReconstruct3D):

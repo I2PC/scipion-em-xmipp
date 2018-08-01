@@ -23,34 +23,33 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-from scipy.io.arff.arffread import MetaData
 """
 Protocol to perform high-resolution reconstructions
 """
 
+from scipy.io.arff.arffread import MetaData
 from glob import glob
 import math
 from itertools import izip
+from os.path import join, exists, split
 
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam, IntParam, EnumParam, NumericListParam
+from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
+                                        BooleanParam, IntParam, EnumParam,
+                                        NumericListParam)
 from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile, createLink
 from pyworkflow.em.protocol import ProtRefine3D
 from pyworkflow.em.data import SetOfVolumes, Volume
 from pyworkflow.em.metadata.utils import getFirstRow, getSize
 from pyworkflow.utils.utils import getFloatListFromValues
-from convert import writeSetOfParticles
-from os.path import join, exists, split
-from pyworkflow.em.packages.xmipp3.convert import createItemMatrix, setXmippAttributes
 from pyworkflow.em.convert import ImageHandler
 import pyworkflow.em.metadata as md
 import pyworkflow.em as em
 
 import xmipp
-
-from xmipp3 import HelicalFinder
-
+from ..base import HelicalFinder
+from ..convert import createItemMatrix, setXmippAttributes, writeSetOfParticles
 
 
 class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):

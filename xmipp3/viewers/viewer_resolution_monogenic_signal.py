@@ -24,30 +24,33 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-import os
 
-from pyworkflow.gui.plotter import Plotter
-from pyworkflow.em.viewer import LocalResolutionViewer
-from pyworkflow.em.constants import (COLOR_JET, COLOR_TERRAIN,
- COLOR_GIST_EARTH, COLOR_GIST_NCAR, COLOR_GNU_PLOT, COLOR_GNU_PLOT2,
- COLOR_OTHER, COLOR_CHOICES, AX_X, AX_Y, AX_Z)
-from pyworkflow.em.packages.xmipp3.plotter import XmippPlotter
-from pyworkflow.protocol.params import (LabelParam, StringParam, EnumParam,
-                                        IntParam, LEVEL_ADVANCED)
-from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
-from protocol_resolution_monogenic_signal import (XmippProtMonoRes,
-                                                  OUTPUT_RESOLUTION_FILE,
-                                                  OUTPUT_RESOLUTION_FILE_CHIMERA,
-                                                  FN_METADATA_HISTOGRAM, CHIMERA_RESOLUTION_VOL)
-from pyworkflow.em.viewer import ChimeraView, DataView
-from pyworkflow.em.metadata import MetaData, MDL_X, MDL_COUNT
-from pyworkflow.em import ImageHandler
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 import matplotlib.colors as mcolors
 from pyworkflow.utils import getExt, removeExt
 from os.path import abspath
+
+from pyworkflow.gui.plotter import Plotter
+from pyworkflow.em.viewer import LocalResolutionViewer
+from pyworkflow.em.constants import (COLOR_JET, COLOR_TERRAIN,
+ COLOR_GIST_EARTH, COLOR_GIST_NCAR, COLOR_GNU_PLOT, COLOR_GNU_PLOT2,
+ COLOR_OTHER, COLOR_CHOICES, AX_X, AX_Y, AX_Z)
+from pyworkflow.protocol.params import (LabelParam, StringParam, EnumParam,
+                                        IntParam, LEVEL_ADVANCED)
+from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
+from pyworkflow.em.viewer import ChimeraView, DataView
+from pyworkflow.em.metadata import MetaData, MDL_X, MDL_COUNT
+from pyworkflow.em import ImageHandler
+
+from .plotter import XmippPlotter
+from ..protocols.protocol_resolution_monogenic_signal import (XmippProtMonoRes,
+                                                  OUTPUT_RESOLUTION_FILE,
+                                                  OUTPUT_RESOLUTION_FILE_CHIMERA,
+                                                  FN_METADATA_HISTOGRAM,
+                                                  CHIMERA_RESOLUTION_VOL)
 
 binaryCondition = ('(colorMap == %d) ' % (COLOR_OTHER))
 

@@ -31,24 +31,22 @@ import math
 import os
 from tempfile import mkstemp
 
-from pyworkflow.em.constants import SYM_I222r, SYM_I222, SCIPION_SYM_NAME, \
-    SYM_In25, SYM_In25r, SYM_CYCLIC, SYM_DIHEDRAL, SYM_TETRAHEDRAL, \
-    SYM_OCTAHEDRAL
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.em.data import Transform
 from pyworkflow.em.headers import Ccp4Header
-from pyworkflow.em.packages.xmipp3 import getEnviron
-from pyworkflow.em.packages.xmipp3.constants import XMIPP_SYM_NAME
-from pyworkflow.em.packages.xmipp3.pdb.protocol_pseudoatoms \
-    import XmippProtConvertToPseudoAtoms
-from pyworkflow.em.packages.xmipp3.pdb.protocol_pseudoatoms_base \
-    import NMA_MASK_THRE
-from pyworkflow.em.packages.xmipp3.protocol_extract_unit_cell \
-    import XmippProtExtractUnit
 from pyworkflow.em.protocol import ProtImportVolumes
 from pyworkflow.em.symmetry import Icosahedron
 from pyworkflow.tests import BaseTest, setupTestProject
 from pyworkflow.utils import runJob
+from pyworkflow.em.constants import (SYM_I222r, SYM_I222, SCIPION_SYM_NAME,
+                                     SYM_In25, SYM_In25r, SYM_CYCLIC,
+                                     SYM_DIHEDRAL, SYM_TETRAHEDRAL,
+                                     SYM_OCTAHEDRAL)
+from .. import Plugin
+from ..constants import XMIPP_SYM_NAME
+from ..protocols import XmippProtConvertToPseudoAtoms, XmippProtExtractUnit
+from ..protocols.pdb.protocol_pseudoatoms_base import NMA_MASK_THRE
+
 
 OFFSET = 22.5
 
@@ -470,7 +468,7 @@ class TestProtModelBuilding(BaseTest):
         command = "xmipp_phantom_create "
         args = " -i %s" % self.filename[sym]
         args += " -o %s" % outputFile1
-        runJob(None, command, args, env=getEnviron())
+        runJob(None, command, args, env=Plugin.getEnviron())
         ccp4header = Ccp4Header(outputFile1, readHeader=True)
         x, y, z = ccp4header.getDims()
         t = Transform()
@@ -485,7 +483,7 @@ class TestProtModelBuilding(BaseTest):
             args += " %d " % (+ x / 2.)
             args += " %d " % (+ y / 2.)
             args += " %d " % (+ z / 2.)
-            runJob(None, "xmipp_transform_window", args, env=getEnviron())
+            runJob(None, "xmipp_transform_window", args, env=Plugin.getEnviron())
             t.setShifts(0, 0, 0)
             outputFile = outputFile2
             ccp4header = Ccp4Header(outputFile2, readHeader=True)

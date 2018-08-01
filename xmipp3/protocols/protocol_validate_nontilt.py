@@ -25,14 +25,16 @@
 # **************************************************************************
 
 from os.path import join
+
 from pyworkflow.object import Float, String
 from pyworkflow.protocol.params import (PointerParam, FloatParam, STEPS_PARALLEL,
                                         StringParam, EnumParam, LEVEL_ADVANCED)
 from pyworkflow.em.data import Volume
 from pyworkflow.em.protocol import ProtAnalysis3D
 from pyworkflow.utils.path import moveFile, makePath
-from pyworkflow.em.packages.xmipp3.convert import writeSetOfParticles
 import pyworkflow.em.metadata as md
+
+from ..convert import writeSetOfParticles
 
 
 PROJECTION_MATCHING = 0

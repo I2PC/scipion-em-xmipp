@@ -25,13 +25,15 @@
 # *
 # **************************************************************************
 
+import os
+
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
 import pyworkflow.em.metadata as md
-from protocol_validate_overfitting import XmippProtValidateOverfitting
 from pyworkflow.gui.plotter import plt
-from plotter import XmippPlotter
+
 import xmipp
-import os
+from .plotter import XmippPlotter
+from ..protocols.protocol_validate_overfitting import XmippProtValidateOverfitting
 
 
 class XmippValidateOverfittingViewer(Viewer):

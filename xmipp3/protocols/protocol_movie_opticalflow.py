@@ -32,13 +32,15 @@ from os.path import join, exists
 import pyworkflow.object as pwobj
 import pyworkflow.utils as pwutils
 import pyworkflow.em as em
+import pyworkflow.protocol.params as params
+import pyworkflow.em.metadata as md
 from pyworkflow import VERSION_1_1
 from pyworkflow.gui.project import ProjectWindow
 from pyworkflow.em.protocol import ProtAlignMovies
 from pyworkflow.em.protocol.protocol_align_movies import createAlignmentPlot
-import pyworkflow.protocol.params as params
-import pyworkflow.em.metadata as md
-from convert import writeMovieMd
+
+from ..convert import writeMovieMd
+
 
 PLOT_CART = 0
 PLOT_POLAR = 1

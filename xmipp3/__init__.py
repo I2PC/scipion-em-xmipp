@@ -1,8 +1,10 @@
 # **************************************************************************
 # *
 # * Authors:     J.M. De la Rosa Trevin (delarosatrevin@scilifelab.se) [1]
+# *              David Maluenda Niubo (dmaluenda@cnb.csic.es) [2]
 # *
 # * [1] SciLifeLab, Stockholm University
+# * [2] Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -26,8 +28,10 @@
 
 import pyworkflow.em
 import pyworkflow.utils as pwutils
+
+from .base import *
 from .constants import XMIPP_HOME
-from base import *
+
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']

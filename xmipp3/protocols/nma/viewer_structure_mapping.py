@@ -26,12 +26,15 @@
 # **************************************************************************
 
 import os
-from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-from protocol_structure_mapping import XmippProtStructureMapping
-from pyworkflow.gui.plotter import plt
 import numpy as np
 from mpl_toolkits.mplot3d import proj3d
+
+from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
+from pyworkflow.gui.plotter import plt
 import pyworkflow.protocol.params as params
+
+from .protocol_structure_mapping import XmippProtStructureMapping
+
 
 class XmippProtStructureMappingViewer(ProtocolViewer):
     """ Wrapper to visualize different type of data objects

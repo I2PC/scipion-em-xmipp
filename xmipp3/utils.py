@@ -29,8 +29,11 @@ This module contains utils functions to operate over xmipp metadata files.
 """
 
 import xmipp
-from xmipp3 import XmippMdRow
+from .base import XmippMdRow
 
+
+def validateXmippGpuBins():
+    exist()
 
 def getMdFirstRow(filename):
     """ Create a MetaData but only read the first row.

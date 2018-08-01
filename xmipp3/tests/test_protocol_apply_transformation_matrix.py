@@ -23,9 +23,12 @@
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pyworkflow.em.protocol import ProtImportParticles, ProtImportVolumes
-from pyworkflow.em.packages.xmipp3.protocol_apply_transformation_matrix import XmippProtApplyTransformationMatrix
-from pyworkflow.em.packages.xmipp3.protocol_align_volume import XmippProtAlignVolume, ALIGN_ALGORITHM_LOCAL
-    
+
+from ..protocols import XmippProtApplyTransformationMatrix
+from ..protocols.protocol_align_volume import (XmippProtAlignVolume,
+                                               ALIGN_ALGORITHM_LOCAL)
+
+
 class TestApplyTransformationMatrix(BaseTest):
     @classmethod
     def setUpClass(cls):

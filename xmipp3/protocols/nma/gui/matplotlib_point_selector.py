@@ -24,7 +24,7 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.packages.xmipp3.nma.plotter import plotArray2D
+from ..plotter import plotArray2D
 
 
         

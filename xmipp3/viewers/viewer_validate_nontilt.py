@@ -27,10 +27,11 @@
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.em.showj import RENDER, ORDER, VISIBLE, MODE, MODE_MD
 from pyworkflow.em.viewer import DataView
-import pyworkflow.em.metadata as md
 from pyworkflow.protocol.params import LabelParam, StringParam
-from protocol_validate_nontilt import XmippProtValidateNonTilt
-from plotter import XmippPlotter
+import pyworkflow.em.metadata as md
+
+from ..protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
+from .plotter import XmippPlotter
 
 
 IMAGE_INDEX = 'Image index'

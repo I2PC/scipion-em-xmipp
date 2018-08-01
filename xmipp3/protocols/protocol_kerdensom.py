@@ -25,12 +25,13 @@
 # **************************************************************************
 
 from os.path import join, dirname, exists
-from pyworkflow.em import *  
+from glob import glob
+
+from pyworkflow.em import *
 import xmipp
 
-import xmipp3
-from convert import writeSetOfParticles, readSetOfClasses2D, xmippToLocation
-from glob import glob
+from ..convert import writeSetOfParticles, readSetOfClasses2D, xmippToLocation
+
 
 
 class KendersomBaseClassify(ProtClassify2D):

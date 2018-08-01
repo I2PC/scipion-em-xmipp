@@ -29,7 +29,7 @@ import os
 from glob import glob
 
 import pyworkflow.utils as pwutils
-from xmipp3 import getXmippPath
+from .base import getXmippPath
 
 
 # Create some short-cut functions to colors

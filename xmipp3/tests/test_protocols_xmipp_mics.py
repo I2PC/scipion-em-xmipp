@@ -30,9 +30,12 @@ from os.path import join, basename
 
 from pyworkflow.em import *
 from pyworkflow.tests import *
-from pyworkflow.em.packages.xmipp3 import *
 from pyworkflow.protocol import getProtocolFromDb
 import pyworkflow.utils as pwutils
+
+from ..base import *
+from ..convert import *
+from ..constants import *
 
 # Some utility functions to import micrographs that are used
 # in several tests.

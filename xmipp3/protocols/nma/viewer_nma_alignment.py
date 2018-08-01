@@ -31,15 +31,13 @@ visualization program.
 import os
 from os.path import join, dirname, basename
 
+from pyworkflow.protocol.params import StringParam, BooleanParam
 from pyworkflow.viewer import (ProtocolViewer, CommandView,
                                DESKTOP_TKINTER, WEB_DJANGO)
-from pyworkflow.protocol.params import StringParam, BooleanParam
-from protocol_nma_alignment import XmippProtAlignmentNMA
-from data import Point, Data
 import xmipp
-
-from plotter import XmippNmaPlotter
-
+from .data import Point, Data
+from .plotter import XmippNmaPlotter
+from .protocol_nma_alignment import XmippProtAlignmentNMA
 
         
 class XmippAlignmentNMAViewer(ProtocolViewer):
