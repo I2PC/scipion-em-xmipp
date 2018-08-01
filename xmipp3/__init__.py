@@ -84,10 +84,8 @@ class Plugin(pyworkflow.em.Plugin):
 
         return env
 
-
-
     @classmethod
-    def registerPluginBinaries(cls, env):
+    def defineBinaries(cls, env):
         scons = env.addPipModule('scons', '2.3.6', target='scons-2.3.6',
                                  default=True, ignoreDefaultDeps=True)
 
