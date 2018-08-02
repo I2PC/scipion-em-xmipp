@@ -31,7 +31,7 @@ from __future__ import print_function
 from pyworkflow.tests.test_utils import wait
 from pyworkflow.utils import magentaStr
 from pyworkflow.tests import *
-from pyworklow.em.protocol.protocol_import import *
+from pyworkflow.em.protocol.protocol_import import *
 
 from ..base import *
 from ..convert import *

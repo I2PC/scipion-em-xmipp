@@ -25,7 +25,9 @@
 # **************************************************************************
 
 from pyworkflow.tests import *
-from ..protocol import ProtImportVolumes, XmippProtMLTomo
+from pyworkflow.em.protocol import ProtImportVolumes
+
+from ..protocols import XmippProtMLTomo
 
 
 class TestMLTomoBase(BaseTest):
