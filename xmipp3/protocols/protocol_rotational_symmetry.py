@@ -30,7 +30,7 @@ from pyworkflow.em import *
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
 from xmipp import MetaData, MDL_ANGLE_ROT, MDL_ANGLE_TILT
-from ..convert import getImageLocation
+from xmipp3.convert import getImageLocation
 
 
 class XmippProtRotationalSymmetry(ProtPreprocessVolumes):

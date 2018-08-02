@@ -30,8 +30,7 @@ from pyworkflow import VERSION_1_1
 from pyworkflow.em.protocol import ProtProcessParticles
 import pyworkflow.protocol.params as params
 
-from ..convert import writeSetOfParticles
-
+from xmipp3.convert import writeSetOfParticles
 
         
 class XmippProtApplyTransformationMatrix(ProtProcessParticles):

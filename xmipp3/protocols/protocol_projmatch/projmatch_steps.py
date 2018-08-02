@@ -38,8 +38,8 @@ from pyworkflow.em.data import Volume, SetOfClasses3D
 from pyworkflow.utils import getMemoryAvailable, replaceExt, removeExt, cleanPath, makePath, copyFile
 
 import xmipp
-from ...convert import createClassesFromImages
-from ...utils import isMdEmpty
+from xmipp3.convert import createClassesFromImages
+from xmipp3.utils import isMdEmpty
 
 
 ctfBlockName = 'ctfGroup'

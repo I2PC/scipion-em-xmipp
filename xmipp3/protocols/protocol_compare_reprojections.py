@@ -38,8 +38,8 @@ import pyworkflow.em.metadata as md
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
 import xmipp
-from ..base import ProjMatcher
-from ..convert import setXmippAttributes, xmippToLocation, rowToAlignment
+from xmipp3.base import ProjMatcher
+from xmipp3.convert import setXmippAttributes, xmippToLocation, rowToAlignment
 
         
 class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):

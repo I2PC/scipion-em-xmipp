@@ -36,7 +36,7 @@ import pyworkflow.em as em
 import pyworkflow.em.showj as showj
 from pyworkflow.protocol.params import EnumParam, StringParam
 
-from ..protocols.protocol_ml2d import XmippProtML2D
+from xmipp3.protocols.protocol_ml2d import XmippProtML2D
 
 
 ITER_LAST = 0

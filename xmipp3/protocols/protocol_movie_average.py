@@ -32,7 +32,7 @@ import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_1
 from pyworkflow.em.protocol import ProtAlignMovies
 
-from ..convert import writeMovieMd
+from xmipp3.convert import writeMovieMd
 
 
 CROP_NONE = 0

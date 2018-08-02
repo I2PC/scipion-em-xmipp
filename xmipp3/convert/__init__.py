@@ -24,6 +24,6 @@
 # *
 # **************************************************************************
 
-from convert import *
-from dataimport import *
+from .convert import *
+from .dataimport import *
 

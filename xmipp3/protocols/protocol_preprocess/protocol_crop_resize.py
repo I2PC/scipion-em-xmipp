@@ -33,7 +33,6 @@ from pyworkflow.em.data import Volume
 from .protocol_process import XmippProcessParticles, XmippProcessVolumes
 
 
-
 class XmippResizeHelper():
     """ Common features to change dimensions of either SetOfParticles,
     Volume or SetOfVolumes objects.

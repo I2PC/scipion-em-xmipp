@@ -30,8 +30,9 @@ from pyworkflow.em import *
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
 from xmipp import MetaData, MDL_ANGLE_ROT, MDL_SHIFT_Z
-from ..base import HelicalFinder
-from ..convert import getImageLocation
+from xmipp3.base import HelicalFinder
+from xmipp3.convert import getImageLocation
+
 
 class XmippProtHelicalParameters(ProtPreprocessVolumes, HelicalFinder):
     """ Estimate helical parameters and symmetrize.

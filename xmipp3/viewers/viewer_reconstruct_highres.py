@@ -38,10 +38,9 @@ import pyworkflow.em.showj as showj
 
 from xmipp import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
                    MDL_RESOLUTION_FREQ, MDL_RESOLUTION_FRC, MetaData)
+from xmipp3.convert import getImageLocation
+from xmipp3.protocols.protocol_reconstruct_highres import XmippProtReconstructHighRes
 from .plotter import XmippPlotter
-from ..convert import getImageLocation
-from ..protocols.protocol_reconstruct_highres import XmippProtReconstructHighRes
-
 
 ITER_LAST = 0
 ITER_SELECTION = 1

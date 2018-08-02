@@ -33,7 +33,8 @@ from pyworkflow.em.protocol import ProtImportVolumes, ProtImportParticles
 from pyworkflow.em.protocol.protocol_sets import ProtSubSet
 
 import xmipp
-from ..protocols import XmippProtReconstructHighRes
+from xmipp3.protocols import XmippProtReconstructHighRes
+
 
 class TestHighres(BaseTest):
     @classmethod

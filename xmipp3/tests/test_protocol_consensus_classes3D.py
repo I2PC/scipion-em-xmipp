@@ -33,7 +33,8 @@ from pyworkflow.utils import redStr, greenStr, magentaStr
 from pyworkflow.em.data import Class3D
 from pyworkflow.em.protocol.protocol_import import ProtImportParticles
 
-from ..protocols import XmippProtConsensusClasses3D
+from xmipp3.protocols import XmippProtConsensusClasses3D
+
 
 class TestConsensusClasses3D(BaseTest):
 

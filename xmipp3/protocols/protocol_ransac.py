@@ -36,9 +36,8 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
                                         IntParam, StringParam, 
                                         STEPS_PARALLEL, LEVEL_ADVANCED)
 import xmipp
-from ..convert import writeSetOfClasses2D, readSetOfVolumes, writeSetOfParticles
-from ..utils import isMdEmpty
-
+from xmipp3.convert import writeSetOfClasses2D, readSetOfVolumes, writeSetOfParticles
+from xmipp3.utils import isMdEmpty
 
 
 class XmippProtRansac(ProtInitialVolume):

@@ -30,7 +30,7 @@ from pyworkflow.em import exists
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 from pyworkflow.em.protocol import ProtImportVolumes
 
-from ..protocols import XmippProtMonoRes, XmippProtCreateMask3D
+from xmipp3.protocols import XmippProtMonoRes, XmippProtCreateMask3D
 
 
 class TestMonoResBase(BaseTest):

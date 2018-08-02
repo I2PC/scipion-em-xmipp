@@ -46,9 +46,9 @@ import pyworkflow.em.metadata as md
 import pyworkflow.em as em
 
 import xmipp
-from ..base import HelicalFinder
-from ..convert import (writeSetOfParticles, createItemMatrix,
-                       setXmippAttributes, getImageLocation)
+from xmipp3.base import HelicalFinder
+from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
+                            setXmippAttributes, getImageLocation)
 
 
 class XmippProtReconstructSwarm(ProtRefine3D):

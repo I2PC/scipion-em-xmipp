@@ -30,8 +30,8 @@ from pyworkflow.em.viewer import DataView
 from pyworkflow.protocol.params import LabelParam, StringParam
 import pyworkflow.em.metadata as md
 
-from ..protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
 from .plotter import XmippPlotter
+from xmipp3.protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
 
 
 IMAGE_INDEX = 'Image index'

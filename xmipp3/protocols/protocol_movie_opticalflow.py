@@ -39,7 +39,7 @@ from pyworkflow.gui.project import ProjectWindow
 from pyworkflow.em.protocol import ProtAlignMovies
 from pyworkflow.em.protocol.protocol_align_movies import createAlignmentPlot
 
-from ..convert import writeMovieMd
+from xmipp3.convert import writeMovieMd
 
 
 PLOT_CART = 0

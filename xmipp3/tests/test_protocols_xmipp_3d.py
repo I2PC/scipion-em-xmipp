@@ -33,15 +33,15 @@ from pyworkflow.utils import redStr, greenStr, magentaStr
 from pyworkflow.tests import *
 from pyworkflow.em import *
 
-from ..base import *
-from ..convert import *
-from ..constants import *
+from xmipp3.base import *
+from xmipp3.convert import *
+from xmipp3.constants import *
 from xmipp3.protocols import *
-from ..protocols import (XmippFilterHelper as xfh,
-                         XmippResizeHelper as xrh,
-                         OP_COLUNM, OP_DOTPRODUCT, OP_MULTIPLY,
-                         OP_SQRT, OP_RADIAL, OP_ROW)
-from ..protocols.protocol_align_volume import (ALIGN_ALGORITHM_EXHAUSTIVE,
+from xmipp3.protocols import (XmippFilterHelper as xfh,
+                              XmippResizeHelper as xrh,
+                              OP_COLUNM, OP_DOTPRODUCT, OP_MULTIPLY,
+                              OP_SQRT, OP_RADIAL, OP_ROW)
+from xmipp3.protocols.protocol_align_volume import (ALIGN_ALGORITHM_EXHAUSTIVE,
                                                ALIGN_ALGORITHM_EXHAUSTIVE_LOCAL,
                                                ALIGN_ALGORITHM_LOCAL)
 

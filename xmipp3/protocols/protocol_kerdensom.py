@@ -30,8 +30,7 @@ from glob import glob
 from pyworkflow.em import *
 import xmipp
 
-from ..convert import writeSetOfParticles, readSetOfClasses2D, xmippToLocation
-
+from xmipp3.convert import writeSetOfParticles, readSetOfClasses2D, xmippToLocation
 
 
 class KendersomBaseClassify(ProtClassify2D):

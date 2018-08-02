@@ -38,7 +38,7 @@ from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pyworkflow.em.viewers.chimera_utils import (createCoordinateAxisFile,
                                                  symMapperScipionchimera,
                                                  getProgram)
-from ..protocols.protocol_extract_unit_cell import XmippProtExtractUnit
+from xmipp3.protocols.protocol_extract_unit_cell import XmippProtExtractUnit
 
 
 VOLUME_SLICES = 1

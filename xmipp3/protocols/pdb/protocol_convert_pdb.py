@@ -38,7 +38,6 @@ from pyworkflow.em.convert_atom_struct import cifToPdb
 from pyworkflow.utils import replaceBaseExt, removeExt, getExt
 
 
-
 class XmippProtConvertPdb(em.ProtInitialVolume):
     """ Convert a PDB file into a volume.  """
     _label = 'convert a PDB'

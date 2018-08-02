@@ -48,8 +48,8 @@ import pyworkflow.em.metadata as md
 import pyworkflow.em as em
 
 import xmipp
-from ..base import HelicalFinder
-from ..convert import createItemMatrix, setXmippAttributes, writeSetOfParticles
+from xmipp3.base import HelicalFinder
+from xmipp3.convert import createItemMatrix, setXmippAttributes, writeSetOfParticles
 
 
 class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):

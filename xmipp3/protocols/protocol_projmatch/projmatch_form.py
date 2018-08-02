@@ -29,13 +29,12 @@ Since the Projection Matching protocol of Xmipp 3 has a very large
 form definition, we have separated in this sub-module.
 """
 
-
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, IntParam, 
                                         FloatParam, StringParam, Positive, GE,
                                         EnumParam, NumericListParam, TextParam,
                                         DigFreqParam)
-from ...constants import *
+from xmipp3.constants import *
                                         
 
 def _defineProjectionMatchingParams(self, form):

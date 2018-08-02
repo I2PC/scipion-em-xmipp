@@ -29,8 +29,9 @@ from pyworkflow.protocol.params import StringParam
 from pyworkflow.em.protocol import ProtProcessParticles
 import pyworkflow.em.metadata as md
 
-from ..convert import writeSetOfParticles
- 
+from xmipp3.convert import writeSetOfParticles
+
+
 class XmippProtAngBreakSymmetry(ProtProcessParticles):
     """
     Given an input set of particles with angular assignment, find an

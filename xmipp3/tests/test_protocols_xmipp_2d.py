@@ -34,13 +34,13 @@ from pyworkflow.tests import *
 from pyworkflow.em.protocol.protocol_import import *
 
 from xmipp3 import Plugin
-from ..base import *
-from ..convert import *
-from ..constants import *
+from xmipp3.base import *
+from xmipp3.convert import *
+from xmipp3.constants import *
 from xmipp3.protocols import *
-from ..protocols import XmippFilterHelper as xfh
-from ..protocols import XmippResizeHelper as xrh
-from ..protocols import OP_DOTPRODUCT, OP_MULTIPLY, OP_SQRT
+from xmipp3.protocols import XmippFilterHelper as xfh
+from xmipp3.protocols import XmippResizeHelper as xrh
+from xmipp3.protocols import OP_DOTPRODUCT, OP_MULTIPLY, OP_SQRT
 
 
 # Some utility functions to import particles that are used

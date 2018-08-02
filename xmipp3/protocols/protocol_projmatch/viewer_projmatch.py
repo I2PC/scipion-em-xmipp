@@ -43,8 +43,8 @@ from pyworkflow.protocol.params import (LabelParam, IntParam, FloatParam,
 from pyworkflow.em.plotter import EmPlotter
 
 import xmipp
-from ...convert import *
-from ...viewers.plotter import XmippPlotter
+from xmipp3.convert import *
+from xmipp3.viewers.plotter import XmippPlotter
 from .protocol_projmatch import XmippProtProjMatch
 # from .projmatch_initialize import createFilenameTemplates
 

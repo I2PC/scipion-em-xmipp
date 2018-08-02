@@ -28,10 +28,9 @@ from pyworkflow.em.protocol import (ProtImportAverages, ProtImportMicrographs,
                                     ProtCreateStreamData)
 from pyworkflow.em.protocol.protocol_create_stream_data import SET_OF_MICROGRAPHS
 from pyworkflow.protocol import getProtocolFromDb
-from pyworkflow.em.packages.grigoriefflab import ProtCTFFind
 
-from ..protocols.protocol_extract_particles import *
-from ..protocols.protocol_classification_gpuCorr_semi import *
+from xmipp3.protocols.protocol_extract_particles import *
+from xmipp3.protocols.protocol_classification_gpuCorr_semi import *
 
 try:
     from eman2.protocol_autopick import *

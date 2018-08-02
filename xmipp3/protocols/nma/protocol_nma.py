@@ -38,7 +38,7 @@ from pyworkflow.protocol.params import (PointerParam, IntParam, FloatParam,
 from pyworkflow.em.data import SetOfNormalModes
 
 import xmipp
-from ...base import XmippMdRow
+from xmipp3.base import XmippMdRow
 from .protocol_nma_base import XmippProtNMABase, NMA_CUTOFF_REL
 from .convert import rowToMode, getNMAEnviron
 

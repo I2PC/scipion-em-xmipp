@@ -36,10 +36,10 @@ from pyworkflow.em.protocol import ProtAnalysis3D
 import pyworkflow.em.metadata as md
 
 import xmipp
-from ..base import findRow
-from ..convert import (rowToAlignment, setXmippAttributes,
+from xmipp3.base import findRow
+from xmipp3.convert import (rowToAlignment, setXmippAttributes,
                        xmippToLocation, writeSetOfParticles)
-from ..constants import SYM_URL
+from xmipp3.constants import SYM_URL
 
 
 class XmippProtCompareAngles(ProtAnalysis3D):

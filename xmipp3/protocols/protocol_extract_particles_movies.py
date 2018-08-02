@@ -39,9 +39,9 @@ from pyworkflow.protocol.params import (PointerParam, IntParam, BooleanParam,
                                         Positive, FloatParam, EnumParam)
 from pyworkflow.utils.path import cleanPath
 
-from ..base import XmippMdRow
-from ..convert import coordinateToRow
-from ..convert import readSetOfMovieParticles, xmippToLocation
+from xmipp3.base import XmippMdRow
+from xmipp3.convert import coordinateToRow
+from xmipp3.convert import readSetOfMovieParticles, xmippToLocation
 
 
 class XmippProtExtractMovieParticles(ProtExtractMovieParticles):

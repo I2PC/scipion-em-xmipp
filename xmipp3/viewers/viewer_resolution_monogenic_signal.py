@@ -46,11 +46,10 @@ from pyworkflow.em.metadata import MetaData, MDL_X, MDL_COUNT
 from pyworkflow.em import ImageHandler
 
 from .plotter import XmippPlotter
-from ..protocols.protocol_resolution_monogenic_signal import (XmippProtMonoRes,
-                                                  OUTPUT_RESOLUTION_FILE,
-                                                  OUTPUT_RESOLUTION_FILE_CHIMERA,
-                                                  FN_METADATA_HISTOGRAM,
-                                                  CHIMERA_RESOLUTION_VOL)
+from xmipp3.protocols.protocol_resolution_monogenic_signal import \
+        XmippProtMonoRes, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM, \
+        OUTPUT_RESOLUTION_FILE_CHIMERA, CHIMERA_RESOLUTION_VOL
+
 
 binaryCondition = ('(colorMap == %d) ' % (COLOR_OTHER))
 

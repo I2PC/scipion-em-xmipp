@@ -28,11 +28,18 @@ from pyworkflow.em.protocol import ProtImportMicrographs, ProtCreateStreamData
 from pyworkflow.em.protocol.protocol_create_stream_data import \
     SET_OF_MICROGRAPHS
 from pyworkflow.protocol import getProtocolFromDb
-from pyworkflow.em.packages.grigoriefflab import ProtCTFFind
-from pyworkflow.em.packages.eman2.protocol_autopick import *
 
-from ..protocols.protocol_extract_particles import *
-from ..protocols.protocol_classification_gpuCorr_full import *
+from xmipp3.protocols.protocol_extract_particles import *
+from xmipp3.protocols.protocol_classification_gpuCorr_full import *
+
+try:
+    from grigoriefflab import ProtCTFFind
+except:
+    print("grigoriefflab in needed to this test")
+try:
+    from eman2.protocol_autopick import *
+except:
+    print("grigoriefflab in needed to this test")
 
 
 # Number of mics to be processed

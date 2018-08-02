@@ -36,7 +36,7 @@ import pyworkflow.em as em
 from pyworkflow.em.metadata import Row, MetaData
 
 import xmipp
-from .. import convert
+from xmipp3 import convert
 
 
 class XmippProtCTFDiscrepancy(em.ProtCTFMicrographs):

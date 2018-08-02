@@ -31,7 +31,7 @@ from pyworkflow.utils import Environ
 from pyworkflow.em.data import NormalMode
 
 import xmipp
-from ...convert import rowToObject, objectToRow
+from xmipp3.convert import rowToObject, objectToRow
 
             
 MODE_DICT = OrderedDict([ 

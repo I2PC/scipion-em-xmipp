@@ -31,7 +31,7 @@ from pyworkflow.em import *
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 from pyworkflow.em.protocol import ProtImportVolumes, ProtImportMask
 
-from ..protocols import XmippProtMultipleFSCs
+from xmipp3.protocols import XmippProtMultipleFSCs
 
 
 class TestMultipleFSCsBase(BaseTest):

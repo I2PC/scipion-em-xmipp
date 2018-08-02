@@ -30,7 +30,7 @@ import pyworkflow.protocol.params as params
 import pyworkflow.em as em
 import pyworkflow.em.metadata as md
 
-from ..convert import locationToXmipp
+from xmipp3.convert import locationToXmipp
 
 
 class XmippProtMultipleFSCs(em.ProtAnalysis3D):

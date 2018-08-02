@@ -29,7 +29,7 @@ from pyworkflow.protocol.params import PointerParam, FileParam
 from pyworkflow.em.protocol import BatchProtocol
 from pyworkflow.em.data import SetOfParticles, Volume
 
-from ...convert import writeSetOfParticles
+from xmipp3.convert import writeSetOfParticles
 
 
 

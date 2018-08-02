@@ -31,7 +31,7 @@ from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.em.viewer import DataView, ChimeraView
 
 from .viewer import XmippViewer
-from ..protocols.protocol_volume_strain import XmippProtVolumeStrain
+from xmipp3.protocols.protocol_volume_strain import XmippProtVolumeStrain
 
 
 class XmippVolumeStrainViewer(XmippViewer):

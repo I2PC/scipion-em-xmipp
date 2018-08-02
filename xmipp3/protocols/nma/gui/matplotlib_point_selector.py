@@ -26,7 +26,6 @@
 
 from ..plotter import plotArray2D
 
-
         
 class PointSelector():
     """ Graphical manager based on Matplotlib to handle mouse

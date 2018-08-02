@@ -39,7 +39,6 @@ ALIGN_ALGORITHM_EXHAUSTIVE_LOCAL = 2
 ALIGN_ALGORITHM_FAST_FOURIER = 3
 
 
-
 class XmippProtAlignVolume(em.ProtAlignVolume):
     """ 
     Aligns a set of volumes using cross correlation 

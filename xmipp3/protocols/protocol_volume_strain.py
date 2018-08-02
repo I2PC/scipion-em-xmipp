@@ -33,8 +33,6 @@ from pyworkflow.em.protocol.protocol import EMProtocol
 from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
 from pyworkflow.utils import cleanPath
 
-
-
         
 class XmippProtVolumeStrain(ProtAnalysis3D):
     """Compare two states of a volume to analyze the local strains and rotations"""

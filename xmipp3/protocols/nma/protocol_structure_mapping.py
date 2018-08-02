@@ -40,8 +40,8 @@ from pyworkflow.utils.path import cleanPattern, createLink, moveFile, copyFile, 
 # from pyworkflow.em.data import SetOfNormalModes
 
 import xmipp
-from ...convert import getImageLocation
-# from ...base import XmippMdRow
+from xmipp3.convert import getImageLocation
+# from xmipp3.base import XmippMdRow
 from ..pdb.protocol_pseudoatoms_base import XmippProtConvertToPseudoAtomsBase
 from .protocol_nma_base import XmippProtNMABase, NMA_CUTOFF_REL
 

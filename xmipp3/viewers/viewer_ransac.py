@@ -31,8 +31,8 @@ visualization program.
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.em import *
 
-from ..viewers import XmippViewer
-from ..protocols.protocol_ransac import XmippProtRansac
+from xmipp3.viewers import XmippViewer
+from xmipp3.protocols.protocol_ransac import XmippProtRansac
 
 
 class XmippViewerRansac(XmippViewer):

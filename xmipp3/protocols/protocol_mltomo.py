@@ -24,7 +24,6 @@
 # *
 # **************************************************************************
 
-
 import re
 from glob import glob
 
@@ -37,8 +36,8 @@ import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 
-from .. import Plugin
-from ..convert import (readSetOfClassesVol, getImageLocation,
+from xmipp3 import Plugin
+from xmipp3.convert import (readSetOfClassesVol, getImageLocation,
                        writeSetOfVolumes, rowToAlignment)
 
 

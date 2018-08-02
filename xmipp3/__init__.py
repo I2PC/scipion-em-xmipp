@@ -95,15 +95,15 @@ class Plugin(pyworkflow.em.Plugin):
 
         target = "%s/bin/xmipp_reconstruct_significant" % cls.getHome()
 
-        env.addPackage('xmippSrc', version='18.05',
-                       tar='xmippSrc-18.05.tgz',
+        env.addPackage('xmippSrc', version='3.18.05',
+                       tar='xmippSrc-3.18.05.tgz',
                        commands=[(installCmd, target)],
                        default=True,
                        deps=[scons])
             # Old dependencies now are checked inside xmipp script:
             #   fftw3, scikit, nma, tiff, sqlite, opencv, sh_alignment, hdf5
 
-        env.addPackage('xmippBin', version='18.05',
-                       tar='xmipp-18.05.tgz')
+        env.addPackage('xmippBin', version='3.18.05',
+                       tar='xmipp-3.18.05.tgz')
 
 pyworkflow.em.Domain.registerPlugin(__name__)
