@@ -36,6 +36,7 @@ import pyworkflow.utils as pwutils
 from ..base import *
 from ..convert import *
 from ..constants import *
+from xmipp3.protocols import *
 
 # Some utility functions to import micrographs that are used
 # in several tests.

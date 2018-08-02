@@ -294,7 +294,7 @@ class XmippVolumeOuterRadiusWizard(XmippVolumeMaskRadiusWizard):
 
     def _getParameters(self, protocol):
         protParams = {}
-        protParams['input']= protocol.inputVolumes
+        protParams['input']= protocol.inputVolume
         protParams['label']= 'cylinderOuterRadius'
         protParams['value']= protocol.cylinderOuterRadius.get()
         return protParams
@@ -305,7 +305,7 @@ class XmippVolumeInnerRadiusWizard(XmippVolumeMaskRadiusWizard):
 
     def _getParameters(self, protocol):
         protParams = {}
-        protParams['input']= protocol.inputVolumes
+        protParams['input']= protocol.inputVolume
         protParams['label']= 'cylinderInnerRadius'
         protParams['value']= protocol.cylinderInnerRadius.get()
         return protParams

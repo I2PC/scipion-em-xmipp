@@ -31,7 +31,7 @@ from pyworkflow.protocol.constants import STATUS_FINISHED
 from pyworkflow.em.protocol import ProtCreateStreamData, ProtImportMovies
 from pyworkflow.em.protocol.protocol_create_stream_data import SET_OF_MOVIES
 
-from ..protocols.protocol_preprocess import XmippProtMovieResize
+from ..protocols import XmippProtMovieResize
 
 
 RESIZE_SAMPLINGRATE = 0

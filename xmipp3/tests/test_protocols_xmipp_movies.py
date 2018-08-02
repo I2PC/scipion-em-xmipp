@@ -28,9 +28,10 @@
 from os.path import abspath
 from pyworkflow.tests import *
 
-from ..base import *
-from ..convert import *
-from ..constants import *
+from xmipp3.base import *
+from xmipp3.convert import *
+from xmipp3.constants import *
+from xmipp3.protocols import *
 
 
 # Some utility functions to import movies that are used in several tests.

@@ -36,6 +36,7 @@ from pyworkflow.em import *
 from ..base import *
 from ..convert import *
 from ..constants import *
+from xmipp3.protocols import *
 from ..protocols import (XmippFilterHelper as xfh,
                          XmippResizeHelper as xrh,
                          OP_COLUNM, OP_DOTPRODUCT, OP_MULTIPLY,
