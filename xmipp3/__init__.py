@@ -89,23 +89,21 @@ class Plugin(pyworkflow.em.Plugin):
         scons = env.addPipModule('scons', '2.3.6', target='scons-2.3.6',
                                  default=True, ignoreDefaultDeps=True)
 
-        installCmd = "src/xmipp/xmipp config ; src/xmipp/xmipp check_config;" \
-                     " src/xmipp/xmipp compile %d ; src/xmipp/xmipp install"\
-                     % env.getProcessors()
+        installCmd = "xmipp/xmipp config ; xmipp/xmipp check_config ;" \
+                     "xmipp/xmipp compile %d ; xmipp/xmipp install %s" \
+                      % (env.getProcessors(), cls.getHome())
 
-        print ("cls.getHome():" + cls.getHome())
+        target = "%s/bin/xmipp_reconstruct_significant" % cls.getHome()
 
-        target = "%s/build/bin/xmipp_reconstruct_significant" % cls.getHome()
+        env.addPackage('xmippSrc', version='18.05',
+                       tar='xmippSrc-18.05.tgz',
+                       commands=[(installCmd, target)],
+                       default=True,
+                       deps=[scons])
+            # Old dependencies now are checked inside xmipp script:
+            #   fftw3, scikit, nma, tiff, sqlite, opencv, sh_alignment, hdf5
 
-        # sconsArgs = " ".join([a for a in sys.argv[2:] if not a in env.getTargetNames()])
-        xmipp = env.addPackage('xmipp', version='18.05',
-                               tar='xmipp-18.05.tgz',
-                               commands=[(installCmd, target)],
-                               default=True,
-                               deps=[scons])  # Old dependencies. Now we check it inside xmipp script:
-                                              #   fftw3, scikit, nma, tiff, sqlite, opencv, sh_alignment, hdf5
-
-        xmippBin = env.addPackage('xmippBin', version='18.05',
-                                  tar='xmippBinaries-18.05.tgz')
+        env.addPackage('xmippBin', version='18.05',
+                       tar='xmipp-18.05.tgz')
 
 pyworkflow.em.Domain.registerPlugin(__name__)
