@@ -42,7 +42,7 @@ from pyworkflow.em.data import Class2D
 from pyworkflow.object import Float, String
 import pyworkflow.protocol.constants as const
 
-from ..convert import writeSetOfParticles, rowToAlignment, writeSetOfClasses2D
+from xmipp3.convert import writeSetOfParticles, rowToAlignment, writeSetOfClasses2D
 
 
 REF_CLASSES = 0

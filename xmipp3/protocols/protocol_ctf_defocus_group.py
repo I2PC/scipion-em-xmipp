@@ -35,7 +35,7 @@ from pyworkflow.utils import *
 from pyworkflow.protocol.params import GE
 
 import xmipp
-from ..convert import writeSetOfParticles, writeSetOfDefocusGroups
+from xmipp3.convert import writeSetOfParticles, writeSetOfDefocusGroups
 
 
 # TODO: change the base class to a more apropiated one

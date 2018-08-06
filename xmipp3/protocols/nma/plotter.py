@@ -25,7 +25,7 @@
 # **************************************************************************
 
 import numpy as np
-from ...viewers.plotter import XmippPlotter
+from xmipp3.viewers.plotter import XmippPlotter
 
 
 class XmippNmaPlotter(XmippPlotter):

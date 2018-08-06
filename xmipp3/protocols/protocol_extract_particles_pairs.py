@@ -40,9 +40,9 @@ from pyworkflow.em.protocol import ProtExtractParticlesPair
 from pyworkflow.em.data_tiltpairs import ParticlesTiltPair, TiltPair
 from pyworkflow.em.data import SetOfMicrographs, SetOfParticles
 
-from ..base import XmippProtocol
-from ..convert import writeSetOfCoordinates, readSetOfParticles
-from ..constants import OTHER
+from xmipp3.base import XmippProtocol
+from xmipp3.convert import writeSetOfCoordinates, readSetOfParticles
+from xmipp3.constants import OTHER
 
 
 class XmippProtExtractParticlesPairs(ProtExtractParticlesPair, XmippProtocol):

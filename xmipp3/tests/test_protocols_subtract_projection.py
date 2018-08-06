@@ -1,3 +1,5 @@
+# *********************************************************************
+# *
 # * Authors:     Roberto Marabini (roberto@cnb.csic.es)
 # *
 # *
@@ -18,7 +20,9 @@
 # *
 # *  All comments concerning this program package may be sent to the
 # *  e-mail address 'scipion@cnb.csic.es'
-# *******
+# *
+# ********************************************************************
+
 import os
 import random
 import numpy as np
@@ -33,9 +37,9 @@ from pyworkflow.em.data import  VolumeMask
 from pyworkflow.em.packages.relion import ProtRelionSubtract
 
 import xmipp
-from .. import Plugin
-from ..convert import writeSetOfParticles
-from ..protocols import XmippProtSubtractProjection
+from xmipp3 import Plugin
+from xmipp3.convert import writeSetOfParticles
+from xmipp3.protocols import XmippProtSubtractProjection
 
 
 proj1 = [(0, 0, 53, 55, 0.5), (0, 0, 53, 56, 1.0), (0, 0, 53, 57, 0.5), (0, 0, 53, 63, 0.5), (0, 0, 53, 64, 1.0),

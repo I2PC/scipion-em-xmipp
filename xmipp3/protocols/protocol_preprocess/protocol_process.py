@@ -29,8 +29,8 @@ from pyworkflow.em.protocol import ProtProcessParticles, ProtPreprocessVolumes
 from pyworkflow.em.data import Volume
 import pyworkflow.em.metadata as md
 
-from ...convert import writeSetOfParticles, xmippToLocation
-from ...convert import writeSetOfVolumes, getImageLocation
+from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
+                            writeSetOfVolumes, getImageLocation)
 
 
 class XmippProcessParticles(ProtProcessParticles):

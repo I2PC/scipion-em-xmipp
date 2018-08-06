@@ -28,8 +28,8 @@
 
 from pyworkflow.em import *
 
-from ...convert import getImageLocation
-from ...constants import *
+from xmipp3.convert import getImageLocation
+from xmipp3.constants import *
 from .geometrical_mask import *
 
 

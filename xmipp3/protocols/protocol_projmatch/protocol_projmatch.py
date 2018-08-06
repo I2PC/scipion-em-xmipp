@@ -26,7 +26,6 @@
 # *
 # **************************************************************************
 
-
 from pyworkflow.object import Integer
 from pyworkflow.utils.path import makePath, copyFile
 from pyworkflow.utils import getFloatListFromValues, getBoolListFromValues, getStringListFromValues
@@ -36,7 +35,6 @@ import xmipp
 from .projmatch_initialize import *
 from .projmatch_form import _defineProjectionMatchingParams
 from .projmatch_steps import *
-
 
 
 class XmippProtProjMatch(ProtRefine3D, ProtClassify3D):

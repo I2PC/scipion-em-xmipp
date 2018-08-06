@@ -37,10 +37,10 @@ import pyworkflow.em.metadata as md
 import pyworkflow.em as em
 
 import xmipp
-from ..base import findRow
-from ..convert import (rowToAlignment, setXmippAttributes, xmippToLocation,
-                       createItemMatrix, writeSetOfParticles)
-from ..constants import SYM_URL
+from xmipp3.base import findRow
+from xmipp3.convert import (rowToAlignment, setXmippAttributes, xmippToLocation,
+                            createItemMatrix, writeSetOfParticles)
+from xmipp3.constants import SYM_URL
 
 
 class XmippProtSolidAngles(ProtAnalysis3D):

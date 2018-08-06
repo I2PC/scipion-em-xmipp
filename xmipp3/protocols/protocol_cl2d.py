@@ -35,7 +35,7 @@ import pyworkflow.protocol.constants as const
 from pyworkflow.em.protocol import ProtClassify2D, SetOfClasses2D
 from pyworkflow.utils.path import cleanPath, makePath
 
-from ..convert import (writeSetOfParticles, createItemMatrix, writeSetOfClasses2D,
+from xmipp3.convert import (writeSetOfParticles, createItemMatrix, writeSetOfClasses2D,
                        xmippToLocation, rowToAlignment)
 
 

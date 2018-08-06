@@ -28,8 +28,8 @@ from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pyworkflow.em import ImageHandler
 from pyworkflow.em.protocol import ProtImportMovies
 
-from ..protocols import (XmippProtMovieCorr, XmippProtOFAlignment,
-                         XmippProtMovieAverage)
+from xmipp3.protocols import (XmippProtMovieCorr, XmippProtOFAlignment,
+                              XmippProtMovieAverage)
 
 
 class TestMixedMovies(BaseTest):

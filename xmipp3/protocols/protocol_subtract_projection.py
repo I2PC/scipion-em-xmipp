@@ -34,9 +34,8 @@ from pyworkflow.protocol.constants import STEPS_PARALLEL
 from pyworkflow.em import ImageHandler
 
 import xmipp
-from ..convert import (XmippMdRow, particleToRow,
+from xmipp3.convert import (XmippMdRow, particleToRow,
                        getImageLocation, geometryFromMatrix)
-
 
 
 class XmippProtSubtractProjection(ProtOperateParticles):

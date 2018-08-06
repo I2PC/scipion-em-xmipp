@@ -34,7 +34,7 @@ from pyworkflow.protocol.params import FloatParam, IntParam, LabelParam
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pyworkflow.utils.path import cleanPath
 
-from ..protocols.protocol_ctf_discrepancy import XmippProtCTFDiscrepancy
+from xmipp3.protocols.protocol_ctf_discrepancy import XmippProtCTFDiscrepancy
 
 
 class XmippCTFDiscrepancyViewer(ProtocolViewer):

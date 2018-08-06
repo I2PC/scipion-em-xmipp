@@ -31,14 +31,16 @@ from __future__ import print_function
 from pyworkflow.tests.test_utils import wait
 from pyworkflow.utils import magentaStr
 from pyworkflow.tests import *
-from pyworklow.em.protocol.protocol_import import *
+from pyworkflow.em.protocol.protocol_import import *
 
-from ..base import *
-from ..convert import *
-from ..constants import *
-from ..protocols import XmippFilterHelper as xfh
-from ..protocols import XmippResizeHelper as xrh
-from ..protocols import OP_DOTPRODUCT, OP_MULTIPLY, OP_SQRT
+from xmipp3 import Plugin
+from xmipp3.base import *
+from xmipp3.convert import *
+from xmipp3.constants import *
+from xmipp3.protocols import *
+from xmipp3.protocols import XmippFilterHelper as xfh
+from xmipp3.protocols import XmippResizeHelper as xrh
+from xmipp3.protocols import OP_DOTPRODUCT, OP_MULTIPLY, OP_SQRT
 
 
 # Some utility functions to import particles that are used
@@ -1140,7 +1142,7 @@ class TestXmippBreakSym(TestXmippBase):
         from pyworkflow.utils import runJob
         runJob(None, 'xmipp_angular_distance',
                "--ang1 images.xmd --ang2 input_particles.xmd --sym i2 --oroot kk",
-               env=getEnviron())
+               env=Plugin.getEnviron())
         mdRober = md.MetaData("kk_vec_diff_hist.txt")
         objId = mdRober.firstObject()
         count = mdRober.getValue(md.MDL_COUNT, objId)

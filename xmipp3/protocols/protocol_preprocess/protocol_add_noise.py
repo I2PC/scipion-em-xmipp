@@ -34,8 +34,7 @@ from pyworkflow.em.protocol.protocol_3d import ProtRefine3D
 from pyworkflow.em.data import Volume
 import pyworkflow.em as em
 
-from ...convert import writeSetOfParticles
-
+from xmipp3.convert import writeSetOfParticles
 
 
 class XmippProtAddNoise(ProtRefine3D):

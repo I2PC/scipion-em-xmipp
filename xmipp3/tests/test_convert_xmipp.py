@@ -30,9 +30,9 @@ from pyworkflow.em.data import SetOfVolumes
 from pyworkflow.tests import *
 from pyworkflow.utils.properties import colorText
 
-from ..base import *
-from ..convert import *
-from ..constants import *
+from xmipp3.base import *
+from xmipp3.convert import *
+from xmipp3.constants import *
 
 
 class TestBasic(BaseTest):

@@ -34,7 +34,6 @@ from ..data import Point
 from . import PointSelector
 from ..plotter import XmippNmaPlotter
 
- 
     
 class ClusteringWindow(gui.Window):
     """ This class creates a Window that will display some Point's

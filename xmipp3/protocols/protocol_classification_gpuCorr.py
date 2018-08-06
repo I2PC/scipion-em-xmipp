@@ -36,8 +36,8 @@ import pyworkflow.protocol.constants as const
 from pyworkflow.em import SetOfClasses2D, ALIGN_2D, ALIGN_NONE
 
 from xmipp import MD_APPEND
-from ..convert import rowToAlignment, xmippToLocation
-from ..convert import writeSetOfParticles, writeSetOfClasses2D
+from xmipp3.convert import (rowToAlignment, xmippToLocation,
+                            writeSetOfParticles, writeSetOfClasses2D)
 
 
 class XmippProtGpuCrrCL2D(ProtAlign2D):

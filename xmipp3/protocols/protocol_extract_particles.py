@@ -40,10 +40,10 @@ from pyworkflow.em.protocol import ProtExtractParticles
 from pyworkflow.em.data import Particle
 from pyworkflow.em.constants import RELATION_CTF
 
-from ..base import XmippProtocol
-from ..convert import (micrographToCTFParam, writeMicCoordinates,
-                       xmippToLocation, setXmippAttributes)
-from ..constants import SAME_AS_PICKING, OTHER
+from xmipp3.base import XmippProtocol
+from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
+                            xmippToLocation, setXmippAttributes)
+from xmipp3.constants import SAME_AS_PICKING, OTHER
 
 
 class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):

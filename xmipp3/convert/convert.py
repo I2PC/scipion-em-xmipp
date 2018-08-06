@@ -41,8 +41,8 @@ import pyworkflow.em.metadata as md
 from pyworkflow.em import *
 
 import xmipp
-from ..base import XmippMdRow, getLabelPythonType, RowMetaData
-from ..utils import iterMdRows
+from xmipp3.base import XmippMdRow, getLabelPythonType, RowMetaData
+from xmipp3.utils import iterMdRows
 
 
 

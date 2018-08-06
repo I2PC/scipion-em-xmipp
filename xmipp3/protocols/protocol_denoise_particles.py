@@ -29,8 +29,7 @@ from pyworkflow.object import String
 from pyworkflow.protocol.params import IntParam, PointerParam, LEVEL_ADVANCED
 from pyworkflow.em.protocol import ProtProcessParticles
 
-from ..convert import writeSetOfParticles, writeSetOfClasses2D, xmippToLocation
-
+from xmipp3.convert import writeSetOfParticles, writeSetOfClasses2D, xmippToLocation
 
         
 class XmippProtDenoiseParticles(ProtProcessParticles):

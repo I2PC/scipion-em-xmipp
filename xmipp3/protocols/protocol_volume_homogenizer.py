@@ -33,7 +33,7 @@ from pyworkflow import VERSION_1_1
 from pyworkflow.em.protocol import ProtProcessParticles
 from pyworkflow.utils import getExt
 
-from ..convert import (writeSetOfParticles, readSetOfParticles,
+from xmipp3.convert import (writeSetOfParticles, readSetOfParticles,
                        geometryFromMatrix, SetOfParticles)
 
 

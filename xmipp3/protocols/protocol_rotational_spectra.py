@@ -34,7 +34,7 @@ from pyworkflow.protocol.params import EnumParam, IntParam
 
 import xmipp
 import xmipp3
-from ..convert import readSetOfClasses2D
+from xmipp3.convert import readSetOfClasses2D
 from .protocol_kerdensom import KendersomBaseClassify
 
 

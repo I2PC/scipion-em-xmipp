@@ -33,6 +33,7 @@ Projection Matching.
 from os.path import join, exists
 from pyworkflow.object import String
 
+
 # taken from angular_project_library in xmipp
 
 def createFilenameTemplates(self):

@@ -38,8 +38,8 @@ from pyworkflow.em.protocol import Prot3D
 from pyworkflow.em.viewers.chimera_utils import \
     createCoordinateAxisFile
 
-from ...convert import getImageLocation
-# from ...base import XmippProtocol
+from xmipp3.convert import getImageLocation
+# from xmipp3.base import XmippProtocol
 
 
 NMA_MASK_NONE = 0

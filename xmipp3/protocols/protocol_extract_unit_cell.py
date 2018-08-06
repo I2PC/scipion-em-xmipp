@@ -36,7 +36,7 @@ from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         EnumParam, IntParam)
 
-from ..constants import XMIPP_SYM_NAME
+from xmipp3.constants import XMIPP_SYM_NAME
 
 
 DEBUG = True

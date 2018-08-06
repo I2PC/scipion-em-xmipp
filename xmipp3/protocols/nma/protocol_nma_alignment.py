@@ -40,10 +40,11 @@ from pyworkflow.protocol.params import NumericRangeParam
 import pyworkflow.em as em
 import pyworkflow.em.metadata as md
 
+from xmipp3.base import XmippMdRow
+from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
+                            getImageLocation, createItemMatrix,
+                            setXmippAttributes)
 from .convert import modeToRow
-from ...base import XmippMdRow
-from ...convert import (writeSetOfParticles, xmippToLocation,
-                        getImageLocation, createItemMatrix, setXmippAttributes)
 
 
 NMA_ALIGNMENT_WAV = 0

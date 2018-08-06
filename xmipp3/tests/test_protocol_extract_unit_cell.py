@@ -33,7 +33,7 @@ from tempfile import mkstemp
 
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.em.data import Transform
-from pyworkflow.em.headers import Ccp4Header
+from pyworkflow.em.convert_header.CCP4.convert import Ccp4Header
 from pyworkflow.em.protocol import ProtImportVolumes
 from pyworkflow.em.symmetry import Icosahedron
 from pyworkflow.tests import BaseTest, setupTestProject
@@ -42,10 +42,10 @@ from pyworkflow.em.constants import (SYM_I222r, SYM_I222, SCIPION_SYM_NAME,
                                      SYM_In25, SYM_In25r, SYM_CYCLIC,
                                      SYM_DIHEDRAL, SYM_TETRAHEDRAL,
                                      SYM_OCTAHEDRAL)
-from .. import Plugin
-from ..constants import XMIPP_SYM_NAME
-from ..protocols import XmippProtConvertToPseudoAtoms, XmippProtExtractUnit
-from ..protocols.pdb.protocol_pseudoatoms_base import NMA_MASK_THRE
+from xmipp3 import Plugin
+from xmipp3.constants import XMIPP_SYM_NAME
+from xmipp3.protocols import XmippProtConvertToPseudoAtoms, XmippProtExtractUnit
+from xmipp3.protocols.pdb.protocol_pseudoatoms_base import NMA_MASK_THRE
 
 
 OFFSET = 22.5

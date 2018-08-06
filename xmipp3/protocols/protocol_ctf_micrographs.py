@@ -37,8 +37,8 @@ import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as pwconst
 import pyworkflow.utils as pwutils
 
-from ..utils import isMdEmpty
-from ..convert import mdToCTFModel, readCTFModel
+from xmipp3.utils import isMdEmpty
+from xmipp3.convert import mdToCTFModel, readCTFModel
 
 
 class XmippProtCTFMicrographs(em.ProtCTFMicrographs):

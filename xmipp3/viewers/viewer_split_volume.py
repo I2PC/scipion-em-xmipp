@@ -37,8 +37,8 @@ from pyworkflow.gui.text import *
 from pyworkflow.gui.dialog import showError, showWarning
 from pyworkflow.protocol.params import LabelParam, LEVEL_ADVANCED
 
-from ..viewers import XmippViewer
-from ..protocols.protocol_split_volume import XmippProtSplitvolume
+from xmipp3.viewers import XmippViewer
+from xmipp3.protocols.protocol_split_volume import XmippProtSplitvolume
 
 
 class XmippViewerSplitVolume(XmippViewer):

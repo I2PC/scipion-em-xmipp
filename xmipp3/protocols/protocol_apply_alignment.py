@@ -30,7 +30,7 @@ import pyworkflow.protocol.params as params
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.utils.properties import Message
 
-from ..convert import xmippToLocation, writeSetOfParticles
+from xmipp3.convert import xmippToLocation, writeSetOfParticles
 
         
 class XmippProtApplyAlignment(em.ProtAlign2D):

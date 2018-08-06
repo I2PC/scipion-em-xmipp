@@ -27,6 +27,7 @@
 """
 Consensus picking protocol
 """
+
 import os, time
 from math import sqrt
 import numpy as np

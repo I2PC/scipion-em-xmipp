@@ -32,8 +32,8 @@ import pyworkflow.em.metadata as md
 from pyworkflow.gui.plotter import plt
 
 import xmipp
+from xmipp3.protocols.protocol_validate_overfitting import XmippProtValidateOverfitting
 from .plotter import XmippPlotter
-from ..protocols.protocol_validate_overfitting import XmippProtValidateOverfitting
 
 
 class XmippValidateOverfittingViewer(Viewer):

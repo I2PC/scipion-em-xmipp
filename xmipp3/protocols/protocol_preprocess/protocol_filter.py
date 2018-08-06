@@ -36,12 +36,10 @@ from pyworkflow.em.data import ImageDim, CTFModel
 from pyworkflow.em.constants import FILTER_LOW_PASS, FILTER_HIGH_PASS, FILTER_BAND_PASS
 from pyworkflow.em.protocol import ProtFilterParticles, ProtFilterVolumes
 
-from ...constants import (FILTER_SPACE_FOURIER, FILTER_SPACE_REAL,
-                          FILTER_SPACE_WAVELET)
-from ...convert import writeCTFModel
+from xmipp3.constants import (FILTER_SPACE_FOURIER, FILTER_SPACE_REAL,
+                              FILTER_SPACE_WAVELET)
+from xmipp3.convert import writeCTFModel
 from .protocol_process import XmippProcessParticles, XmippProcessVolumes
-
-
 
 
 class XmippFilterHelper():

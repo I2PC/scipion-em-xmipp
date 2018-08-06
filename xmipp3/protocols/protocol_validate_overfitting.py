@@ -39,7 +39,7 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         StringParam, BooleanParam,
                                         LEVEL_ADVANCED)
 import xmipp
-from ..convert import writeSetOfParticles
+from xmipp3.convert import writeSetOfParticles
 
 
 class XmippProtValidateOverfitting(ProtReconstruct3D):

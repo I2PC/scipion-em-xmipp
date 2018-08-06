@@ -34,7 +34,7 @@ from pyworkflow.em.protocol import ProtAnalysis3D
 from pyworkflow.utils.path import moveFile, makePath
 import pyworkflow.em.metadata as md
 
-from ..convert import writeSetOfParticles
+from xmipp3.convert import writeSetOfParticles
 
 
 PROJECTION_MATCHING = 0

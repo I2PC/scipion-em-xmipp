@@ -35,7 +35,7 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, IntParam,
                                         FloatParam)
 
-from ..convert import writeSetOfParticles, rowToAlignment, xmippToLocation
+from xmipp3.convert import writeSetOfParticles, rowToAlignment, xmippToLocation
 
 
 class XmippProtML2D(ProtClassify2D):

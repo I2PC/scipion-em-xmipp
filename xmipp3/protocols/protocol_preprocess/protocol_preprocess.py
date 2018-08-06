@@ -31,9 +31,9 @@ from pyworkflow.protocol.params import *
 from pyworkflow.utils.path import cleanPath
 from pyworkflow.em import Volume
 
-from ...constants import *
-from ...convert import getImageLocation
-from ...convert import locationToXmipp, writeSetOfParticles
+from xmipp3.constants import *
+from xmipp3.convert import getImageLocation
+from xmipp3.convert import locationToXmipp, writeSetOfParticles
 from .protocol_process import XmippProcessParticles, XmippProcessVolumes
 
 

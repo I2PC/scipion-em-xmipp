@@ -24,7 +24,6 @@
 # *
 # **************************************************************************
 
-
 from os.path import basename
 
 from pyworkflow.object import String

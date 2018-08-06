@@ -32,9 +32,8 @@ from pyworkflow.em.protocol import ProtParticlePicking
 from pyworkflow.em.data_tiltpairs import CoordinatesTiltPair
 from pyworkflow.em.showj import launchTiltPairPickerGUI
 
-from ..base import XmippProtocol
-from .. import convert
-
+from xmipp3 import convert
+from xmipp3.base import XmippProtocol
 
 
 class XmippProtParticlePickingPairs(ProtParticlePicking, XmippProtocol):

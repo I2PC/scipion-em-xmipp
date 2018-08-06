@@ -38,8 +38,7 @@ from pyworkflow import VERSION_1_1
 from pyworkflow.em.protocol import ProtAlignMovies
 from pyworkflow.em.protocol.protocol_align_movies import createAlignmentPlot
 
-
-from ..convert import writeMovieMd
+from xmipp3.convert import writeMovieMd
 
 
 class XmippProtMovieCorr(ProtAlignMovies):

@@ -35,8 +35,8 @@ import pyworkflow.em.metadata as metadata
 from pyworkflow.protocol.params import *
 
 import xmipp
-from ..base import XmippMdRow
-from ..convert import writeSetOfClasses2D, writeSetOfParticles, volumeToRow
+from xmipp3.base import XmippMdRow
+from xmipp3.convert import writeSetOfClasses2D, writeSetOfParticles, volumeToRow
 
 
 class XmippProtReconstructSignificant(ProtInitialVolume):

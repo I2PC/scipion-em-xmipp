@@ -24,11 +24,18 @@
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pyworkflow.em.protocol import ProtImportAverages, ProtImportMicrographs
 from pyworkflow.em.protocol.protocol_sets import ProtSubSet
-from pyworkflow.em.packages.grigoriefflab import ProtCTFFind
-from pyworkflow.em.packages.eman2.protocol_autopick import *
 
-from ..protocols.protocol_extract_particles import *
-from ..protocols.protocol_classification_gpuCorr import *
+from xmipp3.protocols.protocol_extract_particles import *
+from xmipp3.protocols.protocol_classification_gpuCorr import *
+
+try:
+    from grigoriefflab import ProtCTFFind
+except:
+    print("grigoriefflab in needed to this test")
+try:
+    from eman2.protocol_autopick import *
+except:
+    print("grigoriefflab in needed to this test")
 
 
 # Number of mics to be processed

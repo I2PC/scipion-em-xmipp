@@ -31,7 +31,7 @@ from glob import glob
 import math
 import random
 from itertools import izip
-
+from os.path import join, exists
 
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
@@ -46,9 +46,9 @@ import pyworkflow.em.metadata as md
 import pyworkflow.em as em
 
 import xmipp
-from ..base import HelicalFinder
-from ..convert import (writeSetOfParticles, createItemMatrix,
-                       setXmippAttributes, getImageLocation)
+from xmipp3.base import HelicalFinder
+from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
+                            setXmippAttributes, getImageLocation)
 
 
 class XmippProtReconstructSwarm(ProtRefine3D):
@@ -119,7 +119,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
         mdInfo = xmipp.MetaData()
         objId=mdInfo.addObject()
         mdInfo.setValue(label,value,objId)
-        mdInfo.write("%s@%s"%(block,join(fnDir,"info.xmd")),xmipp.MD_APPEND)
+        mdInfo.write("%s@%s"%(block, join(fnDir,"info.xmd")),xmipp.MD_APPEND)
 
     def convertInputVolume(self, imgHandler, obj, fnIn, fnOut, TsCurrent, newXdim):
         self.runJob('xmipp_image_resize',"-i %s -o %s --factor %f"%(fnIn,fnOut,obj.getSamplingRate()/TsCurrent),numberOfMpi=1)

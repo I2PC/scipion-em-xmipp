@@ -36,7 +36,7 @@ from pyworkflow.protocol.params import LabelParam, BooleanParam, LEVEL_ADVANCED
 import pyworkflow.em.showj as showj
 from pyworkflow.protocol.params import EnumParam, StringParam
 
-from ..protocols.protocol_cl2d import XmippProtCL2D
+from xmipp3.protocols.protocol_cl2d import XmippProtCL2D
 
 
 CLASSES = 0

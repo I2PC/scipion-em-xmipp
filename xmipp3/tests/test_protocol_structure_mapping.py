@@ -24,7 +24,7 @@
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pyworkflow.em.protocol import ProtImportVolumes
 
-from ..protocols import XmippProtStructureMapping
+from xmipp3.protocols import XmippProtStructureMapping
 
     
 class TestStructureMapping(BaseTest):
