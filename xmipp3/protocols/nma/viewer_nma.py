@@ -33,7 +33,7 @@ from pyworkflow.protocol.params import LabelParam, IntParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.em.viewer import ObjectView, VmdView
 
-import xmipp
+import xmippLib
 from .protocol_nma import XmippProtNMA
 from .plotter import XmippNmaPlotter
 
@@ -107,7 +107,7 @@ class XmippNMAViewer(ProtocolViewer):
 def createShiftPlot(mdFn, title, ylabel):
     plotter = XmippNmaPlotter()
     plotter.createSubPlot(title, 'atom index', ylabel)
-    plotter.plotMdFile(mdFn, None, xmipp.MDL_NMA_ATOMSHIFT)
+    plotter.plotMdFile(mdFn, None, xmippLib.MDL_NMA_ATOMSHIFT)
     return plotter
 
 

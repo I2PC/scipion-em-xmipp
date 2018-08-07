@@ -36,8 +36,8 @@ from pyworkflow.object import ObjectWrap
 from pyworkflow.dataset import (
     COL_RENDER_CHECKBOX, COL_RENDER_TEXT, COL_RENDER_IMAGE, COL_RENDER_VOLUME)
 
-import xmipp
-from xmipp import (MetaData, MetaDataInfo, MDL_IMAGE, MDL_IMAGE1, MDL_IMAGE_REF,
+import xmippLib
+from xmippLib import (MetaData, MetaDataInfo, MDL_IMAGE, MDL_IMAGE1, MDL_IMAGE_REF,
     MDL_ANGLE_ROT, MDL_ANGLE_TILT, MDL_ANGLE_PSI, MDL_REF, MDL_SHIFT_X,
     MDL_SHIFT_Y, MDL_FLIP, MD_APPEND, MDL_MAXCC, MDL_ENABLED, MDL_CTF_MODEL,
     MDL_SAMPLINGRATE, DT_DOUBLE, MDL_ANGLE_ROT, MDL_SHIFT_Z,
@@ -46,10 +46,10 @@ from .constants import *
 
 
 LABEL_TYPES = { 
-               xmipp.LABEL_SIZET: long,
-               xmipp.LABEL_DOUBLE: float,
-               xmipp.LABEL_INT: int,
-               xmipp.LABEL_BOOL: bool              
+               xmippLib.LABEL_SIZET: long,
+               xmippLib.LABEL_DOUBLE: float,
+               xmippLib.LABEL_INT: int,
+               xmippLib.LABEL_BOOL: bool
                }
 
 
@@ -64,7 +64,7 @@ def getXmippPath(*paths):
 
 def getLabelPythonType(label):
     """ From xmipp label to python variable type """
-    labelType = xmipp.labelType(label)
+    labelType = xmippLib.labelType(label)
     return LABEL_TYPES.get(labelType, str)
 
 
@@ -123,7 +123,7 @@ class XmippMdRow():
     def containsLabel(self, label):
         # Allow getValue using the label string
         if isinstance(label, basestring):
-            label = xmipp.str2Label(label)
+            label = xmippLib.str2Label(label)
         return label in self._labelDict
     
     def removeLabel(self, label):
@@ -135,14 +135,14 @@ class XmippMdRow():
         MetaData Label and the desired value"""
         # Allow setValue using the label string
         if isinstance(label, basestring):
-            label = xmipp.str2Label(label)
+            label = xmippLib.str2Label(label)
         self._labelDict[label] = value
             
     def getValue(self, label, default=None):
         """ Return the value of the row for a given label. """
         # Allow getValue using the label string
         if isinstance(label, basestring):
-            label = xmipp.str2Label(label)
+            label = xmippLib.str2Label(label)
         return self._labelDict.get(label, default)
     
     def getValueAsObject(self, label, default=None):
@@ -167,7 +167,7 @@ class XmippMdRow():
             if t is unicode:
                 value = str(value)
                 
-            if t is int and xmipp.labelType(label) == xmipp.LABEL_SIZET:
+            if t is int and xmippLib.labelType(label) == xmippLib.LABEL_SIZET:
                 value = long(value)
                 
             try:
@@ -180,7 +180,7 @@ class XmippMdRow():
                 raise ex
             
     def readFromFile(self, fn):
-        md = xmipp.MetaData(fn)
+        md = xmippLib.MetaData(fn)
         self.readFromMd(md, md.firstObject())
         
     def copyFromRow(self, other):
@@ -190,7 +190,7 @@ class XmippMdRow():
     def __str__(self):
         s = '{'
         for k, v in self._labelDict.iteritems():
-            s += '  %s = %s\n' % (xmipp.label2Str(k), v)
+            s += '  %s = %s\n' % (xmippLib.label2Str(k), v)
         return s + '}'
     
     def __iter__(self):
@@ -206,7 +206,7 @@ class RowMetaData():
     Where only one object is used.
     """
     def __init__(self, filename=None):
-        self._md = xmipp.MetaData()
+        self._md = xmippLib.MetaData()
         self._md.setColumnFormat(False)
         self._id = self._md.addObject()
         
@@ -219,7 +219,7 @@ class RowMetaData():
     def getValue(self, label):
         return self._md.getValue(label, self._id)
         
-    def write(self, filename, mode=xmipp.MD_APPEND):
+    def write(self, filename, mode=xmippLib.MD_APPEND):
         self._md.write(filename, mode)
         
     def read(self, filename):
@@ -241,8 +241,8 @@ def findRow(md, label, value):
         XmippMdRow object of the row found.
         None if no row is found with label=value
     """
-    mdQuery = xmipp.MetaData() # store result
-    mdQuery.importObjects(md, xmipp.MDValueEQ(label, value))
+    mdQuery = xmippLib.MetaData() # store result
+    mdQuery.importObjects(md, xmippLib.MDValueEQ(label, value))
     n = mdQuery.size()
     
     if n == 0:
@@ -251,13 +251,13 @@ def findRow(md, label, value):
         row = XmippMdRow()
         row.readFromMd(mdQuery, mdQuery.firstObject())
     else:
-        raise Exception("findRow: more than one row found matching the query %s = %s" % (xmipp.label2Str(label), value))
+        raise Exception("findRow: more than one row found matching the query %s = %s" % (xmippLib.label2Str(label), value))
     
     return row
 
 def findRowById(md, value):
     """ Same as findRow, but using MDL_ITEM_ID for label. """
-    return findRow(md, xmipp.MDL_ITEM_ID, long(value))
+    return findRow(md, xmippLib.MDL_ITEM_ID, long(value))
   
   
 class XmippSet():
@@ -270,7 +270,7 @@ class XmippSet():
         """
         self._itemClass = itemClass 
         #self._fileName = fileName      
-        self._md = xmipp.MetaData()
+        self._md = xmippLib.MetaData()
         
         
     def __iter__(self):
@@ -280,9 +280,9 @@ class XmippSet():
         for objId in self._md:  
             item = self._itemClass()
             item.readFromMd(self._md, objId)  
-            #m = Image(md.getValue(xmipp.MDL_IMAGE, objId))
+            #m = Image(md.getValue(xmippLib.MDL_IMAGE, objId))
             #if self.hasCTF():
-            #    m.ctfModel = XmippCTFModel(md.getValue(xmipp.MDL_CTF_MODEL, objId)) 
+            #    m.ctfModel = XmippCTFModel(md.getValue(xmippLib.MDL_CTF_MODEL, objId))
             yield item
         
 #        
@@ -347,7 +347,7 @@ class XmippDataSet(ds.DataSet):
     """
     def __init__(self, filename):
         self._filename = filename
-        blocks = xmipp.getBlocksInMetaDataFile(filename)
+        blocks = xmippLib.getBlocksInMetaDataFile(filename)
         
         if not blocks: # If there are no block, add an empty one
             blocks = ['']
@@ -358,26 +358,26 @@ class XmippDataSet(ds.DataSet):
             mdFn = tableName + "@" + self._filename
         else:
             mdFn = self._filename
-        md = xmipp.MetaData(mdFn)
+        md = xmippLib.MetaData(mdFn)
         return self._convertMdToTable(md)
         
     def _getLabelRenderType(self, label, md):
         """ Return the way to render each label. """
-        if xmipp.labelIsImage(label):
+        if xmippLib.labelIsImage(label):
             value = md.getValue(label, md.firstObject())
             if value.endswith('.vol'):
                 return COL_RENDER_VOLUME
             return COL_RENDER_IMAGE
         
-        labelType = xmipp.labelType(label)
-        if labelType == xmipp.LABEL_BOOL:
+        labelType = xmippLib.labelType(label)
+        if labelType == xmippLib.LABEL_BOOL:
             return COL_RENDER_CHECKBOX
         
         return COL_RENDER_TEXT
         
     def _convertLabelToColumn(self, label, md):
         """ From an Xmipp label, create the corresponding column. """
-        return ds.Column(xmipp.label2Str(label), 
+        return ds.Column(xmippLib.label2Str(label),
                          getLabelPythonType(label),
                          renderType=self._getLabelRenderType(label, md))
         
@@ -405,9 +405,9 @@ class XmippDataSet(ds.DataSet):
         return table
     
     def _convertTableToMd(self, table):
-        colLabels = [(col.getName(), xmipp.str2Label(col.getName())) 
+        colLabels = [(col.getName(), xmippLib.str2Label(col.getName()))
                      for col in table.iterColumns()]
-        md = xmipp.MetaData()
+        md = xmippLib.MetaData()
         
         for row in table.iterRows():
             objId = md.addObject()
@@ -421,24 +421,26 @@ class XmippDataSet(ds.DataSet):
     def writeTable(self, tableName, table):
         """ Write changes made to a table. """
         md = self._convertTableToMd(table)
-        md.write("%s@%s" % (tableName, self._filename), xmipp.MD_APPEND)
+        md.write("%s@%s" % (tableName, self._filename), xmippLib.MD_APPEND)
 
         
     def _hasTransformation(self, labels):
-        for l in [xmipp.MDL_SHIFT_X, xmipp.MDL_SHIFT_Y, xmipp.MDL_SHIFT_Z, xmipp.MDL_ANGLE_ROT, xmipp.MDL_ANGLE_TILT, xmipp.MDL_ANGLE_PSI]:
+        for l in [xmippLib.MDL_SHIFT_X, xmippLib.MDL_SHIFT_Y,
+                  xmippLib.MDL_SHIFT_Z, xmippLib.MDL_ANGLE_ROT,
+                  xmippLib.MDL_ANGLE_TILT, xmippLib.MDL_ANGLE_PSI]:
             if l in labels:
                 return True
         return False
         
     def _getTransformation(self, md, objId):
-        rot  = md.getValue(xmipp.MDL_ANGLE_ROT, objId) or 0.
-        tilt = md.getValue(xmipp.MDL_ANGLE_TILT, objId) or 0.
-        psi  = md.getValue(xmipp.MDL_ANGLE_PSI, objId) or 0.
+        rot  = md.getValue(xmippLib.MDL_ANGLE_ROT, objId) or 0.
+        tilt = md.getValue(xmippLib.MDL_ANGLE_TILT, objId) or 0.
+        psi  = md.getValue(xmippLib.MDL_ANGLE_PSI, objId) or 0.
 
-        tMatrix = xmipp.Euler_angles2matrix(rot, tilt, psi)
-        x = md.getValue(xmipp.MDL_SHIFT_X, objId) or 0.
-        y = md.getValue(xmipp.MDL_SHIFT_Y, objId) or 0.
-        z = md.getValue(xmipp.MDL_SHIFT_Z, objId) or 0.
+        tMatrix = xmippLib.Euler_angles2matrix(rot, tilt, psi)
+        x = md.getValue(xmippLib.MDL_SHIFT_X, objId) or 0.
+        y = md.getValue(xmippLib.MDL_SHIFT_Y, objId) or 0.
+        z = md.getValue(xmippLib.MDL_SHIFT_Z, objId) or 0.
 
         matrix = [tMatrix[0][0], tMatrix[0][1], tMatrix[0][2], x,
                   tMatrix[1][0], tMatrix[1][1], tMatrix[1][2], y,
@@ -471,8 +473,8 @@ class ProjMatcher():
         # Write angles in the original file and sort
         MD=MetaData(fnAngles)
         for id in MD:
-            galleryReference = MD.getValue(xmipp.MDL_REF,id)
-            MD.setValue(xmipp.MDL_IMAGE_REF, "%05d@%s" % (galleryReference+1,fnGallery), id)
+            galleryReference = MD.getValue(xmippLib.MDL_REF,id)
+            MD.setValue(xmippLib.MDL_IMAGE_REF, "%05d@%s" % (galleryReference+1,fnGallery), id)
         MD.write(fnAngles)
         
     def produceAlignedImagesStep(self, volumeIsCTFCorrected, fn, images):
@@ -482,58 +484,58 @@ class ProjMatcher():
         MDin = MetaData(images)
         MDout = MetaData()
         n = 1
-        hasCTF = MDin.containsLabel(xmipp.MDL_CTF_MODEL)
+        hasCTF = MDin.containsLabel(xmippLib.MDL_CTF_MODEL)
         for i in MDin:
-            fnImg = MDin.getValue(xmipp.MDL_IMAGE,i)
-            fnImgRef = MDin.getValue(xmipp.MDL_IMAGE_REF,i)
-            maxCC = MDin.getValue(xmipp.MDL_MAXCC,i)
-            rot =  MDin.getValue(xmipp.MDL_ANGLE_ROT,i)
-            tilt = MDin.getValue(xmipp.MDL_ANGLE_TILT,i)
-            psi =-1.*MDin.getValue(xmipp.MDL_ANGLE_PSI,i)
-            flip = MDin.getValue(xmipp.MDL_FLIP,i)
+            fnImg = MDin.getValue(xmippLib.MDL_IMAGE,i)
+            fnImgRef = MDin.getValue(xmippLib.MDL_IMAGE_REF,i)
+            maxCC = MDin.getValue(xmippLib.MDL_MAXCC,i)
+            rot =  MDin.getValue(xmippLib.MDL_ANGLE_ROT,i)
+            tilt = MDin.getValue(xmippLib.MDL_ANGLE_TILT,i)
+            psi =-1.*MDin.getValue(xmippLib.MDL_ANGLE_PSI,i)
+            flip = MDin.getValue(xmippLib.MDL_FLIP,i)
             if flip:
                 psi = -psi
             eulerMatrix = Euler_angles2matrix(0.,0.,psi)
-            x = MDin.getValue(xmipp.MDL_SHIFT_X,i)
-            y = MDin.getValue(xmipp.MDL_SHIFT_Y,i)
+            x = MDin.getValue(xmippLib.MDL_SHIFT_X,i)
+            y = MDin.getValue(xmippLib.MDL_SHIFT_Y,i)
             shift = array([x, y, 0])
             shiftOut = dot(eulerMatrix, shift)
             [x,y,z]= shiftOut
             if flip:
                 x = -x
             id = MDout.addObject()
-            MDout.setValue(xmipp.MDL_IMAGE, fnImg, id)
-            MDout.setValue(xmipp.MDL_IMAGE_REF, fnImgRef, id)
-            MDout.setValue(xmipp.MDL_IMAGE1, "%05d@%s"%(n, self._getExtraPath("diff.stk")), id)
+            MDout.setValue(xmippLib.MDL_IMAGE, fnImg, id)
+            MDout.setValue(xmippLib.MDL_IMAGE_REF, fnImgRef, id)
+            MDout.setValue(xmippLib.MDL_IMAGE1, "%05d@%s"%(n, self._getExtraPath("diff.stk")), id)
             if hasCTF:
-                fnCTF = MDin.getValue(xmipp.MDL_CTF_MODEL,i)
-                MDout.setValue(xmipp.MDL_CTF_MODEL,fnCTF,id)
-            MDout.setValue(xmipp.MDL_MAXCC, maxCC, id)
-            MDout.setValue(xmipp.MDL_ANGLE_ROT, rot, id)
-            MDout.setValue(xmipp.MDL_ANGLE_TILT, tilt, id)
-            MDout.setValue(xmipp.MDL_ANGLE_PSI, psi, id)
-            MDout.setValue(xmipp.MDL_SHIFT_X, x,id)
-            MDout.setValue(xmipp.MDL_SHIFT_Y, y,id)
-            MDout.setValue(xmipp.MDL_FLIP,flip,id)
-            MDout.setValue(xmipp.MDL_ENABLED,1,id)
+                fnCTF = MDin.getValue(xmippLib.MDL_CTF_MODEL,i)
+                MDout.setValue(xmippLib.MDL_CTF_MODEL,fnCTF,id)
+            MDout.setValue(xmippLib.MDL_MAXCC, maxCC, id)
+            MDout.setValue(xmippLib.MDL_ANGLE_ROT, rot, id)
+            MDout.setValue(xmippLib.MDL_ANGLE_TILT, tilt, id)
+            MDout.setValue(xmippLib.MDL_ANGLE_PSI, psi, id)
+            MDout.setValue(xmippLib.MDL_SHIFT_X, x,id)
+            MDout.setValue(xmippLib.MDL_SHIFT_Y, y,id)
+            MDout.setValue(xmippLib.MDL_FLIP,flip,id)
+            MDout.setValue(xmippLib.MDL_ENABLED,1,id)
             n+=1
-        MDout.write(fnOut,xmipp.MD_APPEND)
+        MDout.write(fnOut,xmippLib.MD_APPEND)
         
         # Actually create the differences
         img = Image()
         imgRef = Image()
         if hasCTF and volumeIsCTFCorrected:
-            Ts = MDin.getValue(xmipp.MDL_SAMPLINGRATE, MDin.firstObject())
+            Ts = MDin.getValue(xmippLib.MDL_SAMPLINGRATE, MDin.firstObject())
     
         for i in MDout:
             img.readApplyGeo(MDout,i)
-            imgRef.read(MDout.getValue(xmipp.MDL_IMAGE_REF,i))
+            imgRef.read(MDout.getValue(xmippLib.MDL_IMAGE_REF,i))
             if hasCTF and volumeIsCTFCorrected:
-                fnCTF = MDout.getValue(xmipp.MDL_CTF_MODEL,i)
+                fnCTF = MDout.getValue(xmippLib.MDL_CTF_MODEL,i)
                 applyCTF(imgRef, fnCTF,Ts)
                 img.convert2DataType(DT_DOUBLE)
             imgDiff = img-imgRef
-            imgDiff.write(MDout.getValue(xmipp.MDL_IMAGE1,i))
+            imgDiff.write(MDout.getValue(xmippLib.MDL_IMAGE1,i))
 
 class HelicalFinder():
     """ Base class for protocols that find helical symmetry """
@@ -587,14 +589,14 @@ class HelicalFinder():
 # ---------------- Legacy code from 'protlib_xmipp.py' ----------------------
 
 def xmippExists(path):
-    return xmipp.FileName(path).exists()
+    return xmippLib.FileName(path).exists()
             
             
 class XmippScript():
     ''' This class will serve as wrapper around the XmippProgram class
     to have same facilities from Python scripts'''
     def __init__(self, runWithoutArgs=False):
-        self._prog = xmipp.Program(runWithoutArgs)
+        self._prog = xmippLib.Program(runWithoutArgs)
         
     def defineParams(self):
         ''' This function should be overwrited by subclasses for 
@@ -831,10 +833,10 @@ def createMetaDataFromPattern(pattern, isStack=False, label="image"):
     files = glob.glob(pattern)
     files.sort()
 
-    label = xmipp.str2Label(label) #Check for label value
+    label = xmippLib.str2Label(label) #Check for label value
     
-    mD = xmipp.MetaData()
-    inFile = xmipp.FileName()
+    mD = xmippLib.MetaData()
+    inFile = xmippLib.FileName()
     
     nSize = 1
     for file in files:
@@ -842,17 +844,17 @@ def createMetaDataFromPattern(pattern, isStack=False, label="image"):
         if isStack:
             if file.endswith(".mrc"):
                 fileAux=file+":mrcs"
-            x, x, x, nSize = xmipp.getImageSize(fileAux)
+            x, x, x, nSize = xmippLib.getImageSize(fileAux)
         if nSize != 1:
             counter = 1
             for jj in range(nSize):
                 inFile.compose(counter, fileAux)
                 objId = mD.addObject()
                 mD.setValue(label, inFile, objId)
-                mD.setValue(xmipp.MDL_ENABLED, 1, objId)
+                mD.setValue(xmippLib.MDL_ENABLED, 1, objId)
                 counter += 1
         else:
             objId = mD.addObject()
             mD.setValue(label, fileAux, objId)
-            mD.setValue(xmipp.MDL_ENABLED, 1, objId)
+            mD.setValue(xmippLib.MDL_ENABLED, 1, objId)
     return mD            

@@ -35,7 +35,7 @@ from pyworkflow.em.metadata.utils import iterRows, getSize
 import pyworkflow.protocol.constants as const
 from pyworkflow.em import SetOfClasses2D, ALIGN_2D, ALIGN_NONE
 
-from xmipp import MD_APPEND
+from xmippLib import MD_APPEND
 from xmipp3.convert import (rowToAlignment, xmippToLocation,
                             writeSetOfParticles, writeSetOfClasses2D)
 

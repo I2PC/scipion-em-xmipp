@@ -34,7 +34,7 @@ from pyworkflow.em import *
 from pyworkflow.utils import *  
 from pyworkflow.protocol.params import GE
 
-import xmipp
+import xmippLib
 from xmipp3.convert import writeSetOfParticles, writeSetOfDefocusGroups
 
 
@@ -95,42 +95,42 @@ class XmippProtCTFDefocusGroup(ProtProcessParticles):
         fnXmipp   = self._getPath('defocus_groups.xmd')
         setOfDefocus = SetOfDefocusGroup(filename=fnScipion)
         df = DefocusGroup()
-        mdImages    = xmipp.MetaData(self.imgsFn)
-        if not mdImages.containsLabel(xmipp.MDL_CTF_SAMPLING_RATE):
-            mdImages.setValueCol(xmipp.MDL_CTF_SAMPLING_RATE, self.inputParticles.get().getSamplingRate())
+        mdImages    = xmippLib.MetaData(self.imgsFn)
+        if not mdImages.containsLabel(xmippLib.MDL_CTF_SAMPLING_RATE):
+            mdImages.setValueCol(xmippLib.MDL_CTF_SAMPLING_RATE, self.inputParticles.get().getSamplingRate())
         
-        mdGroups    = xmipp.MetaData()
-        mdGroups.aggregateMdGroupBy(mdImages, xmipp.AGGR_COUNT, 
-                                               [xmipp.MDL_CTF_DEFOCUSU,
-                                                xmipp.MDL_CTF_DEFOCUS_ANGLE,
-                                                xmipp.MDL_CTF_SAMPLING_RATE,
-                                                xmipp.MDL_CTF_VOLTAGE,
-                                                xmipp.MDL_CTF_CS,
-                                                xmipp.MDL_CTF_Q0], 
-                                                xmipp.MDL_CTF_DEFOCUSU, 
-                                                xmipp.MDL_COUNT)
-        mdGroups.sort(xmipp.MDL_CTF_DEFOCUSU)
+        mdGroups    = xmippLib.MetaData()
+        mdGroups.aggregateMdGroupBy(mdImages, xmippLib.AGGR_COUNT,
+                                               [xmippLib.MDL_CTF_DEFOCUSU,
+                                                xmippLib.MDL_CTF_DEFOCUS_ANGLE,
+                                                xmippLib.MDL_CTF_SAMPLING_RATE,
+                                                xmippLib.MDL_CTF_VOLTAGE,
+                                                xmippLib.MDL_CTF_CS,
+                                                xmippLib.MDL_CTF_Q0],
+                                                xmippLib.MDL_CTF_DEFOCUSU,
+                                                xmippLib.MDL_COUNT)
+        mdGroups.sort(xmippLib.MDL_CTF_DEFOCUSU)
         
-        mdCTFAux = xmipp.MetaData()
+        mdCTFAux = xmippLib.MetaData()
         idGroup  = mdGroups.firstObject()
         idCTFAux = mdCTFAux.addObject()
-        mdCTFAux.setValue(xmipp.MDL_CTF_DEFOCUS_ANGLE, 0., idCTFAux);
-        mdCTFAux.setValue(xmipp.MDL_CTF_SAMPLING_RATE, mdGroups.getValue(xmipp.MDL_CTF_SAMPLING_RATE,idGroup), idCTFAux)
-        mdCTFAux.setValue(xmipp.MDL_CTF_VOLTAGE,       mdGroups.getValue(xmipp.MDL_CTF_VOLTAGE,idGroup),       idCTFAux)
-        mdCTFAux.setValue(xmipp.MDL_CTF_CS,            mdGroups.getValue(xmipp.MDL_CTF_CS,idGroup),            idCTFAux)
-        mdCTFAux.setValue(xmipp.MDL_CTF_Q0,            mdGroups.getValue(xmipp.MDL_CTF_Q0,idGroup),            idCTFAux)
-        resolutionError= mdGroups.getValue(xmipp.MDL_CTF_SAMPLING_RATE,idGroup)
+        mdCTFAux.setValue(xmippLib.MDL_CTF_DEFOCUS_ANGLE, 0., idCTFAux);
+        mdCTFAux.setValue(xmippLib.MDL_CTF_SAMPLING_RATE, mdGroups.getValue(xmippLib.MDL_CTF_SAMPLING_RATE,idGroup), idCTFAux)
+        mdCTFAux.setValue(xmippLib.MDL_CTF_VOLTAGE,       mdGroups.getValue(xmippLib.MDL_CTF_VOLTAGE,idGroup),       idCTFAux)
+        mdCTFAux.setValue(xmippLib.MDL_CTF_CS,            mdGroups.getValue(xmippLib.MDL_CTF_CS,idGroup),            idCTFAux)
+        mdCTFAux.setValue(xmippLib.MDL_CTF_Q0,            mdGroups.getValue(xmippLib.MDL_CTF_Q0,idGroup),            idCTFAux)
+        resolutionError= mdGroups.getValue(xmippLib.MDL_CTF_SAMPLING_RATE,idGroup)
 
         counter = 0
-        minDef  = mdGroups.getValue(xmipp.MDL_CTF_DEFOCUSU,idGroup)
+        minDef  = mdGroups.getValue(xmippLib.MDL_CTF_DEFOCUSU,idGroup)
         maxDef  = minDef
         avgDef  = minDef
 
-        mdCTFAux.setValue(xmipp.MDL_CTF_DEFOCUSU, minDef, idCTFAux)
+        mdCTFAux.setValue(xmippLib.MDL_CTF_DEFOCUSU, minDef, idCTFAux)
         for idGroup in mdGroups:
-            defocusU = mdGroups.getValue(xmipp.MDL_CTF_DEFOCUSU,idGroup)
-            mdCTFAux.setValue(xmipp.MDL_CTF_DEFOCUSV, defocusU, idCTFAux);
-            resolution = xmipp.errorMaxFreqCTFs(mdCTFAux,pi/2.)
+            defocusU = mdGroups.getValue(xmippLib.MDL_CTF_DEFOCUSU,idGroup)
+            mdCTFAux.setValue(xmippLib.MDL_CTF_DEFOCUSV, defocusU, idCTFAux);
+            resolution = xmippLib.errorMaxFreqCTFs(mdCTFAux,pi/2.)
             if  resolution > resolutionError/ctfGroupMaxDiff:
                 avgDef /=  counter
                 df.cleanObjId()
@@ -142,7 +142,7 @@ class XmippProtCTFDefocusGroup(ProtProcessParticles):
                 counter = 0
                 minDef = defocusU
                 avgDef = defocusU
-                mdCTFAux.setValue(xmipp.MDL_CTF_DEFOCUSU, defocusU, idCTFAux);
+                mdCTFAux.setValue(xmippLib.MDL_CTF_DEFOCUSU, defocusU, idCTFAux);
             else:
                 avgDef  += defocusU
                 

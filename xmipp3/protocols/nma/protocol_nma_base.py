@@ -38,7 +38,7 @@ from pyworkflow.utils.path import copyFile, createLink, makePath, cleanPath, mov
 from pyworkflow.protocol.params import PointerParam, IntParam, FloatParam, LEVEL_ADVANCED, EnumParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, LEVEL_ADVANCED
 
-import xmipp
+import xmippLib
 from .convert import getNMAEnviron
 
 
@@ -117,9 +117,9 @@ class XmippProtNMABase(EMProtocol):
         return rc
         
     def _computeCutoff(self, fnHist, rcPercentage):
-        mdHist = xmipp.MetaData(fnHist)
-        distances = mdHist.getColumnValues(xmipp.MDL_X)
-        distanceCount = mdHist.getColumnValues(xmipp.MDL_COUNT)
+        mdHist = xmippLib.MetaData(fnHist)
+        distances = mdHist.getColumnValues(xmippLib.MDL_X)
+        distanceCount = mdHist.getColumnValues(xmippLib.MDL_COUNT)
         # compute total number of distances
         nCounts = 0
         for count in distanceCount:
@@ -194,7 +194,7 @@ class XmippProtNMABase(EMProtocol):
         cleanPath(fnDiag)
         
         fh = open("Chkmod.res")
-        mdOut = xmipp.MetaData()
+        mdOut = xmippLib.MetaData()
         collectivityList = []
         
         for n in range(len(fnVec)):
@@ -204,17 +204,17 @@ class XmippProtNMABase(EMProtocol):
     
             objId = mdOut.addObject()
             modefile = self._getPath("modes", "vec.%d" % (n+1))
-            mdOut.setValue(xmipp.MDL_NMA_MODEFILE, modefile, objId)
-            mdOut.setValue(xmipp.MDL_ORDER, long(n+1), objId)
+            mdOut.setValue(xmippLib.MDL_NMA_MODEFILE, modefile, objId)
+            mdOut.setValue(xmippLib.MDL_ORDER, long(n+1), objId)
             
             if n >= 6:
-                mdOut.setValue(xmipp.MDL_ENABLED, 1, objId)
+                mdOut.setValue(xmippLib.MDL_ENABLED, 1, objId)
             else:
-                mdOut.setValue(xmipp.MDL_ENABLED, -1, objId)
-            mdOut.setValue(xmipp.MDL_NMA_COLLECTIVITY, collectivity, objId)
+                mdOut.setValue(xmippLib.MDL_ENABLED, -1, objId)
+            mdOut.setValue(xmippLib.MDL_NMA_COLLECTIVITY, collectivity, objId)
             
             if collectivity < collectivityThreshold:
-                mdOut.setValue(xmipp.MDL_ENABLED,-1,objId)
+                mdOut.setValue(xmippLib.MDL_ENABLED,-1,objId)
         fh.close()
         idxSorted = [i[0] for i in sorted(enumerate(collectivityList), key=lambda x:x[1], reverse=True)]
         
@@ -234,7 +234,7 @@ class XmippProtNMABase(EMProtocol):
         i = 0
         for objId in mdOut:
             score_i = float(score[i])/(2.0*l)
-            mdOut.setValue(xmipp.MDL_NMA_SCORE, score_i, objId)
+            mdOut.setValue(xmippLib.MDL_NMA_SCORE, score_i, objId)
             i+=1
         mdOut.write("modes%s.xmd"%suffix)
         cleanPath("Chkmod.res")

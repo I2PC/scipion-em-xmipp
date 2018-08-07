@@ -31,7 +31,7 @@ from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
 import pyworkflow.em.metadata as md
 from pyworkflow.gui.plotter import plt
 
-import xmipp
+import xmippLib
 from xmipp3.protocols.protocol_validate_overfitting import XmippProtValidateOverfitting
 from .plotter import XmippPlotter
 
@@ -53,7 +53,7 @@ class XmippValidateOverfittingViewer(Viewer):
         plotter = self._createPlot("Validation 3D Reconstruction (Overfitting)",
                                     "Number of Particles", 
                                     "Resolution for FSC=0.5 (A)", 
-                                    fnOutput, xmipp.MDL_COUNT, xmipp.MDL_AVG)        
+                                    fnOutput, xmippLib.MDL_COUNT, xmippLib.MDL_AVG)
         #for noise
         fnOutputN = self.protocol._defineResultsNoiseName()
         if not os.path.exists(fnOutputN):
@@ -73,31 +73,31 @@ class XmippValidateOverfittingViewer(Viewer):
                         
         #plot noise and related errorbar
         fnOutputN = self.protocol._defineResultsNoiseName()
-        md = xmipp.MetaData(fnOutputN)
-        xValueN = md.getColumnValues(xmipp.MDL_COUNT)
-        yValueN = md.getColumnValues(xmipp.MDL_AVG)
+        md = xmippLib.MetaData(fnOutputN)
+        xValueN = md.getColumnValues(xmippLib.MDL_COUNT)
+        yValueN = md.getColumnValues(xmippLib.MDL_AVG)
         plt.plot(xValueN, yValueN, '--', color='r',
                 label='Aligned gaussian noise')
         
         # putting error bar
-        md = xmipp.MetaData(fnOutputN)
-        yErrN = md.getColumnValues(xmipp.MDL_STDDEV)
-        xValueNe = md.getColumnValues(xmipp.MDL_COUNT)
-        yValueNe = md.getColumnValues(xmipp.MDL_AVG)
+        md = xmippLib.MetaData(fnOutputN)
+        yErrN = md.getColumnValues(xmippLib.MDL_STDDEV)
+        xValueNe = md.getColumnValues(xmippLib.MDL_COUNT)
+        yValueNe = md.getColumnValues(xmippLib.MDL_AVG)
         plt.errorbar(xValueNe, yValueNe, yErrN, fmt='o', color='k')
                 
         #plot real data-set
         fnOutput = self.protocol._defineResultsName()
-        md = xmipp.MetaData(fnOutput)
-        xValue = md.getColumnValues(xmipp.MDL_COUNT)
-        yValue = md.getColumnValues(xmipp.MDL_AVG)
+        md = xmippLib.MetaData(fnOutput)
+        xValue = md.getColumnValues(xmippLib.MDL_COUNT)
+        yValue = md.getColumnValues(xmippLib.MDL_AVG)
         plt.plot(xValue, yValue, color='g', label='Aligned particles')
                 
         # putting error bar 
-        md = xmipp.MetaData(fnOutput)
-        yErr = md.getColumnValues(xmipp.MDL_STDDEV)
-        xValue = md.getColumnValues(xmipp.MDL_COUNT)
-        yValue = md.getColumnValues(xmipp.MDL_AVG)
+        md = xmippLib.MetaData(fnOutput)
+        yErr = md.getColumnValues(xmippLib.MDL_STDDEV)
+        xValue = md.getColumnValues(xmippLib.MDL_COUNT)
+        yValue = md.getColumnValues(xmippLib.MDL_AVG)
         plt.errorbar(xValue, yValue, yErr, fmt='o')        
             
         plt.legend(loc='upper right' , fontsize = 11)

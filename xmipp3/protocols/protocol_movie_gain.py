@@ -42,7 +42,7 @@ from pyworkflow.utils.path import cleanPath
 import pyworkflow.protocol.constants as cons
 import pyworkflow.em as em
 
-import xmipp
+import xmippLib
 
 
 class XmippProtMovieGain(ProtProcessMovies):
@@ -141,7 +141,7 @@ class XmippProtMovieGain(ProtProcessMovies):
             fnMonitorSummary = open(fnMonitorSummary, "a")
         fnGain = self._getPath("movie_%06d_gain.xmp" % movieId)
         if os.path.exists(fnGain):
-            G = xmipp.Image()
+            G = xmippLib.Image()
             G.read(fnGain)
             mean, dev, min, max = G.computeStats()
             Gnp = G.getData()

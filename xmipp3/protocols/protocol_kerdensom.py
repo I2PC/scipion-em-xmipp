@@ -28,7 +28,7 @@ from os.path import join, dirname, exists
 from glob import glob
 
 from pyworkflow.em import *
-import xmipp
+import xmippLib
 
 from xmipp3.convert import writeSetOfParticles, readSetOfClasses2D, xmippToLocation
 
@@ -128,7 +128,7 @@ class KendersomBaseClassify(ProtClassify2D):
         fnClassStack = self._params['classes']
         fnAverageStack = self._params['averages']      
         
-        md = xmipp.MetaData(mdClasses)
+        md = xmippLib.MetaData(mdClasses)
         image = ImageHandler().createImage()
         
         counter = 1
@@ -137,7 +137,7 @@ class KendersomBaseClassify(ProtClassify2D):
             imageName =  "%06d@%s" % (counter, fnClassStack)
             averageName = "%06d@%s" % (counter, fnAverageStack)
             
-            if md.getValue(xmipp.MDL_CLASS_COUNT, objId) > 0:
+            if md.getValue(xmippLib.MDL_CLASS_COUNT, objId) > 0:
                 # compute the average of images assigned to this class
                 classPrefix = 'class%06d' % counter
                 classMd = '%s_images@%s' % (classPrefix, fnClasses)
@@ -151,16 +151,16 @@ class KendersomBaseClassify(ProtClassify2D):
                 image.initConstant(0.)
                 
             image.write(averageName)
-            md.setValue(xmipp.MDL_IMAGE, imageName, objId)
-            md.setValue(xmipp.MDL_IMAGE2, averageName, objId)
+            md.setValue(xmippLib.MDL_IMAGE, imageName, objId)
+            md.setValue(xmippLib.MDL_IMAGE2, averageName, objId)
             
             counter += 1
             
-        md.write(mdClasses, xmipp.MD_APPEND)
+        md.write(mdClasses, xmippLib.MD_APPEND)
         
     def _preprocessClass(self, classItem, classRow):
         classItem.average = Particle()
-        classItem.average.setLocation(xmippToLocation(classRow.getValue(xmipp.MDL_IMAGE2)))
+        classItem.average.setLocation(xmippToLocation(classRow.getValue(xmippLib.MDL_IMAGE2)))
         
     def createOutputStep(self):
         """ Store the kenserdom object 

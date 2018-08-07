@@ -34,7 +34,7 @@ from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
 from pyworkflow.protocol.params import MultiPointerParam
 from pyworkflow.utils.path import createLink
 
-import xmipp
+import xmippLib
 
 
 class XmippProtNormalizeStrain(ProtAnalysis3D):
@@ -61,7 +61,7 @@ class XmippProtNormalizeStrain(ProtAnalysis3D):
             
     def normalize(self,what):
         # Get overall minimum and maximum
-        V=xmipp.Image()
+        V=xmippLib.Image()
         minAll=1e38
         maxAll=-1e38
         for prot in self.inputRuns:

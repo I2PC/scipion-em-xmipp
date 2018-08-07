@@ -128,7 +128,7 @@ class XmippML2DViewer(ProtocolViewer):
 def createPlots(protML, selectedPlots):
     ''' Launch some plot for an ML2D protocol run '''
     from xmipp3.viewers.plotter import XmippPlotter
-    import xmipp
+    import xmippLib
     
     protML._plot_count = 0
     lastIter = protML._lastIteration()
@@ -167,10 +167,10 @@ def createPlots(protML, selectedPlots):
     pmax = []
     for iter in iters:
         logs = protML._getIterClasses(it=iter, block='info')
-        md = xmipp.MetaData(logs)
+        md = xmippLib.MetaData(logs)
         id = md.firstObject()
-        ll.append(md.getValue(xmipp.MDL_LL, id))
-        pmax.append(md.getValue(xmipp.MDL_PMAX, id))
+        ll.append(md.getValue(xmippLib.MDL_LL, id))
+        pmax.append(md.getValue(xmippLib.MDL_PMAX, id))
             
     if doPlot('doShowLL'):
         a = xplotter.createSubPlot('Log-likelihood (should increase)', 'iterations', 'LL', yformat=True)
@@ -180,8 +180,8 @@ def createPlots(protML, selectedPlots):
     if doPlot('doShowMirror'):
         from numpy import arange
         from matplotlib.ticker import FormatStrFormatter
-        md = xmipp.MetaData(refs)
-        mirrors = [md.getValue(xmipp.MDL_MIRRORFRAC, id) for id in md]
+        md = xmippLib.MetaData(refs)
+        mirrors = [md.getValue(xmippLib.MDL_MIRRORFRAC, id) for id in md]
         nrefs = len(mirrors)
         ind = arange(1, nrefs + 1)
         width = 0.85
@@ -197,18 +197,18 @@ def createPlots(protML, selectedPlots):
         a.plot(iters, pmax, color='green')
     
     if doPlot('doShowSignalChange'):
-        md = xmipp.MetaData()
+        md = xmippLib.MetaData()
         for iter in iters:
             fn = protML._getIterClasses(it=iter, block='classes')
-            md2 = xmipp.MetaData(fn)
-            md2.fillConstant(xmipp.MDL_ITER, str(iter))
+            md2 = xmippLib.MetaData(fn)
+            md2.fillConstant(xmippLib.MDL_ITER, str(iter))
             md.unionAll(md2)
         # 'iter(.*[1-9].*)@2D/ML2D/run_004/ml2d_iter_refs.xmd')
         #a = plt.subplot(gs[1, 1])
         #print "md:", md
-        md2 = xmipp.MetaData()    
-        md2.aggregate(md, xmipp.AGGR_MAX, xmipp.MDL_ITER, xmipp.MDL_SIGNALCHANGE, xmipp.MDL_MAX)
-        signal_change = [md2.getValue(xmipp.MDL_MAX, id) for id in md2]
+        md2 = xmippLib.MetaData()
+        md2.aggregate(md, xmippLib.AGGR_MAX, xmippLib.MDL_ITER, xmippLib.MDL_SIGNALCHANGE, xmippLib.MDL_MAX)
+        signal_change = [md2.getValue(xmippLib.MDL_MAX, id) for id in md2]
         xplotter.createSubPlot('Maximum signal change', 'iterations', 'signal change')
         xplotter.plot(iters, signal_change, color='green')
     

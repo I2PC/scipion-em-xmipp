@@ -41,7 +41,7 @@ class XmippPlotter(EmPlotter):
         distribution of weight projections. A metadata should be provided containing
         labels: MDL_ANGLE_ROT, MDL_ANGLE_TILT, MDL_WEIGHT '''
         from math import radians
-        from xmipp import MDL_ANGLE_ROT, MDL_ANGLE_TILT, MDL_WEIGHT
+        from xmippLib import MDL_ANGLE_ROT, MDL_ANGLE_TILT, MDL_WEIGHT
         
         rot = [radians(md.getValue(MDL_ANGLE_ROT, objId)) for objId in md]
         tilt = [md.getValue(MDL_ANGLE_TILT, objId) for objId in md]
@@ -73,7 +73,7 @@ class XmippPlotter(EmPlotter):
         """ plot metadataFile columns mdLabelX and mdLabelY
             if nbins is in args then and histogram over y data is made
         """
-        from xmipp import MetaData
+        from xmippLib import MetaData
         md = MetaData(mdFilename)
         self.plotMd(md, mdLabelX, mdLabelY, color=color,**args)
       

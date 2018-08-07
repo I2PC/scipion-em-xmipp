@@ -42,7 +42,7 @@ from pyworkflow.object import Set
 from pyworkflow.protocol.constants import STATUS_NEW
 import pyworkflow.protocol.constants as const
 
-from xmipp import Image, MD_APPEND, DT_DOUBLE
+from xmippLib import Image, MD_APPEND, DT_DOUBLE
 from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
                             rowToAlignment, rowToParticle)
 

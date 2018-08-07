@@ -35,7 +35,7 @@ import pyworkflow.protocol.params as params
 import pyworkflow.em as em
 from pyworkflow.em.metadata import Row, MetaData
 
-import xmipp
+import xmippLib
 from xmipp3 import convert
 
 
@@ -237,7 +237,7 @@ class XmippProtCTFDiscrepancy(em.ProtCTFMicrographs):
             self._ctfToMd(ctf1, md1)
             ctf2 = method2[ctfId]  # .target
             self._ctfToMd(ctf2, md2)
-            self._freqResol[ctfId] = xmipp.errorMaxFreqCTFs2D(md1, md2)
+            self._freqResol[ctfId] = xmippLib.errorMaxFreqCTFs2D(md1, md2)
 
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
         outSet = self._loadOutputSet(SetOfCTF, 'ctfs.sqlite')

@@ -32,7 +32,7 @@ from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 from pyworkflow.em.protocol import ProtImportVolumes, ProtImportParticles
 from pyworkflow.em.protocol.protocol_sets import ProtSubSet
 
-import xmipp
+import xmippLib
 from xmipp3.protocols import XmippProtReconstructHighRes
 
 
@@ -102,6 +102,6 @@ class TestHighres(BaseTest):
         if not exists(fnResolution):
             self.assertTrue(False, fnResolution + " does not exist")
         else:
-            md = xmipp.MetaData("resolution@" + fnResolution)
-            R = md.getValue(xmipp.MDL_RESOLUTION_FREQREAL, md.firstObject())
+            md = xmippLib.MetaData("resolution@" + fnResolution)
+            R = md.getValue(xmippLib.MDL_RESOLUTION_FREQREAL, md.firstObject())
             self.assertTrue(R < 8, "Resolution is not below 8A")

@@ -33,7 +33,7 @@ import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
 from pyworkflow.em.data import Transform
 
-from xmipp import MD_APPEND
+from xmippLib import MD_APPEND
 from xmipp3.convert import (rowToAlignment, alignmentToRow,
                        rowToParticle, writeSetOfClasses2D)
 

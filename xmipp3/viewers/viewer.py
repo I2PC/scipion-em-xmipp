@@ -36,7 +36,7 @@ import pyworkflow as pw
 from pyworkflow.em.showj import *
 import pyworkflow.gui.dialog as dialog
 
-import xmipp
+import xmippLib
 import xmipp3
 from xmipp3.convert import *
 from xmipp3.protocols.protocol_cl2d_align import XmippProtCL2DAlign
@@ -289,20 +289,20 @@ class XmippViewer(Viewer):
 
             fn = obj._getPath('images.xmd')
             if os.path.exists(fn): # it doesnt unless cls is Xmipp
-                md = xmipp.MetaData(fn)
+                md = xmippLib.MetaData(fn)
                 # If Zscore on output images plot Zscore particle sorting
-                if md.containsLabel(xmipp.MDL_ZSCORE):
+                if md.containsLabel(xmippLib.MDL_ZSCORE):
                     from plotter import XmippPlotter
                     xplotter = XmippPlotter(windowTitle="Zscore particles sorting")
                     xplotter.createSubPlot("Particle sorting", "Particle number", "Zscore")
-                    xplotter.plotMd(md, False, mdLabelY=xmipp.MDL_ZSCORE)
+                    xplotter.plotMd(md, False, mdLabelY=xmippLib.MDL_ZSCORE)
                     self._views.append(xplotter)
                 # If VARscore on output images plot VARscore particle sorting
-                if md.containsLabel(xmipp.MDL_SCORE_BY_VAR):
+                if md.containsLabel(xmippLib.MDL_SCORE_BY_VAR):
                     from plotter import XmippPlotter
                     xplotter = XmippPlotter(windowTitle="Variance particles sorting")
                     xplotter.createSubPlot("Variance Histogram", "Variance", "Number of particles")
-                    xplotter.plotMd(md, False, mdLabelY=xmipp.MDL_SCORE_BY_VAR, nbins=100)
+                    xplotter.plotMd(md, False, mdLabelY=xmippLib.MDL_SCORE_BY_VAR, nbins=100)
                     self._views.append(xplotter)
 
         elif issubclass(cls, XmippProtMovieGain):
@@ -404,12 +404,12 @@ class XmippViewer(Viewer):
                                                       MODE: MODE_MD}))
 
             fn = obj._getExtraPath('vol001_pruned_particles_alignability.xmd')
-            md = xmipp.MetaData(fn)
+            md = xmippLib.MetaData(fn)
             from plotter import XmippPlotter
             from pyworkflow.em.plotter import EmPlotter
             plotter = XmippPlotter()
             plotter.createSubPlot('Soft-alignment validation plot','Angular Precision', 'Angular Accuracy')
-            plotter.plotMdFile(md, xmipp.MDL_SCORE_BY_ALIGNABILITY_PRECISION, xmipp.MDL_SCORE_BY_ALIGNABILITY_ACCURACY,
+            plotter.plotMdFile(md, xmippLib.MDL_SCORE_BY_ALIGNABILITY_PRECISION, xmippLib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY,
                                marker='.', markersize=.55, color='red', linestyle='')
             self._views.append(plotter)
 

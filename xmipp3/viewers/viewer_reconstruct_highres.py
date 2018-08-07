@@ -36,7 +36,7 @@ from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pyworkflow.em.viewer import ObjectView, DataView, ChimeraClientView
 import pyworkflow.em.showj as showj
 
-from xmipp import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
+from xmippLib import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
                    MDL_RESOLUTION_FREQ, MDL_RESOLUTION_FRC, MetaData)
 from xmipp3.convert import getImageLocation
 from xmipp3.protocols.protocol_reconstruct_highres import XmippProtReconstructHighRes
@@ -221,10 +221,10 @@ Examples:
             fnDir = self.protocol._getExtraPath("Iter%03d"%it)
             fnAngles = join(fnDir,"angles.xmd")
             if self.protocol.weightJumper and it>1:
-                import xmipp
+                import xmippLib
                 xplotter = XmippPlotter(windowTitle="Jumper weight")
                 a = xplotter.createSubPlot("Jumper weight", "Weight", "Count")
-                xplotter.plotMdFile(fnAngles,xmipp.MDL_WEIGHT_JUMPER,xmipp.MDL_WEIGHT_JUMPER,nbins=100)
+                xplotter.plotMdFile(fnAngles,xmippLib.MDL_WEIGHT_JUMPER,xmippLib.MDL_WEIGHT_JUMPER,nbins=100)
                 views.append(xplotter)
         return views
     

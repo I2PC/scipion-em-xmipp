@@ -32,7 +32,7 @@ from pyworkflow.utils.path import makePath
 from pyworkflow.gui.plotter import Plotter
 from pyworkflow.protocol.params import EnumParam, IntParam
 
-import xmipp
+import xmippLib
 import xmipp3
 from xmipp3.convert import readSetOfClasses2D
 from .protocol_kerdensom import KendersomBaseClassify
@@ -116,19 +116,19 @@ class XmippProtRotSpectra(KendersomBaseClassify):
     
     #--------------------------- STEPS functions ---------------------------------------------------
     def centerFirstHarmonicStep(self, imagesFn, outputCenter):
-        dims = xmipp.MetaDataInfo(str(imagesFn))
-        md = xmipp.MetaData()
+        dims = xmippLib.MetaDataInfo(str(imagesFn))
+        md = xmippLib.MetaData()
         objId = md.addObject()
-        md.setValue(xmipp.MDL_X, float(dims[0] / 2), objId)
-        md.setValue(xmipp.MDL_Y, float(dims[1] / 2), objId)
+        md.setValue(xmippLib.MDL_X, float(dims[0] / 2), objId)
+        md.setValue(xmippLib.MDL_Y, float(dims[1] / 2), objId)
         md.write(outputCenter)
         return [outputCenter] # this file should exists after the step
             
     def calculateSpectraStep(self, imagesFn, inputCenter, outputSpectra):     
-        md = xmipp.MetaData(inputCenter)
+        md = xmippLib.MetaData(inputCenter)
         objId = md.firstObject()
-        self._params['xOffset'] = md.getValue(xmipp.MDL_X, objId)
-        self._params['yOffset'] = md.getValue(xmipp.MDL_Y, objId)
+        self._params['xOffset'] = md.getValue(xmippLib.MDL_X, objId)
+        self._params['yOffset'] = md.getValue(xmippLib.MDL_Y, objId)
         
         program = 'xmipp_image_rotational_spectra'
         args = "-i %s -o %s" % (imagesFn, outputSpectra)
@@ -163,7 +163,7 @@ class XmippProtRotSpectra(KendersomBaseClassify):
                 
     def _preprocessClass(self, classItem, classRow):
         KendersomBaseClassify._preprocessClass(self, classItem, classRow)
-        ref = classRow.getValue(xmipp.MDL_REF) # get class number
+        ref = classRow.getValue(xmippLib.MDL_REF) # get class number
         classItem.spectraPlot = em.Image()
         classItem.spectraPlot.setFileName(self._createSpectraPlot('class', 
                                                                   self.classArray, 
