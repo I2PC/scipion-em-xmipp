@@ -35,7 +35,7 @@ from .constants import XMIPP_HOME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-
+_currentVersion = '3.18.05'
 
 class Plugin(pyworkflow.em.Plugin):
     _homeVar = XMIPP_HOME
@@ -44,7 +44,7 @@ class Plugin(pyworkflow.em.Plugin):
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(XMIPP_HOME, 'xmipp-18.05')
+        cls._defineEmVar(XMIPP_HOME, 'xmipp-%s'%_currentVersion)
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
@@ -95,15 +95,15 @@ class Plugin(pyworkflow.em.Plugin):
 
         target = "%s/bin/xmipp_reconstruct_significant" % cls.getHome()
 
-        env.addPackage('xmippSrc', version='3.18.05',
-                       tar='xmippSrc-3.18.05.tgz',
+        env.addPackage('xmippSrc', version=_currentVersion,
+                       tar='xmippSrc-%s.tgz'%_currentVersion,
                        commands=[(installCmd, target)],
                        default=True,
                        deps=[scons])
             # Old dependencies now are checked inside xmipp script:
             #   fftw3, scikit, nma, tiff, sqlite, opencv, sh_alignment, hdf5
 
-        env.addPackage('xmippBin', version='3.18.05',
-                       tar='xmipp-3.18.05.tgz')
+        env.addPackage('xmippBin', version=_currentVersion,
+                       tar='xmipp-%s.tgz'%_currentVersion)
 
 pyworkflow.em.Domain.registerPlugin(__name__)
