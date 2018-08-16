@@ -1,7 +1,6 @@
 # **************************************************************************
 # *
 # * Authors:     David Maluenda    (dmaluenda@cnb.csic.es)
-# *              Carlos Oscar S. Sorzano (coss@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -25,27 +24,33 @@
 # *
 # **************************************************************************
 
-from os.path import getmtime, exists
-from datetime import datetime
+from os.path import exists
 import numpy as np
 
-import pyworkflow.em as em
 from pyworkflow.em.protocol.protocol_movies import ProtProcessMovies
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
-from pyworkflow.mapper import Mapper
+
 from pyworkflow.object import Set
-from pyworkflow.protocol.constants import (STATUS_NEW)
+from pyworkflow.protocol.constants import STATUS_NEW
 from pyworkflow.protocol.params import PointerParam
 from pyworkflow.utils.properties import Message
-from pyworkflow.em.data import (MovieAlignment, SetOfMovies, SetOfMicrographs,
-                                Image, Movie)
+from pyworkflow.em.data import SetOfMovies, SetOfMicrographs
 
 
 class XmippProtMovieMaxShift(ProtProcessMovies):
     """
-    Protocol to make an automatic selection of those movies whose
-    frames move less than a given threshold.
+    Protocol to make an automatic rejection of those movies whose
+    frames move more than a given threshold.
+        Rejection criteria:
+            - *by frame*: Rejects movies with drifts between frames
+                              bigger than a certain maximum.
+            - *by whole movie*: Rejects movies with a total travel
+                                         bigger than a certain maximum.
+            - *by frame and movie*: Rejects movies if both conditions
+                                                above are met.
+            - *by frame or movie*: Rejects movies if one of the conditions
+                                             above are met.
     """
     _label = 'movie maxshift'
     
@@ -63,9 +68,8 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         self.acceptedDone = 0
         self.discardedDone = 0
 
-    #--------------------------- DEFINE param functions ------------------------
+    # -------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
-        # ProtProcessMovies._defineParams(self, form)
         form.addSection(label=Message.LABEL_INPUT)
         form.addParam('inputMovies', PointerParam, important=True,
                       label=Message.LABEL_INPUT_MOVS,
@@ -83,7 +87,8 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                                     'conditions above are met.\n'
                            ' - *by frame or movie*: Rejects movies if one of '
                                     'the conditions above are met.')
-        form.addParam('maxFrameShift', params.FloatParam, default=1, 
+
+        form.addParam('maxFrameShift', params.FloatParam, default=10,
                        label='Max. frame shift (A)',
                        condition='rejType==%s or rejType==%s or rejType==%s'
                                   % (self.REJ_FRAME, self.REJ_AND, self.REJ_OR),
@@ -98,28 +103,30 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         
     #--------------------------- INSERT steps functions ------------------------
     def _insertMovieStep(self, movie):
-        """ Insert the processMovieStep for a given movie. """
-        # Note1: At this point is safe to pass the movie, since this
-        # is not executed in parallel, here we get the params
-        # to pass to the actual step that is gone to be executed later on
-        # Note2: We are serializing the Movie as a dict that can be passed
-        # as parameter for a functionStep
+        """ Insert the processMovieStep for a given movie.
+        """
+        # looking for a setOfMicrographs related to the inputMovies
+        self.setInputMics()
+        # Insert the selection/rejection step
         movieStepId = self._insertFunctionStep('_evaluateMovieAlign',
                                                movie.clone(),
                                                prerequisites=[])
         return movieStepId
 
     def _evaluateMovieAlign(self, movie):
-        """ Fill either the accepted or the rejected list with the movieID """
+        """ Fill the accepted or the rejected list with the movie.
+        """
         alignment = movie.getAlignment()
         sampling = self.samplingRate
 
-        # getShifts() returns the absolute shifts from a certain refference
+        # getShifts() returns the absolute shifts from a certain reference
         shiftListX, shiftListY = alignment.getShifts()
 
+        # initialize the criteria values
         rejectedByMovie = False
         rejectedByFrame = False
         if any(shiftListX) or any(shiftListY):
+            # we use np.arrays to use np.diff()
             shiftArrayX = np.asarray(shiftListX)
             shiftArrayY = np.asarray(shiftListY)
 
@@ -128,27 +135,29 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             if self.rejType == self.REJ_MOVIE or evalBoth:
                 rangeX = np.max(shiftArrayX) - np.min(shiftArrayX)
                 rangeY = np.max(shiftArrayY) - np.min(shiftArrayY)
-                rejectedByMovie = (rangeX*sampling > self.maxMovieShift.get() or
-                                   rangeY*sampling > self.maxMovieShift.get() )
+                rangeM = max(rangeX, rangeY) * sampling
+                rejectedByMovie = rangeM > self.maxMovieShift.get()
 
             if self.rejType == self.REJ_FRAME or evalBoth:
                 frameShiftX = np.abs(np.diff(shiftArrayX))
                 frameShiftY = np.abs(np.diff(shiftArrayY))
-                rejectedByFrame = ( np.max(frameShiftX) * sampling > 
-                                    self.maxFrameShift.get()          or
-                                    np.max(frameShiftY) * sampling >
-                                    self.maxFrameShift.get() )
+                maxShiftX = np.max(frameShiftX)
+                maxShiftY = np.max(frameShiftY)
+                maxShiftM = max(maxShiftX, maxShiftY) * sampling
+                rejectedByFrame = maxShiftM > self.maxFrameShift.get()
 
             if self.rejType == self.REJ_AND:
                 if rejectedByFrame and rejectedByMovie:
                     self.discardedMoviesList.append(movie)
                 else:
                     self.acceptedMoviesList.append(movie)
-            else:  # for the OR and also for the individuals evaluations
+            else:  # for the OR and the individuals evaluations
                 if rejectedByFrame or rejectedByMovie:
                     self.discardedMoviesList.append(movie)
                 else:
                     self.acceptedMoviesList.append(movie)
+        else:  # we accept the movie if no shifts is associated
+            self.acceptedMoviesList.append(movie)
 
     def _checkNewOutput(self):
         """ Check for already selected Movies and update the output set. """
@@ -162,18 +171,17 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         # Load previously done items
         preDone = self.acceptedDone + self.discardedDone
 
-        # Check for newly done items
+        # Taking newly done items in movie lists
         newDoneAccepted = self.acceptedMoviesList[self.acceptedDone:]
         newDoneDiscarded = self.discardedMoviesList[self.discardedDone:]
 
-        # Updating the done lists
+        # Updating the done items
         self.acceptedDone = len(self.acceptedMoviesList)
         self.discardedDone = len(self.discardedMoviesList)
         
         allDone = preDone + len(newDoneAccepted) + len(newDoneDiscarded)
 
-        # Update the file with the newly done movies
-        # or exit from the function if no new done movies
+        # Some checks to debug
         self.debug('_checkNewOutput: ')
         self.debug('   listOfMovies: %d,' %len(self.listOfMovies))
         self.debug('   doneList: %d,' %preDone)
@@ -188,37 +196,48 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         if not self.finished and not newDoneDiscarded and not newDoneAccepted:
             # If we are not finished and no new output have been produced
             # it does not make sense to proceed and updated the outputs
-            # so we exit from the function here
             return
 
-        if newDoneAccepted:
-            movieSetAccepted = self._loadOutputSet(SetOfMovies, 'movies.sqlite')
-            for movie in newDoneAccepted:
-                movie.setEnabled(True)
-                movieSetAccepted.append(movie)
+        def fillOutput(newDoneList, firstTime, AccOrDisc='Accepted'):
+            """ A single function is used to fill the two sets (Accepted/Rej.)
+            """
+            suffix = 'Discarded' if AccOrDisc=='Discarded' else ''
+            enable = False if AccOrDisc=='Discarded' else True
                 
-            self._updateOutputSet('outputMovies', movieSetAccepted, streamMode)
-            if firstTimeAcc:
-                # define relation just once
-                self._defineTransformRelation(self.inputMovies.get(),
-                                           movieSetAccepted)
-            movieSetAccepted.close()
+            movieSet = self._loadOutputSet(SetOfMovies,
+                                                     'movies%s.sqlite' % suffix)
+            micsSet = self._loadOutputSet(SetOfMicrographs,
+                                                  'micrographs%s.sqlite'%suffix)
+            for movie in newDoneList:
+                movie.setEnabled(enable)
+                movieSet.append(movie)
+                if self.inputMics is not None:
+                    mic = self.getMicFromMovie(movie)
+                    mic.setEnabled(enable)
+                    micsSet.append(mic)
 
-        # new subsets with discarded movies
-        if newDoneDiscarded:
-            movieSetDiscarded = self._loadOutputSet(SetOfMovies,
-                                                       'moviesDiscarded.sqlite')
-            for movie in newDoneDiscarded:
-                movie.setEnabled(False)
-                movieSetDiscarded.append(movie)
+            self._updateOutputSet('outputMovies%s' % suffix, movieSet,
+                                  streamMode)
+            if self.inputMics is not None:
+                self._updateOutputSet('outputMicrographs%s' % suffix, micsSet,
+                                      streamMode)
+            if firstTime:
+                # define relation just the first time
+                self._defineTransformRelation(self.inputMovies.get(), movieSet)
+                if self.inputMics is not None:
+                    self._defineTransformRelation(self.inputMics, micsSet)
+            movieSet.close()
+            if self.inputMics is not None:
+                micsSet.close()
 
-            self._updateOutputSet('outputMoviesDiscarded',
-                                  movieSetDiscarded, streamMode)
-            if firstTimeDisc:
-                # define relation just once
-                self._defineTransformRelation(self.inputMovies.get(),
-                                              movieSetDiscarded)
-            movieSetDiscarded.close()
+        # We fill/update the output if there are something new or to close sets
+        if newDoneAccepted or (self.finished and hasattr(self, 'outputMovies')):
+            fillOutput(newDoneAccepted, firstTimeAcc, AccOrDisc='Accepted')
+
+        # We fill/update the output for the discarded movies
+        if newDoneDiscarded or (self.finished and
+                                hasattr(self, 'outputMoviesDiscarded')):
+            fillOutput(newDoneDiscarded, firstTimeDisc, AccOrDisc='Discarded')
 
         # Unlock createOutputStep if finished all jobs
         if self.finished:  
@@ -237,12 +256,17 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         """ Load the output set if it exists or create a new one.
         fixSampling: correct the output sampling rate if binning was used,
         except for the case when the original movies are kept and shifts
-        refers to that one. """
+            refers to that one.
+        """
+        if SetClass == SetOfMicrographs:
+            if self.inputMics is None:
+                # if no mics to do, do nothing and exit
+                return None
         setFile = self._getPath(baseName)
 
         if exists(setFile):
             outputSet = SetClass(filename=setFile)
-            if(outputSet.__len__() is 0):
+            if len(outputSet) == 0:
                 pwutils.path.cleanPath(setFile)
 
         if exists(setFile):
@@ -261,6 +285,27 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             outputSet.setSamplingRate(newSampling)
 
         return outputSet
+
+    def setInputMics(self):
+        """ Setting the self.inputMics to the SetOfMics associated to
+            the input movies (or None if no relation is found)
+        """
+        parentProt = self.getMapper().getParent(self.inputMovies.get())
+        self.inputMics = getattr(parentProt, 'outputMicrographs', None)
+        if self.inputMics is None:
+            self.warning('The creator of the inputMovies has NOT '
+                         'outputMicrographs. Therefore, no Mics will be '
+                         'returned, only movies.')
+
+    def getMicFromMovie(self, movie):
+        """ Get the Micrograph related with the movie
+        """
+        movieMicName = movie.getMicName()
+        for mic in self.inputMics:
+            if mic.getMicName() == movieMicName:
+                return mic
+        self.warning('Mic NOT found for movie "%s"' % movieMicName)
+
 
     # ---------------------- INFO functions ------------------------------------
     def _validate(self):
