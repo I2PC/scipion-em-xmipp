@@ -28,7 +28,7 @@
 from pyworkflow.utils.path import createLink, cleanPath
 from pyworkflow.protocol.params import BooleanParam
 
-from xmipp import MetaData, MDL_NMA, MDL_ENABLED, MDL_NMA_MINRANGE, \
+from xmippLib import MetaData, MDL_NMA, MDL_ENABLED, MDL_NMA_MINRANGE, \
     MDL_NMA_MAXRANGE
 from .protocol_nma_base import *
 from ..pdb.protocol_pseudoatoms_base import *

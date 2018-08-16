@@ -39,7 +39,7 @@ from pyworkflow.utils.path import cleanPattern, createLink, moveFile, copyFile, 
 # from pyworkflow.object import String
 # from pyworkflow.em.data import SetOfNormalModes
 
-import xmipp
+import xmippLib
 from xmipp3.convert import getImageLocation
 # from xmipp3.base import XmippMdRow
 from ..pdb.protocol_pseudoatoms_base import XmippProtConvertToPseudoAtomsBase
@@ -196,9 +196,9 @@ class XmippProtStructureMapping(XmippProtConvertToPseudoAtomsBase,
             copyFile (self._getPath("modes/vec.%d"%i),
                       self._getExtraPath("modes%d/vec.%d"%(nVoli, i)))
             
-        mdVol = xmipp.MetaData()
+        mdVol = xmippLib.MetaData()
         fnOutMeta = self._getExtraPath('RigidAlignVol_%d_To_Vol_%d.xmd' % (nVolj, nVoli))
-        mdVol.setValue(xmipp.MDL_IMAGE, fnAlignedVolj, mdVol.addObject())      
+        mdVol.setValue(xmippLib.MDL_IMAGE, fnAlignedVolj, mdVol.addObject())
         mdVol.write(fnOutMeta)
                                               
         fnPseudo = self._getPath("pseudoatoms_%d.pdb"%nVoli)
@@ -230,7 +230,7 @@ class XmippProtStructureMapping(XmippProtConvertToPseudoAtomsBase,
                 if nVolj == nVoli:
                     score[(nVoli-1)][(nVolj-1)] = 0
                 else:
-                    elasticRow = xmipp.MetaData(self._getExtraPath('compDeformVol_%d_To_Vol_%d.xmd' %
+                    elasticRow = xmippLib.MetaData(self._getExtraPath('compDeformVol_%d_To_Vol_%d.xmd' %
                                                                    (nVolj, nVoli)))
                     maxCc = elasticRow.getValue(md.MDL_MAXCC,1)
                     score[(nVoli-1)][(nVolj-1)] = (1 - maxCc)

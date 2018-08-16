@@ -26,7 +26,7 @@
 
 from pyworkflow.em import *  
 
-from xmipp import MetaData
+from xmippLib import MetaData
 from xmipp3 import Plugin
 from xmipp3.constants import *
 from xmipp3.convert import writeSetOfVolumes, readSetOfClassesVol, readSetOfVolumes

@@ -37,7 +37,7 @@ from pyworkflow.em.data import SetOfClasses2D, Image, SetOfAverages, SetOfPartic
 import pyworkflow.em.metadata as md
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
-import xmipp
+import xmippLib
 from xmipp3.base import ProjMatcher
 from xmipp3.convert import setXmippAttributes, xmippToLocation, rowToAlignment
 
@@ -167,10 +167,13 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
 
     def _processRow(self, particle, row):
         setXmippAttributes(particle, row,
-                           xmipp.MDL_ZSCORE_RESVAR, xmipp.MDL_ZSCORE_RESMEAN, xmipp.MDL_ZSCORE_RESCOV, xmipp.MDL_IMAGE_ORIGINAL,
-                           xmipp.MDL_COST, xmipp.MDL_CONTINUOUS_GRAY_A, xmipp.MDL_CONTINUOUS_GRAY_B, xmipp.MDL_CONTINUOUS_X, xmipp.MDL_CONTINUOUS_Y)
+                           xmippLib.MDL_ZSCORE_RESVAR, xmippLib.MDL_ZSCORE_RESMEAN,
+                           xmippLib.MDL_ZSCORE_RESCOV, xmippLib.MDL_IMAGE_ORIGINAL,
+                           xmippLib.MDL_COST, xmippLib.MDL_CONTINUOUS_GRAY_A,
+                           xmippLib.MDL_CONTINUOUS_GRAY_B, xmippLib.MDL_CONTINUOUS_X,
+                           xmippLib.MDL_CONTINUOUS_Y)
         def __setXmippImage(label):
-            attr = '_xmipp_' + xmipp.label2Str(label)
+            attr = '_xmipp_' + xmippLib.label2Str(label)
             if not hasattr(particle, attr):
                 img = Image()
                 setattr(particle, attr, img)
@@ -179,10 +182,10 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                 img = getattr(particle, attr)
             img.setLocation(xmippToLocation(row.getValue(label)))
         
-        __setXmippImage(xmipp.MDL_IMAGE)
-        __setXmippImage(xmipp.MDL_IMAGE_REF)
-        __setXmippImage(xmipp.MDL_IMAGE_RESIDUAL)
-        __setXmippImage(xmipp.MDL_IMAGE_COVARIANCE)
+        __setXmippImage(xmippLib.MDL_IMAGE)
+        __setXmippImage(xmippLib.MDL_IMAGE_REF)
+        __setXmippImage(xmippLib.MDL_IMAGE_RESIDUAL)
+        __setXmippImage(xmippLib.MDL_IMAGE_COVARIANCE)
 
     #--------------------------- INFO functions --------------------------------------------
     def _summary(self):

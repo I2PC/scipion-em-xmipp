@@ -30,6 +30,7 @@ from pyworkflow.em.data import SetOfVolumes
 from pyworkflow.tests import *
 from pyworkflow.utils.properties import colorText
 
+import xmippLib
 from xmipp3.base import *
 from xmipp3.convert import *
 from xmipp3.constants import *
@@ -55,20 +56,20 @@ class TestBasic(BaseTest):
     
     def test_rowToCtfModel(self):
         row = XmippMdRow()
-        row.setValue(xmipp.MDL_CTF_DEFOCUSU, 2520.)
-        row.setValue(xmipp.MDL_CTF_DEFOCUSV, 2510.)
-        row.setValue(xmipp.MDL_CTF_DEFOCUS_ANGLE, 45.)
+        row.setValue(xmippLib.MDL_CTF_DEFOCUSU, 2520.)
+        row.setValue(xmippLib.MDL_CTF_DEFOCUSV, 2510.)
+        row.setValue(xmippLib.MDL_CTF_DEFOCUS_ANGLE, 45.)
         
         ctf = rowToCtfModel(row)
         # Check that the ctf object was properly set
         self.assertTrue(ctf.equalAttributes(self.getCTF(2520., 2510., 45.)))
         # Check when the EMX standarization takes place
-        row.setValue(xmipp.MDL_CTF_DEFOCUSV, 2530.)
+        row.setValue(xmippLib.MDL_CTF_DEFOCUSV, 2530.)
         ctf = rowToCtfModel(row)
         self.assertTrue(ctf.equalAttributes(self.getCTF(2530., 2520., 135.)))
         
         # When one of CTF labels is missing, None should be returned
-        row.removeLabel(xmipp.MDL_CTF_DEFOCUSV)
+        row.removeLabel(xmippLib.MDL_CTF_DEFOCUSV)
         ctf = rowToCtfModel(row)       
         self.assertIsNone(ctf)
         
@@ -76,10 +77,10 @@ class TestBasic(BaseTest):
         row = XmippMdRow()
         index = 1
         filename = 'images.stk'
-        row.setValue(xmipp.MDL_ITEM_ID, 1)
-        row.setValue(xmipp.MDL_IMAGE, '%d@%s' % (index, filename))
+        row.setValue(xmippLib.MDL_ITEM_ID, 1)
+        row.setValue(xmippLib.MDL_IMAGE, '%d@%s' % (index, filename))
         
-        img = rowToImage(row, xmipp.MDL_IMAGE, Particle)
+        img = rowToImage(row, xmippLib.MDL_IMAGE, Particle)
         
         # Check correct index and filename
         self.assertEquals(index, img.getIndex())
@@ -240,52 +241,52 @@ class TestAlignment(TestConvertBase):
                   [0.0, 0.0, 1.0, 0.0],
                   [0.0, 0.0, 0.0, 1.0]])
 
-        self.assertAlmostEqual(row.getValue(xmipp.MDL_SHIFT_X),20.,4)
-        self.assertAlmostEqual(row.getValue(xmipp.MDL_SHIFT_Y),0.,4)
-        self.assertAlmostEqual(row.getValue(xmipp.MDL_ANGLE_PSI),0.,4)
-        self.assertEqual(row.getValue(xmipp.MDL_FLIP),False)
+        self.assertAlmostEqual(row.getValue(xmippLib.MDL_SHIFT_X),20.,4)
+        self.assertAlmostEqual(row.getValue(xmippLib.MDL_SHIFT_Y),0.,4)
+        self.assertAlmostEqual(row.getValue(xmippLib.MDL_ANGLE_PSI),0.,4)
+        self.assertEqual(row.getValue(xmippLib.MDL_FLIP),False)
 
-        self.assertAlmostEqual(row2.getValue(xmipp.MDL_SHIFT_X),20.,4)
-        self.assertAlmostEqual(row2.getValue(xmipp.MDL_SHIFT_Y),0.,4)
-        self.assertAlmostEqual(row2.getValue(xmipp.MDL_SHIFT_Z),0.,4)
-        self.assertAlmostEqual(row2.getValue(xmipp.MDL_ANGLE_ROT),0.,4)
-        self.assertAlmostEqual(row2.getValue(xmipp.MDL_ANGLE_TILT),0.,4)
-        self.assertAlmostEqual(row2.getValue(xmipp.MDL_ANGLE_PSI),0.,4)
-        self.assertEqual(row2.getValue(xmipp.MDL_FLIP),False)
+        self.assertAlmostEqual(row2.getValue(xmippLib.MDL_SHIFT_X),20.,4)
+        self.assertAlmostEqual(row2.getValue(xmippLib.MDL_SHIFT_Y),0.,4)
+        self.assertAlmostEqual(row2.getValue(xmippLib.MDL_SHIFT_Z),0.,4)
+        self.assertAlmostEqual(row2.getValue(xmippLib.MDL_ANGLE_ROT),0.,4)
+        self.assertAlmostEqual(row2.getValue(xmippLib.MDL_ANGLE_TILT),0.,4)
+        self.assertAlmostEqual(row2.getValue(xmippLib.MDL_ANGLE_PSI),0.,4)
+        self.assertEqual(row2.getValue(xmippLib.MDL_FLIP),False)
 
-        self.assertAlmostEqual(row3.getValue(xmipp.MDL_SHIFT_X),20.,4)
-        self.assertAlmostEqual(row3.getValue(xmipp.MDL_SHIFT_Y),0.,4)
-        self.assertAlmostEqual(row3.getValue(xmipp.MDL_SHIFT_Z),0.,4)
-        self.assertAlmostEqual(row3.getValue(xmipp.MDL_ANGLE_ROT),0.,4)
-        self.assertAlmostEqual(row3.getValue(xmipp.MDL_ANGLE_TILT),0.,4)
-        self.assertAlmostEqual(row3.getValue(xmipp.MDL_ANGLE_PSI),0.,4)
-        self.assertEqual(row3.getValue(xmipp.MDL_FLIP),False)
+        self.assertAlmostEqual(row3.getValue(xmippLib.MDL_SHIFT_X),20.,4)
+        self.assertAlmostEqual(row3.getValue(xmippLib.MDL_SHIFT_Y),0.,4)
+        self.assertAlmostEqual(row3.getValue(xmippLib.MDL_SHIFT_Z),0.,4)
+        self.assertAlmostEqual(row3.getValue(xmippLib.MDL_ANGLE_ROT),0.,4)
+        self.assertAlmostEqual(row3.getValue(xmippLib.MDL_ANGLE_TILT),0.,4)
+        self.assertAlmostEqual(row3.getValue(xmippLib.MDL_ANGLE_PSI),0.,4)
+        self.assertEqual(row3.getValue(xmippLib.MDL_FLIP),False)
 
 
         row, row2, row3 = _testInv([[0.93969, 0.34202, 0.0, -6.8404],
                   [-0.34202, 0.93969, 0.0, 18.7939],
                   [0.0, 0.0, 1.0, 0.0],
                   [0.0, 0.0, 0.0, 1.0]])
-        self.assertAlmostEqual(row.getValue(xmipp.MDL_SHIFT_X),-6.8404,4)
-        self.assertAlmostEqual(row.getValue(xmipp.MDL_SHIFT_Y),18.7939,4)
-        self.assertAlmostEqual(row.getValue(xmipp.MDL_ANGLE_PSI),20.,4)
-        self.assertEqual(row.getValue(xmipp.MDL_FLIP),False)
+        self.assertAlmostEqual(row.getValue(xmippLib.MDL_SHIFT_X),-6.8404,4)
+        self.assertAlmostEqual(row.getValue(xmippLib.MDL_SHIFT_Y),18.7939,4)
+        self.assertAlmostEqual(row.getValue(xmippLib.MDL_ANGLE_PSI),20.,4)
+        self.assertEqual(row.getValue(xmippLib.MDL_FLIP),False)
 
-        self.assertAlmostEqual(row2.getValue(xmipp.MDL_SHIFT_X),-6.8404,4)
-        self.assertAlmostEqual(row2.getValue(xmipp.MDL_SHIFT_Y),18.7939,4)
-        self.assertAlmostEqual(row2.getValue(xmipp.MDL_SHIFT_Z),0.,4)
-        self.assertAlmostEqual(row2.getValue(xmipp.MDL_ANGLE_ROT),20.,4)
-        self.assertAlmostEqual(row2.getValue(xmipp.MDL_ANGLE_TILT),0.,4)
-        self.assertAlmostEqual(row2.getValue(xmipp.MDL_ANGLE_PSI),0.,4)
-        self.assertEqual(row2.getValue(xmipp.MDL_FLIP),False)
+        self.assertAlmostEqual(row2.getValue(xmippLib.MDL_SHIFT_X),-6.8404,4)
+        self.assertAlmostEqual(row2.getValue(xmippLib.MDL_SHIFT_Y),18.7939,4)
+        self.assertAlmostEqual(row2.getValue(xmippLib.MDL_SHIFT_Z),0.,4)
+        self.assertAlmostEqual(row2.getValue(xmippLib.MDL_ANGLE_ROT),20.,4)
+        self.assertAlmostEqual(row2.getValue(xmippLib.MDL_ANGLE_TILT),0.,4)
+        self.assertAlmostEqual(row2.getValue(xmippLib.MDL_ANGLE_PSI),0.,4)
+        self.assertEqual(row2.getValue(xmippLib.MDL_FLIP),False)
 
-        self.assertAlmostEqual(row3.getValue(xmipp.MDL_SHIFT_X),-12.8558097352,4)
-        self.assertAlmostEqual(row3.getValue(xmipp.MDL_SHIFT_Y),15.3209632479,4)
-        self.assertAlmostEqual(row3.getValue(xmipp.MDL_SHIFT_Z),0.,4)
-        self.assertAlmostEqual(row3.getValue(xmipp.MDL_ANGLE_ROT),-20.,4)
-        self.assertAlmostEqual(row3.getValue(xmipp.MDL_ANGLE_TILT),0.,4)
-        self.assertAlmostEqual(row3.getValue(xmipp.MDL_ANGLE_PSI),0.,4)
-        self.assertAlmostEqual(row3.getValue(xmipp.MDL_FLIP),False)
+        self.assertAlmostEqual(row3.getValue(xmippLib.MDL_SHIFT_X),-12.8558097352,4)
+        self.assertAlmostEqual(row3.getValue(xmippLib.MDL_SHIFT_Y),15.3209632479,4)
+        self.assertAlmostEqual(row3.getValue(xmippLib.MDL_SHIFT_Z),0.,4)
+        self.assertAlmostEqual(row3.getValue(xmippLib.MDL_ANGLE_ROT),-20.,4)
+        self.assertAlmostEqual(row3.getValue(xmippLib.MDL_ANGLE_TILT),0.,4)
+        self.assertAlmostEqual(row3.getValue(xmippLib.MDL_ANGLE_PSI),0.,4)
+        self.assertAlmostEqual(row3.getValue(xmippLib.MDL_FLIP),False)
 
 
     def test_alignShiftRotExp(self):
@@ -627,13 +628,13 @@ class TestReconstruct(TestConvertBase):
         rowb1 = XmippMdRow()
         rowb2 = XmippMdRow()
         rowb3 = XmippMdRow()
-        labelList=[xmipp.MDL_ANGLE_ROT
-                  ,xmipp.MDL_ANGLE_TILT
-                  ,xmipp.MDL_ANGLE_PSI
-                  ,xmipp.MDL_SHIFT_X
-                  ,xmipp.MDL_SHIFT_Y
-                  ,xmipp.MDL_SHIFT_Z
-                  ]
+        labelList=[xmippLib.MDL_ANGLE_ROT,
+                   xmippLib.MDL_ANGLE_TILT,
+                   xmippLib.MDL_ANGLE_PSI,
+                   xmippLib.MDL_SHIFT_X,
+                   xmippLib.MDL_SHIFT_Y,
+                   xmippLib.MDL_SHIFT_Z
+                   ]
         for i, a in enumerate(aList):
             a = Transform(aList[i])
             alignmentToRow(a, rowa, ALIGN_PROJ)
@@ -647,7 +648,7 @@ class TestReconstruct(TestConvertBase):
                 #same two rows
                 self.assertAlmostEqual(auxBtilt, auxAtilt, places=3, msg=None, delta=None)
 
-            rowa.setValue(xmipp.MDL_FLIP,True)
+            rowa.setValue(xmippLib.MDL_FLIP,True)
             b=rowToAlignment(rowa, ALIGN_PROJ)
             alignmentToRow(b, rowb, ALIGN_PROJ)
             aMatrix = a.getMatrix()
@@ -814,10 +815,10 @@ class TestSetConvert(BaseTest):
             self.assertTrue(img.getCoordinate() is not None)    
             self.assertTrue(img.hasCTF())
             
-        mdIn = xmipp.MetaData(fn)
+        mdIn = xmippLib.MetaData(fn)
         #print mdIn
         
-        mdOut = xmipp.MetaData()
+        mdOut = xmippLib.MetaData()
         setOfParticlesToMd(partSet, mdOut)
         #print mdOut
         
@@ -838,7 +839,7 @@ class TestSetConvert(BaseTest):
                                   amplitudeContrast=0.07)
         micSet.setAcquisition(acquisition)
         micSet.setSamplingRate(1.)
-        mdXmipp = xmipp.MetaData()
+        mdXmipp = xmippLib.MetaData()
         
 
         for i in range(n):
@@ -849,19 +850,19 @@ class TestSetConvert(BaseTest):
             p.setCTF(ctf)
             micSet.append(p)
             id = mdXmipp.addObject()
-            mdXmipp.setValue(xmipp.MDL_ENABLED, 1, id)
-            mdXmipp.setValue(xmipp.MDL_ITEM_ID, long(i+1), id)
-            mdXmipp.setValue(xmipp.MDL_MICROGRAPH, file, id)
+            mdXmipp.setValue(xmippLib.MDL_ENABLED, 1, id)
+            mdXmipp.setValue(xmippLib.MDL_ITEM_ID, long(i+1), id)
+            mdXmipp.setValue(xmippLib.MDL_MICROGRAPH, file, id)
             # set CTFModel params
-            mdXmipp.setValue(xmipp.MDL_CTF_DEFOCUSU, ctf.getDefocusU(), id)
-            mdXmipp.setValue(xmipp.MDL_CTF_DEFOCUSV, ctf.getDefocusV(), id)
-            mdXmipp.setValue(xmipp.MDL_CTF_DEFOCUS_ANGLE, ctf.getDefocusAngle(), id)
+            mdXmipp.setValue(xmippLib.MDL_CTF_DEFOCUSU, ctf.getDefocusU(), id)
+            mdXmipp.setValue(xmippLib.MDL_CTF_DEFOCUSV, ctf.getDefocusV(), id)
+            mdXmipp.setValue(xmippLib.MDL_CTF_DEFOCUS_ANGLE, ctf.getDefocusAngle(), id)
             # set Acquisition params
-            mdXmipp.setValue(xmipp.MDL_CTF_Q0, acquisition.getAmplitudeContrast(), id)
-            mdXmipp.setValue(xmipp.MDL_CTF_CS, acquisition.getSphericalAberration(), id)
-            mdXmipp.setValue(xmipp.MDL_CTF_VOLTAGE, acquisition.getVoltage(), id)
+            mdXmipp.setValue(xmippLib.MDL_CTF_Q0, acquisition.getAmplitudeContrast(), id)
+            mdXmipp.setValue(xmippLib.MDL_CTF_CS, acquisition.getSphericalAberration(), id)
+            mdXmipp.setValue(xmippLib.MDL_CTF_VOLTAGE, acquisition.getVoltage(), id)
             
-        mdScipion = xmipp.MetaData()
+        mdScipion = xmippLib.MetaData()
         setOfMicrographsToMd(micSet, mdScipion)
         writeSetOfMicrographs(micSet, self.getOutputPath("micrographs.xmd"))
         self.assertEqual(mdScipion, mdXmipp, "metadata are not the same")
@@ -910,11 +911,11 @@ class TestSetConvert(BaseTest):
                                           sphericalAberration=0.1,
                                           amplitudeContrast=0.1))
         
-        md = xmipp.MetaData()
+        md = xmippLib.MetaData()
         setOfParticlesToMd(partSet, md, alignType=ALIGN_2D)
         
         # test that the metadata contains some geometry labels
-        self.assertTrue(md.containsLabel(xmipp.MDL_SHIFT_X))
+        self.assertTrue(md.containsLabel(xmippLib.MDL_SHIFT_X))
         fn = self.getOutputPath("aligned_particles.xmd")
         #print "Aligned particles written to: ", fn
         #md.write(fn)
@@ -930,7 +931,7 @@ class TestSetConvert(BaseTest):
                ]
         acquisition = Acquisition(magnification=60000, voltage=300,
                                   sphericalAberration=2., amplitudeContrast=0.07)
-        mdXmipp = xmipp.MetaData()
+        mdXmipp = xmippLib.MetaData()
         imgSet.setAcquisition(acquisition)
 
         for i in range(n):
@@ -941,70 +942,70 @@ class TestSetConvert(BaseTest):
             p.setAcquisition(acquisition)
             imgSet.append(p)
             id = mdXmipp.addObject()
-            mdXmipp.setValue(xmipp.MDL_ENABLED, 1, id)
-            mdXmipp.setValue(xmipp.MDL_ITEM_ID, long(i+1), id)
-            mdXmipp.setValue(xmipp.MDL_IMAGE, locationToXmipp(i+1, fn), id)
+            mdXmipp.setValue(xmippLib.MDL_ENABLED, 1, id)
+            mdXmipp.setValue(xmippLib.MDL_ITEM_ID, long(i+1), id)
+            mdXmipp.setValue(xmippLib.MDL_IMAGE, locationToXmipp(i+1, fn), id)
             # set CTFModel params
-            mdXmipp.setValue(xmipp.MDL_CTF_DEFOCUSU, ctf.getDefocusU(), id)
-            mdXmipp.setValue(xmipp.MDL_CTF_DEFOCUSV, ctf.getDefocusV(), id)
-            mdXmipp.setValue(xmipp.MDL_CTF_DEFOCUS_ANGLE, ctf.getDefocusAngle(), id)
+            mdXmipp.setValue(xmippLib.MDL_CTF_DEFOCUSU, ctf.getDefocusU(), id)
+            mdXmipp.setValue(xmippLib.MDL_CTF_DEFOCUSV, ctf.getDefocusV(), id)
+            mdXmipp.setValue(xmippLib.MDL_CTF_DEFOCUS_ANGLE, ctf.getDefocusAngle(), id)
             # set Acquisition params
-            mdXmipp.setValue(xmipp.MDL_CTF_Q0, acquisition.getAmplitudeContrast(), id)
-            mdXmipp.setValue(xmipp.MDL_CTF_CS, acquisition.getSphericalAberration(), id)
-            mdXmipp.setValue(xmipp.MDL_CTF_VOLTAGE, acquisition.getVoltage(), id)
+            mdXmipp.setValue(xmippLib.MDL_CTF_Q0, acquisition.getAmplitudeContrast(), id)
+            mdXmipp.setValue(xmippLib.MDL_CTF_CS, acquisition.getSphericalAberration(), id)
+            mdXmipp.setValue(xmippLib.MDL_CTF_VOLTAGE, acquisition.getVoltage(), id)
             
-        mdScipion = xmipp.MetaData()
+        mdScipion = xmippLib.MetaData()
         setOfParticlesToMd(imgSet, mdScipion)
         self.assertEqual(mdScipion, mdXmipp, "metadata are not the same")
         
                 
     def test_CTF(self):
         """ Test the conversion of a SetOfParticles to Xmipp metadata. """
-        mdCtf = xmipp.MetaData(self.dataset.getFile('ctfGold'))
+        mdCtf = xmippLib.MetaData(self.dataset.getFile('ctfGold'))
         objId = mdCtf.firstObject()
         rowCtf = rowFromMd(mdCtf, objId)
         ctf = rowToCtfModel(rowCtf)        
         
         ALL_CTF_LABELS = [   
-            xmipp.MDL_CTF_CA,
-            xmipp.MDL_CTF_ENERGY_LOSS,
-            xmipp.MDL_CTF_LENS_STABILITY,
-            xmipp.MDL_CTF_CONVERGENCE_CONE,
-            xmipp.MDL_CTF_LONGITUDINAL_DISPLACEMENT,
-            xmipp.MDL_CTF_TRANSVERSAL_DISPLACEMENT,
-            xmipp.MDL_CTF_K,
-            xmipp.MDL_CTF_BG_GAUSSIAN_K,
-            xmipp.MDL_CTF_BG_GAUSSIAN_SIGMAU,
-            xmipp.MDL_CTF_BG_GAUSSIAN_SIGMAV,
-            xmipp.MDL_CTF_BG_GAUSSIAN_CU,
-            xmipp.MDL_CTF_BG_GAUSSIAN_CV,
-            xmipp.MDL_CTF_BG_SQRT_K,
-            xmipp.MDL_CTF_BG_SQRT_U,
-            xmipp.MDL_CTF_BG_SQRT_V,
-            xmipp.MDL_CTF_BG_SQRT_ANGLE,
-            xmipp.MDL_CTF_BG_BASELINE,
-            xmipp.MDL_CTF_BG_GAUSSIAN2_K,
-            xmipp.MDL_CTF_BG_GAUSSIAN2_SIGMAU,
-            xmipp.MDL_CTF_BG_GAUSSIAN2_SIGMAV,
-            xmipp.MDL_CTF_BG_GAUSSIAN2_CU,
-            xmipp.MDL_CTF_BG_GAUSSIAN2_CV,
-            xmipp.MDL_CTF_BG_GAUSSIAN2_ANGLE,
-            #xmipp.MDL_CTF_CRIT_FITTINGSCORE,
-            xmipp.MDL_CTF_CRIT_FITTINGCORR13,
-            xmipp.MDL_CTF_DOWNSAMPLE_PERFORMED,
-            xmipp.MDL_CTF_CRIT_PSDVARIANCE,
-            xmipp.MDL_CTF_CRIT_PSDPCA1VARIANCE,
-            xmipp.MDL_CTF_CRIT_PSDPCARUNSTEST,
-            xmipp.MDL_CTF_CRIT_FIRSTZEROAVG,
-            xmipp.MDL_CTF_CRIT_DAMPING,
-            xmipp.MDL_CTF_CRIT_FIRSTZERORATIO,
-            xmipp.MDL_CTF_CRIT_PSDCORRELATION90,
-            xmipp.MDL_CTF_CRIT_PSDRADIALINTEGRAL,
-            xmipp.MDL_CTF_CRIT_NORMALITY,  
+            xmippLib.MDL_CTF_CA,
+            xmippLib.MDL_CTF_ENERGY_LOSS,
+            xmippLib.MDL_CTF_LENS_STABILITY,
+            xmippLib.MDL_CTF_CONVERGENCE_CONE,
+            xmippLib.MDL_CTF_LONGITUDINAL_DISPLACEMENT,
+            xmippLib.MDL_CTF_TRANSVERSAL_DISPLACEMENT,
+            xmippLib.MDL_CTF_K,
+            xmippLib.MDL_CTF_BG_GAUSSIAN_K,
+            xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAU,
+            xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAV,
+            xmippLib.MDL_CTF_BG_GAUSSIAN_CU,
+            xmippLib.MDL_CTF_BG_GAUSSIAN_CV,
+            xmippLib.MDL_CTF_BG_SQRT_K,
+            xmippLib.MDL_CTF_BG_SQRT_U,
+            xmippLib.MDL_CTF_BG_SQRT_V,
+            xmippLib.MDL_CTF_BG_SQRT_ANGLE,
+            xmippLib.MDL_CTF_BG_BASELINE,
+            xmippLib.MDL_CTF_BG_GAUSSIAN2_K,
+            xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAU,
+            xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAV,
+            xmippLib.MDL_CTF_BG_GAUSSIAN2_CU,
+            xmippLib.MDL_CTF_BG_GAUSSIAN2_CV,
+            xmippLib.MDL_CTF_BG_GAUSSIAN2_ANGLE,
+            #xmippLib.MDL_CTF_CRIT_FITTINGSCORE,
+            xmippLib.MDL_CTF_CRIT_FITTINGCORR13,
+            xmippLib.MDL_CTF_DOWNSAMPLE_PERFORMED,
+            xmippLib.MDL_CTF_CRIT_PSDVARIANCE,
+            xmippLib.MDL_CTF_CRIT_PSDPCA1VARIANCE,
+            xmippLib.MDL_CTF_CRIT_PSDPCARUNSTEST,
+            xmippLib.MDL_CTF_CRIT_FIRSTZEROAVG,
+            xmippLib.MDL_CTF_CRIT_DAMPING,
+            xmippLib.MDL_CTF_CRIT_FIRSTZERORATIO,
+            xmippLib.MDL_CTF_CRIT_PSDCORRELATION90,
+            xmippLib.MDL_CTF_CRIT_PSDRADIALINTEGRAL,
+            xmippLib.MDL_CTF_CRIT_NORMALITY,
         ]      
 
         for label in ALL_CTF_LABELS:
-            attrName = '_xmipp_%s' % xmipp.label2Str(label)
+            attrName = '_xmipp_%s' % xmippLib.label2Str(label)
             self.assertAlmostEquals(mdCtf.getValue(label, objId),
                                     ctf.getAttributeValue(attrName))
         
@@ -1012,23 +1013,23 @@ class TestSetConvert(BaseTest):
         #TODO: FIX THIS test according to the new SetOfDefocusGroup
         return
         #reference metadata
-        md = xmipp.MetaData()
+        md = xmippLib.MetaData()
         objId = md.addObject()
         defocusGroupRow = XmippMdRow()
 
-        defocusGroupRow.setValue(xmipp.MDL_ENABLED, 1)
-        defocusGroupRow.setValue(xmipp.MDL_CTF_GROUP, 1)
-        defocusGroupRow.setValue(xmipp.MDL_MIN, 2000.)
-        defocusGroupRow.setValue(xmipp.MDL_MAX, 2500.)
-        defocusGroupRow.setValue(xmipp.MDL_AVG, 2100.)
+        defocusGroupRow.setValue(xmippLib.MDL_ENABLED, 1)
+        defocusGroupRow.setValue(xmippLib.MDL_CTF_GROUP, 1)
+        defocusGroupRow.setValue(xmippLib.MDL_MIN, 2000.)
+        defocusGroupRow.setValue(xmippLib.MDL_MAX, 2500.)
+        defocusGroupRow.setValue(xmippLib.MDL_AVG, 2100.)
         defocusGroupRow.writeToMd(md, objId)
 
         objId = md.addObject()
-        defocusGroupRow.setValue(xmipp.MDL_ENABLED, 1)
-        defocusGroupRow.setValue(xmipp.MDL_CTF_GROUP, 2)
-        defocusGroupRow.setValue(xmipp.MDL_MIN, 3000.)
-        defocusGroupRow.setValue(xmipp.MDL_MAX, 5500.)
-        defocusGroupRow.setValue(xmipp.MDL_AVG, 5000.)
+        defocusGroupRow.setValue(xmippLib.MDL_ENABLED, 1)
+        defocusGroupRow.setValue(xmippLib.MDL_CTF_GROUP, 2)
+        defocusGroupRow.setValue(xmippLib.MDL_MIN, 3000.)
+        defocusGroupRow.setValue(xmippLib.MDL_MAX, 5500.)
+        defocusGroupRow.setValue(xmippLib.MDL_AVG, 5000.)
         defocusGroupRow.writeToMd(md, objId)
         #
         fnScipion = self.getOutputPath("writeSetOfDefocusGroups.sqlite")
@@ -1049,7 +1050,7 @@ class TestSetConvert(BaseTest):
         fnXmipp = self.getOutputPath("writeSetOfDefocusGroups.xmd")
         fnScipion = self.getOutputPath("writeSetOfDefocusGroups2.xmd")
         writeSetOfDefocusGroups(setOfDefocus, fnXmipp)
-        mdAux = xmipp.MetaData(fnXmipp)
+        mdAux = xmippLib.MetaData(fnXmipp)
         md.write(fnScipion)
         print "Comparing metadatas: \n%s\n%s" % (fnXmipp, fnScipion)
         self.assertEqual(md, mdAux, "test writeSetOfDefocusGroups fails")

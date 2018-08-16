@@ -38,7 +38,7 @@ import pyworkflow.em as em
 from pyworkflow.gui.widgets import Button, HotButton
 import pyworkflow.gui.dialog as dialog
 
-import xmipp
+import xmippLib
 from xmipp3.convert import getImageLocation
 from xmipp3.protocols.protocol_resolution3d import XmippProtResolution3D
 from .plotter import XmippPlotter
@@ -82,19 +82,19 @@ class XmippResolution3DViewer(ProtocolViewer):
                                       'Execute again the protocol with FSC\n'
                                       'and/or DPR options enabled.',
                                       title='Missing result file')]
-        md = xmipp.MetaData(fscFn)
+        md = xmippLib.MetaData(fscFn)
         plotter = self._createPlot(title, FREQ_LABEL, plotLabel, md, 
-                                   xmipp.MDL_RESOLUTION_FREQ, resolutionLabel,
+                                   xmippLib.MDL_RESOLUTION_FREQ, resolutionLabel,
                                    **kwargs)
         return [plotter, em.DataView(fscFn)]
         
     def _viewFsc(self, e=None):
         return self._loadPlots("Fourier Shell Correlation", 'FSC', 
-                               xmipp.MDL_RESOLUTION_FRC, color='r')
+                               xmippLib.MDL_RESOLUTION_FRC, color='r')
 
     def _viewDpr(self, e=None):
         return self._loadPlots("Differential Phase Residual", 'DPR', 
-                       xmipp.MDL_RESOLUTION_DPR)
+                       xmippLib.MDL_RESOLUTION_DPR)
         
     def _createPlot(self, title, xTitle, yTitle, md, mdLabelX, mdLabelY, color='g', figure=None):        
         xplotter = XmippPlotter(figure=figure)
@@ -112,10 +112,10 @@ class XmippResolution3DViewer(ProtocolViewer):
         X=[]
         Y=[]
         for objId in self.md:
-            f=self.md.getValue(xmipp.MDL_RESOLUTION_FREQ2,objId)
+            f=self.md.getValue(xmippLib.MDL_RESOLUTION_FREQ2,objId)
             if f>=x[0] and f<=x[1]:
                 X.append(f)
-                Y.append(self.md.getValue(xmipp.MDL_RESOLUTION_LOG_STRUCTURE_FACTOR,objId))
+                Y.append(self.md.getValue(xmippLib.MDL_RESOLUTION_LOG_STRUCTURE_FACTOR,objId))
         X=np.array(X)
         Y=np.array(Y)
         A=np.array([np.ones(X.size), X.T])
@@ -158,15 +158,15 @@ class XmippResolution3DViewer(ProtocolViewer):
         
     def _viewStructureFactor(self, e=None):
         strFactFn = self.protocol._defineStructFactorName()
-        self.md = xmipp.MetaData(strFactFn)
+        self.md = xmippLib.MetaData(strFactFn)
         win = self.tkWindow(BfactorWindow, 
                            title='Clustering Tool',
                            callback=self._applyBfactor
                             )
         plotter = self._createPlot("Structure Factor", 'frequency^2 (1/A^2)', 
                                    'log(Structure Factor)',
-                                   self.md, xmipp.MDL_RESOLUTION_FREQ2, 
-                                   xmipp.MDL_RESOLUTION_LOG_STRUCTURE_FACTOR,
+                                   self.md, xmippLib.MDL_RESOLUTION_FREQ2,
+                                   xmippLib.MDL_RESOLUTION_LOG_STRUCTURE_FACTOR,
                                    figure=win.figure)
         self.path = PointPath(plotter.getLastSubPlot(), self._loadData(), 
                               callback=self._adjustPoints,

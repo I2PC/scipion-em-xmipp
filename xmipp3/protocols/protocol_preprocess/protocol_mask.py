@@ -29,7 +29,6 @@ from pyworkflow.em import *
 from pyworkflow.utils import *
 from pyworkflow.em.constants import *
 
-# import xmipp
 from xmipp3.convert import getImageLocation
 from xmipp3.constants import *
 from .geometrical_mask import XmippGeometricalMask3D, XmippGeometricalMask2D

@@ -34,7 +34,7 @@ from os.path import join, dirname, basename
 from pyworkflow.protocol.params import StringParam, BooleanParam
 from pyworkflow.viewer import (ProtocolViewer, CommandView,
                                DESKTOP_TKINTER, WEB_DJANGO)
-import xmipp
+import xmippLib
 from .data import Point, Data
 from .plotter import XmippNmaPlotter
 from .protocol_nma_alignment import XmippProtAlignmentNMA
@@ -92,9 +92,9 @@ class XmippAlignmentNMAViewer(ProtocolViewer):
             
             for modeNumber in components:
                 found = False
-                md = xmipp.MetaData(self.protocol._getExtraPath('modes.xmd'))
+                md = xmippLib.MetaData(self.protocol._getExtraPath('modes.xmd'))
                 for i, objId in enumerate(md):
-                    modeId = md.getValue(xmipp.MDL_ORDER, objId)
+                    modeId = md.getValue(xmippLib.MDL_ORDER, objId)
                     if modeNumber == modeId:
                         modeNameList.append('Mode %d' % modeNumber)
                         modeList.append(i)

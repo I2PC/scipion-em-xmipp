@@ -37,7 +37,7 @@ from pyworkflow.object import Float
 from pyworkflow.em.data import Volume, SetOfClasses3D
 from pyworkflow.utils import getMemoryAvailable, replaceExt, removeExt, cleanPath, makePath, copyFile
 
-import xmipp
+import xmippLib
 from xmipp3.convert import createClassesFromImages
 from xmipp3.utils import isMdEmpty
 
@@ -52,7 +52,7 @@ def runExecuteCtfGroupsStep(self, **kwargs):
     #     printLog("executeCtfGroups01"+ CTFDatName, _log) FIXME: print in log this line
     
     if not self.doCTFCorrection:
-        md = xmipp.MetaData(self.selFileName)
+        md = xmippLib.MetaData(self.selFileName)
         block_name = self._getBlockFileName(ctfBlockName, 1, self._getFileName('imageCTFpairs'))
         md.write(block_name)
         self._log.info("Written a single CTF group to file: '%s'" % block_name)
@@ -63,12 +63,12 @@ def runExecuteCtfGroupsStep(self, **kwargs):
         
     #    remove all entries not present in sel file by
     #    join between selfile and metadatafile
-        mdCtfData = xmipp.MetaData()
+        mdCtfData = xmippLib.MetaData()
         mdCtfData.read(self.ctfDatName)
     
-        mdSel = xmipp.MetaData();
+        mdSel = xmippLib.MetaData();
         mdSel.read(self.selFileName)
-        mdCtfData.intersection(mdSel, xmipp.MDL_IMAGE)
+        mdCtfData.intersection(mdSel, xmippLib.MDL_IMAGE)
         tmpCtfDat = self.ctfDatName
         mdCtfData.write(tmpCtfDat)
         args = ' --ctfdat %(tmpCtfDat)s -o %(ctffile)s --wiener --wc %(wiener)s --pad %(pad)s'
@@ -95,8 +95,8 @@ def runExecuteCtfGroupsStep(self, **kwargs):
         
         self.runJob("xmipp_ctf_group", args % params, numberOfMpi=1, **kwargs)
         
-        auxMD = xmipp.MetaData("numberGroups@" + self._getFileName('cTFGroupSummary'))
-        self.numberOfCtfGroups.set(auxMD.getValue(xmipp.MDL_COUNT, auxMD.firstObject()))
+        auxMD = xmippLib.MetaData("numberGroups@" + self._getFileName('cTFGroupSummary'))
+        self.numberOfCtfGroups.set(auxMD.getValue(xmippLib.MDL_COUNT, auxMD.firstObject()))
     
     self._store(self.numberOfCtfGroups)
 
@@ -105,22 +105,22 @@ def runExecuteCtfGroupsStep(self, **kwargs):
 def runInitAngularReferenceFileStep(self):
     '''Create Initial angular file. Either fill it with zeros or copy input'''
     #NOTE: if using angles, self.selFileName file should contain angles info
-    md = xmipp.MetaData(self.selFileName) 
+    md = xmippLib.MetaData(self.selFileName)
     
     # Ensure this labels are always 
-    md.addLabel(xmipp.MDL_ANGLE_ROT)
-    md.addLabel(xmipp.MDL_ANGLE_TILT)
-    md.addLabel(xmipp.MDL_ANGLE_PSI)
+    md.addLabel(xmippLib.MDL_ANGLE_ROT)
+    md.addLabel(xmippLib.MDL_ANGLE_TILT)
+    md.addLabel(xmippLib.MDL_ANGLE_PSI)
     
     expImages = self._getFileName('inputParticlesDoc')
     ctfImages = self._getFileName('imageCTFpairs')
     
     md.write(self._getExpImagesFileName(expImages))
-    blocklist = xmipp.getBlocksInMetaDataFile(ctfImages)
+    blocklist = xmippLib.getBlocksInMetaDataFile(ctfImages)
     
-    mdCtf = xmipp.MetaData()
-    mdAux = xmipp.MetaData()
-    readLabels = [xmipp.MDL_ITEM_ID, xmipp.MDL_IMAGE]
+    mdCtf = xmippLib.MetaData()
+    mdAux = xmippLib.MetaData()
+    readLabels = [xmippLib.MDL_ITEM_ID, xmippLib.MDL_IMAGE]
     
     for block in blocklist:
         #read ctf block from ctf file
@@ -128,7 +128,7 @@ def runInitAngularReferenceFileStep(self):
         #add ctf columns to images file
         mdAux.joinNatural(md, mdCtf)
         # write block in images file with ctf info
-        mdCtf.write(block + '@' + expImages, xmipp.MD_APPEND)
+        mdCtf.write(block + '@' + expImages, xmippLib.MD_APPEND)
         
     return [expImages]
 
@@ -344,11 +344,11 @@ def runAssignImagesToReferences(self, iterN, **kwargs):
     numberOfCtfGroups = self.numberOfCtfGroups.get()
     #first we need a list with the references used. That is,
     #read all docfiles and map referecendes to a mdl_order
-    mdAux = xmipp.MetaData()
-    mdSort = xmipp.MetaData()
-    md = xmipp.MetaData()
-    md1 = xmipp.MetaData()
-    mdout = xmipp.MetaData()
+    mdAux = xmippLib.MetaData()
+    mdSort = xmippLib.MetaData()
+    md = xmippLib.MetaData()
+    md1 = xmippLib.MetaData()
+    mdout = xmippLib.MetaData()
     mdout.setComment("Metadata with images, the winner reference as well as the ctf group")
     
     mycounter = 1L
@@ -359,20 +359,20 @@ def runAssignImagesToReferences(self, iterN, **kwargs):
             inputdocfile = ctfFilePrefix + projMatchRootName
             md.read(inputdocfile)
             for id in md:
-                t = md.getValue(xmipp.MDL_REF, id)
+                t = md.getValue(xmippLib.MDL_REF, id)
                 i = mdSort.addObject()
-                mdSort.setValue(xmipp.MDL_REF, t, i)
+                mdSort.setValue(xmippLib.MDL_REF, t, i)
     
     mdSort.removeDuplicates()
      
     for id in mdSort:
-        mdSort.setValue(xmipp.MDL_ORDER, mycounter, id)
+        mdSort.setValue(xmippLib.MDL_ORDER, mycounter, id)
         mycounter += 1
     ####################
     outputdocfile = self.docFileInputAngles[iterN]
     cleanPath(outputdocfile)
          
-    mdout2 = xmipp.MetaData()
+    mdout2 = xmippLib.MetaData()
     for ctfN in self.allCtfGroups():
         mdAux.clear()
         ctfFilePrefix = self._getBlockFileName(ctfBlockName, ctfN, '')
@@ -383,26 +383,26 @@ def runAssignImagesToReferences(self, iterN, **kwargs):
             md.read(inputdocfile)
             #In practice you should not get duplicates
             md.removeDuplicates()
-            md.setValueCol(xmipp.MDL_REF3D, refN)
-            md.setValueCol(xmipp.MDL_DEFGROUP, ctfN)
-            #MD.setValueCol(xmipp.MDL_CTF_MODEL,ctfFilePrefix[:-1])
+            md.setValueCol(xmippLib.MDL_REF3D, refN)
+            md.setValueCol(xmippLib.MDL_DEFGROUP, ctfN)
+            #MD.setValueCol(xmippLib.MDL_CTF_MODEL,ctfFilePrefix[:-1])
             mdAux.unionAll(md)
         mdAux.sort()
-        md.aggregate(mdAux, xmipp.AGGR_MAX, xmipp.MDL_IMAGE, xmipp.MDL_MAXCC, xmipp.MDL_MAXCC)
+        md.aggregate(mdAux, xmippLib.AGGR_MAX, xmippLib.MDL_IMAGE, xmippLib.MDL_MAXCC, xmippLib.MDL_MAXCC)
         #if a single image is assigned to two references with the same 
         #CC use it in both reconstruction
         #recover atribbutes after aggregate function
          
         md1.joinNatural(md, mdAux)
         mdout.joinNatural(md1, mdSort)
-        mdout.write(ctfFilePrefix + outputdocfile, xmipp.MD_APPEND)
+        mdout.write(ctfFilePrefix + outputdocfile, xmippLib.MD_APPEND)
         mdout2.unionAll(mdout)
         
-    mdout2.write(self.blockWithAllExpImages + '@' + outputdocfile, xmipp.MD_APPEND)
+    mdout2.write(self.blockWithAllExpImages + '@' + outputdocfile, xmippLib.MD_APPEND)
     #Aggregate for ref3D and print warning if all images has been assigned to a single volume
     #ROB
     md1.clear()
-    md1.aggregate(mdout2, xmipp.AGGR_COUNT, xmipp.MDL_REF3D, xmipp.MDL_REF3D, xmipp.MDL_COUNT)
+    md1.aggregate(mdout2, xmippLib.AGGR_COUNT, xmippLib.MDL_REF3D, xmippLib.MDL_REF3D, xmippLib.MDL_COUNT)
     import sys
     md1_size = md1.size()
     numberOfReferences = self.numberOfReferences
@@ -427,8 +427,8 @@ def runAssignImagesToReferences(self, iterN, **kwargs):
         for refN in self.allRefs():
             auxOutputdocfile = self._getRefBlockFileName(ctfBlockName, ctfN, refBlockName, refN, '')
             #select images with ref3d=iRef3D
-            mdout.importObjects(mdAux, xmipp.MDValueEQ(xmipp.MDL_REF3D, refN))
-            mdout.write(auxOutputdocfile + outputdocfile, xmipp.MD_APPEND)
+            mdout.importObjects(mdAux, xmippLib.MDValueEQ(xmippLib.MDL_REF3D, refN))
+            mdout.write(auxOutputdocfile + outputdocfile, xmippLib.MD_APPEND)
 
 
 def insertAngularClassAverageStep(self, iterN, refN, **kwargs):
@@ -441,7 +441,7 @@ def insertAngularClassAverageStep(self, iterN, refN, **kwargs):
     projLibraryDoc = self._getFileName('projectLibraryDoc', iter=iterN, ref=refN)
     outClasses = self._getFileName('outClasses', iter=iterN, ref=refN)
     # FIXME: Why is necessary ask if docFileInputAngles is empty. check if is a validation step
-#     if xmipp.isMdEmpty(docFileInputAngles):
+#     if xmippLib.isMdEmpty(docFileInputAngles):
 #         print "Empty metadata file: %s" % docFileInputAngles
 #         return
     
@@ -540,7 +540,7 @@ def runReconstructionStep(self, iterN, refN, program, method, args, suffix, **kw
         args += ' --thr %d' % threads
     
     if isMdEmpty(mdFn):
-        img = xmipp.Image()
+        img = xmippLib.Image()
         img.read(maskFn)
         #(x,y,z,n) = img.getDimensions()
         self._log.warning("Metadata '%s' is empty. \n Creating a random volume file '%s'" % (mdFn, volFn))
@@ -614,31 +614,31 @@ def runCalculateFscStep(self, iterN, refN, args, constantToAdd, **kwargs):
 def runStoreResolutionStep(self, resolIterMd, resolIterMaxMd, sampling):
     self._log.info("compute resolution 1")
     #compute resolution
-    mdRsol = xmipp.MetaData(resolIterMd)
-    mdResolOut = xmipp.MetaData()
-    mdResolOut.importObjects(mdRsol, xmipp.MDValueLT(xmipp.MDL_RESOLUTION_FRC, 0.5))
+    mdRsol = xmippLib.MetaData(resolIterMd)
+    mdResolOut = xmippLib.MetaData()
+    mdResolOut.importObjects(mdRsol, xmippLib.MDValueLT(xmippLib.MDL_RESOLUTION_FRC, 0.5))
     self._log.info("compute resolution 2")
     if mdResolOut.size()==0:
         mdResolOut.clear()
         mdResolOut.addObject()
         id=mdResolOut.firstObject()
-        mdResolOut.setValue(xmipp.MDL_RESOLUTION_FREQREAL, sampling*2., id)
-        mdResolOut.setValue(xmipp.MDL_RESOLUTION_FRC, 0.5, id)
+        mdResolOut.setValue(xmippLib.MDL_RESOLUTION_FREQREAL, sampling*2., id)
+        mdResolOut.setValue(xmippLib.MDL_RESOLUTION_FRC, 0.5, id)
     else:
         mdResolOut.sort()
     
     id = mdResolOut.firstObject()
-    filterFrequence = mdResolOut.getValue(xmipp.MDL_RESOLUTION_FREQREAL, id)
-    frc = mdResolOut.getValue(xmipp.MDL_RESOLUTION_FRC, id)
+    filterFrequence = mdResolOut.getValue(xmippLib.MDL_RESOLUTION_FREQREAL, id)
+    frc = mdResolOut.getValue(xmippLib.MDL_RESOLUTION_FRC, id)
     
-    md = xmipp.MetaData()
+    md = xmippLib.MetaData()
     id = md.addObject()
     md.setColumnFormat(False)
     
-    md.setValue(xmipp.MDL_RESOLUTION_FREQREAL, filterFrequence, id)
-    md.setValue(xmipp.MDL_RESOLUTION_FRC, frc, id)
-    md.setValue(xmipp.MDL_SAMPLINGRATE, sampling, id)
-    md.write(resolIterMaxMd, xmipp.MD_APPEND)
+    md.setValue(xmippLib.MDL_RESOLUTION_FREQREAL, filterFrequence, id)
+    md.setValue(xmippLib.MDL_RESOLUTION_FRC, frc, id)
+    md.setValue(xmippLib.MDL_SAMPLINGRATE, sampling, id)
+    md.write(resolIterMaxMd, xmippLib.MD_APPEND)
 
 
 def insertFilterVolumeStep(self, iterN, refN, **kwargs):
@@ -684,14 +684,14 @@ def runCreateOutputStep(self):
         inDocfile = self._getFileName('docfileInputAnglesIters', iter=lastIter)
         ClassFnTemplate = '%(rootDir)s/reconstruction_Ref3D_%(ref)03d.vol'
         
-        allExpImagesinDocfile = xmipp.FileName()
+        allExpImagesinDocfile = xmippLib.FileName()
         all_exp_images="all_exp_images"
         allExpImagesinDocfile.compose(all_exp_images, inDocfile)
         
         dataClasses = self._getFileName('sqliteClasses')
         
         createClassesFromImages(imgSet, str(allExpImagesinDocfile), dataClasses, 
-                                SetOfClasses3D, xmipp.MDL_REF3D, ClassFnTemplate, lastIter)
+                                SetOfClasses3D, xmippLib.MDL_REF3D, ClassFnTemplate, lastIter)
         
         classes = self._createSetOfClasses3D(imgSet)
         clsSet = SetOfClasses3D(dataClasses)

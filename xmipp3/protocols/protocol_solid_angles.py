@@ -36,7 +36,7 @@ from pyworkflow.em.protocol import ProtAnalysis3D
 import pyworkflow.em.metadata as md
 import pyworkflow.em as em
 
-import xmipp
+import xmippLib
 from xmipp3.base import findRow
 from xmipp3.convert import (rowToAlignment, setXmippAttributes, xmippToLocation,
                             createItemMatrix, writeSetOfParticles)
@@ -252,7 +252,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         self.runJob("xmipp_transform_geometry", args, numberOfMpi=1)
 
         for classNo in range(1, Nclasses+1):
-            localImagesMd = xmipp.MetaData("class%06d_images@%s"
+            localImagesMd = xmippLib.MetaData("class%06d_images@%s"
                                            % (classNo, classesXmd))
 
             # New class detected
@@ -260,26 +260,26 @@ class XmippProtSolidAngles(ProtAnalysis3D):
             # Check which images have not been assigned yet to any class
             # and assign them to this new class
             for objId in localImagesMd:
-                imgId = localImagesMd.getValue(xmipp.MDL_ITEM_ID, objId)
+                imgId = localImagesMd.getValue(xmippLib.MDL_ITEM_ID, objId)
                 # Add images not classify yet and store their class number
                 if imgId not in self.classImages:
                     self.classImages.add(imgId)
                     newObjId = mdImages.addObject()
-                    mdImages.setValue(xmipp.MDL_ITEM_ID, imgId, newObjId)
-                    mdImages.setValue(xmipp.MDL_REF2, self.classCount, newObjId)
+                    mdImages.setValue(xmippLib.MDL_ITEM_ID, imgId, newObjId)
+                    mdImages.setValue(xmippLib.MDL_REF2, self.classCount, newObjId)
 
             newClassId = mdClasses.addObject()
-            mdClasses.setValue(xmipp.MDL_REF, projNumber, newClassId)
-            mdClasses.setValue(xmipp.MDL_REF2, self.classCount, newClassId)
-            mdClasses.setValue(xmipp.MDL_IMAGE, "%d@%s" %
+            mdClasses.setValue(xmippLib.MDL_REF, projNumber, newClassId)
+            mdClasses.setValue(xmippLib.MDL_REF2, self.classCount, newClassId)
+            mdClasses.setValue(xmippLib.MDL_IMAGE, "%d@%s" %
                                (classNo, classesStk), newClassId)
-            mdClasses.setValue(xmipp.MDL_IMAGE1, projRef, newClassId)
-            mdClasses.setValue(xmipp.MDL_CLASS_COUNT,localImagesMd.size(),newClassId)
+            mdClasses.setValue(xmippLib.MDL_IMAGE1, projRef, newClassId)
+            mdClasses.setValue(xmippLib.MDL_CLASS_COUNT,localImagesMd.size(),newClassId)
 
     def classifyGroupsStep(self):
         # Create two metadatas, one for classes and another one for images
-        mdClasses = xmipp.MetaData()
-        mdImages = xmipp.MetaData()
+        mdClasses = xmippLib.MetaData()
+        mdImages = xmippLib.MetaData()
 
         fnNeighbours = self._getExtraPath("neighbours.xmd")
         fnGallery = self._getExtraPath("gallery.stk")
@@ -287,7 +287,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         self.classCount = 0
         self.classImages = set()
 
-        for block in xmipp.getBlocksInMetaDataFile(fnNeighbours):
+        for block in xmippLib.getBlocksInMetaDataFile(fnNeighbours):
             # Figure out the projection number from the block name
             projNumber = int(block.split("_")[1])
 
@@ -297,12 +297,12 @@ class XmippProtSolidAngles(ProtAnalysis3D):
                                   mdClasses=mdClasses,
                                   mdImages=mdImages)
 
-        galleryMd = xmipp.MetaData(self._getExtraPath("gallery.doc"))
+        galleryMd = xmippLib.MetaData(self._getExtraPath("gallery.doc"))
         # Increment the reference number to starts from 1
         galleryMd.operate("ref=ref+1")
-        mdJoined = xmipp.MetaData()
+        mdJoined = xmippLib.MetaData()
         # Add extra information from the gallery metadata
-        mdJoined.join1(mdClasses, galleryMd, xmipp.MDL_REF)
+        mdJoined.join1(mdClasses, galleryMd, xmippLib.MDL_REF)
         # Remove unnecessary columns
         md.keepColumns(mdJoined, "ref", "ref2", "image", "image1",
                     "classCount", "angleRot", "angleTilt")
@@ -323,7 +323,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         # Look for the block with the minimum number of images
         if minClass==0:
             minClass = 1e38
-            for block in xmipp.getBlocksInMetaDataFile(fnNeighbours):
+            for block in xmippLib.getBlocksInMetaDataFile(fnNeighbours):
                 projNumber = int(block.split("_")[1])
                 fnDir=self._getExtraPath("direction_%d"%projNumber,"level_00","class_classes.xmd")
                 if exists(fnDir):
@@ -332,14 +332,14 @@ class XmippProtSolidAngles(ProtAnalysis3D):
                         minClass=blockSize
         
         # Construct the homogeneized metadata
-        mdAll = xmipp.MetaData()
-        mdSubset=xmipp.MetaData()
-        mdRandom=xmipp.MetaData()
-        for block in xmipp.getBlocksInMetaDataFile(fnNeighbours):
+        mdAll = xmippLib.MetaData()
+        mdSubset=xmippLib.MetaData()
+        mdRandom=xmippLib.MetaData()
+        for block in xmippLib.getBlocksInMetaDataFile(fnNeighbours):
             projNumber = int(block.split("_")[1])
             fnDir=self._getExtraPath("direction_%d"%projNumber,"level_00","class_classes.xmd")
             if exists(fnDir):
-                mdDirection = xmipp.MetaData("class000001_images@"+fnDir)
+                mdDirection = xmippLib.MetaData("class000001_images@"+fnDir)
                 mdRandom.randomize(mdDirection)
                 mdSubset.selectPart(mdRandom,0L,min(mdRandom.size(),minClass))
                 mdAll.unionAll(mdSubset)
@@ -355,8 +355,8 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         pass
 
     def createOutputStep(self):
-        self.mdClasses = xmipp.MetaData(self._getDirectionalClassesFn())
-        self.mdImages = xmipp.MetaData(self._getDirectionalImagesFn())
+        self.mdClasses = xmippLib.MetaData(self._getDirectionalClassesFn())
+        self.mdImages = xmippLib.MetaData(self._getDirectionalImagesFn())
 
         inputParticles = self.inputParticles.get()
         classes2D = self._createSetOfClasses2D(inputParticles)
@@ -405,23 +405,23 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         particle._appendItem = count > 0
 
     def _updateParticle(self, item, row):
-        item.setClassId(row.getValue(xmipp.MDL_REF2))
+        item.setClassId(row.getValue(xmippLib.MDL_REF2))
 
     def _updateClass(self, item):
         classId = item.getObjId()
-        classRow = findRow(self.mdClasses, xmipp.MDL_REF2, classId)
+        classRow = findRow(self.mdClasses, xmippLib.MDL_REF2, classId)
 
         representative = item.getRepresentative()
         representative.setTransform(rowToAlignment(classRow, ALIGN_PROJ))
-        representative.setLocation(xmippToLocation(classRow.getValue(xmipp.MDL_IMAGE)))
-        setXmippAttributes(representative, classRow, xmipp.MDL_ANGLE_ROT)
-        setXmippAttributes(representative, classRow, xmipp.MDL_ANGLE_TILT)
-        setXmippAttributes(representative, classRow, xmipp.MDL_CLASS_COUNT)
+        representative.setLocation(xmippToLocation(classRow.getValue(xmippLib.MDL_IMAGE)))
+        setXmippAttributes(representative, classRow, xmippLib.MDL_ANGLE_ROT)
+        setXmippAttributes(representative, classRow, xmippLib.MDL_ANGLE_TILT)
+        setXmippAttributes(representative, classRow, xmippLib.MDL_CLASS_COUNT)
 
         self.averageSet.append(representative)
 
         reprojection = Image()
-        reprojection.setLocation(xmippToLocation(classRow.getValue(xmipp.MDL_IMAGE1)))
+        reprojection.setLocation(xmippToLocation(classRow.getValue(xmippLib.MDL_IMAGE1)))
         item.reprojection = reprojection
 
     # --------------------------- INFO functions -------------------------------

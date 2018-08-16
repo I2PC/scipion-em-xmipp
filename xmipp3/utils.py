@@ -28,7 +28,7 @@
 This module contains utils functions to operate over xmipp metadata files.
 """
 
-import xmipp
+import xmippLib
 from .base import XmippMdRow
 
 
@@ -40,7 +40,7 @@ def getMdFirstRow(filename):
     This method should be used for validations of labels
     or metadata size, but the full metadata is not needed.
     """
-    md = xmipp.MetaData()
+    md = xmippLib.MetaData()
     md.read(filename, 1)
     if md.getParsedLines():
         row = XmippMdRow()
@@ -53,7 +53,7 @@ def getMdFirstRow(filename):
 
 def getMdSize(filename):
     """ Return the metadata size without parsing entirely. """
-    md = xmipp.MetaData()
+    md = xmippLib.MetaData()
     md.read(filename, 1)
     return md.getParsedLines()
 
@@ -67,7 +67,7 @@ def iterMdRows(md):
     """ Iterate over the rows of the given metadata. """
     # If md is string, take as filename and create the metadata
     if isinstance(md, basestring):
-        md = xmipp.MetaData(md)
+        md = xmippLib.MetaData(md)
         
     row = XmippMdRow()
     

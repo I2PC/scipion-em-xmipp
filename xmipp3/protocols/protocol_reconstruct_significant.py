@@ -34,7 +34,7 @@ from pyworkflow.em import *
 import pyworkflow.em.metadata as metadata
 from pyworkflow.protocol.params import *
 
-import xmipp
+import xmippLib
 from xmipp3.base import XmippMdRow
 from xmipp3.convert import writeSetOfClasses2D, writeSetOfParticles, volumeToRow
 
@@ -202,7 +202,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
         # Convert input images if necessary
         self.imgsFn = self._getExtraPath('input_classes.xmd')
         self._insertFunctionStep('convertInputStep', self.imgsFn)
-        SL = xmipp.SymList()
+        SL = xmippLib.SymList()
         SL.readSymmetryFile(self.symmetryGroup.get())
         self.trueSymsNo = SL.getTrueSymsNo()
         self.TsCurrent = self.inputSet.get().getSamplingRate()
@@ -375,7 +375,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
             fnVolumes = self._getExtraPath('input_volumes.xmd')
             row = XmippMdRow()
             volumeToRow(inputVolume, row, alignType=ALIGN_NONE)
-            md = xmipp.MetaData()
+            md = xmippLib.MetaData()
             row.writeToMd(md, md.addObject())
             md.write(fnVolumes)
 
@@ -410,7 +410,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
             else:
                 errors.append("Please, enter a reference image")
 
-        SL = xmipp.SymList()
+        SL = xmippLib.SymList()
         SL.readSymmetryFile(self.symmetryGroup.get())
         if (100 - self.alpha0.get()) / 100.0 * (SL.getTrueSymsNo() + 1) > 1:
             errors.append("Increase the initial significance it is too low "

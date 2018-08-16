@@ -38,7 +38,7 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         NumericListParam, IntParam,
                                         StringParam, BooleanParam,
                                         LEVEL_ADVANCED)
-import xmipp
+import xmippLib
 from xmipp3.convert import writeSetOfParticles
 
 
@@ -283,10 +283,10 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                      fnRoot + "_fsc_%02d.xmd" % iteration,Ts),
                      numberOfMpi = 1)
                 
-        mdFSC = xmipp.MetaData(fnRoot + "_fsc_%02d.xmd" % iteration)
+        mdFSC = xmippLib.MetaData(fnRoot + "_fsc_%02d.xmd" % iteration)
         for id in mdFSC:
-            fscValue = mdFSC.getValue(xmipp.MDL_RESOLUTION_FRC,id)
-            maxFreq = mdFSC.getValue(xmipp.MDL_RESOLUTION_FREQREAL,id)
+            fscValue = mdFSC.getValue(xmippLib.MDL_RESOLUTION_FRC,id)
+            maxFreq = mdFSC.getValue(xmippLib.MDL_RESOLUTION_FREQREAL,id)
             if fscValue < 0.5:
                 break
         fh = open(fnRoot + "_freq.txt","a")
@@ -306,10 +306,10 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
         cleanPattern(fnRoot + "_noisesL_0?.xmd")
         cleanPattern(fnRoot + "_noises2_0?.stk")        
         
-        mdFSCN = xmipp.MetaData(fnRootN + "_fsc_%02d.xmd" % iteration)
+        mdFSCN = xmippLib.MetaData(fnRootN + "_fsc_%02d.xmd" % iteration)
         for id in mdFSCN:
-            fscValueN = mdFSCN.getValue(xmipp.MDL_RESOLUTION_FRC, id)
-            maxFreqN = mdFSCN.getValue(xmipp.MDL_RESOLUTION_FREQREAL, id)
+            fscValueN = mdFSCN.getValue(xmippLib.MDL_RESOLUTION_FRC, id)
+            maxFreqN = mdFSCN.getValue(xmippLib.MDL_RESOLUTION_FREQREAL, id)
             if fscValueN < 0.5: 
                 break
         fhN = open(fnRootN + "_freq.txt", "a")
@@ -387,7 +387,7 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
         subset = 0
         
         numberOfParticles = getFloatListFromValues(self.numberOfParticles.get())
-        validationMd = xmipp.MetaData()
+        validationMd = xmippLib.MetaData()
 
         for fnFreq in fnFreqs:
             print fnFreq
@@ -403,11 +403,11 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
             stdRes = sqrt(varRes)
             
             objId = validationMd.addObject()
-            validationMd.setValue(xmipp.MDL_COUNT, 
+            validationMd.setValue(xmippLib.MDL_COUNT,
                                   long(numberOfParticles[subset]),
                                   objId)
-            validationMd.setValue(xmipp.MDL_AVG,meanRes, objId)  
-            validationMd.setValue(xmipp.MDL_STDDEV,stdRes,objId)
+            validationMd.setValue(xmippLib.MDL_AVG,meanRes, objId)
+            validationMd.setValue(xmippLib.MDL_STDDEV,stdRes,objId)
             subset += 1
 
         validationMd.write(outputFn)        

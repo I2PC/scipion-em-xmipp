@@ -37,7 +37,7 @@ from pyworkflow.protocol.params import (PointerParam, IntParam, FloatParam,
                                         LEVEL_ADVANCED)
 from pyworkflow.em.data import SetOfNormalModes
 
-import xmipp
+import xmippLib
 from xmipp3.base import XmippMdRow
 from .protocol_nma_base import XmippProtNMABase, NMA_CUTOFF_REL
 from .convert import rowToMode, getNMAEnviron
@@ -263,7 +263,7 @@ class XmippProtNMA(XmippProtNMABase):
             fnVec = self._getPath("modes", "vec.%d" % n)
             if exists(fnVec):
                 fhIn = open(fnVec)
-                md = xmipp.MetaData()
+                md = xmippLib.MetaData()
                 atomCounter = 0
                 for line in fhIn:
                     x, y, z = map(float, line.split())
@@ -276,23 +276,23 @@ class XmippProtNMA(XmippProtNMABase):
                             maxShift[atomCounter]=d
                             maxShiftMode[atomCounter]=n
                     atomCounter+=1
-                    md.setValue(xmipp.MDL_NMA_ATOMSHIFT,d,md.addObject())
+                    md.setValue(xmippLib.MDL_NMA_ATOMSHIFT,d,md.addObject())
                 md.write(join(fnOutDir,"vec%d.xmd" % n))
                 fhIn.close()
-        md = xmipp.MetaData()
+        md = xmippLib.MetaData()
         for i, _ in enumerate(maxShift):
             fnVec = self._getPath("modes", "vec.%d" % (maxShiftMode[i]+1))
             if exists(fnVec):
                 objId = md.addObject()
-                md.setValue(xmipp.MDL_NMA_ATOMSHIFT, maxShift[i],objId)
-                md.setValue(xmipp.MDL_NMA_MODEFILE, fnVec, objId)
+                md.setValue(xmippLib.MDL_NMA_ATOMSHIFT, maxShift[i],objId)
+                md.setValue(xmippLib.MDL_NMA_MODEFILE, fnVec, objId)
         md.write(self._getExtraPath('maxAtomShifts.xmd'))
                                                       
     def createOutputStep(self):
         fnSqlite = self._getPath('modes.sqlite')
         nmSet = SetOfNormalModes(filename=fnSqlite)
 
-        md = xmipp.MetaData(self._getPath('modes.xmd'))
+        md = xmippLib.MetaData(self._getPath('modes.xmd'))
         row = XmippMdRow()
         
         for objId in md:

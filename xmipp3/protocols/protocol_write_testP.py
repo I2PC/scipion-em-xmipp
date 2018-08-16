@@ -32,7 +32,7 @@ from pyworkflow.em.protocol import ProtProcessParticles
 from pyworkflow.protocol.constants import STEPS_PARALLEL
 from pyworkflow.protocol.params import IntParam
 
-from xmipp import *
+from xmippLib import *
 
 
 class XmippProtWriteTestP(ProtProcessParticles):
