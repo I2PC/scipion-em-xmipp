@@ -33,7 +33,7 @@ from xmipp3.protocols.protocol_extract_particles import *
 from xmipp3.protocols.protocol_classification_gpuCorr_semi import *
 
 try:
-    from eman2.protocol_autopick import *
+    from eman2.protocol_autopick_sparx import *
 except:
     print("Eman is needed to do this test")
 

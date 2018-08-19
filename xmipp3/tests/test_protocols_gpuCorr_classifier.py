@@ -33,7 +33,7 @@ try:
 except:
     print("grigoriefflab in needed to this test")
 try:
-    from eman2.protocol_autopick import *
+    from eman2.protocol_autopick_sparx import *
 except:
     print("grigoriefflab in needed to this test")
 

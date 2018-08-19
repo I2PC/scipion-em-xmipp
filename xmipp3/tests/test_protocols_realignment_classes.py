@@ -25,7 +25,7 @@ from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pyworkflow.em.protocol import ProtImportMicrographs
 from pyworkflow.em.protocol.protocol_sets import ProtSubSet
 from pyworkflow.em.packages.grigoriefflab import ProtCTFFind
-from pyworkflow.em.packages.eman2.protocol_autopick import *
+from pyworkflow.em.packages.eman2.protocol_autopick_sparx import *
 
 from xmipp3.protocols.protocol_extract_particles import *
 from xmipp3.protocols.protocol_cl2d import *
