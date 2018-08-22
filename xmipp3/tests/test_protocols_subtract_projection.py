@@ -28,18 +28,20 @@ import random
 import numpy as np
 
 from pyworkflow.tests import BaseTest, setupTestProject
+from pyworkflow.utils import importFromPlugin
 from pyworkflow.em.data import SetOfParticles
 from pyworkflow.em.constants import ALIGN_PROJ
 from pyworkflow.em.data import Acquisition, Particle, Transform
 from pyworkflow.em.data import CTFModel
 from pyworkflow.em.protocol import ProtImportParticles, ProtImportMask, ProtImportVolumes
 from pyworkflow.em.data import  VolumeMask
-from pyworkflow.em.packages.relion import ProtRelionSubtract
 
 import xmippLib
 from xmipp3 import Plugin
 from xmipp3.convert import writeSetOfParticles
 from xmipp3.protocols import XmippProtSubtractProjection
+
+ProtRelionSubtract = importFromPlugin('relion.protocols', 'ProtRelionSubtract')
 
 
 proj1 = [(0, 0, 53, 55, 0.5), (0, 0, 53, 56, 1.0), (0, 0, 53, 57, 0.5), (0, 0, 53, 63, 0.5), (0, 0, 53, 64, 1.0),

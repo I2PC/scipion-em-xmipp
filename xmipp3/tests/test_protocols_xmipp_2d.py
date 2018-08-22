@@ -29,11 +29,11 @@
 from __future__ import print_function
 
 from pyworkflow.tests.test_utils import wait
-from pyworkflow.utils import magentaStr
+from pyworkflow.utils import magentaStr, importFromPlugin
 from pyworkflow.tests import *
 from pyworkflow.em.protocol.protocol_import import *
 
-from xmipp3 import Plugin
+import xmipp3
 from xmipp3.base import *
 from xmipp3.convert import *
 from xmipp3.constants import *
@@ -863,7 +863,9 @@ class TestXmippDenoiseParticles(TestXmippBase):
     """Check protocol Denoise Particles"""
     @classmethod
     def setUpClass(cls):
-        from pyworkflow.em.packages.relion import ProtRelionClassify2D, ProtRelionPreprocessParticles, isVersion2
+        ProtRelionClassify2D = importFromPlugin('relion.protocols', 'ProtRelionClassify2D')
+        ProtRelionPreprocessParticles = importFromPlugin('relion.protocols', 'ProtRelionPreprocessParticles')
+        isVersion2 = importFromPlugin('relion.protocols', 'Plugin').isVersion2Active()
         # To denoise particles we need to import the particles and the
         # classes, and particles must be aligned with classes. As this
         # is the usual situation after a CL2D, we just run that protocol.
@@ -1142,7 +1144,7 @@ class TestXmippBreakSym(TestXmippBase):
         from pyworkflow.utils import runJob
         runJob(None, 'xmipp_angular_distance',
                "--ang1 images.xmd --ang2 input_particles.xmd --sym i2 --oroot kk",
-               env=Plugin.getEnviron())
+               env=xmipp3.Plugin.getEnviron())
         mdRober = md.MetaData("kk_vec_diff_hist.txt")
         objId = mdRober.firstObject()
         count = mdRober.getValue(md.MDL_COUNT, objId)
