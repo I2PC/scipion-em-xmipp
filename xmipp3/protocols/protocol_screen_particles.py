@@ -134,6 +134,7 @@ class XmippProtScreenParticles(ProtProcessParticles):
         self._initializeZscores()
         self.outputSize = 0
         self.check = None
+        self.streamClosed = self.inputParticles.get().isStreamClosed()
         partsSteps = self._insertNewPartsSteps()
         self._insertFunctionStep('createOutputStep',
                                  prerequisites=partsSteps, wait=True)
