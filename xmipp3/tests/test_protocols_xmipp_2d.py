@@ -346,7 +346,7 @@ class TestXmippScreenParticles(TestXmippBase):
             protScreenNone.outputParticles))
         
         for x, y in izip(self.protImport.outputParticles, protScreenNone.outputParticles):
-            print("\t      compare %s with %s" % (x, y))
+            # print("\t      compare %s with %s" % (x, y))
             self.assertEqual(x.getObjId(), y.getObjId(), "Particles differ")
             self.assertEqual(x.getSamplingRate(), y.getSamplingRate(), "Particle sampling rate differ")
         print('\t --> Input/Output sets contain the same particles')
@@ -387,7 +387,7 @@ class TestXmippScreenParticles(TestXmippBase):
             self.assertLess(x._xmipp_zScore.get(), 2.5, "Particle with id (%s) has a ZScore of %s, upper than supposed threshold %s" % (x.getObjId(), x._xmipp_zScore.get(), 2.5))
         print('\t --> Output particles are below the ZScore threshold')
         
-        # Finally, we check for errors in method with particle rejection by percentage
+        # We check for errors in method with particle rejection by percentage
         print(
         "--> Running Screen with rejection of the 5% particles with the lowest ZScore")
         protScreenPercentage = self.newProtocol(xpsp,
