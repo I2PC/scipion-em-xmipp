@@ -37,7 +37,7 @@ from xmipp3.convert import (writeSetOfParticles, readSetOfParticles,
                        geometryFromMatrix, SetOfParticles)
 
 
-class XmippProtVolumeHomogenizer(ProtProcessParticles):
+class XmippProtEnrich(ProtProcessParticles):
     
     """    
     Method to get two volume from different classes (with different conformation)
@@ -45,7 +45,7 @@ class XmippProtVolumeHomogenizer(ProtProcessParticles):
     with respect to the another one as a reference, using optical flow algorithm.
     The output is a setOfParticles contaied deformed reference particles.
     """    
-    _label = 'volume homogenizer'
+    _label = 'enrich'
     _lastUpdateVersion = VERSION_1_1
     #--------------------------- DEFINE param functions --------------------------------------------   
    
