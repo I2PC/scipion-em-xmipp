@@ -369,18 +369,21 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         
     def _createItemMatrix(self, particle, row):
         if row.containsLabel(xmippLib.MDL_CONTINUOUS_X):
-            row.setValue(xmippLib.MDL_SHIFT_X,row.getValue(xmippLib.MDL_CONTINUOUS_X))
-            row.setValue(xmippLib.MDL_SHIFT_Y,row.getValue(xmippLib.MDL_CONTINUOUS_Y))
-        row.setValue(xmippLib.MDL_SHIFT_X,row.getValue(xmippLib.MDL_SHIFT_X)*self.scaleFactor)
-        row.setValue(xmippLib.MDL_SHIFT_Y,row.getValue(xmippLib.MDL_SHIFT_Y)*self.scaleFactor)
+            row.setValue(xmippLib.MDL_SHIFT_X, row.getValue(xmippLib.MDL_CONTINUOUS_X))
+            row.setValue(xmippLib.MDL_SHIFT_Y, row.getValue(xmippLib.MDL_CONTINUOUS_Y))
+            row.setValue(xmippLib.MDL_FLIP, row.getValue(xmippLib.MDL_CONTINUOUS_FLIP))
+        row.setValue(xmippLib.MDL_SHIFT_X, row.getValue(xmippLib.MDL_SHIFT_X)*self.scaleFactor)
+        row.setValue(xmippLib.MDL_SHIFT_Y, row.getValue(xmippLib.MDL_SHIFT_Y)*self.scaleFactor)
         setXmippAttributes(particle, row, xmippLib.MDL_SHIFT_X, xmippLib.MDL_SHIFT_Y, xmippLib.MDL_ANGLE_TILT,
                            xmippLib.MDL_SCALE, xmippLib.MDL_MAXCC, xmippLib.MDL_MAXCC_PERCENTILE, xmippLib.MDL_WEIGHT)
         if row.containsLabel(xmippLib.MDL_ANGLE_DIFF0):
             setXmippAttributes(particle, row, xmippLib.MDL_ANGLE_DIFF0, xmippLib.MDL_WEIGHT_JUMPER0)
         if row.containsLabel(xmippLib.MDL_CONTINUOUS_X):
-            setXmippAttributes(particle, row, xmippLib.MDL_COST, xmippLib.MDL_WEIGHT_CONTINUOUS2,
-                               xmippLib.MDL_CONTINUOUS_SCALE_X, xmippLib.MDL_CONTINUOUS_SCALE_Y, xmippLib.MDL_COST_PERCENTILE,
-                               xmippLib.MDL_CONTINUOUS_GRAY_A, xmippLib.MDL_CONTINUOUS_GRAY_B)
+            setXmippAttributes(particle, row, xmippLib.MDL_COST, xmippLib.MDL_WEIGHT_CONTINUOUS2, xmippLib.MDL_COST_PERCENTILE)
+            if row.containsLabel(xmippLib.MDL_CONTINUOUS_SCALE_X):
+                setXmippAttributes(xmippLib.MDL_CONTINUOUS_SCALE_X, xmippLib.MDL_CONTINUOUS_SCALE_Y)
+            if row.containsLabel(xmippLib.MDL_CONTINUOUS_GRAY_A):
+                setXmippAttributes(xmippLib.MDL_CONTINUOUS_GRAY_A, xmippLib.MDL_CONTINUOUS_GRAY_B)
         if row.containsLabel(xmippLib.MDL_WEIGHT_JUMPER):
             setXmippAttributes(particle, row, xmippLib.MDL_WEIGHT_JUMPER)
         if row.containsLabel(xmippLib.MDL_ANGLE_DIFF):
