@@ -24,6 +24,7 @@
 import time
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
+from pyworkflow.utils import importFromPlugin, pluginNotFound
 from pyworkflow.em.protocol import ProtImportMicrographs, ProtCreateStreamData
 from pyworkflow.em.protocol.protocol_create_stream_data import \
     SET_OF_MICROGRAPHS
@@ -32,14 +33,11 @@ from pyworkflow.protocol import getProtocolFromDb
 from xmipp3.protocols.protocol_extract_particles import *
 from xmipp3.protocols.protocol_classification_gpuCorr_full import *
 
+ProtCTFFind = importFromPlugin('grigoriefflab.protocols', 'ProtCTFFind')
 try:
-    from grigoriefflab import ProtCTFFind
+    from eman2.protocols.protocol_autopick_sparx import *
 except:
-    print("grigoriefflab in needed to this test")
-try:
-    from eman2.protocol_autopick import *
-except:
-    print("grigoriefflab in needed to this test")
+    pluginNotFound('Eman2', "Eman2 is needed to run this test.")
 
 
 # Number of mics to be processed

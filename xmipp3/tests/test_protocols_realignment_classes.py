@@ -32,7 +32,7 @@ from xmipp3.protocols.protocol_realignment_classes import *
 
 ProtCTFFind = importFromPlugin('grigoriefflab.protocols', 'ProtCTFFind')
 try:
-    from eman2.protocol_autopick import *
+    from eman2.protocols.protocol_autopick_sparx import *
 except:
     pluginNotFound('Eman2', "Eman2 is needed to run this test.")
 
