@@ -90,7 +90,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                            'If *No*, all the generated classes will be '
                            'balanced',
                       expertLevel=const.LEVEL_ADVANCED,)
-        form.addParallelSection(threads=0, mpi=0)
+        form.addParallelSection(threads=0, mpi=4)
 
 
     # --------------------------- INSERT steps functions -----------------------
@@ -411,7 +411,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                     self._params['Nrefs']=Nrefs
                     self._params['cl2dDir'] = self._getExtraPath(
                                               join('level%03d' % level))
-                    self.runJob("mpirun -np 4 -bynode xmipp_mpi_classify_CL2D",
+                    self.runJob("xmipp_mpi_classify_CL2D",
                                 args % self._params)
                 except Exception as ex:
                     flag_error = True

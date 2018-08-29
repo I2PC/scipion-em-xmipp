@@ -22,20 +22,15 @@
 # ***************************************************************************/
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
+from pyworkflow.utils import importFromPlugin, pluginNotFound
 from pyworkflow.em.protocol import ProtImportAverages, ProtImportMicrographs
 from pyworkflow.em.protocol.protocol_sets import ProtSubSet
 
 from xmipp3.protocols.protocol_extract_particles import *
 from xmipp3.protocols.protocol_classification_gpuCorr import *
 
-try:
-    from grigoriefflab import ProtCTFFind
-except:
-    print("grigoriefflab in needed to this test")
-try:
-    from eman2.protocol_autopick import *
-except:
-    print("grigoriefflab in needed to this test")
+ProtCTFFind = importFromPlugin('grigoriefflab.protocols', 'ProtCTFFind')
+SparxGaussianProtPicking = importFromPlugin('eman2.protocols', 'SparxGaussianProtPicking')
 
 
 # Number of mics to be processed
