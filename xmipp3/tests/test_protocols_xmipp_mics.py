@@ -607,6 +607,106 @@ class TestXmippExtractParticles(TestXmippBase):
         self._checkVarianceAndGiniCoeff(outputParts[170], 1.1640, 0.5190)
 
 
+class TestXmippVarianceFiltering(TestXmippBase):
+    """This class check if the protocol to extract particles
+    in Xmipp works properly.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        TestXmippBase.setData()
+        cls.DOWNSAMPLING = 5.0
+        cls.protImport = cls.runImportMicrographBPV(cls.micsFn)
+        cls.protDown = cls.runDownsamplingMicrographs(cls.protImport.outputMicrographs,
+                                                      cls.DOWNSAMPLING)
+        cls.protPP = cls.runFakedPicking(cls.protDown.outputMicrographs, cls.allCrdsDir)
+
+    def _checkSamplingConsistency(self, outputSet):
+        """ Check that the set sampling is the same as item sampling. """
+        first = outputSet.getFirstItem()
+
+        self.assertAlmostEqual(outputSet.getSamplingRate(),
+                               first.getSamplingRate())
+
+    def _checkVarianceAndGiniCoeff(self, particle, varianceScore, giniScore):
+        """ Check the Variance and Gini coeff. added to a certain particle
+        """
+        self.assertTrue(particle.hasAttribute('_xmipp_scoreByVariance'),
+                        'Particle has not scoreByVariance attribute.')
+        self.assertAlmostEqual(particle._xmipp_scoreByVariance.get(), varianceScore,
+                               3, "The was a problem with the varianceScore")
+
+        self.assertTrue(particle.hasAttribute('_xmipp_scoreByGiniCoeff'),
+                        'Particle has not scoreByGiniCoeff attribute.')
+        self.assertAlmostEqual(particle._xmipp_scoreByGiniCoeff.get(), giniScore,
+                               3, "The was a problem with the giniCoeffScore")
+
+    def testExtractAndVarianceFilteringByScreenParticles(self):
+        print "Run extract particles from same micrographs as picking"
+        protExtract = self.newProtocol(XmippProtExtractParticles,
+                                       boxSize=110,
+                                       downsampleType=SAME_AS_PICKING,
+                                       doInvert=False,
+                                       doFlip=False)
+        protExtract.setObjLabel("extract-same as picking")
+        protExtract.inputCoordinates.set(self.protPP.outputCoordinates)
+        self.launchProtocol(protExtract)
+
+        inputCoords = protExtract.inputCoordinates.get()
+        outputParts = protExtract.outputParticles
+        micSampling = protExtract.inputCoordinates.get().getMicrographs().getSamplingRate()
+
+        self.assertIsNotNone(outputParts,
+                             "There was a problem generating the output.")
+        self.assertAlmostEqual(outputParts.getSamplingRate() / micSampling,
+                               1, 1,
+                               "There was a problem generating the output.")
+        self._checkSamplingConsistency(outputParts)
+
+        def compare(objId, delta=0.001):
+            cx, cy = inputCoords[objId].getPosition()
+            px, py = outputParts[objId].getCoordinate().getPosition()
+            micNameCoord = inputCoords[objId].getMicName()
+            micNamePart = outputParts[objId].getCoordinate().getMicName()
+            self.assertAlmostEquals(cx, px, delta=delta)
+            self.assertAlmostEquals(cy, py, delta=delta)
+            self.assertEqual(micNameCoord, micNamePart,
+                             "The micName should be %s and its %s"
+                             % (micNameCoord, micNamePart))
+
+        compare(83)
+        compare(228)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.1640, 0.5190)
+
+        print('\t --> Checking rejection particles for variance by screen protocol')
+        protScreen = self.newProtocol(XmippProtScreenParticles,
+                      autoParRejectionVar=XmippProtScreenParticles.REJ_VARIANCE)
+        protScreen.inputParticles.set(outputParts)
+        self.launchProtocol(protScreen)
+        self.assertIsNotNone(protScreen.outputParticles,
+                             "Output has not been produced by screen particles prot.")
+        self.assertEqual(len(protScreen.outputParticles), 303,
+                         "Output Set Of Particles must be 303, "
+                         "but %s found. Bad filtering in screen particles prot." %
+                         len(protScreen.outputParticles))
+
+
+        # test values summary values
+        GOLD_THRESHOLD = 1.133451234375
+        self.assertAlmostEqual(GOLD_THRESHOLD, protScreen.varThreshold.get(),
+                               msg="Variance threshold different than "
+                                   "the gold value (screen part. prot.)")
+
+        for x in protScreen.outputParticles:
+            self.assertLess(x._xmipp_scoreByVariance.get(), GOLD_THRESHOLD,
+                            "Particle with id (%s) has a varianceScore of %s, "
+                            "upper than supposed threshold %s. "
+                            "Bad filtering by screen particles prot."
+                            % (x.getObjId(), x._xmipp_scoreByVariance.get(),
+                               GOLD_THRESHOLD))
+
+
 class TestXmippEliminatingEmptyParticles(TestXmippBase):
     """This class check if the protocol for eliminating
      empty particles in Xmipp works properly."""
