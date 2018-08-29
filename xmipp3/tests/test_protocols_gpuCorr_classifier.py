@@ -22,7 +22,7 @@
 # ***************************************************************************/
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
-from pyworkflow.utils import importFromPlugin, pluginNotFound
+from pyworkflow.utils import importFromPlugin
 from pyworkflow.em.protocol import ProtImportAverages, ProtImportMicrographs
 from pyworkflow.em.protocol.protocol_sets import ProtSubSet
 

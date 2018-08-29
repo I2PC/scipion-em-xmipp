@@ -219,13 +219,15 @@ class XmippViewer(Viewer):
 
         elif issubclass(cls, SetOfParticles):
             fn = obj.getFileName()
-            labels = 'id enabled _index _filename _xmipp_zScore _xmipp_cumulativeSSNR _sampling _xmipp_scoreEmptiness '
-            labels += '_ctfModel._defocusU _ctfModel._defocusV _ctfModel._defocusAngle _transform._matrix'
+            labels = 'id enabled _index _filename _xmipp_zScore _xmipp_cumulativeSSNR ' \
+                     '_sampling _xmipp_scoreByVariance _xmipp_scoreEmptiness ' \
+                     '_ctfModel._defocusU _ctfModel._defocusV _ctfModel._defocusAngle ' \
+                     '_transform._matrix'
             self._views.append(ObjectView(self._project, obj.strId(), fn,
                                           viewParams={ORDER: labels,
                                                       VISIBLE: labels,
                                                       'sortby': '_xmipp_zScore asc',
-                                                      RENDER:'_filename'}))
+                                                      RENDER: '_filename'}))
 
         elif issubclass(cls, SetOfVolumes):
             fn = obj.getFileName()
