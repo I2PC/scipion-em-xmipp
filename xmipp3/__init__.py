@@ -89,8 +89,8 @@ class Plugin(pyworkflow.em.Plugin):
         scons = env.addPipModule('scons', '2.3.6', target='scons-2.3.6',
                                  default=True, ignoreDefaultDeps=True)
 
-        installCmd = "xmipp/xmipp config ; xmipp/xmipp check_config ;" \
-                     "xmipp/xmipp compile %d ; xmipp/xmipp install %s" \
+        installCmd = "src/xmipp/xmipp config ; src/xmipp/xmipp check_config ;" \
+                     "src/xmipp/xmipp compile %d ; src/xmipp/xmipp install %s" \
                       % (env.getProcessors(), cls.getHome())
 
         target = "%s/bin/xmipp_reconstruct_significant" % cls.getHome()
