@@ -33,7 +33,7 @@ from tempfile import mkstemp
 
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.em.data import Transform
-from pyworkflow.em.convert_header.CCP4.convert import Ccp4Header
+from pyworkflow.em.headers import Ccp4Header
 from pyworkflow.em.protocol import ProtImportVolumes
 from pyworkflow.em.symmetry import Icosahedron
 from pyworkflow.tests import BaseTest, setupTestProject
