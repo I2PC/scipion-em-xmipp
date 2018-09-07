@@ -70,7 +70,6 @@ CTF_DICT = OrderedDict([
        ("_defocusU", xmippLib.MDL_CTF_DEFOCUSU),
        ("_defocusV", xmippLib.MDL_CTF_DEFOCUSV),
        ("_defocusAngle", xmippLib.MDL_CTF_DEFOCUS_ANGLE),
-       # ("_phaseShift", xmippLib.MDL_CTF_PHASE_SHIFT),
        ("_resolution", xmippLib.MDL_CTF_CRIT_MAXFREQ),
        ("_fitQuality", xmippLib.MDL_CTF_CRIT_FITTINGSCORE)
        ])
@@ -622,6 +621,9 @@ def ctfModelToRow(ctfModel, ctfRow):
     if ctfModel.hasResolution():
         objectToRow(ctfModel, ctfRow, CTF_DICT,
                     extraLabels=CTF_EXTRA_LABELS)
+        if ctfModel.hasPhaseShift():
+            ctfRow.setValue(xmippLib.MDL_CTF_PHASE_SHIFT,
+                            ctfModel.getPhaseShift())
     else:
         objectToRow(ctfModel, ctfRow, CTF_DICT_NORESOLUTION,
                     extraLabels=CTF_EXTRA_LABELS)
