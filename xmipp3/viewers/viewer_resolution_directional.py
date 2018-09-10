@@ -253,7 +253,7 @@ class XmippMonoDirViewer(ProtocolViewer):
             val2 = md.getValue(MDL_RESOLUTION_FREQ2, idx)
 
             if val1>=val2:
-                max_Res = val1
+                max_Res = val1 +0.01
             else:
                 max_Res = val2
 
