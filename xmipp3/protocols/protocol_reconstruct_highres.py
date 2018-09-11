@@ -469,6 +469,11 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         # Compare both reconstructions
         self.evaluateReconstructions(0)
 
+        # Get the angles and shifts from images into this directory as if this directory
+        # had been the result of a global alignment
+        if self.alignmentMethod.get()==self.LOCAL_ALIGNMENT:
+            copyFile(self.imgsFn,join(fnDirCurrent,"angles.xmd"))
+
     def evaluateReconstructions(self,iteration):
         fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
         fnVol1=join(fnDirCurrent,"volume%02d.vol"%1)
@@ -1453,6 +1458,9 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             errors.append("Symmetrize within mask requires a mask")
         if not self.doContinue and not self.inputParticles.hasValue():
             errors.append("You must provide input particles")
+        if not self.doContinue and self.inputParticles.hasValue() and \
+           self.alignmentMethod.get()==self.LOCAL_ALIGNMENT and not self.inputParticles.get().hasAlignmentProj():
+            errors.append("If the first iteration is local, then the input particles must have an alignment")
         return errors    
     
     def _summary(self):
