@@ -56,6 +56,8 @@ OUTPUT_RESOLUTION_LOWEST_FILE = 'lowestResolution.vol'
 OUTPUT_RESOLUTION_HIGHEST_FILE = 'highestResolution.vol'
 OUTPUT_VARIANCE_FILE = 'resolution_variance.vol'
 OUTPUT_DOA_FILE = 'local_anisotropy.vol'
+OUTPUT_DOA1_FILE = 'doaMetric.vol'
+OUTPUT_DOA2_FILE = 'meanResdoa.vol'
 OUTPUT_SPH_FILE = 'sphericity.vol'
 OUTPUT_RADIAL_FILE = 'radial_resolution.vol'
 OUTPUT_AZIMUHTAL_FILE = 'azimuthal_resolution.vol'
@@ -185,6 +187,8 @@ class XmippMonoDirViewer(ProtocolViewer):
         return {'doShowOriginalVolumeSlices': self._showOriginalVolumeSlices,
                 'doShowDoASlices': self._showDoASlices,
                 'doShowDoAColorSlices': self._showDoAColorSlices,
+                'doShowDoAColorMean': self._showDoAColorMean,
+                'doShowDoAColorPol': self._showDoAColorPol,
                 'doShowRadialColorSlices': self._showRadialColorSlices,
                 'doShowAzimuthalColorSlices': self._showAzimuthalColorSlices,
                 'doShowHighestResolutionMap': self._showHighestResolutionColorSlices,
@@ -206,6 +210,12 @@ class XmippMonoDirViewer(ProtocolViewer):
  
     def _showDoAColorSlices(self, param=None):
         self._showColorSlices(OUTPUT_DOA_FILE, True, 'Degree of Anisotropy (DoA)', 0, 1)
+        
+    def _showDoAColorPol(self, param=None):
+        self._showColorSlices(OUTPUT_DOA1_FILE, True, 'New Anisotropy (DoA)', 0, 1)
+        
+    def _showDoAColorMean(self, param=None):
+        self._showColorSlices(OUTPUT_DOA2_FILE, True, 'Mean resolution (DoA)', -1, -1)
         
     def _showRadialColorSlices(self, param=None):
         self._showColorSlices(OUTPUT_RADIAL_FILE, False, 'Radial Resolution', -1, -1)
