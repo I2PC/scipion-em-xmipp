@@ -121,7 +121,7 @@ class XmippMonoDirViewer(ProtocolViewer):
         form.addParam('doShowOriginalVolumeSlices', LabelParam,
               label="Show original volume slices")
 
-        groupDoA = form.addGroup('DoA information')
+        groupDoA = form.addGroup('Anisotropy information')
         groupDoA.addParam('doShowDoASlices', LabelParam,
                       label="Show DoA slices")
         
@@ -221,7 +221,7 @@ class XmippMonoDirViewer(ProtocolViewer):
         self._showColorSlices(OUTPUT_DOA1_FILE, True, 'New Anisotropy (DoA)', 0, 1)
         
     def _showDoAColorMean(self, param=None):
-        self._showColorSlices(OUTPUT_DOA2_FILE, True, 'Mean resolution (DoA)', -1, -1)
+        self._showColorSlices(OUTPUT_DOA2_FILE, False, 'Mean resolution (DoA)', -1, -1)
         
     def _showRadialColorSlices(self, param=None):
         self._showColorSlices(OUTPUT_RADIAL_FILE, False, 'Radial Resolution', -1, -1)
@@ -243,6 +243,13 @@ class XmippMonoDirViewer(ProtocolViewer):
         
     def _show2DDistribution(self, param=None):
         self._createAngDist2D(self.protocol._getExtraPath('hist_prefdir.xmd'))
+        
+    def _createPlot(self, title, xTitle, yTitle, md, mdLabelX, mdLabelY, color='g', figure=None):        
+        xplotter = XmippPlotter(figure=figure)
+        xplotter.plot_title_fontsize = 11
+        xplotter.createSubPlot(title, xTitle, yTitle, 1, 1)
+        xplotter.plotMdFile(md, mdLabelX, mdLabelY, color)
+        return xplotter
         
     def _showOriginalVolumeSlices(self, param=None):
         if self.protocol.halfVolumes.get() is True:
