@@ -136,7 +136,7 @@ class XmippProtMonoDir(ProtAnalysis3D):
 
         self._insertFunctionStep('createOutputStep')
 
-        self._insertFunctionStep("createEllipsoid")
+#         self._insertFunctionStep("createEllipsoid")
         self._insertFunctionStep("createHistrogramStep")
         
         
@@ -272,14 +272,15 @@ class XmippProtMonoDir(ProtAnalysis3D):
         
     
     def createHistrogramStep(self):
-        self.createHistrogram(self._getExtraPath(OUTPUT_DOA_FILE), self._getExtraPath('hist_DoA.xmd'), True)
+        self.createHistrogram(self._getExtraPath(OUTPUT_DOA1_FILE), self._getExtraPath('hist_DoA.xmd'), True)
+        self.createHistrogram(self._getExtraPath(OUTPUT_DOA2_FILE), self._getExtraPath('hist_DoA2.xmd'), False)
         self.createHistrogram(self._getExtraPath(OUTPUT_RADIAL_FILE), self._getExtraPath('hist_radial.xmd'), False)
         self.createHistrogram(self._getExtraPath(OUTPUT_AZIMUTHAL_FILE), self._getExtraPath('hist_azimuthal.xmd'), False)
         
     def createOutputStep(self):
         
         volume=Volume()
-        volume.setFileName(self._getExtraPath(OUTPUT_DOA_FILE))
+        volume.setFileName(self._getExtraPath(OUTPUT_DOA1_FILE))
         volume.setSamplingRate(self.inputVolumes.get().getSamplingRate())
         self._defineOutputs(outputVolume_doa=volume)
         self._defineSourceRelation(self.inputVolumes, volume)

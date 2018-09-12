@@ -131,6 +131,12 @@ class XmippMonoDirViewer(ProtocolViewer):
         groupDoA.addParam('doShowDoAColorSlices', LabelParam,
                label="Show DoA colored slices")
         
+        groupDoA.addParam('doShowDoAColorPol', LabelParam,
+               label="Show DoA metric slices")
+        
+        groupDoA.addParam('doShowDoAColorMean', LabelParam,
+               label="Show DoA mean slices")
+        
         groupDoA.addParam('doShowChimera', LabelParam,
                        label="Show DoA map in Chimera")
         
