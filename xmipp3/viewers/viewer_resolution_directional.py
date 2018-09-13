@@ -275,6 +275,8 @@ class XmippMonoDirViewer(ProtocolViewer):
     def _plotCurve(self, a, fnDir, labelmd):
         print labelmd
         md = MetaData(fnDir)
+        resolution_inv = []
+        frc = []
         for objId in md:
             print objId
             resolution_inv.append(md.getValue(labelmd, objId))
