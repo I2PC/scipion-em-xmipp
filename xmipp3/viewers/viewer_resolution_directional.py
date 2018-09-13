@@ -282,7 +282,7 @@ class XmippMonoDirViewer(ProtocolViewer):
             radius.append(md.getValue(MDL_IDX, objId))
 #         resolution_inv = [md.getValue(labelmd, objId) for objId in md]
 #         frc = [md.getValue(MDL_IDX, objId) for objId in md]
-        self.maxFrc = max(frc)
+        self.maxFrc = max(radius)
         self.minInv = min(resolution)
         self.maxInv = max(resolution)
         a.plot(radius, resolution)
