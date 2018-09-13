@@ -259,7 +259,7 @@ class XmippMonoDirViewer(ProtocolViewer):
         
         for idx in range(4):
             fnDir = self.protocol._getExtraPath(OUTPUT_RADIAL_AVERAGES)
-            lablmd = str(labellist[idx])
+            lablmd = labellist[idx]
             if exists(fnDir):
                 print lablmd
                 legends.append(list[idx])
