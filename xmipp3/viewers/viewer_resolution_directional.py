@@ -277,7 +277,7 @@ class XmippMonoDirViewer(ProtocolViewer):
         md = MetaData(fnDir)
         for objId in md:
             print objId
-            resolution_inv.appedn(md.getValue(labelmd, objId))
+            resolution_inv.append(md.getValue(labelmd, objId))
             frc.append(md.getValue(MDL_IDX, objId))
 #         resolution_inv = [md.getValue(labelmd, objId) for objId in md]
 #         frc = [md.getValue(MDL_IDX, objId) for objId in md]
