@@ -40,6 +40,8 @@ from xmippLib import (MDL_XCOOR, MDL_YCOOR, MDL_ZCOOR,
 
 MONORES_METHOD_URL = 'http://github.com/I2PC/scipion/wiki/XmippProtMonoDir'
 
+
+OUTPUT_RADIAL_AVERAGES = 'Radial_averages.xmd'
 OUTPUT_RESOLUTION_FILE = 'mgresolution.vol'
 OUTPUT_RESOLUTION_FILE_CHIMERA = 'MG_Chimera_resolution.vol'
 OUTPUT_MASK_FILE = 'output_Mask.vol'
@@ -186,7 +188,7 @@ class XmippProtMonoDir(ProtAnalysis3D):
         params += ' --doa2 %s' % self._getExtraPath(OUTPUT_DOA2_FILE)
         params += ' --radialAzimuthalThresholds %s' % self._getExtraPath(OUTPUT_THRESHOLDS_FILE)
         params += ' --radialAvg %s' % self._getExtraPath(OUTPUT_MD_RADIAL_FILE)
-        params += ' --azimuthalAvg %s' % self._getExtraPath(OUTPUT_MD_AZIMUTHAL_FILE)
+        params += ' --azimuthalAvg %s' % self._getExtraPath(OUTPUT_RADIAL_AVERAGES)
         params += ' --prefMin %s' % self._getExtraPath(OUTPUT_MD_MINDIRECTIONAL_FILE)
         params += ' --zScoremap %s' % self._getExtraPath(OUTPUT_ZSCOREMAP_FILE)
         params += ' --threads %i' % self.numberOfThreads.get()

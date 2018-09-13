@@ -277,7 +277,6 @@ class XmippMonoDirViewer(ProtocolViewer):
         resolution = []
         radius = []
         for objId in md:
-            print objId
             resolution.append(md.getValue(labelmd, objId))
             radius.append(md.getValue(MDL_IDX, objId))
 #         resolution_inv = [md.getValue(labelmd, objId) for objId in md]
