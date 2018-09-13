@@ -255,7 +255,7 @@ class XmippMonoDirViewer(ProtocolViewer):
         legends = []
         
         list = ['LowestResolution', 'HighestResolution', 'RadialResolution', 'AzimuthalResolution', 'MonoRes']
-        labellist = ['MDL_VOLUME_SCORE1', 'MDL_VOLUME_SCORE2', 'MDL_VOLUME_SCORE3', 'MDL_VOLUME_SCORE4', 'MDL_AVG']
+        labellist = [MDL_VOLUME_SCORE1, MDL_VOLUME_SCORE2, MDL_VOLUME_SCORE3, MDL_VOLUME_SCORE4, MDL_AVG]
         
         for idx in range(4):
             fnDir = self.protocol._getExtraPath(OUTPUT_RADIAL_AVERAGES)
@@ -275,10 +275,8 @@ class XmippMonoDirViewer(ProtocolViewer):
     def _plotCurve(self, a, fnDir, labelmd):
         print labelmd
         md = MetaData(fnDir)
-        for objId in md:
-            print objId
-            resolution_inv = md.getValue(MDL_VOLUME_SCORE1, objId)
-            frc = md.getValue(MDL_IDX, objId)
+        resolution_inv =[md.getValue(labelmd, objId) for objId in md]
+        frc = [md.getValue(MDL_IDX, objId) for objId in md]
         self.maxFrc = max(frc)
         self.minInv = min(resolution_inv)
         self.maxInv = max(resolution_inv)
