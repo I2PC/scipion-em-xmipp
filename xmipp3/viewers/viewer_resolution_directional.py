@@ -50,7 +50,7 @@ CHIMERA_CMD_VARIANCE = 'chimera_Variance.cmd'
 CHIMERA_CMD_SPH = 'chimera_Sph.cmd'
 CHIMERA_ELLIP = 'ellipsoid.vol'
 
-
+OUTPUT_RADIAL_AVERAGES = 'Radial_averages.xmd'
 OUTPUT_RESOLUTION_MEAN = 'mean_volume.vol'
 OUTPUT_RESOLUTION_LOWEST_FILE = 'lowestResolution.vol'
 OUTPUT_RESOLUTION_HIGHEST_FILE = 'highestResolution.vol'
@@ -165,11 +165,15 @@ class XmippMonoDirViewer(ProtocolViewer):
         
         groupRadAzim.addParam('doShowDirectionsHistogram', LabelParam,
                label="Show directions histogram")
+        
         groupRadAzim.addParam('doShowDirectionsSphere', LabelParam,
                label="Show directions sphere")
         
         groupRadAzim.addParam('doshowZscoreMap', LabelParam,
-               label="Show zscore map")    
+               label="Show zscore map")
+        
+        groupRadAzim.addParam('doShowRadialAverages', LabelParam,
+               label="Show radial averages")
 
         group = form.addGroup('Choose a Color Map')
         group.addParam('colorMap', EnumParam, choices=COLOR_CHOICES.values(),
@@ -206,9 +210,9 @@ class XmippMonoDirViewer(ProtocolViewer):
                 'doShowDirectionsHistogram': self._plotHistogramDirections,
                 'doShowDirectionsSphere': self._show2DDistribution,
                 'doshowAnisotropyResolution': self._showAnisotropyResolution,
-                'doshowZscoreMap': self._showZscoreMap
-                
-                }
+                'doshowZscoreMap': self._showZscoreMap,
+                'doShowRadialAverages': self._showRadialAverages
+     }
 
     def _showDoASlices(self, param=None):
         cm = DataView(self.protocol._getExtraPath(OUTPUT_DOA_FILE))
@@ -244,6 +248,40 @@ class XmippMonoDirViewer(ProtocolViewer):
     def _show2DDistribution(self, param=None):
         self._createAngDist2D(self.protocol._getExtraPath('hist_prefdir.xmd'))
         
+    def _showRadialAverages(self, paramName=None):
+        xplotter = XmippPlotter(windowTitle="Resolution Radial Averages")
+        a = xplotter.createSubPlot("Radial Averages", "Radius (pixel)", "Frequency (A)")
+        legends = []
+        
+        list = ['LowestResolution', 'HighestResolution', 'RadialResolution', 'AzimuthalResolution', 'MonoRes']
+        labellist = ['MDL_VOLUME_SCORE1', 'MDL_VOLUME_SCORE2', 'MDL_VOLUME_SCORE3', 'MDL_VOLUME_SCORE4', 'MDL_AVG']
+        
+        for idx in range(4):
+            fnDir = self.protocol._getExtraPath(OUTPUT_RADIAL_AVERAGES)
+            lablmd = labellist[idx]
+            if exists(fnDir):
+                legends.append(list[idx])
+                self._plotCurve(a, fnDir, lablmd)
+                xplotter.showLegend(legends)
+#         a.plot([self.minInv, self.maxInv],[self.resolutionThreshold.get(), self.resolutionThreshold.get()], color='black', linestyle='--')
+        a.grid(True)
+        views = []
+        views.append(xplotter)
+        return views
+    
+
+    def _plotCurve(self, a, fnDir, labelmd):
+        md = MetaData(fnDir)
+        resolution_inv = [md.getValue(labelmd, f) for f in md]
+        frc = [md.getValue(MDL_INDEX, f) for f in md]
+        self.maxFrc = max(frc)
+        self.minInv = min(resolution_inv)
+        self.maxInv = max(resolution_inv)
+        a.plot(resolution_inv, frc)
+#         a.xaxis.set_major_formatter(self._plotFormatter)
+#         a.set_ylim([-0.1, 1.1])
+
+
     def _createPlot(self, title, xTitle, yTitle, md, mdLabelX, mdLabelY, color='g', figure=None):        
         xplotter = XmippPlotter(figure=figure)
         xplotter.plot_title_fontsize = 11
