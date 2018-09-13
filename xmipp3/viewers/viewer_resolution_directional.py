@@ -39,7 +39,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 import matplotlib.colors as mcolors
 from pyworkflow.utils import getExt, removeExt
-from os.path import abspath
+from os.path import abspath, exists
 from collections import OrderedDict
 
 OUTPUT_RESOLUTION_FILE_CHIMERA = 'MG_Chimera_resolution.vol'
@@ -273,7 +273,7 @@ class XmippMonoDirViewer(ProtocolViewer):
     def _plotCurve(self, a, fnDir, labelmd):
         md = MetaData(fnDir)
         resolution_inv = [md.getValue(labelmd, f) for f in md]
-        frc = [md.getValue(MDL_INDEX, f) for f in md]
+        frc = [md.getValue(MDL_IDX, f) for f in md]
         self.maxFrc = max(frc)
         self.minInv = min(resolution_inv)
         self.maxInv = max(resolution_inv)
