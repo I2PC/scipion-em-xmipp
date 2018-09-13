@@ -258,7 +258,7 @@ class XmippMonoDirViewer(ProtocolViewer):
         
         for idx in range(4):
             fnDir = self.protocol._getExtraPath(OUTPUT_RADIAL_AVERAGES)
-            lablmd = labellist[idx]
+            lablmd = 'xmippLib.'+str(labellist[idx])
             if exists(fnDir):
                 print lablmd
                 legends.append(list[idx])
@@ -272,10 +272,11 @@ class XmippMonoDirViewer(ProtocolViewer):
     
 
     def _plotCurve(self, a, fnDir, labelmd):
+        print labelmd
         md = MetaData(fnDir)
         for f in md:
             resolution_inv = md.getValue(labelmd, f)
-            frc = md.getValue('MDL_IDX', f)
+            frc = md.getValue(xmippLib.MDL_IDX, f)
         self.maxFrc = max(frc)
         self.minInv = min(resolution_inv)
         self.maxInv = max(resolution_inv)
