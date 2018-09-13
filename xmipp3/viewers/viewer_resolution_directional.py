@@ -260,6 +260,7 @@ class XmippMonoDirViewer(ProtocolViewer):
             fnDir = self.protocol._getExtraPath(OUTPUT_RADIAL_AVERAGES)
             lablmd = labellist[idx]
             if exists(fnDir):
+                print lablmd
                 legends.append(list[idx])
                 self._plotCurve(a, fnDir, lablmd)
                 xplotter.showLegend(legends)
