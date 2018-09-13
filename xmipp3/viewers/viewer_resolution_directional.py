@@ -31,7 +31,8 @@ from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 from pyworkflow.em.viewer import ChimeraView, DataView
 from xmipp3.protocols.protocol_resolution_directional import XmippProtMonoDir
 from pyworkflow.em.metadata import MetaData
-from xmippLib import MDL_X, MDL_COUNT, MDL_RESOLUTION_FREQ, MDL_RESOLUTION_FREQ2, MDL_COST, MDL_RESOLUTION_SSNR
+from xmippLib import (MDL_X, MDL_COUNT, MDL_RESOLUTION_FREQ, MDL_RESOLUTION_FREQ2, MDL_COST, MDL_RESOLUTION_SSNR,
+                      MDL_VOLUME_SCORE1, MDL_VOLUME_SCORE2, MDL_VOLUME_SCORE3, MDL_VOLUME_SCORE4, MDL_AVG, MDL_IDX) 
 from pyworkflow.em import ImageHandler
 from plotter import XmippPlotter
 import numpy as np
@@ -258,7 +259,7 @@ class XmippMonoDirViewer(ProtocolViewer):
         
         for idx in range(4):
             fnDir = self.protocol._getExtraPath(OUTPUT_RADIAL_AVERAGES)
-            lablmd = 'xmippLib.'+str(labellist[idx])
+            lablmd = str(labellist[idx])
             if exists(fnDir):
                 print lablmd
                 legends.append(list[idx])
@@ -275,8 +276,9 @@ class XmippMonoDirViewer(ProtocolViewer):
         print labelmd
         md = MetaData(fnDir)
         for f in md:
+            print f
             resolution_inv = md.getValue(labelmd, f)
-            frc = md.getValue(xmippLib.MDL_IDX, f)
+            frc = md.getValue(MDL_IDX, f)
         self.maxFrc = max(frc)
         self.minInv = min(resolution_inv)
         self.maxInv = max(resolution_inv)
