@@ -104,6 +104,10 @@ class XmippProtMonoDir(ProtAnalysis3D):
                       help='The resolution will be sought in steps of this values, '
                       'with step = 0.3, then 1A, 1.3A, 1.6A,...')
         
+        group.addParam('fast', BooleanParam, default=False, 
+                      label="Fast Computation",
+                      help='Fast computation is recommended for large volumes.')
+        
         group.addParam('isPremasked', BooleanParam, default=False,
                       label="Is the original premasked?",
                       help='Sometimes the original volume is masked inside a spherical mask. In this case'
@@ -194,6 +198,8 @@ class XmippProtMonoDir(ProtAnalysis3D):
         params += ' --threads %i' % self.numberOfThreads.get()
         params += ' --monores %s' % self._getExtraPath(OUTPUT_RESOLUTION_FILE)
         params += ' --aniRes %s' % self._getExtraPath('anires.xmd')
+        if (self.fast.get() is True):
+            params += ' --fast'
 
         self.runJob('xmipp_resolution_directional', params)
         
