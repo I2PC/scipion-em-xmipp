@@ -123,14 +123,9 @@ class XmippMonoDirViewer(ProtocolViewer):
               label="Show original volume slices")
 
         groupDoA = form.addGroup('Anisotropy information')
-        groupDoA.addParam('doShowDoASlices', LabelParam,
-                      label="Show DoA slices")
-        
+       
         groupDoA.addParam('doShowDoAHistogram', LabelParam,
               label="Show DoA histogram")
-        
-        groupDoA.addParam('doShowDoAColorSlices', LabelParam,
-               label="Show DoA colored slices")
         
         groupDoA.addParam('doShowDoAColorPol', LabelParam,
                label="Show DoA metric slices")
@@ -196,8 +191,6 @@ class XmippMonoDirViewer(ProtocolViewer):
         
     def _getVisualizeDict(self):
         return {'doShowOriginalVolumeSlices': self._showOriginalVolumeSlices,
-                'doShowDoASlices': self._showDoASlices,
-                'doShowDoAColorSlices': self._showDoAColorSlices,
                 'doShowDoAColorMean': self._showDoAColorMean,
                 'doShowDoAColorPol': self._showDoAColorPol,
                 'doShowRadialColorSlices': self._showRadialColorSlices,
@@ -219,9 +212,6 @@ class XmippMonoDirViewer(ProtocolViewer):
         cm = DataView(self.protocol._getExtraPath(OUTPUT_DOA_FILE))
         return [cm]  
  
-    def _showDoAColorSlices(self, param=None):
-        self._showColorSlices(OUTPUT_DOA_FILE, True, 'Degree of Anisotropy (DoA)', 0, 1)
-        
     def _showDoAColorPol(self, param=None):
         self._showColorSlices(OUTPUT_DOA1_FILE, True, 'New Anisotropy (DoA)', 0, 1)
         
@@ -488,7 +478,6 @@ class XmippMonoDirViewer(ProtocolViewer):
 
         fhCmd.close()
 
-# 
 #     def plotAnisotropyResolution(self, path):        
 #         from xmippLib import XmippPlotter as Xmplt
 #  

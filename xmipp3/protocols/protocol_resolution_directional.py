@@ -177,27 +177,21 @@ class XmippProtMonoDir(ProtAnalysis3D):
         params += ' --mask %s' % self.maskFn
         params += ' -o %s' % self._getExtraPath(OUTPUT_RESOLUTION_FILE)
         params += ' --sampling_rate %f' % self.inputVolumes.get().getSamplingRate()
-        params += ' --angular_sampling %f' % 15
         params += ' --volumeRadius %f' % xdim
         params += ' --significance %f' % self.significance.get()
         params += ' --resStep %f' % self.resstep.get()
-        params += ' --doa_vol %s' % self._getExtraPath(OUTPUT_DOA_FILE)
-        params += ' --directions %s' % self._getExtraPath(OUTPUT_DIRECTIONS_FILE)
         params += ' --radialRes %s' % self._getExtraPath(OUTPUT_RADIAL_FILE)
         params += ' --azimuthalRes %s' % self._getExtraPath(OUTPUT_AZIMUTHAL_FILE)
-        params += ' --resolutionAvg %s' % self._getExtraPath(OUTPUT_MEANRES_FILE)
         params += ' --highestResolutionVol %s' % self._getExtraPath(OUTPUT_HIGHESTRES_FILE)
         params += ' --lowestResolutionVol %s' % self._getExtraPath(OUTPUT_LOWESTRES_FILE)
         params += ' --doa1 %s' % self._getExtraPath(OUTPUT_DOA1_FILE)
         params += ' --doa2 %s' % self._getExtraPath(OUTPUT_DOA2_FILE)
         params += ' --radialAzimuthalThresholds %s' % self._getExtraPath(OUTPUT_THRESHOLDS_FILE)
-        params += ' --radialAvg %s' % self._getExtraPath(OUTPUT_MD_RADIAL_FILE)
-        params += ' --azimuthalAvg %s' % self._getExtraPath(OUTPUT_RADIAL_AVERAGES)
+        params += ' --radialAvG %s' % self._getExtraPath(OUTPUT_RADIAL_AVERAGES)
         params += ' --prefMin %s' % self._getExtraPath(OUTPUT_MD_MINDIRECTIONAL_FILE)
         params += ' --zScoremap %s' % self._getExtraPath(OUTPUT_ZSCOREMAP_FILE)
         params += ' --threads %i' % self.numberOfThreads.get()
         params += ' --monores %s' % self._getExtraPath(OUTPUT_RESOLUTION_FILE)
-        params += ' --aniRes %s' % self._getExtraPath('anires.xmd')
         if (self.fast.get() is True):
             params += ' --fast'
 
