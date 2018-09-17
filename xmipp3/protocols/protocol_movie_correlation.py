@@ -150,7 +150,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
             args += "--outside wrap"
         elif self.outsideMode == self.OUTSIDE_AVG:
             args += "--outside avg"
-        elif self.outsideMode == self.OUTSIDE_AVG:
+        elif self.outsideMode == self.OUTSIDE_VALUE:
             args += "--outside value %f" % self.outsideValue
         
         args += ' --frameRange %d %d ' % (0, aN-a0)
