@@ -177,9 +177,8 @@ class TestMovieResize(BaseTest):
         protMovieResize = self._updateProtocol(protMovieResize)
         protMovieResize2 = self._updateProtocol(protMovieResize2)
         protMovieResize3 = self._updateProtocol(protMovieResize3)
-        if protMovieResize3.outputMovies.getSize() != \
-                protMovieResize3.outputMovies.getSize():
-            self.assertTrue(False)
+        self.assertEqual(protImportMovsStr.outputMovies.getSize(),
+                                 protMovieResize3.outputMovies.getSize())
 
         xOrig, yOrig, zOrig = protImportMovsStr.outputMovies.getDim()
         samplingRateOrig = protImportMovsStr.outputMovies.getSamplingRate()
