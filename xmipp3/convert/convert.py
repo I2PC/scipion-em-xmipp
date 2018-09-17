@@ -1252,43 +1252,6 @@ def readSetOfClassesVol(classesVolSet, filename,
     __readSetOfClasses(SetOfVolumes, readSetOfVolumes,
                        classesVolSet, filename, classesBlock, **kwargs)
 
-    return
-
-    # FIXME: Delete from here
-
-    blocks = xmippLib.getBlocksInMetaDataFile(filename)
-    classesMd = xmippLib.MetaData('%s@%s' % (classesBlock, filename))
-
-    # Provide a hook to be used if something is needed to be
-    # done for special cases before converting row to class
-    preprocessClass = kwargs.get('preprocessClass', None)
-    postprocessClass = kwargs.get('postprocessClass', None)
-
-    for objId in classesMd:
-        classVol = classesVolSet.ITEM_TYPE()
-        classRow = rowFromMd(classesMd, objId)
-        classVol = rowToClass(classRow, classVol)
-        # FIXME: the following is only valid for SetOfParticles
-        SetOfParticles.copyInfo(classVol, classesVolSet.getImages())
-
-        if preprocessClass:
-            preprocessClass(classVol, classRow)
-
-        classesVolSet.append(classVol)
-        ref = classVol.getObjId()
-        b = 'class%06d_images' % ref
-
-        if b in blocks:
-            readSetFunc = _readSetFunc()
-            readSetOfVolumes('%s@%s' % (b, filename), classVol, **kwargs)
-
-        if postprocessClass:
-            postprocessClass(classVol, classRow)
-
-        # Update with new properties of classItem such as _size
-        classesVolSet.update(classVol)
-
-
 def writeSetOfMovies(moviesSet, filename, moviesBlock='movies'):
     """ This function will write a SetOfMovies as Xmipp metadata.
     Params:
@@ -1307,56 +1270,6 @@ def writeSetOfMovies(moviesSet, filename, moviesBlock='movies'):
             micrographToRow(mic, micRow)
             micRow.writeToMd(micrographsMd, micrographsMd.addObject())
         micrographsMd.write(micrographsFn, xmippLib.MD_APPEND)
-
-
-def createXmippInputImages(prot, imgSet, imagesFn=None):
-    raise Exception('createXmippInputImages is DEPRECATED!!!')
-    if prot is not None:
-        imgsFn = prot._getPath(imagesFn or 'input_images.xmd')
-
-    writeSetOfParticles(imgSet, imgsFn)
-    return imgsFn
-
-
-def createXmippInputMicrographs(prot, micSet, micsFn=None):
-    raise Exception('createXmippInputMicrographs is DEPRECATED!!!')
-    if prot is not None:
-        micsFn = prot._getPath('input_micrographs.xmd')
-
-    writeSetOfMicrographs(micSet, micsFn)
-    return micsFn
-
-
-def createXmippInputVolumes(prot, volSet, volsFn=None):
-    raise Exception('createXmippInputVolumes is DEPRECATED!!!')
-    if volsFn is None:
-        volsFn = prot._getPath('input_volumes.xmd')
-
-    writeSetOfVolumes(volSet, volsFn)
-    return volsFn
-
-
-def createXmippInputClasses2D(prot, classSet, classFn=None):
-    raise Exception('createXmippInputClasses2D is DEPRECATED!!!')
-    if prot is not None and classFn is None:
-        classFn = prot._getPath('input_classes.xmd')
-
-    writeSetOfClasses2D(classSet, classFn)
-    return classFn
-
-
-def createXmippInputCTF(prot, ctfSet, ctfFn=None):
-    raise Exception('createXmippInputCTF is DEPRECATED!!!')
-    ctfMd = getattr(ctfSet, '_xmippMd', None)
-    if ctfMd is None:
-        if prot is not None:
-            ctfFn = prot._getPath('input_ctfs.xmd')
-
-        writeSetOfCTFs(ctfSet, ctfFn)
-    else:
-        ctfFn = ctfMd.get()
-    return ctfFn
-
 
 def geometryFromMatrix(matrix, inverseTransform):
     from pyworkflow.em.transformations import \
