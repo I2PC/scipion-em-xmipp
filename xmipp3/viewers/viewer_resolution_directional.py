@@ -244,10 +244,10 @@ class XmippMonoDirViewer(ProtocolViewer):
         a = xplotter.createSubPlot("Radial Averages", "Radius (pixel)", "Frequency (A)")
         legends = []
         
-        list = ['LowestResolution', 'HighestResolution', 'RadialResolution', 'AzimuthalResolution', 'MonoRes']
+        list = ['RadialResolution', 'AzimuthalResolution', 'HighestResolution', 'LowestResolution', 'MonoRes']
         labellist = [MDL_VOLUME_SCORE1, MDL_VOLUME_SCORE2, MDL_VOLUME_SCORE3, MDL_VOLUME_SCORE4, MDL_AVG]
         
-        for idx in range(4):
+        for idx in range(5):
             fnDir = self.protocol._getExtraPath(OUTPUT_RADIAL_AVERAGES)
             lablmd = labellist[idx]
             if exists(fnDir):
