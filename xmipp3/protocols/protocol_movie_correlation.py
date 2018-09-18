@@ -108,8 +108,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
                       help='How to fill the borders when shifting the frames')
 
         form.addParam('benchmarkFile', params.FileParam,
-                      label='Benchmark file',
-                      condition="useGpu",
+                      label='GPU Benchmark file',
                       expertLevel=cons.LEVEL_ADVANCED,
                       help='Select a file where protocol can save some info about your \
                       card. First run will be a bit longer, but subsequent calls with similar \
