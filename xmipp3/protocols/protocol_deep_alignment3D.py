@@ -69,7 +69,7 @@ class XmippProtDeepAlignment3D(ProtRefine3D):
         self.imgsFn = self._getExtraPath('input_imgs.xmd')
         
         self._insertFunctionStep("convertStep")
-        #self._insertFunctionStep("align")
+        self._insertFunctionStep("align")
         #self._insertFunctionStep("createOutputStep")
 
     #--------------------------- STEPS functions ---------------------------------------------------
@@ -111,7 +111,7 @@ _projRotNoise   '0'
 _projTiltRange    '0 180 1'
 _projTiltRandomness   random 
 _projTiltNoise   '0'
-_projPsiRange    '0 360 1'
+_projPsiRange    '0 0 1'
 _projPsiRandomness   random 
 _projPsiNoise   '0'
 _noisePixelLevel   '0'
@@ -124,6 +124,11 @@ _noiseCoord   '0'
 
         fnProjs = self._getExtraPath("projections.stk")
         self.runJob("xmipp_phantom_project","-i %s -o %s --method fourier 1 0.5 --params %s"%(fnVol,fnProjs,fnParams),numberOfMpi=1)
+
+    def align(self):
+        maxShift=6
+        maxPsi=180
+        self.runJob("xmipp_angular_deepalign","%s %f %f psi %s"%(self._getExtraPath("projections.xmd"),maxShift,maxPsi,self._getExtraPath()),numberOfMpi=1)
     
     def createOutputStep(self):
         fnImgs = self._getExtraPath('images.stk')
