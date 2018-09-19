@@ -25,9 +25,10 @@
 # *
 # **************************************************************************
 """
-This module contains utils functions to operate over xmipp metadata files.
+This module contains utils functions for Xmipp protocols
 """
 
+from os.path import join
 import xmippLib
 from .base import XmippMdRow
 
@@ -74,3 +75,14 @@ def iterMdRows(md):
     for objId in md:
         row.readFromMd(md, objId)
         yield row
+
+def readInfoField(fnDir,block,label):
+    mdInfo = xmippLib.MetaData("%s@%s"%(block,join(fnDir,"iterInfo.xmd")))
+    return mdInfo.getValue(label,mdInfo.firstObject())
+
+def writeInfoField(fnDir,block,label, value):
+    mdInfo = xmippLib.MetaData()
+    objId=mdInfo.addObject()
+    mdInfo.setValue(label,value,objId)
+    mdInfo.write("%s@%s"%(block,join(fnDir,"iterInfo.xmd")),xmippLib.MD_APPEND)
+    
