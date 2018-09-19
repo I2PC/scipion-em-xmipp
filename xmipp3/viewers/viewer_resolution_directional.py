@@ -274,7 +274,7 @@ class XmippMonoDirViewer(ProtocolViewer):
         self.maxFrc = max(radius)
         self.minInv = min(resolution)
         self.maxInv = max(resolution)
-        a.plot(radius, resolution)
+        a.plot(radius, resolution, marker='x')
 #         a.xaxis.set_major_formatter(self._plotFormatter)
 #         a.set_ylim([-0.1, 1.1])
 
