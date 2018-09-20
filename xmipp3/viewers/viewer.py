@@ -62,6 +62,7 @@ from xmipp3.protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
 from xmipp3.protocols.protocol_multireference_alignability import XmippProtMultiRefAlignability
 from xmipp3.protocols.protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from xmipp3.protocols.protocol_movie_gain import XmippProtMovieGain
+from xmipp3.protocols.protocol_deep_denoising import XmippProtDeepDenoising
 
 
 class XmippViewer(Viewer):
@@ -96,7 +97,8 @@ class XmippViewer(Viewer):
                 XmippProtValidateNonTilt,
                 XmippProtAssignmentTiltPair,
                 XmippProtMultiRefAlignability,
-                XmippProtMovieGain
+                XmippProtMovieGain,
+                XmippProtDeepDenoising
                 ]
 
     def __init__(self, **kwargs):
@@ -309,6 +311,16 @@ class XmippViewer(Viewer):
                     xplotter.createSubPlot("Variance Histogram", "Variance", "Number of particles")
                     xplotter.plotMd(md, False, mdLabelY=xmippLib.MDL_SCORE_BY_VAR, nbins=100)
                     self._views.append(xplotter)
+
+        elif issubclass(cls, XmippProtDeepDenoising):
+            fn = obj.outputParticles.getFileName()
+            self._views.append(ObjectView(self._project, obj.outputParticles.strId(),
+                                          fn, viewParams={VISIBLE:  'enabled id _filename '
+                                                  '_xmipp_corrDenoiseProjection '
+                                                  '_xmipp_corrDenoiseNoisy '
+                                                  '_xmipp_imageOriginal _xmipp_imageRef',
+                                        SORT_BY: 'id',
+                                        MODE: MODE_MD}))
 
         elif issubclass(cls, XmippProtMovieGain):
             self._visualize(obj.outputMovies)

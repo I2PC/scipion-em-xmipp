@@ -101,4 +101,6 @@ from .protocol_enrich import XmippProtEnrich
 from .protocol_write_testC import XmippProtWriteTestC
 from .protocol_write_testP import XmippProtWriteTestP
 from .protocol_ctf_selection import XmippProtCTFSelection
+from .protocol_deep_denoising import XmippProtDeepDenoising
+from .protocol_generate_reprojections import XmippProtGenerateReprojections
 
