@@ -50,6 +50,8 @@ METADATA_MASK_FILE = 'metadataresolutions'
 FN_METADATA_HISTOGRAM = 'mdhist'
 BINARY_MASK = 'binarymask'
 FN_GAUSSIAN_MAP = 'gaussianfilter'
+FSC_MAP = 'FSCmap'
+MD_NOISE_INFO = 'mdNoiseInfo'
 
 
 class XmippProtMonoRes(ProtAnalysis3D):
@@ -131,6 +133,16 @@ class XmippProtMonoRes(ProtAnalysis3D):
                       help='Sometimes the original volume is masked inside '
                       'a spherical mask. In this case please select yes')
         
+        group.addParam('isfullymasked', BooleanParam, default=False,
+                      label="Is the original premasked?",
+                      help='Sometimes the original volume is fully masked and'
+                      'it lacks of noise.')
+        
+        group.addParam('FSC', FloatParam, default=-1,
+                      label="FSC value (A)",
+                      condition = 'isfullymasked', 
+                      help='provide the FSC value')
+        
         form.addParam('noiseonlyinhalves', BooleanParam, expertLevel=LEVEL_ADVANCED,
                       default=True,
                       label="Use noise outside the mask?", 
@@ -184,9 +196,12 @@ class XmippProtMonoRes(ProtAnalysis3D):
                  METADATA_MASK_FILE: self._getExtraPath('mask_data.xmd'),
                  FN_METADATA_HISTOGRAM: self._getExtraPath('hist.xmd'),
                  BINARY_MASK: self._getExtraPath('binarized_mask.vol'),
-                 FN_GAUSSIAN_MAP: self._getExtraPath('gaussianfilted.vol')
+                 FN_GAUSSIAN_MAP: self._getExtraPath('gaussianfilted.vol'),
+                 FSC_MAP: self._getExtraPath('FSC_map.vol'),
+                 MD_NOISE_INFO :self._getExtraPath('mdnoiseInfo.xmd')
                  }
         self._updateFilenamesDict(myDict)
+
 
     def _insertAllSteps(self):
             # Convert input into xmipp Metadata format
@@ -195,6 +210,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
         self._insertFunctionStep('resolutionMonogenicSignalStep')
         self._insertFunctionStep('createOutputStep')
         self._insertFunctionStep("createHistrogram")
+
 
     def convertInputStep(self):
         """ Read the input volume.
@@ -257,8 +273,8 @@ class XmippProtMonoRes(ProtAnalysis3D):
         params += ' -o %s' % self._getFileName(FN_GAUSSIAN_MAP)
         setsize = 0.02*xdim
         params += ' --fourier real_gaussian %f' % (setsize)
-     
         self.runJob('xmipp_transform_filter', params)
+        
         img = ImageHandler().read(self._getFileName(FN_GAUSSIAN_MAP))
         imgData = img.getData()
         max_val = np.amax(imgData)*0.05
@@ -267,10 +283,32 @@ class XmippProtMonoRes(ProtAnalysis3D):
         params += ' --select below %f' % max_val
         params += ' --substitute binarize'
         params += ' -o %s' % self._getFileName(BINARY_MASK)
-     
         self.runJob('xmipp_transform_threshold', params)
         
         self.maskFn = self._getFileName(BINARY_MASK)
+
+
+    def ifFSC(self):
+        
+        params = ' -i %s' % self.vol0Fn
+        params += ' -o %s' % self._getFileName(FSC_MAP)
+        params += ' --fourier high_pass %f 0.01' % (self.FSC.get())
+        params += ' --sampling %f' % (self.inputVolumes.get().getSamplingRate())
+        self.runJob('xmipp_transform_filter', params)
+        
+        params = ' -i %s' % self._getFileName(FSC_MAP)
+        params += ' --mask binary_file %s' % self._getFileName(BINARY_MASK)
+        params += ' -o %s' % self._getFileName(MD_NOISE_INFO)
+        self.runJob('xmipp_image_statistics', params)
+     
+        mData = md.MetaData(self._getFileName(MD_NOISE_INFO))
+        std_noise = float(mData.getValue(md.MDL_STDDEV, mData.firstObject()))
+         
+     
+        params = ' -i %s' % self.vol0Fn
+        params += ' --type gaussian %f 0' % std_noise
+        params += ' -o %s' % self._getFileName(FSC_MAP)
+        self.runJob('xmipp_transform_add_noise', params)
 
     def maskRadius(self, halfmaps, premaskedmap):
         if halfmaps:
@@ -294,6 +332,8 @@ class XmippProtMonoRes(ProtAnalysis3D):
                 xdim, _ydim, _zdim = self.inputVolumes.get().getDim()
                 xdim = xdim*0.5
         return xdim
+    
+    
     
     def resolutionMonogenicAuto(self):
         freq_step = 1
@@ -342,6 +382,9 @@ class XmippProtMonoRes(ProtAnalysis3D):
         else:
             freq_step = 0.25
   
+        if (self.isfullymasked.get() is True):
+            self.ifFSC()
+            
         xdim = self.maskRadius(self.halfVolumes, self.isPremasked)
 
         if self.halfVolumes:
@@ -353,7 +396,10 @@ class XmippProtMonoRes(ProtAnalysis3D):
             if (self.noiseonlyinhalves is False):
                 params += ' --noiseonlyinhalves'
         else:
-            params = ' --vol %s' % self.vol0Fn
+            if (self.isfullymasked.get() is True):
+                params = ' --vol %s' % self._getFileName(FSC_MAP)
+            else:
+                params = ' --vol %s' % self.vol0Fn
             params += ' --mask %s' % self._getFileName(BINARY_MASK)
             params += ' --sampling_rate %f' % self.inputVolumes.get().getSamplingRate()
 
