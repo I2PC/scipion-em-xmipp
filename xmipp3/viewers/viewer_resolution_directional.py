@@ -32,11 +32,11 @@ from pyworkflow.em.viewer import ChimeraView, DataView
 from xmipp3.protocols.protocol_resolution_directional import XmippProtMonoDir
 from pyworkflow.em.metadata import MetaData
 from xmippLib import (MDL_X, MDL_COUNT, MDL_RESOLUTION_FREQ, MDL_RESOLUTION_FREQ2, MDL_COST, MDL_RESOLUTION_SSNR,
-                      MDL_VOLUME_SCORE1, MDL_VOLUME_SCORE2, MDL_VOLUME_SCORE3, MDL_VOLUME_SCORE4, MDL_AVG, MDL_IDX) 
+                      MDL_VOLUME_SCORE1, MDL_VOLUME_SCORE2, MDL_VOLUME_SCORE3, MDL_VOLUME_SCORE4, MDL_AVG, MDL_IDX, MDL_WEIGHT) 
 from pyworkflow.em import ImageHandler
-from plotter import XmippPlotter
 import numpy as np
 import matplotlib.pyplot as plt
+from math import sqrt
 from matplotlib import cm
 import matplotlib.colors as mcolors
 from pyworkflow.utils import getExt, removeExt
@@ -339,7 +339,17 @@ class XmippMonoDirViewer(ProtocolViewer):
         
     def _createAngDist2D(self, path):
         view = XmippPlotter(x=1, y=1, mainTitle="Highest Resolution per Direction", windowTitle="Angular distribution")
-        return view.plotAngularDistributionFromMd(path, 'directional resolution distribution')
+        
+        #md = MetaData(path)
+        #wmax=-1
+        #for objId in md:
+        #    w=md.getValue(MDL_WEIGHT,objId)
+        #    w=sqrt(w)
+        #    wmax=max(wmax,w)
+        #    md.setValue(MDL_WEIGHT,w,objId)
+        #md.write(path)
+        #print(w)
+        return view.plotAngularDistributionFromMd(path, 'directional resolution distribution',  min_w=0)
 
     def _plotHistogram(self, fnhist, titlename, xname):
         md = MetaData()
