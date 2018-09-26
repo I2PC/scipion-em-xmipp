@@ -6,6 +6,7 @@ from keras.models import Model, Sequential, load_model
 from keras.optimizers import Adam
 from keras.layers import Input, Conv2D, UpSampling2D, AveragePooling2D, \
     BatchNormalization, LeakyReLU, Flatten, Activation, Dense
+from keras import backend as K
 import xmippLib
 from pyworkflow.em.data import Image
 from skimage.transform import rotate, AffineTransform, warp
@@ -20,6 +21,13 @@ import os
 
 ITER_TRAIN = 0
 ITER_PREDICT = 1
+
+
+def dice_coef(y_true, y_pred):
+    intersection = K.sum(y_true * y_pred, axis=[1, 2, 3])
+    union = K.sum(y_true, axis=[1, 2, 3]) + K.sum(y_pred, axis=[1, 2, 3])
+    return K.mean((2. * intersection + 1) / (union + 1), axis=0)
+
 
 class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
@@ -60,7 +68,19 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
         form.addParam('inputParticles', params.PointerParam,
                       pointerClass='SetOfParticles', important=True,
-                      label='Input particles', help='input noisy particles')
+                      label='Input noisy particles', help='Input noisy '
+                      'particles from the protocol generate reprojections if '
+                      'you are training or from any other protocol if you are '
+                      'predicting')
+
+        if 'CUDA' in os.environ and not os.environ['CUDA'] == "False":
+
+            form.addParam('gpuToUse', params.IntParam, default='0',
+                          label='Which GPU to use:',
+                          help='Currently just one GPU will be use, by '
+                               'default GPU number 0 You can override the default '
+                               'allocation by providing other GPU number, p.e. 2'
+                               '\nif -1 no gpu but all cpu cores will be used')
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -116,7 +136,8 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
         if self.model.get() == ITER_PREDICT:
             if self.modelPretrain:
-                model = load_model(self.ownModel.get())
+                model = load_model(self.ownModel.get(), custom_objects={
+                    'dice_coef': dice_coef})
             else:
                 model = load_model(self._getPath('PretrainModel.h5'))
         for num in range(1,dimMetadata,self.groupParticles):
@@ -215,8 +236,9 @@ class GAN():
 
         # Build and compile the generator
         self.generator = self.build_generator()
-        self.generator.compile(loss='mean_squared_error',
+        self.generator.compile(loss=dice_coef,
                                optimizer=optimizer)
+        'mean_squared_error'
 
         # The generator takes noise as input and generated imgs
         z = Input(shape=self.img_shape)  # Input(shape=(self.shape,))
@@ -338,7 +360,7 @@ class GAN():
 
     def addNoise(self, image):
 
-        levelsNoise = np.arange(0.5, 3.5, 0.1)
+        levelsNoise = np.arange(0.5, 2.5, 0.1)
         k = np.random.randint(0, len(levelsNoise))
         noise = np.random.normal(0.0, levelsNoise[k], image.shape)
         imageNoise = image + noise
@@ -380,11 +402,7 @@ class GAN():
 
         input_img = Input(shape=self.img_shape,
                           name='input')
-        x = Conv2D(32, (21, 21), padding='same')(input_img)
-        x = BatchNormalization(momentum=0.8)(x)
-        x = LeakyReLU(alpha=0.2)(x)
-        x = AveragePooling2D((2, 2), padding='same')(x)
-        x = Conv2D(64, (15, 15), padding='same')(x)
+        x = Conv2D(32, (15, 15), padding='same')(input_img)
         x = BatchNormalization(momentum=0.8)(x)
         x = LeakyReLU(alpha=0.2)(x)
         encoded = AveragePooling2D((2, 2), padding='same',
@@ -393,11 +411,7 @@ class GAN():
         x = BatchNormalization(momentum=0.8)(x)
         x = LeakyReLU(alpha=0.2)(x)
         x = UpSampling2D(2)(x)
-        x = Conv2D(32, (7, 7), padding='same')(x)
-        x = BatchNormalization(momentum=0.8)(x)
-        x = LeakyReLU(alpha=0.2)(x)
-        x = UpSampling2D(2)(x)
-        x = Conv2D(1, (9, 9), padding='same')(x)
+        x = Conv2D(1, (5, 5), padding='same')(x)
         decoded = Activation('linear')(x)
 
         model = Model(input_img, decoded)
@@ -420,8 +434,7 @@ class GAN():
         model.add(LeakyReLU(alpha=0.2))
         model.add(Dense(128))
         model.add(LeakyReLU(alpha=0.2))
-        model.add(Dense(64))
-        model.add(LeakyReLU(alpha=0.2))
+
         model.add(Dense(1, activation='sigmoid'))
 
         img = Input(shape=img_shape)
@@ -432,7 +445,7 @@ class GAN():
     def train(self, X_train, epochs, batch_size=128, save_interval=50):
 
         half_batch = int(batch_size / 2)
-
+        self.true, self.noise = self.generate_data(X_train, 100)
         self.lossD = []
         self.lossG = []
         lossEpoch = []
@@ -450,7 +463,7 @@ class GAN():
             d_loss_real = self.discriminator.train_on_batch(imgs,
                                                             np.round(
                                                                 np.random.uniform(
-                                                                    0.8,
+                                                                    0.9,
                                                                     1.0,
                                                                     half_batch),
                                                                 1))
@@ -458,7 +471,7 @@ class GAN():
                                                             np.round(
                                                                 np.random.uniform(
                                                                     0.0,
-                                                                    0.2,
+                                                                    0.1,
                                                                     half_batch),
                                                                 1))
             d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
@@ -476,7 +489,7 @@ class GAN():
             g_loss = self.combined.train_on_batch(noise2, valid_y)
 
             # Plot the progress
-            print ("%d [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (
+            print ("%d/10000 [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (
                 epoch, d_loss[0], 100 * d_loss[1], g_loss))
 
             self.lossD.append(d_loss[0])
@@ -485,12 +498,12 @@ class GAN():
             # If at save interval => save generated image samples
             if epoch % save_interval == 0:
                 print "MeanLoss = ", np.mean(lossEpoch)
-                #self.save_imgs(X_train, epoch)
+                self.save_imgs(X_train, epoch)
                 lossEpoch = []
 
         return self.generator
 
-    def predict(self, model, data):
+    def predict(self, model, data, evaluate=False):
 
         test = data
         prediction = model.predict(test)
@@ -510,33 +523,6 @@ class GAN():
         return predictEnhanced
 
     def save_imgs(self, X_train, epoch):
-        filename = "denoise_%d.png"
-        true, noise = self.generate_data(X_train, 10)
+        gen_imgs = self.generator.evaluate(self.noise, self.true)
+        print "Validation =", gen_imgs
 
-        gen_imgs = self.generator.predict(noise)
-
-        # Rescale images 0 - 1
-        gen_imgs = 0.5 * gen_imgs + 0.5
-
-        fig, axs = plt.subplots(10, 3)
-        cnt = 0
-        for i in range(10):
-            axs[i, 0].imshow(true[cnt, :, :, 0], cmap='gray')
-            axs[i, 0].axis('off')
-            axs[i, 1].imshow(noise[cnt, :, :, 0], cmap='gray')
-            axs[i, 1].axis('off')
-            axs[i, 2].imshow(gen_imgs[cnt, :, :, 0], cmap='gray')
-            axs[i, 2].axis('off')
-            cnt += 1
-        plt.savefig(filename % epoch)
-        plt.close()
-
-        filenameD = 'loss_D.png'
-        plt.plot(np.arange(0, len(self.lossD)), np.array(self.lossD))
-        plt.savefig(filenameD)
-        plt.close()
-
-        filenameG = 'loss_G.png'
-        plt.plot(np.arange(0, len(self.lossG)), np.array(self.lossG))
-        plt.savefig(filenameG)
-        plt.close()
