@@ -134,7 +134,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
                       'a spherical mask. In this case please select yes')
         
         group.addParam('isfullymasked', BooleanParam, default=False,
-                      label="Is the original premasked?",
+                      label="Map lacks of noise?",
                       help='Sometimes the original volume is fully masked and'
                       'it lacks of noise.')
         

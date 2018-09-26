@@ -173,12 +173,8 @@ class XmippProtMonoTomo(ProtAnalysis3D):
             self.runJob('xmipp_transform_threshold', params)
 
     def ifNomask(self, fnVol):
-        if self.halfVolumes:
-            xdim, _ydim, _zdim = self.inputVolume.get().getDim()
-            params = ' -i %s' % fnVol
-        else:
-            xdim, _ydim, _zdim = self.inputVolumes.get().getDim()
-            params = ' -i %s' % fnVol
+        xdim, _ydim, _zdim = self.inputVolume.get().getDim()
+        params = ' -i %s' % fnVol
         params += ' -o %s' % self._getFileName(FN_GAUSSIAN_MAP)
         setsize = 0.02*xdim
         params += ' --fourier real_gaussian %f' % (setsize)
@@ -242,7 +238,7 @@ class XmippProtMonoTomo(ProtAnalysis3D):
 
         M = float(self.max_res_init)
         m = float(self.min_res_init)
-        range_res = round((M - m)*4.0)
+        range_res = round((M - m))
 
         params = ' -i %s' % self._getFileName(OUTPUT_RESOLUTION_FILE)
         params += ' --mask binary_file %s' % self._getFileName(OUTPUT_MASK_FILE)

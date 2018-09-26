@@ -62,8 +62,8 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
     density maps studied in structural biology, primarily by cryo-electron
     microscopy (cryo-EM).
     """
-    _label = 'viewer MonoRes'
-    _targets = [XmippProtMonoRes]      
+    _label = 'viewer MonoTomo'
+    _targets = [XmippProtMonoTomo]      
     _environments = [DESKTOP_TKINTER]
 
     
@@ -240,24 +240,15 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
         colors_labels = self.numberOfColors(min_Res, max_Res, numberOfColors)
         colorList = self.colorMapToColorList(colors_labels, self.getColorMap())
         
-        if self.protocol.halfVolumes.get() is True:
-            #fhCmd.write("open %s\n" % (fnRoot+FN_MEAN_VOL)) #Perhaps to check 
-            #the use of mean volume is useful
-            fnbase = removeExt(self.protocol.inputVolume.get().getFileName())
-            ext = getExt(self.protocol.inputVolume.get().getFileName())
-            fninput = abspath(fnbase + ext[0:4])
-            fhCmd.write("open %s\n" % fninput)
-        else:
-            fnbase = removeExt(self.protocol.inputVolumes.get().getFileName())
-            ext = getExt(self.protocol.inputVolumes.get().getFileName())
-            fninput = abspath(fnbase + ext[0:4])
-            fhCmd.write("open %s\n" % fninput)
+        #fhCmd.write("open %s\n" % (fnRoot+FN_MEAN_VOL)) #Perhaps to check 
+        #the use of mean volume is useful
+        fnbase = removeExt(self.protocol.inputVolume.get().getFileName())
+        ext = getExt(self.protocol.inputVolume.get().getFileName())
+        fninput = abspath(fnbase + ext[0:4])
+        fhCmd.write("open %s\n" % fninput)
 
         fhCmd.write("open %s\n" % (fnRoot + CHIMERA_RESOLUTION_VOL))
-        if self.protocol.halfVolumes.get() is True:
-            smprt = self.protocol.inputVolume.get().getSamplingRate()
-        else:
-            smprt = self.protocol.inputVolumes.get().getSamplingRate()
+        smprt = self.protocol.inputVolume.get().getSamplingRate()
         fhCmd.write("volume #0 voxelSize %s\n" % (str(smprt)))
         fhCmd.write("volume #1 voxelSize %s\n" % (str(smprt)))
         fhCmd.write("vol #1 hide\n")
