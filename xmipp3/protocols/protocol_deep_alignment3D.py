@@ -34,10 +34,12 @@ from pyworkflow.em.constants import ALIGN_PROJ
 from pyworkflow.utils.path import cleanPath, moveFile
 from pyworkflow.em.protocol import ProtRefine3D
 import pyworkflow.em.metadata as md
+from pyworkflow.em.data import SetOfClasses2D, SetOfAverages
 
 import xmippLib
 from xmipp3.convert import setXmippAttributes, xmippToLocation, rowToAlignment
 from xmipp3.utils import writeInfoField, readInfoField
+import numpy as np
 
         
 class XmippProtDeepAlignment3D(ProtRefine3D):
@@ -69,7 +71,8 @@ class XmippProtDeepAlignment3D(ProtRefine3D):
         self.imgsFn = self._getExtraPath('input_imgs.xmd')
         
         self._insertFunctionStep("convertStep")
-        self._insertFunctionStep("align")
+        self._insertFunctionStep("projectStep")
+        self._insertFunctionStep("alignStep")
         #self._insertFunctionStep("createOutputStep")
 
     #--------------------------- STEPS functions ---------------------------------------------------
@@ -81,25 +84,29 @@ class XmippProtDeepAlignment3D(ProtRefine3D):
         Ts = inputParticles.getSamplingRate()
         newTs = self.targetResolution.get() * 1.0/3.0
         newTs = max(Ts, newTs)
-        newXdim = long(Xdim * Ts / newTs)
+        self.newXdim = long(Xdim * Ts / newTs)
         writeInfoField(self._getExtraPath(), "sampling", xmippLib.MDL_SAMPLINGRATE, newTs)
-        writeInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE, newXdim)
-        if newXdim != Xdim:
+        writeInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE, self.newXdim)
+        if self.newXdim != Xdim:
             self.runJob("xmipp_image_resize",
                         "-i %s -o %s --save_metadata_stack %s --fourier %d" %
                         (self.imgsFn,
                          self._getExtraPath('scaled_particles.stk'),
                          self._getExtraPath('scaled_particles.xmd'),
-                         newXdim))
-            moveFile()
+                         self.newXdim))
+            #moveFile()
 
         from pyworkflow.em.convert import ImageHandler
         ih = ImageHandler()
         fnVol = self._getTmpPath("volume.vol")
         ih.convert(self.inputVolume.get(), fnVol)
         Xdim = self.inputVolume.get().getDim()[0]
-        if Xdim != newXdim:
-            self.runJob("xmipp_image_resize","-i %s --dim %d"%(fnVol,newXdim),numberOfMpi=1)
+        if Xdim != self.newXdim:
+            self.runJob("xmipp_image_resize","-i %s --dim %d"%(fnVol,self.newXdim),numberOfMpi=1)
+
+    def projectStep(self):
+
+        fnVol = self._getTmpPath("volume.vol")
 
         uniformProjectionsStr ="""
 # XMIPP_STAR_1 *
@@ -116,7 +123,7 @@ _projPsiRandomness   random
 _projPsiNoise   '0'
 _noisePixelLevel   '0'
 _noiseCoord   '0'
-"""%(newXdim,newXdim)
+"""%(self.newXdim, self.newXdim)
         fnParams = self._getExtraPath("uniformProjections.xmd")
         fh = open(fnParams,"w")
         fh.write(uniformProjectionsStr)
@@ -125,37 +132,49 @@ _noiseCoord   '0'
         fnProjs = self._getExtraPath("projections.stk")
         self.runJob("xmipp_phantom_project","-i %s -o %s --method fourier 1 0.5 --params %s"%(fnVol,fnProjs,fnParams),numberOfMpi=1)
 
-    def align(self):
+    def alignStep(self):
         maxShift=6
         maxPsi=180
-        self.runJob("xmipp_angular_deepalign","%s %f %f psi %s"%(self._getExtraPath("projections.xmd"),maxShift,maxPsi,self._getExtraPath()),numberOfMpi=1)
-    
-    def createOutputStep(self):
-        fnImgs = self._getExtraPath('images.stk')
-        if os.path.exists(fnImgs):
-            cleanPath(fnImgs)
+        mode = 'psi'
+        modelFn = mode+'_iter%06d'%1
+        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %s"%
+                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn,'train'),numberOfMpi=1)
 
-        outputSet = self._createSetOfParticles()
-        imgSet = self.inputSet.get()
-        imgFn = self._getExtraPath("anglesCont.xmd")
-        self.newAssignmentPerformed = os.path.exists(self._getExtraPath("angles.xmd"))
-        self.samplingRate = self.inputSet.get().getSamplingRate()
-        if isinstance(imgSet, SetOfClasses2D):
-            outputSet = self._createSetOfClasses2D(imgSet)
-            outputSet.copyInfo(imgSet.getImages())
-        elif isinstance(imgSet, SetOfAverages):
-            outputSet = self._createSetOfAverages()
-            outputSet.copyInfo(imgSet)
-        else:
-            outputSet = self._createSetOfParticles()
-            outputSet.copyInfo(imgSet)
-            if not self.newAssignmentPerformed:
-                outputSet.setAlignmentProj()
-        outputSet.copyItems(imgSet,
-                            updateItemCallback=self._processRow,
-                            itemDataIterator=md.iterRows(imgFn, sortByLabel=md.MDL_ITEM_ID))
-        self._defineOutputs(outputParticles=outputSet)
-        self._defineSourceRelation(self.inputSet, outputSet)
+
+        maxShift=6
+        prevPsiError = np.savetxt(os.path.join(self._getExtraPath(),modelFn+'.txt'))
+        maxPsi=max([round(100*np.arccos(prevPsiError))/100, round(100*np.arcsin(prevPsiError))/100])
+        mode = 'shift'
+        modelFn = mode+'_iter%06d'%1
+        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %s"%
+                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn,'train'),numberOfMpi=1)
+    
+    # def createOutputStep(self):
+    #     fnImgs = self._getExtraPath('images.stk')
+    #     if os.path.exists(fnImgs):
+    #         cleanPath(fnImgs)
+    #
+    #     outputSet = self._createSetOfParticles()
+    #     imgSet = self.inputSet.get()
+    #     imgFn = self._getExtraPath("anglesCont.xmd")
+    #     self.newAssignmentPerformed = os.path.exists(self._getExtraPath("angles.xmd"))
+    #     self.samplingRate = self.inputSet.get().getSamplingRate()
+    #     if isinstance(imgSet, SetOfClasses2D):
+    #         outputSet = self._createSetOfClasses2D(imgSet)
+    #         outputSet.copyInfo(imgSet.getImages())
+    #     elif isinstance(imgSet, SetOfAverages):
+    #         outputSet = self._createSetOfAverages()
+    #         outputSet.copyInfo(imgSet)
+    #     else:
+    #         outputSet = self._createSetOfParticles()
+    #         outputSet.copyInfo(imgSet)
+    #         if not self.newAssignmentPerformed:
+    #             outputSet.setAlignmentProj()
+    #     outputSet.copyItems(imgSet,
+    #                         updateItemCallback=self._processRow,
+    #                         itemDataIterator=md.iterRows(imgFn, sortByLabel=md.MDL_ITEM_ID))
+    #     self._defineOutputs(outputParticles=outputSet)
+    #     self._defineSourceRelation(self.inputSet, outputSet)
 
     #--------------------------- INFO functions --------------------------------------------
     def _summary(self):
