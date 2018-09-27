@@ -86,24 +86,24 @@ class Plugin(pyworkflow.em.Plugin):
 
     @classmethod
     def defineBinaries(cls, env):
-        scons = env.addPipModule('scons', '2.3.6', target='scons-2.3.6',
-                                 default=True, ignoreDefaultDeps=True)
+        # Old dependencies now are checked inside xmipp script:
+        #   scons, fftw3, scikit, nma, tiff, sqlite, opencv, sh_alignment, hdf5
+        # 
+        # scons = env.addPipModule('scons', '2.3.6', target='scons-2.3.6',
+        #                          default=True, ignoreDefaultDeps=True)
 
-        installCmd = "src/xmipp/xmipp config ; src/xmipp/xmipp check_config ;" \
-                     "src/xmipp/xmipp compile %d ; src/xmipp/xmipp install %s" \
-                      % (env.getProcessors(), cls.getHome())
+        installCmd = ("src/xmipp/xmipp config ; src/xmipp/xmipp check_config ;"
+                      "src/xmipp/xmipp compile %d ; src/xmipp/xmipp install %s"
+                       % (env.getProcessors(), cls.getHome()))
 
         target = "%s/bin/xmipp_reconstruct_significant" % cls.getHome()
 
-        env.addPackage('xmippSrc', version=_currentVersion,
-                       tar='xmippSrc-%s.tgz'%_currentVersion,
-                       commands=[(installCmd, target)],
-                       default=True,
-                       deps=[scons])
-            # Old dependencies now are checked inside xmipp script:
-            #   fftw3, scikit, nma, tiff, sqlite, opencv, sh_alignment, hdf5
+        xmippSrc = env.addPackage('xmippSrc', version=_currentVersion,
+                                  tar='xmippSrc-%s.tgz'%_currentVersion,
+                                  commands=[(installCmd, target)])
 
-        env.addPackage('xmippBin', version=_currentVersion,
-                       tar='xmipp-%s.tgz'%_currentVersion)
+        xmippBin = env.addPackage('xmippBin', version=_currentVersion,
+                                  tar='xmipp-%s.tgz' %_currentVersion,
+                                  default=True)
 
 pyworkflow.em.Domain.registerPlugin(__name__)
