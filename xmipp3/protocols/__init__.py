@@ -55,7 +55,6 @@ from .protocol_ctf_correct_wiener2d import XmippProtCTFCorrectWiener2D
 from .protocol_consensus_classes3D import XmippProtConsensusClasses3D
 from .protocol_subtract_projection import XmippProtSubtractProjection
 from .protocol_denoise_particles import XmippProtDenoiseParticles
-from .protocol_deep_alignment3D import XmippProtDeepAlignment3D
 from .protocol_eliminate_empty_particles import XmippProtEliminateEmptyParticles
 from .protocol_extract_particles import XmippProtExtractParticles
 from .protocol_extract_particles_movies import XmippProtExtractMovieParticles
@@ -102,4 +101,9 @@ from .protocol_enrich import XmippProtEnrich
 from .protocol_write_testC import XmippProtWriteTestC
 from .protocol_write_testP import XmippProtWriteTestP
 from .protocol_ctf_selection import XmippProtCTFSelection
+
+#AJ
+from .protocol_angular_alignment_sph import XmippProtAngularAlignmentSPH
+from .protocol_volume_deform_sph import XmippProtVolumeDeformSPH
+from .protocol_structure_map_sph import XmippProtStructureMapSPH
 

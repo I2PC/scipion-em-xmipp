@@ -43,6 +43,9 @@ from .viewer_volume_strain import XmippVolumeStrainViewer
 from .viewer_reconstruct_highres import XmippReconstructHighResViewer
 from .viewer_solid_angles import SolidAnglesViewer
 from .viewer_extract_unit_cell import viewerXmippProtExtractUnit
-
+#AJ
+from .viewer_structure_map_sph import XmippProtStructureMapSphViewer
+from .viewer_volume_deform_sph import XmippVolumeDeformSphViewer
+from .viewer_angular_alignment_sph import XmippAngularAlignmentSphViewer
 
 
