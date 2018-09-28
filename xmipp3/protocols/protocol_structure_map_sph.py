@@ -90,7 +90,8 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         nVoli = 1
         for voli in volList:
             self._insertFunctionStep('convertStep', volList[nVoli - 1],
-                                     dimList[nVoli - 1], srList[nVoli - 1])
+                                     dimList[nVoli - 1], srList[nVoli - 1],
+                                     min(dimList), max(srList))
             nVolj = 1
             for volj in volList:
                 if nVolj != nVoli:
@@ -105,17 +106,21 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         self._insertFunctionStep('gatherResultsStep', volList)
 
     # --------------------------- STEPS functions ---------------------------------------------------
-    def convertStep(self, volFn, volDim, volSr):
+    def convertStep(self, volFn, volDim, volSr, minDim, maxSr):
         Xdim = volDim
         Ts = volSr
         newTs = self.targetResolution.get() * 1.0 / 3.0
-        newTs = max(Ts, newTs)
-        self.newXdim = long(Xdim * Ts / newTs)
+        newTs = max(maxSr, newTs)
+        newXdim = long(Xdim * Ts / newTs)
 
         ih = ImageHandler()
-        if Xdim != self.newXdim:
+        if Xdim != newXdim:
             self.runJob("xmipp_image_resize",
-                        "-i %s --dim %d" % (volFn, self.newXdim))
+                        "-i %s --dim %d" % (volFn, newXdim))
+
+        if newXdim>minDim:
+            self.runJob("xmipp_transform_window", " -i %s --crop %d" %
+                        (volFn, (newXdim - minDim)))
 
     def deformStep(self, inputVolFn, refVolFn, i, j):
         fnOut = self._getExtraPath('vol%dDeformedTo%d.vol' % (i, j))

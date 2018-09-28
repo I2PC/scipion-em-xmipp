@@ -77,23 +77,34 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
         fnInputVol = self._getFileName('fnInputVol')
         fnRefVol = self._getFileName('fnRefVol')
 
-        Xdim = self.inputVolume.get().getDim()[0]
-        Ts = self.inputVolume.get().getSamplingRate()
+        XdimI = self.inputVolume.get().getDim()[0]
+        TsI = self.inputVolume.get().getSamplingRate()
+        XdimR = self.refVolume.get().getDim()[0]
+        TsR = self.refVolume.get().getSamplingRate()
         self.newTs = self.targetResolution.get() * 1.0 / 3.0
-        self.newTs = max(Ts, self.newTs)
-        self.newXdim = long(Xdim * Ts / self.newTs)
+        self.newTs = max(TsI, TsR, self.newTs)
+        newXdimI = long(XdimI * TsI / self.newTs)
+        newXdimR = long(XdimR * TsR / self.newTs)
+        self.newXdim = min(newXdimI, newXdimR)
 
         ih = ImageHandler()
         ih.convert(self.inputVolume.get(), fnInputVol)
-        if Xdim != self.newXdim:
+        if XdimI != newXdimI:
             self.runJob("xmipp_image_resize",
-                        "-i %s --dim %d" % (fnInputVol, self.newXdim))
+                        "-i %s --dim %d" % (fnInputVol, newXdimI))
+        if newXdimI>self.newXdim:
+            self.runJob("xmipp_transform_window", " -i %s --crop %d" %
+                        (fnInputVol, (newXdimI-self.newXdim)))
+
 
         ih.convert(self.refVolume.get(), fnRefVol)
-        Xdim = self.refVolume.get().getDim()[0]
-        if Xdim != self.newXdim:
+        if XdimR != newXdimR:
             self.runJob("xmipp_image_resize",
-                        "-i %s --dim %d" % (fnRefVol, self.newXdim))
+                        "-i %s --dim %d" % (fnRefVol, newXdimR))
+        if newXdimR>self.newXdim:
+            self.runJob("xmipp_transform_window", " -i %s --crop %d" %
+                        (fnRefVol, (newXdimR-self.newXdim)))
+
 
     def deformStep(self):
         fnInputVol = self._getFileName('fnInputVol')

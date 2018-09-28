@@ -58,6 +58,7 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         form.addParam('depth', params.IntParam, default=1,
                       label='Harmonical depth', expertLevel=params.LEVEL_ADVANCED,
                       help='Harmonical depth of the deformation=1,2,3,...')
+        form.addParallelSection(threads=1, mpi=8)
 
     def _createFilenameTemplates(self):
         """ Centralize how files are called """
@@ -95,7 +96,7 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
                         (imgsFn,
                          self._getExtraPath('scaled_particles.stk'),
                          self._getExtraPath('scaled_particles.xmd'),
-                         self.newXdim))
+                         self.newXdim), numberOfMpi=1)
             moveFile(self._getExtraPath('scaled_particles.xmd'), imgsFn)
 
         ih = ImageHandler()
@@ -103,7 +104,7 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         Xdim = self.inputVolume.get().getDim()[0]
         if Xdim != self.newXdim:
             self.runJob("xmipp_image_resize"
-                        ,"-i %s --dim %d " %(fnVol, self.newXdim))
+                        ,"-i %s --dim %d " %(fnVol, self.newXdim), numberOfMpi=1)
 
 
     def alignmentStep(self):
@@ -112,11 +113,10 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         fnOut =  self._getFileName('fnOut')
         params = ' -i %s --ref %s -o %s --optimizeAlignment --optimizeDeformation --depth %d' %\
                  (imgsFn, fnVol, fnOut, self.depth.get())
-        self.runJob("xmipp_angular_sph_alignment", params)
+        self.runJob("xmipp_angular_sph_alignment", params, numberOfMpi=self.numberOfMpi.get())
 
 
     def createOutputStep(self):
-
         fnOut = self._getFileName('fnOut')
         mdOut = md.MetaData(fnOut)
         i = 0
@@ -138,7 +138,7 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
             newRow.setValue(md.MDL_SPH_TSNE_COEFF2D, [float(X_tsne_2d[i, 0]),  float(X_tsne_2d[i, 1])])
             newRow.addToMd(newMdOut)
             i+=1
-            newMdOut.write(self.fnOut)
+            newMdOut.write(fnOut)
 
         inputSet = self.inputParticles.get()
         partSet = self._createSetOfParticles()
