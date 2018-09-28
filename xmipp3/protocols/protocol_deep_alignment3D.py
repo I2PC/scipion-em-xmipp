@@ -71,8 +71,13 @@ class XmippProtDeepAlignment3D(ProtRefine3D):
         self.imgsFn = self._getExtraPath('input_imgs.xmd')
         
         self._insertFunctionStep("convertStep")
-        self._insertFunctionStep("projectStep")
+        # Trainig steps
+        self._insertFunctionStep("projectStep", 5000, 'projections')
         self._insertFunctionStep("alignStep")
+        # # Predicting steps
+        self._insertFunctionStep("projectStep", 1, 'projectionsTest')
+        self._insertFunctionStep("predictStep")
+
         #self._insertFunctionStep("createOutputStep")
 
     #--------------------------- STEPS functions ---------------------------------------------------
@@ -94,7 +99,7 @@ class XmippProtDeepAlignment3D(ProtRefine3D):
                          self._getExtraPath('scaled_particles.stk'),
                          self._getExtraPath('scaled_particles.xmd'),
                          self.newXdim))
-            #moveFile()
+            moveFile(self._getExtraPath('scaled_particles.xmd'), self.imgsFn)
 
         from pyworkflow.em.convert import ImageHandler
         ih = ImageHandler()
@@ -104,7 +109,7 @@ class XmippProtDeepAlignment3D(ProtRefine3D):
         if Xdim != self.newXdim:
             self.runJob("xmipp_image_resize","-i %s --dim %d"%(fnVol,self.newXdim),numberOfMpi=1)
 
-    def projectStep(self):
+    def projectStep(self, numProj, fn):
 
         fnVol = self._getTmpPath("volume.vol")
 
@@ -112,7 +117,7 @@ class XmippProtDeepAlignment3D(ProtRefine3D):
 # XMIPP_STAR_1 *
 data_block1
 _dimensions2D   '%d %d'
-_projRotRange    '0 360 5000'
+_projRotRange    '0 360 %d'
 _projRotRandomness   random 
 _projRotNoise   '0'
 _projTiltRange    '0 180 1'
@@ -123,32 +128,82 @@ _projPsiRandomness   random
 _projPsiNoise   '0'
 _noisePixelLevel   '0'
 _noiseCoord   '0'
-"""%(self.newXdim, self.newXdim)
+"""%(self.newXdim, self.newXdim, numProj)
         fnParams = self._getExtraPath("uniformProjections.xmd")
         fh = open(fnParams,"w")
         fh.write(uniformProjectionsStr)
         fh.close()
 
-        fnProjs = self._getExtraPath("projections.stk")
+        fnProjs = self._getExtraPath(fn+".stk")
         self.runJob("xmipp_phantom_project","-i %s -o %s --method fourier 1 0.5 --params %s"%(fnVol,fnProjs,fnParams),numberOfMpi=1)
 
     def alignStep(self):
-        maxShift=6
-        maxPsi=180
+
+        numIter = 1
+        for i in range(numIter):
+            self.psiAlign(i)
+            self.shiftAlign(i)
+
+        maxShift = np.loadtxt(os.path.join(self._getExtraPath(), 'shift_iter%06d.txt' % (numIter - 1)))
+        maxPsi = 180*np.loadtxt(os.path.join(self._getExtraPath(), 'psi_iter%06d.txt' % (numIter - 1)))
+        print("FINAL ERROR VALUES")
+        print("shift ", float(maxShift), " psi ", maxPsi)
+
+
+    def psiAlign(self, i):
+        if i==0:
+            maxShift=2
+            maxPsi=10
+        else:
+            maxShift = np.loadtxt(os.path.join(self._getExtraPath(),'shift_iter%06d.txt'%(i-1)))
+            prevPsiError = np.loadtxt(os.path.join(self._getExtraPath(),'psi_iter%06d.txt'%(i-1)))
+            #maxPsi = round(100 * np.rad2deg(np.arcsin(prevPsiError))) / 100
+            maxPsi = 180*prevPsiError
+
         mode = 'psi'
-        modelFn = mode+'_iter%06d'%1
+        modelFn = mode+'_iter%06d'%i
         self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %s"%
                     (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn,'train'),numberOfMpi=1)
 
+    def shiftAlign(self, i):
+        if i == 0:
+            maxShift=2
+            prevPsiError = np.loadtxt(os.path.join(self._getExtraPath(),'psi_iter%06d.txt'%i))
+            #maxPsi = round(100 * np.rad2deg(np.arcsin(prevPsiError))) / 100
+            maxPsi = 180 * prevPsiError
+        else:
+            maxShift = np.loadtxt(os.path.join(self._getExtraPath(),'shift_iter%06d.txt'%(i-1)))
+            prevPsiError = np.loadtxt(os.path.join(self._getExtraPath(),'psi_iter%06d.txt'%i))
+            #maxPsi = round(100 * np.rad2deg(np.arcsin(prevPsiError))) / 100
+            maxPsi = 180 * prevPsiError
 
-        maxShift=6
-        prevPsiError = np.savetxt(os.path.join(self._getExtraPath(),modelFn+'.txt'))
-        maxPsi=max([round(100*np.arccos(prevPsiError))/100, round(100*np.arcsin(prevPsiError))/100])
         mode = 'shift'
-        modelFn = mode+'_iter%06d'%1
+        modelFn = mode+'_iter%06d'%i
         self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %s"%
                     (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn,'train'),numberOfMpi=1)
-    
+
+    def predictStep(self):
+        mode = 'psi'
+        modelFn = mode + '_iter%06d' % 0
+        self.runJob("xmipp_angular_deepalign", "%s %f %f %s %s %s %s" %
+                    (self._getExtraPath("projectionsTest.xmd"), 10, 2,
+                     mode, self._getExtraPath(), modelFn, 'predict'),
+                    numberOfMpi=1)
+
+        # Ypred = np.loadtxt(os.path.join(self._getExtraPath(), modelFn + '_prediction.txt'))
+        # testMd = md.MetaData(self._getExtraPath("projectionsTest.xmd"))
+        # for row in md.iterRows(testMd):
+        # # xmipp_transform_geometry -i mD1.xmd --apply_transform -o jjjkkjk
+
+        #aplicar transformacion sobre la imagen para generar la entrada al siguiente paso
+
+        # mode = 'shift'
+        # modelFn = mode + '_iter%06d' % 0
+        # self.runJob("xmipp_angular_deepalign", "%s %f %f %s %s %s %s" %
+        #             (self._getExtraPath("projectionsTest.xmd"), 0, 0,
+        #              mode, self._getExtraPath(), modelFn, 'predict'),
+        #             numberOfMpi=1)
+
     # def createOutputStep(self):
     #     fnImgs = self._getExtraPath('images.stk')
     #     if os.path.exists(fnImgs):
