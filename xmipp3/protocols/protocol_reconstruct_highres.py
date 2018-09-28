@@ -1463,6 +1463,13 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             errors.append("If the first iteration is local, then the input particles must have an alignment")
         return errors    
     
+    def _warnings(self):
+        warnings = []
+        if not self.doContinue and self.inputParticles.hasValue() and not self.inputParticles.get().isPhaseFlipped():
+            warnings.append("Highres is designed to work on phase flipped particles. The input particles are not phase flipped. "
+                            "Unless you work with phantoms, you need to extract particles with phase flip.")
+        return warnings    
+
     def _summary(self):
         summary = []
         summary.append("Symmetry: %s" % self.symmetryGroup.get())
