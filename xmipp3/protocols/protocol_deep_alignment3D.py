@@ -35,6 +35,8 @@ from pyworkflow.utils.path import cleanPath, moveFile
 from pyworkflow.em.protocol import ProtRefine3D
 import pyworkflow.em.metadata as md
 from pyworkflow.em.data import SetOfClasses2D, SetOfAverages
+from shutil import copy
+from xmipp3.convert import readSetOfParticles
 
 import xmippLib
 from xmipp3.convert import setXmippAttributes, xmippToLocation, rowToAlignment
@@ -67,18 +69,19 @@ class XmippProtDeepAlignment3D(ProtRefine3D):
     
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
+        self.numIter = 3
         # Convert input images if necessary
         self.imgsFn = self._getExtraPath('input_imgs.xmd')
         
         self._insertFunctionStep("convertStep")
         # Trainig steps
-        self._insertFunctionStep("projectStep", 5000, 'projections')
+        self._insertFunctionStep("projectStep", 10000, 'projections')
         self._insertFunctionStep("alignStep")
         # # Predicting steps
-        self._insertFunctionStep("projectStep", 1, 'projectionsTest')
+        self._insertFunctionStep("projectStep", 100, 'projectionsTest')
         self._insertFunctionStep("predictStep")
 
-        #self._insertFunctionStep("createOutputStep")
+        self._insertFunctionStep("createOutputStep")
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self):
@@ -111,6 +114,7 @@ class XmippProtDeepAlignment3D(ProtRefine3D):
 
     def projectStep(self, numProj, fn):
 
+        newXdim = readInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE)
         fnVol = self._getTmpPath("volume.vol")
 
         uniformProjectionsStr ="""
@@ -128,7 +132,7 @@ _projPsiRandomness   random
 _projPsiNoise   '0'
 _noisePixelLevel   '0'
 _noiseCoord   '0'
-"""%(self.newXdim, self.newXdim, numProj)
+"""%(newXdim, newXdim, numProj)
         fnParams = self._getExtraPath("uniformProjections.xmd")
         fh = open(fnParams,"w")
         fh.write(uniformProjectionsStr)
@@ -139,99 +143,87 @@ _noiseCoord   '0'
 
     def alignStep(self):
 
-        numIter = 1
-        for i in range(numIter):
-            self.psiAlign(i)
+        for i in range(self.numIter):
             self.shiftAlign(i)
+            self.psiAlign(i)
+            #self.shiftAlign(i)
 
-        maxShift = np.loadtxt(os.path.join(self._getExtraPath(), 'shift_iter%06d.txt' % (numIter - 1)))
-        maxPsi = 180*np.loadtxt(os.path.join(self._getExtraPath(), 'psi_iter%06d.txt' % (numIter - 1)))
+        self.rotTiltAlign(self.numIter)
+
+        maxShift = np.loadtxt(os.path.join(self._getExtraPath(), 'shift_iter%06d.txt' % (self.numIter - 1)))
+        prevErrorPsi = np.loadtxt(os.path.join(self._getExtraPath(), 'psi_iter%06d.txt' % (self.numIter - 1)))
+        maxPsi = np.rad2deg(np.arctan2(prevErrorPsi, 1-prevErrorPsi))
+        prevErrorRot = np.loadtxt(os.path.join(self._getExtraPath(), 'rot_iter%06d.txt' % (self.numIter)))
+        maxRot = np.rad2deg(np.arctan2(prevErrorRot, 1-prevErrorRot))
+        prevErrorTilt = np.loadtxt(os.path.join(self._getExtraPath(), 'tilt_iter%06d.txt' % (self.numIter)))
+        maxTilt = np.rad2deg(np.arctan2(prevErrorTilt, 1-prevErrorTilt))
         print("FINAL ERROR VALUES")
-        print("shift ", float(maxShift), " psi ", maxPsi)
+        print("shift ", float(maxShift), " psi ", maxPsi, " rot ", maxRot, " tilt ", maxTilt)
 
 
     def psiAlign(self, i):
         if i==0:
-            maxShift=2
-            maxPsi=10
+            maxShift = 3*np.loadtxt(os.path.join(self._getExtraPath(),'shift_iter%06d.txt'%i)) #round(self.newXdim/10)
+            maxPsi = 180
         else:
-            maxShift = np.loadtxt(os.path.join(self._getExtraPath(),'shift_iter%06d.txt'%(i-1)))
-            prevPsiError = np.loadtxt(os.path.join(self._getExtraPath(),'psi_iter%06d.txt'%(i-1)))
-            #maxPsi = round(100 * np.rad2deg(np.arcsin(prevPsiError))) / 100
-            maxPsi = 180*prevPsiError
+            maxShift = 3*np.loadtxt(os.path.join(self._getExtraPath(),'shift_iter%06d.txt'%(i))) #i-1
+            prevErrorPsi = np.loadtxt(os.path.join(self._getExtraPath(),'psi_iter%06d.txt'%(i-1)))
+            maxPsi = 3*np.rad2deg(np.arctan2(prevErrorPsi, 1 - prevErrorPsi))
 
         mode = 'psi'
         modelFn = mode+'_iter%06d'%i
-        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %s"%
-                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn,'train'),numberOfMpi=1)
+        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s"%
+                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn),numberOfMpi=1)
 
     def shiftAlign(self, i):
         if i == 0:
-            maxShift=2
-            prevPsiError = np.loadtxt(os.path.join(self._getExtraPath(),'psi_iter%06d.txt'%i))
-            #maxPsi = round(100 * np.rad2deg(np.arcsin(prevPsiError))) / 100
-            maxPsi = 180 * prevPsiError
+            maxShift = round(self.newXdim/10) # *** To form
+            #prevErrorPsi = np.loadtxt(os.path.join(self._getExtraPath(),'psi_iter%06d.txt'%i))
+            maxPsi = 180 #3*np.rad2deg(np.arctan2(prevErrorPsi, 1 - prevErrorPsi))
         else:
-            maxShift = np.loadtxt(os.path.join(self._getExtraPath(),'shift_iter%06d.txt'%(i-1)))
-            prevPsiError = np.loadtxt(os.path.join(self._getExtraPath(),'psi_iter%06d.txt'%i))
-            #maxPsi = round(100 * np.rad2deg(np.arcsin(prevPsiError))) / 100
-            maxPsi = 180 * prevPsiError
+            maxShift = 3*np.loadtxt(os.path.join(self._getExtraPath(),'shift_iter%06d.txt'%(i-1)))
+            prevErrorPsi = np.loadtxt(os.path.join(self._getExtraPath(),'psi_iter%06d.txt'%(i-1))) #i
+            maxPsi = 3*np.rad2deg(np.arctan2(prevErrorPsi, 1 - prevErrorPsi))
 
         mode = 'shift'
         modelFn = mode+'_iter%06d'%i
-        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %s"%
-                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn,'train'),numberOfMpi=1)
+        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s"%
+                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn),numberOfMpi=1)
+
+    def rotTiltAlign(self, i):
+
+        maxShift = 2*np.loadtxt(os.path.join(self._getExtraPath(),'shift_iter%06d.txt'%(i-1)))
+        prevErrorPsi = np.loadtxt(os.path.join(self._getExtraPath(),'psi_iter%06d.txt'%(i-1)))
+        maxPsi = 2*np.rad2deg(np.arctan2(prevErrorPsi, 1 - prevErrorPsi))
+
+        mode = 'rot'
+        modelFn = mode+'_iter%06d'%i
+        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s"%
+                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn),numberOfMpi=1)
+
+        mode = 'tilt'
+        modelFn = mode+'_iter%06d'%i
+        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s"%
+                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn),numberOfMpi=1)
 
     def predictStep(self):
-        mode = 'psi'
-        modelFn = mode + '_iter%06d' % 0
-        self.runJob("xmipp_angular_deepalign", "%s %f %f %s %s %s %s" %
-                    (self._getExtraPath("projectionsTest.xmd"), 10, 2,
-                     mode, self._getExtraPath(), modelFn, 'predict'),
-                    numberOfMpi=1)
+        newXdim = readInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE)
+        outMdFn = self._getExtraPath('outputParticles.xmd')
+        copy(self.imgsFn, outMdFn)
+        self.runJob("xmipp_angular_deepalign_predict", "%s %f %f %s %d" %
+                    (outMdFn,
+                     round(newXdim/10), 180, self._getExtraPath(),
+                     self.numIter), numberOfMpi=1)
 
-        # Ypred = np.loadtxt(os.path.join(self._getExtraPath(), modelFn + '_prediction.txt'))
-        # testMd = md.MetaData(self._getExtraPath("projectionsTest.xmd"))
-        # for row in md.iterRows(testMd):
-        # # xmipp_transform_geometry -i mD1.xmd --apply_transform -o jjjkkjk
+    def createOutputStep(self):
+        inputParticles = self.inputSet.get()
+        fnDeformedParticles = self._getExtraPath('outputParticles.xmd')
+        outputSetOfParticles = self._createSetOfParticles()
+        outputSetOfParticles.copyInfo(inputParticles)
+        readSetOfParticles(fnDeformedParticles, outputSetOfParticles)
+        self._defineOutputs(outputParticles=outputSetOfParticles)
 
-        #aplicar transformacion sobre la imagen para generar la entrada al siguiente paso
-
-        # mode = 'shift'
-        # modelFn = mode + '_iter%06d' % 0
-        # self.runJob("xmipp_angular_deepalign", "%s %f %f %s %s %s %s" %
-        #             (self._getExtraPath("projectionsTest.xmd"), 0, 0,
-        #              mode, self._getExtraPath(), modelFn, 'predict'),
-        #             numberOfMpi=1)
-
-    # def createOutputStep(self):
-    #     fnImgs = self._getExtraPath('images.stk')
-    #     if os.path.exists(fnImgs):
-    #         cleanPath(fnImgs)
-    #
-    #     outputSet = self._createSetOfParticles()
-    #     imgSet = self.inputSet.get()
-    #     imgFn = self._getExtraPath("anglesCont.xmd")
-    #     self.newAssignmentPerformed = os.path.exists(self._getExtraPath("angles.xmd"))
-    #     self.samplingRate = self.inputSet.get().getSamplingRate()
-    #     if isinstance(imgSet, SetOfClasses2D):
-    #         outputSet = self._createSetOfClasses2D(imgSet)
-    #         outputSet.copyInfo(imgSet.getImages())
-    #     elif isinstance(imgSet, SetOfAverages):
-    #         outputSet = self._createSetOfAverages()
-    #         outputSet.copyInfo(imgSet)
-    #     else:
-    #         outputSet = self._createSetOfParticles()
-    #         outputSet.copyInfo(imgSet)
-    #         if not self.newAssignmentPerformed:
-    #             outputSet.setAlignmentProj()
-    #     outputSet.copyItems(imgSet,
-    #                         updateItemCallback=self._processRow,
-    #                         itemDataIterator=md.iterRows(imgFn, sortByLabel=md.MDL_ITEM_ID))
-    #     self._defineOutputs(outputParticles=outputSet)
-    #     self._defineSourceRelation(self.inputSet, outputSet)
-
-    #--------------------------- INFO functions --------------------------------------------
+        #--------------------------- INFO functions --------------------------------------------
     def _summary(self):
         summary = []
         summary.append("Images evaluated: %i" % self.inputSet.get().getSize())
