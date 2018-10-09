@@ -187,7 +187,12 @@ class XmippResolution3DViewer(ProtocolViewer):
         pixelSize = vol.getSamplingRate()
         args += '--sampling %f ' % pixelSize
         args += '--maxres %f ' % maxres
+        from os.path import exists
+        if ( exists(self.protocol._getPath('fsc.xmd')) ):
+            args += '--fsc %s ' % self.protocol._getPath('fsc.xmd')
+        
         args += '--adhoc %f ' % -values[4]
+               
         volName = os.path.basename(volPath)
         volOut = self.protocol._getPath(volName) 
         args += '-o %s ' % volOut
