@@ -411,7 +411,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                     self._params['Nrefs']=Nrefs
                     self._params['cl2dDir'] = self._getExtraPath(
                                               join('level%03d' % level))
-                    self.runJob("xmipp_mpi_classify_CL2D",
+                    self.runJob("xmipp_classify_CL2D",
                                 args % self._params)
                 except Exception as ex:
                     flag_error = True

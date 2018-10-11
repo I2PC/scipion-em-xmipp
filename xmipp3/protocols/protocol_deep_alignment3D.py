@@ -24,22 +24,15 @@
 # *
 # **************************************************************************
 
-from math import floor
 import os
-
 from pyworkflow import VERSION_1_2
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam
+from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, IntParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.em.constants import ALIGN_PROJ
-from pyworkflow.utils.path import cleanPath, moveFile
+from pyworkflow.utils.path import moveFile
 from pyworkflow.em.protocol import ProtRefine3D
-import pyworkflow.em.metadata as md
-from pyworkflow.em.data import SetOfClasses2D, SetOfAverages
 from shutil import copy
 from xmipp3.convert import readSetOfParticles
-
 import xmippLib
-from xmipp3.convert import setXmippAttributes, xmippToLocation, rowToAlignment
 from xmipp3.utils import writeInfoField, readInfoField
 import numpy as np
 
@@ -65,27 +58,41 @@ class XmippProtDeepAlignment3D(ProtRefine3D):
                       label='Symmetry group', 
                       help='See http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
                         'If no symmetry is present, give c1')
+        form.addParam('numIterMin', IntParam, label="Min iterations",
+                      default=3,
+                      help="The minimum number of iterations in the training process.")
+        form.addParam('numEpochs', IntParam, label="Number of epochs in training",
+                      default=2,
+                      help="Number of epochs in training.")
+        form.addParam('minShiftError', FloatParam, label="Min shift error",
+                      default=1.0,
+                      help="In pixels, the minimum error allowed in the training of shifts.")
+        form.addParam('minPsiError', FloatParam, label="Min psi error",
+                      default=5.0,
+                      help="In degrees, the minimum error allowed in the training of psi.")
+        form.addParam('minReduction', IntParam, label="Min train reduction",
+                      default=10,
+                      help="In percentage, the minimum change required in the training process.")
         form.addParallelSection(threads=0, mpi=8)
-    
+
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        self.numIter = 3
+        self.lastIter = 0
         # Convert input images if necessary
         self.imgsFn = self._getExtraPath('input_imgs.xmd')
         
         self._insertFunctionStep("convertStep")
         # Trainig steps
         self._insertFunctionStep("projectStep", 10000, 'projections')
-        self._insertFunctionStep("alignStep")
-        # # Predicting steps
-        self._insertFunctionStep("projectStep", 100, 'projectionsTest')
+        self._insertFunctionStep("trainStep")
+        # Predict step
         self._insertFunctionStep("predictStep")
 
         self._insertFunctionStep("createOutputStep")
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self):
-        from ..convert import writeSetOfClasses2D, writeSetOfParticles
+        from ..convert import writeSetOfParticles
         inputParticles = self.inputSet.get()
         writeSetOfParticles(inputParticles, self.imgsFn)
         Xdim = inputParticles.getXDim()
@@ -93,8 +100,10 @@ class XmippProtDeepAlignment3D(ProtRefine3D):
         newTs = self.targetResolution.get() * 1.0/3.0
         newTs = max(Ts, newTs)
         self.newXdim = long(Xdim * Ts / newTs)
+        self.firstMaxShift = round(self.newXdim / 10)
         writeInfoField(self._getExtraPath(), "sampling", xmippLib.MDL_SAMPLINGRATE, newTs)
         writeInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE, self.newXdim)
+        writeInfoField(self._getExtraPath(), "shift", xmippLib.MDL_SHIFT_X, self.firstMaxShift)
         if self.newXdim != Xdim:
             self.runJob("xmipp_image_resize",
                         "-i %s -o %s --save_metadata_stack %s --fourier %d" %
@@ -141,22 +150,51 @@ _noiseCoord   '0'
         fnProjs = self._getExtraPath(fn+".stk")
         self.runJob("xmipp_phantom_project","-i %s -o %s --method fourier 1 0.5 --params %s"%(fnVol,fnProjs,fnParams),numberOfMpi=1)
 
-    def alignStep(self):
+    def trainStep(self):
 
-        for i in range(self.numIter):
+        maxShiftPrev = readInfoField(self._getExtraPath(), "shift", xmippLib.MDL_SHIFT_X)
+        maxPsiPrev = 180
+        keepTraining = True
+        i=0
+        while keepTraining:
             self.shiftAlign(i)
             self.psiAlign(i)
             #self.shiftAlign(i)
 
-        self.rotTiltAlign(self.numIter)
+            #Checking if we need to continue the training
+            maxShift = np.loadtxt(os.path.join(self._getExtraPath(), 'shift_iter%06d.txt' % i))
+            prevErrorPsi = np.loadtxt(os.path.join(self._getExtraPath(), 'psi_iter%06d.txt' % i))
+            maxPsi = np.rad2deg(np.arctan2(prevErrorPsi, 1 - prevErrorPsi))
 
-        maxShift = np.loadtxt(os.path.join(self._getExtraPath(), 'shift_iter%06d.txt' % (self.numIter - 1)))
-        prevErrorPsi = np.loadtxt(os.path.join(self._getExtraPath(), 'psi_iter%06d.txt' % (self.numIter - 1)))
+            shiftReduction = float(maxShiftPrev-maxShift)*100/float(maxShiftPrev)
+            psiReduction = float(maxPsiPrev - maxPsi) * 100 / float(maxPsiPrev)
+
+            print("Conditions to train: ", i, maxShiftPrev, maxShift, maxPsiPrev, maxPsi, shiftReduction, psiReduction)
+
+            if i>=self.numIterMin and maxShift<self.minShiftError and \
+                    maxPsi<self.minPsiError and \
+                    shiftReduction<self.minReduction and \
+                    psiReduction<self.minReduction:
+                keepTraining=False
+                self.lastIter=i
+            if i>=self.numIterMin and (shiftReduction<0 or psiReduction<0):
+                keepTraining = False
+                self.lastIter=i-1
+
+            maxShiftPrev = maxShift
+            maxPsiPrev = maxPsi
+            i+=1
+
+        self.rotTiltAlign(self.lastIter)
+
+        maxShift = np.loadtxt(os.path.join(self._getExtraPath(), 'shift_iter%06d.txt' % self.lastIter))
+        prevErrorPsi = np.loadtxt(os.path.join(self._getExtraPath(), 'psi_iter%06d.txt' % self.lastIter))
         maxPsi = np.rad2deg(np.arctan2(prevErrorPsi, 1-prevErrorPsi))
-        prevErrorRot = np.loadtxt(os.path.join(self._getExtraPath(), 'rot_iter%06d.txt' % (self.numIter)))
+        prevErrorRot = np.loadtxt(os.path.join(self._getExtraPath(), 'rot_iter%06d.txt' % (self.lastIter+1)))
         maxRot = np.rad2deg(np.arctan2(prevErrorRot, 1-prevErrorRot))
-        prevErrorTilt = np.loadtxt(os.path.join(self._getExtraPath(), 'tilt_iter%06d.txt' % (self.numIter)))
+        prevErrorTilt = np.loadtxt(os.path.join(self._getExtraPath(), 'tilt_iter%06d.txt' % (self.lastIter+1)))
         maxTilt = np.rad2deg(np.arctan2(prevErrorTilt, 1-prevErrorTilt))
+        writeInfoField(self._getExtraPath(), "iter", xmippLib.MDL_REF, self.lastIter)
         print("FINAL ERROR VALUES")
         print("shift ", float(maxShift), " psi ", maxPsi, " rot ", maxRot, " tilt ", maxTilt)
 
@@ -172,12 +210,12 @@ _noiseCoord   '0'
 
         mode = 'psi'
         modelFn = mode+'_iter%06d'%i
-        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s"%
-                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn),numberOfMpi=1)
+        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %d"%
+                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn, self.numEpochs),numberOfMpi=1)
 
     def shiftAlign(self, i):
         if i == 0:
-            maxShift = round(self.newXdim/10) # *** To form
+            maxShift = readInfoField(self._getExtraPath(), "shift", xmippLib.MDL_SHIFT_X)
             #prevErrorPsi = np.loadtxt(os.path.join(self._getExtraPath(),'psi_iter%06d.txt'%i))
             maxPsi = 180 #3*np.rad2deg(np.arctan2(prevErrorPsi, 1 - prevErrorPsi))
         else:
@@ -187,33 +225,34 @@ _noiseCoord   '0'
 
         mode = 'shift'
         modelFn = mode+'_iter%06d'%i
-        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s"%
-                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn),numberOfMpi=1)
+        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %d"%
+                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn, self.numEpochs),numberOfMpi=1)
 
     def rotTiltAlign(self, i):
 
-        maxShift = 2*np.loadtxt(os.path.join(self._getExtraPath(),'shift_iter%06d.txt'%(i-1)))
-        prevErrorPsi = np.loadtxt(os.path.join(self._getExtraPath(),'psi_iter%06d.txt'%(i-1)))
+        print ('shift_iter%06d.txt'%i)
+        maxShift = 2*np.loadtxt(os.path.join(self._getExtraPath(),'shift_iter%06d.txt'%i))
+        prevErrorPsi = np.loadtxt(os.path.join(self._getExtraPath(),'psi_iter%06d.txt'%i))
         maxPsi = 2*np.rad2deg(np.arctan2(prevErrorPsi, 1 - prevErrorPsi))
 
         mode = 'rot'
-        modelFn = mode+'_iter%06d'%i
-        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s"%
-                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn),numberOfMpi=1)
+        modelFn = mode+'_iter%06d'%(i+1)
+        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %d"%
+                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn, self.numEpochs),numberOfMpi=1)
 
         mode = 'tilt'
-        modelFn = mode+'_iter%06d'%i
-        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s"%
-                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn),numberOfMpi=1)
+        modelFn = mode+'_iter%06d'%(i+1)
+        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %d"%
+                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn, self.numEpochs),numberOfMpi=1)
 
     def predictStep(self):
-        newXdim = readInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE)
+        lastIter = readInfoField(self._getExtraPath(), "iter", xmippLib.MDL_REF)
+        firstMaxShift = readInfoField(self._getExtraPath(), "shift", xmippLib.MDL_SHIFT_X)
         outMdFn = self._getExtraPath('outputParticles.xmd')
         copy(self.imgsFn, outMdFn)
         self.runJob("xmipp_angular_deepalign_predict", "%s %f %f %s %d" %
-                    (outMdFn,
-                     round(newXdim/10), 180, self._getExtraPath(),
-                     self.numIter), numberOfMpi=1)
+                    (outMdFn, firstMaxShift, 180, self._getExtraPath(),
+                     lastIter+1), numberOfMpi=1)
 
     def createOutputStep(self):
         inputParticles = self.inputSet.get()

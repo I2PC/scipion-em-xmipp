@@ -56,6 +56,7 @@ from .protocol_consensus_classes3D import XmippProtConsensusClasses3D
 from .protocol_subtract_projection import XmippProtSubtractProjection
 from .protocol_denoise_particles import XmippProtDenoiseParticles
 from .protocol_deep_alignment3D import XmippProtDeepAlignment3D
+from .protocol_deep_correlation3D import XmippProtDeepCorrelation3D
 from .protocol_eliminate_empty_particles import XmippProtEliminateEmptyParticles
 from .protocol_extract_particles import XmippProtExtractParticles
 from .protocol_extract_particles_movies import XmippProtExtractMovieParticles
