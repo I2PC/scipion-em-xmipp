@@ -1,0 +1,25 @@
+**`changes.txt`**:
+
+## devel
+
+- Highres can now take a global alignment performed by any other method
+
+
+
+
+**`MANIFEST.in`**:
+
+include *.txt
+
+
+
+**`.gitignore`**:
+
+### Python binaries
+*.pyc
+*.pyo
+
+# Other
+dist/
+/*.egg-info
+venv
