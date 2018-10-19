@@ -71,8 +71,9 @@ class XmippProtDeepCorrelation3D(ProtRefine3D):
         
         self._insertFunctionStep("convertStep")
         # Trainig steps
-        self._insertFunctionStep("generateProjImagesStep", 100, 'projections')
-        self._insertFunctionStep("generateExpImagesStep", 5, 'projections', 'projectionsExp')
+        self._insertFunctionStep("generateProjImagesStep", 1000, 'projections')
+        self._insertFunctionStep("generateExpImagesStep", 30, 'projections', 'projectionsExp', False)
+        #self._insertFunctionStep("generateExpImagesStep", 30, 'projections', 'projectionsNoisyExp', True)
         self._insertFunctionStep("calculateCorrMatrixStep")
         self._insertFunctionStep("trainStep")
         # Predict step
@@ -140,7 +141,7 @@ _noiseCoord   '0'
         fnProjs = self._getExtraPath(fn+".stk")
         self.runJob("xmipp_phantom_project","-i %s -o %s --method fourier 1 0.5 --params %s"%(fnVol,fnProjs,fnParams),numberOfMpi=1)
 
-    def generateExpImagesStep(self, Nrepeats, nameProj, nameExp):
+    def generateExpImagesStep(self, Nrepeats, nameProj, nameExp, boolNoise):
 
         fnProj = self._getExtraPath(nameProj+".xmd")
         fnExp = self._getExtraPath(nameExp+".xmd")
@@ -168,12 +169,16 @@ _noiseCoord   '0'
                 s = math.sin(psi)
                 M = np.float32([[c, s, (1 - c) * Xdim2 - s * Ydim2 + deltaX],
                                 [-s, c, s * Xdim2 + (1 - c) * Ydim2 + deltaY]])
-                newImg = cv2.warpAffine(I.getData(), M, (Xdim, Ydim)) + np.random.normal(0.0, 10.0, [Xdim, Xdim])\
-                         + np.random.normal(0.0, 10.0, [Xdim, Xdim])
+                newImg = cv2.warpAffine(I.getData(), M, (Xdim, Ydim))
+                if boolNoise:
+                    newImg = newImg + np.random.normal(0.0, 10.0, [Xdim, Xdim])
                 newFn = ('%06d@'%idx)+fnExp[:-3]+'stk'
                 newImage.setData(newImg)
                 newImage.write(newFn)
                 myRow.setValue(xmippLib.MDL_IMAGE, newFn)
+                myRow.setValue(xmippLib.MDL_ANGLE_PSI, psiDeg)
+                myRow.setValue(xmippLib.MDL_SHIFT_X, deltaX)
+                myRow.setValue(xmippLib.MDL_SHIFT_Y, deltaY)
                 myRow.addToMd(mdExp)
                 idx+=1
         mdExp.write(fnExp)
@@ -185,42 +190,39 @@ _noiseCoord   '0'
         expSet = self._getExtraPath('projectionsExp.xmd')
         args = '-i_ref %s -i_exp %s -o %s --odir %s --keep_best %d ' \
                '--maxShift %d ' %(refSet, expSet,
-                self._getExtraPath('outputGl2d.xmd'), self._getExtraPath(),
-                1, 10)
+                self._getExtraPath('outputGl2d.xmd'), self._getExtraPath(), 1, 10)
         self.runJob("xmipp_cuda_correlation", args, numberOfMpi=1)
 
     def trainStep(self):
 
+        newXdim = readInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE)
         refSet = self._getExtraPath('projections.xmd')
         expSet = self._getExtraPath('projectionsExp.xmd')
         fnCorrMatrix = self._getExtraPath('example.txt')
         modelFn = 'modelCorr'
 
-        self.runJob("xmipp_correlation_deepalign", "%s %s %s %s %s %d" %
+        self.runJob("xmipp_correlation_deepalign", "%s %s %s %s %s %d %d" %
                     (refSet, expSet, fnCorrMatrix, self._getExtraPath(),
-                     modelFn, 10), numberOfMpi=1)
+                     modelFn, 10, newXdim), numberOfMpi=1)
 
 
-        aaaaaaaaaaaaaaaaaaaaa
+    def predictStep(self):
+        newXdim = readInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE)
+        fnProjs = self._getExtraPath("projections.xmd")
+        outMdFn = self._getExtraPath('outputParticles.xmd')
+        self.runJob("xmipp_correlation_deepalign_predict", " %s %s %s %s %d" %
+                    (fnProjs, self.imgsFn, outMdFn, self._getExtraPath(), newXdim), numberOfMpi=1)
 
-    # def predictStep(self):
-    #     lastIter = readInfoField(self._getExtraPath(), "iter", xmippLib.MDL_REF)
-    #     firstMaxShift = readInfoField(self._getExtraPath(), "shift", xmippLib.MDL_SHIFT_X)
-    #     outMdFn = self._getExtraPath('outputParticles.xmd')
-    #     copy(self.imgsFn, outMdFn)
-    #     self.runJob("xmipp_angular_deepalign_predict", "%s %f %f %s %d" %
-    #                 (outMdFn, firstMaxShift, 180, self._getExtraPath(),
-    #                  lastIter+1), numberOfMpi=1)
-    #
-    # def createOutputStep(self):
-    #     inputParticles = self.inputSet.get()
-    #     fnDeformedParticles = self._getExtraPath('outputParticles.xmd')
-    #     outputSetOfParticles = self._createSetOfParticles()
-    #     outputSetOfParticles.copyInfo(inputParticles)
-    #     readSetOfParticles(fnDeformedParticles, outputSetOfParticles)
-    #     self._defineOutputs(outputParticles=outputSetOfParticles)
+    def createOutputStep(self):
+        inputParticles = self.inputSet.get()
+        fnDeformedParticles = self._getExtraPath('outputParticles.xmd')
+        outputSetOfParticles = self._createSetOfParticles()
+        outputSetOfParticles.copyInfo(inputParticles)
+        readSetOfParticles(fnDeformedParticles, outputSetOfParticles)
+        self._defineOutputs(outputParticles=outputSetOfParticles)
 
-        #--------------------------- INFO functions --------------------------------------------
+
+    #--------------------------- INFO functions --------------------------------
     def _summary(self):
         summary = []
         summary.append("Images evaluated: %i" % self.inputSet.get().getSize())
@@ -232,6 +234,5 @@ _noiseCoord   '0'
         if hasattr(self, 'outputParticles'):
             methods.append("We evaluated %i input images %s regarding to volume %s."\
                            %(self.inputSet.get().getSize(), self.getObjectTag('inputSet'), self.getObjectTag('inputVolume')) )
-            methods.append("The residuals were evaluated according to their mean, variance and covariance structure [Cherian2013].")
         return methods
 

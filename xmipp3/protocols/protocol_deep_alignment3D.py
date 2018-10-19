@@ -61,9 +61,12 @@ class XmippProtDeepAlignment3D(ProtRefine3D):
         form.addParam('numIterMin', IntParam, label="Min iterations",
                       default=3,
                       help="The minimum number of iterations in the training process.")
-        form.addParam('numEpochs', IntParam, label="Number of epochs in training",
-                      default=2,
-                      help="Number of epochs in training.")
+        form.addParam('numEpochs', IntParam, label="Number of epochs in psi and shift training",
+                      default=3,
+                      help="Number of epochs in training for psi and shift paremeters.")
+        form.addParam('numEpochsRot', IntParam, label="Number of epochs in rot and tilt training",
+                      default=8,
+                      help="Number of epochs in training for rot and tilt paremeters.")
         form.addParam('minShiftError', FloatParam, label="Min shift error",
                       default=1.0,
                       help="In pixels, the minimum error allowed in the training of shifts.")
@@ -238,12 +241,12 @@ _noiseCoord   '0'
         mode = 'rot'
         modelFn = mode+'_iter%06d'%(i+1)
         self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %d"%
-                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn, self.numEpochs),numberOfMpi=1)
+                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn, self.numEpochsRot),numberOfMpi=1)
 
         mode = 'tilt'
         modelFn = mode+'_iter%06d'%(i+1)
         self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %d"%
-                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn, self.numEpochs),numberOfMpi=1)
+                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn, self.numEpochsRot),numberOfMpi=1)
 
     def predictStep(self):
         lastIter = readInfoField(self._getExtraPath(), "iter", xmippLib.MDL_REF)
@@ -262,7 +265,7 @@ _noiseCoord   '0'
         readSetOfParticles(fnDeformedParticles, outputSetOfParticles)
         self._defineOutputs(outputParticles=outputSetOfParticles)
 
-        #--------------------------- INFO functions --------------------------------------------
+    #--------------------------- INFO functions --------------------------------
     def _summary(self):
         summary = []
         summary.append("Images evaluated: %i" % self.inputSet.get().getSize())
@@ -274,6 +277,5 @@ _noiseCoord   '0'
         if hasattr(self, 'outputParticles'):
             methods.append("We evaluated %i input images %s regarding to volume %s."\
                            %(self.inputSet.get().getSize(), self.getObjectTag('inputSet'), self.getObjectTag('inputVolume')) )
-            methods.append("The residuals were evaluated according to their mean, variance and covariance structure [Cherian2013].")
         return methods
 
