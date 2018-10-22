@@ -70,14 +70,19 @@ class XmippProtMonoTomo(ProtAnalysis3D):
         form.addSection(label='Input')
 
         form.addParam('inputVolume', PointerParam, pointerClass='Volume',
-                      label="Volume Half 1", important=True,
+                      label="Odd tomogram", important=True,
                       help='Select a volume for determining its '
                       'local resolution.')
 
         form.addParam('inputVolume2', PointerParam, pointerClass='Volume',
-                      label="Volume Half 2", important=True,
+                      label="Even Tomogram", important=True,
                       help='Select a second volume for determining a '
                       'local resolution.')
+        
+        form.addParam('tomoComplete', PointerParam, pointerClass='Volume',
+                  label="Tomogram Complete", allowsNull=True,
+                  help='Select a tomogram for determining a '
+                  'local resolution.')
 
         form.addParam('Mask', PointerParam, pointerClass='VolumeMask', 
                       allowsNull=True,
@@ -129,8 +134,8 @@ class XmippProtMonoTomo(ProtAnalysis3D):
                  METADATA_MASK_FILE: self._getExtraPath('mask_data.xmd'),
                  FN_METADATA_HISTOGRAM: self._getExtraPath('hist.xmd'),
                  BINARY_MASK: self._getExtraPath('binarized_mask.vol'),
-                 FN_GAUSSIAN_MAP: self._getExtraPath('gaussianfilted.vol')
-                 }
+                 FN_GAUSSIAN_MAP: self._getExtraPath('gaussianfilted.vol'),
+                                  }
         self._updateFilenamesDict(myDict)
 
     def _insertAllSteps(self):
@@ -213,6 +218,8 @@ class XmippProtMonoTomo(ProtAnalysis3D):
   
         xdim = self.maskRadius()
 
+#         params = ' --tomogram %s' % self.tomoComplete.get.getFileName()
+#         params = ' --vol %s' % self.vol1Fn
         params = ' --vol %s' % self.vol1Fn
         params += ' --vol2 %s' % self.vol2Fn
         params += ' --meanVol %s' % self._getFileName(FN_MEAN_VOL)
@@ -225,6 +232,7 @@ class XmippProtMonoTomo(ProtAnalysis3D):
         params += ' --step %f' % freq_step
         params += ' --mask_out %s' % self._getFileName(OUTPUT_MASK_FILE)
         params += ' -o %s' % self._getFileName(OUTPUT_RESOLUTION_FILE)
+        params += ' --filteredMap %s' % self._getFileName(FN_FILTERED_MAP)
         params += ' --chimera_volume %s' % self._getFileName(
                                                     OUTPUT_RESOLUTION_FILE_CHIMERA)
         params += ' --significance %f' % self.significance.get()
@@ -270,6 +278,12 @@ class XmippProtMonoTomo(ProtAnalysis3D):
 
         volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
         self._defineOutputs(resolution_Volume=volume)
+        self._defineSourceRelation(self.inputVolume, volume)
+        
+        volume=Volume()
+        volume.setFileName(self._getFileName(FN_FILTERED_MAP))
+        volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
+        self._defineOutputs(outputVolume_Filtered=volume)
         self._defineSourceRelation(self.inputVolume, volume)
             
             
