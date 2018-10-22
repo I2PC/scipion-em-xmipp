@@ -72,8 +72,7 @@ class XmippProtDeepCorrelation3D(ProtRefine3D):
         self._insertFunctionStep("convertStep")
         # Trainig steps
         self._insertFunctionStep("generateProjImagesStep", 1000, 'projections')
-        self._insertFunctionStep("generateExpImagesStep", 30, 'projections', 'projectionsExp', False)
-        #self._insertFunctionStep("generateExpImagesStep", 30, 'projections', 'projectionsNoisyExp', True)
+        self._insertFunctionStep("generateExpImagesStep", 30, 'projections', 'projectionsExp', True)
         self._insertFunctionStep("calculateCorrMatrixStep")
         self._insertFunctionStep("trainStep")
         # Predict step
