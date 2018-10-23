@@ -34,7 +34,7 @@ from pyworkflow.em.metadata.utils import iterRows
 from pyworkflow.em.convert import ImageHandler
 from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
                             setXmippAttributes)
-from xmipp3.utils import writeInfoField
+from xmipp3.utils import writeInfoField, readInfoField
 from pyworkflow.utils.path import moveFile
 import numpy as np
 from sklearn.manifold import TSNE
@@ -52,12 +52,21 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         form.addSection(label='Input')
         form.addParam('inputParticles', params.PointerParam, label="Input particles", pointerClass='SetOfParticles')
         form.addParam('inputVolume', params.PointerParam, label="Input volume", pointerClass='Volume')
-        form.addParam('targetResolution', params.FloatParam, label="Target resolution", default=8.0,
+        form.addParam('targetResolution', params.FloatParam, label="Target resolution (A)", default=8.0,
                       help="In Angstroms, the images and the volume are rescaled so that this resolution is at "
                            "2/3 of the Fourier spectrum.")
-        form.addParam('depth', params.IntParam, default=1,
+        form.addParam('depth', params.IntParam, default=3,
                       label='Harmonical depth', expertLevel=params.LEVEL_ADVANCED,
                       help='Harmonical depth of the deformation=1,2,3,...')
+        form.addParam('maxShift', params.FloatParam, default=-1,
+                      label='Maximum shift (px)', expertLevel=params.LEVEL_ADVANCED,
+                      help='Maximum shift allowed in pixels')
+        form.addParam('maxAngular', params.FloatParam, default=5,
+                      label='Maximum angular change (degrees)', expertLevel=params.LEVEL_ADVANCED,
+                      help='Maximum angular change allowed (in degrees)')
+        form.addParam('maxResolution', params.FloatParam, default=4.0,
+                      label='Maximum resolution (A)', expertLevel=params.LEVEL_ADVANCED,
+                      help='Maximum resolution (A)')
         form.addParallelSection(threads=1, mpi=8)
 
     def _createFilenameTemplates(self):
@@ -111,8 +120,13 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         imgsFn = self._getFileName('imgsFn')
         fnVol = self._getFileName('fnVol')
         fnOut =  self._getFileName('fnOut')
-        params = ' -i %s --ref %s -o %s --optimizeAlignment --optimizeDeformation --depth %d' %\
-                 (imgsFn, fnVol, fnOut, self.depth.get())
+        Ts = readInfoField(self._getExtraPath(), "sampling", md.MDL_SAMPLINGRATE)
+        params = ' -i %s --ref %s -o %s --optimizeAlignment --optimizeDeformation ' \
+                 '--depth %d --max_shift %f --max_angular_change %f --sampling %f ' \
+                 ' --max_resolution %f ' %\
+                 (imgsFn, fnVol, fnOut, self.depth, self.maxShift, self.maxAngular, Ts, self.maxResolution)
+        if self.inputParticles.get().isPhaseFlipped(): #preguntar
+            params += ' --phaseFlipped'
         self.runJob("xmipp_angular_sph_alignment", params, numberOfMpi=self.numberOfMpi.get())
 
 

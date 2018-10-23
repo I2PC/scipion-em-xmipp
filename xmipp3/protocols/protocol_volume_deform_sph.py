@@ -50,7 +50,7 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
                       default=8.0,
                       help="In Angstroms, the images and the volume are rescaled so that this resolution is at "
                            "2/3 of the Fourier spectrum.")
-        form.addParam('depth', params.IntParam, default=1,
+        form.addParam('depth', params.IntParam, default=3,
                       label='Harmonical depth',
                       expertLevel=params.LEVEL_ADVANCED,
                       help='Harmonical depth of the deformation=1,2,3,...')
@@ -116,7 +116,7 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
         self.runJob("xmipp_volume_align", params)
 
 
-        params = ' -i %s -r %s -o %s --analyzeStrain --depth %d' % \
+        params = ' -i %s -r %s -o %s --analyzeStrain --depth %d ' % \
                  (fnOutVol, fnRefVol, fnOutVol, self.depth.get())
         self.runJob("xmipp_volume_deform_sph", params)
 
