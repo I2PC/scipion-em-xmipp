@@ -26,6 +26,8 @@
 # *
 # **************************************************************************
 
+import subprocess
+
 import pyworkflow.em
 import pyworkflow.utils as pwutils
 
@@ -86,24 +88,53 @@ class Plugin(pyworkflow.em.Plugin):
 
     @classmethod
     def defineBinaries(cls, env):
-        scons = env.addPipModule('scons', '2.3.6', target='scons-2.3.6',
-                                 default=True, ignoreDefaultDeps=True)
 
-        installCmd = "src/xmipp/xmipp config ; src/xmipp/xmipp check_config ;" \
-                     "src/xmipp/xmipp compile %d ; src/xmipp/xmipp install %s" \
-                      % (env.getProcessors(), cls.getHome())
+        ## XMIPP SOFTWARE ##
+
+        installCmd = ("src/xmipp/xmipp config ; src/xmipp/xmipp check_config ;"
+                      "src/xmipp/xmipp compile %d ; src/xmipp/xmipp install %s"
+                       % (env.getProcessors(), cls.getHome()))
 
         target = "%s/bin/xmipp_reconstruct_significant" % cls.getHome()
 
-        env.addPackage('xmippSrc', version=_currentVersion,
-                       tar='xmippSrc-%s.tgz'%_currentVersion,
-                       commands=[(installCmd, target)],
-                       default=True,
-                       deps=[scons])
-            # Old dependencies now are checked inside xmipp script:
-            #   fftw3, scikit, nma, tiff, sqlite, opencv, sh_alignment, hdf5
+        xmippSrc = env.addPackage('xmippSrc', version=_currentVersion,
+                                  tar='xmippSrc-%s.tgz'%_currentVersion,
+                                  commands=[(installCmd, target)])
 
-        env.addPackage('xmippBin', version=_currentVersion,
-                       tar='xmipp-%s.tgz'%_currentVersion)
+        xmippBin = env.addPackage('xmippBin', version=_currentVersion,
+                                  tar='xmipp-%s.tgz' %_currentVersion,
+                                  default=True)
+
+        # Old dependencies now are taken into account inside xmipp script:
+        #   scons, fftw3, scikit, nma, tiff, sqlite, opencv, sh_alignment, hdf5
+
+
+        ## EXTRA PACKAGES ##
+
+        # TensorFlow
+        tensorFlowTarget = "1.10.0"
+        nvccProgram = subprocess.Popen(["which", "nvcc"],
+                                       stdout=subprocess.PIPE).stdout.read()
+        if nvccProgram != "":
+            nvccVersion = subprocess.Popen(["nvcc", '--version'],
+                                           stdout=subprocess.PIPE).stdout.read()
+            if "release 8.0" in nvccVersion:
+                tensorFlowTarget = "1.4.1"
+
+        env.addPipModule('tensorflow', target='tensorflow*', default=False,
+                         pipCmd="pip install https://storage.googleapis.com/"
+                                "tensorflow/linux/cpu/tensorflow-%s-cp27-none-"
+                                "linux_x86_64.whl" % tensorFlowTarget)
+        env.addPipModule('tensorflow-gpu', target='tensorflow*', default=False,
+                         pipCmd="pip install https://storage.googleapis.com/"
+                                "tensorflow/linux/gpu/tensorflow_gpu-%s-cp27-none-"
+                                "linux_x86_64.whl" % tensorFlowTarget)
+
+        # Keras
+        cv2 = env.addPipModule('opencv-python', "3.4.2.17",
+                               target="cv2", default=False)
+        env.addPipModule('Keras', '2.2.2', target='keras',
+                         default=False, deps=[cv2])
+
 
 pyworkflow.em.Domain.registerPlugin(__name__)

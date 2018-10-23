@@ -49,8 +49,7 @@ class XmippProtParticlePicking(ProtParticlePicking, XmippProtocol):
     #--------------------------- DEFINE param functions ------------------------   
     def _defineParams(self, form):
         ProtParticlePicking._defineParams(self, form)
-        form.addParam('memory', FloatParam, default=2,
-                      label='Memory to use (In Gb)', expertLevel=2)
+
         form.addParam('saveDiscarded', BooleanParam, default=False,
                       label='Save discarded particles',
                       help='Generates an output with '
@@ -75,8 +74,7 @@ class XmippProtParticlePicking(ProtParticlePicking, XmippProtocol):
     def launchParticlePickGUIStep(self, micFn):
         # Launch the particle picking GUI
         extraDir = self._getExtraPath()
-        memory = '%dg'%self.memory.get()
-        process = launchSupervisedPickerGUI(micFn, extraDir, self, memory=memory)
+        process = launchSupervisedPickerGUI(micFn, extraDir, self)
         process.wait()
         # generate the discarded output only if there is a good output
         if self.saveDiscarded and exists(self._getPath('coordinates.sqlite')):

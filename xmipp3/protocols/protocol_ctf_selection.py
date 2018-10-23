@@ -92,29 +92,30 @@ class XmippProtCTFSelection(em.ProtCTFMicrographs):
                            'requirement, it will be discarded.')
 
         form.addParam('useCritXmipp', params.BooleanParam, default=False,
-                      label='Use Xmipp Crit criterion for selection',
+                      label='Use Xmipp criteria for selection',
                       help='Use this button to decide if carrying out the '
                            'selection taking into account the Xmipp '
                            'Crit parameters. \n'
                            'Only available when Xmipp CTF'
                            ' estimation was used.')
         form.addParam('critFirstZero', params.FloatParam, default=5,
-                      condition="useCritXmipp", label='CritFirstZero',
+                      condition="useCritXmipp", label='Minimum 1st zero',
                       help='Minimun value of CritFirstZero')
-        line = form.addLine('CritFirstZeroRatio', condition="useCritXmipp",
+        line = form.addLine('First zero astigmatism', condition="useCritXmipp",
                             help='Minimum and maximum values for '
                                  'CritFirstZeroRatio')
         line.addParam('minCritFirstZeroRatio', params.FloatParam, default=0.9,
                       label='Min')
         line.addParam('maxCritFirstZeroRatio', params.FloatParam, default=1.1,
                       label='Max')
-        form.addParam('critCorr', params.FloatParam, default=0,
-                      condition="useCritXmipp", label='CritCorr',
-                      help='Minimum value of CritCorr')
-        form.addParam('critCtfMargin', params.FloatParam, default=0,
-                      condition="useCritXmipp", label='CritCtfMargin',
+         # The following default value is important to avoid energy explosions in Wiener filter
+        form.addParam('critCorr', params.FloatParam, default=0.05,
+                      condition="useCritXmipp", label='Correlation 1st-3rd zero',
+                      help='Minimum value of correlation between 1st and 3rd zeros')
+        form.addParam('critCtfMargin', params.FloatParam, default=1.5,
+                      condition="useCritXmipp", label='CTF Margin',
                       help='Minimum value of CritCtfMargin')
-        line = form.addLine('CritNonAstigmaticValidity',
+        line = form.addLine('Non astigmatic validity',
                             condition="useCritXmipp",
                             help='Minimum and maximum values for '
                                  'CritNonAstigmaticValidity')
