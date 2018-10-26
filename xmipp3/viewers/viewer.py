@@ -89,6 +89,7 @@ class XmippViewer(Viewer):
                 XmippProtExtractParticlesPairs,
                 XmippProtKerdensom,
                 ProtParticlePicking,
+                ProtImportMovies,
                 XmippProtParticlePickingPairs,
                 XmippProtRotSpectra,
                 XmippProtScreenParticles,
@@ -384,6 +385,14 @@ class XmippViewer(Viewer):
             if obj.getOutputsSize() >= 1:
                 coordsSet = obj.getCoords()
                 self._visualize(coordsSet)
+                
+        elif issubclass(cls, ProtImportMovies):
+            movs = obj.outputMovies
+            self._visualize(movs)
+            gainFn = movs.getGain()
+            if os.path.exists(gainFn):
+                self._views.append(DataView(gainFn))
+
 
         elif issubclass(cls, XmippProtValidateNonTilt):
             outputVols = obj.outputVolumes
