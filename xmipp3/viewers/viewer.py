@@ -166,7 +166,7 @@ class XmippViewer(Viewer):
         elif issubclass(cls, SetOfMovies):
             fn = obj.getFileName()
             # Enabled for the future has to be available
-            labels = 'id _filename _samplingRate  '
+            labels = 'id _filename _samplingRate _acquisition._dosePerFrame _acquisition._doseInitial '
             moviesView = ObjectView(self._project, obj.strId(), fn,
                                           viewParams={ORDER: labels,
                                                       VISIBLE: labels,
