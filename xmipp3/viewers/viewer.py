@@ -90,6 +90,7 @@ class XmippViewer(Viewer):
                 XmippProtExtractParticlesPairs,
                 XmippProtKerdensom,
                 ProtParticlePicking,
+                ProtImportMovies,
                 XmippProtParticlePickingPairs,
                 XmippProtRotSpectra,
                 XmippProtScreenParticles,
@@ -167,7 +168,7 @@ class XmippViewer(Viewer):
         elif issubclass(cls, SetOfMovies):
             fn = obj.getFileName()
             # Enabled for the future has to be available
-            labels = 'id _filename _samplingRate  '
+            labels = 'id _filename _samplingRate _acquisition._dosePerFrame _acquisition._doseInitial '
             moviesView = ObjectView(self._project, obj.strId(), fn,
                                           viewParams={ORDER: labels,
                                                       VISIBLE: labels,
@@ -396,6 +397,14 @@ class XmippViewer(Viewer):
             if obj.getOutputsSize() >= 1:
                 coordsSet = obj.getCoords()
                 self._visualize(coordsSet)
+                
+        elif issubclass(cls, ProtImportMovies):
+            movs = obj.outputMovies
+            self._visualize(movs)
+            gainFn = movs.getGain()
+            if os.path.exists(gainFn):
+                self._views.append(DataView(gainFn))
+
 
         elif issubclass(cls, XmippProtValidateNonTilt):
             outputVols = obj.outputVolumes

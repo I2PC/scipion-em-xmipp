@@ -111,10 +111,6 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                            'Downsample factor; and if it fails, +1; '
                            'and if it fails, -1.')
 
-        form.addParam('doFastDefocus', params.BooleanParam, default=False,
-                      label="Fast defocus estimate",
-                      expertLevel=pwconst.LEVEL_ADVANCED,
-                      help='Perform fast defocus estimate.')
         form.addParam('doAutomaticRejection', params.BooleanParam,
                       default=False, label="Automatic rejection",
                       expertLevel=pwconst.LEVEL_ADVANCED,
@@ -280,8 +276,6 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
     def _methods(self):
         strMsg = "We calculated the CTF of micrographs %s using Xmipp " \
                  "[Sorzano2007a]" % self.getObjectTag('inputMicrographs')
-        if self.doFastDefocus and not self.doInitialCTF:
-            strMsg += " with a fast defocus estimate [Vargas2013a]"
         strMsg += "."
 
         if self.methodsVar.hasValue():
@@ -294,8 +288,6 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
 
     def _citations(self):
         papers = ['Sorzano2007a']
-        if self.doFastDefocus and not self.doInitialCTF:
-            papers.append('Vargas2013a')
         return papers
 
     # --------------------------- UTILS functions ------------------------------
@@ -314,9 +306,6 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
 
         for par, val in params.iteritems():
             self._args += " --%s %s" % (par, str(val))
-
-        #if self.doFastDefocus and not self.doInitialCTF:
-            #self._args += " --fastDefocus"
 
     def getPreviousParameters(self):
         if self.ctfRelations.hasValue():

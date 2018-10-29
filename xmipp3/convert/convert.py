@@ -359,7 +359,6 @@ def getMovieFileName(movie):
 
 
 def getImageLocation(image):
-    print 'this is crazy!'
     return ImageHandler.locationToXmipp(image)
 
 
