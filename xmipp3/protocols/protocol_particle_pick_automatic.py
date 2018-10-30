@@ -81,9 +81,6 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
                       help="Select other set of micrographs to pick using the "
                            "trained picker.")
 
-        form.addParam('memory', FloatParam, default=2,
-                      label='Memory to use (In Gb)', expertLevel=2)
-
         self._defineStreamingParams(form)
 
         form.addParallelSection(threads=1, mpi=1)

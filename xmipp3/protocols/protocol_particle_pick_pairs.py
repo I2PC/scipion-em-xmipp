@@ -52,8 +52,6 @@ class XmippProtParticlePickingPairs(ProtParticlePicking, XmippProtocol):
                       pointerClass='MicrographsTiltPair',
                       label="Micrographs tilt pair",
                       help='Select the MicrographsTiltPair ')
-        form.addParam('memory', params.FloatParam, default=2,
-                      label='Memory to use (In Gb)', expertLevel=2)
 
         #----------- INSERT steps functions ----------------------------------
     def _insertAllSteps(self):
@@ -79,8 +77,7 @@ class XmippProtParticlePickingPairs(ProtParticlePicking, XmippProtocol):
                                            self.micsFn)
 
     def launchParticlePickGUIStep(self):
-        process = launchTiltPairPickerGUI(self.micsFn, self._getExtraPath(),
-                                          self, memory='%dg' % self.memory.get())
+        process = launchTiltPairPickerGUI(self.micsFn, self._getExtraPath(), self)
         process.wait()
 
     def _importFromFolderStep(self):

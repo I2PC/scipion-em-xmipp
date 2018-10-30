@@ -35,6 +35,8 @@ from pyworkflow.utils import makePath, runJob, copyTree, cleanPath
 import pyworkflow as pw
 from pyworkflow.em.showj import *
 import pyworkflow.gui.dialog as dialog
+import matplotlib.pyplot as plt
+import numpy as np
 
 import xmippLib
 import xmipp3
@@ -79,7 +81,7 @@ class XmippViewer(Viewer):
                 SetOfImages,
                 SetOfMovies,
                 SetOfNormalModes,
-                SetOfPDBs ,
+                SetOfPDBs,
                 XmippProtCompareReprojections,
                 XmippProtCompareAngles,
                 XmippParticlePickingAutomatic,
@@ -87,6 +89,7 @@ class XmippViewer(Viewer):
                 XmippProtExtractParticlesPairs,
                 XmippProtKerdensom,
                 ProtParticlePicking,
+                ProtImportMovies,
                 XmippProtParticlePickingPairs,
                 XmippProtRotSpectra,
                 XmippProtScreenParticles,
@@ -163,7 +166,7 @@ class XmippViewer(Viewer):
         elif issubclass(cls, SetOfMovies):
             fn = obj.getFileName()
             # Enabled for the future has to be available
-            labels = 'id _filename _samplingRate  '
+            labels = 'id _filename _samplingRate _acquisition._dosePerFrame _acquisition._doseInitial '
             moviesView = ObjectView(self._project, obj.strId(), fn,
                                           viewParams={ORDER: labels,
                                                       VISIBLE: labels,
@@ -261,7 +264,8 @@ class XmippViewer(Viewer):
             if ctfSet.isEmpty():
                 self._views.append(self.infoMessage("No CTF estimation has finished yet"))
             else:
-                self._views.append(CtfView(self._project, ctfSet))
+                self.getCTFViews(ctfSet)
+
 
         elif issubclass(cls, SetOfCTF):
             self._views.append(CtfView(self._project, obj))
@@ -381,6 +385,14 @@ class XmippViewer(Viewer):
             if obj.getOutputsSize() >= 1:
                 coordsSet = obj.getCoords()
                 self._visualize(coordsSet)
+                
+        elif issubclass(cls, ProtImportMovies):
+            movs = obj.outputMovies
+            self._visualize(movs)
+            gainFn = movs.getGain()
+            if os.path.exists(gainFn):
+                self._views.append(DataView(gainFn))
+
 
         elif issubclass(cls, XmippProtValidateNonTilt):
             outputVols = obj.outputVolumes
@@ -422,5 +434,27 @@ class XmippViewer(Viewer):
         return self._views
 
 
+    def getCTFViews(self, ctfSet):
+    # This could be used by any CTF viewer to show CTF plus, phaseShift plot
+    # if applies.
 
+        # Return phaseShift plot if apply
+        firstCtf = ctfSet.getFirstItem()
 
+        if firstCtf.hasPhaseShift():
+
+            from pyworkflow.em.plotter import EmPlotter
+            phase_shift = []
+
+            for ctf in ctfSet.iterItems():
+                phShift = ctf.getPhaseShift()
+                phase_shift.append(phShift)
+
+            plotter = EmPlotter()
+            plotter.createSubPlot("Phase Shift estimation",
+                                  "Number of CTFs", "Phase Shift")
+            plotter.plotData(np.arange(0, len(phase_shift)), phase_shift)
+            self._views.append(plotter)
+
+        # Return Standard CTF view (showJ)
+        self._views.append(CtfView(self._project, ctfSet))

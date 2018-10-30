@@ -278,7 +278,7 @@ class XmippProtScreenParticles(ProtProcessParticles):
 
         args = "-i Particles@%s -o %s" % (fnInputMd, fnOutputMd)
         if self.autoParRejectionSSNR == self.REJ_PERCENTAGE_SSNR:
-            args += "--ssnrpercent " + str(self.percentageSSNR.get())
+            args += " --ssnrpercent " + str(self.percentageSSNR.get())
         self.runJob("xmipp_image_ssnr", args)
 
         if self.autoParRejectionVar != self.REJ_NONE:
