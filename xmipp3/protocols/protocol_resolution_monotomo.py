@@ -79,13 +79,13 @@ class XmippProtMonoTomo(ProtAnalysis3D):
                       help='Select a second volume for determining a '
                       'local resolution.')
         
-        form.addParam('tomoComplete', PointerParam, pointerClass='Volume',
-                  label="Tomogram Complete", allowsNull=True,
-                  help='Select a tomogram for determining a '
-                  'local resolution.')
-
+        form.addParam('useMask', BooleanParam, default=False,
+                      label="Use mask?", 
+                      help='The mask determines which points are specimen'
+                      ' and which are not.')
+        
         form.addParam('Mask', PointerParam, pointerClass='VolumeMask', 
-                      allowsNull=True,
+                      condition='useMask', allowsNull=True, 
                       label="Binary Mask", 
                       help='The mask determines which points are specimen'
                       ' and which are not')
@@ -104,15 +104,6 @@ class XmippProtMonoTomo(ProtAnalysis3D):
                       help='Relution is computed using hipothesis tests, '
                       'this value determines the significance of that test')
         
-        group.addParam('maskthreshold', FloatParam, default=0.5, 
-                       expertLevel=LEVEL_ADVANCED,
-                      label="Mask threshold",
-                      help='If the provided mask is not binary. Then, MonoRes'
-                      'will try to binarize it. Bmask values below the threshold'
-                      'will be change to 0 and above the thresthol will be 1')
-        
-
-
         line.addParam('minRes', FloatParam, default=0, label='High')
         line.addParam('maxRes', FloatParam, allowsNull=True, label='Low')
         line.addParam('stepSize', FloatParam, allowsNull=True,
@@ -158,24 +149,26 @@ class XmippProtMonoTomo(ProtAnalysis3D):
             self.vol1Fn = self.vol1Fn + ':mrc'
         if (extVol2 == '.mrc') or (extVol2 == '.map'):
             self.vol2Fn = self.vol2Fn + ':mrc'
+        
+        if self.useMask.get() is True:
+            if (not self.Mask.hasValue()):
+                self.ifNomask(self.vol1Fn)
+            else:
+                self.maskFn = self.Mask.get().getFileName()
+                
+            extMask = getExt(self.maskFn)
             
-        if not self.Mask.hasValue():
-            self.ifNomask(self.vol1Fn)
-        else:
-            self.maskFn = self.Mask.get().getFileName()
-
-
-        extMask = getExt(self.maskFn)
-        if (extMask == '.mrc') or (extMask == '.map'):
-            self.maskFn = self.maskFn + ':mrc'
-            
-        if self.Mask.hasValue():
-            params = ' -i %s' % self.maskFn
-            params += ' -o %s' % self._getFileName(BINARY_MASK)
-            params += ' --select below %f' % self.maskthreshold.get()
-            params += ' --substitute binarize'
-             
-            self.runJob('xmipp_transform_threshold', params)
+            if (extMask == '.mrc') or (extMask == '.map'):
+                self.maskFn = self.maskFn + ':mrc'
+                
+            if self.Mask.hasValue():
+                params = ' -i %s' % self.maskFn
+                params += ' -o %s' % self._getFileName(BINARY_MASK)
+                params += ' --select below %f' % 0.5# Mask threshold = 0.5 self.maskthreshold.get()
+                params += ' --substitute binarize'
+                 
+                self.runJob('xmipp_transform_threshold', params)
+        
 
     def ifNomask(self, fnVol):
         xdim, _ydim, _zdim = self.inputVolume.get().getDim()
@@ -218,12 +211,13 @@ class XmippProtMonoTomo(ProtAnalysis3D):
   
         xdim = self.maskRadius()
 
-#         params = ' --tomogram %s' % self.tomoComplete.get.getFileName()
-#         params = ' --vol %s' % self.vol1Fn
         params = ' --vol %s' % self.vol1Fn
         params += ' --vol2 %s' % self.vol2Fn
         params += ' --meanVol %s' % self._getFileName(FN_MEAN_VOL)
-        params += ' --mask %s' % self._getFileName(BINARY_MASK)
+        
+        if self.useMask.get() is True:
+            params += ' --mask %s' % self._getFileName(BINARY_MASK)
+        
         params += ' --sampling_rate %f' % self.inputVolume.get().getSamplingRate()
 
         params += ' --minRes %f' % self.minRes.get()

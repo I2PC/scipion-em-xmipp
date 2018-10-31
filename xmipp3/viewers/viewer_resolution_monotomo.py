@@ -159,6 +159,7 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
         xplotter = XmippPlotter(x=2, y=2, mainTitle="Local Resolution Slices "
                                                      "along %s-axis."
                                                      %self._getAxis())
+
         #The slices to be shown are close to the center. Volume size is divided in 
         # 9 segments, the fouth central ones are selected i.e. 3,4,5,6
         for i in xrange(3,7): 
@@ -169,7 +170,8 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
                                        cmap=self.getColorMap(),
                                        interpolation="nearest")
         xplotter.getColorBar(plot)
-        return [xplotter]
+
+        return [plt.show(xplotter)]
     
 
     def _showOneColorslice(self, param=None):
@@ -192,7 +194,8 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
                                        cmap=self.getColorMap(),
                                        interpolation="nearest")
         xplotter.getColorBar(plot)
-        return [xplotter]
+
+        return [plt.show(xplotter)]
     
     def _plotHistogram(self, param=None):
         md = MetaData()
