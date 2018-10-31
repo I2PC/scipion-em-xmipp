@@ -38,7 +38,7 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
                                         BooleanParam, IntParam, EnumParam,
                                         NumericListParam)
-from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile, createLink
+from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile, createLink, cleanPattern
 from pyworkflow.em.protocol import ProtRefine3D
 from pyworkflow.em.data import SetOfVolumes, Volume
 from pyworkflow.em.metadata.utils import getFirstRow, getSize
@@ -810,7 +810,6 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                             if self.globalMethod.get() == self.GLOBAL_SIGNIFICANT:
                                 args='-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d'%\
                                      (fnGroup,fnGalleryGroupMd,maxShift,fnDirSignificant,self.numberOfReplicates.get()-1)
-                                # Falta Wiener y filtrar
                                 self.runJob('xmipp_reconstruct_significant',args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
                                 # moveFile(join(fnDirSignificant,"images_significant_iter001_00.xmd"),join(fnDirSignificant,"angles_group%03d%s.xmd"%(j,subset)))
                                 fnAnglesSignificant = join(fnDirSignificant,"angles_iter001_00.xmd")
@@ -1210,6 +1209,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     if self.inputParticles.get().isPhaseFlipped():
                         args+=" --phase_flipped"
                     self.runJob("xmipp_ctf_correct_wiener2d",args,numberOfMpi=min(self.numberOfMpi.get()*self.numberOfThreads.get(),24))
+                    self.runJob("xmipp_image_eliminate_largeEnergy","-i %s.xmd --sigma2 4"%fnCorrectedImagesRoot,numberOfMpi=min(self.numberOfMpi.get()*self.numberOfThreads.get(),12))
                     fnAnglesToUse = fnCorrectedImagesRoot+".xmd"
                     deleteStack = True
                     deletePattern = fnCorrectedImagesRoot+".*"
@@ -1230,7 +1230,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     self.runJob("xmipp_transform_adjust_image_grey_levels",args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
                     fnAnglesToUse = fnGrayRoot+".xmd"
                     if deleteStack:
-                        cleanPath(deletePattern)
+                        cleanPattern(deletePattern)
                     deleteStack = True
                     deletePattern = fnGrayRoot+".*"
                     
@@ -1267,7 +1267,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     self.runJob("xmipp_image_operate","-i %s --plus %s"%(fnVol,fnAuxVol))
                     cleanPath(fnAuxVol)
                 if deleteStack:
-                    cleanPath(deletePattern)
+                    cleanPattern(deletePattern)
                     
                     
         if grayAdjusted:
@@ -1463,6 +1463,13 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             errors.append("If the first iteration is local, then the input particles must have an alignment")
         return errors    
     
+    def _warnings(self):
+        warnings = []
+        if not self.doContinue and self.inputParticles.hasValue() and not self.inputParticles.get().isPhaseFlipped():
+            warnings.append("Highres is designed to work on phase flipped particles. The input particles are not phase flipped. "
+                            "Unless you work with phantoms, you need to extract particles with phase flip.")
+        return warnings    
+
     def _summary(self):
         summary = []
         summary.append("Symmetry: %s" % self.symmetryGroup.get())
