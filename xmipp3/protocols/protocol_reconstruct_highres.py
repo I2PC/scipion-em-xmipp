@@ -1209,7 +1209,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     if self.inputParticles.get().isPhaseFlipped():
                         args+=" --phase_flipped"
                     self.runJob("xmipp_ctf_correct_wiener2d",args,numberOfMpi=min(self.numberOfMpi.get()*self.numberOfThreads.get(),24))
-                    self.runJob("xmipp_image_eliminate_largeEnergy","-i %s.xmd --sigma2 4"%fnCorrectedImagesRoot,numberOfMpi=min(self.numberOfMpi.get()*self.numberOfThreads.get(),12))
+                    self.runJob("xmipp_image_eliminate_largeEnergy","-i %s.xmd --sigma2 9"%fnCorrectedImagesRoot,numberOfMpi=min(self.numberOfMpi.get()*self.numberOfThreads.get(),12))
                     fnAnglesToUse = fnCorrectedImagesRoot+".xmd"
                     deleteStack = True
                     deletePattern = fnCorrectedImagesRoot+".*"
