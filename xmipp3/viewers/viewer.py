@@ -57,6 +57,7 @@ from xmipp3.protocols.protocol_preprocess import XmippProtPreprocessVolumes
 from xmipp3.protocols.protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
 from xmipp3.protocols.protocol_rotational_spectra import XmippProtRotSpectra
 from xmipp3.protocols.protocol_screen_particles import XmippProtScreenParticles
+from protocol_screen_deepConsensus import XmippProtScreenDeepConsensus
 from xmipp3.protocols.protocol_ctf_micrographs import XmippProtCTFMicrographs
 from xmipp3.protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
 from xmipp3.protocols.protocol_multireference_alignability import XmippProtMultiRefAlignability
@@ -85,6 +86,7 @@ class XmippViewer(Viewer):
                 XmippProtCompareReprojections,
                 XmippProtCompareAngles,
                 XmippParticlePickingAutomatic,
+                XmippProtScreenDeepConsensus,
                 XmippProtExtractParticles,
                 XmippProtExtractParticlesPairs,
                 XmippProtKerdensom,
@@ -288,6 +290,34 @@ class XmippViewer(Viewer):
             writeSetOfCoordinates(tmpDir, obj.getTilted())
             launchTiltPairPickerGUI(mdFn, tmpDir, self.protocol)
 
+        elif issubclass(cls, XmippProtScreenDeepConsensus):
+
+            parts = obj.outputParticles
+            fnParts = parts.getFileName()
+            coordsId = obj.outputCoordinates.strId()
+            
+            fnXml = obj._getPath('particles.xmd')
+            md = xmipp.MetaData(fnXml)
+            if md.containsLabel(xmipp.MDL_ZSCORE_DEEPLEARNING1):
+                from plotter import XmippPlotter
+                xplotter = XmippPlotter(windowTitle="Deep consensus score")
+                xplotter.createSubPlot("Deep consensus score", "Deep consensus score", "Number of Particle")
+                xplotter.plotMd(md, False, mdLabelY=xmipp.MDL_ZSCORE_DEEPLEARNING1, nbins=200)
+                self._views.append(xplotter)
+            
+
+            labels  = 'id enabled _index _filename _xmipp_zScoreDeepLearning1 '
+            labels += '_xmipp_zScore _xmipp_cumulativeSSNR _sampling '
+            labels += '_xmipp_scoreEmptiness _ctfModel._defocusU _ctfModel._defocusV '
+            labels += '_ctfModel._defocusAngle _transform._matrix'
+
+            self._views.append(
+                ObjectView(self._project, parts.strId(), fnParts,
+                           other='coordsCons%s'%coordsId,
+                           viewParams={ORDER: labels, VISIBLE: labels,
+                                       'sortby': '_xmipp_zScoreDeepLearning1 asc',
+                                       RENDER:'_filename'}))
+
         elif (issubclass(cls, XmippProtExtractParticles) or
               issubclass(cls, XmippProtScreenParticles)):
             particles = obj.outputParticles
@@ -392,7 +422,6 @@ class XmippViewer(Viewer):
             gainFn = movs.getGain()
             if os.path.exists(gainFn):
                 self._views.append(DataView(gainFn))
-
 
         elif issubclass(cls, XmippProtValidateNonTilt):
             outputVols = obj.outputVolumes
