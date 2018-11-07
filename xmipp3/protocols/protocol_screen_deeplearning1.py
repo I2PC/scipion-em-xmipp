@@ -25,13 +25,13 @@
 # **************************************************************************
 
 
-import os
+import os, sys
 
 from pyworkflow.utils.path import copyTree, makeFilePath
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtProcessParticles
 import pyworkflow.em.metadata as md
-from pyworkflow.em.packages.xmipp3.convert import writeSetOfParticles, setXmippAttributes
+from xmipp3.convert import writeSetOfParticles, setXmippAttributes
 
 WRITE_TEST_SCORES=True
 N_MAX_NEG_SETS= 5
@@ -290,7 +290,6 @@ def trainWorker(netDataPath, posTrainDict, negTrainDict, nEpochs, learningRate, 
     prevRunPath: a path to previous run or None. Generally prevRun._getExtraPath('nnetData')
     '''
 #    print(prevRunPath, netDataPath, nEpochs)
-    import sys
     sys.stdout.flush()
     if prevRunPath:
           copyTree(prevRunPath, netDataPath)

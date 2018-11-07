@@ -57,7 +57,7 @@ from xmipp3.protocols.protocol_preprocess import XmippProtPreprocessVolumes
 from xmipp3.protocols.protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
 from xmipp3.protocols.protocol_rotational_spectra import XmippProtRotSpectra
 from xmipp3.protocols.protocol_screen_particles import XmippProtScreenParticles
-from protocol_screen_deepConsensus import XmippProtScreenDeepConsensus
+from xmipp3.protocols.protocol_screen_deepConsensus import XmippProtScreenDeepConsensus
 from xmipp3.protocols.protocol_ctf_micrographs import XmippProtCTFMicrographs
 from xmipp3.protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
 from xmipp3.protocols.protocol_multireference_alignability import XmippProtMultiRefAlignability
@@ -297,12 +297,12 @@ class XmippViewer(Viewer):
             coordsId = obj.outputCoordinates.strId()
             
             fnXml = obj._getPath('particles.xmd')
-            md = xmipp.MetaData(fnXml)
-            if md.containsLabel(xmipp.MDL_ZSCORE_DEEPLEARNING1):
+            md = xmippLib.MetaData(fnXml)
+            if md.containsLabel(xmippLib.MDL_ZSCORE_DEEPLEARNING1):
                 from plotter import XmippPlotter
                 xplotter = XmippPlotter(windowTitle="Deep consensus score")
                 xplotter.createSubPlot("Deep consensus score", "Deep consensus score", "Number of Particle")
-                xplotter.plotMd(md, False, mdLabelY=xmipp.MDL_ZSCORE_DEEPLEARNING1, nbins=200)
+                xplotter.plotMd(md, False, mdLabelY=xmippLib.MDL_ZSCORE_DEEPLEARNING1, nbins=200)
                 self._views.append(xplotter)
             
 

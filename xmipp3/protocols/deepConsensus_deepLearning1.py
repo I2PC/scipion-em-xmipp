@@ -34,7 +34,7 @@ import scipy
 import random
 
 from sklearn.metrics import accuracy_score, roc_auc_score, precision_score, recall_score, matthews_corrcoef
-import xmipp
+import xmippLib as xmipp
 import pyworkflow.em.metadata as md
 import tensorflow as tf
 from keras import backend as K
@@ -51,7 +51,7 @@ def updateEnviron(gpuNum=None):
     os.environ['CUDA_VISIBLE_DEVICES']="-1"
 
 import keras
-from pyworkflow.em.packages.xmipp3.networkDef import main_network
+from xmipp3.protocols.deepConsensus_networkDef import main_network
 tf_intarnalError= tf.errors.InternalError
 
 BATCH_SIZE= 64

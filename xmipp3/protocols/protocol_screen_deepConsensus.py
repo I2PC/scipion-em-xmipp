@@ -39,12 +39,12 @@ from pyworkflow.protocol.constants import *
 from pyworkflow.em.constants import RELATION_CTF
 
 from pyworkflow.em.data import SetOfCoordinates, Coordinate, SetOfParticles
-from pyworkflow.em.packages.xmipp3.protocol_pick_noise import (pickAllNoiseWorker, writeSetOfCoordsFromFnames,
+from xmipp3.protocols.protocol_pick_noise import (pickAllNoiseWorker, writeSetOfCoordsFromFnames,
                                                                writePosFilesStepWorker)
-from  pyworkflow.em.packages.xmipp3.protocol_screen_deeplearning1 import trainWorker, predictWorker, XmippProtScreenDeepLearning1
+from xmipp3.protocols.protocol_screen_deeplearning1 import trainWorker, predictWorker, XmippProtScreenDeepLearning1
 import pyworkflow.em.metadata as MD
-import xmipp
-from pyworkflow.em.packages.xmipp3.convert import readSetOfParticles, setXmippAttributes, micrographToCTFParam, writeSetOfParticles
+import xmippLib as xmipp
+from xmipp3.convert import readSetOfParticles, setXmippAttributes, micrographToCTFParam, writeSetOfParticles
 import numpy as np
 from joblib import Parallel, delayed
 

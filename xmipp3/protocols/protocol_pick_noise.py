@@ -34,7 +34,7 @@ import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtParticlePicking
 from pyworkflow.em.data import SetOfCoordinates, Coordinate
 import pyworkflow.em.metadata as MD
-from convert import writeSetOfCoordinates, readSetOfCoordinates
+from xmipp3.convert import writeSetOfCoordinates, readSetOfCoordinates
 from xmipp3 import XmippProtocol
 import numpy as np
 from scipy.spatial.distance import cdist
