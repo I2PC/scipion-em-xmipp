@@ -109,32 +109,68 @@ class Plugin(pyworkflow.em.Plugin):
         #   scons, fftw3, scikit, nma, tiff, sqlite, opencv, sh_alignment, hdf5
 
 
+
         ## EXTRA PACKAGES ##
+
+        ## --- DEEP LEARNING TOOLKIT --- ##
+
+        scipy = env.addPipModule('scipy', '0.14.0', default=False)#,
+                                 # deps=[lapack, matplotlib])
+        cython = env.addPipModule('cython', '0.22', target='Cython-0.22*', default=False)
+
+        scikit_learn = env.addPipModule('scikit-learn', '0.19.1',
+                                        target='scikit_learn*',
+                                        default=False, deps=[scipy, cython])
+        unittest2 = env.addPipModule('unittest2', '0.5.1', target='unittest2*', default=False)
+        h5py = env.addPipModule('h5py', '2.8.0rc1', target='h5py*', default=False, deps=[unittest2])
 
         # TensorFlow
         tensorFlowTarget = "1.10.0"
         nvccProgram = subprocess.Popen(["which", "nvcc"],
                                        stdout=subprocess.PIPE).stdout.read()
+        pipCmdScipion = '%s %s/pip install' % (env.getBin('python'),
+                                               env.getPythonPackagesFolder())
         if nvccProgram != "":
             nvccVersion = subprocess.Popen(["nvcc", '--version'],
                                            stdout=subprocess.PIPE).stdout.read()
             if "release 8.0" in nvccVersion:
                 tensorFlowTarget = "1.4.1"
 
-        env.addPipModule('tensorflow', target='tensorflow*', default=False,
-                         pipCmd="pip install https://storage.googleapis.com/"
-                                "tensorflow/linux/cpu/tensorflow-%s-cp27-none-"
-                                "linux_x86_64.whl" % tensorFlowTarget)
-        env.addPipModule('tensorflow-gpu', target='tensorflow*', default=False,
-                         pipCmd="pip install https://storage.googleapis.com/"
-                                "tensorflow/linux/gpu/tensorflow_gpu-%s-cp27-none-"
-                                "linux_x86_64.whl" % tensorFlowTarget)
+            tensor = env.addPipModule('tensorflow-gpu', target='tensorflow*',
+                                      default=False,
+                                      pipCmd="%s https://storage.googleapis.com/"
+                                             "tensorflow/linux/gpu/tensorflow_gpu-%s-cp27-none-"
+                                             "linux_x86_64.whl"
+                                             % (pipCmdScipion, tensorFlowTarget))
+
+        else:
+
+            tensor = env.addPipModule('tensorflow', target='tensorflow*',
+                                      default=False,
+                                      pipCmd="%s https://storage.googleapis.com/"
+                                             "tensorflow/linux/cpu/tensorflow-%s-cp27-none-"
+                                             "linux_x86_64.whl"
+                                             % (pipCmdScipion, tensorFlowTarget))
+
 
         # Keras
+        # keras = env.addPipModule('keras', '2.1.5', target='keras*', default=False, deps=[h5py])
         cv2 = env.addPipModule('opencv-python', "3.4.2.17",
                                target="cv2", default=False)
-        env.addPipModule('Keras', '2.2.2', target='keras',
-                         default=False, deps=[cv2])
+        keras = env.addPipModule('keras', '2.2.2', target='keras',
+                                 default=False, deps=[cv2, h5py])
+
+
+        deppLearnigTools = [scipy, cython, scikit_learn, unittest2, h5py,
+                            keras, tensor]
+
+        env.addPackage('deepLearnigToolkit', urlSuffix='external',
+                       commands=[('echo "installed deepLearnig-Toolkit: %s"'
+                                  % str([tool._name for tool in deppLearnigTools]),
+                                  'deepLearnigToolkit')],
+                       deps=deppLearnigTools)
+
+        ## --- END OF DEEP LEARNING TOOLKIT --- ##
 
 
 pyworkflow.em.Domain.registerPlugin(__name__)
