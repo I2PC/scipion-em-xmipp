@@ -24,26 +24,27 @@
 # *
 # **************************************************************************
 
-import os
+from os import remove
+from os.path import exists
 from pyworkflow import VERSION_1_2
 from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, IntParam
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.utils.path import moveFile
+from pyworkflow.utils.path import moveFile, cleanPattern
 from pyworkflow.em.protocol import ProtRefine3D
 from shutil import copy
 from xmipp3.convert import readSetOfParticles
 import xmippLib
 from xmipp3.utils import writeInfoField, readInfoField
 import numpy as np
-import cv2
 import math
 from pyworkflow.em.metadata.utils import iterRows
+import cv2
+import pyworkflow.em.metadata as md
 
         
-class XmippProtDeepCorrelation3D(ProtRefine3D):
+class XmippProtDeepCones3D(ProtRefine3D):
     """Performs a fast and approximate angular assignment that can be further refined
     with Xmipp highres local refinement"""
-    _label = 'deep correlation3D'
+    _label = 'deep cones3D'
     _lastUpdateVersion = VERSION_1_2
     
     def __init__(self, **args):
@@ -54,13 +55,21 @@ class XmippProtDeepCorrelation3D(ProtRefine3D):
         form.addSection(label='Input')
         form.addParam('inputSet', PointerParam, label="Input images", pointerClass='SetOfParticles')
         form.addParam('inputVolume', PointerParam, label="Volume", pointerClass='Volume')
-        form.addParam('targetResolution', FloatParam, label="Target resolution", default=8.0,
+        # form.addParam('mask', PointerParam, label="Mask", pointerClass='VolumeMask', allowsNull=True,
+        #               help='The mask values must be between 0 (remove these pixels) and 1 (let them pass). Smooth masks are recommended.')
+        form.addParam('targetResolution', FloatParam, label="Target resolution", default=3.0,
             help="In Angstroms, the images and the volume are rescaled so that this resolution is at "
                  "2/3 of the Fourier spectrum.")
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group', 
                       help='See http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
                         'If no symmetry is present, give c1')
+        form.addParam('numEpochs', IntParam, label="Number of epochs for training",
+                      default=10,
+                      help="Number of epochs for training.")
+        form.addParam('numConesTilt', IntParam, label="Number of cones per 180 degrees",
+                      default=3,
+                      help="Number of cones per 180 degrees.")
         form.addParallelSection(threads=0, mpi=8)
 
     #--------------------------- INSERT steps functions --------------------------------------------
@@ -71,14 +80,34 @@ class XmippProtDeepCorrelation3D(ProtRefine3D):
         
         self._insertFunctionStep("convertStep")
         # Trainig steps
-        self._insertFunctionStep("generateProjImagesStep", 100, 'projections')
-        self._insertFunctionStep("generateExpImagesStep", 30, 'projections', 'projectionsExp', False)
-        self._insertFunctionStep("calculateCorrMatrixStep")
-        self._insertFunctionStep("trainStep")
-        # Predict step
-        #self._insertFunctionStep("predictStep")
+        numConesTilt = int(self.numConesTilt)
+        numConesRot = numConesTilt*2
+        self.numCones = numConesTilt * numConesRot
+        stepRot = int(360/numConesRot)
+        stepTilt = int(180 / numConesTilt)
+        iniRot = 0
+        endRot = stepRot
+        counterCones=0
+        for i in range(numConesRot):
+            iniTilt = 0
+            endTilt = stepTilt
+            for j in range(numConesTilt):
+                self._insertFunctionStep("projectStep", 3000, iniRot, endRot, iniTilt, endTilt, 'projections', counterCones+1)
+                self._insertFunctionStep("generateExpImagesStep", 1, 'projections', 'projectionsExp', counterCones+1, True)
+                iniTilt +=stepTilt
+                endTilt +=stepTilt
+                counterCones+=1
+            iniRot +=stepRot
+            endRot +=stepRot
 
-        #self._insertFunctionStep("createOutputStep")
+        for i in range(self.numCones):
+            self._insertFunctionStep("trainNClassifiers2ClassesStep", i+1)
+
+        #self._insertFunctionStep("trainOneClassifierNClassesStep")
+        # Predict step
+        self._insertFunctionStep("predictStep")
+
+        self._insertFunctionStep("createOutputStep")
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self):
@@ -111,7 +140,7 @@ class XmippProtDeepCorrelation3D(ProtRefine3D):
         if Xdim != self.newXdim:
             self.runJob("xmipp_image_resize","-i %s --dim %d"%(fnVol,self.newXdim),numberOfMpi=1)
 
-    def generateProjImagesStep(self, numProj, fn):
+    def projectStep(self, numProj, iniRot, endRot, iniTilt, endTilt, fn, idx):
 
         newXdim = readInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE)
         fnVol = self._getTmpPath("volume.vol")
@@ -120,10 +149,10 @@ class XmippProtDeepCorrelation3D(ProtRefine3D):
 # XMIPP_STAR_1 *
 data_block1
 _dimensions2D   '%d %d'
-_projRotRange    '0 360 %d'
+_projRotRange    '%d %d %d'
 _projRotRandomness   random 
 _projRotNoise   '0'
-_projTiltRange    '0 180 1'
+_projTiltRange    '%d %d 1'
 _projTiltRandomness   random 
 _projTiltNoise   '0'
 _projPsiRange    '0 0 1'
@@ -131,24 +160,28 @@ _projPsiRandomness   random
 _projPsiNoise   '0'
 _noisePixelLevel   '0'
 _noiseCoord   '0'
-"""%(newXdim, newXdim, numProj)
-        fnParams = self._getExtraPath("uniformProjections.xmd")
+"""%(newXdim, newXdim, iniRot, endRot, numProj, iniTilt, endTilt)
+        fnParams = self._getExtraPath("uniformProjections%d.xmd"%idx)
         fh = open(fnParams,"w")
         fh.write(uniformProjectionsStr)
         fh.close()
 
-        fnProjs = self._getExtraPath(fn+".stk")
+        fnProjs = self._getExtraPath(fn+"%d.stk"%idx)
         self.runJob("xmipp_phantom_project","-i %s -o %s --method fourier 1 0.5 --params %s"%(fnVol,fnProjs,fnParams),numberOfMpi=1)
+        cleanPattern(self._getExtraPath('uniformProjections'))
 
-    def generateExpImagesStep(self, Nrepeats, nameProj, nameExp, boolNoise):
+    def generateExpImagesStep(self, Nrepeats, nameProj, nameExp, label, boolNoise):
 
-        fnProj = self._getExtraPath(nameProj+".xmd")
-        fnExp = self._getExtraPath(nameExp+".xmd")
+        newXdim = readInfoField(self._getExtraPath(), "size",xmippLib.MDL_XSIZE)
+        fnProj = self._getExtraPath(nameProj+"%d.xmd"%label)
+        fnExp = self._getExtraPath(nameExp+"%d.xmd"%label)
+        fnLabels = self._getExtraPath('labels.txt')
+        fileLabels=open(fnLabels,"a")
         mdIn = xmippLib.MetaData(fnProj)
         mdExp = xmippLib.MetaData()
         newImage = xmippLib.Image()
         maxPsi = 180
-        maxShift = round(self.newXdim / 10)
+        maxShift = round(newXdim / 10)
         idx=1
         for row in iterRows(mdIn):
             objId = row.getObjId()
@@ -180,46 +213,113 @@ _noiseCoord   '0'
                 myRow.setValue(xmippLib.MDL_SHIFT_Y, deltaY)
                 myRow.addToMd(mdExp)
                 idx+=1
+                fileLabels.write(str(label-1)+'\n')
         mdExp.write(fnExp)
+        fileLabels.close()
+        if (label-1)>0:
+            lastFnExp = self._getExtraPath(nameExp+"%d.xmd"%(label-1))
+            self.runJob("xmipp_metadata_utilities", " -i %s --set union %s -o %s " %
+                        (lastFnExp, fnExp, fnExp), numberOfMpi=1)
 
+    def trainNClassifiers2ClassesStep(self, idx):
 
-    def calculateCorrMatrixStep(self):
-
-        refSet = self._getExtraPath('projections.xmd')
-        expSet = self._getExtraPath('projectionsExp.xmd')
-        args = '-i_ref %s -i_exp %s -o %s --odir %s --keep_best %d ' \
-               '--maxShift %d ' %(refSet, expSet,
-                self._getExtraPath('outputGl2d.xmd'), self._getExtraPath(), 1, 10)
-        self.runJob("xmipp_cuda_correlation", args, numberOfMpi=1)
-
-    def trainStep(self):
+        fnLabels = self._getExtraPath('labels.txt')
+        fileLabels = open(fnLabels, "r")
+        newFnLabels = self._getExtraPath('labels%d.txt' %idx)
+        newFileLabels = open(newFnLabels, "w")
+        lines = fileLabels.readlines()
+        for line in lines:
+            if line == str(idx-1)+'\n':
+                newFileLabels.write('1\n')
+            else:
+                newFileLabels.write('0\n')
+        newFileLabels.close()
+        fileLabels.close()
 
         newXdim = readInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE)
-        refSet = self._getExtraPath('projections.xmd')
-        expSet = self._getExtraPath('projectionsExp.xmd')
-        fnCorrMatrix = self._getExtraPath('example.txt')
-        modelFn = 'modelCorr'
+        expSet = self._getExtraPath('projectionsExp%d.xmd'%self.numCones)
+        fnLabels = self._getExtraPath('labels%d.txt'%idx)
+        modelFn = 'modelCone%d'%idx
 
-        self.runJob("xmipp_correlation_deepalign", "%s %s %s %s %s %d %d" %
-                    (refSet, expSet, fnCorrMatrix, self._getExtraPath(),
-                     modelFn, 10, newXdim), numberOfMpi=1)
+        self.runJob("xmipp_cone_deepalign", "%s %s %s %s %d %d %d" %
+                    (expSet, fnLabels, self._getExtraPath(),
+                     modelFn, self.numEpochs, newXdim, 2), numberOfMpi=1)
+        #copy(self._getExtraPath('pruebaYpred.txt'), self._getExtraPath('prediction%d.txt'%idx))
+
+    # def trainOneClassifierNClassesStep(self):
+    #
+    #     newXdim = readInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE)
+    #     expSet = self._getExtraPath('projectionsExp%d.xmd'%self.numCones)
+    #     fnLabels = self._getExtraPath('labels.txt')
+    #     modelFn = 'modelCone'
+    #
+    #     self.runJob("xmipp_cone_deepalign", "%s %s %s %s %d %d %d" %
+    #                 (expSet, fnLabels, self._getExtraPath(),
+    #                  modelFn, 30, newXdim, self.numCones), numberOfMpi=1)
 
 
     def predictStep(self):
-        newXdim = readInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE)
-        fnProjs = self._getExtraPath("projections.xmd")
-        outMdFn = self._getExtraPath('outputParticles.xmd')
-        self.runJob("xmipp_correlation_deepalign_predict", " %s %s %s %s %d" %
-                    (fnProjs, self.imgsFn, outMdFn, self._getExtraPath(), newXdim), numberOfMpi=1)
+        newXdim = readInfoField(self._getExtraPath(), "size",xmippLib.MDL_XSIZE)
+        self.runJob("xmipp_cone_deepalign_predict", "%s %s %d %d" %
+                    (self.imgsFn, self._getExtraPath(), newXdim, self.numCones), numberOfMpi=1)
+
+        #Cuda Correlation step - creating the metadata
+        predCones = np.loadtxt(self._getExtraPath('conePrediction.txt'))
+        mdConeList=[]
+        for i in range(self.numCones):
+            print("Loading model ", i+1)
+            mdConeList.append(xmippLib.MetaData())
+        mdIn = xmippLib.MetaData(self.imgsFn)
+        allInFns = mdIn.getColumnValues(xmippLib.MDL_IMAGE)
+        fnFinal = self._getExtraPath('outConesParticles.xmd')
+        for i in range(self.numCones):
+            print("Classifying cone ", i+1)
+            positions = np.where(predCones[:,1]==(i+1))
+            positions=positions[0]
+            #print(positions, len(positions))
+
+            if len(positions)>0:
+                for pos in positions:
+                    #print(pos)
+                    imageName = allInFns[pos]
+                    cone = (i+1)
+                    #id = int(predCones[pos,0])
+                    #print(imageName, cone, id)
+                    row = md.Row()
+                    row.setValue(md.MDL_IMAGE, imageName)
+                    row.setValue(md.MDL_REF, cone)
+                    row.addToMd(mdConeList[i])
+                fnExpCone = self._getExtraPath('metadataCone%d.xmd' % (i + 1))
+                mdConeList[i].write(fnExpCone)
+
+                fnProjCone = self._getExtraPath('projections%d.xmd'%(i+1))
+                fnOutCone = 'outCone%d.xmd'%(i+1)
+                #fnOutClassesCone = 'outClassesCone%d.xmd'%(i+1)
+                #Cuda Correlation step - calling cuda program
+                params = ' -i_ref %s -i_exp %s -o %s --odir %s --keep_best 1 ' \
+                         '--maxShift 10 '%(fnProjCone, fnExpCone, fnOutCone,
+                                           self._getExtraPath())
+                self.runJob("xmipp_cuda_correlation", params, numberOfMpi=1)
+
+                if not exists(fnFinal):
+                    copy(self._getExtraPath(fnOutCone), fnFinal)
+                else:
+                    params = ' -i %s --set union %s -o %s'%(fnFinal,
+                                                            self._getExtraPath(fnOutCone),
+                                                            fnFinal)
+                    self.runJob("xmipp_metadata_utilities", params, numberOfMpi=1)
+                remove(self._getExtraPath(fnOutCone))
+
 
     def createOutputStep(self):
+        cleanPattern(self._getExtraPath('metadataCone'))
+
         inputParticles = self.inputSet.get()
-        fnDeformedParticles = self._getExtraPath('outputParticles.xmd')
+        fnOutputParticles = self._getExtraPath('outConesParticles.xmd')
         outputSetOfParticles = self._createSetOfParticles()
         outputSetOfParticles.copyInfo(inputParticles)
-        readSetOfParticles(fnDeformedParticles, outputSetOfParticles)
+        readSetOfParticles(fnOutputParticles, outputSetOfParticles)
         self._defineOutputs(outputParticles=outputSetOfParticles)
-
 
     #--------------------------- INFO functions --------------------------------
     def _summary(self):
