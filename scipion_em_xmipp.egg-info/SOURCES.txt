@@ -1,4 +1,6 @@
-README.md
+CHANGES.txt
+MANIFEST.in
+README.rst
 setup.py
 scipion_em_xmipp.egg-info/PKG-INFO
 scipion_em_xmipp.egg-info/SOURCES.txt
@@ -15,6 +17,8 @@ xmipp3/convert/__init__.py
 xmipp3/convert/convert.py
 xmipp3/convert/dataimport.py
 xmipp3/protocols/__init__.py
+xmipp3/protocols/deepConsensus_deepLearning1.py
+xmipp3/protocols/deepConsensus_networkDef.py
 xmipp3/protocols/protocol_3dbionotes.py
 xmipp3/protocols/protocol_align_volume.py
 xmipp3/protocols/protocol_apply_alignment.py
@@ -59,6 +63,7 @@ xmipp3/protocols/protocol_particle_pick.py
 xmipp3/protocols/protocol_particle_pick_automatic.py
 xmipp3/protocols/protocol_particle_pick_consensus.py
 xmipp3/protocols/protocol_particle_pick_pairs.py
+xmipp3/protocols/protocol_pick_noise.py
 xmipp3/protocols/protocol_preprocess_micrographs.py
 xmipp3/protocols/protocol_random_conical_tilt.py
 xmipp3/protocols/protocol_ransac.py
@@ -69,8 +74,11 @@ xmipp3/protocols/protocol_reconstruct_significant.py
 xmipp3/protocols/protocol_reconstruct_swarm.py
 xmipp3/protocols/protocol_resolution3d.py
 xmipp3/protocols/protocol_resolution_monogenic_signal.py
+xmipp3/protocols/protocol_resolution_monotomo.py
 xmipp3/protocols/protocol_rotational_spectra.py
 xmipp3/protocols/protocol_rotational_symmetry.py
+xmipp3/protocols/protocol_screen_deepConsensus.py
+xmipp3/protocols/protocol_screen_deeplearning1.py
 xmipp3/protocols/protocol_screen_particles.py
 xmipp3/protocols/protocol_solid_angles.py
 xmipp3/protocols/protocol_split_volume.py
@@ -145,6 +153,7 @@ xmipp3/tests/test_protocols_highres.py
 xmipp3/tests/test_protocols_mixed_movies.py
 xmipp3/tests/test_protocols_mltomo.py
 xmipp3/tests/test_protocols_monores.py
+xmipp3/tests/test_protocols_monotomo.py
 xmipp3/tests/test_protocols_realignment_classes.py
 xmipp3/tests/test_protocols_solid_angles.py
 xmipp3/tests/test_protocols_subtract_projection.py
@@ -168,6 +177,7 @@ xmipp3/viewers/viewer_ransac.py
 xmipp3/viewers/viewer_reconstruct_highres.py
 xmipp3/viewers/viewer_resolution3d.py
 xmipp3/viewers/viewer_resolution_monogenic_signal.py
+xmipp3/viewers/viewer_resolution_monotomo.py
 xmipp3/viewers/viewer_solid_angles.py
 xmipp3/viewers/viewer_split_volume.py
 xmipp3/viewers/viewer_swarm.py
