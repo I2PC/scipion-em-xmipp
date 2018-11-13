@@ -75,7 +75,7 @@ class XmippProtDeepCones3D(ProtRefine3D):
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self.lastIter = 0
-        self.batchSize = 512
+        self.batchSize = 1024
         self.imgsFn = self._getExtraPath('input_imgs.xmd')
         
         self._insertFunctionStep("convertStep")
