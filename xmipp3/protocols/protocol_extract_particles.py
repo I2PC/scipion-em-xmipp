@@ -46,6 +46,7 @@ from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
                             xmippToLocation, setXmippAttributes)
 from xmipp3.constants import SAME_AS_PICKING, OTHER
 
+import xmippLib
 
 class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
     """Protocol to extract particles from a set of coordinates"""
@@ -493,7 +494,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                     setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
                     setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
                     setattr(p, '_xmipp_%s'
-                            % xmipp.label2Str(md.MDL_COORD_CONSENSUS_SCORE),
+                            % xmippLib.label2Str(md.MDL_COORD_CONSENSUS_SCORE),
                             ObjectWrap(iii))
                     iii += 3
 

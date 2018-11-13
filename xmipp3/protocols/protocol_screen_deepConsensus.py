@@ -48,7 +48,6 @@ import xmippLib as xmipp
 
 from xmipp3.protocols.protocol_pick_noise import (pickAllNoiseWorker, writeSetOfCoordsFromFnames,
                                                                writePosFilesStepWorker)
-from xmipp3.protocols.protocol_screen_deeplearning1 import trainWorker, predictWorker, XmippProtScreenDeepLearning1
 from xmipp3.convert import readSetOfParticles, setXmippAttributes, micrographToCTFParam, writeSetOfParticles
 import numpy as np
 from joblib import Parallel, delayed
@@ -56,16 +55,14 @@ from joblib import Parallel, delayed
 from xmipp3.protocols.protocol_pick_noise import (pickAllNoiseWorker,
                                                   writeSetOfCoordsFromFnames,
                                                   writePosFilesStepWorker)
-from xmipp3.protocols.protocol_screen_deeplearning1 import (trainWorker,
-                                    predictWorker, XmippProtScreenDeepLearning1)
+
 from xmipp3.convert import (readSetOfParticles, setXmippAttributes,
                             micrographToCTFParam, writeSetOfParticles)
 
 DEEP_PARTICLE_SIZE = 128
-
 MIN_NUM_CONSENSUS_COORDS = 256
 
-class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtScreenDeepLearning1):
+class XmippProtScreenDeepConsensus(ProtParticlePicking):
     """ TODO: HELP
     Protocol to compute a smart consensus between different particle picking
     algorithms. The protocol takes several Sets of Coordinates calculated
@@ -81,7 +78,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtScreenDeepLearn
         ProtParticlePicking.__init__(self, **args)
         self.stepsExecutionMode = params.STEPS_SERIAL
 #        self.stepsExecutionMode = params.STEPS_PARALLEL
-
 
     def _defineParams(self, form):
         form.addSection(label='Input')
@@ -272,6 +268,12 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtScreenDeepLearn
 
         form.addParallelSection(threads=2, mpi=1)
 
+    def _validate(self):
+        errorMsg = []
+#        if not self.skipDoFlip:
+#            if self.ctfRelations.get().getSize() != self.ctfRelations.get().getSize()
+        return errorMsg
+
 #--------------------------- INSERT steps functions ---------------------------
     def _insertAllSteps(self):
         self.inputMicrographs = None
@@ -346,8 +348,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtScreenDeepLearn
           firstCoords = self._getInputMicrographs()
           self.boxSize= firstCoords.getBoxSize()
           self.downFactor = self.boxSize /float(DEEP_PARTICLE_SIZE)
-          assert (self.downFactor >= 1,
-              "Error, the particle box size must be greater or equal than 128.")
+          assert self.downFactor >= 1, \
+              "Error, the particle box size must be greater or equal than 128."
 
         return self.downFactor
 
@@ -469,10 +471,10 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtScreenDeepLearn
                     setOfCoordinates.append(aux)
                     totalGoodCoords+= 1
 
-        assert (totalGoodCoords > MIN_NUM_CONSENSUS_COORDS,
-                "Error, the consensus (%s) of your input coordinates was too small (%d). "
-                "It must be > %d. Try a different input..."
-                % (mode, totalGoodCoords, MIN_NUM_CONSENSUS_COORDS))
+        assert totalGoodCoords > MIN_NUM_CONSENSUS_COORDS, \
+                "Error, the consensus (%s) of your input coordinates was too small (%d). "+\
+                "It must be > %d. Try a different input..."\
+                % (mode, totalGoodCoords, MIN_NUM_CONSENSUS_COORDS)
 
         self.coordinatesDict[mode]= setOfCoordinates
         if writeSet:
@@ -506,7 +508,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtScreenDeepLearn
         self.downFactor = boxSize / float(DEEP_PARTICLE_SIZE)
         mics_ = self._getInputMicrographs()
         samplingRate = self._getInputMicrographs().getSamplingRate()
-        preproDep = self._insertFunctionStep("preprocessMicsInitStep",
+        preproDep = self._insertFunctionStep("preprocessMicsInitStep", micIds,
                                              prerequisites=prerequisites)
         for micId in micIds:
             mic = mics_[micId]
@@ -517,26 +519,30 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtScreenDeepLearn
         return deps
 
 
-    def preprocessMicsInitStep(self):
+    def preprocessMicsInitStep(self, micIds):
         self._getDownFactor()
         mics_ = self._getInputMicrographs()
 
         if not self.skipDoFlip.get():
+            
             setOfMicCtf= self.ctfRelations.get()
-            assert (setOfMicCtf is not None,
-                    "Error, CTFs must be provided to compute phase flip")
+            if setOfMicCtf.getSize() != len(micIds):
+              raise ValueError("Error, there are different number of CTFs compared to "+
+                                "the number of micrographs where particles were picked")
+            else:
+                assert setOfMicCtf is not None, \
+                        "Error, CTFs must be provided to compute phase flip"
 
-            self.micToCtf = {}
-            micsFnameSet = set( [ mic.getMicName() for mic in mics_])
+                self.micToCtf = {}
+                micsFnameSet = set( [ mic.getMicName() for mic in mics_])
 
-            for ctf in setOfMicCtf:
-                ctf_mic = ctf.getMicrograph()
-                ctfMicName = ctf_mic.getMicName()
+                for ctf in setOfMicCtf:
+                    ctf_mic = ctf.getMicrograph()
+                    ctfMicName = ctf_mic.getMicName()
 
-                if ctfMicName in micsFnameSet:
-                    self.micToCtf[ctfMicName] = ctf_mic
-                    ctf_mic.setCTF(ctf)        
-
+                    if ctfMicName in micsFnameSet:
+                        self.micToCtf[ctfMicName] = ctf_mic
+                        ctf_mic.setCTF(ctf)        
 
     def preprocessOneMicStep(self, micId, fnMic, samplingRate):
         downFactor = self._getDownFactor()
@@ -571,13 +577,12 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtScreenDeepLearn
         newDep = self._insertFunctionStep("prepareExtractParticles", mode,
                                           prerequisites= prerequisites)
         prerequisites = [newDep]
-        for micId in micIds:   
+        for micId in micIds:
             mic = mics_[micId]
             fnMic = mic.getFileName()
             fnMic = self._getExtraPath('preProcMics', os.path.basename(fnMic))
             fnPos = self._getExtraPath('coord_%s' % mode,
-                                       pwutils.replaceBaseExt(fnMic, ".pos"))
-
+                                       pwutils.replaceBaseExt(fnMic, "pos"))
             deps.append(self._insertFunctionStep("extractParticlesStep", fnMic,
                                                  fnPos, mode, numberOfMpi=1,
                                                  prerequisites= prerequisites))
@@ -613,7 +618,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtScreenDeepLearn
             args += " -o %s --Xdim %d" % (outputStack, int( self._getBoxSize() / self._getDownFactor()))
             args += " --downsampling %f --fillBorders" % self._getDownFactor()
             self.runJob("xmipp_micrograph_scissor", args, numberOfMpi=1)
-
+        else:
+            print("It may be an error")
 
     def joinSetOfParticlesStep( self, micIds, mode):
         #Create images.xmd metadata
@@ -637,6 +643,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtScreenDeepLearn
               
     
     def trainCNN(self):
+        from xmipp3.protocols.protocol_screen_deeplearning1 import trainWorker
         netDataPath = self._getExtraPath("nnetData")
         makePath(netDataPath)
         posTrainDict = {self._getExtraPath("particles_AND.xmd"):  1}
@@ -673,6 +680,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtScreenDeepLearn
 
 
     def predictCNN(self):
+        from xmipp3.protocols.protocol_screen_deeplearning1 import predictWorker, XmippProtScreenDeepLearning1
         netDataPath = self._getExtraPath('nnetData')
         if hasattr(self, 'gpuToUse'):        
             numberOfThreads = None

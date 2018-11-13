@@ -124,8 +124,10 @@ class Plugin(pyworkflow.em.Plugin):
         unittest2 = env.addPipModule('unittest2', '0.5.1', target='unittest2*', default=False)
         h5py = env.addPipModule('h5py', '2.8.0rc1', target='h5py*', default=False, deps=[unittest2])
 
+        cv2 = env.addPipModule('opencv-python', "3.4.2.17",
+                               target="cv2", default=False)
         # TensorFlow
-        tensorFlowTarget = "1.10.0"
+        tensorFlowTarget = "1.10.0" #cuda 9
         nvccProgram = subprocess.Popen(["which", "nvcc"],
                                        stdout=subprocess.PIPE).stdout.read()
         pipCmdScipion = '%s %s/pip install' % (env.getBin('python'),
@@ -133,7 +135,8 @@ class Plugin(pyworkflow.em.Plugin):
         if nvccProgram != "":
             nvccVersion = subprocess.Popen(["nvcc", '--version'],
                                            stdout=subprocess.PIPE).stdout.read()
-            if "release 8.0" in nvccVersion:
+            #TODO: check if cuda 9 or 10  or 7.5 ...
+            if "release 8.0" in nvccVersion: #cuda 8
                 tensorFlowTarget = "1.4.1"
 
             tensor = env.addPipModule('tensorflow-gpu', target='tensorflow*',
@@ -142,6 +145,7 @@ class Plugin(pyworkflow.em.Plugin):
                                              "tensorflow/linux/gpu/tensorflow_gpu-%s-cp27-none-"
                                              "linux_x86_64.whl"
                                              % (pipCmdScipion, tensorFlowTarget))
+            keras=env.addPipModule('keras', '2.1.5', target='keras*', default=False, deps=[h5py])
 
         else:
 
@@ -152,13 +156,8 @@ class Plugin(pyworkflow.em.Plugin):
                                              "linux_x86_64.whl"
                                              % (pipCmdScipion, tensorFlowTarget))
 
-
-        # Keras
-        # keras = env.addPipModule('keras', '2.1.5', target='keras*', default=False, deps=[h5py])
-        cv2 = env.addPipModule('opencv-python', "3.4.2.17",
-                               target="cv2", default=False)
-        keras = env.addPipModule('keras', '2.2.2', target='keras',
-                                 default=False, deps=[cv2, h5py])
+            keras = env.addPipModule('keras', '2.2.2', target='keras',
+                                   default=False, deps=[cv2, h5py])
 
 
         deppLearnigTools = [scipy, cython, scikit_learn, unittest2, h5py,

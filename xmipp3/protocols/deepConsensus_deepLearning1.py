@@ -27,7 +27,7 @@
 from __future__ import print_function
 
 from six.moves import range
-import sys, os
+import sys, os, gc
 
 import numpy as np
 import scipy
@@ -111,7 +111,6 @@ class DeepTFSupervised(object):
   def startSessionAndInitialize(self):
     '''
     '''
-
     if self.numberOfThreads is None:
       self.session = tf.Session()
     else:
@@ -125,9 +124,11 @@ class DeepTFSupervised(object):
 
     '''
     K.clear_session()
+    del self.nNetModel
     self.session.close()
-
-
+    tf.reset_default_graph()
+    gc.collect()
+    
   def trainNet(self, nEpochs, dataManagerTrain, learningRate, l2RegStrength=1e-5, auto_stop=False):
     '''
       @param nEpochs: int. The number of epochs that will be used for training
@@ -169,7 +170,6 @@ class DeepTFSupervised(object):
                                  validation_data=dataManagerTrain.getValidationIterator( batchesPerEpoch= n_batches_per_epoch_val), 
                                  validation_steps=n_batches_per_epoch_val, callbacks=cBacks, epochs=nEpochs, 
                                  use_multiprocessing=True, verbose=2)
-      del self.nNetModel      
       self.closeSession()
       
       
@@ -178,19 +178,18 @@ class DeepTFSupervised(object):
     y_pred_all= np.zeros(n_images)
     for modelNum in range(self.numberOfModels):
       self.startSessionAndInitialize()
-      print("predicting with model %d/%d"%((modelNum+1), self.numberOfModels))  
-      sys.stdout.flush()      
       currentCheckPointName= self.checkPointsNameTemplate%modelNum
       if os.path.isfile( currentCheckPointName ):
-        print("loading model %s"%(currentCheckPointName))
+        print("loading model %s"%(currentCheckPointName)); sys.stdout.flush()
         self.loadNNet( currentCheckPointName, keepTraining=False)
-
       else:
         raise ValueError("Neural net must be trained before prediction")
 
       sys.stdout.flush()
+      print("predicting with model %d/%d"%((modelNum+1), self.numberOfModels)); sys.stdout.flush()
       y_pred_all+= self.nNetModel.predict_generator( (data for data,label in dataManger.getIteratorPredictBatch() ),
                                                 steps= n_batches, use_multiprocessing=True, verbose=0)[:,1]
+      print("prediction done"); sys.stdout.flush()
       self.closeSession()
     y_pred_all= y_pred_all/ self.numberOfModels
     return y_pred_all, dataManger.getPredictDataLabel_Id_dataSetNum()

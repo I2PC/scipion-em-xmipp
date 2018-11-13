@@ -26,7 +26,7 @@
 
 
 import os, sys
-
+import re
 from pyworkflow.utils.path import copyTree, makeFilePath
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtProcessParticles
@@ -35,6 +35,18 @@ from xmipp3.convert import writeSetOfParticles, setXmippAttributes
 
 WRITE_TEST_SCORES=True
 N_MAX_NEG_SETS= 5
+
+BAD_IMPORT_MSG='''
+Error, tensorflow is not installed. Install it with:\n  ./scipion install tensorflow
+If gpu version of tensorflow desired, install cuda 8 and cudnn 6 or cuda 9 and cudnn 7 add to scipion.conf
+CUDA = True
+CUDA_VERSION = 8.0  or 9.0
+CUDA_HOME = /path/to/cuda-8
+CUDA_BIN = %(CUDA_HOME)s/bin
+CUDA_LIB = %(CUDA_HOME)s/lib64
+CUDNN_VERSION = 6 or 7
+'''
+
 class XmippProtScreenDeepLearning1(ProtProcessParticles):
     """ Protocol for screening particles using deep learning. """
     _label = 'screen deep learning'
@@ -97,8 +109,7 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                       help='Select the set of putative particles particles to classify.')
 
         use_cuda=True
-        if 'CUDA' in os.environ and not os.environ['CUDA'] == "False":
-
+        if os.environ.get("CUDA", False):
             form.addParam('gpuToUse', params.IntParam, default='0',
                           label='Which GPU to use:',
                           help='Currently just one GPU will be use, by '
@@ -185,54 +196,57 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
             else:
                 return dictONameToWeight
 
-        posSetTrainDict = {self._getExtraPath("inputTrueParticlesSet.xmd"):
-                               (self.inPosSetOfParticles.get(), 1)}
+        posSetTrainDict = {self._getExtraPath("inputTrueParticlesSet.xmd"): 1}
+        
         negSetTrainDict = {}
         for num in range(1, N_MAX_NEG_SETS):
             if self.numberOfNegativeSets <= 0 or self.numberOfNegativeSets >= num:
-                negativeSetParticles = self.__dict__["negativeSet_%d" % num].get()
+#                negativeSetParticles = self.__dict__["negativeSet_%d" % num].get()
                 negSetTrainDict[self._getExtraPath("negativeSet_%d.xmd"%num)] = \
-                    (negativeSetParticles, self.__dict__["inNegWeight_%d"%num].get())
-        setPredictDict = {self._getExtraPath("predictSetOfParticles.xmd"):
-                              (self.predictSetOfParticles.get(), 1)}
+                                          self.__dict__["inNegWeight_%d"%num].get()
+                    
+        setPredictDict = {self._getExtraPath("predictSetOfParticles.xmd"): 1}
 
-        setTestPosDict = {self._getExtraPath("testTrueParticlesSet.xmd"):
-                              (self.testPosSetOfParticles.get(), 1)}
-        setTestNegDict = {self._getExtraPath("testFalseParticlesSet.xmd"):
-                              (self.testNegSetOfParticles.get(), 1)}
+        setTestPosDict = {self._getExtraPath("testTrueParticlesSet.xmd"): 1}
+        setTestNegDict = {self._getExtraPath("testFalseParticlesSet.xmd"): 1}
 
 
         self._insertFunctionStep('convertInputStep', posSetTrainDict,
                                  negSetTrainDict, setPredictDict,
                                  setTestPosDict, setTestNegDict)
-        self._insertFunctionStep('train', _getFname2WeightDict(posSetTrainDict),
-                                 _getFname2WeightDict(negSetTrainDict))
-        self._insertFunctionStep('predict', _getFname2WeightDict(setTestPosDict),
-                                 _getFname2WeightDict(setTestNegDict),
-                                 _getFname2WeightDict(setPredictDict))
+        self._insertFunctionStep('train', posSetTrainDict, negSetTrainDict)
+        self._insertFunctionStep('predict', setTestPosDict, setTestNegDict,setPredictDict)
         self._insertFunctionStep('createOutputStep')
 
     #--------------------------- STEPS functions -------------------------------
     def convertInputStep(self, *dataDicts):
+        def __getSetOfParticlesFromFname(fname):
+          if fname== self._getExtraPath("inputTrueParticlesSet.xmd"):
+            return self.inPosSetOfParticles.get()
+          elif fname== self._getExtraPath("predictSetOfParticles.xmd"):
+            return self.predictSetOfParticles.get()
+          elif fname== self._getExtraPath("testTrueParticlesSet.xmd"):
+            return self.testPosSetOfParticles.get()
+          elif fname== self._getExtraPath("testFalseParticlesSet.xmd"):
+            return self.testNegSetOfParticles.get()
+          else:
+            matchOjb= re.match( self._getExtraPath("negativeSet_(\d+).xmd"), fname)
+            if matchOjb:
+              num= matchOjb.group(1)
+              return self.__dict__["negativeSet_%s"%num].get()
+            else:
+              raise ValueError("Error, unexpected fname")
+                     
         if ((not self.doContinue.get() or self.keepTraining.get())
                 and self.nEpochs.get() > 0):
-            assert (not self.inPosSetOfParticles.get() is None,
-                    "Positive particles must be provided for training if nEpochs!=0")
-        for num in range(1, N_MAX_NEG_SETS):
-            if self.numberOfNegativeSets <= 0 or self.numberOfNegativeSets >= num:
-                negativeSetParticles = self.__dict__["negativeSet_%d" % num].get()
-                if ((not self.doContinue.get() or self.keepTraining.get())
-                        and self.nEpochs.get() > 0):
-                    assert (not negativeSetParticles is None,
-                            "Negative particles must be provided for training if nEpochs!=0")
-
+            assert not self.inPosSetOfParticles.get() is None, \
+                    "Positive particles must be provided for training if nEpochs!=0"
+                    
         for dataDict in dataDicts:
             for fnameParticles in sorted(dataDict):
-                print(fnameParticles, dataDict[fnameParticles][0],
-                      not dataDict[fnameParticles][0] is None)
-
-            if not dataDict[fnameParticles][0] is None:
-                writeSetOfParticles(dataDict[fnameParticles][0], fnameParticles)
+                setOfParticles= __getSetOfParticlesFromFname(fnameParticles)
+                if not setOfParticles is None:
+                    writeSetOfParticles(setOfParticles, fnameParticles)
 
     def train(self, posTrainDict, negTrainDict):
         """
@@ -354,8 +368,10 @@ def trainWorker(netDataPath, posTrainDict, negTrainDict, nEpochs, learningRate,
     if nEpochs == 0:
         print("training is not required")
         return
-
-    from .deepConsensus_deepLearning1 import updateEnviron
+    try:
+        from .deepConsensus_deepLearning1 import updateEnviron
+    except ImportError:
+        raise ValueError(BAD_IMPORT_MSG)
     if gpuToUse >= 0:
         numberOfThreads = None
 
@@ -370,25 +386,16 @@ def trainWorker(netDataPath, posTrainDict, negTrainDict, nEpochs, learningRate,
     try:
         from .deepConsensus_deepLearning1 import DeepTFSupervised, DataManager, tf_intarnalError
     except ImportError:
-        raise ValueError('''
-    Error, tensorflow is not installed. Install it with:\n  ./scipion install tensorflow
-    If gpu version of tensorflow desired, install cuda 8 and cudnn 6 or cuda 9 and cudnn 7 add to scipion.conf
-    CUDA = True
-    CUDA_VERSION = 8.0  or 9.0
-    CUDA_HOME = /path/to/cuda-8
-    CUDA_BIN = %(CUDA_HOME)s/bin
-    CUDA_LIB = %(CUDA_HOME)s/lib64
-    CUDNN_VERSION = 6 or 7
-''')
+        raise ValueError(BAD_IMPORT_MSG)
 
     trainDataManager = DataManager(posSetDict=posTrainDict,
                                    negSetDict=negTrainDict)
     if prevRunPath:
-        assert (dataShape == trainDataManager.shape,
-                "Error, data shape mismatch in input data compared to previous model")
+        assert dataShape == trainDataManager.shape, \
+                "Error, data shape mismatch in input data compared to previous model"
 
     writeNetShape(netDataPath, trainDataManager.shape, trainDataManager.nTrue, numModels)
-    assert (numModels >=1, "Error, nModels<1")
+    assert numModels >=1, "Error, nModels<1"
     try:
         nnet = DeepTFSupervised(numberOfThreads= numberOfThreads,
                                 rootPath= netDataPath,
@@ -409,8 +416,10 @@ def predictWorker(netDataPath, posTestDict, negTestDict, predictDict,
         outParticlesPath= self._getPath("particles.xmd")
         posTestDict, negTestDict, predictDict: { fnameToMetadata:  weight:int }
     '''
-
-    from .deepConsensus_deepLearning1 import  updateEnviron
+    try:
+        from .deepConsensus_deepLearning1 import  updateEnviron
+    except ImportError:
+        raise ValueError(BAD_IMPORT_MSG)    
     if gpuToUse >= 0:
         numberOfThreads = None
     else:
@@ -424,16 +433,7 @@ def predictWorker(netDataPath, posTestDict, negTestDict, predictDict,
     try:
         from .deepConsensus_deepLearning1 import DeepTFSupervised, DataManager, tf_intarnalError
     except ImportError:
-        raise ValueError('''
-    Error, tensorflow is not installed. Install it with:\n  ./scipion install tensorflow
-    If gpu version of tensorflow desired, install cuda 8 and cudnn 6 or cuda 9 and cudnn 7 add to scipion.conf
-    CUDA = True
-    CUDA_VERSION = 8.0  or 9.0
-    CUDA_HOME = /path/to/cuda-8
-    CUDA_BIN = %(CUDA_HOME)s/bin
-    CUDA_LIB = %(CUDA_HOME)s/lib64
-    CUDNN_VERSION = 6 or 7
-''')
+        raise ValueError(BAD_IMPORT_MSG)
 
     predictDataManager = DataManager(posSetDict=predictDict, negSetDict=None)
     dataShape, nTrue, numModels = loadNetShape(netDataPath)
@@ -448,16 +448,17 @@ def predictWorker(netDataPath, posTestDict, negTestDict, predictDict,
             raise e
 
     y_pred, label_Id_dataSetNumIterator = nnet.predictNet(predictDataManager)
-
+    print("Returning to helper"); sys.stdout.flush()
     metadataPosList, metadataNegList = predictDataManager.getMetadata(None)
     for score, (isPositive, mdId, dataSetNumber) in zip(y_pred, label_Id_dataSetNumIterator):
+        print( score, (isPositive, mdId, dataSetNumber) ); sys.stdout.flush()
         if isPositive==True:
             metadataPosList[dataSetNumber].setValue(md.MDL_ZSCORE_DEEPLEARNING1, score, mdId)
         else:
             metadataNegList[dataSetNumber].setValue(md.MDL_ZSCORE_DEEPLEARNING1, score, mdId)
 
-    assert (len(metadataPosList) == 1,
-            "Error, predict setOfParticles must contain one single object")
+    assert len(metadataPosList) == 1, \
+            "Error, predict setOfParticles must contain one single object"
 
     metadataPosList[0].write(outParticlesPath)
 
