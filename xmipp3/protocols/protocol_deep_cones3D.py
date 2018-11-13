@@ -75,7 +75,7 @@ class XmippProtDeepCones3D(ProtRefine3D):
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self.lastIter = 0
-        # Convert input images if necessary
+        self.batchSize = 512
         self.imgsFn = self._getExtraPath('input_imgs.xmd')
         
         self._insertFunctionStep("convertStep")
@@ -241,9 +241,9 @@ _noiseCoord   '0'
         fnLabels = self._getExtraPath('labels%d.txt'%idx)
         modelFn = 'modelCone%d'%idx
 
-        self.runJob("xmipp_cone_deepalign", "%s %s %s %s %d %d %d" %
+        self.runJob("xmipp_cone_deepalign", "%s %s %s %s %d %d %d %d" %
                     (expSet, fnLabels, self._getExtraPath(),
-                     modelFn, self.numEpochs, newXdim, 2), numberOfMpi=1)
+                     modelFn, self.numEpochs, newXdim, 2, self.batchSize), numberOfMpi=1)
         #copy(self._getExtraPath('pruebaYpred.txt'), self._getExtraPath('prediction%d.txt'%idx))
 
     # def trainOneClassifierNClassesStep(self):
@@ -267,7 +267,6 @@ _noiseCoord   '0'
         predCones = np.loadtxt(self._getExtraPath('conePrediction.txt'))
         mdConeList=[]
         for i in range(self.numCones):
-            print("Loading model ", i+1)
             mdConeList.append(xmippLib.MetaData())
         mdIn = xmippLib.MetaData(self.imgsFn)
         allInFns = mdIn.getColumnValues(xmippLib.MDL_IMAGE)
