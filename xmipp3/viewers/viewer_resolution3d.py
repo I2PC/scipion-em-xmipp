@@ -42,6 +42,7 @@ import xmippLib
 from xmipp3.convert import getImageLocation
 from xmipp3.protocols.protocol_resolution3d import XmippProtResolution3D
 from .plotter import XmippPlotter
+from os.path import exists
 
 
 FREQ_LABEL = 'frequency (1/A)'
@@ -187,7 +188,7 @@ class XmippResolution3DViewer(ProtocolViewer):
         pixelSize = vol.getSamplingRate()
         args += '--sampling %f ' % pixelSize
         args += '--maxres %f ' % maxres
-        from os.path import exists
+        
         if ( exists(self.protocol._getPath('fsc.xmd')) ):
             args += '--fsc %s ' % self.protocol._getPath('fsc.xmd')
         
