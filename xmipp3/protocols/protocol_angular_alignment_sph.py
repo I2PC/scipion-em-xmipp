@@ -74,7 +74,8 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         myDict = {
             'imgsFn': self._getExtraPath('input_particles.xmd'),
             'fnVol': self._getExtraPath('input_volume.vol'),
-            'fnOut': self._getExtraPath('output_particles.xmd')
+            'fnOut': self._getExtraPath('output_particles.xmd'),
+            'fnOutDir': self._getExtraPath()
                  }
         self._updateFilenamesDict(myDict)
 
@@ -120,11 +121,13 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         imgsFn = self._getFileName('imgsFn')
         fnVol = self._getFileName('fnVol')
         fnOut =  self._getFileName('fnOut')
+        fnOutDir = self._getFileName('fnOutDir')
         Ts = readInfoField(self._getExtraPath(), "sampling", md.MDL_SAMPLINGRATE)
         params = ' -i %s --ref %s -o %s --optimizeAlignment --optimizeDeformation ' \
                  '--depth %d --max_shift %f --max_angular_change %f --sampling %f ' \
-                 ' --max_resolution %f ' %\
-                 (imgsFn, fnVol, fnOut, self.depth, self.maxShift, self.maxAngular, Ts, self.maxResolution)
+                 ' --max_resolution %f --odir %s --resume' %\
+                 (imgsFn, fnVol, fnOut, self.depth, self.maxShift, self.maxAngular,
+                  Ts, self.maxResolution, fnOutDir)
         if self.inputParticles.get().isPhaseFlipped(): #preguntar
             params += ' --phaseFlipped'
         self.runJob("xmipp_angular_sph_alignment", params, numberOfMpi=self.numberOfMpi.get())
