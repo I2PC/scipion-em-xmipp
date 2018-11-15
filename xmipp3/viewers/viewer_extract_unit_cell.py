@@ -113,7 +113,8 @@ class viewerXmippProtExtractUnit(ProtocolViewer):
                                  bildFileName=tmpFileName,
                                  sampling=sampling)
         f.write("open %s\n" % tmpFileName)
-
+        f.write("cofr 0,0,0\n")  # set center of coordinates
+        
         _inputVol = self.protocol.inputVolumes.get()
         _outputVol = self.protocol.outputVolume
         inputVolFileName = os.path.abspath(ImageHandler.removeFileType(
