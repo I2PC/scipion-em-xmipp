@@ -742,7 +742,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
         print(self.coordinatesDict['OR'].getBoxSize())
 #        raise ValueError("peta")
 
-
     def _summary(self):
         message = []
         for i, coordinates in enumerate(self.inputCoordinates):

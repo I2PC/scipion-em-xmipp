@@ -201,16 +201,18 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
         negSetTrainDict = {}
         for num in range(1, N_MAX_NEG_SETS):
             if self.numberOfNegativeSets <= 0 or self.numberOfNegativeSets >= num:
-#                negativeSetParticles = self.__dict__["negativeSet_%d" % num].get()
                 negSetTrainDict[self._getExtraPath("negativeSet_%d.xmd"%num)] = \
                                           self.__dict__["inNegWeight_%d"%num].get()
                     
         setPredictDict = {self._getExtraPath("predictSetOfParticles.xmd"): 1}
 
-        setTestPosDict = {self._getExtraPath("testTrueParticlesSet.xmd"): 1}
-        setTestNegDict = {self._getExtraPath("testFalseParticlesSet.xmd"): 1}
-
-
+        if self.testPosSetOfParticles.get() and self.testNegSetOfParticles.get():
+          setTestPosDict = {self._getExtraPath("testTrueParticlesSet.xmd"): 1}
+          setTestNegDict = {self._getExtraPath("testFalseParticlesSet.xmd"): 1}
+        else:
+          setTestPosDict = None
+          setTestNegDict = None
+          
         self._insertFunctionStep('convertInputStep', posSetTrainDict,
                                  negSetTrainDict, setPredictDict,
                                  setTestPosDict, setTestNegDict)
@@ -243,9 +245,9 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                     "Positive particles must be provided for training if nEpochs!=0"
                     
         for dataDict in dataDicts:
-            for fnameParticles in sorted(dataDict):
-                setOfParticles= __getSetOfParticlesFromFname(fnameParticles)
-                if not setOfParticles is None:
+            if not dataDict is None:
+                for fnameParticles in sorted(dataDict):
+                    setOfParticles= __getSetOfParticlesFromFname(fnameParticles)
                     writeSetOfParticles(setOfParticles, fnameParticles)
 
     def train(self, posTrainDict, negTrainDict):
@@ -451,7 +453,6 @@ def predictWorker(netDataPath, posTestDict, negTestDict, predictDict,
     print("Returning to helper"); sys.stdout.flush()
     metadataPosList, metadataNegList = predictDataManager.getMetadata(None)
     for score, (isPositive, mdId, dataSetNumber) in zip(y_pred, label_Id_dataSetNumIterator):
-        print( score, (isPositive, mdId, dataSetNumber) ); sys.stdout.flush()
         if isPositive==True:
             metadataPosList[dataSetNumber].setValue(md.MDL_ZSCORE_DEEPLEARNING1, score, mdId)
         else:
@@ -461,7 +462,6 @@ def predictWorker(netDataPath, posTestDict, negTestDict, predictDict,
             "Error, predict setOfParticles must contain one single object"
 
     metadataPosList[0].write(outParticlesPath)
-
     if posTestDict and negTestDict:
         testDataManager = DataManager(posSetDict=posTestDict,
                                       negSetDict=negTestDict,
