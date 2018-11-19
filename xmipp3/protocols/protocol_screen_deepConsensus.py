@@ -209,7 +209,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
                            'preprocessed as indicated before.')
         
         form.addParam('trainPosSetOfParticles', params.PointerParam,
-                      label="Positive train particles (optional)",
+                      label="Positive train particles 128px (optional)", allowsNull=True,
                       pointerClass='SetOfParticles', condition='addTrainingData',
                       help='Select a set of true positive particles. '
                            'Take care of the preprocessing')
@@ -224,7 +224,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
                            'the contribution of internal particles')
         
         form.addParam('trainNegSetOfParticles', params.PointerParam,
-                      label="Negative train particles (optional)",
+                      label="Negative train particles 128px (optional)", allowsNull=True,
                       pointerClass='SetOfParticles', condition='addTrainingData',
                       help='Select a set of false positive particles. '
                            'Take care of the preprocessing')
@@ -270,8 +270,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
 
     def _validate(self):
         errorMsg = []
-#        if not self.skipDoFlip:
-#            if self.ctfRelations.get().getSize() != self.ctfRelations.get().getSize()
+        if self._getBoxSize()< DEEP_PARTICLE_SIZE:
+          errorMsg.append("Error, too small particles (needed 128px or larger), have you provided already "+
+                         "downsampled micrographs? If so, use original ones")
         return errorMsg
 
 #--------------------------- INSERT steps functions ---------------------------
@@ -335,7 +336,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
 
     def _getBoxSize(self):
 
-        if not self.boxSize:
+        if not hasattr(self, "boxSize"):
             firstCoords = self.inputCoordinates[0].get()
             self.boxSize = firstCoords.getBoxSize()
             self.downFactor = self.boxSize / float(DEEP_PARTICLE_SIZE)
@@ -344,7 +345,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
 
     def _getDownFactor(self):
 
-        if not self.downFactor:
+        if not hasattr(self, "downFactor"):
           firstCoords = self._getInputMicrographs()
           self.boxSize= firstCoords.getBoxSize()
           self.downFactor = self.boxSize /float(DEEP_PARTICLE_SIZE)
@@ -665,10 +666,11 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
             prevRunPath = None
 
         #TODO define weight behaviour
-        if self.trainPosSetOfParticles.get() and self.trainNegSetOfParticles.get():
+        print(self.trainPosSetOfParticles.get() , self.trainNegSetOfParticles.get() )
+        if self.trainPosSetOfParticles.get():
             posTrainFn = self._getExtraPath("trainTrueParticlesSet.xmd")
             posTrainDict[posTrainFn] = self.trainPosWeight.get()
-
+        if self.trainNegSetOfParticles.get():
             negTrainFn = self._getExtraPath("trainFalseParticlesSet.xmd")
             negTrainDict[negTrainFn] = self.trainNegWeight.get()
 
@@ -677,7 +679,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
                     self.learningRate.get(), self.l2RegStrength.get(),
                     self.auto_stopping.get(), self.nModels.get(), gpuToUse,
                     numberOfThreads, prevRunPath= prevRunPath)
-
 
     def predictCNN(self):
         from xmipp3.protocols.protocol_screen_deeplearning1 import predictWorker, XmippProtScreenDeepLearning1
