@@ -58,6 +58,7 @@ from xmipp3.protocols.protocol_preprocess_micrographs import XmippProtPreprocess
 from xmipp3.protocols.protocol_rotational_spectra import XmippProtRotSpectra
 from xmipp3.protocols.protocol_screen_particles import XmippProtScreenParticles
 from xmipp3.protocols.protocol_screen_deepConsensus import XmippProtScreenDeepConsensus
+from xmipp3.protocols.protocol_screen_deeplearning1 import XmippProtScreenDeepLearning1
 from xmipp3.protocols.protocol_ctf_micrographs import XmippProtCTFMicrographs
 from xmipp3.protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
 from xmipp3.protocols.protocol_multireference_alignability import XmippProtMultiRefAlignability
@@ -87,6 +88,7 @@ class XmippViewer(Viewer):
                 XmippProtCompareAngles,
                 XmippParticlePickingAutomatic,
                 XmippProtScreenDeepConsensus,
+                XmippProtScreenDeepLearning1,
                 XmippProtExtractParticles,
                 XmippProtExtractParticlesPairs,
                 XmippProtKerdensom,
@@ -290,11 +292,10 @@ class XmippViewer(Viewer):
             writeSetOfCoordinates(tmpDir, obj.getTilted())
             launchTiltPairPickerGUI(mdFn, tmpDir, self.protocol)
 
-        elif issubclass(cls, XmippProtScreenDeepConsensus):
+        elif issubclass(cls, XmippProtScreenDeepConsensus) or issubclass(cls, XmippProtScreenDeepLearning1):
 
             parts = obj.outputParticles
             fnParts = parts.getFileName()
-            coordsId = obj.outputCoordinates.strId()
             
             fnXml = obj._getPath('particles.xmd')
             md = xmippLib.MetaData(fnXml)
@@ -310,14 +311,21 @@ class XmippViewer(Viewer):
             labels += '_xmipp_zScore _xmipp_cumulativeSSNR _sampling '
             labels += '_xmipp_scoreEmptiness _ctfModel._defocusU _ctfModel._defocusV '
             labels += '_ctfModel._defocusAngle _transform._matrix'
-
-            self._views.append(
-                ObjectView(self._project, parts.strId(), fnParts,
-                           other='coordsCons%s'%coordsId,
-                           viewParams={ORDER: labels, VISIBLE: labels,
-                                       'sortby': '_xmipp_zScoreDeepLearning1 asc',
-                                       RENDER:'_filename'}))
-
+            if issubclass(cls, XmippProtScreenDeepConsensus):
+                coordsId = obj.outputCoordinates.strId()
+                self._views.append(
+                    ObjectView(self._project, parts.strId(), fnParts,
+                               other='coordsCons%s'%coordsId,
+                               viewParams={ORDER: labels, VISIBLE: labels,
+                                           'sortby': '_xmipp_zScoreDeepLearning1 asc',
+                                           RENDER:'_filename'}))
+            else:
+                self._views.append(
+                    ObjectView(self._project, parts.strId(), fnParts,
+                               viewParams={ORDER: labels, VISIBLE: labels,
+                                           'sortby': '_xmipp_zScoreDeepLearning1 asc',
+                                           RENDER:'_filename'}))
+                                           
         elif (issubclass(cls, XmippProtExtractParticles) or
               issubclass(cls, XmippProtScreenParticles)):
             particles = obj.outputParticles
