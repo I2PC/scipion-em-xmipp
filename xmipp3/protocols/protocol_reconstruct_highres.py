@@ -38,7 +38,7 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
                                         BooleanParam, IntParam, EnumParam,
                                         NumericListParam)
-from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile, createLink, cleanPattern
+from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile, createLink
 from pyworkflow.em.protocol import ProtRefine3D
 from pyworkflow.em.data import SetOfVolumes, Volume
 from pyworkflow.em.metadata.utils import getFirstRow, getSize
@@ -100,14 +100,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                       pointerClass='SetOfParticles', allowsNull=True,
                       help='Select a set of images at full resolution')
         form.addParam('inputVolumes', PointerParam, label="Initial volumes", important=True,
-                      condition='not doContinue',
-                      pointerClass='Volume, '
-                                                            'SetOfVolumes',
+                      condition='not doContinue', pointerClass='Volume, SetOfVolumes',
                       help='Select a set of volumes with 2 volumes or a single volume')
         form.addParam('particleRadius', IntParam, default=-1, 
-                     condition='not doContinue', label='Radius '
-                                                                     'of '
-                                                           'particle (px)',
+                     condition='not doContinue', label='Radius of particle (px)',
                      help='This is the radius (in pixels) of the spherical mask covering the particle in the input images')       
 
         form.addParam('continueRun', PointerParam, pointerClass=self.getClassName(),
@@ -436,13 +432,13 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
     def doIteration000(self, inputVolumesId):
         fnDirCurrent=self._getExtraPath('Iter000')
         makePath(fnDirCurrent)
-
+        
         # Split data
         if self.splitMethod == self.SPLIT_FIXED:
             self.runJob("xmipp_metadata_split","-i %s --oroot %s/images -n 2"%(self.imgsFn,fnDirCurrent),numberOfMpi=1)
             for i in range(1,3):
                 moveFile("%s/images%06d.xmd"%(fnDirCurrent,i),"%s/images%02d.xmd"%(fnDirCurrent,i))
-
+        
         # Get volume sampling rate
         TsCurrent=self.inputVolumes.get().getSamplingRate()
         self.writeInfoField(fnDirCurrent,"sampling",xmippLib.MDL_SAMPLINGRATE,TsCurrent)
@@ -476,14 +472,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         # Get the angles and shifts from images into this directory as if this directory
         # had been the result of a global alignment
         if self.alignmentMethod.get()==self.LOCAL_ALIGNMENT:
-            fnAngles = join(fnDirCurrent,"angles.xmd")
-            copyFile(self.imgsFn,fnAngles)
-            K=self.TsOrig/TsCurrent
-            self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "shiftX=%f*shiftX"'
-                        %(fnAngles,K),numberOfMpi=1)
-            self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "shiftY=%f*shiftY"'
-                        %(fnAngles,K),numberOfMpi=1)
-
+            copyFile(self.imgsFn,join(fnDirCurrent,"angles.xmd"))
 
     def evaluateReconstructions(self,iteration):
         fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
@@ -821,6 +810,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                             if self.globalMethod.get() == self.GLOBAL_SIGNIFICANT:
                                 args='-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d'%\
                                      (fnGroup,fnGalleryGroupMd,maxShift,fnDirSignificant,self.numberOfReplicates.get()-1)
+                                # Falta Wiener y filtrar
                                 self.runJob('xmipp_reconstruct_significant',args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
                                 # moveFile(join(fnDirSignificant,"images_significant_iter001_00.xmd"),join(fnDirSignificant,"angles_group%03d%s.xmd"%(j,subset)))
                                 fnAnglesSignificant = join(fnDirSignificant,"angles_iter001_00.xmd")
@@ -1220,7 +1210,6 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     if self.inputParticles.get().isPhaseFlipped():
                         args+=" --phase_flipped"
                     self.runJob("xmipp_ctf_correct_wiener2d",args,numberOfMpi=min(self.numberOfMpi.get()*self.numberOfThreads.get(),24))
-                    self.runJob("xmipp_image_eliminate_largeEnergy","-i %s.xmd --sigma2 4"%fnCorrectedImagesRoot,numberOfMpi=min(self.numberOfMpi.get()*self.numberOfThreads.get(),12))
                     fnAnglesToUse = fnCorrectedImagesRoot+".xmd"
                     deleteStack = True
                     deletePattern = fnCorrectedImagesRoot+".*"
@@ -1241,7 +1230,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     self.runJob("xmipp_transform_adjust_image_grey_levels",args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
                     fnAnglesToUse = fnGrayRoot+".xmd"
                     if deleteStack:
-                        cleanPattern(deletePattern)
+                        cleanPath(deletePattern)
                     deleteStack = True
                     deletePattern = fnGrayRoot+".*"
                     
@@ -1278,7 +1267,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     self.runJob("xmipp_image_operate","-i %s --plus %s"%(fnVol,fnAuxVol))
                     cleanPath(fnAuxVol)
                 if deleteStack:
-                    cleanPattern(deletePattern)
+                    cleanPath(deletePattern)
                     
                     
         if grayAdjusted:

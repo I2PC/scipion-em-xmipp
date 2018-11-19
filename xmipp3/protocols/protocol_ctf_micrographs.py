@@ -199,24 +199,28 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                                                               micDir=micDir)
                     isFirstDownsample = True
                 # Update _params dictionary with mic and micDir
-
                 localParams['micFn'] = finalName
                 localParams['samplingRate'] = \
                     self.inputMics.getSamplingRate() * downFactor
 
                 # CTF estimation with Xmipp
-                if self.doInitialCTF:
-                    self.runJob(self._program,
-                            self._args % localParams +
-                            " --downSamplingPerformed %f" % downFactor)
-                else:
-                    self.runJob(self._program,
+                try:
+                    if self.doInitialCTF:
+                        self.runJob(self._program,
                                 self._args % localParams +
-                                " --downSamplingPerformed %f" % downFactor
-                                + " --selfEstimation")
+                                " --downSamplingPerformed %f" % downFactor)
+                    else:
+                        self.runJob(self._program,
+                                    self._args % localParams +
+                                    " --downSamplingPerformed %f" % downFactor
+                                    + " --selfEstimation")
 
+                except Exception, ex:
+                    print >> sys.stderr, "xmipp_ctf_estimate_from_micrograph has " \
+                                         "failed with micrograph %s" % finalName
                 # Check the quality of the estimation and reject it necessary
                 good = self.evaluateSingleMicrograph(micFn, micDir)
+                #self.downsample += 1
                 if good:
                     break
 
@@ -232,9 +236,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                                            "xmipp_ctf.ctfparam"))
 
         except:
-            print >> sys.stderr, "Xmipp cannot estimate the ctf of the " \
-                                 "micrograph %s" % finalName
-
+            pass
         # Let's notify that this micrograph have been processed
         # just creating an empty file at the end (after success or failure)
         open(doneFile, 'w')

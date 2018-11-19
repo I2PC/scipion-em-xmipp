@@ -107,7 +107,6 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
     def preprocessData(self):
         particles = self._getExtraPath('noisyParticles.xmd')
         writeSetOfParticles(self.inputParticles.get(), particles)
-
         self.metadata = xmippLib.MetaData(particles)
         fnNewParticles = self._getExtraPath('resizedParticles.stk')
         self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (
@@ -439,9 +438,7 @@ class GAN(XmippProtDeepDenoising):
         x = Conv2D(128, (5, 5), padding='same')(x)
         x = BatchNormalization(momentum=0.8)(x)
         encoded = LeakyReLU(alpha=0.2)(x)
-        '''encoded = MaxPooling2D((2, 2), padding='same',
-                                   name='encoder')(x)'''
-        #x = Conv2D(64, (3, 3), padding='same')(encoded)
+        
         x = Conv2DTranspose(64, kernel_size=1, strides=1, padding='same')(
             encoded)
         x = BatchNormalization(momentum=0.8)(x)
