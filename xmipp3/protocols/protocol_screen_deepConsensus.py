@@ -322,9 +322,10 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
             writeSetOfParticles(self.testNegSetOfParticles.get(),
                                 self._getExtraPath("testFalseParticlesSet.xmd"))
 
-        if self.trainPosSetOfParticles.get() and self.trainNegSetOfParticles.get():
+        if self.trainPosSetOfParticles.get():
             writeSetOfParticles(self.trainPosSetOfParticles.get(),
                                 self._getExtraPath("trainTrueParticlesSet.xmd"))
+        if self.trainNegSetOfParticles.get():
             writeSetOfParticles(self.trainNegSetOfParticles.get(),
                                 self._getExtraPath("trainFalseParticlesSet.xmd"))
 
@@ -335,17 +336,15 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
         return self.inputMicrographs
 
     def _getBoxSize(self):
-
-        if not hasattr(self, "boxSize"):
+        if not hasattr(self, "boxSize") or not self.boxSize:
             firstCoords = self.inputCoordinates[0].get()
             self.boxSize = firstCoords.getBoxSize()
             self.downFactor = self.boxSize / float(DEEP_PARTICLE_SIZE)
-
         return self.boxSize
 
     def _getDownFactor(self):
 
-        if not hasattr(self, "downFactor"):
+        if not hasattr(self, "downFactor") or not self.downFactor:
           firstCoords = self._getInputMicrographs()
           self.boxSize= firstCoords.getBoxSize()
           self.downFactor = self.boxSize /float(DEEP_PARTICLE_SIZE)
@@ -673,7 +672,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
         if self.trainNegSetOfParticles.get():
             negTrainFn = self._getExtraPath("trainFalseParticlesSet.xmd")
             negTrainDict[negTrainFn] = self.trainNegWeight.get()
-
+        print(posTrainDict, negTrainDict)
         # TODO: check if works prevRunPath
         trainWorker(netDataPath, posTrainDict, negTrainDict, nEpochs,
                     self.learningRate.get(), self.l2RegStrength.get(),
