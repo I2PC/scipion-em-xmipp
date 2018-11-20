@@ -86,6 +86,7 @@ from .protocol_reconstruct_highres import XmippProtReconstructHighRes
 from .protocol_reconstruct_significant import XmippProtReconstructSignificant
 from .protocol_reconstruct_swarm import XmippProtReconstructSwarm
 from .protocol_resolution3d import XmippProtResolution3D
+from .protocol_resolution_directional import XmippProtMonoDir
 from .protocol_resolution_monogenic_signal import XmippProtMonoRes
 from .protocol_resolution_monotomo import XmippProtMonoTomo
 from .protocol_rotational_spectra import XmippProtRotSpectra
