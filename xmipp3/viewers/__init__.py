@@ -36,6 +36,7 @@ from .viewer_movie_alignment import XmippMovieAlignViewer
 from .viewer_normalize_strain import XmippNormalizeStrainViewer
 from .viewer_resolution3d import XmippResolution3DViewer
 from .viewer_resolution_monogenic_signal import XmippMonoResViewer
+from .viewer_resolution_dl2r import XmippResDl2rViewer
 from .viewer_validate_nontilt import XmippValidateNonTiltViewer
 from .viewer_split_volume import XmippViewerSplitVolume
 from .viewer_validate_overfitting import XmippValidateOverfittingViewer

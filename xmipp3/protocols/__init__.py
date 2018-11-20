@@ -87,6 +87,7 @@ from .protocol_reconstruct_significant import XmippProtReconstructSignificant
 from .protocol_reconstruct_swarm import XmippProtReconstructSwarm
 from .protocol_resolution3d import XmippProtResolution3D
 from .protocol_resolution_monogenic_signal import XmippProtMonoRes
+from .protocol_resolution_dl2r import XmippProtDl2r
 from .protocol_rotational_spectra import XmippProtRotSpectra
 from .protocol_rotational_symmetry import XmippProtRotationalSymmetry
 from .protocol_screen_particles import XmippProtScreenParticles
