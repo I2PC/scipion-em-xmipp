@@ -33,7 +33,7 @@ from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pyworkflow.gui.plotter import plt
 import pyworkflow.protocol.params as params
 
-from .protocol_structure_mapping import XmippProtStructureMapping
+from xmipp3.protocols import XmippProtStructureMapping
 
 
 class XmippProtStructureMappingViewer(ProtocolViewer):

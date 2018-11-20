@@ -33,7 +33,7 @@ from pyworkflow.em.protocol import *
 from pyworkflow.em.data_tiltpairs import MicrographsTiltPair, ParticlesTiltPair, CoordinatesTiltPair
 from pyworkflow.utils import makePath, runJob, copyTree, cleanPath
 import pyworkflow as pw
-from pyworkflow.em.showj import *
+from pyworkflow.em.viewers.showj import *
 import pyworkflow.gui.dialog as dialog
 import matplotlib.pyplot as plt
 import numpy as np
@@ -419,8 +419,7 @@ class XmippViewer(Viewer):
 
             fn = obj._getExtraPath('vol001_pruned_particles_alignability.xmd')
             md = xmippLib.MetaData(fn)
-            from plotter import XmippPlotter
-            from pyworkflow.em.plotter import EmPlotter
+            from .plotter import XmippPlotter
             plotter = XmippPlotter()
             plotter.createSubPlot('Soft-alignment validation plot','Angular Precision', 'Angular Accuracy')
             plotter.plotMdFile(md, xmippLib.MDL_SCORE_BY_ALIGNABILITY_PRECISION, xmippLib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY,
@@ -443,7 +442,7 @@ class XmippViewer(Viewer):
 
         if firstCtf.hasPhaseShift():
 
-            from pyworkflow.em.plotter import EmPlotter
+            from pyworkflow.em.viewers import EmPlotter, CtfView
             phase_shift = []
 
             for ctf in ctfSet.iterItems():

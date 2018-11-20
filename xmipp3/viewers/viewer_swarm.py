@@ -28,7 +28,7 @@
 # **************************************************************************
 
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-import pyworkflow.em.showj as showj
+import pyworkflow.em.viewers.showj as showj
 
 import xmippLib
 from xmipp3.protocols.protocol_reconstruct_swarm import XmippProtReconstructSwarm
