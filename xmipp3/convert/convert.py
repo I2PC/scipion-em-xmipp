@@ -31,7 +31,7 @@ This module contains converter functions that will serve to:
 """
 
 import os
-from os.path import join, dirname
+from os.path import join, exists
 from collections import OrderedDict
 from itertools import izip
 import numpy
@@ -46,7 +46,6 @@ import pyworkflow.em.metadata as md
 import xmippLib
 from xmipp3.base import XmippMdRow, getLabelPythonType, RowMetaData
 from xmipp3.utils import iterMdRows
-
 
 
 # This dictionary will be used to map
