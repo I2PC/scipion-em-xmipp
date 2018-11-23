@@ -441,7 +441,6 @@ class GAN(XmippProtDeepDenoising):
         encoded = LeakyReLU(alpha=0.2)(x)
         '''encoded = MaxPooling2D((2, 2), padding='same',
                                    name='encoder')(x)'''
-        #x = Conv2D(64, (3, 3), padding='same')(encoded)
         x = Conv2DTranspose(64, kernel_size=1, strides=1, padding='same')(
             encoded)
         x = BatchNormalization(momentum=0.8)(x)
@@ -462,7 +461,7 @@ class GAN(XmippProtDeepDenoising):
 
         model = Sequential()
         model.add(Flatten(input_shape=img_shape))
-        model.add(Dense(512))
+        model.add(Dense(1024))
         model.add(LeakyReLU(alpha=0.2))
 
         model.add(Dense(1, activation='sigmoid'))
