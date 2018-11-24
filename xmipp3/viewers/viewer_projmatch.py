@@ -762,7 +762,7 @@ Examples:
 # Utils Functions
 #===============================================================================
     def createScipionPartView(self, partSet, viewParams={}):
-        from pyworkflow.em import ObjectView
+        from pyworkflow.em.viewers import ObjectView
         inputParticlesId = self.protocol.inputParticles.get().strId()
         filename = partSet.getFileName()
         
