@@ -32,7 +32,7 @@ from pyworkflow.utils import *
 import pyworkflow.em.metadata as md
 
 from xmipp3.base import XmippProtocol
-from xmipp3.convert import (createXmippInputVolumes, readSetOfVolumes,
+from xmipp3.convert import (readSetOfVolumes,
                             locationToXmipp, getImageLocation)
 
 
