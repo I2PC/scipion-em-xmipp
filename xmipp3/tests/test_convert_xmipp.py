@@ -26,6 +26,8 @@
 # *
 # **************************************************************************
 
+import subprocess
+
 from pyworkflow.em.data import SetOfVolumes
 from pyworkflow.tests import *
 from pyworkflow.utils.properties import colorText
