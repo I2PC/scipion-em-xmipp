@@ -31,19 +31,21 @@ This module contains converter functions that will serve to:
 """
 
 import os
-from os.path import join, dirname
+from os.path import join, exists
 from collections import OrderedDict
 from itertools import izip
 import numpy
 
-from pyworkflow.utils.path import replaceBaseExt, removeExt, findRootFrom
+from pyworkflow.object import ObjectWrap
+from pyworkflow.utils import replaceBaseExt, removeExt, findRootFrom
+from pyworkflow.em.constants import *
+from pyworkflow.em.data import *
+from pyworkflow.em.convert import ImageHandler
 import pyworkflow.em.metadata as md
-from pyworkflow.em import *
 
 import xmippLib
 from xmipp3.base import XmippMdRow, getLabelPythonType, RowMetaData
 from xmipp3.utils import iterMdRows
-
 
 
 # This dictionary will be used to map
@@ -397,6 +399,7 @@ def micrographToCTFParam(mic, ctfparam):
     row.writeToMd(md, md.addObject())
     md.write(ctfparam)
     return ctfparam
+
 
 def imageToRow(img, imgRow, imgLabel, **kwargs):
     # Provide a hook to be used if something is needed to be
@@ -1272,7 +1275,7 @@ def writeSetOfMovies(moviesSet, filename, moviesBlock='movies'):
         micrographsMd.write(micrographsFn, xmippLib.MD_APPEND)
 
 def geometryFromMatrix(matrix, inverseTransform):
-    from pyworkflow.em.transformations import \
+    from pyworkflow.em.convert.transformations import  \
         translation_from_matrix, euler_from_matrix
     if inverseTransform:
         matrix = numpy.linalg.inv(matrix)
@@ -1287,7 +1290,7 @@ def matrixFromGeometry(shifts, angles, inverseTransform):
     """ Create the transformation matrix from a given
     2D shifts in X and Y...and the 3 euler angles.
     """
-    from pyworkflow.em.transformations import euler_matrix
+    from pyworkflow.em.convert.transformations import  euler_matrix
     radAngles = -numpy.deg2rad(angles)
 
     M = euler_matrix(radAngles[0], radAngles[1], radAngles[2], 'szyz')
