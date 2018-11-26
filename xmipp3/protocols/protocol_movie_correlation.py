@@ -70,6 +70,16 @@ class XmippProtMovieCorr(ProtAlignMovies):
                       help="linear (faster but lower quality), "
                            "cubic (slower but more accurate).")
 
+        form.addHidden(params.USE_GPU, params.BooleanParam, default=False,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
+                       expertLevel=cons.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+
         form.addParam('maxFreq', params.FloatParam, default=4,
                        label='Filter at (A)',
                        help="For the calculation of the shifts with Xmipp, "
@@ -96,6 +106,13 @@ class XmippProtMovieCorr(ProtAlignMovies):
                       expertLevel=cons.LEVEL_ADVANCED,
                       label="How to fill borders",
                       help='How to fill the borders when shifting the frames')
+
+        form.addParam('benchmarkFile', params.FileParam,
+                      label='GPU Benchmark file',
+                      expertLevel=cons.LEVEL_ADVANCED,
+                      help='Select a file where protocol can save some info about your \
+                      card. First run will be a bit longer, but subsequent calls with similar \
+                      parameters (on this machine) will be faster')
 
         form.addParam('outsideValue', params.FloatParam, default=0.0,
                        expertLevel=cons.LEVEL_ADVANCED,
@@ -174,7 +191,13 @@ class XmippProtMovieCorr(ProtAlignMovies):
         if self.inputMovies.get().getGain():
             args += ' --gain ' + self.inputMovies.get().getGain()
 
-        self.runJob('xmipp_movie_alignment_correlation', args, numberOfMpi=1)
+        if self.useGpu.get():
+            args += ' --device %(GPU)s'
+            if self.benchmarkFile.get():
+                args += ' --storage ' + self.benchmarkFile.get()
+            self.runJob('xmipp_cuda_movie_alignment_correlation', args, numberOfMpi=1)
+        else:
+            self.runJob('xmipp_movie_alignment_correlation', args, numberOfMpi=1)
 
         if self.doComputePSD:
             self.computePSDs(movie, fnInitial, fnAvg)
