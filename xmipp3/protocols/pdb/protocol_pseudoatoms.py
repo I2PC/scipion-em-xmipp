@@ -28,9 +28,7 @@
 # **************************************************************************
 
 from pyworkflow.protocol.params import PointerParam
-from pyworkflow.em.data import PdbFile, Volume
-from pyworkflow.em.data import Transform
-from pyworkflow.em.viewers.chimera_utils import createCoordinateAxisFile
+from pyworkflow.em.data import PdbFile, Volume, Transform
 
 from xmipp3.convert import getImageLocation
 from .protocol_pseudoatoms_base import XmippProtConvertToPseudoAtomsBase
