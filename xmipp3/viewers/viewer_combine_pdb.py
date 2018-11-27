@@ -1,9 +1,7 @@
 # **************************************************************************
 # *
-# * Authors:  Carlos Oscar Sanchez Sorzano (coss@cnb.csic.es), May 2013
-# *           Slavica Jonic                (jonic@impmc.upmc.fr)
-# * Ported to Scipion:
-# *           J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es), Nov 2014
+# * Authors:  Mohsen Kazemi (mkazemi@cnb.csic.es)
+# * 
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -27,19 +25,16 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.viewer import DataView, ChimeraView
+from pyworkflow.em.viewers import ChimeraView
 
 from xmipp3.viewers import XmippViewer
-from .protocol_pseudoatoms import XmippProtConvertToPseudoAtoms
+from xmipp3.protocols import XmippProtCombinePdb
 
 
-class XmippPseudoAtomsViewer(XmippViewer):
+class XmippProtCombinePdbViewer(XmippViewer):
     """ Visualize the output of protocol Convert to PseudoAtoms """
-    _label = 'pseudoatoms viewer'
-    _targets = [XmippProtConvertToPseudoAtoms]
+    _label = 'combine PDBs viewer'
+    _targets = [XmippProtCombinePdb]
     
     def _visualize(self, obj, **args):
-        self._views.append(ChimeraView(obj.outputPdb._chimeraScript))
-        self._views.append(DataView(obj._getExtraPath(
-            'pseudoatoms_approximation.mrc')))
-
+        self._views.append(ChimeraView(self.protocol._getPdbOutName()))

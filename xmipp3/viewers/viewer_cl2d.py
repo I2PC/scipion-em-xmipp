@@ -33,7 +33,7 @@ import os
 import pyworkflow.em as em
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import LabelParam, BooleanParam, LEVEL_ADVANCED
-import pyworkflow.em.showj as showj
+import pyworkflow.em.viewers.showj as showj
 from pyworkflow.protocol.params import EnumParam, StringParam
 
 from xmipp3.protocols.protocol_cl2d import XmippProtCL2D
