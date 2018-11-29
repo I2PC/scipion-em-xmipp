@@ -52,6 +52,6 @@ from .viewer_nma_dimred import XmippDimredNMAViewer
 from .viewer_structure_mapping import XmippProtStructureMappingViewer
 
 from .viewer_pseudoatoms import XmippPseudoAtomsViewer
-from .viewer_combine_pdb import XmippProtCombinePdbViewer
+#from .viewer_combine_pdb import XmippProtCombinePdbViewer
 
 from .viewer_projmatch import XmippProjMatchViewer
