@@ -35,7 +35,7 @@ from pyworkflow.em.constants import SYM_I222
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.em.data import (SetOfVolumes)
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-from pyworkflow.em.viewers import Chimera
+from pyworkflow.em.viewers.viewer_chimera import Chimera, ChimeraView
 from xmipp3.protocols.protocol_extract_unit_cell import XmippProtExtractUnit
 
 
@@ -155,7 +155,7 @@ class viewerXmippProtExtractUnit(ProtocolViewer):
 
         f.close()
 
-        return [em.ChimeraView(tmpFileNameCMD)]
+        return [ChimeraView(tmpFileNameCMD)]
 
     def _showVolumesXmipp(self):
 
