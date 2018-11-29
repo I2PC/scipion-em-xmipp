@@ -138,14 +138,17 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
         return [cm]
     
     def _showOriginalVolumeSlices(self, param=None):
-        if self.protocol.halfVolumes.get() is True:
+
+        # if self.protocol.halfVolumes.get() is True:
+        # Where is halfVolumes?
+        try:
             cm = DataView(self.protocol.inputVolume.get().getFileName())
             cm2 = DataView(self.protocol.inputVolume2.get().getFileName())
             return [cm, cm2]
-        else:
+        except:
             cm = DataView(self.protocol.inputVolumes.get().getFileName())
             return [cm]
-    
+
     def _showVolumeColorSlicesResolution(self, param=None):
         self._showVolumeColorSlices(OUTPUT_RESOLUTION_FILE)
         
