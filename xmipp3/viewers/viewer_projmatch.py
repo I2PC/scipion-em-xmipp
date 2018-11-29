@@ -33,17 +33,22 @@ visualization program.
 import numpy as np
 
 from pyworkflow.protocol.executor import StepExecutor
-from pyworkflow.viewer import CommandView, Viewer, ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.em.viewers import DataView, ClassesView, Classes3DView, EmPlotter
+from pyworkflow.viewer import  ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
+from pyworkflow.em.viewers import DataView, EmPlotter
 from pyworkflow.utils import createUniqueFileName, cleanPattern
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (LabelParam, IntParam, FloatParam,
-                                        StringParam, EnumParam, NumericRangeParam)
-import xmippLib
+                                        StringParam, EnumParam,
+                                        NumericRangeParam, BooleanParam)
+from pyworkflow.em.viewers import showj
 from xmipp3.convert import *
 from xmipp3.viewers.plotter import XmippPlotter
 from xmipp3.protocols import XmippProtProjMatch
+from pyworkflow.em.viewers.viewer_chimera import (ChimeraClientView,
+    ChimeraView)
+from pyworkflow.em.viewers.views import ObjectView
 # from .projmatch_initialize import createFilenameTemplates
+from pyworkflow.utils.path import cleanPath
 
 
 ITER_LAST = 0
@@ -483,7 +488,7 @@ Examples:
         return list
     
     def _showProjMatchLibAndImages(self, paramName=None):
-        from numpy  import array, dot
+        from numpy  import (array, dot)
         #map stack position with ref number
         imgAndClasses = []
         mdIn  = xmippLib.MetaData()
@@ -569,8 +574,8 @@ Examples:
 # Convergence
 #===============================================================================
     def _plotHistogramAngularMovement(self, paramName=None):
-        from numpy import arange
-        from matplotlib.ticker import FormatStrFormatter
+        #from numpy import arange
+        #from matplotlib.ticker import FormatStrFormatter
         
         plots = []
         colors = ['g', 'b', 'r', 'y', 'c', 'm', 'k']
