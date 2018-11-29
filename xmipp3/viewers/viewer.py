@@ -24,39 +24,23 @@
 # *
 # **************************************************************************
 
-import os
-from os.path import dirname, join, exists
 
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO, CommandView
-from pyworkflow.em.data import *
 from pyworkflow.em.protocol import *
-from pyworkflow.em.data_tiltpairs import MicrographsTiltPair, ParticlesTiltPair, CoordinatesTiltPair
-from pyworkflow.utils import makePath, runJob, copyTree, cleanPath
-import pyworkflow as pw
 
-from pyworkflow.em.viewers import DataViewer, EmPlotter, CtfView
+from pyworkflow.em.viewers.viewers_data import DataViewer
+from pyworkflow.em.viewers.plotter import EmPlotter
+from pyworkflow.em.viewers.views  import CtfView, ObjectView
 from pyworkflow.em.viewers.showj import *
-import pyworkflow.gui.dialog as dialog
-import matplotlib.pyplot as plt
-import numpy as np
 
-import xmippLib
-import xmipp3
 from xmipp3.convert import *
-from xmipp3.protocols.protocol_cl2d_align import XmippProtCL2DAlign
-from xmipp3.protocols.protocol_cl2d import XmippProtCL2D
 from xmipp3.protocols.protocol_compare_reprojections import XmippProtCompareReprojections
 from xmipp3.protocols.protocol_compare_angles import XmippProtCompareAngles
-from xmipp3.protocols.protocol_ctf_discrepancy import XmippProtCTFDiscrepancy
 from xmipp3.protocols.protocol_extract_particles import XmippProtExtractParticles
 from xmipp3.protocols.protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
-from xmipp3.protocols.protocol_helical_parameters import XmippProtHelicalParameters
 from xmipp3.protocols.protocol_kerdensom import XmippProtKerdensom
 from xmipp3.protocols.protocol_particle_pick_automatic import XmippParticlePickingAutomatic
-from xmipp3.protocols.protocol_particle_pick import XmippProtParticlePicking
 from xmipp3.protocols.protocol_particle_pick_pairs import XmippProtParticlePickingPairs
-from xmipp3.protocols.protocol_preprocess import XmippProtPreprocessVolumes
-from xmipp3.protocols.protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
 from xmipp3.protocols.protocol_rotational_spectra import XmippProtRotSpectra
 from xmipp3.protocols.protocol_screen_particles import XmippProtScreenParticles
 from xmipp3.protocols.protocol_ctf_micrographs import XmippProtCTFMicrographs
@@ -112,7 +96,6 @@ class XmippViewer(DataViewer):
 
     def _visualize(self, obj, **kwargs):
         cls = type(obj)
-        print("type(obj): ", cls)
 
         if issubclass(cls, SetOfNormalModes):
             fn = obj.getFileName()

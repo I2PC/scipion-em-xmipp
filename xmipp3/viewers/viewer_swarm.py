@@ -56,3 +56,4 @@ class XmippReconstructSwarmViewer(XmippViewer):
         if os.path.exists(fnSwarm):
             self._views.append(DataView('bestByVolume@' + fnSwarm, viewParams = {showj.MODE: showj.MODE_MD}))
         
+        return self._views

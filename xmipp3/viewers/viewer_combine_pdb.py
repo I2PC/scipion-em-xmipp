@@ -38,3 +38,4 @@ class XmippProtCombinePdbViewer(XmippViewer):
     
     def _visualize(self, obj, **args):
         self._views.append(ChimeraView(self.protocol._getPdbOutName()))
+        return  self._views
