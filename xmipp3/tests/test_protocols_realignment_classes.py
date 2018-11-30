@@ -84,7 +84,8 @@ class TestRealignmentClasses(BaseTest):
         """ Run a particle picking. """
         protPicking = SparxGaussianProtPicking(boxSize=64,
                                                numberOfThreads=1,
-                                               numberOfMpi=1)
+                                               numberOfMpi=1,
+                                               lowerThreshold=0.001)
         protPicking.inputMicrographs.set(inputMicrographs)
         self.launchProtocol(protPicking)
 
@@ -146,8 +147,9 @@ class TestRealignmentClasses(BaseTest):
         if protPicking.isFailed():
             self.assertTrue(False)
 
-        protExtract = self.runExtractParticles(protPicking.outputCoordinates,
-                                               protCtf.outputCTF)
+        protExtract = self.runExtractParticles\
+            (protPicking.outputCoordinates,
+             protCtf.outputCTF)
         if protExtract.isFailed():
             self.assertTrue(False)
 
