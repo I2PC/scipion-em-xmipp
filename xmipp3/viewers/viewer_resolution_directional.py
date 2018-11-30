@@ -213,7 +213,7 @@ class XmippMonoDirViewer(ProtocolViewer):
         return [cm]  
  
     def _showDoAColorPol(self, param=None):
-        self._showColorSlices(OUTPUT_DOA1_FILE, True, 'Resolutions range', -1, -1)
+        self._showColorSlices(OUTPUT_DOA1_FILE, False, 'Resolutions range', -1, -1)
         
     def _showDoAColorMean(self, param=None):
         self._showColorSlices(OUTPUT_DOA2_FILE, False, 'Mean resolution (DoA)', -1, -1)
