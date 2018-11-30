@@ -32,6 +32,7 @@ from pyworkflow.em.viewers.viewers_data import DataViewer
 from pyworkflow.em.viewers.plotter import EmPlotter
 from pyworkflow.em.viewers.views  import CtfView, ObjectView
 from pyworkflow.em.viewers.showj import *
+from pyworkflow.em.viewers.viewer_monitors import MovieGainMonitorPlotter
 
 from xmipp3.convert import *
 from xmipp3.protocols.protocol_compare_reprojections import XmippProtCompareReprojections
