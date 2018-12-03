@@ -151,7 +151,8 @@ _noiseCoord   '0'
         fh.close()
 
         fnProjs = self._getExtraPath(fn+".stk")
-        self.runJob("xmipp_phantom_project","-i %s -o %s --method fourier 1 0.5 --params %s"%(fnVol,fnProjs,fnParams),numberOfMpi=1)
+        self.runJob("xmipp_phantom_project","-i %s -o %s --method fourier 1 0.5 "
+                    "--params %s --sym %s "%(fnVol,fnProjs,fnParams, self.symmetryGroup.get()),numberOfMpi=1)
 
     def trainStep(self):
 
@@ -260,6 +261,9 @@ _noiseCoord   '0'
     def createOutputStep(self):
         inputParticles = self.inputSet.get()
         fnDeformedParticles = self._getExtraPath('outputParticles.xmd')
+        self.runJob("xmipp_metadata_utilities",
+                    " -i %s --fill weight constant 1.0" %
+                    (fnDeformedParticles), numberOfMpi=1)
         outputSetOfParticles = self._createSetOfParticles()
         outputSetOfParticles.copyInfo(inputParticles)
         readSetOfParticles(fnDeformedParticles, outputSetOfParticles)

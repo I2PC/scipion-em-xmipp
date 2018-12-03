@@ -93,6 +93,7 @@ class XmippProtDeepCones3D(ProtRefine3D):
             endTilt = stepTilt
             for j in range(numConesTilt):
                 self._insertFunctionStep("projectStep", 3000, iniRot, endRot, iniTilt, endTilt, 'projections', counterCones+1)
+                self._insertFunctionStep("projectStep", 300, iniRot, endRot, iniTilt, endTilt, 'projectionsCudaCorr', counterCones + 1)
                 self._insertFunctionStep("generateExpImagesStep", 1, 'projections', 'projectionsExp', counterCones+1, True)
                 iniTilt +=stepTilt
                 endTilt +=stepTilt
@@ -203,7 +204,7 @@ _noiseCoord   '0'
                                 [-s, c, s * Xdim2 + (1 - c) * Ydim2 + deltaY]])
                 newImg = cv2.warpAffine(I.getData(), M, (Xdim, Ydim))
                 if boolNoise:
-                    newImg = newImg + np.random.normal(0.0, 10.0, [Xdim, Xdim])
+                    newImg = newImg + np.random.normal(0.0, 2.0, [Xdim, Xdim])
                 newFn = ('%06d@'%idx)+fnExp[:-3]+'stk'
                 newImage.setData(newImg)
                 newImage.write(newFn)
@@ -241,10 +242,13 @@ _noiseCoord   '0'
         fnLabels = self._getExtraPath('labels%d.txt'%idx)
         modelFn = 'modelCone%d'%idx
 
-        self.runJob("xmipp_cone_deepalign", "%s %s %s %s %d %d %d %d" %
-                    (expSet, fnLabels, self._getExtraPath(),
-                     modelFn, self.numEpochs, newXdim, 2, self.batchSize), numberOfMpi=1)
-        #copy(self._getExtraPath('pruebaYpred.txt'), self._getExtraPath('prediction%d.txt'%idx))
+        try:
+            self.runJob("xmipp_cone_deepalign", "%s %s %s %s %d %d %d %d" %
+                        (expSet, fnLabels, self._getExtraPath(),
+                         modelFn, self.numEpochs, newXdim, 2, self.batchSize), numberOfMpi=1)
+            #copy(self._getExtraPath('pruebaYpred.txt'), self._getExtraPath('prediction%d.txt'%idx))
+        except Exception as e:
+            raise Exception("ERROR: Please, check the target resolution to work with lower dimensions.")
 
     # def trainOneClassifierNClassesStep(self):
     #
@@ -291,7 +295,7 @@ _noiseCoord   '0'
                 fnExpCone = self._getExtraPath('metadataCone%d.xmd' % (i + 1))
                 mdConeList[i].write(fnExpCone)
 
-                fnProjCone = self._getExtraPath('projections%d.xmd'%(i+1))
+                fnProjCone = self._getExtraPath('projectionsCudaCorr%d.xmd'%(i+1))
                 fnOutCone = 'outCone%d.xmd'%(i+1)
                 #fnOutClassesCone = 'outClassesCone%d.xmd'%(i+1)
                 #Cuda Correlation step - calling cuda program
