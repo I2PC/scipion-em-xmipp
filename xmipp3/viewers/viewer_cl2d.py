@@ -33,11 +33,10 @@ import os
 import pyworkflow.em as em
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import LabelParam, BooleanParam, LEVEL_ADVANCED
-import pyworkflow.em.showj as showj
 from pyworkflow.protocol.params import EnumParam, StringParam
 
 from xmipp3.protocols.protocol_cl2d import XmippProtCL2D
-
+from pyworkflow.em.viewers import DataView
 
 CLASSES = 0
 CLASS_CORES = 1
@@ -168,7 +167,7 @@ class XmippCL2DViewer(ProtocolViewer):
 
     def _viewInfo(self, fn):
         """ Display the info block in the metadata for a level convergence. """
-        return em.DataView('info@' + fn)
+        return DataView('info@' + fn)
         
 # ==============================================================================
 # showClassHierarchy

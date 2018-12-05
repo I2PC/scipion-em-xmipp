@@ -28,11 +28,11 @@
 from os.path import abspath
 from pyworkflow.tests import *
 
-from xmipp3.base import *
 from xmipp3.convert import *
-from xmipp3.constants import *
 from xmipp3.protocols import *
-
+from pyworkflow.em.protocol import ProtImportMovies
+import pyworkflow.utils as pwutils
+from pyworkflow.em.protocol import ProtImportCoordinates
 
 # Some utility functions to import movies that are used in several tests.
 class TestXmippBase(BaseTest):

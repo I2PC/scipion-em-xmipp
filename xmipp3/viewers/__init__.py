@@ -46,5 +46,12 @@ from .viewer_reconstruct_highres import XmippReconstructHighResViewer
 from .viewer_solid_angles import SolidAnglesViewer
 from .viewer_extract_unit_cell import viewerXmippProtExtractUnit
 
+from .viewer_nma import XmippNMAViewer
+from .viewer_nma_alignment import XmippAlignmentNMAViewer
+from .viewer_nma_dimred import XmippDimredNMAViewer
+from .viewer_structure_mapping import XmippProtStructureMappingViewer
 
+from .viewer_pseudoatoms import XmippPseudoAtomsViewer
+#from .viewer_combine_pdb import XmippProtCombinePdbViewer
 
+from .viewer_projmatch import XmippProjMatchViewer
