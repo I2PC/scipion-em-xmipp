@@ -27,9 +27,8 @@
 import numpy as np
 
 from pyworkflow.em import data
-from pyworkflow.em.plotter import EmPlotter
-from pyworkflow.em.viewer import ObjectView
-from pyworkflow.em.showj import MODE, MODE_MD, ORDER, VISIBLE
+from pyworkflow.em.viewers import EmPlotter, ObjectView
+from pyworkflow.em.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE
 from pyworkflow.protocol.params import FloatParam, IntParam, LabelParam
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pyworkflow.utils.path import cleanPath

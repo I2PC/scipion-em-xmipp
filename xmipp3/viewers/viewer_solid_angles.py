@@ -29,8 +29,8 @@ visualization program.
 """
 
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.em.viewer import ObjectView
-import pyworkflow.em.showj as showj 
+from pyworkflow.em.viewers import ObjectView
+import pyworkflow.em.viewers.showj as showj
 
 from xmipp3.protocols.protocol_solid_angles import XmippProtSolidAngles
 

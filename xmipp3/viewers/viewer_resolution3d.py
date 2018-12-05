@@ -34,14 +34,15 @@ from pyworkflow.utils.properties import Icon
 import pyworkflow.gui as gui
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import LabelParam
-import pyworkflow.em as em
 from pyworkflow.gui.widgets import Button, HotButton
+from pyworkflow.em.viewers.views import DataView
 import pyworkflow.gui.dialog as dialog
 
 import xmippLib
 from xmipp3.convert import getImageLocation
 from xmipp3.protocols.protocol_resolution3d import XmippProtResolution3D
 from .plotter import XmippPlotter
+from os.path import exists
 
 
 FREQ_LABEL = 'frequency (1/A)'
@@ -86,7 +87,7 @@ class XmippResolution3DViewer(ProtocolViewer):
         plotter = self._createPlot(title, FREQ_LABEL, plotLabel, md, 
                                    xmippLib.MDL_RESOLUTION_FREQ, resolutionLabel,
                                    **kwargs)
-        return [plotter, em.DataView(fscFn)]
+        return [plotter, DataView(fscFn)]
         
     def _viewFsc(self, e=None):
         return self._loadPlots("Fourier Shell Correlation", 'FSC', 
@@ -187,7 +188,12 @@ class XmippResolution3DViewer(ProtocolViewer):
         pixelSize = vol.getSamplingRate()
         args += '--sampling %f ' % pixelSize
         args += '--maxres %f ' % maxres
+        
+        if ( exists(self.protocol._getPath('fsc.xmd')) ):
+            args += '--fsc %s ' % self.protocol._getPath('fsc.xmd')
+        
         args += '--adhoc %f ' % -values[4]
+               
         volName = os.path.basename(volPath)
         volOut = self.protocol._getPath(volName) 
         args += '-o %s ' % volOut
