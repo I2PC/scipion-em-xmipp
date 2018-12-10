@@ -31,11 +31,11 @@ from os.path import basename, join, abspath
 import os
 
 from pyworkflow.object import String
-from pyworkflow.utils import cleanPattern, createLink, moveFile
+from pyworkflow.utils import cleanPattern, moveFile
 from pyworkflow.protocol.params import EnumParam, PointerParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.em.protocol import Prot3D
-
+from pyworkflow.em.viewers.viewer_chimera import Chimera
 from xmipp3.convert import getImageLocation
 
 
@@ -137,7 +137,7 @@ class XmippProtConvertToPseudoAtomsBase(Prot3D):
 
         dim = volume.getDim()[0]
         bildFileName = os.path.abspath(self._getExtraPath("axis.bild"))
-        createCoordinateAxisFile(dim,
+        Chimera.createCoordinateAxisFile(dim,
                                  bildFileName=bildFileName,
                                  sampling=sampling)
         fhCmd = open(scriptFile, 'w')

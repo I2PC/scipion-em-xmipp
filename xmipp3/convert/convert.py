@@ -36,9 +36,8 @@ from collections import OrderedDict
 from itertools import izip
 import numpy
 
-from pyworkflow.object import ObjectWrap
-from pyworkflow.utils import replaceBaseExt, removeExt, findRootFrom
-from pyworkflow.em.constants import *
+from pyworkflow.em import Angles
+from pyworkflow.utils import replaceBaseExt
 from pyworkflow.em.data import *
 from pyworkflow.em.convert import ImageHandler
 import pyworkflow.em.metadata as md
@@ -1001,6 +1000,9 @@ def readAnglesFromMicrographs(micFile, anglesSet):
 #    micMd.removeDisabled()
 
     for objId in micMd:
+        # TODO I have added the import from pyworkflow.em import Angles
+        # because next line gave an error. I do not know if this
+        # is the right Angle class
         angles = Angles()
         row = rowFromMd(micMd, objId)
         rowToObject(row, angles, ANGLES_DICT)

@@ -27,7 +27,8 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.viewers import DataView, ChimeraView
+from pyworkflow.em.viewers.viewer_chimera import ChimeraView
+from pyworkflow.em.viewers.views import DataView
 
 from xmipp3.viewers import XmippViewer
 from xmipp3.protocols import XmippProtConvertToPseudoAtoms
@@ -37,9 +38,11 @@ class XmippPseudoAtomsViewer(XmippViewer):
     """ Visualize the output of protocol Convert to PseudoAtoms """
     _label = 'pseudoatoms viewer'
     _targets = [XmippProtConvertToPseudoAtoms]
-    
+
     def _visualize(self, obj, **args):
         self._views.append(ChimeraView(obj.outputPdb._chimeraScript))
         self._views.append(DataView(obj._getExtraPath(
             'pseudoatoms_approximation.mrc')))
+
+        return(self._views)
 
