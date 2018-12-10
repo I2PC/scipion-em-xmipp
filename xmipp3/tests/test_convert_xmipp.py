@@ -91,8 +91,8 @@ class TestBasic(BaseTest):
         self.assertEquals(filename, img.getFileName())
 
 
-SHOW_IMAGES  = True  # Launch xmipp_showj to open intermediate results
-CLEAN_IMAGES = True  # Remove the output temporary files
+SHOW_IMAGES  = False  # Launch xmipp_showj to open intermediate results
+CLEAN_IMAGES = True   # Remove the output temporary files
 PRINT_MATRIX = True
 PRINT_FILES  = True
 
