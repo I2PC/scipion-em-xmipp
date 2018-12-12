@@ -2,8 +2,7 @@
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
 import pyworkflow.protocol.params as params
 import numpy as np
-import time
-time.sleep(10)
+
 import xmippLib
 from pyworkflow.em.data import Image
 from skimage.transform import rotate, AffineTransform, warp
@@ -16,17 +15,21 @@ from scipy.stats import pearsonr
 from pyworkflow.utils.path import cleanPath
 import os
 import GPUtil
+import time
+time.sleep(10)
 
 def updateEnviron(gpuNum=None):
     """ Create the needed environment for TensorFlow programs. """
     print("updating environ to select gpu %s" % (gpuNum))
     if not gpuNum is None:
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)  # THIS IS FOR USING JUST one GPU:# must be changed to select desired gpu
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)[1:-1]  # THIS IS FOR
+        # USING JUST one GPU:# must be changed to select desired gpu
     else:
         os.environ['CUDA_VISIBLE_DEVICES'] = "-1"
 
 availableGPUs = GPUtil.getAvailable(order='first')
 updateEnviron(availableGPUs)
+
 from keras.models import Model, Sequential, load_model
 from keras.optimizers import Adam
 from keras.layers import Input, Conv2D, UpSampling2D, AveragePooling2D, \
@@ -90,14 +93,14 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                                         'must be even. Using high sizes '
                                         'several GPUs are required' )
 
-        if 'CUDA' in os.environ and not os.environ['CUDA'] == "False":
+        '''if 'CUDA' in os.environ and not os.environ['CUDA'] == "False":
 
             form.addParam('gpuToUse', params.IntParam, default='0',
                           label='Which GPU to use:',
                           help='Currently just one GPU will be use, by '
                                'default GPU number 0 You can override the default '
                                'allocation by providing other GPU number, p.e. 2'
-                               '\nif -1 no gpu but all cpu cores will be used')
+                               '\nif -1 no gpu but all cpu cores will be used')'''
 
         form.addParallelSection(threads=1, mpi=5)
 
