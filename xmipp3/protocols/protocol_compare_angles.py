@@ -103,13 +103,6 @@ class XmippProtCompareAngles(ProtAnalysis3D):
         writeSetOfParticles(self.inputParticles1.get(), self._getExtraPath("angles1.xmd"))
         writeSetOfParticles(self.inputParticles2.get(), self._getExtraPath("angles2.xmd"))
 
-        sizeInput1 = self.inputParticles1.get().getDimensions()[0]
-        sizeInput2 = self.inputParticles2.get().getDimensions()[0]
-        if sizeInput1 != sizeInput2:
-            factor = float(sizeInput1) / float(sizeInput2)
-            self.runJob("xmipp_image_resize", "-i %s --factor %f"%(
-                self._getExtraPath('angles2.xmd'), factor))
-
     def analyzeDistanceStep(self, particlesId1, particlesId2, symmetryGroup):
         self.runJob("xmipp_metadata_utilities","-i %s -o %s --operate keep_column itemId"%\
                     (self._getExtraPath("angles1.xmd"),self._getTmpPath("ids1.xmd")))
@@ -177,3 +170,4 @@ class XmippProtCompareAngles(ProtAnalysis3D):
     def _summary(self):
         summary = []
         return summary
+

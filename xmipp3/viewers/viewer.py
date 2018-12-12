@@ -312,6 +312,7 @@ class XmippViewer(Viewer):
                     xplotter.plotMd(md, False, mdLabelY=xmippLib.MDL_SCORE_BY_VAR, nbins=100)
                     self._views.append(xplotter)
 
+
         elif issubclass(cls, XmippProtDeepDenoising):
             fn = obj.outputParticles.getFileName()
             self._views.append(ObjectView(self._project, obj.outputParticles.strId(),
@@ -322,6 +323,7 @@ class XmippViewer(Viewer):
                                                   '_xmipp_imageOriginal _xmipp_imageRef',
                                           SORT_BY: 'id',
                                           MODE: MODE_MD}))
+
 
         elif issubclass(cls, XmippProtMovieGain):
             self._visualize(obj.outputMovies)

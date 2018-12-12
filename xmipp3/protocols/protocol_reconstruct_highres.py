@@ -100,14 +100,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                       pointerClass='SetOfParticles', allowsNull=True,
                       help='Select a set of images at full resolution')
         form.addParam('inputVolumes', PointerParam, label="Initial volumes", important=True,
-                      condition='not doContinue',
-                      pointerClass='Volume, '
-                                                            'SetOfVolumes',
+                      condition='not doContinue', pointerClass='Volume, SetOfVolumes',
                       help='Select a set of volumes with 2 volumes or a single volume')
         form.addParam('particleRadius', IntParam, default=-1, 
-                     condition='not doContinue', label='Radius '
-                                                                     'of '
-                                                           'particle (px)',
+                     condition='not doContinue', label='Radius of particle (px)',
                      help='This is the radius (in pixels) of the spherical mask covering the particle in the input images')       
 
         form.addParam('continueRun', PointerParam, pointerClass=self.getClassName(),
@@ -436,13 +432,13 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
     def doIteration000(self, inputVolumesId):
         fnDirCurrent=self._getExtraPath('Iter000')
         makePath(fnDirCurrent)
-
+        
         # Split data
         if self.splitMethod == self.SPLIT_FIXED:
             self.runJob("xmipp_metadata_split","-i %s --oroot %s/images -n 2"%(self.imgsFn,fnDirCurrent),numberOfMpi=1)
             for i in range(1,3):
                 moveFile("%s/images%06d.xmd"%(fnDirCurrent,i),"%s/images%02d.xmd"%(fnDirCurrent,i))
-
+        
         # Get volume sampling rate
         TsCurrent=self.inputVolumes.get().getSamplingRate()
         self.writeInfoField(fnDirCurrent,"sampling",xmippLib.MDL_SAMPLINGRATE,TsCurrent)
@@ -476,14 +472,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         # Get the angles and shifts from images into this directory as if this directory
         # had been the result of a global alignment
         if self.alignmentMethod.get()==self.LOCAL_ALIGNMENT:
-            fnAngles = join(fnDirCurrent,"angles.xmd")
-            copyFile(self.imgsFn,fnAngles)
-            K=self.TsOrig/TsCurrent
-            self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "shiftX=%f*shiftX"'
-                        %(fnAngles,K),numberOfMpi=1)
-            self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "shiftY=%f*shiftY"'
-                        %(fnAngles,K),numberOfMpi=1)
-
+            copyFile(self.imgsFn,join(fnDirCurrent,"angles.xmd"))
 
     def evaluateReconstructions(self,iteration):
         fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
