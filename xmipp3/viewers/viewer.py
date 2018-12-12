@@ -23,14 +23,13 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
-
+from pyworkflow.em.viewers import showj
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO, CommandView
 from pyworkflow.em.protocol import *
 
 from pyworkflow.em.viewers.viewers_data import DataViewer
 from pyworkflow.em.viewers.plotter import EmPlotter
-from pyworkflow.em.viewers.views  import CtfView, ObjectView
+from pyworkflow.em.viewers.views import CtfView, ObjectView
 from pyworkflow.em.viewers.showj import *
 from pyworkflow.em.viewers.viewer_monitors import MovieGainMonitorPlotter
 
@@ -202,7 +201,7 @@ class XmippViewer(DataViewer):
                 inTmpFolder = True
 
             posDir = obj._getExtraPath()
-            memory = '%dg'%obj.memory.get(),
+            memory = showj.getJvmMaxMemory()
             launchSupervisedPickerGUI(micsfn, posDir, obj, mode='review', memory=memory, inTmpFolder=inTmpFolder)
 
          # We need this case to happens before the ProtParticlePicking one

@@ -47,7 +47,7 @@ from .protocol_ctf_defocus_group import XmippProtCTFDefocusGroup
 from .protocol_compare_reprojections import XmippProtCompareReprojections
 from .protocol_compare_angles import XmippProtCompareAngles
 from .protocol_create_gallery import XmippProtCreateGallery
-from .protocol_ctf_discrepancy import XmippProtCTFDiscrepancy
+from .protocol_ctf_consensus import XmippProtCTFConsensus
 from .protocol_ctf_micrographs import XmippProtCTFMicrographs
 from .protocol_ctf_correct_wiener2d import XmippProtCTFCorrectWiener2D
 from .protocol_consensus_classes3D import XmippProtConsensusClasses3D
@@ -100,5 +100,4 @@ from .protocol_volume_strain import XmippProtVolumeStrain
 from .protocol_enrich import XmippProtEnrich
 from .protocol_write_testC import XmippProtWriteTestC
 from .protocol_write_testP import XmippProtWriteTestP
-from .protocol_ctf_selection import XmippProtCTFSelection
 
