@@ -32,6 +32,7 @@ from pyworkflow.tests.test_utils import wait
 from pyworkflow.utils import magentaStr, importFromPlugin
 from pyworkflow.tests import *
 from pyworkflow.em.protocol.protocol_import import *
+from pyworkflow.em.protocol import ProtCreateStreamData
 
 import xmipp3
 from xmipp3.base import *
