@@ -315,12 +315,13 @@ class XmippViewer(Viewer):
         elif issubclass(cls, XmippProtDeepDenoising):
             fn = obj.outputParticles.getFileName()
             self._views.append(ObjectView(self._project, obj.outputParticles.strId(),
-                                          fn, viewParams={VISIBLE:  'enabled id _filename '
+                                          fn,
+                                          viewParams={VISIBLE:  'enabled id _filename '
                                                   '_xmipp_corrDenoiseProjection '
                                                   '_xmipp_corrDenoiseNoisy '
                                                   '_xmipp_imageOriginal _xmipp_imageRef',
-                                        SORT_BY: 'id',
-                                        MODE: MODE_MD}))
+                                          SORT_BY: 'id',
+                                          MODE: MODE_MD}))
 
         elif issubclass(cls, XmippProtMovieGain):
             self._visualize(obj.outputMovies)

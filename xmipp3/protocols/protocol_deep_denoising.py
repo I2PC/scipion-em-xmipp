@@ -2,12 +2,7 @@
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
 import pyworkflow.protocol.params as params
 import numpy as np
-from keras.models import Model, Sequential, load_model
-from keras.optimizers import Adam
-from keras.layers import Input, Conv2D, UpSampling2D, AveragePooling2D, \
-    BatchNormalization, LeakyReLU, Flatten, Activation, Dense, \
-    Conv2DTranspose, MaxPooling2D, Dropout
-from keras import backend as K
+
 import xmippLib
 from pyworkflow.em.data import Image
 from skimage.transform import rotate, AffineTransform, warp
@@ -20,15 +15,22 @@ from scipy.stats import pearsonr
 from pyworkflow.utils.path import cleanPath
 import os
 
+def updateEnviron(gpuNum=None):
+    """ Create the needed environment for TensorFlow programs. """
+    print("updating environ to select gpu %s" % (gpuNum))
+    if not gpuNum is None:
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)  # THIS IS FOR USING JUST one GPU:# must be changed to select desired gpu
+    else:
+        os.environ['CUDA_VISIBLE_DEVICES'] = "-1"
+updateEnviron()
+from keras.models import Model, Sequential, load_model
+from keras.optimizers import Adam
+from keras.layers import Input, Conv2D, UpSampling2D, AveragePooling2D, \
+    BatchNormalization, LeakyReLU, Flatten, Activation, Dense, \
+    Conv2DTranspose, MaxPooling2D, Dropout
+
 ITER_TRAIN = 0
 ITER_PREDICT = 1
-
-
-def dice_coef(y_true, y_pred):
-    intersection = K.sum(y_true * y_pred, axis=[1, 2, 3])
-    union = K.sum(y_true, axis=[1, 2, 3]) + K.sum(y_pred, axis=[1, 2, 3])
-    return -K.mean((2. * intersection + 1) / (union + 1), axis=0)
-
 
 class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
@@ -93,11 +95,12 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                                'allocation by providing other GPU number, p.e. 2'
                                '\nif -1 no gpu but all cpu cores will be used')
 
-        form.addParallelSection(threads=1, mpi=8)
+        form.addParallelSection(threads=1, mpi=5)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self.newXdim = self.imageSize.get()
+        self.updateEnviron()
         self._insertFunctionStep('preprocessData')
         if self.model.get() == ITER_TRAIN:
             self._insertFunctionStep('trainModel')
@@ -465,24 +468,6 @@ class GAN(XmippProtDeepDenoising):
         model.add(LeakyReLU(alpha=0.2))
 
         model.add(Dense(1, activation='sigmoid'))
-
-        '''model.add(Conv2D(32 * 1, 5, strides=2, input_shape=img_shape, \
-                          padding='same'))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.4))
-
-        model.add(Conv2D(32 * 2, 5, strides=2, padding='same'))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.4))
-
-        model.add(Conv2D(32 * 4, 5, strides=2, padding='same'))
-        model.add(LeakyReLU(alpha=0.2))
-        model.add(Dropout(0.4))
-
-        # Out: 1-dim probability
-        model.add(Flatten())
-        model.add(Dense(1))
-        model.add(Activation('sigmoid'))'''
 
         img = Input(shape=img_shape)
         validity = model(img)
