@@ -2,7 +2,8 @@
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
 import pyworkflow.protocol.params as params
 import numpy as np
-
+import time
+time.sleep(10)
 import xmippLib
 from pyworkflow.em.data import Image
 from skimage.transform import rotate, AffineTransform, warp
@@ -14,6 +15,7 @@ import pyworkflow.em.metadata as md
 from scipy.stats import pearsonr
 from pyworkflow.utils.path import cleanPath
 import os
+import GPUtil
 
 def updateEnviron(gpuNum=None):
     """ Create the needed environment for TensorFlow programs. """
@@ -22,7 +24,9 @@ def updateEnviron(gpuNum=None):
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)  # THIS IS FOR USING JUST one GPU:# must be changed to select desired gpu
     else:
         os.environ['CUDA_VISIBLE_DEVICES'] = "-1"
-updateEnviron()
+
+availableGPUs = GPUtil.getAvailable(order='first')
+updateEnviron(availableGPUs)
 from keras.models import Model, Sequential, load_model
 from keras.optimizers import Adam
 from keras.layers import Input, Conv2D, UpSampling2D, AveragePooling2D, \
@@ -100,7 +104,6 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self.newXdim = self.imageSize.get()
-        self.updateEnviron()
         self._insertFunctionStep('preprocessData')
         if self.model.get() == ITER_TRAIN:
             self._insertFunctionStep('trainModel')
