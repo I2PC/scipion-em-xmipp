@@ -15,8 +15,6 @@ from scipy.stats import pearsonr
 from pyworkflow.utils.path import cleanPath
 import os
 import GPUtil
-import time
-time.sleep(10)
 
 def updateEnviron(gpuNum=None):
     """ Create the needed environment for TensorFlow programs. """
@@ -26,15 +24,6 @@ def updateEnviron(gpuNum=None):
         # USING JUST one GPU:# must be changed to select desired gpu
     else:
         os.environ['CUDA_VISIBLE_DEVICES'] = "-1"
-
-availableGPUs = GPUtil.getAvailable(order='first')
-updateEnviron(availableGPUs)
-
-from keras.models import Model, Sequential, load_model
-from keras.optimizers import Adam
-from keras.layers import Input, Conv2D, UpSampling2D, AveragePooling2D, \
-    BatchNormalization, LeakyReLU, Flatten, Activation, Dense, \
-    Conv2DTranspose, MaxPooling2D, Dropout
 
 ITER_TRAIN = 0
 ITER_PREDICT = 1
@@ -106,6 +95,10 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
+
+        availableGPUs = GPUtil.getAvailable(order='first')
+        updateEnviron(availableGPUs)
+
         self.newXdim = self.imageSize.get()
         self._insertFunctionStep('preprocessData')
         if self.model.get() == ITER_TRAIN:
@@ -135,6 +128,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
 
     def trainModel(self):
+        from keras.models import load_model
         self.X_train = self.gan.extractTrainData(self._getExtraPath(
             'resizedProjections.xmd'), xmippLib.MDL_IMAGE, -1)
 
@@ -144,6 +138,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         self.Generator = load_model(self._getPath('ModelTrained.h5'))
 
     def predictModel(self):
+        from keras.models import load_model
         metadataPart = xmippLib.MetaData(self._getExtraPath(
             'resizedParticles.xmd'))
         if self.model.get() == ITER_TRAIN:
@@ -256,6 +251,9 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 class GAN(XmippProtDeepDenoising):
 
     def initModel(self, saveModelDir):
+        from keras.optimizers import Adam
+        from keras.models import Model
+        from keras.layers import Input
 
         self.dir2 = saveModelDir
         optimizer = Adam(0.0001)
@@ -409,13 +407,7 @@ class GAN(XmippProtDeepDenoising):
     def applyTransform(self, image):
 
         angle = np.random.randint(-180, 180)
-        #shiftx = np.random.randint(-10, 10)
-        #shifty = np.random.randint(-10, 10)
-
         imRotate = rotate(image, angle, mode='wrap')
-        #shift = AffineTransform(translation=[shiftx, shifty])
-        #imShift = warp(imRotate, shift, mode='wrap',
-        #               preserve_range=True)
 
         return imRotate
 
@@ -438,6 +430,9 @@ class GAN(XmippProtDeepDenoising):
         return projections, imageNoise
 
     def build_generator(self):
+        from keras.layers import Input, Conv2D, BatchNormalization, LeakyReLU, Activation,\
+            Conv2DTranspose
+        from keras.models import Model
 
         input_img = Input(shape=self.img_shape,
                           name='input')
@@ -462,7 +457,8 @@ class GAN(XmippProtDeepDenoising):
         return Model(noise, img)
 
     def build_discriminator(self):
-
+        from keras.models import Sequential, Model
+        from keras.layers import Flatten, Dense, LeakyReLU, Input
         img_shape = (self.img_rows, self.img_cols, self.channels)
 
         model = Sequential()
