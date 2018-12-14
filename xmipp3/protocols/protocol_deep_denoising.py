@@ -102,8 +102,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        import time
-        time.sleep(10)
+
         #availableGPUs = GPUtil.getAvailable(order='first')
         updateEnviron(self.gpuList.get())
 
