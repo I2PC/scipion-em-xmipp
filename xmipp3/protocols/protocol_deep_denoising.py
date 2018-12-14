@@ -1,6 +1,7 @@
 
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
 import pyworkflow.protocol.params as params
+import pyworkflow.protocol.constants as cons
 import numpy as np
 
 import xmippLib
@@ -16,15 +17,13 @@ from pyworkflow.utils.path import cleanPath
 import os
 import GPUtil
 
-def updateEnviron(gpuNum=None):
+def updateEnviron(gpuNum):
     """ Create the needed environment for TensorFlow programs. """
     print("updating environ to select gpu %s" % (gpuNum))
-    if not gpuNum is None:
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)[1:-1]  # THIS IS FOR
-        # USING JUST one GPU:# must be changed to select desired gpu
+    if gpuNum == '':
+        os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
     else:
-        os.environ['CUDA_VISIBLE_DEVICES'] = "-1"
-
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
 ITER_TRAIN = 0
 ITER_PREDICT = 1
 
@@ -38,6 +37,14 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         form.addParam('deepMsg', params.LabelParam, default=True,
                       label='WARNING! You need to have installed '
                             'Keras programs')
+        form.addHidden(params.GPU_LIST, params.StringParam, default='',
+                       expertLevel=cons.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="GPU may have several cores. Set it to zero"
+                            " if you do not know what we are talking about."
+                            " First core index is 0, second 1 and so on."
+                            " In case to use several GPUs separate with comas:"
+                            "0,1,2")
         form.addParam('model', params.EnumParam, choices=['Train & Predict',
                                                           'Predict'],
                        default=ITER_TRAIN,
@@ -95,9 +102,10 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-
-        availableGPUs = GPUtil.getAvailable(order='first')
-        updateEnviron(availableGPUs)
+        import time
+        time.sleep(10)
+        #availableGPUs = GPUtil.getAvailable(order='first')
+        updateEnviron(self.gpuList.get())
 
         self.newXdim = self.imageSize.get()
         self._insertFunctionStep('preprocessData')
