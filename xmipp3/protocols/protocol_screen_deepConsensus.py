@@ -472,9 +472,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
                     totalGoodCoords+= 1
 
         assert totalGoodCoords > MIN_NUM_CONSENSUS_COORDS, \
-                "Error, the consensus (%s) of your input coordinates was too small (%d). "+\
-                "It must be > %d. Try a different input..."\
-                % (mode, totalGoodCoords, MIN_NUM_CONSENSUS_COORDS)
+                ("Error, the consensus (%s) of your input coordinates was too small (%s). "+
+                "It must be > %s. Try a different input..."
+                )% (mode, str(totalGoodCoords), str(MIN_NUM_CONSENSUS_COORDS))
 
         self.coordinatesDict[mode]= setOfCoordinates
         if writeSet:
