@@ -15,7 +15,7 @@ import pyworkflow.em.metadata as md
 from scipy.stats import pearsonr
 from pyworkflow.utils.path import cleanPath
 import os
-import GPUtil
+
 
 def updateEnviron(gpuNum):
     """ Create the needed environment for TensorFlow programs. """
