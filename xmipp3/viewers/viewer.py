@@ -44,12 +44,13 @@ from xmipp3.protocols.protocol_particle_pick_automatic import XmippParticlePicki
 from xmipp3.protocols.protocol_particle_pick_pairs import XmippProtParticlePickingPairs
 from xmipp3.protocols.protocol_rotational_spectra import XmippProtRotSpectra
 from xmipp3.protocols.protocol_screen_particles import XmippProtScreenParticles
+from xmipp3.protocols.protocol_screen_deepConsensus import XmippProtScreenDeepConsensus
+from xmipp3.protocols.protocol_screen_deeplearning1 import XmippProtScreenDeepLearning1
 from xmipp3.protocols.protocol_ctf_micrographs import XmippProtCTFMicrographs
 from xmipp3.protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
 from xmipp3.protocols.protocol_multireference_alignability import XmippProtMultiRefAlignability
 from xmipp3.protocols.protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from xmipp3.protocols.protocol_movie_gain import XmippProtMovieGain
-
 
 class XmippViewer(DataViewer):
     """ Wrapper to visualize different type of objects
@@ -62,6 +63,8 @@ class XmippViewer(DataViewer):
                 XmippParticlePickingAutomatic,
                 XmippProtExtractParticles,
                 XmippProtExtractParticlesPairs,
+                XmippProtScreenDeepConsensus,
+                XmippProtScreenDeepLearning1,
                 XmippProtKerdensom,
                 XmippProtParticlePickingPairs,
                 XmippProtRotSpectra,
@@ -72,7 +75,6 @@ class XmippViewer(DataViewer):
                 XmippProtMultiRefAlignability,
                 XmippProtMovieGain
                 ]
-
     def __createTemporaryCtfs(self, obj, setOfMics):
         pwutils.cleanPath(obj._getPath("ctfs_temporary.sqlite"))
         self.protocol._createFilenameTemplates()
@@ -97,7 +99,6 @@ class XmippViewer(DataViewer):
 
     def _visualize(self, obj, **kwargs):
         cls = type(obj)
-
         if issubclass(cls, SetOfNormalModes):
             fn = obj.getFileName()
             from nma.viewer_nma import OBJCMD_NMA_PLOTDIST, OBJCMD_NMA_VMD
@@ -119,6 +120,39 @@ class XmippViewer(DataViewer):
             else:
                 self.getCTFViews(ctfSet)
 
+        elif issubclass(cls, XmippProtScreenDeepConsensus) or issubclass(cls, XmippProtScreenDeepLearning1):
+            parts = obj.outputParticles
+            fnParts = parts.getFileName()
+            
+            fnXml = obj._getPath('particles.xmd')
+            md = xmippLib.MetaData(fnXml)
+            if md.containsLabel(xmippLib.MDL_ZSCORE_DEEPLEARNING1):
+                from plotter import XmippPlotter
+                xplotter = XmippPlotter(windowTitle="Deep consensus score")
+                xplotter.createSubPlot("Deep consensus score", "Deep consensus score", "Number of Particle")
+                xplotter.plotMd(md, False, mdLabelY=xmippLib.MDL_ZSCORE_DEEPLEARNING1, nbins=200)
+                self._views.append(xplotter)
+            
+
+            labels  = 'id enabled _index _filename _xmipp_zScoreDeepLearning1 '
+            labels += '_xmipp_zScore _xmipp_cumulativeSSNR _sampling '
+            labels += '_xmipp_scoreEmptiness _ctfModel._defocusU _ctfModel._defocusV '
+            labels += '_ctfModel._defocusAngle _transform._matrix'
+            if issubclass(cls, XmippProtScreenDeepConsensus):
+                coordsId = obj.outputCoordinates.strId()
+                self._views.append(
+                    ObjectView(self._project, parts.strId(), fnParts,
+                               other='coordsCons%s'%coordsId,
+                               viewParams={ORDER: labels, VISIBLE: labels,
+                                           'sortby': '_xmipp_zScoreDeepLearning1 asc',
+                                           RENDER:'_filename'}))
+            else:
+                self._views.append(
+                    ObjectView(self._project, parts.strId(), fnParts,
+                               viewParams={ORDER: labels, VISIBLE: labels,
+                                           'sortby': '_xmipp_zScoreDeepLearning1 asc',
+                                           RENDER:'_filename'}))
+                                           
         elif (issubclass(cls, XmippProtExtractParticles) or
               issubclass(cls, XmippProtScreenParticles)):
             print("visualizaing XmippProtExtractParticles or XmippProtScreenParticles")
@@ -143,6 +177,8 @@ class XmippViewer(DataViewer):
                     xplotter.plotMd(md, False, mdLabelY=xmippLib.MDL_SCORE_BY_VAR, nbins=100)
                     self._views.append(xplotter)
 
+
+                                           
         elif issubclass(cls, XmippProtMovieGain):
             self._visualize(obj.outputMovies)
             movieGainMonitor = MonitorMovieGain(obj,
