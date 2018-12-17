@@ -90,6 +90,12 @@ class Plugin(pyworkflow.em.Plugin):
 
     @classmethod
     def defineBinaries(cls, env):
+        """ Define the Xmipp binaries/source available tgz.
+            In addition, define extra software needed by some Xmipp methods
+            such as deepLearning-toolKit.
+            Scipion defined software can be used as a dependency by means of
+            the name as string. See 'scipy' dependency for scikit_learn below.
+        """
 
         ## XMIPP SOFTWARE ##
 
@@ -170,9 +176,10 @@ class Plugin(pyworkflow.em.Plugin):
         deppLearnigTools = [scikit_learn, keras, tensor]
 
         env.addPackage('deepLearnigToolkit', urlSuffix='external',
-                       commands=[('echo "installed deepLearnig-Toolkit: %s"'
+                       commands=[("echo;echo ' > Installed deepLearnig-Toolkit: %s';"
+                                  "echo ; touch done"
                                   % str([tool._name for tool in deppLearnigTools]),
-                                  'deepLearnigToolkit')],
+                                  'done')],
                        deps=deppLearnigTools)
 
         ## --- END OF DEEP LEARNING TOOLKIT --- ##
