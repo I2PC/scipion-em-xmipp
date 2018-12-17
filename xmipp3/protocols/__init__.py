@@ -29,8 +29,6 @@
 from .nma import *
 from .pdb import *
 from .protocol_preprocess import *
-
-
 from .protocol_3dbionotes import XmippProt3DBionotes
 from .protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from .protocol_align_volume import XmippProtAlignVolume, XmippProtAlignVolumeForWeb
@@ -77,7 +75,7 @@ from .protocol_particle_pick_consensus import XmippProtConsensusPicking
 from .protocol_particle_pick import XmippProtParticlePicking
 from .protocol_particle_pick_pairs import XmippProtParticlePickingPairs
 from .protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
-from .protocol_projmatch import XmippProtProjMatch, XmippProjMatchViewer
+from .protocol_projmatch import XmippProtProjMatch
 from .protocol_random_conical_tilt import XmippProtRCT
 from .protocol_ransac import XmippProtRansac
 from .protocol_realignment_classes import XmippProtReAlignClasses
@@ -86,7 +84,10 @@ from .protocol_reconstruct_highres import XmippProtReconstructHighRes
 from .protocol_reconstruct_significant import XmippProtReconstructSignificant
 from .protocol_reconstruct_swarm import XmippProtReconstructSwarm
 from .protocol_resolution3d import XmippProtResolution3D
+from .protocol_resolution_directional import XmippProtMonoDir
 from .protocol_resolution_monogenic_signal import XmippProtMonoRes
+from .protocol_volume_local_sharpening import XmippProtLocSharp
+from .protocol_resolution_monotomo import XmippProtMonoTomo
 from .protocol_rotational_spectra import XmippProtRotSpectra
 from .protocol_rotational_symmetry import XmippProtRotationalSymmetry
 from .protocol_screen_particles import XmippProtScreenParticles
@@ -95,7 +96,6 @@ from .protocol_split_volume import XmippProtSplitvolume
 from .protocol_trigger_data import XmippProtTriggerData
 from .protocol_validate_nontilt import XmippProtValidateNonTilt
 from .protocol_validate_overfitting import XmippProtValidateOverfitting
-# from .protocol_validate_tilt import XmippProtValidateTilt
 from .protocol_volume_strain import XmippProtVolumeStrain
 from .protocol_enrich import XmippProtEnrich
 from .protocol_write_testC import XmippProtWriteTestC

@@ -28,10 +28,10 @@
 import requests
 import webbrowser
 
+# FIXME: Avoid this crazy import * statements
 from pyworkflow.em import *
-from pyworkflow.em.convert import ImageHandler
+from pyworkflow.em.convert import ImageHandler, Ccp4Header
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.em.headers import Ccp4Header
 
 
 class XmippProt3DBionotes(ProtAnalysis3D):

@@ -28,7 +28,7 @@
 # **************************************************************************
 
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-import pyworkflow.em.showj as showj
+import pyworkflow.em.viewers.showj as showj
 
 import xmippLib
 from xmipp3.protocols.protocol_reconstruct_swarm import XmippProtReconstructSwarm
@@ -56,3 +56,4 @@ class XmippReconstructSwarmViewer(XmippViewer):
         if os.path.exists(fnSwarm):
             self._views.append(DataView('bestByVolume@' + fnSwarm, viewParams = {showj.MODE: showj.MODE_MD}))
         
+        return self._views

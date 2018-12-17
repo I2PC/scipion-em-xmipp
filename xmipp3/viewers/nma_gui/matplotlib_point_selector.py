@@ -24,7 +24,7 @@
 # *
 # **************************************************************************
 
-from ..plotter import plotArray2D
+from ..nma_plotter import plotArray2D
 
         
 class PointSelector():

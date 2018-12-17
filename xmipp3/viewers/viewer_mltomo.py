@@ -30,9 +30,11 @@ This module implements the viewer for Xmipp mltomo protocol
 import os
 from os.path import exists
 
-from pyworkflow.em import (DataView, Classes3DView, FscViewer, FSC,
-                           ObjectView, ChimeraView, ChimeraClientView)
-import pyworkflow.em.showj as showj
+from pyworkflow.em.data import FSC
+from pyworkflow.em.viewers import (
+    DataView, Classes3DView, FscViewer, ObjectView,
+    ChimeraView, ChimeraClientView)
+import pyworkflow.em.viewers.showj as showj
 import pyworkflow.em.metadata as md
 from pyworkflow.protocol.params import EnumParam, NumericRangeParam, LabelParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO

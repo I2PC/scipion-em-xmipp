@@ -46,15 +46,15 @@ from pyworkflow.em.metadata import MetaData, MDL_X, MDL_COUNT
 from pyworkflow.em import ImageHandler
 
 from .plotter import XmippPlotter
-from xmipp3.protocols.protocol_resolution_monogenic_signal import \
-        XmippProtMonoRes, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM, \
-        OUTPUT_RESOLUTION_FILE_CHIMERA, CHIMERA_RESOLUTION_VOL
+from xmipp3.protocols.protocol_resolution_monotomo import \
+        XmippProtMonoTomo, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM, \
+        OUTPUT_RESOLUTION_FILE_CHIMERA, CHIMERA_RESOLUTION_VOL, FN_FILTERED_MAP
 
 
 binaryCondition = ('(colorMap == %d) ' % (COLOR_OTHER))
 
 
-class XmippMonoResViewer(LocalResolutionViewer):
+class XmippMonoTomoViewer(LocalResolutionViewer):
     """
     Visualization tools for MonoRes results.
     
@@ -62,8 +62,8 @@ class XmippMonoResViewer(LocalResolutionViewer):
     density maps studied in structural biology, primarily by cryo-electron
     microscopy (cryo-EM).
     """
-    _label = 'viewer MonoRes'
-    _targets = [XmippProtMonoRes]      
+    _label = 'viewer MonoTomo'
+    _targets = [XmippProtMonoTomo]      
     _environments = [DESKTOP_TKINTER]
 
     
@@ -106,7 +106,10 @@ class XmippMonoResViewer(LocalResolutionViewer):
                        label='Slice axis')
 
         group.addParam('doShowVolumeColorSlices', LabelParam,
-              label="Show colored slices")
+              label="Show colored resolution slices")
+        
+        group.addParam('doShowVolumeColorFiltered', LabelParam,
+              label="Show colored filtered resolution slices")
         
         group.addParam('doShowOneColorslice', LabelParam, 
                        expertLevel=LEVEL_ADVANCED, 
@@ -122,7 +125,8 @@ class XmippMonoResViewer(LocalResolutionViewer):
         self.protocol._createFilenameTemplates()
         return {'doShowOriginalVolumeSlices': self._showOriginalVolumeSlices,
                 'doShowVolumeSlices': self._showVolumeSlices,
-                'doShowVolumeColorSlices': self._showVolumeColorSlices,
+                'doShowVolumeColorSlices': self._showVolumeColorSlicesResolution,
+                'doShowVolumeColorFiltered': self._showVolumeColorSlicesResolutionFiltered,
                 'doShowOneColorslice': self._showOneColorslice,
                 'doShowResHistogram': self._plotHistogram,
                 'doShowChimera': self._showChimera,
@@ -134,21 +138,31 @@ class XmippMonoResViewer(LocalResolutionViewer):
         return [cm]
     
     def _showOriginalVolumeSlices(self, param=None):
-        if self.protocol.halfVolumes.get() is True:
+
+        # if self.protocol.halfVolumes.get() is True:
+        # Where is halfVolumes?
+        try:
             cm = DataView(self.protocol.inputVolume.get().getFileName())
             cm2 = DataView(self.protocol.inputVolume2.get().getFileName())
             return [cm, cm2]
-        else:
+        except:
             cm = DataView(self.protocol.inputVolumes.get().getFileName())
             return [cm]
+
+    def _showVolumeColorSlicesResolution(self, param=None):
+        self._showVolumeColorSlices(OUTPUT_RESOLUTION_FILE)
+        
+    def _showVolumeColorSlicesResolutionFiltered(self, param=None):
+        self._showVolumeColorSlices(FN_FILTERED_MAP)
     
-    def _showVolumeColorSlices(self, param=None):
-        imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE)
+    def _showVolumeColorSlices(self, mapFile):
+        imageFile = self.protocol._getFileName(mapFile)
         imgData, min_Res, max_Res = self.getImgData(imageFile)
 
         xplotter = XmippPlotter(x=2, y=2, mainTitle="Local Resolution Slices "
                                                      "along %s-axis."
                                                      %self._getAxis())
+
         #The slices to be shown are close to the center. Volume size is divided in 
         # 9 segments, the fouth central ones are selected i.e. 3,4,5,6
         for i in xrange(3,7): 
@@ -159,7 +173,9 @@ class XmippMonoResViewer(LocalResolutionViewer):
                                        cmap=self.getColorMap(),
                                        interpolation="nearest")
         xplotter.getColorBar(plot)
-        return [xplotter]
+
+        return [plt.show(xplotter)]
+    
 
     def _showOneColorslice(self, param=None):
         imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE)
@@ -181,7 +197,8 @@ class XmippMonoResViewer(LocalResolutionViewer):
                                        cmap=self.getColorMap(),
                                        interpolation="nearest")
         xplotter.getColorBar(plot)
-        return [xplotter]
+
+        return [plt.show(xplotter)]
     
     def _plotHistogram(self, param=None):
         md = MetaData()
@@ -240,24 +257,15 @@ class XmippMonoResViewer(LocalResolutionViewer):
         colors_labels = self.numberOfColors(min_Res, max_Res, numberOfColors)
         colorList = self.colorMapToColorList(colors_labels, self.getColorMap())
         
-        if self.protocol.halfVolumes.get() is True:
-            #fhCmd.write("open %s\n" % (fnRoot+FN_MEAN_VOL)) #Perhaps to check 
-            #the use of mean volume is useful
-            fnbase = removeExt(self.protocol.inputVolume.get().getFileName())
-            ext = getExt(self.protocol.inputVolume.get().getFileName())
-            fninput = abspath(fnbase + ext[0:4])
-            fhCmd.write("open %s\n" % fninput)
-        else:
-            fnbase = removeExt(self.protocol.inputVolumes.get().getFileName())
-            ext = getExt(self.protocol.inputVolumes.get().getFileName())
-            fninput = abspath(fnbase + ext[0:4])
-            fhCmd.write("open %s\n" % fninput)
+        #fhCmd.write("open %s\n" % (fnRoot+FN_MEAN_VOL)) #Perhaps to check 
+        #the use of mean volume is useful
+        fnbase = removeExt(self.protocol.inputVolume.get().getFileName())
+        ext = getExt(self.protocol.inputVolume.get().getFileName())
+        fninput = abspath(fnbase + ext[0:4])
+        fhCmd.write("open %s\n" % fninput)
 
         fhCmd.write("open %s\n" % (fnRoot + CHIMERA_RESOLUTION_VOL))
-        if self.protocol.halfVolumes.get() is True:
-            smprt = self.protocol.inputVolume.get().getSamplingRate()
-        else:
-            smprt = self.protocol.inputVolumes.get().getSamplingRate()
+        smprt = self.protocol.inputVolume.get().getSamplingRate()
         fhCmd.write("volume #0 voxelSize %s\n" % (str(smprt)))
         fhCmd.write("volume #1 voxelSize %s\n" % (str(smprt)))
         fhCmd.write("vol #1 hide\n")
