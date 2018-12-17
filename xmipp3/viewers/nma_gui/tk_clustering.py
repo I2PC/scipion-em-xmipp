@@ -28,29 +28,29 @@ from os.path import basename
 import Tkinter as tk
 
 import pyworkflow.gui as gui
-from pyworkflow.utils.properties import Icon
 from pyworkflow.gui.widgets import Button, HotButton
 
-from ..data import Point, PathData
-from ..plotter import XmippNmaPlotter
-from . import PointPath
- 
+from xmipp3.protocols.nma.data import Point
+from . import PointSelector
+from ..nma_plotter import XmippNmaPlotter
+
     
-class TrajectoriesWindow(gui.Window):
+class ClusteringWindow(gui.Window):
     """ This class creates a Window that will display some Point's
     contained in a Data object.
-    It will allow to draw and adjust trajectories along 2D axes.
+    It will allow to launch 1D, 2D and 3D plots by selecting any
+    combination of the x1, x2...xn from the Point dimension.
+    Points can be selected by either Click and Drag in the Scatter plot or..
+    by creating an Expression.
+    Finally, there is a button 'Create Cluster' that will call a callback 
+    fuction to take care of it.
     """
     def __init__(self, **kwargs):
         gui.Window.__init__(self,  minsize=(420, 200), **kwargs)
         
         self.dim = kwargs.get('dim')
         self.data = kwargs.get('data')
-        self.pathData = PathData(dim=self.dim)
         self.callback = kwargs.get('callback', None)
-        self.loadCallback = kwargs.get('loadCallback', None)
-        self.numberOfPoints = kwargs.get('numberOfPoints', 10)
-        
         self.plotter = None
          
         content = tk.Frame(self.root)
@@ -61,7 +61,8 @@ class TrajectoriesWindow(gui.Window):
         
     def _createContent(self, content):
         self._createFigureBox(content)
-        self._createTrajectoriesBox(content)
+        self._createClusteringBox(content)
+        self._updateSelectionLabel()
         
     def _addLabel(self, parent, text, r, c):
         label = tk.Label(parent, text=text, font=self.fontBold)
@@ -84,12 +85,12 @@ class TrajectoriesWindow(gui.Window):
         self.listbox = listbox
         
         # Selection controls
-        self._addLabel(frame, 'Rejection', 1, 0)  
+        self._addLabel(frame, 'Selection', 1, 0)  
         # Selection label
         self.selectionVar = tk.StringVar()
         self.clusterLabel = tk.Label(frame, textvariable=self.selectionVar)
         self.clusterLabel.grid(row=1, column=1, sticky='nw', padx=5, pady=(10, 5))
-        self._updateSelectionLabel()
+        
         # --- Expression
         expressionFrame = tk.Frame(frame)
         expressionFrame.grid(row=2, column=1, sticky='news')
@@ -113,57 +114,40 @@ class TrajectoriesWindow(gui.Window):
        
         frame.grid(row=0, column=0, sticky='new', padx=5, pady=(10, 5))
 
-    def _createTrajectoriesBox(self, content):
-        frame = tk.LabelFrame(content, text='Trajectories')
+    def _createClusteringBox(self, content):
+        frame = tk.LabelFrame(content, text='Cluster')
         frame.columnconfigure(0, minsize=50)
         frame.columnconfigure(1, weight=1)#, minsize=30)
 
-        # Animation name
-        self._addLabel(frame, 'Name', 0, 0)
-        self.animationVar = tk.StringVar()
-        clusterEntry = tk.Entry(frame, textvariable=self.animationVar, 
+        # Cluster line
+        self._addLabel(frame, 'Cluster name', 0, 0)
+        self.clusterVar = tk.StringVar()
+        clusterEntry = tk.Entry(frame, textvariable=self.clusterVar, 
                                    width=30, bg='white')
         clusterEntry.grid(row=0, column=1, sticky='nw', pady=5)
         
-        buttonsFrame = tk.Frame(frame)
+        buttonsFrame = tk.Frame(frame, bg='green')
         buttonsFrame.grid(row=1, column=1, 
                           sticky='se', padx=5, pady=5)
         buttonsFrame.columnconfigure(0, weight=1)
 
-        self.generateBtn = HotButton(buttonsFrame, text='Generate Animation', state=tk.DISABLED,
-                              tooltip='Select trajectory points to generate the animations',
-                              imagePath='fa-plus-circle.png', command=self._onCreateClick)
-        self.generateBtn.grid(row=0, column=1, padx=5)  
-        
-        self.loadBtn = Button(buttonsFrame, text='Load', imagePath='fa-folder-open.png',
-                              tooltip='Load a generated animation.',command=self._onLoadClick)
-        self.loadBtn.grid(row=0, column=2, padx=5)   
-                  
-        self.closeBtn = Button(buttonsFrame, text='Close', imagePath=Icon.ACTION_CLOSE,
-                              tooltip='Close window', command=self.close)
-        self.closeBtn.grid(row=0, column=3, padx=(5, 10)) 
-               
+        self.createBtn = HotButton(buttonsFrame, text='Create Cluster', 
+                                   tooltip="Select some points to create the cluster",
+                                   imagePath='fa-plus-circle.png', command=self._onCreateClick)
+        self.createBtn.grid(row=0, column=1)       
+       
         frame.grid(row=1, column=0, sticky='new', padx=5, pady=(5, 10))
         
     def _onResetClick(self, e=None):
         """ Clean the expression and the current selection. """
         self.expressionVar.set('')
-        self.pathData.clear()
-        for point in self.data.iterAll():
+        for point in self.data:
             point.setState(Point.NORMAL)
         self._onUpdateClick()
-        self.generateBtn.config(state=tk.DISABLED)
         
     def _onCreateClick(self, e=None):
         if self.callback:
             self.callback()
-        
-    def _onLoadClick(self, e=None):
-        if self.loadCallback:
-            self.loadCallback()
-        
-    def setPathData(self, data):
-        self.pathData = data
         
     def _evalExpression(self):
         """ Evaluate the input expression and add 
@@ -173,13 +157,8 @@ class TrajectoriesWindow(gui.Window):
         if value:
             for point in self.data:
                 if point.eval(value):
-                    point.setState(Point.DISCARDED)
-                   
-    def setDataIndex(self, indexName, value):
-        """ Set which point data index will be used as X, Y or Z. """
-        setattr(self.data, indexName, value)
-        setattr(self.pathData, indexName, value)
-                             
+                    point.setState(Point.SELECTED)
+                                        
     def _onUpdateClick(self, e=None):
         components = self.listbox.curselection()
         dim = len(components)
@@ -198,7 +177,6 @@ class TrajectoriesWindow(gui.Window):
             if self.plotter is None or self.plotter.isClosed():
                 self.plotter = XmippNmaPlotter(data=self.data)
                 doShow = True
-                #self.plotter.useLastPlot = True
             else:
                 self.plotter.clear()
                 doShow = False
@@ -206,24 +184,22 @@ class TrajectoriesWindow(gui.Window):
             # Actually plot
             baseList = [basename(n) for n in modeNameList]
             
-            self.setDataIndex('XIND', modeList[0])
-            self.ps = None
+            self.data.XIND = modeList[0]
             
             if dim == 1:
                 self.plotter.plotArray1D("Histogram for %s" % baseList[0],  
                                     "Deformation value", "Number of images")
             else:
-                self.setDataIndex('YIND', modeList[1])
+                self.data.YIND = modeList[1]
                 if dim == 2:
                     self._evalExpression()
                     self._updateSelectionLabel()
                     ax = self.plotter.createSubPlot("Click and drag to add points to the Cluster",
                                                     *baseList)
-                    self.ps = PointPath(ax, self.data, self.pathData, 
-                                        callback=self._checkNumberOfPoints)
+                    self.ps = PointSelector(ax, self.data, callback=self._updateSelectionLabel)
                 elif dim == 3:
-                    #del self.ps # Remove PointSelector
-                    self.setDataIndex('ZIND', modeList[2])
+                    del self.ps # Remove PointSelector
+                    self.data.ZIND = modeList[2]
                     self.plotter.plotArray3D("%s %s %s" % tuple(baseList), *baseList)
 
             if doShow:
@@ -232,23 +208,16 @@ class TrajectoriesWindow(gui.Window):
                 self.plotter.draw()
 
     def _updateSelectionLabel(self):
-        self.selectionVar.set('%d / %d points' % (self.data.getDiscardedSize(),
-                                                  self.data.getSize()))
+        selected = self.data.getSelectedSize()
+        self.selectionVar.set('%d / %d points' % (selected, self.data.getSize()))
         
-    def _checkNumberOfPoints(self):
-        """ Check that if the number of points was selected
-        and add new ones if needed.
-        """
-        while (self.pathData.getSize() < self.numberOfPoints):
-            self.pathData.splitLongestSegment()
-        self._onUpdateClick()
-        self.generateBtn.config(state=tk.NORMAL)
+        if selected:
+            self.createBtn.config(state=tk.NORMAL)
+        else:
+            self.createBtn.config(state=tk.DISABLED)
         
-    def getAnimationName(self):
-        return self.animationVar.get().strip()
-    
-    def setAnimationName(self, value):
-        self.animationVar.set(value)
+    def getClusterName(self):
+        return self.clusterVar.get().strip()
         
     def _onClosing(self):
         if self.plotter:

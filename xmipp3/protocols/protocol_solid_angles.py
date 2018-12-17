@@ -29,8 +29,9 @@ import math
 
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_1
-from pyworkflow.utils.path import makePath
-from pyworkflow.em.convert import ImageHandler, ALIGN_PROJ
+from pyworkflow.utils import makePath
+from pyworkflow.em.convert import ImageHandler
+from pyworkflow.em.constants import ALIGN_PROJ
 from pyworkflow.em.data import Image
 from pyworkflow.em.protocol import ProtAnalysis3D
 import pyworkflow.em.metadata as md

@@ -28,7 +28,7 @@ from pyworkflow.gui.plotter import Plotter
 from plotter import XmippPlotter
 from pyworkflow.protocol.params import LabelParam, StringParam, EnumParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
-from pyworkflow.em.viewer import ChimeraView, DataView
+from pyworkflow.em.viewers import ChimeraView, DataView
 from xmipp3.protocols.protocol_resolution_directional import XmippProtMonoDir
 from pyworkflow.em.metadata import MetaData
 from xmippLib import (MDL_X, MDL_COUNT, MDL_RESOLUTION_FREQ, MDL_RESOLUTION_FREQ2, MDL_COST, MDL_RESOLUTION_SSNR,
