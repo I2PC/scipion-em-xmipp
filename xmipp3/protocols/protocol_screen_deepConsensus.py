@@ -1,7 +1,6 @@
 # **************************************************************************
 # *
-# * Authors:
-# *             Ruben Sanchez Garcia (rsanchez@cnb.csic.es)
+# * Authors:    Ruben Sanchez Garcia (rsanchez@cnb.csic.es)
 # *             David Maluenda (dmaluenda@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
@@ -105,6 +104,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
                       help='Select the set of coordinates to compare')
         form.addParam('consensusRadius', params.FloatParam, default=0.1,
                       label="Relative Radius", expertLevel=params.LEVEL_ADVANCED,
+                      validators=[params.Positive],
                       help="All coordinates within this radius "
                            "(as fraction of particle size) "
                            "are presumed to correspond to the same particle")
@@ -271,8 +271,12 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
     def _validate(self):
         errorMsg = []
         if self._getBoxSize()< DEEP_PARTICLE_SIZE:
-          errorMsg.append("Error, too small particles (needed 128px or larger), have you provided already "+
-                         "downsampled micrographs? If so, use original ones")
+          errorMsg.append("Error, too small particles (needed 128px or larger), "
+                          "have you provided already downsampled micrographs? "
+                          "If so, use original ones")
+        if not self.skipDoFlip.get() and self.ctfRelations.get() is None:
+          errorMsg.append("Error, CTFs must be provided to compute phase flip. "
+                          "Please, provide a set of CTFs.")
         return errorMsg
 
 #--------------------------- INSERT steps functions ---------------------------
@@ -409,7 +413,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
         
         boxSize = self._getBoxSize()
         consensusNpixels = self.consensusRadius.get() * boxSize
-        assert consensusNpixels >= 0, "Error, consensusNpixel must be >=0"
 
         # Add the rest of coordinates
         Ncurrent = N0

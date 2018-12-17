@@ -78,10 +78,12 @@ class Plugin(pyworkflow.em.Plugin):
         """
         env = pwutils.getEnviron()
         env.set('PATH', os.environ['MATLAB_BINDIR'], pwutils.Environ.BEGIN)
-        env.set('LD_LIBRARY_PATH', os.environ['MATLAB_LIBDIR'], pwutils.Environ.BEGIN)
+        env.set('LD_LIBRARY_PATH', os.environ['MATLAB_LIBDIR'],
+                pwutils.Environ.BEGIN)
         for toolpath in toolPaths:
             env.set('MATLABPATH', toolpath, pwutils.Environ.BEGIN)
-        env.set('MATLABPATH', os.path.join(os.environ[XMIPP_HOME], 'libraries', 'bindings', 'matlab'),
+        env.set('MATLABPATH', os.path.join(os.environ[XMIPP_HOME],
+                                           'libraries', 'bindings', 'matlab'),
                 pwutils.Environ.BEGIN)
 
         return env
@@ -114,15 +116,18 @@ class Plugin(pyworkflow.em.Plugin):
 
         ## --- DEEP LEARNING TOOLKIT --- ##
 
-        scipy = env.addPipModule('scipy', '0.14.0', default=False)#,
-                                 # deps=[lapack, matplotlib])
-        cython = env.addPipModule('cython', '0.22', target='Cython-0.22*', default=False)
+        # scipy = env.addPipModule('scipy', '0.14.0', default=False)#,
+        #                          deps=['lapack', 'matplotlib'])
+        cython = env.addPipModule('cython', '0.22', target='Cython-0.22*',
+                                  default=False)
 
         scikit_learn = env.addPipModule('scikit-learn', '0.19.1',
                                         target='scikit_learn*',
-                                        default=False, deps=[scipy, cython])
-        unittest2 = env.addPipModule('unittest2', '0.5.1', target='unittest2*', default=False)
-        h5py = env.addPipModule('h5py', '2.8.0rc1', target='h5py*', default=False, deps=[unittest2])
+                                        default=False, deps=['scipy', cython])
+        unittest2 = env.addPipModule('unittest2', '0.5.1', target='unittest2*',
+                                     default=False)
+        h5py = env.addPipModule('h5py', '2.8.0rc1', target='h5py*',
+                                default=False, deps=[unittest2])
 
         cv2 = env.addPipModule('opencv-python', "3.4.2.17",
                                target="cv2", default=False)
@@ -142,26 +147,27 @@ class Plugin(pyworkflow.em.Plugin):
             tensor = env.addPipModule('tensorflow-gpu', target='tensorflow*',
                                       default=False,
                                       pipCmd="%s https://storage.googleapis.com/"
-                                             "tensorflow/linux/gpu/tensorflow_gpu-%s-cp27-none-"
+                                             "tensorflow/linux/gpu/"
+                                             "tensorflow_gpu-%s-cp27-none-"
                                              "linux_x86_64.whl"
                                              % (pipCmdScipion, tensorFlowTarget))
-            keras=env.addPipModule('keras', '2.1.5', target='keras*', default=False, deps=[h5py])
+            keras=env.addPipModule('keras', '2.1.5', target='keras*',
+                                   default=False, deps=[h5py])
 
         else:
 
             tensor = env.addPipModule('tensorflow', target='tensorflow*',
                                       default=False,
                                       pipCmd="%s https://storage.googleapis.com/"
-                                             "tensorflow/linux/cpu/tensorflow-%s-cp27-none-"
+                                             "tensorflow/linux/cpu/"
+                                             "tensorflow-%s-cp27-none-"
                                              "linux_x86_64.whl"
                                              % (pipCmdScipion, tensorFlowTarget))
 
             keras = env.addPipModule('keras', '2.2.2', target='keras',
                                    default=False, deps=[cv2, h5py])
 
-
-        deppLearnigTools = [scipy, cython, scikit_learn, unittest2, h5py,
-                            keras, tensor]
+        deppLearnigTools = [scikit_learn, keras, tensor]
 
         env.addPackage('deepLearnigToolkit', urlSuffix='external',
                        commands=[('echo "installed deepLearnig-Toolkit: %s"'
