@@ -33,11 +33,11 @@ from pyworkflow.protocol import getProtocolFromDb
 from xmipp3.protocols.protocol_extract_particles import *
 from xmipp3.protocols.protocol_classification_gpuCorr_semi import *
 
-ProtCTFFind = importFromPlugin('grigoriefflab.protocols', 'ProtCTFFind')
+ProtCTFFind = importFromPlugin('grigoriefflab.protocols', 'ProtCTFFind', doRaise=True)
 try:
     from eman2.protocols.protocol_autopick_sparx import *
 except:
-    pluginNotFound('Eman', "Eman is needed to do this test")
+    pluginNotFound('Eman', "Eman is needed to do this test", doRaise=True)
 
 
 # Number of mics to be processed
