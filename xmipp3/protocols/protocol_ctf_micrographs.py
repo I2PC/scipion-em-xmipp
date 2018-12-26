@@ -111,12 +111,6 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                            'Downsample factor; and if it fails, +1; '
                            'and if it fails, -1.')
 
-        form.addParam('doAutomaticRejection', params.BooleanParam,
-                      default=False, label="Automatic rejection",
-                      expertLevel=pwconst.LEVEL_ADVANCED,
-                      help='Automatically reject micrographs whose CTF looks '
-                           'suspicious.')
-
     def getInputMicrographs(self):
         return self.inputMicrographs.get()
 
