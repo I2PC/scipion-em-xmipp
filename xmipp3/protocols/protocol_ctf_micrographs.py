@@ -143,8 +143,11 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                     downsampleList.append((ctfDownFactor + 1) / 2)
         return downsampleList
 
-    def _estimateCTF(self, micFn, micDir, micName):
+    def _estimateCTF(self, mic, *args):
         """ Run the estimate CTF program """
+        micFn = mic.getFileName()
+        micDir = self._getTmpPath('mic_%04d' % mic.getObjId())
+        micName = mic.getMicName()
         doneFile = join(micDir, 'done.txt')
 
         localParams = self.__params.copy()
