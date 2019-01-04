@@ -81,6 +81,7 @@ class XmippProtDeepAlignment3D(ProtRefine3D):
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self.lastIter = 0
+        self.stdNoise = 2.0
         # Convert input images if necessary
         self.imgsFn = self._getExtraPath('input_imgs.xmd')
         
@@ -214,8 +215,8 @@ _noiseCoord   '0'
 
         mode = 'psi'
         modelFn = mode+'_iter%06d'%i
-        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %d"%
-                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn, self.numEpochs),numberOfMpi=1)
+        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %d %d"%
+                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn, self.numEpochs, self.stdNoise),numberOfMpi=1)
 
     def shiftAlign(self, i):
         if i == 0:
@@ -229,8 +230,8 @@ _noiseCoord   '0'
 
         mode = 'shift'
         modelFn = mode+'_iter%06d'%i
-        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %d"%
-                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn, self.numEpochs),numberOfMpi=1)
+        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %d %d"%
+                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn, self.numEpochs, self.stdNoise),numberOfMpi=1)
 
     def rotTiltAlign(self, i):
 
@@ -241,13 +242,13 @@ _noiseCoord   '0'
 
         mode = 'rot'
         modelFn = mode+'_iter%06d'%(i+1)
-        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %d"%
-                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn, self.numEpochsRot),numberOfMpi=1)
+        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %d %d"%
+                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn, self.numEpochsRot, self.stdNoise),numberOfMpi=1)
 
         mode = 'tilt'
         modelFn = mode+'_iter%06d'%(i+1)
-        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %d"%
-                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn, self.numEpochsRot),numberOfMpi=1)
+        self.runJob("xmipp_angular_deepalign","%s %f %f %s %s %s %d %d"%
+                    (self._getExtraPath("projections.xmd"),maxShift,maxPsi,mode,self._getExtraPath(),modelFn, self.numEpochsRot, self.stdNoise),numberOfMpi=1)
 
     def predictStep(self):
         lastIter = readInfoField(self._getExtraPath(), "iter", xmippLib.MDL_REF)

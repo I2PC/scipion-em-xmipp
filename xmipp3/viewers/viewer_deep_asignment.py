@@ -30,11 +30,8 @@
 from glob import glob
 from os.path import exists, join
 
-from pyworkflow.protocol.params import EnumParam, NumericRangeParam, LabelParam, IntParam, FloatParam
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
+from pyworkflow.protocol.params import LabelParam
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-from pyworkflow.em.viewer import ObjectView, DataView, ChimeraClientView
-import pyworkflow.em.showj as showj
 
 from xmippLib import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
                    MDL_RESOLUTION_FREQ, MDL_RESOLUTION_FRC, MetaData)
@@ -202,7 +199,7 @@ class XmippDeepAsignmentViewer(ProtocolViewer):
         fnAngles = join(fnDir,"outConesParticles.xmd")
         if not exists(fnAngles):
             fnAngles = join(fnDir,"outputParticles.xmd")
-        from pyworkflow.em.plotter import EmPlotter
+        from pyworkflow.em.viewers.plotter import EmPlotter
         view = EmPlotter(x=1, y=1, windowTitle="Angular distribution")
         view.plotAngularDistributionFromMd(fnAngles, '')
         return view
