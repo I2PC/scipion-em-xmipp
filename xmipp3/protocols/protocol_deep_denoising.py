@@ -89,21 +89,11 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                                         'must be even. Using high sizes '
                                         'several GPUs are required' )
 
-        '''if 'CUDA' in os.environ and not os.environ['CUDA'] == "False":
-
-            form.addParam('gpuToUse', params.IntParam, default='0',
-                          label='Which GPU to use:',
-                          help='Currently just one GPU will be use, by '
-                               'default GPU number 0 You can override the default '
-                               'allocation by providing other GPU number, p.e. 2'
-                               '\nif -1 no gpu but all cpu cores will be used')'''
-
         form.addParallelSection(threads=1, mpi=5)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-
-        #availableGPUs = GPUtil.getAvailable(order='first')
+	
         updateEnviron(self.gpuList.get())
 
         self.newXdim = self.imageSize.get()
@@ -114,32 +104,35 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         self._insertFunctionStep('createOutputStep')
 
     def preprocessData(self):
-        particles = self._getExtraPath('noisyParticles.xmd')
-        writeSetOfParticles(self.inputParticles.get(), particles)
-        self.metadata = xmippLib.MetaData(particles)
+	self.numGPUs = self.gpuList.get()
+        self.particles = self._getExtraPath('noisyParticles.xmd')
+        writeSetOfParticles(self.inputParticles.get(), self.particles)
+        self.metadata = xmippLib.MetaData(self.particles)
         fnNewParticles = self._getExtraPath('resizedParticles.stk')
         self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (
-            particles, fnNewParticles, self.newXdim))
+            self.particles, fnNewParticles, self.newXdim))
 
         if self.model.get() == ITER_TRAIN:
             projections = self._getExtraPath('projections.xmd')
             writeSetOfParticles(self.inputProjections.get(), projections)
             fnNewProjections = self._getExtraPath('resizedProjections.stk')
-            self.runJob("xmipp_image_resize", "-i %s -o %s --dim %d" % (
+            self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (
                 projections, fnNewProjections, self.newXdim))
 
         dir = self._getPath('ModelTrained.h5')
         self.gan = GAN()
         self.gan.setSize(self.imageSize.get())
-        self.gan.initModel(dir)
+        self.gan.initModel(dir, self.numGPUs)
 
 
     def trainModel(self):
         from keras.models import load_model
         self.X_train = self.gan.extractTrainData(self._getExtraPath(
             'resizedProjections.xmd'), xmippLib.MDL_IMAGE, -1)
-
-        self.gan.train(self.X_train, epochs=5000,
+	self.X_trainDis = self.gan.extractTrainData(self._getExtraPath(
+            'projections.xmd'), xmippLib.MDL_IMAGE, -1)
+	print np.shape(self.X_trainDis)
+        self.gan.train(self.X_train, self.X_trainDis, epochs=5000,
                                        batch_size=32, save_interval=500)
 
         self.Generator = load_model(self._getPath('ModelTrained.h5'))
@@ -155,7 +148,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         dimMetadata = getMdSize(self._getExtraPath(
                 'resizedParticles.xmd'))
         xmippLib.createEmptyFile(self._getExtraPath(
-            'particlesDenoised.stk'), self.newXdim, self.newXdim, 1,
+            'particlesDenoised.stk'),self.newXdim, self.newXdim,1,
             dimMetadata)
 
         mdNewParticles = md.MetaData()
@@ -164,8 +157,6 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
         if self.model.get() == ITER_PREDICT:
             if self.modelPretrain:
-                '''model = load_model(self.ownModel.get(), custom_objects={
-                    'dice_coef': dice_coef})'''
                 model = load_model(self.ownModel.get())
             else:
                 model = load_model(self._getPath('PretrainModel.h5'))
@@ -193,8 +184,6 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
     def prepareMetadata(self, metadata, image, initItem):
         newRow = md.Row()
         for i, img in enumerate(self.predict):
-            correlations2, _ = pearsonr(img.ravel(), self.noisyParticles[
-                i].ravel())
             image.setData(np.squeeze(img))
             path = '%06d@' % (i + initItem) + self._getExtraPath(
                    'particlesDenoised.stk')
@@ -212,8 +201,6 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                 correlations1, _ = pearsonr(img.ravel(), self.projections[
                     i].ravel())
                 newRow.setValue(md.MDL_CORR_DENOISE_PROJECTION, correlations1)
-
-            newRow.setValue(md.MDL_CORR_DENOISE_NOISY, correlations2)
             newRow.addToMd(metadata)
 
 
@@ -243,10 +230,8 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         particle.setLocation(xmippToLocation(row.getValue(xmippLib.MDL_IMAGE)))
         if self.model.get() == ITER_TRAIN:
             setXmippAttributes(particle, row,
-                               xmippLib.MDL_CORR_DENOISE_PROJECTION,
-                               xmippLib.MDL_CORR_DENOISE_NOISY)
-        else:
-            setXmippAttributes(particle, row, xmippLib.MDL_CORR_DENOISE_NOISY)
+                               xmippLib.MDL_CORR_DENOISE_PROJECTION)
+                         
 
     # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
@@ -257,11 +242,12 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
 class GAN(XmippProtDeepDenoising):
 
-    def initModel(self, saveModelDir):
-        from keras.optimizers import Adam
-        from keras.models import Model
-        from keras.layers import Input
-
+    def initModel(self, saveModelDir, numGPUs):
+	from keras.models import Model
+	from keras.layers import Input
+	from keras.optimizers import Adam
+	from keras.utils import multi_gpu_model
+        
         self.dir2 = saveModelDir
         optimizer = Adam(0.0001)
 
@@ -270,28 +256,29 @@ class GAN(XmippProtDeepDenoising):
         self.discriminator.compile(loss='binary_crossentropy',
                                    optimizer=optimizer,
                                    metrics=['accuracy'])
-
         # Build and compile the generator
-        self.generator = self.build_generator()
+        self.generatorNoParallel = self.build_generator()
+	if len(numGPUs.split(',')) > 1:
+		self.generator = multi_gpu_model(self.generatorNoParallel)
+	else:
+		self.generator = self.generatorNoParallel
         self.generator.compile(loss='mean_squared_error',
                                optimizer=optimizer)
-
         # The generator takes noise as input and generated imgs
-        z = Input(shape=self.img_shape)  # Input(shape=(self.shape,))
+        z = Input(shape=self.img_shape) 
         img = self.generator(z)
-
         # For the combined model we will only train the generator
         self.discriminator.trainable = False
 
         # The valid takes generated images as input and determines validity
         valid = self.discriminator(img)
-
         # The combined model  (stacked generator and discriminator) takes
         # noise as input => generates images => determines validity
         self.combined = Model(z, valid)
+	if len(numGPUs.split(',')) > 1:
+		self.combined = multi_gpu_model(self.combined)
         self.combined.compile(loss='binary_crossentropy',
                               optimizer=optimizer)
-
     def setSize(self, size):
 
         self.img_rows = size
@@ -438,20 +425,20 @@ class GAN(XmippProtDeepDenoising):
 
     def build_generator(self):
         from keras.layers import Input, Conv2D, BatchNormalization, LeakyReLU, Activation,\
-            Conv2DTranspose
+            Conv2DTranspose, MaxPooling2D, Dropout
         from keras.models import Model
 
         input_img = Input(shape=self.img_shape,
                           name='input')
         x = Conv2D(64, (9, 9), padding='same')(input_img)
-        x = BatchNormalization(momentum=0.8)(x)
+        x = BatchNormalization(momentum=0.5)(x)
         x = LeakyReLU(alpha=0.2)(x)
         x = Conv2D(128, (5, 5), padding='same')(x)
-        x = BatchNormalization(momentum=0.8)(x)
+        x = BatchNormalization(momentum=0.5)(x)
         encoded = LeakyReLU(alpha=0.2)(x)
-        x = Conv2DTranspose(64, kernel_size=1, strides=1, padding='same')(
-            encoded)
-        x = BatchNormalization(momentum=0.8)(x)
+        x = Conv2DTranspose(64, kernel_size=3, strides=1, padding='same')(
+            input_img)
+        x = BatchNormalization(momentum=0.5)(x)
         x = LeakyReLU(alpha=0.2)(x)
         x = Conv2DTranspose(1,kernel_size=1,strides=1, padding='same')(x)
         decoded = Activation('linear')(x)
@@ -466,11 +453,11 @@ class GAN(XmippProtDeepDenoising):
     def build_discriminator(self):
         from keras.models import Sequential, Model
         from keras.layers import Flatten, Dense, LeakyReLU, Input
-        img_shape = (self.img_rows, self.img_cols, self.channels)
-
+	img_shape = (self.img_rows, self.img_cols, self.channels)
+   
         model = Sequential()
         model.add(Flatten(input_shape=img_shape))
-        model.add(Dense(1024))
+        model.add(Dense(2048))
         model.add(LeakyReLU(alpha=0.2))
 
         model.add(Dense(1, activation='sigmoid'))
@@ -480,7 +467,7 @@ class GAN(XmippProtDeepDenoising):
 
         return Model(img, validity)
 
-    def train(self, X_train, epochs, batch_size=128, save_interval=50):
+    def train(self, X_train, X_trainDis,epochs, batch_size=128, save_interval=50):
 
         half_batch = int(batch_size / 2)
         self.true, self.noise = self.generate_data(X_train, 100)
@@ -495,7 +482,7 @@ class GAN(XmippProtDeepDenoising):
             # ---------------------
             imgs, noise1 = self.generate_data(X_train, half_batch)
             # Select a random half batch of images
-
+	   
             # Generate a half batch of new images
             gen_imgs = self.generator.predict(noise1)
             # Train the discriminator
@@ -514,12 +501,10 @@ class GAN(XmippProtDeepDenoising):
                                                                     half_batch),
                                                                 1))
             d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
-
             # ---------------------
             #  Train Generator
             # ---------------------
             imgs2, noise2 = self.generate_data(X_train, batch_size)
-
             # The generator wants the discriminator to label the generated samples
             # as valid (ones)
             valid_y = np.array([1] * batch_size)
@@ -535,7 +520,7 @@ class GAN(XmippProtDeepDenoising):
             print "Validation =", evaluate
 
             if epoch > 0 and evaluate <= np.min(self.validation):
-                self.generator.save(self.dir2)
+                self.generatorNoParallel.save(self.dir2)
 
             self.lossD.append(d_loss[0])
             self.lossG.append(g_loss)
@@ -544,7 +529,7 @@ class GAN(XmippProtDeepDenoising):
             # If at save interval => save generated image samples
             if epoch % save_interval == 0:
                 print "MeanLoss = ", np.mean(lossEpoch)
-                self.save_imgs(epoch)
+                #self.save_imgs(epoch)
                 lossEpoch = []
 
     def predict(self, model, data):
