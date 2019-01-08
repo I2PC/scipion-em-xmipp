@@ -104,7 +104,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         self._insertFunctionStep('createOutputStep')
 
     def preprocessData(self):
-	self.numGPUs = self.gpuList.get()
+        self.numGPUs = self.gpuList.get()
         self.particles = self._getExtraPath('noisyParticles.xmd')
         writeSetOfParticles(self.inputParticles.get(), self.particles)
         self.metadata = xmippLib.MetaData(self.particles)
@@ -129,9 +129,9 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         from keras.models import load_model
         self.X_train = self.gan.extractTrainData(self._getExtraPath(
             'resizedProjections.xmd'), xmippLib.MDL_IMAGE, -1)
-	self.X_trainDis = self.gan.extractTrainData(self._getExtraPath(
+        self.X_trainDis = self.gan.extractTrainData(self._getExtraPath(
             'projections.xmd'), xmippLib.MDL_IMAGE, -1)
-	print np.shape(self.X_trainDis)
+        print np.shape(self.X_trainDis)
         self.gan.train(self.X_train, self.X_trainDis, epochs=5000,
                                        batch_size=32, save_interval=500)
 
@@ -243,11 +243,11 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 class GAN(XmippProtDeepDenoising):
 
     def initModel(self, saveModelDir, numGPUs):
-	from keras.models import Model
-	from keras.layers import Input
-	from keras.optimizers import Adam
-	from keras.utils import multi_gpu_model
-        
+        from keras.models import Model
+        from keras.layers import Input
+        from keras.optimizers import Adam
+        from keras.utils import multi_gpu_model
+
         self.dir2 = saveModelDir
         optimizer = Adam(0.0001)
 
@@ -258,27 +258,27 @@ class GAN(XmippProtDeepDenoising):
                                    metrics=['accuracy'])
         # Build and compile the generator
         self.generatorNoParallel = self.build_generator()
-	if len(numGPUs.split(',')) > 1:
-		self.generator = multi_gpu_model(self.generatorNoParallel)
-	else:
-		self.generator = self.generatorNoParallel
-        self.generator.compile(loss='mean_squared_error',
-                               optimizer=optimizer)
-        # The generator takes noise as input and generated imgs
-        z = Input(shape=self.img_shape) 
-        img = self.generator(z)
-        # For the combined model we will only train the generator
-        self.discriminator.trainable = False
+        if len(numGPUs.split(',')) > 1:
+            self.generator = multi_gpu_model(self.generatorNoParallel)
+        else:
+            self.generator = self.generatorNoParallel
+            self.generator.compile(loss='mean_squared_error',
+                                   optimizer=optimizer)
+            # The generator takes noise as input and generated imgs
+            z = Input(shape=self.img_shape)
+            img = self.generator(z)
+            # For the combined model we will only train the generator
+            self.discriminator.trainable = False
 
-        # The valid takes generated images as input and determines validity
-        valid = self.discriminator(img)
-        # The combined model  (stacked generator and discriminator) takes
-        # noise as input => generates images => determines validity
-        self.combined = Model(z, valid)
-	if len(numGPUs.split(',')) > 1:
-		self.combined = multi_gpu_model(self.combined)
-        self.combined.compile(loss='binary_crossentropy',
-                              optimizer=optimizer)
+            # The valid takes generated images as input and determines validity
+            valid = self.discriminator(img)
+            # The combined model  (stacked generator and discriminator) takes
+            # noise as input => generates images => determines validity
+            self.combined = Model(z, valid)
+        if len(numGPUs.split(',')) > 1:
+            self.combined = multi_gpu_model(self.combined)
+            self.combined.compile(loss='binary_crossentropy',
+                                  optimizer=optimizer)
     def setSize(self, size):
 
         self.img_rows = size
@@ -437,7 +437,7 @@ class GAN(XmippProtDeepDenoising):
         x = BatchNormalization(momentum=0.5)(x)
         encoded = LeakyReLU(alpha=0.2)(x)
         x = Conv2DTranspose(64, kernel_size=3, strides=1, padding='same')(
-            input_img)
+            encoded)
         x = BatchNormalization(momentum=0.5)(x)
         x = LeakyReLU(alpha=0.2)(x)
         x = Conv2DTranspose(1,kernel_size=1,strides=1, padding='same')(x)
@@ -453,7 +453,7 @@ class GAN(XmippProtDeepDenoising):
     def build_discriminator(self):
         from keras.models import Sequential, Model
         from keras.layers import Flatten, Dense, LeakyReLU, Input
-	img_shape = (self.img_rows, self.img_cols, self.channels)
+        img_shape = (self.img_rows, self.img_cols, self.channels)
    
         model = Sequential()
         model.add(Flatten(input_shape=img_shape))
