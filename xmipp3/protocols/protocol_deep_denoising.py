@@ -277,8 +277,8 @@ class GAN(XmippProtDeepDenoising):
         self.combined = Model(z, valid)
         if len(numGPUs.split(',')) > 1:
             self.combined = multi_gpu_model(self.combined)
-            self.combined.compile(loss='binary_crossentropy',
-                                  optimizer=optimizer)
+        self.combined.compile(loss='binary_crossentropy',
+                              optimizer=optimizer)
     def setSize(self, size):
 
         self.img_rows = size
