@@ -262,19 +262,19 @@ class GAN(XmippProtDeepDenoising):
             self.generator = multi_gpu_model(self.generatorNoParallel)
         else:
             self.generator = self.generatorNoParallel
-            self.generator.compile(loss='mean_squared_error',
-                                   optimizer=optimizer)
-            # The generator takes noise as input and generated imgs
-            z = Input(shape=self.img_shape)
-            img = self.generator(z)
-            # For the combined model we will only train the generator
-            self.discriminator.trainable = False
+        self.generator.compile(loss='mean_squared_error',
+                               optimizer=optimizer)
+        # The generator takes noise as input and generated imgs
+        z = Input(shape=self.img_shape)
+        img = self.generator(z)
+        # For the combined model we will only train the generator
+        self.discriminator.trainable = False
 
-            # The valid takes generated images as input and determines validity
-            valid = self.discriminator(img)
-            # The combined model  (stacked generator and discriminator) takes
-            # noise as input => generates images => determines validity
-            self.combined = Model(z, valid)
+        # The valid takes generated images as input and determines validity
+        valid = self.discriminator(img)
+        # The combined model  (stacked generator and discriminator) takes
+        # noise as input => generates images => determines validity
+        self.combined = Model(z, valid)
         if len(numGPUs.split(',')) > 1:
             self.combined = multi_gpu_model(self.combined)
             self.combined.compile(loss='binary_crossentropy',

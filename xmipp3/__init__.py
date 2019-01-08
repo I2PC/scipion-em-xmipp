@@ -125,16 +125,29 @@ class Plugin(pyworkflow.em.Plugin):
                          pipCmd="pip install https://storage.googleapis.com/"
                                 "tensorflow/linux/cpu/tensorflow-%s-cp27-none-"
                                 "linux_x86_64.whl" % tensorFlowTarget)
-        env.addPipModule('tensorflow-gpu', target='tensorflow*', default=False,
+        tensorflow_gpu = env.addPipModule('tensorflow-gpu',
+                                         target='tensorflow*', default=False,
                          pipCmd="pip install https://storage.googleapis.com/"
                                 "tensorflow/linux/gpu/tensorflow_gpu-%s-cp27-none-"
                                 "linux_x86_64.whl" % tensorFlowTarget)
+
+
+        h5py = env.addPipModule('h5py', pipCmd="pip install h5py",
+                         target='h5py*', default=False)
+        skimage = env.addPipModule('scikit-image', pipCmd="pip install scikit-image",
+                         target='skimage*', default=False)
 
         # Keras
         cv2 = env.addPipModule('opencv-python', "3.4.2.17",
                                target="cv2", default=False)
         env.addPipModule('Keras', '2.2.2', target='keras',
-                         default=False, deps=[cv2])
+                         default=False, deps=[cv2, h5py, skimage, tensorflow_gpu])
+
+
+        env.addPipModule('scikit-learn', '0.17', target='scikit_learn*',
+                     default=False, deps=['scipy', 'cython'])
+
+
 
 
 pyworkflow.em.Domain.registerPlugin(__name__)
