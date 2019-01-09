@@ -45,7 +45,7 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
     """ Metaprotocol to run together all the protocols to discover discrete
     heterogeneity in a set of particles
      """
-    _label = 'metaprotocol heterogeneity scheduler'
+    _label = 'metaprotocol heterogeneity'
 
     def __init__(self, **kwargs):
         ProtMonitor.__init__(self, **kwargs)
@@ -108,41 +108,6 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
         form.addParam('useGpu', BooleanParam, default=False, label="Use GPU")
 
 
-        form.addSection(label='Reconstruct')
-
-        form.addParam('numberOfIterations', IntParam, default=3,
-                      label='Number of iterations')
-        form.addParam('nextMask', PointerParam, label="Mask",
-                      pointerClass='VolumeMask', allowsNull=True,
-                      help='The mask values must be between 0 (remove these pixels) and 1 (let them pass). Smooth masks are recommended.')
-        form.addParam('angularMaxShift', FloatParam, label="Max. shift (%)",
-                      default=10,
-                      help='Maximum shift as a percentage of the image size')
-        line = form.addLine('Tilt angle:',
-                            help='0 degrees represent top views, 90 degrees represent side views',
-                            expertLevel=LEVEL_ADVANCED)
-        line.addParam('angularMinTilt', FloatParam, label="Min.", default=0,
-                      expertLevel=LEVEL_ADVANCED)
-        line.addParam('angularMaxTilt', FloatParam, label="Max.", default=90,
-                      expertLevel=LEVEL_ADVANCED)
-        form.addParam('numberOfReplicates', IntParam,
-                      label="Max. Number of Replicates", default=1,
-                      expertLevel=LEVEL_ADVANCED,
-                      help="Significant alignment is allowed to replicate each image up to this number of times")
-        form.addParam("numberVotes", IntParam, label="Number of votes", default=3,
-                      expertLevel=LEVEL_ADVANCED,
-                      help="Number of votes for classification (maximum 5)")
-        form.addParam('stochastic', BooleanParam, label="Stochastic",
-                      default=False,
-                      help="Stochastic optimization")
-        form.addParam("stochasticAlpha", FloatParam, label="Relaxation factor",
-                      default=0.1, condition="stochastic",
-                      expertLevel=LEVEL_ADVANCED,
-                      help="Relaxation factor (between 0 and 1). Set it closer to 0 if the random subset size is small")
-        form.addParam("stochasticN", IntParam, label="Subset size", default=200,
-                      condition="stochastic", expertLevel=LEVEL_ADVANCED,
-                      help="Number of images in the random subset")
-
         form.addSection(label='Split volume')
 
         form.addParam('directionalClasses', IntParam, default=2,
@@ -184,6 +149,42 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                       label='Angular distance',
                       help="In degrees. An image belongs to a group if its "
                            "distance is smaller than this value")
+
+
+        form.addSection(label='Reconstruct')
+
+        form.addParam('numberOfIterations', IntParam, default=3,
+                      label='Number of iterations')
+        form.addParam('nextMask', PointerParam, label="Mask",
+                      pointerClass='VolumeMask', allowsNull=True,
+                      help='The mask values must be between 0 (remove these pixels) and 1 (let them pass). Smooth masks are recommended.')
+        form.addParam('angularMaxShift', FloatParam, label="Max. shift (%)",
+                      default=10,
+                      help='Maximum shift as a percentage of the image size')
+        line = form.addLine('Tilt angle:',
+                            help='0 degrees represent top views, 90 degrees represent side views',
+                            expertLevel=LEVEL_ADVANCED)
+        line.addParam('angularMinTilt', FloatParam, label="Min.", default=0,
+                      expertLevel=LEVEL_ADVANCED)
+        line.addParam('angularMaxTilt', FloatParam, label="Max.", default=90,
+                      expertLevel=LEVEL_ADVANCED)
+        form.addParam('numberOfReplicates', IntParam,
+                      label="Max. Number of Replicates", default=1,
+                      expertLevel=LEVEL_ADVANCED,
+                      help="Significant alignment is allowed to replicate each image up to this number of times")
+        form.addParam("numberVotes", IntParam, label="Number of votes", default=3,
+                      expertLevel=LEVEL_ADVANCED,
+                      help="Number of votes for classification (maximum 5)")
+        form.addParam('stochastic', BooleanParam, label="Stochastic",
+                      default=False,
+                      help="Stochastic optimization")
+        form.addParam("stochasticAlpha", FloatParam, label="Relaxation factor",
+                      default=0.1, condition="stochastic",
+                      expertLevel=LEVEL_ADVANCED,
+                      help="Relaxation factor (between 0 and 1). Set it closer to 0 if the random subset size is small")
+        form.addParam("stochasticN", IntParam, label="Subset size", default=200,
+                      condition="stochastic", expertLevel=LEVEL_ADVANCED,
+                      help="Number of images in the random subset")
 
         form.addParallelSection(threads=1, mpi=8)
             
