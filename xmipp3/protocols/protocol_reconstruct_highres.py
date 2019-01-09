@@ -828,7 +828,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                 else:
                                     if exists(fnAngles) and exists(fnAnglesGroup):
                                         self.runJob("xmipp_metadata_utilities","-i %s --set union_all %s"%(fnAngles,fnAnglesGroup),numberOfMpi=1)
-                    self.runJob("xmipp_metadata_utilities","-i %s --set join %s image"%(fnAngles,fnImgs),numberOfMpi=1)
+                    if exists(fnAngles) and exists(fnImgs):
+                        self.runJob("xmipp_metadata_utilities","-i %s --set join %s image"%(fnAngles,fnImgs),numberOfMpi=1)
                     if self.saveSpace and ctfPresent:
                         self.runJob("rm -f",fnDirSignificant+"/gallery*",numberOfMpi=1)
                 

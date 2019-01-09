@@ -136,5 +136,13 @@ class Plugin(pyworkflow.em.Plugin):
         env.addPipModule('Keras', '2.2.2', target='keras',
                          default=False, deps=[cv2])
 
+        # sh_alignment
+        env.addLibrary(
+            'sh_alignment',
+            tar='sh_alignment.tgz',
+            commands=[('cd software/tmp/sh_alignment; make install',
+                       'software/lib/python2.7/site-packages/sh_alignment/frm.py')],
+            deps=['swig'],
+            default=False)
 
 pyworkflow.em.Domain.registerPlugin(__name__)
