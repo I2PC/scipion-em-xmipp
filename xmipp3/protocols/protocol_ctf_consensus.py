@@ -91,7 +91,7 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
                       help='Use this button to decide if carry out the '
                            'selection taking into account or not the '
                            'resolution value.')
-        form.addParam('resolution', params.FloatParam, default=7,
+        form.addParam('resolution', params.FloatParam, default=17,
                       label='Resolution (A)',
                       condition="useResolution",
                       help='Minimum value for resolution in Angstroms. '
@@ -141,7 +141,7 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
                       label="Secondary CTF",
                       help='CTF to be compared with reference CTF')
         form.addParam('minConsResol', params.FloatParam,
-                      condition="calculateConsensus", default=5.0,
+                      condition="calculateConsensus", default=15.0,
                       label='Minimum consensus resolution in angstroms.')
         form.addParallelSection(threads=0, mpi=0)
 
