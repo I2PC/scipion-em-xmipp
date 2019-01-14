@@ -248,7 +248,8 @@ _noiseCoord   '0'
                          modelFn, self.numEpochs, newXdim, 2, self.batchSize), numberOfMpi=1)
             #copy(self._getExtraPath('pruebaYpred.txt'), self._getExtraPath('prediction%d.txt'%idx))
         except Exception as e:
-            raise Exception("ERROR: Please, check the target resolution to work with lower dimensions.")
+            raise Exception("ERROR: Please, if you are having memory problems, "
+                            "check the target resolution to work with lower dimensions.")
 
     # def trainOneClassifierNClassesStep(self):
     #
@@ -263,9 +264,10 @@ _noiseCoord   '0'
 
 
     def predictStep(self):
+        numMax=3
         newXdim = readInfoField(self._getExtraPath(), "size",xmippLib.MDL_XSIZE)
-        self.runJob("xmipp_cone_deepalign_predict", "%s %s %d %d" %
-                    (self.imgsFn, self._getExtraPath(), newXdim, self.numCones), numberOfMpi=1)
+        self.runJob("xmipp_cone_deepalign_predict", "%s %s %d %d %d" %
+                    (self.imgsFn, self._getExtraPath(), newXdim, self.numCones, numMax), numberOfMpi=1)
 
         #Cuda Correlation step - creating the metadata
         predCones = np.loadtxt(self._getExtraPath('conePrediction.txt'))
@@ -275,11 +277,17 @@ _noiseCoord   '0'
         mdIn = xmippLib.MetaData(self.imgsFn)
         allInFns = mdIn.getColumnValues(xmippLib.MDL_IMAGE)
         fnFinal = self._getExtraPath('outConesParticles.xmd')
+
+        coneFns=[]
+        coneCCs=[]
+        mdCones=[]
         for i in range(self.numCones):
             print("Classifying cone ", i+1)
-            positions = np.where(predCones[:,1]==(i+1))
-            positions=positions[0]
-            #print(positions, len(positions))
+            positions = []
+            for n in range(numMax):
+                posAux = np.where(predCones[:,(n*2)+1]==(i+1))
+                positions = positions + (np.ndarray.tolist(posAux[0]))
+                #print(posAux, positions, len(positions))
 
             if len(positions)>0:
                 for pos in positions:
@@ -297,24 +305,58 @@ _noiseCoord   '0'
 
                 fnProjCone = self._getExtraPath('projectionsCudaCorr%d.xmd'%(i+1))
                 fnOutCone = 'outCone%d.xmd'%(i+1)
-                #fnOutClassesCone = 'outClassesCone%d.xmd'%(i+1)
-                #Cuda Correlation step - calling cuda program
-                params = ' -i_ref %s -i_exp %s -o %s --odir %s --keep_best 1 ' \
-                         '--maxShift 10 '%(fnProjCone, fnExpCone, fnOutCone,
-                                           self._getExtraPath())
-                self.runJob("xmipp_cuda_correlation", params, numberOfMpi=1)
 
-                if not exists(fnFinal):
-                    copy(self._getExtraPath(fnOutCone), fnFinal)
+                if not exists(self._getExtraPath(fnOutCone)):
+                    #fnOutClassesCone = 'outClassesCone%d.xmd'%(i+1)
+                    #Cuda Correlation step - calling cuda program
+                    params = ' -i_ref %s -i_exp %s -o %s --odir %s --keep_best 1 ' \
+                             '--maxShift 10 '%(fnProjCone, fnExpCone, fnOutCone,
+                                               self._getExtraPath())
+                    self.runJob("xmipp_cuda_correlation", params, numberOfMpi=1)
+
+                if numMax==1:
+                    if not exists(fnFinal):
+                        copy(self._getExtraPath(fnOutCone), fnFinal)
+                    else:
+                        params = ' -i %s --set union %s -o %s'%(fnFinal,
+                                                                self._getExtraPath(fnOutCone),
+                                                                fnFinal)
+                        self.runJob("xmipp_metadata_utilities", params, numberOfMpi=1)
+                    remove(self._getExtraPath(fnOutCone))
                 else:
-                    params = ' -i %s --set union %s -o %s'%(fnFinal,
-                                                            self._getExtraPath(fnOutCone),
-                                                            fnFinal)
-                    self.runJob("xmipp_metadata_utilities", params, numberOfMpi=1)
-                remove(self._getExtraPath(fnOutCone))
+                    mdCones.append(xmippLib.MetaData(self._getExtraPath(fnOutCone)))
+                    coneFns.append(mdCones[i].getColumnValues(xmippLib.MDL_IMAGE))
+                    coneCCs.append(mdCones[i].getColumnValues(xmippLib.MDL_MAXCC))
+
+            else:
+                if numMax>1:
+                    mdCones.append(None)
+                    coneFns.append([])
+                    coneCCs.append([])
+
+        if numMax > 1:
+            mdFinal = xmippLib.MetaData()
+            row = md.Row()
+            for myFn in allInFns:
+                myCCs=[]
+                myCones=[]
+                myPos = []
+                for n in range(self.numCones):
+                    if myFn in coneFns[n]:
+                        pos = coneFns[n].index(myFn)
+                        myPos.append(pos)
+                        myCCs.append(coneCCs[n][pos])
+                        myCones.append(n+1)
+                if len(myPos)>0:
+                    coneMax = myCones[myCCs.index(max(myCCs))]
+                    objId = myPos[myCCs.index(max(myCCs))]+1
+                    row.readFromMd(mdCones[coneMax-1],objId)
+                    row.addToMd(mdFinal)
+            mdFinal.write(fnFinal)
 
 
     def createOutputStep(self):
+
         cleanPattern(self._getExtraPath('metadataCone'))
 
         inputParticles = self.inputSet.get()
