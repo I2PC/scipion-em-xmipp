@@ -46,7 +46,8 @@ class Plugin(pyworkflow.em.Plugin):
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(XMIPP_HOME, 'xmipp-%s'%_currentVersion)
+        cls._defineEmVar(XMIPP_HOME, 'xmipp-%s' % _currentVersion)
+        cls._defineEmVar(NMA_HOME, 'nma')
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
@@ -135,6 +136,15 @@ class Plugin(pyworkflow.em.Plugin):
                                target="cv2", default=False)
         env.addPipModule('Keras', '2.2.2', target='keras',
                          default=False, deps=[cv2])
+
+        # NMA
+        env.addPackage('nma',
+                       tar='nma.tgz',
+                       commands=[('cd ElNemo; make; mv nma_* ..', 'nma_elnemo_pdbmat'),
+                                 ('cd NMA_cart; LDFLAGS=-L%s make; mv nma_* ..' %
+                                  env.getLibFolder(), 'nma_diag_arpack')],
+                       deps=['arpack'],
+                       default=False)
 
         # sh_alignment
         env.addLibrary(
