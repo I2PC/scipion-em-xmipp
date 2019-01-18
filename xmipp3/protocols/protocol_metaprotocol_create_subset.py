@@ -41,9 +41,9 @@ class XmippMetaProtCreateSubset(EMProtocol):
     def _defineParams(self, form):
         form.addSection(label='Input')
 
-        form.addParam('inputSetOfVolumes', PointerParam, pointerClass='SetOfVolumes',
-                      label="Input set of volumes",
-                      help='Select the set of volumes to select an specific volume.')
+        # form.addParam('inputSetOfVolumes', PointerParam, pointerClass='SetOfVolumes',
+        #               label="Input set of volumes",
+        #               help='Select the set of volumes to select an specific volume.')
 
         form.addParam('inputSetOfClasses3D', PointerParam, pointerClass='SetOfClasses3D',
                       label="Input set of 3D classes",
@@ -63,12 +63,15 @@ class XmippMetaProtCreateSubset(EMProtocol):
     def createOutputStep(self):
 
         id = self.idx.get()
-        inputSetOfVolumes=self.inputSetOfVolumes.get()
+        # inputSetOfVolumes=self.inputSetOfVolumes.get()
         inputSetOfClasses3D=self.inputSetOfClasses3D.get()
 
         newVolume = Volume()
-        newVolume.setFileName(inputSetOfVolumes[id].getFileName())
-        newVolume.setSamplingRate(inputSetOfVolumes[id].getSamplingRate())
+        #newVolume.setFileName(inputSetOfVolumes[id].getFileName())
+        #newVolume.setSamplingRate(inputSetOfVolumes[id].getSamplingRate())
+        newVolume.setFileName(inputSetOfClasses3D[id].getRepresentative().getFileName())
+        newVolume.setSamplingRate(inputSetOfClasses3D[id].getSamplingRate())
+
         newParticles = self._createSetOfParticles()
         newParticles.setSamplingRate(inputSetOfClasses3D[id].getSamplingRate())
         if inputSetOfClasses3D[id].hasAlignmentProj():

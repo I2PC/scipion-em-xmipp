@@ -635,7 +635,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         fnCentered = join(fnDirCurrent, "volumeCentered.mrc")
 
         listVolumesToProcess = self._readVolumesToProcess()
-        print("listVolumesToProcess", listVolumesToProcess)
+        #print("listVolumesToProcess", listVolumesToProcess)
         for i in range(1, self.getNumberOfReconstructedVolumes() + 1):
             # Align the two volumes
             if (listVolumesToProcess[i - 1] == False):
@@ -859,11 +859,11 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                                 "Class %d: average angular diff=%f      average shift diff=%f" % (
                         i, avgAngDistance, avgShiftDistance))
 
-            print("Size of the intersections")
-            print(sizeClasses)
-            print(' ')
-            print('Stability of the classes (coocurrence)')
-            print(coocurrence)
+            # print("Size of the intersections")
+            # print(sizeClasses)
+            # print(' ')
+            # print('Stability of the classes (coocurrence)')
+            # print(coocurrence)
 
             cleanPath(fnIntersection)
             cleanPath(fnUnion)
@@ -895,17 +895,17 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         self._defineOutputs(outputClasses=classes3D)
         self._defineSourceRelation(self.inputParticles, classes3D)
 
-        # create a SetOfVolumes and define its relations
-        volumes = self._createSetOfVolumes()
-        volumes.setSamplingRate(self.inputParticles.get().getSamplingRate())
-
-        for class3D in classes3D:
-            vol = class3D.getRepresentative()
-            vol.setObjId(class3D.getObjId())
-            volumes.append(vol)
-
-        self._defineOutputs(outputVolumes=volumes)
-        self._defineSourceRelation(self.inputParticles, volumes)
+        # # create a SetOfVolumes and define its relations
+        # volumes = self._createSetOfVolumes()
+        # volumes.setSamplingRate(self.inputParticles.get().getSamplingRate())
+        #
+        # for class3D in classes3D:
+        #     vol = class3D.getRepresentative()
+        #     vol.setObjId(class3D.getObjId())
+        #     volumes.append(vol)
+        #
+        # self._defineOutputs(outputVolumes=volumes)
+        # self._defineSourceRelation(self.inputParticles, volumes)
 
         #create a set of particles with the no-assigned particles
         fnSubtracted = join(self.fnLastDir, "imagesNotAssig.xmd")

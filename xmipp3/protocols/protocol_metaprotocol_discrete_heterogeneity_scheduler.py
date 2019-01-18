@@ -353,7 +353,6 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                     if newSignificantProt.isFinished():
                         finishedIter = True
                         for classItem in newSignificantProt.outputClasses:
-                            #print("EN EL BUCLEEEEEE")
                             self.classListSizes.append(classItem.getSize())
                             self.classListIds.append(classItem.getObjId())
                             self.classListProtocols.append(newSignificantProt)
@@ -363,13 +362,9 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                 if iter != self.numIter - 1:
                     subsetProt = self.checkOutputsStep(project, iter)
                     while finishedSubset == False and not self.finished:
-                        #print("ESPERA 2 Iter", iter)
-                        #sys.stdout.flush()
                         time.sleep(5)
                         subsetProt = self._updateProtocol(subsetProt)
                         if subsetProt.isFailed() or subsetProt.isAborted():
-                            #print("XmippMetaProtCreateSubset has failed", iter)
-                            #sys.out.flush()
                             raise Exception('XmippMetaProtCreateSubset has failed')
                         if subsetProt.isFinished():
                             finishedSubset = True
@@ -377,8 +372,6 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                 elif iter == self.numIter-1:
                     outputMetaProt = self.createOutputStep(project)
                     while finishedLast == False:
-                        #print("ESPERA Final", iter)
-                        #sys.stdout.flush()
                         time.sleep(5)
                         outputMetaProt = self._updateProtocol(outputMetaProt)
                         if outputMetaProt.isFailed():
@@ -440,40 +433,15 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
 
         maxSize = max(self.classListSizes)
         minMax = float((self.inputParticles.get().getSize()/len(self.classListSizes))*0.2)
-        #signifProt = None
         newSubsetProt = None
 
         if(maxSize<minMax or maxSize<100):
             self.finished=True
-        # print("AQUIIII", self.classListSizes, maxSize, minMax, self.finished)
-        # print(self.classListIds)
-        # print(self.classListProtocols)
-        # print(self.classListSizes)
 
         if not self.finished:
             idx = self.classListSizes.index(maxSize)
             signifProt = self.classListProtocols[idx]
             idMaxSize = self.classListIds[idx]
-
-            # # signifProt.getProject().loadMappers()
-            # signifProt.loadMappers()
-            #
-            # # newVolume = Volume()
-            # # newVolume.setFileName(signifProt.outputVolumes[idMaxSize].getFileName())
-            # # newVolume.setSamplingRate(signifProt.outputVolumes[idMaxSize].getSamplingRate())
-            # newVolume = signifProt.outputVolumes[idMaxSize]
-            # newParticles = signifProt._createSetOfParticles('Aux%d' % iter)
-            # newParticles.copyInfo(signifProt.inputParticles.get())
-            # newParticles.copyItems(signifProt.outputClasses[idMaxSize])
-            # signifProt._defineOutputs(** {'outputAuxVolumes%d' % iter: newVolume})
-            # signifProt._store(newVolume)
-            # signifProt._defineSourceRelation(signifProt.inputParticles, newVolume)
-            # signifProt._defineOutputs(** {'outputAuxParticles%d' % iter: newParticles})
-            # signifProt._store(newParticles)
-            # signifProt._defineSourceRelation(signifProt.inputParticles, newParticles)
-            # #signifProt = self._updateProtocol(signifProt)
-            #
-            # signifProt.closeMappers()
 
             newSubsetProt = project.newProtocol(
                 XmippMetaProtCreateSubset,
@@ -482,9 +450,9 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                 #inputSetOfClasses3D=signifProt.outputClasses,
                 idx = idMaxSize
             )
-            nameVol = 'outputVolumes'
-            newSubsetProt.inputSetOfVolumes.set(signifProt)
-            newSubsetProt.inputSetOfVolumes.setExtended(nameVol)
+            # nameVol = 'outputVolumes'
+            # newSubsetProt.inputSetOfVolumes.set(signifProt)
+            # newSubsetProt.inputSetOfVolumes.setExtended(nameVol)
             nameClasses = 'outputClasses'
             newSubsetProt.inputSetOfClasses3D.set(signifProt)
             newSubsetProt.inputSetOfClasses3D.setExtended(nameClasses)

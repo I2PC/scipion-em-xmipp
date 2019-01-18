@@ -78,18 +78,18 @@ class XmippMetaProtCreateOutput(EMProtocol):
                     classListSizes.append(int(sizeRead))
                     break
             nameRead = outFile.readline()
-        print(classListProtocols)
-        print(classListIds)
-        print(classListSizes)
+        # print(classListProtocols)
+        # print(classListIds)
+        # print(classListSizes)
 
         inputVolume = self.inputMetaProt.get().inputVolume
         myVolList=[]
-        outputVolumes = self._createSetOfVolumes('Def')
-        outputVolumes.setDim(inputVolume.get().getDim())
-        outputVolumes.setSamplingRate(inputVolume.get().getSamplingRate())
+        # outputVolumes = self._createSetOfVolumes('Def')
+        # outputVolumes.setDim(inputVolume.get().getDim())
+        # outputVolumes.setSamplingRate(inputVolume.get().getSamplingRate())
         origDim = inputVolume.get().getDim()[0]
         for i, prot in enumerate(classListProtocols):
-            print("createOutputStep ", i)
+            # print("createOutputStep ", i)
             classItem = prot.outputClasses[classListIds[i]]
             volFn = str(classItem._representative._filename)
             volFnOut = self._getExtraPath('outVol%d.vol'%(i+1))
@@ -104,9 +104,9 @@ class XmippMetaProtCreateOutput(EMProtocol):
             vol.setLocation(volFnOut)
             vol.setSamplingRate(inputVolume.get().getSamplingRate())
             myVolList.append(vol)
-            outputVolumes.append(vol)
-        self._defineOutputs(** {'outputVolumesDef': outputVolumes})
-        self._store(outputVolumes)
+        #     outputVolumes.append(vol)
+        # self._defineOutputs(** {'outputVolumesDef': outputVolumes})
+        # self._store(outputVolumes)
 
 
         inputParticles = self.inputMetaProt.get().inputParticles
