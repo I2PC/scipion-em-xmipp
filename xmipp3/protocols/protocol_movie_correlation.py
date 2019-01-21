@@ -3,6 +3,7 @@
 # * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
 # *              Vahid Abrishami (vabrishami@cnb.csic.es)
 # *              Josue Gomez Blanco (josue.gomez-blanco@mcgill.ca)
+# *              David Strelak (davidstrelak@gmail.com)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -70,6 +71,16 @@ class XmippProtMovieCorr(ProtAlignMovies):
                       help="linear (faster but lower quality), "
                            "cubic (slower but more accurate).")
 
+        form.addHidden(params.USE_GPU, params.BooleanParam, default=False,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
+                       expertLevel=cons.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+
         form.addParam('maxFreq', params.FloatParam, default=4,
                        label='Filter at (A)',
                        help="For the calculation of the shifts with Xmipp, "
@@ -89,13 +100,60 @@ class XmippProtMovieCorr(ProtAlignMovies):
                       label="Maximum shift (pixels)",
                       help='Maximum allowed distance (in pixels) that each '
                            'frame can be shifted with respect to the next.')
-        
+
         form.addParam('outsideMode', params.EnumParam,
                       choices=['Wrapping','Average','Value'],
                       default=self.OUTSIDE_WRAP,
                       expertLevel=cons.LEVEL_ADVANCED,
                       label="How to fill borders",
                       help='How to fill the borders when shifting the frames')
+
+        #GPU params
+        group = form.addGroup('GPU parameters')
+
+        group.addParam('doLocalAlignment', params.BooleanParam, default=True,
+                      label="Compute local alignment?",
+                      help="If Yes, the protocol will try to determine local shifts, similarly to MotionCor2.")
+
+        group.addParam('benchmarkFile', params.FileParam,
+                      label='GPU Benchmark file',
+                      expertLevel=cons.LEVEL_ADVANCED,
+                      help='Select a file where protocol can save some info about your \
+                        card. First run will be a bit longer, but subsequent calls with similar \
+                        parameters (on this machine) will be faster.')
+
+        group.addParam('bsplineFile', params.FileParam,
+                      label='Bspline root file',
+                      expertLevel=cons.LEVEL_ADVANCED,
+                      help='Coefficients of the BSpline defining shifts within the movie will be saved \
+                        to given path. Valid only with local alignment ON.')
+
+        line = group.addLine('Number of control points',
+                    expertLevel=cons.LEVEL_ADVANCED,
+                    help='Number of control points use for BSpline.')
+        line.addParam('controlPointX', params.IntParam, default=6, label='X')
+        line.addParam('controlPointY', params.IntParam, default=6, label='Y')
+        line.addParam('controlPointT', params.IntParam, default=5, label='t')
+
+        line = group.addLine('Number of patches',
+                    expertLevel=cons.LEVEL_ADVANCED,
+                    help='Number of patches to be used for patch based '
+                        'alignment. Valid only with local alignment ON.')
+        line.addParam('patchX', params.IntParam, default=10, label='X')
+        line.addParam('patchY', params.IntParam, default=10, label='Y')
+
+        line = group.addLine('Correlation downscale',
+                    expertLevel=cons.LEVEL_ADVANCED,
+                    help='Downscale coefficient of the correlations used for local alignment.\
+                        Valid only with local alignment ON.')
+        line.addParam('corrDownscaleX', params.IntParam, default=4, label='X')
+        line.addParam('corrDownscaleY', params.IntParam, default=4, label='Y')
+
+        group.addParam('groupNFrames', params.IntParam, default=3,
+                    expertLevel=cons.LEVEL_ADVANCED,
+                    label='Group N frames',
+                    help='Group every specified number of frames by adding them together. \
+                        The alignment is then performed on the summed frames. Valid only with local alignment ON.')
 
         form.addParam('outsideValue', params.FloatParam, default=0.0,
                        expertLevel=cons.LEVEL_ADVANCED,
@@ -104,7 +162,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
                        help="Fixed value for filling borders")
 
         form.addParallelSection(threads=1, mpi=1)
-    
+
     #--------------------------- STEPS functions -------------------------------
 
     def _processMovie(self, movie):
@@ -126,33 +184,33 @@ class XmippProtMovieCorr(ProtAlignMovies):
         if self.binFactor > 1:
             args += '--bin %f ' % self.binFactor
         # Assume that if you provide one cropDim, you provide all
-        
+
         offsetX = self.cropOffsetX.get()
         offsetY = self.cropOffsetY.get()
         cropDimX = self.cropDimX.get()
         cropDimY = self.cropDimY.get()
-        
+
         args += '--cropULCorner %d %d ' % (offsetX, offsetY)
-        
+
         if cropDimX <= 0:
             dimX = x - 1
         else:
             dimX = offsetX + cropDimX - 1
-        
+
         if cropDimY <= 0:
             dimY = y - 1
         else:
             dimY = offsetY + cropDimY - 1
-        
+
         args += '--cropDRCorner %d %d ' % (dimX, dimY)
-        
+
         if self.outsideMode == self.OUTSIDE_WRAP:
             args += "--outside wrap"
         elif self.outsideMode == self.OUTSIDE_AVG:
             args += "--outside avg"
         elif self.outsideMode == self.OUTSIDE_AVG:
             args += "--outside value %f" % self.outsideValue
-        
+
         args += ' --frameRange %d %d ' % (0, aN-a0)
         args += ' --frameRangeSum %d %d ' % (s0-a0, sN-s0)
         args += ' --max_shift %d ' % self.maxShift
@@ -174,7 +232,21 @@ class XmippProtMovieCorr(ProtAlignMovies):
         if self.inputMovies.get().getGain():
             args += ' --gain ' + self.inputMovies.get().getGain()
 
-        self.runJob('xmipp_movie_alignment_correlation', args, numberOfMpi=1)
+        if self.useGpu.get():
+            args += ' --device %(GPU)s'
+            if self.doLocalAlignment.get():
+                args += ' --processLocalShifts '
+            if self.benchmarkFile.get():
+                args += ' --storage ' + self.benchmarkFile.get()
+            if self.bsplineFile.get():
+                args += ' --oBSpline ' + self.bsplineFile.get()
+            args += ' --controlPoints %d %d %d' % (self.controlPointX, self.controlPointY, self.controlPointT)
+            args += ' --patches %d %d' % (self.patchX, self.patchY)
+            args += ' --locCorrDownscale %d %d' % (self.corrDownscaleX, self.corrDownscaleY)
+            args += ' --patchesAvg %d' % self.groupNFrames
+            self.runJob('xmipp_cuda_movie_alignment_correlation', args, numberOfMpi=1)
+        else:
+            self.runJob('xmipp_movie_alignment_correlation', args, numberOfMpi=1)
 
         if self.doComputePSD:
             self.computePSDs(movie, fnInitial, fnAvg)
@@ -196,7 +268,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
          The shifts should refer to the original micrograph without any binning.
          In case of a bining greater than 1, the shifts should be scaled.
         """
-        
+
         shiftsMd = md.MetaData(self._getShiftsFile(movie))
         return readShiftsMovieAlignment(shiftsMd)
 
