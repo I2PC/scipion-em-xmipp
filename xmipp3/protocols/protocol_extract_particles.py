@@ -274,14 +274,14 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         errors = []
         if self.boxSize.get() == -1:
             self.boxSize.set(self.getBoxSize())
-        else:
-            if self.boxSize <= 0:
-                errors.append('Box size must be positive.')
 
-            if self.doNormalize:
-                if self.backRadius > int(self.boxSize.get() / 2):
-                    errors.append("Background radius for normalization should be "
-                                  "equal or less than half of the box size.")
+        if self.boxSize <= 0:
+            errors.append('Box size must be positive.')
+
+        if self.doNormalize:
+            if self.backRadius > int(self.boxSize.get() / 2):
+                errors.append("Background radius for normalization should be "
+                              "equal or less than half of the box size.")
 
         # doFlip can only be selected if CTF information
         # is available on picked micrographs
