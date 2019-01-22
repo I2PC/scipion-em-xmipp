@@ -124,12 +124,15 @@ class Plugin(pyworkflow.em.Plugin):
 
         # scipy = env.addPipModule('scipy', '0.14.0', default=False)#,
         #                          deps=['lapack', 'matplotlib'])
-        cython = env.addPipModule('cython', '0.22', target='Cython-0.22*',
-                                  default=False)
+        try:
+          cython = env.addPipModule('cython', '0.22', target='Cython-0.22*',
+                                    default=False)
+        except Exception: #If already added
+          pass
 
         scikit_learn = env.addPipModule('scikit-learn', '0.19.1',
                                         target='scikit_learn*',
-                                        default=False, deps=['scipy', cython])
+                                        default=False, deps=['scipy'])
         unittest2 = env.addPipModule('unittest2', '0.5.1', target='unittest2*',
                                      default=False)
         h5py = env.addPipModule('h5py', '2.8.0rc1', target='h5py*',
