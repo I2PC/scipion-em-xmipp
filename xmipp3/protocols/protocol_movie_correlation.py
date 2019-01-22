@@ -115,19 +115,6 @@ class XmippProtMovieCorr(ProtAlignMovies):
                       label="Compute local alignment?",
                       help="If Yes, the protocol will try to determine local shifts, similarly to MotionCor2.")
 
-        group.addParam('benchmarkFile', params.FileParam,
-                      label='GPU Benchmark file',
-                      expertLevel=cons.LEVEL_ADVANCED,
-                      help='Select a file where protocol can save some info about your \
-                        card. First run will be a bit longer, but subsequent calls with similar \
-                        parameters (on this machine) will be faster.')
-
-        group.addParam('bsplineFile', params.FileParam,
-                      label='Bspline root file',
-                      expertLevel=cons.LEVEL_ADVANCED,
-                      help='Coefficients of the BSpline defining shifts within the movie will be saved \
-                        to given path. Valid only with local alignment ON.')
-
         line = group.addLine('Number of control points',
                     expertLevel=cons.LEVEL_ADVANCED,
                     help='Number of control points use for BSpline.')
@@ -142,12 +129,11 @@ class XmippProtMovieCorr(ProtAlignMovies):
         line.addParam('patchX', params.IntParam, default=10, label='X')
         line.addParam('patchY', params.IntParam, default=10, label='Y')
 
-        line = group.addLine('Correlation downscale',
+        group.addParam('corrDownscale', params.IntParam,
+                    default=4, label='Correlation downscale',
                     expertLevel=cons.LEVEL_ADVANCED,
                     help='Downscale coefficient of the correlations used for local alignment.\
                         Valid only with local alignment ON.')
-        line.addParam('corrDownscaleX', params.IntParam, default=4, label='X')
-        line.addParam('corrDownscaleY', params.IntParam, default=4, label='Y')
 
         group.addParam('groupNFrames', params.IntParam, default=3,
                     expertLevel=cons.LEVEL_ADVANCED,
@@ -236,13 +222,11 @@ class XmippProtMovieCorr(ProtAlignMovies):
             args += ' --device %(GPU)s'
             if self.doLocalAlignment.get():
                 args += ' --processLocalShifts '
-            if self.benchmarkFile.get():
-                args += ' --storage ' + self.benchmarkFile.get()
-            if self.bsplineFile.get():
-                args += ' --oBSpline ' + self.bsplineFile.get()
+            args += ' --oBSpline ' + self._getExtraPath(self._getMovieRoot(movie) + "_bsplines.txt")
+            args += ' --storage ' + "fftBenchmark.txt" # assuming the protocol runs from the project folder
             args += ' --controlPoints %d %d %d' % (self.controlPointX, self.controlPointY, self.controlPointT)
             args += ' --patches %d %d' % (self.patchX, self.patchY)
-            args += ' --locCorrDownscale %d %d' % (self.corrDownscaleX, self.corrDownscaleY)
+            args += ' --locCorrDownscale %d %d' % (self.corrDownscale, self.corrDownscale)
             args += ' --patchesAvg %d' % self.groupNFrames
             self.runJob('xmipp_cuda_movie_alignment_correlation', args, numberOfMpi=1)
         else:
