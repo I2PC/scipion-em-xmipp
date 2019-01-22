@@ -37,7 +37,7 @@ from .constants import XMIPP_HOME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.18.08'
+_currentVersion = '3.19.02'
 
 class Plugin(pyworkflow.em.Plugin):
     _homeVar = XMIPP_HOME
@@ -98,13 +98,16 @@ class Plugin(pyworkflow.em.Plugin):
 
         target = "%s/bin/xmipp_reconstruct_significant" % cls.getHome()
 
-        xmippSrc = env.addPackage('xmippSrc', version=_currentVersion,
-                                  tar='xmippSrc-%s.tgz'%_currentVersion,
-                                  commands=[(installCmd, target)])
+        env.addPackage('xmippSrc', version=_currentVersion,
+                       tar='xmippSrc-%s.tgz' % _currentVersion,
+                       commands=[(installCmd, target)])
 
-        xmippBin = env.addPackage('xmippBin', version=_currentVersion,
-                                  tar='xmipp-%s.tgz' %_currentVersion,
-                                  default=True)
+        env.addPackage('xmippBin', version=_currentVersion,
+                       tar='xmippBin-%s.tgz' % _currentVersion,
+                       commands=[("cp -r ../xmippBin-%s ../xmipp-%s"
+                                  % (_currentVersion, _currentVersion),
+                                  target)],
+                       default=True)
 
         # Old dependencies now are taken into account inside xmipp script:
         #   scons, fftw3, scikit, nma, tiff, sqlite, opencv, sh_alignment, hdf5
