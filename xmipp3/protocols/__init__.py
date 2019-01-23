@@ -100,7 +100,6 @@ from .protocol_volume_strain import XmippProtVolumeStrain
 from .protocol_enrich import XmippProtEnrich
 from .protocol_write_testC import XmippProtWriteTestC
 from .protocol_write_testP import XmippProtWriteTestP
-#AJ
 from .protocol_split_volume_hierarchical_cluster import XmippProtSplitVolumeHierarchical
 from .protocol_reconstruct_heterogeneous import XmippProtReconstructHeterogeneous
 from .protocol_metaprotocol_discrete_heterogeneity_scheduler import XmippMetaProtDiscreteHeterogeneityScheduler
