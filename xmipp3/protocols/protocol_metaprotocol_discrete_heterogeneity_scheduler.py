@@ -27,10 +27,10 @@
 
 from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
                                         IntParam, StringParam, LEVEL_ADVANCED)
-from xmipp3.protocols.protocol_split_volume_hierarchical_cluster import XmippProtSplitVolumeHierarchical
-from xmipp3.protocols.protocol_reconstruct_heterogeneous import XmippProtReconstructHeterogeneous
-from xmipp3.protocols.protocol_metaprotocol_create_output import XmippMetaProtCreateOutput
-from xmipp3.protocols.protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
+from xmipp3.protocols import XmippProtSplitVolumeHierarchical
+from xmipp3.protocols import XmippProtReconstructHeterogeneous
+from xmipp3.protocols import XmippMetaProtCreateOutput
+from xmipp3.protocols import XmippMetaProtCreateSubset
 import time
 from pyworkflow.em.protocol import ProtMonitor
 import pyworkflow.object as pwobj
