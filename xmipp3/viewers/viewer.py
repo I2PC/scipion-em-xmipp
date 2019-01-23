@@ -152,8 +152,8 @@ class XmippViewer(DataViewer):
             self._views.append(ObjectView(self._project, obj.outputParticles.strId(),
                                           fn,
                                           viewParams={VISIBLE:  'enabled id _filename '
-                                                  '_xmipp_corrDenoiseProjection '
-                                                  '_xmipp_corrDenoiseNoisy '
+                                                  '_xmipp_corrDenoisedProjection '
+                                                  '_xmipp_corrDenoisedNoisy '
                                                   '_xmipp_imageOriginal _xmipp_imageRef',
                                           SORT_BY: 'id',
                                           MODE: MODE_MD}))
