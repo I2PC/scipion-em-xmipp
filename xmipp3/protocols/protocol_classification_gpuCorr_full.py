@@ -453,15 +453,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
 
             im1 = Image(nameRefLastClasses)
             im2 = Image(nameRefNewClasses)
-
-            print("ALIGN", "im1", nameRefLastClasses, "im2", nameRefNewClasses)
-            im1.write(self._getExtraPath('testing01.mrc'))
-            im2.write(self._getExtraPath('testing02.mrc'))
-
             im2 = xmippLib.image_align(im1, im2)
-
-            im1.write(self._getExtraPath('testing11.mrc'))
-            im2.write(self._getExtraPath('testing12.mrc'))
 
             im1.inplaceMultiply(listToMultiply[0])
             im2.inplaceMultiply(listToMultiply[1])
