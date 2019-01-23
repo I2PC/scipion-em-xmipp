@@ -152,7 +152,6 @@ class Plugin(pyworkflow.em.Plugin):
             tar='sh_alignment.tgz',
             commands=[('cd software/tmp/sh_alignment; make install',
                        'software/lib/python2.7/site-packages/sh_alignment/frm.py')],
-            deps=['swig'],
-            default=False)
+            default=True)
 
 pyworkflow.em.Domain.registerPlugin(__name__)
