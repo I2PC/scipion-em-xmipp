@@ -65,7 +65,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                       'you can choose your own model trained. If you choose'
                       '"no" a general model pretrained will be assign')
 
-        form.addParam('ownModel', params.PathParam,
+        form.addParam('ownModel', params.PointerParam,
                       pointerClass=self.getClassName(),
                       condition='modelPretrain==True and model==%d'%ITER_PREDICT,
                       label='Set your model',
