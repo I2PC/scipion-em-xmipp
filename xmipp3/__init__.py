@@ -162,5 +162,12 @@ class Plugin(pyworkflow.em.Plugin):
                        deps=['arpack'],
                        default=False)
 
+        # sh_alignment
+        env.addLibrary(
+            'sh_alignment',
+            tar='sh_alignment.tgz',
+            commands=[('cd software/tmp/sh_alignment; make install',
+                       'software/lib/python2.7/site-packages/sh_alignment/frm.py')],
+            default=True)
 
 pyworkflow.em.Domain.registerPlugin(__name__)
