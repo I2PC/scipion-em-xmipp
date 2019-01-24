@@ -37,7 +37,7 @@ from .constants import XMIPP_HOME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.18.08'
+_currentVersion = '3.19.02'
 
 class Plugin(pyworkflow.em.Plugin):
     _homeVar = XMIPP_HOME
@@ -46,7 +46,8 @@ class Plugin(pyworkflow.em.Plugin):
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(XMIPP_HOME, 'xmipp-%s'%_currentVersion)
+        cls._defineEmVar(XMIPP_HOME, 'xmipp-%s' % _currentVersion)
+        cls._defineEmVar(NMA_HOME, 'nma')
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
@@ -97,13 +98,16 @@ class Plugin(pyworkflow.em.Plugin):
 
         target = "%s/bin/xmipp_reconstruct_significant" % cls.getHome()
 
-        xmippSrc = env.addPackage('xmippSrc', version=_currentVersion,
-                                  tar='xmippSrc-%s.tgz'%_currentVersion,
-                                  commands=[(installCmd, target)])
+        env.addPackage('xmippSrc', version=_currentVersion,
+                       tar='xmippSrc-%s.tgz' % _currentVersion,
+                       commands=[(installCmd, target)])
 
-        xmippBin = env.addPackage('xmippBin', version=_currentVersion,
-                                  tar='xmipp-%s.tgz' %_currentVersion,
-                                  default=True)
+        env.addPackage('xmippBin', version=_currentVersion,
+                       tar='xmippBin-%s.tgz' % _currentVersion,
+                       commands=[("cp -r ../xmippBin-%s ../xmipp-%s"
+                                  % (_currentVersion, _currentVersion),
+                                  target)],
+                       default=True)
 
         # Old dependencies now are taken into account inside xmipp script:
         #   scons, fftw3, scikit, nma, tiff, sqlite, opencv, sh_alignment, hdf5
@@ -148,6 +152,15 @@ class Plugin(pyworkflow.em.Plugin):
                      default=False, deps=['scipy', 'cython'])
 
 
+
+        # NMA
+        env.addPackage('nma',
+                       tar='nma.tgz',
+                       commands=[('cd ElNemo; make; mv nma_* ..', 'nma_elnemo_pdbmat'),
+                                 ('cd NMA_cart; LDFLAGS=-L%s make; mv nma_* ..' %
+                                  env.getLibFolder(), 'nma_diag_arpack')],
+                       deps=['arpack'],
+                       default=False)
 
 
 pyworkflow.em.Domain.registerPlugin(__name__)

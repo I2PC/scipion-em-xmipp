@@ -24,16 +24,17 @@
 # *
 # **************************************************************************
 
-
+from pyworkflow.em.viewers import showj
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO, CommandView
 from pyworkflow.em.protocol import *
 
 from pyworkflow.em.viewers.viewers_data import DataViewer
 from pyworkflow.em.viewers.plotter import EmPlotter
-from pyworkflow.em.viewers.views  import CtfView, ObjectView
+from pyworkflow.em.viewers.views import CtfView, ObjectView
 from pyworkflow.em.viewers.showj import *
 from pyworkflow.em.viewers.viewer_monitors import MovieGainMonitorPlotter
 
+import xmippLib
 from xmipp3.convert import *
 from xmipp3.protocols.protocol_compare_reprojections import XmippProtCompareReprojections
 from xmipp3.protocols.protocol_compare_angles import XmippProtCompareAngles
@@ -102,7 +103,7 @@ class XmippViewer(DataViewer):
 
         if issubclass(cls, SetOfNormalModes):
             fn = obj.getFileName()
-            from nma.viewer_nma import OBJCMD_NMA_PLOTDIST, OBJCMD_NMA_VMD
+            from .viewer_nma import OBJCMD_NMA_PLOTDIST, OBJCMD_NMA_VMD
             objCommands = "'%s' '%s'" % (OBJCMD_NMA_PLOTDIST, OBJCMD_NMA_VMD)
             self._views.append(ObjectView(self._project, self.protocol.strId(),
                                           fn, obj.strId(),
@@ -151,8 +152,8 @@ class XmippViewer(DataViewer):
             self._views.append(ObjectView(self._project, obj.outputParticles.strId(),
                                           fn,
                                           viewParams={VISIBLE:  'enabled id _filename '
-                                                  '_xmipp_corrDenoiseProjection '
-                                                  '_xmipp_corrDenoiseNoisy '
+                                                  '_xmipp_corrDenoisedProjection '
+                                                  '_xmipp_corrDenoisedNoisy '
                                                   '_xmipp_imageOriginal _xmipp_imageRef',
                                           SORT_BY: 'id',
                                           MODE: MODE_MD}))
@@ -217,7 +218,7 @@ class XmippViewer(DataViewer):
                 inTmpFolder = True
 
             posDir = obj._getExtraPath()
-            memory = '%dg'%obj.memory.get(),
+            memory = showj.getJvmMaxMemory()
             launchSupervisedPickerGUI(micsfn, posDir, obj, mode='review', memory=memory, inTmpFolder=inTmpFolder)
 
          # We need this case to happens before the ProtParticlePicking one
@@ -225,19 +226,6 @@ class XmippViewer(DataViewer):
             if obj.getOutputsSize() >= 1:
                 coordsSet = obj.getCoordsTiltPair()
                 self._visualize(coordsSet)
-
-        elif issubclass(cls, ProtParticlePicking):
-            if obj.getOutputsSize() >= 1:
-                coordsSet = obj.getCoords()
-                self._visualize(coordsSet)
-                
-        elif issubclass(cls, ProtImportMovies):
-            movs = obj.outputMovies
-            self._visualize(movs)
-            gainFn = movs.getGain()
-            if os.path.exists(gainFn):
-                self._views.append(DataView(gainFn))
-
 
         elif issubclass(cls, XmippProtValidateNonTilt):
             outputVols = obj.outputVolumes
