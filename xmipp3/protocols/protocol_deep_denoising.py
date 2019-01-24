@@ -197,7 +197,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                 newRow.setValue(md.MDL_IMAGE_REF, pathProj)
                 correlations1, _ = pearsonr(img.ravel(), self.projections[
                     i].ravel())
-                newRow.setValue(md.MDL_CORR_DENOISE_PROJECTION, correlations1)
+                newRow.setValue(md.MDL_CORR_DENOISED_PROJECTION, correlations1)
             newRow.addToMd(metadata)
 
 
@@ -227,8 +227,8 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         particle.setLocation(xmippToLocation(row.getValue(xmippLib.MDL_IMAGE)))
         if self.model.get() == ITER_TRAIN:
             setXmippAttributes(particle, row,
-                               xmippLib.MDL_CORR_DENOISE_PROJECTION)
-                         
+                               xmippLib.MDL_CORR_DENOISED_PROJECTION)
+
 
     # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
