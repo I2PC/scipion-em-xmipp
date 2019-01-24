@@ -43,7 +43,6 @@ import xmippLib
 from xmipp3.base import findRow
 from xmipp3.constants import SYM_URL
 import numpy as np
-from sklearn.cluster import AgglomerativeClustering
 
 
 class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
@@ -512,6 +511,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         np.savetxt(self._getExtraPath('coocurrenceMatrix.txt'), matrixCoOc, fmt='%.4e')
 
         ##### hierarchical clustering algorithm #########
+        from sklearn.cluster import AgglomerativeClustering
         model = AgglomerativeClustering(n_clusters=2, linkage="complete", affinity="euclidean")
         model.fit(matrixCoOc)
 
