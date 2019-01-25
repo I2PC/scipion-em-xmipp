@@ -45,17 +45,15 @@ from pyworkflow.em.data import SetOfCoordinates, Coordinate, SetOfParticles
 import pyworkflow.em.metadata as MD
 import xmippLib as xmipp
 
-from xmipp3.protocols.protocol_pick_noise import (pickAllNoiseWorker, writeSetOfCoordsFromFnames,
-                                                               writePosFilesStepWorker)
+
 from xmipp3.convert import readSetOfParticles, setXmippAttributes, micrographToCTFParam, writeSetOfParticles
 import numpy as np
 from joblib import Parallel, delayed
 
-from xmipp3.protocols.protocol_pick_noise import (pickAllNoiseWorker,
-                                                  writeSetOfCoordsFromFnames,
-                                                  writePosFilesStepWorker)
+from xmipp3.protocols.protocol_pick_noise import (pickNoise_prepareInput,
+                                                  writeSetOfCoordsFromPosFnames)
 
-from xmipp3.convert import (readSetOfParticles, setXmippAttributes,
+from xmipp3.convert import (readSetOfParticles, setXmippAttributes, writeSetOfCoordinates,
                             micrographToCTFParam, writeSetOfParticles)
 
 DEEP_PARTICLE_SIZE = 128
@@ -82,7 +80,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
         form.addSection(label='Input')
         #CONTINUE FROM PREVIOUS TRAIN
         form.addParam('doContinue', params.BooleanParam, default=False,
-                      label='use previously trained model?',
+                      label='Use previously trained model?',
                       help='If you set to *Yes*, you should select a previous '
                            'run of type *%s* or *%s* class and some of '
                            'the input parameters will be taken from it.'
@@ -115,39 +113,34 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
                           help='Currently just one GPU will be use, by '
                                'default GPU number 0 You can override the default '
                                'allocation by providing other GPU number, p.e. 2'
-                               '\nif -1 no gpu but all cpu cores will be used')
+                               '\nif -1 no GPU but all CPU cores will be used instead')
             
         
         form.addSection(label='Preprocess')
         form.addParam('notePreprocess', params.LabelParam,
-                      label='What have you done with the micrographs from which '
-                            'you have picked your coordinates?',
+                      label='How to extract particles from micrograph',
                       help='Our method, internally, uses particles that are '
                            'extracted from preprocess micrographs. '
-                           'Steps are:\n'
-                           '1) donwsampling to the required size such that '
-                           'the particle box size is 128\n'
-                           '2) phase flipping using CTF.\n'
-                           '3) normalization to 0 mean and 1 std\n'
-                           'Then, particles are extracted with no further alteration. '
-                           'Please, tell us if the '
-                           'micrographs from which you picked your particles '
-                           'are preprocessed')
+                           'Preprocess steps are:\n'
+                           '1) mic donwsampling to the required size such that '
+                           'the particle box size become 128 px\n'
+                           '2a) OPTIONAL: mic contrast inversion\n'
+                           '3) mic normalization to 0 mean and 1 std\n'
+                           '4) particles Extraction extracted.'
+                           '5a) OPTIONAL: phase flipping using CTF.')
 
-        form.addParam('doInvert', params.BooleanParam, default=None,
+        form.addParam('doInvert', params.BooleanParam, default=False,
                       label='Invert contrast', 
-                      help='If you have inverted the contrast, '
-                           'your particles are black over a white background. '
-                           'Have you inverted the contrast? If it is the case, '
-                           'we will skip this step')
+                      help='If you invert the contrast, your particles are white over a black background in the micrograph. '
+                           'We prefer white particles. Select *Yes* if you have not inverted the constrast in the micrograph.')
         
-        form.addParam('skipDoFlip', params.BooleanParam, default=None,
-                      label='Phase flipping',
-                      help='Have you applied pahse flipping? '
-                           'If it is the case, we will skip this step')
+        form.addParam('ignoreCTF', params.BooleanParam, default=True,
+                      label='Ignore CTF',
+                      help='Deep Consensus extracts particles. Do you want to ignore CTF for '
+                            'particle extraction')
                            
         form.addParam('ctfRelations', params.RelationParam, allowsNull=True,
-                      relationName=RELATION_CTF, condition="not skipDoFlip",
+                      relationName=RELATION_CTF, condition="not ignoreCTF",
                       attributeName='_getInputMicrographs',
                       label='CTF estimation',
                       help='Choose some CTF estimation related to input '
@@ -155,19 +148,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
                            'want to do phase flipping or you want to '
                            'associate CTF information to the particles.')
         
-        form.addSection(label='Training')
 
-        form.addParam('auto_stopping',params.BooleanParam, default=True,
-                      condition="not doContinue or keepTraining",
-                      label='Auto stop training when convergency is detected?', 
-                      help='If you set to *Yes*, the program will automatically '
-                           'stop training if there is no improvement for '
-                           'consecutive 2 epochs, learning rate will be decreased '
-                           'by a factor 10. If learningRate_t < 0.01*learningrate_0 '
-                           'training will stop. Warning: Sometimes convergency '
-                           'seems to be reached, but after time, improvement can '
-                           'still happen. Not recommended for very small data sets '
-                           '(<200 true particles)')
+        form.addSection(label='Training')
         
         form.addParam('nEpochs', params.FloatParam,
                       label="Number of epochs", default=5.0,
@@ -177,21 +159,46 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
                       label="Learning rate", default=1e-4,
                       condition="not doContinue or keepTraining",
                       help='Learning rate for neural network training')
-        form.addParam('nModels', params.IntParam, expertLevel=params.LEVEL_ADVANCED,
-                      label="Number of models for ensemble", default=2,
+        form.addParam('auto_stopping',params.BooleanParam,
+                      label='Auto stop training when convergency is detected?',
+                      default=True, condition="not doContinue or keepTraining",
+                      help='If you set to *Yes*, the program will automatically '
+                           'stop training if there is no improvement for '
+                           'consecutive 2 epochs, learning rate will be '
+                           'decreased by a factor 10. '
+                           'If learningRate_t < 0.01*learningrate_0 training will stop. '
+                           'Warning: Sometimes convergency seems to be reached, '
+                           'but after time, improvement can still happen. '
+                           'Not recommended for very small data sets (<100 true particles)')
+        form.addParam('l2RegStrength', params.FloatParam,
+                      label="Regularization strength",
+                      default=1e-5, expertLevel=params.LEVEL_ADVANCED,
+                      condition="not doContinue or keepTraining",
+                      help='L2 regularization for neural network weights.'
+                           'Make it bigger if suffering overfitting. '
+                           'Typical values range from 1e-1 to 1e-6')
+        form.addParam('nModels', params.IntParam,
+                      label="Number of models for ensemble",
+                      default=2, expertLevel=params.LEVEL_ADVANCED,
                       condition="not doContinue",
                       help='Number of models to fit in order to build an ensamble. '
                            'Tipical values are 1 to 5. The more the better '
                            'until a point where no gain is obtained. '
                            'Each model increases running time linearly')
+                           
+        form.addParam('doTesting', params.BooleanParam, default=False,
+                      label='Perform testing after training?', expertLevel=params.LEVEL_ADVANCED,
+                      help='If you set to *Yes*, you should select a testing '
+                           'positive set and a testing negative set')
+        form.addParam('testPosSetOfParticles', params.PointerParam,
+                      label="Set of positive test particles", expertLevel=params.LEVEL_ADVANCED,
+                      pointerClass='SetOfParticles',condition='doTesting',
+                      help='Select the set of ground true positive particles.')
+        form.addParam('testNegSetOfParticles', params.PointerParam,
+                      label="Set of negative test particles", expertLevel=params.LEVEL_ADVANCED,
+                      pointerClass='SetOfParticles', condition='doTesting',
+                      help='Select the set of ground false positive particles.')
 
-        form.addParam('l2RegStrength', params.FloatParam,
-                      label="Regularization strength", default=1e-5,
-                      expertLevel=params.LEVEL_ADVANCED,
-                      condition="not doContinue or keepTraining",
-                      help='L2 regularization for neural network weights. '
-                           'Make it bigger if suffering overfitting. '
-                           'Typical values range from 1e-1 to 1e-6')
         
         form.addSection(label='Additional training data')
         form.addParam('addTrainingData', params.BooleanParam, default=False,
@@ -200,11 +207,12 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
                            'negative sets of particles. Regard that our method, '
                            'internally, uses particles that are extracted from '
                            'preprocess micrographs. Steps are:\n'
-                           '1) donwsampling to the required size such that '
+                           '1) mic donwsampling to the required size such that '
                            'the particle box size is 128\n'
-                           '2) phase flipping using CTF.\n'
-                           '3) normalization to 0 mean and 1 std\n'
+                           '2) according to your selection, mic contrast inversion (to white particles).\n'
+                           '3) mic normalization to 0 mean and 1 std\n'
                            'Then, particles are extracted with no further alteration.\n'
+                           '4.a) Optionally, CTF correction of particles if asked in the form.\n'
                            'Please ensure that the additional particles have been '
                            'preprocessed as indicated before.')
         
@@ -239,32 +247,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
                            'will be calculated such that the contribution of '
                            'additional data is equal to the contribution of '
                            'internal particles')
-        
-        form.addSection(label='Testing data')
-        form.addParam('doTesting', params.BooleanParam, default=False,
-                      label='Perform testing after training?',
-                      help='If you set to *Yes*, you should select a testing '
-                           'positive set and a testing negative set. '
-                           'Regard that our method, internally, uses particles '
-                           'that are extracted from preprocess micrographs. '
-                           'Steps are:\n'
-                           '1) donwsampling to the required size such that '
-                           'the particle box size is 128\n'
-                           '2) phase flipping using CTF.\n'
-                           '3) normalization to 0 mean and 1 standard deviation\n'
-                           'Then, particles are extracted with no further alteration.\n'
-                           'Please ensure that the testing particles have been '
-                           'preprocessed as indicated before.')
-        form.addParam('testPosSetOfParticles', params.PointerParam,
-                      label="Set of positive test particles",
-                      pointerClass='SetOfParticles', condition='doTesting',
-                      help='Select the set of ground true positive particles. '
-                           'Take care of the preprocessing')
-        form.addParam('testNegSetOfParticles', params.PointerParam,
-                      label="Set of negative test particles",
-                      pointerClass='SetOfParticles', condition='doTesting',
-                      help='Select the set of ground false positive particles. '
-                           'Take care of the preprocessing')
+
 
         form.addParallelSection(threads=2, mpi=1)
 
@@ -274,7 +257,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
           errorMsg.append("Error, too small particles (needed 128px or larger), "
                           "have you provided already downsampled micrographs? "
                           "If so, use original ones")
-        if not self.skipDoFlip.get() and self.ctfRelations.get() is None:
+        if not self.ignoreCTF.get() and self.ctfRelations.get() is None:
           errorMsg.append("Error, CTFs must be provided to compute phase flip. "
                           "Please, provide a set of CTFs.")
         return errorMsg
@@ -336,7 +319,10 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
     def _getInputMicrographs(self):
 
         if not hasattr(self, "inputMicrographs") or not self.inputMicrographs:
-            self.inputMicrographs = self.inputCoordinates[0].get().getMicrographs()
+            if len(self.inputCoordinates)==0:
+              print("WARNING. PROVIDE MICROGRAPHS FIRST")
+            else:
+              self.inputMicrographs = self.inputCoordinates[0].get().getMicrographs()
         return self.inputMicrographs
 
     def _getBoxSize(self):
@@ -487,24 +473,22 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
     def pickNoise(self):
         outputRoot= self.CONSENSUS_COOR_PATH_TEMPLATE % "NOISE"
         if not "OR" in self.coordinatesDict:  # fill self.coordinatesDict['OR']
-            self.loadConsensusCoords(self.CONSENSUS_COOR_PATH_TEMPLATE % 'OR',
-                                    'OR', writeSet=False)
-        pickWorker, argsList = pickAllNoiseWorker(self.coordinatesDict['OR'],
-                                                  self._getExtraPath(outputRoot),
-                                                  -1)
+            self.loadConsensusCoords(self.CONSENSUS_COOR_PATH_TEMPLATE % 'OR', 'OR', writeSet=False)
+
+        argsDict=pickNoise_prepareInput(self.coordinatesDict['OR'], self._getExtraPath()) 
+        argsDict["nThrs"] = self.numberOfThreads.get()
+        argsDict["nToPick"]=-1
+        args=(" -i %(mics_dir)s -c %(inCoordsPosDir)s -o %(outCoordsRawTxtDir)s -s %(boxSize)s "+
+              "-n %(nToPick)s -t %(nThrs)s")%argsDict
+                                 
+        self.runJob('xmipp_pick_noise', args, numberOfMpi=1)
         
-        Parallel(n_jobs= self.numberOfThreads.get() * self.numberOfMpi.get(),
-                 backend="multiprocessing", verbose=1)(delayed(pickWorker,
-                 check_pickle=False)(*arg) for arg in argsList)
+        writeSetOfCoordsFromPosFnames(txt_coords_dirPath= argsDict["outCoordsRawTxtDir"], 
+                                   setOfInputCoords= self.coordinatesDict['OR'],
+                                   sqliteOutName= self._getExtraPath("consensus_NOISE.sqlite") )
 
-        # for arg in argsList:
-        #     pickWorker(*arg)
-
-        writeSetOfCoordsFromFnames(self._getExtraPath(outputRoot),
-                                   self.coordinatesDict['OR'],
-                                   self._getExtraPath("consensus_NOISE.sqlite"))
-
-
+#        raise ValueError("peta")
+        
     def insertMicsPreprocSteps(self, micIds, prerequisites):
         deps = []
         boxSize = self._getBoxSize()
@@ -526,7 +510,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
         self._getDownFactor()
         mics_ = self._getInputMicrographs()
 
-        if not self.skipDoFlip.get():
+        if not self.ignoreCTF.get():
             
             setOfMicCtf= self.ctfRelations.get()
             if setOfMicCtf.getSize() != len(micIds):
@@ -556,7 +540,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
             self.runJob('xmipp_transform_downsample', args, numberOfMpi=1)
             fnMic = fnPreproc
             
-        if not self.skipDoFlip.get():
+        if not self.ignoreCTF.get():
             if not hasattr(self, "micToCtf"):
                 self.preprocessMicsInitStep()
 
@@ -607,8 +591,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
         mics_ = self._getInputMicrographs()
         coordSet.setMicrographs(mics_)
         makePath(self._getExtraPath('coord_%s' % mode))
-
-        writePosFilesStepWorker(coordSet, self._getExtraPath('coord_%s' % mode))
+        writeSetOfCoordinates(self._getExtraPath('coord_%s' % mode), coordSet, 
+                              scale= coordSet.getBoxSize())
         makePath(self._getExtraPath('parts_%s' % mode))
 
 
@@ -643,10 +627,17 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
                              % os.path.basename(posFn))
                 self.warning("Maybe you are extracting over a subset of micrographs")
         imgsXmd.write(fnImages)
-              
-    
+                    
+    def __dataDict_toStrs(self, dataDict):
+        fnamesStr=[]
+        weightsStr=[]
+        for fname in dataDict:
+          fnamesStr.append(fname)
+          weightsStr.append(str(dataDict[fname]) )
+        return ":".join(fnamesStr), ":".join(weightsStr)
+        
     def trainCNN(self):
-        from xmipp3.protocols.protocol_screen_deeplearning1 import trainWorker
+
         netDataPath = self._getExtraPath("nnetData")
         makePath(netDataPath)
         posTrainDict = {self._getExtraPath("particles_AND.xmd"):  1}
@@ -662,28 +653,36 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
         nEpochs = self.nEpochs.get()
         if self.doContinue.get():
             prevRunPath = self.continueRun.get()._getExtraPath('nnetData')
+            copyTree(prevRunPath, netDataPath)
             if not self.keepTraining.get():
                 nEpochs = 0
-        else:
-            prevRunPath = None
 
         #TODO define weight behaviour
-        print(self.trainPosSetOfParticles.get() , self.trainNegSetOfParticles.get() )
+
         if self.trainPosSetOfParticles.get():
             posTrainFn = self._getExtraPath("trainTrueParticlesSet.xmd")
             posTrainDict[posTrainFn] = self.trainPosWeight.get()
         if self.trainNegSetOfParticles.get():
             negTrainFn = self._getExtraPath("trainFalseParticlesSet.xmd")
             negTrainDict[negTrainFn] = self.trainNegWeight.get()
-        print(posTrainDict, negTrainDict)
-        # TODO: check if works prevRunPath
-        trainWorker(netDataPath, posTrainDict, negTrainDict, nEpochs,
-                    self.learningRate.get(), self.l2RegStrength.get(),
-                    self.auto_stopping.get(), self.nModels.get(), gpuToUse,
-                    numberOfThreads, prevRunPath= prevRunPath)
 
+        fnamesPos, weightsPos= self.__dataDict_toStrs(posTrainDict)
+        fnamesNeg, weightsNeg= self.__dataDict_toStrs(negTrainDict)
+        args= " -n %s --mode train -p %s -f %s --trueW %s --falseW %s"%(netDataPath, 
+                      fnamesPos, fnamesNeg, weightsPos, weightsNeg)
+        args+= " -e %s -l %s -r %s -m %s "%(nEpochs, self.learningRate.get(), self.l2RegStrength.get(),
+                                          self.nModels.get())
+        if not self.auto_stopping.get():
+          args+=" -s"
+          
+        if not gpuToUse is None:
+          args+= " -g %s"%(gpuToUse)
+        if not numberOfThreads is None:
+          args+= " -t %s"%(numberOfThreads)
+        self.runJob('xmipp_deep_consensus', args, numberOfMpi=1)
+        
     def predictCNN(self):
-        from xmipp3.protocols.protocol_screen_deeplearning1 import predictWorker, XmippProtScreenDeepLearning1
+
         netDataPath = self._getExtraPath('nnetData')
         if hasattr(self, 'gpuToUse'):        
             numberOfThreads = None
@@ -700,10 +699,22 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
             posTestDict = None
             negTestDict = None
         outParticlesPath = self._getPath("particles.xmd")
-        predictWorker(netDataPath, posTestDict, negTestDict, predictDict,
-                      outParticlesPath, gpuToUse, numberOfThreads)
 
-
+        fnamesPred, weightsPred= self.__dataDict_toStrs(predictDict)
+        
+        args= " -n %s --mode score -i %s -o %s "%(netDataPath, fnamesPred, outParticlesPath)
+                
+        if posTestDict and negTestDict:
+          fnamesPosTest, weightsPosTest= self.__dataDict_toStrs(posTrainDict)
+          fnamesNegTest, weightsNegTest= self.__dataDict_toStrs(negTrainDict)
+          args+= " --testingTrue %s --testingFalse %s "%(fnamesPosTest, fnamesNegTest)
+          
+        if not gpuToUse is None:
+          args+= " -g %s"%(gpuToUse)
+        if not numberOfThreads is None:
+          args+= " -t %s"%(numberOfThreads)
+        self.runJob('xmipp_deep_consensus', args, numberOfMpi=1)
+        
     def createOutputStep(self):
         # PARTICLES
         cleanPattern(self._getPath("*.sqlite"))

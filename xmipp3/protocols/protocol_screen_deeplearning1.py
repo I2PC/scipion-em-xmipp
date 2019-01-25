@@ -33,19 +33,7 @@ from pyworkflow.em.protocol import ProtProcessParticles
 import pyworkflow.em.metadata as md
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes
 
-WRITE_TEST_SCORES=True
 N_MAX_NEG_SETS= 5
-
-BAD_IMPORT_MSG='''
-Error, tensorflow is not installed. Install it with:\n  ./scipion installb deepLearnigToolkit
-If gpu version of tensorflow desired, install cuda 8.0 and cudnn 6 or cuda 9.0 and cudnn 7 add to SCIPION_DIR/config/scipion.conf
-CUDA = True
-CUDA_VERSION = 8.0  or 9.0
-CUDA_HOME = /path/to/cuda-8
-CUDA_BIN = %(CUDA_HOME)s/bin
-CUDA_LIB = %(CUDA_HOME)s/lib64
-CUDNN_VERSION = 6 or 7
-'''
 
 class XmippProtScreenDeepLearning1(ProtProcessParticles):
     """ Protocol for screening particles using deep learning. """
@@ -55,19 +43,31 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
     def _defineParams(self, form):
         form.addSection(label='Input')
         form.addParam('doContinue', params.BooleanParam, default=False,
-                      label='use previously trained model?',
+                      label='Use previously trained model?',
                       help='If you set to *Yes*, you should select a previous '
-                           'run of type *%s* class and some of the input parameters'
+                           'run of type *%s* class and some of the input parameters '
                            'will be taken from it.' % self.getClassName())
         form.addParam('continueRun', params.PointerParam,
                       label='Select previous run', allowsNull=True,
                       condition='doContinue', pointerClass=self.getClassName(),
                       help='Select a previous run to continue from.')
         form.addParam('keepTraining', params.BooleanParam,
-                      label='continue training on previously trainedModel?',
+                      label='Continue training on previously trainedModel?',
                       default=True,condition='doContinue',
                       help='If you set to *Yes*, you should provide training set')
 
+
+        use_cuda=True
+        if os.environ.get("CUDA", False):
+            form.addParam('gpuToUse', params.IntParam, default='0',
+                          label='Which GPU to use:',
+                          help='Just one GPU will be use, by '
+                               'default GPU number 0. You can override the default '
+                               'allocation by providing other GPU number, p.e. 2'
+                               '\nif -1 no GPU but all CPU cores will be used')
+        else:
+            use_cuda=False
+            
         form.addParam('inPosSetOfParticles', params.PointerParam,
                       label="True particles", pointerClass='SetOfParticles',
                       allowsNull=True, condition="not doContinue or keepTraining",
@@ -90,8 +90,10 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                                     'and (not doContinue or keepTraining)' % num,
                           pointerClass='SetOfParticles', allowsNull=True,
                           help='Select the set of negative particles for training.')
+                          
             form.addParam('inNegWeight_%d'%num, params.IntParam,
                           label="Weight of negative train particles %d" % num,
+                          expertLevel=params.LEVEL_ADVANCED,
                           default='1', allowsNull=True,
                           condition='(numberOfNegativeSets<=0 or numberOfNegativeSets >=%d) and '
                                     '(not doContinue or keepTraining)'%num,
@@ -108,21 +110,19 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                       pointerClass='SetOfParticles',
                       help='Select the set of putative particles particles to classify.')
 
-        use_cuda=True
-        if os.environ.get("CUDA", False):
-            form.addParam('gpuToUse', params.IntParam, default='0',
-                          label='Which GPU to use:',
-                          help='Currently just one GPU will be use, by '
-                               'default GPU number 0 You can override the default '
-                               'allocation by providing other GPU number, p.e. 2'
-                               '\nif -1 no gpu but all cpu cores will be used')
-        else:
-            use_cuda=False
-
+        form.addSection(label='Training')
+        
+        form.addParam('nEpochs', params.FloatParam,
+                      label="Number of epochs", default=5.0,
+                      condition="not doContinue or keepTraining",
+                      help='Number of epochs for neural network training.')
+        form.addParam('learningRate', params.FloatParam,
+                      label="Learning rate", default=1e-4,
+                      condition="not doContinue or keepTraining",
+                      help='Learning rate for neural network training')
         form.addParam('auto_stopping',params.BooleanParam,
                       label='Auto stop training when convergency is detected?',
                       default=True, condition="not doContinue or keepTraining",
-                      expertLevel=params.LEVEL_ADVANCED,
                       help='If you set to *Yes*, the program will automatically '
                            'stop training if there is no improvement for '
                            'consecutive 2 epochs, learning rate will be '
@@ -131,17 +131,6 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                            'Warning: Sometimes convergency seems to be reached, '
                            'but after time, improvement can still happen. '
                            'Not recommended for very small data sets (<100 true particles)')
-        
-        form.addParam('nEpochs', params.FloatParam,
-                      label="Number of epochs", default=5.0,
-                      expertLevel=params.LEVEL_ADVANCED,
-                      condition="not doContinue or keepTraining",
-                      help='Number of epochs for neural network training.')
-        form.addParam('learningRate', params.FloatParam,
-                      label="Learning rate", default=1e-4,
-                      expertLevel=params.LEVEL_ADVANCED,
-                      condition="not doContinue or keepTraining",
-                      help='Learning rate for neural network training')
         form.addParam('l2RegStrength', params.FloatParam,
                       label="Regularization strength",
                       default=1e-5, expertLevel=params.LEVEL_ADVANCED,
@@ -157,18 +146,17 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                            'Tipical values are 1 to 5. The more the better '
                            'until a point where no gain is obtained. '
                            'Each model increases running time linearly')
-
-        form.addSection(label='testingData')
+                           
         form.addParam('doTesting', params.BooleanParam, default=False,
-                      label='Perform testing after training?',
+                      label='Perform testing after training?', expertLevel=params.LEVEL_ADVANCED,
                       help='If you set to *Yes*, you should select a testing '
                            'positive set and a testing negative set')
         form.addParam('testPosSetOfParticles', params.PointerParam,
-                      label="Set of positive test particles",
+                      label="Set of positive test particles", expertLevel=params.LEVEL_ADVANCED,
                       pointerClass='SetOfParticles',condition='doTesting',
                       help='Select the set of ground true positive particles.')
         form.addParam('testNegSetOfParticles', params.PointerParam,
-                      label="Set of negative test particles",
+                      label="Set of negative test particles", expertLevel=params.LEVEL_ADVANCED,
                       pointerClass='SetOfParticles', condition='doTesting',
                       help='Select the set of ground false positive particles.')
 
@@ -188,8 +176,8 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
             if fnameToSetAndWeight is None:
                 return None
             dictONameToWeight = {fname: fnameToSetAndWeight[fname][-1]
-                                 for fname in fnameToSetAndWeight
-                                 if not fnameToSetAndWeight[fname][0] is None}
+                                   for fname in fnameToSetAndWeight
+                                     if not fnameToSetAndWeight[fname][0] is None}
 
             if len(dictONameToWeight) == 0:
                 return None
@@ -249,10 +237,18 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                 for fnameParticles in sorted(dataDict):
                     setOfParticles= __getSetOfParticlesFromFname(fnameParticles)
                     writeSetOfParticles(setOfParticles, fnameParticles)
-
+                    
+    def __dataDict_toStrs(self, dataDict):
+        fnamesStr=[]
+        weightsStr=[]
+        for fname in dataDict:
+          fnamesStr.append(fname)
+          weightsStr.append(str(dataDict[fname]) )
+        return ":".join(fnamesStr), ":".join(weightsStr)
+        
     def train(self, posTrainDict, negTrainDict):
         """
-            posTrainDict, negTrainDict: { fnameToMetadata: { weight:int }
+            posTrainDict, negTrainDict: { fnameToMetadata: weight (int) }
         """
         netDataPath = self._getExtraPath('nnetData')
 
@@ -266,19 +262,28 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
         nEpochs = self.nEpochs.get()
         if self.doContinue.get():
             prevRunPath = self.continueRun.get()._getExtraPath('nnetData')
+            copyTree(prevRunPath, netDataPath)
             if not self.keepTraining.get():
                 nEpochs = 0
-        else:
-          prevRunPath = None
-
-        trainWorker(netDataPath, posTrainDict, negTrainDict, nEpochs,
-                    self.learningRate.get(), self.l2RegStrength.get(),
-                    self.auto_stopping.get(), self.nModels.get(),
-                    gpuToUse, numberOfThreads, prevRunPath=prevRunPath)
+          
+        fnamesPos, weightsPos= self.__dataDict_toStrs(posTrainDict)
+        fnamesNeg, weightsNeg= self.__dataDict_toStrs(negTrainDict)
+        args= " -n %s --mode train -p %s -f %s --trueW %s --falseW %s"%(netDataPath, 
+                      fnamesPos, fnamesNeg, weightsPos, weightsNeg)
+        args+= " -e %s -l %s -r %s -m %s "%(nEpochs, self.learningRate.get(), self.l2RegStrength.get(),
+                                          self.nModels.get())
+        if not self.auto_stopping.get():
+          args+=" -s"
+          
+        if not gpuToUse is None:
+          args+= " -g %s"%(gpuToUse)
+        if not numberOfThreads is None:
+          args+= " -t %s"%(numberOfThreads)
+        self.runJob('xmipp_deep_consensus', args, numberOfMpi=1)
 
     def predict(self, posTestDict, negTestDict, predictDict):
         """
-            posTestDict, negTestDict, predictDictt: { fnameToMetadata: { weight:int }
+            posTestDict, negTestDict, predictDict: { fnameToMetadata: { weight:int }
         """        
         netDataPath = self._getExtraPath('nnetData')
 
@@ -291,10 +296,21 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
             gpuToUse = None
 
         outParticlesPath = self._getPath("particles.xmd")
-        predictWorker(netDataPath, posTestDict, negTestDict, predictDict,
-                      outParticlesPath, gpuToUse, numberOfThreads)
-
-
+        fnamesPred, weightsPred= self.__dataDict_toStrs(predictDict)
+        
+        args= " -n %s --mode score -i %s -o %s "%(netDataPath, fnamesPred, outParticlesPath)
+                
+        if posTestDict and negTestDict:
+          fnamesPosTest, weightsPosTest= self.__dataDict_toStrs(posTrainDict)
+          fnamesNegTest, weightsNegTest= self.__dataDict_toStrs(negTrainDict)
+          args+= " --testingTrue %s --testingFalse %s "%(fnamesPosTest, fnamesNegTest)
+          
+        if not gpuToUse is None:
+          args+= " -g %s"%(gpuToUse)
+        if not numberOfThreads is None:
+          args+= " -t %s"%(numberOfThreads)
+        self.runJob('xmipp_deep_consensus', args, numberOfMpi=1)
+        
     def createOutputStep(self):
         imgSet = self.predictSetOfParticles.get()
         partSet = self._createSetOfParticles()
@@ -322,155 +338,3 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
         else:
             item._appendItem = True
 
-
-
-def writeNetShape(netDataPath, shape, nTrue, nModels):
-    '''
-        netDataPath= self._getExtraPath("nnetData")
-    '''
-    netInfoFname = os.path.join(netDataPath, "nnetInfo.txt")
-
-    makeFilePath(netInfoFname)
-    with open(netInfoFname, "w" ) as f:
-        f.write("inputShape: %d %d %d\ninputNTrue: %d\nnModels: %d" % (shape+(nTrue, nModels)))
-
-
-def loadNetShape(netDataPath):
-    '''
-        netDataPath= self._getExtraPath("nnetData")
-    '''
-    netInfoFname = os.path.join(netDataPath, "nnetInfo.txt")
-    with open(netInfoFname) as f:
-        lines = f.readlines()
-        dataShape = tuple([int(elem) for elem in lines[0].split()[1:]])
-        nTrue = int(lines[1].split()[1])
-        nModels = int(lines[2].split()[1])
-
-    return dataShape, nTrue, nModels
-  
-def trainWorker(netDataPath, posTrainDict, negTrainDict, nEpochs, learningRate,
-                l2RegStrength, auto_stop, numModels, gpuToUse,
-                numberOfThreads, prevRunPath=None):
-    '''
-        netDataPath=self._getExtraPath("nnetData")
-        posTrainDict, negTrainDict: { fnameToMetadata:  weight:int }
-                  e.g. : {'Runs/006003_XmippProtScreenDeepLearning1/extra/negativeSet_1.xmd': 1}
-        learningRate: float
-        prevRunPath: a path to previous run or None. Generally prevRun._getExtraPath('nnetData')
-    '''
-#    print(prevRunPath, netDataPath, nEpochs)
-    sys.stdout.flush()
-    if prevRunPath:
-        copyTree(prevRunPath, netDataPath)
-        dataShape, nTrue, numModels= loadNetShape(netDataPath)
-    else:
-        if nEpochs == 0:
-            raise ValueError("Number of epochs >0 if not continuing from trained model")
- 
-    if nEpochs == 0:
-        print("training is not required")
-        return
-    try:
-        from .deepConsensus_deepLearning1 import updateEnviron
-    except ImportError:
-        raise ValueError(BAD_IMPORT_MSG)
-    if gpuToUse >= 0:
-        numberOfThreads = None
-
-    else:
-        gpuToUse = None
-        if numberOfThreads < 0:
-            import multiprocessing          
-            numberOfThreads = multiprocessing.cpu_count()
-
-    updateEnviron(gpuToUse)
-                
-    try:
-        from .deepConsensus_deepLearning1 import DeepTFSupervised, DataManager, tf_intarnalError
-    except ImportError:
-        raise ValueError(BAD_IMPORT_MSG)
-
-    trainDataManager = DataManager(posSetDict=posTrainDict,
-                                   negSetDict=negTrainDict)
-    if prevRunPath:
-        assert dataShape == trainDataManager.shape, \
-                "Error, data shape mismatch in input data compared to previous model"
-
-    writeNetShape(netDataPath, trainDataManager.shape, trainDataManager.nTrue, numModels)
-    assert numModels >=1, "Error, nModels<1"
-    try:
-        nnet = DeepTFSupervised(numberOfThreads= numberOfThreads,
-                                rootPath= netDataPath,
-                                numberOfModels=numModels)
-        nnet.trainNet(nEpochs, trainDataManager, learningRate,
-                      l2RegStrength, auto_stop)
-    except tf_intarnalError as e:
-        if e._error_code == 13:
-            raise Exception("Out of gpu Memory. gpu # %d"%(gpuToUse))
-        else:
-            raise e
-    del nnet
-
-
-def predictWorker(netDataPath, posTestDict, negTestDict, predictDict,
-                  outParticlesPath, gpuToUse, numberOfThreads):
-    '''
-        outParticlesPath= self._getPath("particles.xmd")
-        posTestDict, negTestDict, predictDict: { fnameToMetadata:  weight:int }
-    '''
-    try:
-        from .deepConsensus_deepLearning1 import  updateEnviron
-    except ImportError:
-        raise ValueError(BAD_IMPORT_MSG)    
-    if gpuToUse >= 0:
-        numberOfThreads = None
-    else:
-        gpuToUse = None
-        if numberOfThreads < 0:
-            import multiprocessing          
-            numberOfThreads = multiprocessing.cpu_count()
-
-    updateEnviron(gpuToUse)
-
-    try:
-        from .deepConsensus_deepLearning1 import DeepTFSupervised, DataManager, tf_intarnalError
-    except ImportError:
-        raise ValueError(BAD_IMPORT_MSG)
-
-    predictDataManager = DataManager(posSetDict=predictDict, negSetDict=None)
-    dataShape, nTrue, numModels = loadNetShape(netDataPath)
-    try:
-        nnet = DeepTFSupervised(numberOfThreads=numberOfThreads,
-                                rootPath=netDataPath,
-                                numberOfModels=numModels)
-    except tf_intarnalError as e:
-        if e._error_code == 13:
-            raise Exception("Out of gpu Memory. gpu # %d" % (gpuToUse))
-        else:
-            raise e
-
-    y_pred, label_Id_dataSetNumIterator = nnet.predictNet(predictDataManager)
-    print("Returning to helper"); sys.stdout.flush()
-    metadataPosList, metadataNegList = predictDataManager.getMetadata(None)
-    for score, (isPositive, mdId, dataSetNumber) in zip(y_pred, label_Id_dataSetNumIterator):
-        if isPositive==True:
-            metadataPosList[dataSetNumber].setValue(md.MDL_ZSCORE_DEEPLEARNING1, score, mdId)
-        else:
-            metadataNegList[dataSetNumber].setValue(md.MDL_ZSCORE_DEEPLEARNING1, score, mdId)
-
-    assert len(metadataPosList) == 1, \
-            "Error, predict setOfParticles must contain one single object"
-
-    metadataPosList[0].write(outParticlesPath)
-    if posTestDict and negTestDict:
-        testDataManager = DataManager(posSetDict=posTestDict,
-                                      negSetDict=negTestDict,
-                                      validationFraction=0)
-        print("Evaluating test set")
-        global_auc, global_acc, y_labels, y_pred_all = nnet.evaluateNet(testDataManager)
-        if WRITE_TEST_SCORES:
-            makeFilePath(os.path.join(netDataPath, "testPredictions.txt"))
-        with open(os.path.join(netDataPath, "testPredictions.txt"), "w") as f:
-            f.write("label score\n")
-            for l, s in zip(y_labels, y_pred_all):
-                f.write("%d %f\n" % (l, s))
