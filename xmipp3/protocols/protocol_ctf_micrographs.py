@@ -38,6 +38,7 @@ import pyworkflow.utils as pwutils
 
 from xmipp3.utils import isMdEmpty
 from xmipp3.convert import mdToCTFModel, readCTFModel
+from xmippLib import Image
 
 
 class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
@@ -151,6 +152,9 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
 
         localParams = self.__params.copy()
 
+        localParams['pieceDim'] = self.windowSize.get()
+        localParams['ctfmodelSize'] = self.windowSize.get()
+
         if self.doInitialCTF:
             if self.ctfDict[micName] > 0:
                 localParams['defocusU'], localParams['phaseShift0'] = \
@@ -176,44 +180,49 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         localParams['root'] = _getFn('prefix')
         downsampleList = self._calculateDownsampleList(mic.getSamplingRate())
 
-        # try:
-        for i, downFactor in enumerate(downsampleList):
-            # Downsample if necessary
-            if downFactor != 1:
-                # Replace extension by 'mrc' cause there are some formats that
-                # cannot be written (such as dm3)
-                baseFn = pwutils.replaceBaseExt(micFn, 'mrc')
-                finalName = os.path.join(micDir, baseFn)
-                self.runJob("xmipp_transform_downsample",
-                            "-i %s -o %s --step %f --method fourier"
-                            % (micFn, finalName, downFactor))
+        try:
+            for i, downFactor in enumerate(downsampleList):
+                # Downsample if necessary
+                if downFactor != 1:
+                    # Replace extension by 'mrc' cause there are some formats that
+                    # cannot be written (such as dm3)
+                    baseFn = pwutils.replaceBaseExt(micFn, 'mrc')
+                    finalName = os.path.join(micDir, baseFn)
+                    self.runJob("xmipp_transform_downsample",
+                                "-i %s -o %s --step %f --method fourier"
+                                % (micFn, finalName, downFactor))
+                    psd = Image(finalName)
+                    psd = psd.getData()
+                    if psd.shape[0] < self.windowSize.get():
+                        localParams['pieceDim'] = self.windowSize.get()/2
+                        localParams['ctfmodelSize'] = self.windowSize.get()/2
 
-            isFirstDownsample = i == 0
-            # Update _params dictionary with mic and micDir
-            localParams['micFn'] = finalName
-            localParams['samplingRate'] = mic.getSamplingRate() * downFactor
 
-            # CTF estimation with Xmipp
-            try:
+                # Update _params dictionary with mic and micDir
+                localParams['micFn'] = finalName
+                localParams['samplingRate'] = mic.getSamplingRate() * downFactor
+
+                # CTF estimation with Xmipp
+
                 params = self._args % localParams
                 params += " --downSamplingPerformed %f" % downFactor
                 if not self.doInitialCTF:
                     params += " --selfEstimation "
                 self.runJob(self._program, params)
 
-            except Exception as ex:
-                print >> sys.stderr, "xmipp_ctf_estimate_from_micrograph has " \
-                                     "failed with micrograph %s" % finalName
-            # Check the quality of the estimation and reject it necessary
-            good = self.evaluateSingleMicrograph(mic)
-            if good:
-                break
 
-        for key in ['ctfParam', 'psd', 'enhanced_psd', 'ctfmodel_halfplane',
-                    'ctfmodel_quadrant', 'ctf']:
-            pwutils.moveFile(_getFn(key), self._getExtraPath())
-        # except:
-        #     pass
+                # Check the quality of the estimation and reject it necessary
+                good = self.evaluateSingleMicrograph(mic)
+                if good:
+                    break
+
+            for key in ['ctfParam', 'psd', 'enhanced_psd', 'ctfmodel_halfplane',
+                        'ctfmodel_quadrant', 'ctf']:
+                pwutils.moveFile(_getFn(key), self._getExtraPath())
+
+        except Exception as ex:
+            print >> sys.stderr, "xmipp_ctf_estimate_from_micrograph has " \
+                     "failed with micrograph %s" % finalName
 
     def _restimateCTF(self, micId):
         """ Run the estimate CTF program """
@@ -267,7 +276,8 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         self._args = ("--micrograph %(micFn)s --oroot %(root)s "
                       "--sampling_rate %(samplingRate)s --defocusU %("
                       "defocusU)f --defocus_range %(defocus_range)f "
-                      "--overlap 0.7 --acceleration1D ")
+                      "--overlap 0.7 --pieceDim %(pieceDim)s "
+                      "--ctfmodelSize %(ctfmodelSize)s --acceleration1D ")
 
         if self.findPhaseShift:
             self._args += "--phase_shift %(phaseShift0)f --VPP_radius 0.005"
@@ -304,11 +314,11 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         # command options
         self.__params = {'kV': self._params['voltage'],
                          'Cs': self._params['sphericalAberration'],
-                         'ctfmodelSize': self._params['windowSize'],
+                         #'ctfmodelSize': self._params['windowSize'],
                          'Q0': self._params['ampContrast'],
                          'min_freq': self._params['lowRes'],
                          'max_freq': self._params['highRes'],
-                         'pieceDim': self._params['windowSize']
+                         #'pieceDim': self._params['windowSize']
                          }
 
         self._prepareArgs(self.__params)
