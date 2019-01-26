@@ -70,6 +70,9 @@ class XmippProtDeepCones3D(ProtRefine3D):
         form.addParam('numConesTilt', IntParam, label="Number of cones per 180 degrees",
                       default=3,
                       help="Number of cones per 180 degrees.")
+        form.addParam('numConesSelected', IntParam, label="Number of selected cones per image",
+                      default=2,
+                      help="Number of selected cones per image.")
         form.addParallelSection(threads=0, mpi=8)
 
     #--------------------------- INSERT steps functions --------------------------------------------
@@ -92,9 +95,9 @@ class XmippProtDeepCones3D(ProtRefine3D):
             iniTilt = 0
             endTilt = stepTilt
             for j in range(numConesTilt):
-                self._insertFunctionStep("projectStep", 3000, iniRot, endRot, iniTilt, endTilt, 'projections', counterCones+1)
+                self._insertFunctionStep("projectStep", 600, iniRot, endRot, iniTilt, endTilt, 'projections', counterCones+1)
                 self._insertFunctionStep("projectStep", 300, iniRot, endRot, iniTilt, endTilt, 'projectionsCudaCorr', counterCones + 1)
-                self._insertFunctionStep("generateExpImagesStep", 1, 'projections', 'projectionsExp', counterCones+1, True)
+                self._insertFunctionStep("generateExpImagesStep", 10, 'projections', 'projectionsExp', counterCones+1, True)
                 iniTilt +=stepTilt
                 endTilt +=stepTilt
                 counterCones+=1
@@ -204,7 +207,7 @@ _noiseCoord   '0'
                                 [-s, c, s * Xdim2 + (1 - c) * Ydim2 + deltaY]])
                 newImg = cv2.warpAffine(I.getData(), M, (Xdim, Ydim))
                 if boolNoise:
-                    newImg = newImg + np.random.normal(0.0, 2.0, [Xdim, Xdim])
+                    newImg = newImg + np.random.normal(0.0, 4.0, [Xdim, Xdim]) #AJ 2.0 antes
                 newFn = ('%06d@'%idx)+fnExp[:-3]+'stk'
                 newImage.setData(newImg)
                 newImage.write(newFn)
@@ -224,32 +227,33 @@ _noiseCoord   '0'
 
     def trainNClassifiers2ClassesStep(self, idx):
 
-        fnLabels = self._getExtraPath('labels.txt')
-        fileLabels = open(fnLabels, "r")
-        newFnLabels = self._getExtraPath('labels%d.txt' %idx)
-        newFileLabels = open(newFnLabels, "w")
-        lines = fileLabels.readlines()
-        for line in lines:
-            if line == str(idx-1)+'\n':
-                newFileLabels.write('1\n')
-            else:
-                newFileLabels.write('0\n')
-        newFileLabels.close()
-        fileLabels.close()
+        modelFn = 'modelCone%d' % idx
+        if not exists(self._getExtraPath(modelFn+'.h5')): #AJ no se si esto tiene mucho sentido o puede ser peligroso con modelos a medias de entrenamiento
+            fnLabels = self._getExtraPath('labels.txt')
+            fileLabels = open(fnLabels, "r")
+            newFnLabels = self._getExtraPath('labels%d.txt' %idx)
+            newFileLabels = open(newFnLabels, "w")
+            lines = fileLabels.readlines()
+            for line in lines:
+                if line == str(idx-1)+'\n':
+                    newFileLabels.write('1\n')
+                else:
+                    newFileLabels.write('0\n')
+            newFileLabels.close()
+            fileLabels.close()
 
-        newXdim = readInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE)
-        expSet = self._getExtraPath('projectionsExp%d.xmd'%self.numCones)
-        fnLabels = self._getExtraPath('labels%d.txt'%idx)
-        modelFn = 'modelCone%d'%idx
+            newXdim = readInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE)
+            expSet = self._getExtraPath('projectionsExp%d.xmd'%self.numCones)
+            fnLabels = self._getExtraPath('labels%d.txt'%idx)
 
-        try:
-            self.runJob("xmipp_cone_deepalign", "%s %s %s %s %d %d %d %d" %
-                        (expSet, fnLabels, self._getExtraPath(),
-                         modelFn, self.numEpochs, newXdim, 2, self.batchSize), numberOfMpi=1)
-            #copy(self._getExtraPath('pruebaYpred.txt'), self._getExtraPath('prediction%d.txt'%idx))
-        except Exception as e:
-            raise Exception("ERROR: Please, if you are having memory problems, "
-                            "check the target resolution to work with lower dimensions.")
+            try:
+                self.runJob("xmipp_cone_deepalign", "%s %s %s %s %d %d %d %d" %
+                            (expSet, fnLabels, self._getExtraPath(),
+                             modelFn, self.numEpochs, newXdim, 2, self.batchSize), numberOfMpi=1)
+                #copy(self._getExtraPath('pruebaYpred.txt'), self._getExtraPath('prediction%d.txt'%idx))
+            except Exception as e:
+                raise Exception("ERROR: Please, if you are having memory problems, "
+                                "check the target resolution to work with lower dimensions.")
 
     # def trainOneClassifierNClassesStep(self):
     #
@@ -264,7 +268,7 @@ _noiseCoord   '0'
 
 
     def predictStep(self):
-        numMax=3
+        numMax = int(self.numConesSelected)
         newXdim = readInfoField(self._getExtraPath(), "size",xmippLib.MDL_XSIZE)
         self.runJob("xmipp_cone_deepalign_predict", "%s %s %d %d %d" %
                     (self.imgsFn, self._getExtraPath(), newXdim, self.numCones, numMax), numberOfMpi=1)
@@ -307,7 +311,6 @@ _noiseCoord   '0'
                 fnOutCone = 'outCone%d.xmd'%(i+1)
 
                 if not exists(self._getExtraPath(fnOutCone)):
-                    #fnOutClassesCone = 'outClassesCone%d.xmd'%(i+1)
                     #Cuda Correlation step - calling cuda program
                     params = ' -i_ref %s -i_exp %s -o %s --odir %s --keep_best 1 ' \
                              '--maxShift 10 '%(fnProjCone, fnExpCone, fnOutCone,
