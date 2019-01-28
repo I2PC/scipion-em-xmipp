@@ -24,23 +24,38 @@
 # *
 # **************************************************************************
 
-
 import os, sys
 import re
-from pyworkflow.utils.path import copyTree, makeFilePath
+
+from pyworkflow.utils.path import copyTree
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtProcessParticles
 import pyworkflow.em.metadata as md
+
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes
+
 
 N_MAX_NEG_SETS= 5
 
-class XmippProtScreenDeepLearning1(ProtProcessParticles):
+class XmippProtScreenDeepLearning(ProtProcessParticles):
     """ Protocol for screening particles using deep learning. """
     _label = 'screen deep learning'
 
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
+        # GPU settings
+        form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
+                       expertLevel=params.LEVEL_ADVANCED,
+                       label="Use GPU (vs CPU)",
+                       help="Set to true if you want to use GPU implementation "
+                            "of Optical Flow.")
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
+                       expertLevel=params.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="GPU may have several cores. Set it to zero"
+                            " if you do not know what we are talking about."
+                            " First core index is 0, second 1 and so on.")
+
         form.addSection(label='Input')
         form.addParam('doContinue', params.BooleanParam, default=False,
                       label='Use previously trained model?',
@@ -55,18 +70,6 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                       label='Continue training on previously trainedModel?',
                       default=True,condition='doContinue',
                       help='If you set to *Yes*, you should provide training set')
-
-
-        use_cuda=True
-        if os.environ.get("CUDA", False):
-            form.addParam('gpuToUse', params.IntParam, default='0',
-                          label='Which GPU to use:',
-                          help='Just one GPU will be use, by '
-                               'default GPU number 0. You can override the default '
-                               'allocation by providing other GPU number, p.e. 2'
-                               '\nif -1 no GPU but all CPU cores will be used')
-        else:
-            use_cuda=False
             
         form.addParam('inPosSetOfParticles', params.PointerParam,
                       label="True particles", pointerClass='SetOfParticles',
@@ -160,8 +163,7 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
                       pointerClass='SetOfParticles', condition='doTesting',
                       help='Select the set of ground false positive particles.')
 
-        if not use_cuda:
-            form.addParallelSection(threads=8, mpi=0)
+        form.addParallelSection(threads=8, mpi=0)
 
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -252,9 +254,9 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
         """
         netDataPath = self._getExtraPath('nnetData')
 
-        if hasattr(self, 'gpuToUse'):
+        if self.usesGpu():
             numberOfThreads = None
-            gpuToUse = self.gpuToUse.get()
+            gpuToUse = self.getGpuList()[0]
         else:
             numberOfThreads = self.numberOfThreads.get()
             gpuToUse = None
@@ -287,10 +289,9 @@ class XmippProtScreenDeepLearning1(ProtProcessParticles):
         """        
         netDataPath = self._getExtraPath('nnetData')
 
-        if hasattr(self, 'gpuToUse'):        
+        if self.usesGpu():
             numberOfThreads = None
-            gpuToUse = self.gpuToUse.get()
-
+            gpuToUse = self.getGpuList()[0]
         else:
             numberOfThreads = self.numberOfThreads.get()
             gpuToUse = None

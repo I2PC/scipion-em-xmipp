@@ -32,42 +32,36 @@ from math import sqrt
 from glob import glob
 import numpy as np
 
-from joblib import Parallel, delayed
 
 import pyworkflow.utils as pwutils
-from pyworkflow.utils.path import (cleanPath, makePath, moveFile, copyFile,
-                                   createLink, cleanPattern, replaceExt, cleanPath)
+from pyworkflow.object import Integer
+from pyworkflow.utils.path import makePath, cleanPattern, cleanPath
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtParticlePicking
 from pyworkflow.protocol.constants import *
 from pyworkflow.em.constants import RELATION_CTF
-from pyworkflow.em.data import SetOfCoordinates, Coordinate, SetOfParticles
+from pyworkflow.em.data import SetOfCoordinates, Coordinate
 import pyworkflow.em.metadata as MD
 import xmippLib as xmipp
-
-
-from xmipp3.convert import readSetOfParticles, setXmippAttributes, micrographToCTFParam, writeSetOfParticles
-import numpy as np
-from joblib import Parallel, delayed
 
 from xmipp3.protocols.protocol_pick_noise import (pickNoise_prepareInput,
                                                   writeSetOfCoordsFromPosFnames)
 
-from xmipp3.convert import (readSetOfParticles, setXmippAttributes, writeSetOfCoordinates,
-                            micrographToCTFParam, writeSetOfParticles)
+from xmipp3.convert import (readSetOfParticles, setXmippAttributes,
+                            writeSetOfCoordinates, micrographToCTFParam,
+                            writeSetOfParticles)
 
 DEEP_PARTICLE_SIZE = 128
 MIN_NUM_CONSENSUS_COORDS = 256
 
 class XmippProtScreenDeepConsensus(ProtParticlePicking):
-    """ TODO: HELP
-    Protocol to compute a smart consensus between different particle picking
-    algorithms. The protocol takes several Sets of Coordinates calculated
-    by different programs and/or different parameter settings. Let's say:
-    we consider N independent pickings. Then, a neural network is trained
-    using different subset of picked and not picked cooridantes. Finally,
-    a coordinate is considered to be a correct particle according to the
-    neural network predictions.
+    """ Protocol to compute a smart consensus between different particle picking
+        algorithms. The protocol takes several Sets of Coordinates calculated
+        by different programs and/or different parameter settings. Let's say:
+        we consider N independent pickings. Then, a neural network is trained
+        using different subset of picked and not picked cooridantes. Finally,
+        a coordinate is considered to be a correct particle according to the
+        neural network predictions.
     """
     _label = 'deep consensus picking'
     CONSENSUS_COOR_PATH_TEMPLATE="cosensus_%s"
@@ -77,6 +71,19 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
 #        self.stepsExecutionMode = params.STEPS_PARALLEL
 
     def _defineParams(self, form):
+        # GPU settings
+        form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
+                       expertLevel=params.LEVEL_ADVANCED,
+                       label="Use GPU (vs CPU)",
+                       help="Set to true if you want to use GPU implementation "
+                            "of Optical Flow.")
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
+                       expertLevel=params.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="GPU may have several cores. Set it to zero"
+                            " if you do not know what we are talking about."
+                            " First core index is 0, second 1 and so on.")
+
         form.addSection(label='Input')
         #CONTINUE FROM PREVIOUS TRAIN
         form.addParam('doContinue', params.BooleanParam, default=False,
@@ -106,16 +113,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
                       help="All coordinates within this radius "
                            "(as fraction of particle size) "
                            "are presumed to correspond to the same particle")
-        
-        if 'CUDA' in os.environ and not os.environ['CUDA'] == "False":
-            form.addParam('gpuToUse', params.IntParam, default='0',
-                          label='Which GPU to use:',
-                          help='Currently just one GPU will be use, by '
-                               'default GPU number 0 You can override the default '
-                               'allocation by providing other GPU number, p.e. 2'
-                               '\nif -1 no GPU but all CPU cores will be used instead')
-            
-        
+
         form.addSection(label='Preprocess')
         form.addParam('notePreprocess', params.LabelParam,
                       label='How to extract particles from micrograph',
@@ -209,12 +207,15 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
                            'preprocess micrographs. Steps are:\n'
                            '1) mic donwsampling to the required size such that '
                            'the particle box size is 128\n'
-                           '2) according to your selection, mic contrast inversion (to white particles).\n'
+                           '2) according to your selection, mic contrast '
+                           'inversion (to white particles).\n'
                            '3) mic normalization to 0 mean and 1 std\n'
-                           'Then, particles are extracted with no further alteration.\n'
-                           '4.a) Optionally, CTF correction of particles if asked in the form.\n'
-                           'Please ensure that the additional particles have been '
-                           'preprocessed as indicated before.')
+                           'Then, particles are extracted with no further '
+                           'alteration.\n'
+                           '4.a) Optionally, CTF correction of particles '
+                           'if asked in the form.\n'
+                           'Please ensure that the additional particles '
+                           'have been preprocessed as indicated before.')
         
         form.addParam('trainPosSetOfParticles', params.PointerParam,
                       label="Positive train particles 128px (optional)", allowsNull=True,
@@ -643,9 +644,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
         posTrainDict = {self._getExtraPath("particles_AND.xmd"):  1}
         negTrainDict = {self._getExtraPath("particles_NOISE.xmd"):  1}
 
-        if hasattr(self, 'gpuToUse'):        
+        if self.usesGpu():
             numberOfThreads = None
-            gpuToUse = self.gpuToUse.get()
+            gpuToUse = self.getGpuList()[0]
         else:
             numberOfThreads = self.numberOfThreads.get()
             gpuToUse = None
@@ -684,9 +685,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
     def predictCNN(self):
 
         netDataPath = self._getExtraPath('nnetData')
-        if hasattr(self, 'gpuToUse'):        
+        if self.usesGpu():
             numberOfThreads = None
-            gpuToUse = self.gpuToUse.get()
+            gpuToUse = self.getGpuList()[0]
         else:
             numberOfThreads = self.numberOfThreads.get()
             gpuToUse = None

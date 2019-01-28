@@ -46,7 +46,7 @@ from xmipp3.protocols.protocol_particle_pick_pairs import XmippProtParticlePicki
 from xmipp3.protocols.protocol_rotational_spectra import XmippProtRotSpectra
 from xmipp3.protocols.protocol_screen_particles import XmippProtScreenParticles
 from xmipp3.protocols.protocol_screen_deepConsensus import XmippProtScreenDeepConsensus
-from xmipp3.protocols.protocol_screen_deeplearning1 import XmippProtScreenDeepLearning1
+from xmipp3.protocols.protocol_screen_deeplearning import XmippProtScreenDeepLearning
 from xmipp3.protocols.protocol_ctf_micrographs import XmippProtCTFMicrographs
 from xmipp3.protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
 from xmipp3.protocols.protocol_multireference_alignability import XmippProtMultiRefAlignability
@@ -65,7 +65,7 @@ class XmippViewer(DataViewer):
                 XmippProtExtractParticles,
                 XmippProtExtractParticlesPairs,
                 XmippProtScreenDeepConsensus,
-                XmippProtScreenDeepLearning1,
+                XmippProtScreenDeepLearning,
                 XmippProtKerdensom,
                 XmippProtParticlePickingPairs,
                 XmippProtRotSpectra,
@@ -121,7 +121,8 @@ class XmippViewer(DataViewer):
             else:
                 self.getCTFViews(ctfSet)
 
-        elif issubclass(cls, XmippProtScreenDeepConsensus) or issubclass(cls, XmippProtScreenDeepLearning1):
+        elif (issubclass(cls, XmippProtScreenDeepConsensus) or
+              issubclass(cls, XmippProtScreenDeepLearning)):
             parts = obj.outputParticles
             fnParts = parts.getFileName()
             
@@ -130,10 +131,13 @@ class XmippViewer(DataViewer):
             if md.containsLabel(xmippLib.MDL_ZSCORE_DEEPLEARNING1):
                 from plotter import XmippPlotter
                 xplotter = XmippPlotter(windowTitle="Deep consensus score")
-                xplotter.createSubPlot("Deep consensus score", "Deep consensus score", "Number of Particle")
-                xplotter.plotMd(md, False, mdLabelY=xmippLib.MDL_ZSCORE_DEEPLEARNING1, nbins=200)
+                xplotter.createSubPlot("Deep consensus score",
+                                       "Deep consensus score",
+                                       "Number of Particle")
+                xplotter.plotMd(md, False,
+                                mdLabelY=xmippLib.MDL_ZSCORE_DEEPLEARNING1,
+                                nbins=200)
                 self._views.append(xplotter)
-            
 
             labels  = 'id enabled _index _filename _xmipp_zScoreDeepLearning1 '
             labels += '_xmipp_zScore _xmipp_cumulativeSSNR _sampling '
