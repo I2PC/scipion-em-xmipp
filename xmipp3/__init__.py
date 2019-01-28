@@ -133,9 +133,10 @@ class Plugin(pyworkflow.em.Plugin):
         ## EXTRA PACKAGES ##
 
         ## --- DEEP LEARNING TOOLKIT --- ##
-
-        # scipy = env.addPipModule('scipy', '0.14.0', default=False)#,
-        #                          deps=['lapack', 'matplotlib'])
+        try:
+          scipy = env.addPipModule('scipy', '0.14.0', default=False, deps=['lapack', 'matplotlib'])
+        except Exception: #If already added
+            pass                     
         try:
           cython = env.addPipModule('cython', '0.22', target='Cython-0.22*',
                                     default=False)
@@ -161,7 +162,7 @@ class Plugin(pyworkflow.em.Plugin):
         if nvccProgram != "":
             nvccVersion = subprocess.Popen(["nvcc", '--version'],
                                            stdout=subprocess.PIPE).stdout.read()
-            #TODO: check if cuda 9 or 10  or 7.5 ...
+            #TODO: check if cuda 9 or 10  or 7.5 ..., Try to autoInstall cudnn. Probar pip install cudnnenv
             if "release 8.0" in nvccVersion: #cuda 8
                 tensorFlowTarget = "1.4.1"
 
@@ -186,7 +187,7 @@ class Plugin(pyworkflow.em.Plugin):
                                              % (pipCmdScipion, tensorFlowTarget))
 
             keras = env.addPipModule('keras', '2.2.2', target='keras',
-                                   default=False, deps=[cv2, h5py])
+                                   default=False, deps=[ h5py])
 
         deppLearnigTools = [scikit_learn, keras, tensor]
 
