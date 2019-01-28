@@ -109,7 +109,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
                       help='How to fill the borders when shifting the frames')
 
         #GPU params
-        group = form.addGroup('GPU parameters')
+        group = form.addGroup('Local alignment')
 
         group.addParam('doLocalAlignment', params.BooleanParam, default=True,
                       label="Compute local alignment?",
@@ -117,29 +117,32 @@ class XmippProtMovieCorr(ProtAlignMovies):
 
         line = group.addLine('Number of control points',
                     expertLevel=cons.LEVEL_ADVANCED,
-                    help='Number of control points use for BSpline.')
+                    help='Number of control points use for BSpline.',
+                    condition='doLocalAlignment')
         line.addParam('controlPointX', params.IntParam, default=6, label='X')
         line.addParam('controlPointY', params.IntParam, default=6, label='Y')
         line.addParam('controlPointT', params.IntParam, default=5, label='t')
 
         line = group.addLine('Number of patches',
                     expertLevel=cons.LEVEL_ADVANCED,
-                    help='Number of patches to be used for patch based '
-                        'alignment. Valid only with local alignment ON.')
+                    help='Number of patches to be used. Depending on the size of the movie, they may \
+                        overlap.',
+                    condition='doLocalAlignment')
         line.addParam('patchX', params.IntParam, default=10, label='X')
         line.addParam('patchY', params.IntParam, default=10, label='Y')
 
         group.addParam('corrDownscale', params.IntParam,
                     default=4, label='Correlation downscale',
                     expertLevel=cons.LEVEL_ADVANCED,
-                    help='Downscale coefficient of the correlations used for local alignment.\
-                        Valid only with local alignment ON.')
+                    help='Downscale coefficient of the correlations used for local alignment.',
+                    condition='doLocalAlignment')
 
         group.addParam('groupNFrames', params.IntParam, default=3,
                     expertLevel=cons.LEVEL_ADVANCED,
                     label='Group N frames',
                     help='Group every specified number of frames by adding them together. \
-                        The alignment is then performed on the summed frames. Valid only with local alignment ON.')
+                        The alignment is then performed on the summed frames.',
+                    condition='doLocalAlignment')
 
         form.addParam('outsideValue', params.FloatParam, default=0.0,
                        expertLevel=cons.LEVEL_ADVANCED,
@@ -223,7 +226,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
             if self.doLocalAlignment.get():
                 args += ' --processLocalShifts '
             args += ' --oBSpline ' + self._getExtraPath(self._getMovieRoot(movie) + "_bsplines.txt")
-            args += ' --storage ' + "fftBenchmark.txt" # assuming the protocol runs from the project folder
+            args += ' --storage ' + self._getExtraPath("fftBenchmark.txt")
             args += ' --controlPoints %d %d %d' % (self.controlPointX, self.controlPointY, self.controlPointT)
             args += ' --patches %d %d' % (self.patchX, self.patchY)
             args += ' --locCorrDownscale %d %d' % (self.corrDownscale, self.corrDownscale)
@@ -314,3 +317,8 @@ class XmippProtMovieCorr(ProtAlignMovies):
         self._setAlignmentInfo(movie, alignedMovie)
         return alignedMovie
 
+    def _validate(self):
+        errors = ProtAlignMovies._validate(self)
+        if self.doLocalAlignment.get() and not self.useGpu.get():
+            errors.append("GPU is needed to do local alignment.")
+        return errors
