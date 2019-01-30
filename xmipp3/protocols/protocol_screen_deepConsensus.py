@@ -32,21 +32,21 @@ from math import sqrt
 from glob import glob
 import numpy as np
 
-
-import pyworkflow.utils as pwutils
-from pyworkflow.object import Integer
 from pyworkflow.utils.path import makePath, cleanPattern, cleanPath
-import pyworkflow.protocol.params as params
-from pyworkflow.em.protocol import ProtParticlePicking
+from pyworkflow.object import Integer
 from pyworkflow.protocol.constants import *
-from pyworkflow.em.constants import RELATION_CTF
-from pyworkflow.em.data import SetOfCoordinates, Coordinate
+from pyworkflow.em.constants import RELATION_CTF, ALIGN_NONE
+from pyworkflow.em.convert import ImageHandler
+from pyworkflow.em.data import SetOfCoordinates, Coordinate, SetOfParticles
+from pyworkflow.em.protocol import ProtParticlePicking
+import pyworkflow.utils as pwutils
+import pyworkflow.protocol.params as params
 import pyworkflow.em.metadata as MD
-import xmippLib as xmipp
 
+import xmippLib as xmipp
+import xmipp3
 from xmipp3.protocols.protocol_pick_noise import (pickNoise_prepareInput,
                                                   writeSetOfCoordsFromPosFnames)
-
 from xmipp3.convert import (readSetOfParticles, setXmippAttributes,
                             writeSetOfCoordinates, micrographToCTFParam,
                             writeSetOfParticles)
@@ -65,6 +65,12 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
     """
     _label = 'deep consensus picking'
     CONSENSUS_COOR_PATH_TEMPLATE="cosensus_%s"
+
+    ADD_TRAIN_TYPES = ["None", "Precompiled", "Custom"]
+    ADD_TRAIN_NONE = 0
+    ADD_TRAIN_MODEL = 1
+    ADD_TRAIN_CUST = 2
+
     def __init__(self, **args):
         ProtParticlePicking.__init__(self, **args)
         self.stepsExecutionMode = params.STEPS_SERIAL
@@ -197,49 +203,53 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
                       pointerClass='SetOfParticles', condition='doTesting',
                       help='Select the set of ground false positive particles.')
 
-        
         form.addSection(label='Additional training data')
-        form.addParam('addTrainingData', params.BooleanParam, default=False,
-                      label='Use additional data for training (setOfParticles)?',
-                      help='If you set to *Yes*, you should select positive and/or '
+        form.addParam('addTrainingData', params.EnumParam,
+                      choices=self.ADD_TRAIN_TYPES,
+                      default=self.ADD_TRAIN_NONE,
+                      label='Additional training data',
+                      help='If you set to *%s*, you should select positive and/or '
                            'negative sets of particles. Regard that our method, '
                            'internally, uses particles that are extracted from '
                            'preprocess micrographs. Steps are:\n'
-                           '1) mic donwsampling to the required size such that '
+                           '1) donwsampling to the required size such that '
                            'the particle box size is 128\n'
-                           '2) according to your selection, mic contrast '
-                           'inversion (to white particles).\n'
-                           '3) mic normalization to 0 mean and 1 std\n'
-                           'Then, particles are extracted with no further '
-                           'alteration.\n'
-                           '4.a) Optionally, CTF correction of particles '
-                           'if asked in the form.\n'
-                           'Please ensure that the additional particles '
-                           'have been preprocessed as indicated before.')
-        
+                           '2) phase flipping using CTF.\n'
+                           '3) normalization to 0 mean and 1 std\n'
+                           'Then, particles are extracted with no further alteration.\n'
+                           'Please ensure that the additional particles have been '
+                           'preprocessed as indicated before.\n\n'
+                           'Alternatively, you can use a precompiled dataset '
+                           'by selecting *%s* or, just, use only the '
+                           'input coorditanes (*%s*).'
+                           % (self.ADD_TRAIN_CUST, self.ADD_TRAIN_MODEL,
+                              self.ADD_TRAIN_NONE))
         form.addParam('trainPosSetOfParticles', params.PointerParam,
-                      label="Positive train particles 128px (optional)", allowsNull=True,
-                      pointerClass='SetOfParticles', condition='addTrainingData',
+                      label="Positive train particles 128px (optional)",
+                      pointerClass='SetOfParticles', allowsNull=True,
+                      condition='addTrainingData==%s'%self.ADD_TRAIN_CUST,
                       help='Select a set of true positive particles. '
                            'Take care of the preprocessing')
         form.addParam('trainPosWeight', params.IntParam, default='1',
                       label="Weight of positive additional train particles",
-                      condition='addTrainingData', allowsNull=True,
+                      condition='addTrainingData==%s' % self.ADD_TRAIN_CUST,
+                      allowsNull=True,
                       help='Select the weigth for the additional train set of '
                            'positive particles.The weight value indicates '
                            'internal particles are weighted with 1. '
                            'If weight is -1, weight will be calculated such that '
                            'the contribution of additional data is equal to '
                            'the contribution of internal particles')
-        
         form.addParam('trainNegSetOfParticles', params.PointerParam,
-                      label="Negative train particles 128px (optional)", allowsNull=True,
-                      pointerClass='SetOfParticles', condition='addTrainingData',
+                      label="Negative train particles 128px (optional)",
+                      pointerClass='SetOfParticles',  allowsNull=True,
+                      condition='addTrainingData==%s'%self.ADD_TRAIN_CUST,
                       help='Select a set of false positive particles. '
                            'Take care of the preprocessing')
         form.addParam('trainNegWeight', params.IntParam, default='1',
                       label="Weight of negative additional train particles",
-                      condition='addTrainingData', allowsNull=True,
+                      condition='addTrainingData==%s' % self.ADD_TRAIN_CUST,
+                      allowsNull=True,
                       help='Select the weigth for the additional train set of '
                            'negative particles. The weight value indicates '
                            'the number of times each image may be included at '
@@ -248,7 +258,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
                            'will be calculated such that the contribution of '
                            'additional data is equal to the contribution of '
                            'internal particles')
-
 
         form.addParallelSection(threads=2, mpi=1)
 
@@ -265,6 +274,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
 
 #--------------------------- INSERT steps functions ---------------------------
     def _insertAllSteps(self):
+        writeSetOfParticles(self.retrieveTrainSets(),
+                            self._getTmpPath("addTrainParticles.xmd"))
+
         self.inputMicrographs = None
         self.boxSize = None
         self.coordinatesDict = {}
@@ -304,18 +316,55 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking):
         for mode in ["AND", "OR", "NOISE"]:
             consensusCoordsPath = self.CONSENSUS_COOR_PATH_TEMPLATE % mode
             makePath(self._getExtraPath(consensusCoordsPath))
+
         if self.testPosSetOfParticles.get() and self.testNegSetOfParticles.get():
             writeSetOfParticles(self.testPosSetOfParticles.get(),
                                 self._getExtraPath("testTrueParticlesSet.xmd"))
             writeSetOfParticles(self.testNegSetOfParticles.get(),
                                 self._getExtraPath("testFalseParticlesSet.xmd"))
 
-        if self.trainPosSetOfParticles.get():
-            writeSetOfParticles(self.trainPosSetOfParticles.get(),
-                                self._getExtraPath("trainTrueParticlesSet.xmd"))
-        if self.trainNegSetOfParticles.get():
-            writeSetOfParticles(self.trainNegSetOfParticles.get(),
-                                self._getExtraPath("trainFalseParticlesSet.xmd"))
+        if self.addTrainingData.get() == self.ADD_TRAIN_CUST:
+            if self.trainPosSetOfParticles.get():
+                writeSetOfParticles(self.trainPosSetOfParticles.get(),
+                                    self._getExtraPath("trainTrueParticlesSet.xmd"))
+            if self.trainNegSetOfParticles.get():
+                writeSetOfParticles(self.trainNegSetOfParticles.get(),
+                                    self._getExtraPath("trainFalseParticlesSet.xmd"))
+        elif self.addTrainingData.get() == self.ADD_TRAIN_MODEL:
+            writeSetOfParticles(self.retrieveTrainSets(),
+                                self._getTmpPath("addTrainParticles.xmd"))
+
+    def retrieveTrainSets(self):
+        """ Retrieve, link and return a setOfParticles
+            corresponding to the NegativeTrain DeepConsensus trainning set
+            with certain extraction conditions (phaseFlip/invContrast)
+        """
+        prefixYES = ''
+        prefixNO = 'no'
+        modelType = "negativeTrain_%sPhaseFlip_%sInvert.mrcs" % (
+                    prefixYES if self.doInvert.get() else prefixNO,
+                    prefixYES if self.ignoreCTF.get() else prefixNO)
+        modelPath = xmipp3.Plugin.getModel("deepConsensus", modelType)
+        modelFn = self._getTmpPath(modelType)
+        pwutils.createLink(modelPath, modelFn)
+
+        tmpSqliteSuff = "AddTrain"
+        partSet = self._createSetOfParticles(tmpSqliteSuff)
+        img = SetOfParticles.ITEM_TYPE()
+
+        imgh = ImageHandler()
+        _, _, _, n = imgh.getDimensions(modelFn)
+        if n > 1:
+            for index in range(1, n + 1):
+                img.cleanObjId()
+                img.setMicId(9999)
+                img.setFileName(modelFn)
+                img.setIndex(index)
+                partSet.append(img)
+        partSet.setAlignment(ALIGN_NONE)
+
+        cleanPath(self._getPath("particles%s.sqlite"%tmpSqliteSuff))
+        return partSet
 
     def _getInputMicrographs(self):
 

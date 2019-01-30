@@ -160,7 +160,6 @@ class XmippViewer(DataViewer):
                                            
         elif (issubclass(cls, XmippProtExtractParticles) or
               issubclass(cls, XmippProtScreenParticles)):
-            print("visualizaing XmippProtExtractParticles or XmippProtScreenParticles")
             particles = obj.outputParticles
             self._visualize(particles)
 

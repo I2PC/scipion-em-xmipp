@@ -93,7 +93,7 @@ class Plugin(pyworkflow.em.Plugin):
     def getModel(self, *modelPath):
         """ Returns the path to the models folder followed by
             the given relative path.
-        Ex: .../xmippModels/myModel/myFile.h5 = getModel('myModel', myFile.h5')
+        Ex: .../xmippModels/myModel/myFile.h5 <= getModel('myModel', myFile.h5')
         """
         return getXmippPath('models', *modelPath)
 
