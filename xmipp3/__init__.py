@@ -132,10 +132,18 @@ class Plugin(pyworkflow.em.Plugin):
 
         ## EXTRA PACKAGES ##
         def tryAddPipModule(moduleName, *args, **kwargs):
+            """ To try to add certain pipModule.
+                If it fails due to it is already add by other plugin or Scipion,
+                  just returns its name to use it as a dependency.
+                Raise the exception if unknown error is gotten.
+            """
             try:
-                return env.addPipModule(moduleName, *args, **kwargs)
-            except Exception: #If already added
-                return moduleName
+                return env.addPipModule(moduleName, *args, **kwargs)._name
+            except Exception as e:
+                if "Duplicated target '%s'" % moduleName == str(e):
+                    return moduleName
+                else:
+                    raise Exception(e)
 
         joblib = tryAddPipModule('joblib', '0.11', target='joblib*')
 
@@ -175,9 +183,7 @@ class Plugin(pyworkflow.em.Plugin):
                                              % (pipCmdScipion, tensorFlowTarget))
             keras=env.addPipModule('keras', '2.1.5', target='keras*', default=False,
                                    deps=[cv2, h5py])
-
         else:
-
             tensor = env.addPipModule('tensorflow', target='tensorflow*',
                                       default=False,
                                       pipCmd="%s https://storage.googleapis.com/"
@@ -185,17 +191,17 @@ class Plugin(pyworkflow.em.Plugin):
                                              "tensorflow-%s-cp27-none-"
                                              "linux_x86_64.whl"
                                              % (pipCmdScipion, tensorFlowTarget))
-
             keras = env.addPipModule('keras', '2.2.2', target='keras',
                                      default=False, deps=[cv2, h5py])
 
-        deppLearnigTools = [scikit_learn, keras, tensor]
-
+        deppLearnigTools = [scikit_learn, keras._name, tensor._name]
+        target = "installed_%s" % '_'.join([tool for tool in deppLearnigTools])
         env.addPackage('deepLearnigToolkit', urlSuffix='external',
-                       commands=[("echo;echo ' > Installed deepLearnig-Toolkit: %s';"
-                                  "echo ; touch done"
-                                  % str([tool._name for tool in deppLearnigTools]),
-                                  'done')],
+                       commands=[("echo;echo ' > DeepLearnig-Toolkit installed: %s';"
+                                  "echo ; touch %s"
+                                  % (str([tool for tool in deppLearnigTools]),
+                                     target),
+                                  target)],
                        deps=deppLearnigTools)
 
         ## --- END OF DEEP LEARNING TOOLKIT --- ##
