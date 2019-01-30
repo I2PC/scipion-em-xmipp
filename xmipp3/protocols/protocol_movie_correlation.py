@@ -71,7 +71,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
                       help="linear (faster but lower quality), "
                            "cubic (slower but more accurate).")
 
-        form.addHidden(params.USE_GPU, params.BooleanParam, default=False,
+        form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
                        label="Use GPU for execution",
                        help="This protocol has both CPU and GPU implementation.\
                        Select the one you want to use.")
