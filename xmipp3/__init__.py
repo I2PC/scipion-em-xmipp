@@ -131,28 +131,28 @@ class Plugin(pyworkflow.em.Plugin):
 
 
         ## EXTRA PACKAGES ##
+        def tryAddPipModule(moduleName, *args, **kwargs):
+            try:
+                return env.addPipModule(moduleName, *args, **kwargs)
+            except Exception: #If already added
+                return moduleName
+
+        joblib = tryAddPipModule('joblib', '0.11', target='joblib*')
 
         ## --- DEEP LEARNING TOOLKIT --- ##
-        try:
-          scipy = env.addPipModule('scipy', '0.14.0', default=False, deps=['lapack', 'matplotlib'])
-        except Exception: #If already added
-            pass                     
-        try:
-          cython = env.addPipModule('cython', '0.22', target='Cython-0.22*',
+        scipy = tryAddPipModule('scipy', '0.14.0', default=False,
+                                deps=['lapack', 'matplotlib'])
+        cython = tryAddPipModule('cython', '0.22', target='Cython-0.22*',
+                                 default=False)
+        scikit_learn = tryAddPipModule('scikit-learn', '0.19.1',
+                                       target='scikit_learn*',
+                                       default=False, deps=[scipy, cython])
+        unittest2 = tryAddPipModule('unittest2', '0.5.1', target='unittest2*',
                                     default=False)
-        except Exception: #If already added
-          pass
-
-        scikit_learn = env.addPipModule('scikit-learn', '0.19.1',
-                                        target='scikit_learn*',
-                                        default=False, deps=['scipy'])
-        unittest2 = env.addPipModule('unittest2', '0.5.1', target='unittest2*',
-                                     default=False)
-        h5py = env.addPipModule('h5py', '2.8.0rc1', target='h5py*',
-                                default=False, deps=[unittest2])
-
-        cv2 = env.addPipModule('opencv-python', "3.4.2.17",
-                               target="cv2", default=False)
+        h5py = tryAddPipModule('h5py', '2.8.0rc1', target='h5py*',
+                               default=False, deps=[unittest2])
+        cv2 = tryAddPipModule('opencv-python', "3.4.2.17",
+                              target="cv2", default=False)
         # TensorFlow
         tensorFlowTarget = "1.10.0" #cuda 9
         nvccProgram = subprocess.Popen(["which", "nvcc"],
@@ -173,8 +173,8 @@ class Plugin(pyworkflow.em.Plugin):
                                              "tensorflow_gpu-%s-cp27-none-"
                                              "linux_x86_64.whl"
                                              % (pipCmdScipion, tensorFlowTarget))
-            keras=env.addPipModule('keras', '2.1.5', target='keras*',
-                                   default=False, deps=[h5py])
+            keras=env.addPipModule('keras', '2.1.5', target='keras*', default=False,
+                                   deps=[cv2, h5py])
 
         else:
 
@@ -187,7 +187,7 @@ class Plugin(pyworkflow.em.Plugin):
                                              % (pipCmdScipion, tensorFlowTarget))
 
             keras = env.addPipModule('keras', '2.2.2', target='keras',
-                                   default=False, deps=[ h5py])
+                                     default=False, deps=[cv2, h5py])
 
         deppLearnigTools = [scikit_learn, keras, tensor]
 
