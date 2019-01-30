@@ -321,4 +321,26 @@ class XmippProtMovieCorr(ProtAlignMovies):
         errors = ProtAlignMovies._validate(self)
         if self.doLocalAlignment.get() and not self.useGpu.get():
             errors.append("GPU is needed to do local alignment.")
+        if (self.controlPointX < 3):
+            errors.append("You have to use at least 3 control points in X dim")
+            return errors # to avoid possible division by zero later
+        if (self.controlPointY < 3):
+            errors.append("You have to use at least 3 control points in Y dim")
+            return errors # to avoid possible division by zero later
+        if (self.controlPointT < 3):
+            errors.append("You have to use at least 3 control points in T dim")
+            return errors # to avoid possible division by zero later
+        _,_,frames = self.inputMovies.get().getDimensions()
+        tPointsRatio = frames / (int(self.controlPointT) - 2)
+        yPointsRatio = int(self.patchY) / (int(self.controlPointY) - 2)
+        xPointsRatio = int(self.patchX) / (int(self.controlPointX) - 2)
+        if (tPointsRatio < 2):
+            errors.append("You need at least 2 measurements per control point, "
+                "i.e. use movie with more frames or decrease number of control points in T dimension.")
+        if (yPointsRatio < 2):
+            errors.append("You need at least 2 measurements per control point, "
+                "i.e. use more patches in Y dimesion or decrease number of control points.")
+        if (xPointsRatio < 2):
+            errors.append("You need at least 2 measurements per control point, "
+                "i.e. use more patches in X dimesion or decrease number of control points.")
         return errors
