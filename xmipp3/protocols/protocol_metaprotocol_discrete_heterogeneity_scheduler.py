@@ -34,7 +34,7 @@ from xmipp3.protocols import XmippMetaProtCreateSubset
 import time
 from pyworkflow.em.protocol import ProtMonitor
 import pyworkflow.object as pwobj
-from pyworkflow.manager import Manager
+from pyworkflow.project import Manager
 from pyworkflow.em.data import Volume
 from pyworkflow.protocol import getProtocolFromDb
 
