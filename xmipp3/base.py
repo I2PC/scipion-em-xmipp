@@ -31,9 +31,9 @@ import sys
 import platform
 from collections import OrderedDict
 
-import pyworkflow.dataset as ds
+import pyworkflow.tests.tests as ds
 from pyworkflow.object import ObjectWrap
-from pyworkflow.dataset import (
+from pyworkflow.em.viewers.showj import (
     COL_RENDER_CHECKBOX, COL_RENDER_TEXT, COL_RENDER_IMAGE, COL_RENDER_VOLUME)
 
 import xmippLib
