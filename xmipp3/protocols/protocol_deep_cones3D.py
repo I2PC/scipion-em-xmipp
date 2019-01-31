@@ -207,7 +207,7 @@ _noiseCoord   '0'
                                 [-s, c, s * Xdim2 + (1 - c) * Ydim2 + deltaY]])
                 newImg = cv2.warpAffine(I.getData(), M, (Xdim, Ydim))
                 if boolNoise:
-                    newImg = newImg + np.random.normal(0.0, 4.0, [Xdim, Xdim]) #AJ 2.0 antes
+                    newImg = newImg + np.random.normal(0.0, 5.0, [Xdim, Xdim]) #AJ 2.0 antes
                 newFn = ('%06d@'%idx)+fnExp[:-3]+'stk'
                 newImage.setData(newImg)
                 newImage.write(newFn)
@@ -224,6 +224,11 @@ _noiseCoord   '0'
             lastFnExp = self._getExtraPath(nameExp+"%d.xmd"%(label-1))
             self.runJob("xmipp_metadata_utilities", " -i %s --set union %s -o %s " %
                         (lastFnExp, fnExp, fnExp), numberOfMpi=1)
+
+        if label==self.numCones:
+            self.runJob("xmipp_transform_filter", " -i %s --fourier low_pass %f" %
+                        (fnExp, 0.15), numberOfMpi=1)
+
 
     def trainNClassifiers2ClassesStep(self, idx):
 
