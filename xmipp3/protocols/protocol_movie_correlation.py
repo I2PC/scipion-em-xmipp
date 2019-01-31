@@ -108,17 +108,23 @@ class XmippProtMovieCorr(ProtAlignMovies):
                       label="How to fill borders",
                       help='How to fill the borders when shifting the frames')
 
-        #GPU params
+        #Local alignment params
         group = form.addGroup('Local alignment')
 
         group.addParam('doLocalAlignment', params.BooleanParam, default=True,
                       label="Compute local alignment?",
                       help="If Yes, the protocol will try to determine local shifts, similarly to MotionCor2.")
 
+        group.addParam('autoControlPoints', params.BooleanParam, default=True,
+                      label="Auto control points",
+                      expertLevel=cons.LEVEL_ADVANCED,
+                      condition='doLocalAlignment',
+                      help="If on, protocol will automatically determine necessary number of control points.")
+
         line = group.addLine('Number of control points',
                     expertLevel=cons.LEVEL_ADVANCED,
                     help='Number of control points use for BSpline.',
-                    condition='doLocalAlignment')
+                    condition='not autoControlPoints')
         line.addParam('controlPointX', params.IntParam, default=6, label='X')
         line.addParam('controlPointY', params.IntParam, default=6, label='Y')
         line.addParam('controlPointT', params.IntParam, default=5, label='t')
@@ -220,6 +226,12 @@ class XmippProtMovieCorr(ProtAlignMovies):
 
         if self.inputMovies.get().getGain():
             args += ' --gain ' + self.inputMovies.get().getGain()
+
+        if self.autoControlPoints.get():
+            _,_,frames = self.inputMovies.get().getDimensions()
+            self.controlPointX = int(self.patchX) / 3 + 2
+            self.controlPointY = int(self.patchY) / 3 + 2
+            self.controlPointT = int(frames) / 3 + 2
 
         if self.useGpu.get():
             args += ' --device %(GPU)s'
