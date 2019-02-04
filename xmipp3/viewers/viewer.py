@@ -52,6 +52,7 @@ from xmipp3.protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
 from xmipp3.protocols.protocol_multireference_alignability import XmippProtMultiRefAlignability
 from xmipp3.protocols.protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from xmipp3.protocols.protocol_movie_gain import XmippProtMovieGain
+from xmipp3.protocols.protocol_deep_denoising import XmippProtDeepDenoising
 
 class XmippViewer(DataViewer):
     """ Wrapper to visualize different type of objects
@@ -74,7 +75,8 @@ class XmippViewer(DataViewer):
                 XmippProtValidateNonTilt,
                 XmippProtAssignmentTiltPair,
                 XmippProtMultiRefAlignability,
-                XmippProtMovieGain
+                XmippProtMovieGain,
+                XmippProtDeepDenoising
                 ]
     def __createTemporaryCtfs(self, obj, setOfMics):
         pwutils.cleanPath(obj._getPath("ctfs_temporary.sqlite"))
@@ -182,7 +184,19 @@ class XmippViewer(DataViewer):
                     self._views.append(xplotter)
 
 
-                                           
+        elif issubclass(cls, XmippProtDeepDenoising):
+            fn = obj.outputParticles.getFileName()
+            self._views.append(ObjectView(self._project, obj.outputParticles.strId(),
+                                          fn,
+                                          viewParams={VISIBLE:  'enabled id _filename '
+                                                  '_xmipp_corrDenoisedProjection '
+                                                  '_xmipp_corrDenoisedNoisy '
+                                                  '_xmipp_imageOriginal _xmipp_imageRef',
+                                          SORT_BY: 'id',
+                                          MODE: MODE_MD}))
+
+
+
         elif issubclass(cls, XmippProtMovieGain):
             self._visualize(obj.outputMovies)
             movieGainMonitor = MonitorMovieGain(obj,

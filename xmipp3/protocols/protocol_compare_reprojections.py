@@ -121,7 +121,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         args="-i %s -o %s --ref %s --optimizeAngles --optimizeShift --max_shift %d --oresiduals %s --oprojections %s --sampling %f"%\
                     (fnAngles,anglesOutFn,fnVol,floor(xdim*0.05),residualsOutFn,projectionsOutFn,Ts)
         if self.optimizeGray:
-            args+=" --optimizeGray --max_gray_scale 0.95"
+            args+="--optimizeGray --max_gray_scale 0.95 "
         self.runJob("xmipp_angular_continuous_assign2", args)
         fnNewParticles=self._getExtraPath("images.stk")
         if os.path.exists(fnNewParticles):
