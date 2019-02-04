@@ -30,6 +30,7 @@ This modules contains constants related to Xmipp3 protocols
 # ------------------ Constants values --------------------------------------
 
 XMIPP_HOME = 'XMIPP_HOME'
+NMA_HOME = 'NMA_HOME'
 
 MASK_FILL_VALUE = 0
 MASK_FILL_MIN = 1

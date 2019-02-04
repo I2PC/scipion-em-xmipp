@@ -28,6 +28,7 @@
 
 import subprocess
 
+import pyworkflow as pw
 from pyworkflow.em.data import SetOfVolumes
 from pyworkflow.tests import *
 from pyworkflow.utils.properties import colorText
@@ -91,8 +92,8 @@ class TestBasic(BaseTest):
         self.assertEquals(filename, img.getFileName())
 
 
-SHOW_IMAGES  = True  # Launch xmipp_showj to open intermediate results
-CLEAN_IMAGES = True  # Remove the output temporary files
+SHOW_IMAGES  = False  # Launch xmipp_showj to open intermediate results
+CLEAN_IMAGES = True   # Remove the output temporary files
 PRINT_MATRIX = True
 PRINT_FILES  = True
 
@@ -215,7 +216,7 @@ class TestConvertBase(BaseTest):
             print colorText.RED + colorText.BOLD + "WARNING: Gold file '%s' missing!!!" % goldFn + colorText.END
 
         if CLEAN_IMAGES:
-            cleanPath(outputFn)
+            pw.utils.cleanPath(outputFn)
                 
     
 class TestAlignment(TestConvertBase):

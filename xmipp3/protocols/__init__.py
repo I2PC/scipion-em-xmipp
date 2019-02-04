@@ -47,7 +47,7 @@ from .protocol_ctf_defocus_group import XmippProtCTFDefocusGroup
 from .protocol_compare_reprojections import XmippProtCompareReprojections
 from .protocol_compare_angles import XmippProtCompareAngles
 from .protocol_create_gallery import XmippProtCreateGallery
-from .protocol_ctf_discrepancy import XmippProtCTFDiscrepancy
+from .protocol_ctf_consensus import XmippProtCTFConsensus
 from .protocol_ctf_micrographs import XmippProtCTFMicrographs
 from .protocol_ctf_correct_wiener2d import XmippProtCTFCorrectWiener2D
 from .protocol_consensus_classes3D import XmippProtConsensusClasses3D
@@ -101,5 +101,10 @@ from .protocol_volume_strain import XmippProtVolumeStrain
 from .protocol_enrich import XmippProtEnrich
 from .protocol_write_testC import XmippProtWriteTestC
 from .protocol_write_testP import XmippProtWriteTestP
-from .protocol_ctf_selection import XmippProtCTFSelection
-
+from .protocol_deep_denoising import XmippProtDeepDenoising
+from .protocol_generate_reprojections import XmippProtGenerateReprojections
+from .protocol_split_volume_hierarchical_cluster import XmippProtSplitVolumeHierarchical
+from .protocol_reconstruct_heterogeneous import XmippProtReconstructHeterogeneous
+from .protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
+from .protocol_metaprotocol_create_output import XmippMetaProtCreateOutput
+from .protocol_metaprotocol_discrete_heterogeneity_scheduler import XmippMetaProtDiscreteHeterogeneityScheduler # keep this after XmippMetaProtCreateSubset and XmippMetaProtCreateOutput
