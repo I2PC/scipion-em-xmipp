@@ -36,7 +36,7 @@ from xmipp3.protocols.protocol_validate_overfitting import \
     XmippProtValidateOverfitting
 from .plotter import XmippPlotter
 from os.path import exists
-from math import log
+from math import log10
 
 
 class XmippValidateOverfittingViewer(Viewer):
@@ -55,7 +55,7 @@ class XmippValidateOverfittingViewer(Viewer):
                                   'Execute again the protocol\n',
                                   title='Missing result file')]
         plotter = self._createPlot("Validation 3D Reconstruction (Overfitting)",
-                                   "Ln(# Particles)",
+                                   "log10(# Particles)",
                                    "1/Resolution^2 in 1/A^2",
                                    fnOutput, xmippLib.MDL_COUNT,
                                    xmippLib.MDL_AVG)
@@ -86,7 +86,7 @@ class XmippValidateOverfittingViewer(Viewer):
             # AJ new
             xValueNNew = []
             for x in xValueN:
-                val = log(float(x))
+                val = log10(float(x))
                 xValueNNew.append(val)
             # END AJ
             plt.plot(xValueNNew, yValueN, '--', color='r',
@@ -108,7 +108,7 @@ class XmippValidateOverfittingViewer(Viewer):
         # AJ new
         xValueNew = []
         for x in xValue:
-            val = log(float(x))
+            val = log10(float(x))
             xValueNew.append(val)
         # END AJ
         plt.plot(xValueNew, yValue, color='g', label='Aligned particles')
