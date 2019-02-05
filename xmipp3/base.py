@@ -31,10 +31,7 @@ import sys
 import platform
 from collections import OrderedDict
 
-import pyworkflow.dataset as ds
 from pyworkflow.object import ObjectWrap
-from pyworkflow.dataset import (
-    COL_RENDER_CHECKBOX, COL_RENDER_TEXT, COL_RENDER_IMAGE, COL_RENDER_VOLUME)
 
 import xmippLib
 from xmippLib import (MetaData, MetaDataInfo, MDL_IMAGE, MDL_IMAGE1, MDL_IMAGE_REF,
@@ -340,115 +337,6 @@ class XmippSet():
         return setOut   
     
     
-class XmippDataSet(ds.DataSet):
-    """ Provide a DataSet implementation based on Xmipp xmd file.
-    The tables of the dataset will be the blocks in the metadata.
-    Each block is a table on the dataset and is read as an Xmipp metadata. 
-    """
-    def __init__(self, filename):
-        self._filename = filename
-        blocks = xmippLib.getBlocksInMetaDataFile(filename)
-        
-        if not blocks: # If there are no block, add an empty one
-            blocks = ['']
-        ds.DataSet.__init__(self, blocks)
-        
-    def _loadTable(self, tableName):
-        if tableName:
-            mdFn = tableName + "@" + self._filename
-        else:
-            mdFn = self._filename
-        md = xmippLib.MetaData(mdFn)
-        return self._convertMdToTable(md)
-        
-    def _getLabelRenderType(self, label, md):
-        """ Return the way to render each label. """
-        if xmippLib.labelIsImage(label):
-            value = md.getValue(label, md.firstObject())
-            if value.endswith('.vol'):
-                return COL_RENDER_VOLUME
-            return COL_RENDER_IMAGE
-        
-        labelType = xmippLib.labelType(label)
-        if labelType == xmippLib.LABEL_BOOL:
-            return COL_RENDER_CHECKBOX
-        
-        return COL_RENDER_TEXT
-        
-    def _convertLabelToColumn(self, label, md):
-        """ From an Xmipp label, create the corresponding column. """
-        return ds.Column(xmippLib.label2Str(label),
-                         getLabelPythonType(label),
-                         renderType=self._getLabelRenderType(label, md))
-        
-    def _convertMdToTable(self, md):
-        """ Convert a metatada into a table. """
-           
-        labels = md.getActiveLabels()
-        hasTransformation = self._hasTransformation(labels)  
-        columns = [self._convertLabelToColumn(l, md) for l in labels]        
-        #NAPA de LUXE (xmipp deberia saber a que campo va asignado el transformation matrix)             
-        if hasTransformation:
-            columns.append(ds.Column("image_transformationMatrix", str))
-            
-        labelsStr = [col.getName() for col in columns]        
-        
-        table = ds.Table(*columns)
-        
-        for objId in md:
-            values = [md.getValue(l, objId) for l in labels]
-            if hasTransformation:
-                values.append(self._getTransformation(md, objId))
-            d = dict(zip(labelsStr, values))
-            table.addRow(objId, **d)
-            
-        return table
-    
-    def _convertTableToMd(self, table):
-        colLabels = [(col.getName(), xmippLib.str2Label(col.getName()))
-                     for col in table.iterColumns()]
-        md = xmippLib.MetaData()
-        
-        for row in table.iterRows():
-            objId = md.addObject()
-            for col, label in colLabels:
-                if col != 'id':
-                    value = getattr(row, col)
-                    md.setValue(label, value, objId)
-                
-        return md
-        
-    def writeTable(self, tableName, table):
-        """ Write changes made to a table. """
-        md = self._convertTableToMd(table)
-        md.write("%s@%s" % (tableName, self._filename), xmippLib.MD_APPEND)
-
-        
-    def _hasTransformation(self, labels):
-        for l in [xmippLib.MDL_SHIFT_X, xmippLib.MDL_SHIFT_Y,
-                  xmippLib.MDL_SHIFT_Z, xmippLib.MDL_ANGLE_ROT,
-                  xmippLib.MDL_ANGLE_TILT, xmippLib.MDL_ANGLE_PSI]:
-            if l in labels:
-                return True
-        return False
-        
-    def _getTransformation(self, md, objId):
-        rot  = md.getValue(xmippLib.MDL_ANGLE_ROT, objId) or 0.
-        tilt = md.getValue(xmippLib.MDL_ANGLE_TILT, objId) or 0.
-        psi  = md.getValue(xmippLib.MDL_ANGLE_PSI, objId) or 0.
-
-        tMatrix = xmippLib.Euler_angles2matrix(rot, tilt, psi)
-        x = md.getValue(xmippLib.MDL_SHIFT_X, objId) or 0.
-        y = md.getValue(xmippLib.MDL_SHIFT_Y, objId) or 0.
-        z = md.getValue(xmippLib.MDL_SHIFT_Z, objId) or 0.
-
-        matrix = [tMatrix[0][0], tMatrix[0][1], tMatrix[0][2], x,
-                  tMatrix[1][0], tMatrix[1][1], tMatrix[1][2], y,
-                  tMatrix[2][0], tMatrix[2][1], tMatrix[2][2], z]
-
-        return matrix
-        
-        
 class ProjMatcher():
     """ Base class for protocols that use a projection """
     
