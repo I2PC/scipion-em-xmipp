@@ -228,10 +228,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
             args += ' --gain ' + self.inputMovies.get().getGain()
 
         if self.autoControlPoints.get():
-            _,_,frames = self.inputMovies.get().getDimensions()
-            self.controlPointX = int(self.patchX) / 3 + 2
-            self.controlPointY = int(self.patchY) / 3 + 2
-            self.controlPointT = int(frames) / 3 + 2
+            self._setControlPoints()
 
         if self.useGpu.get():
             args += ' --device %(GPU)s'
@@ -260,6 +257,12 @@ class XmippProtMovieCorr(ProtAlignMovies):
     #--------------------------- UTILS functions ------------------------------
     def _getShiftsFile(self, movie):
         return self._getExtraPath(self._getMovieRoot(movie) + '_shifts.xmd')
+
+    def _setControlPoints(self):
+            _,_,frames = self.inputMovies.get().getDimensions()
+            self.controlPointX.set( int(self.patchX) / 3 + 2)
+            self.controlPointY.set(int(self.patchY) / 3 + 2)
+            self.controlPointT.set(int(frames) / 3 + 2)
 
     def _getMovieShifts(self, movie):
         from ..convert import readShiftsMovieAlignment
@@ -330,6 +333,8 @@ class XmippProtMovieCorr(ProtAlignMovies):
         return alignedMovie
 
     def _validate(self):
+        if self.autoControlPoints.get():
+            self._setControlPoints() # make sure we work with proper values
         errors = ProtAlignMovies._validate(self)
         if self.doLocalAlignment.get() and not self.useGpu.get():
             errors.append("GPU is needed to do local alignment.")
