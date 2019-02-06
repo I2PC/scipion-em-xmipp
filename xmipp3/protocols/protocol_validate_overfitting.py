@@ -100,6 +100,10 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                       help="See [[Xmipp Symmetry][http://www2.mrc-lmb.cam.ac.uk/Xmipp/index.php/Conventions_%26_File_formats#Symmetry]] page"
                            "for a description of the symmetry format"
                            "accepted by Xmipp")
+        # AJ NEW
+        form.addParam('useGpu', BooleanParam, default=False,
+                      label='Use GPU?')
+        # END AJ
         form.addParam('numberOfParticles', NumericListParam,
                       default="10 20 50 100 200 500 1000 1500 2000 3000 5000",
                       expertLevel=LEVEL_ADVANCED,
@@ -246,7 +250,13 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
             params += ' --thr 1'
             # params += ' --thr %d' % self.numberOfThreads.get()
             params += ' --sampling %f' % Ts
-            self.runJob('xmipp_reconstruct_fourier', params)
+
+            # AJ NEW condition
+            if not self.useGpu.get():
+                self.runJob('xmipp_reconstruct_fourier', params)
+            else:
+                params += ' --fftOnGPU '
+                self.runJob('xmipp_cuda_reconstruct_fourier', params, numberOfMpi=1)
 
             # for noise
             # AJ NEW condition
@@ -287,13 +297,6 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                             numberOfMpi=self.numberOfMpi.get())
                 # numberOfMpi = self.numberOfMpi.get() * self.numberOfThreads.get())
 
-                # #AJ
-                # args = '-i_ref %s -i_exp %s -o %s --keep_best %d ' % \
-                #        (self._getExtraPath("Ref_Projections.stk"), fnImgsN,
-                #         fnImgsAlignN, 1)
-                # self.runJob("xmipp_cuda_correlation", args, numberOfMpi=1)
-                # #FIN AJ
-
                 params = '  -i %s' % fnImgsAlignN
                 params += '  -o %s' % fnRootN + "_%02d_%02d.vol" % (
                 i, iteration)
@@ -303,7 +306,14 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                 params += ' --thr 1'
                 # params += ' --thr %d' % self.numberOfThreads.get()
                 params += ' --sampling %f' % Ts
-                self.runJob('xmipp_reconstruct_fourier', params)
+
+                # AJ NEW condition
+                if not self.useGpu.get():
+                    self.runJob('xmipp_reconstruct_fourier', params)
+                else:
+                    params += ' --fftOnGPU '
+                    self.runJob('xmipp_cuda_reconstruct_fourier', params, numberOfMpi=1)
+
 
         self.runJob('xmipp_resolution_fsc',
                     "--ref %s -i %s -o %s --sampling_rate %f" % \
@@ -360,11 +370,11 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
 
     def gatherResultsStep(self, debugging):
         self._writeFreqsMetaData("fraction*_freq.txt",
-                                 self._defineResultsName())
+                                 self._defineResultsTxt())
         # AJ NEW condition
         if self.doNoise.get():
             self._writeFreqsMetaData("Nfraction*_freq.txt",
-                                     self._defineResultsNoiseName())
+                                     self._defineResultsNoiseTxt())
 
         if not debugging:
             #cleanPattern(self._getExtraPath("fraction*_freq.txt")) AJ volver
@@ -426,36 +436,56 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
 
         numberOfParticles = getFloatListFromValues(self.numberOfParticles.get())
         validationMd = xmippLib.MetaData()
+        fnOut = open(outputFn, 'w')
 
         for fnFreq in fnFreqs:
             print fnFreq
             data = []
+            dataInv = []
             fnFreqOpen = open(fnFreq, "r")
             for line in fnFreqOpen:
                 fields = line.split()
                 rowdata = map(float, fields)
+                print("rowdata",rowdata)
                 #AJ cambio
-                for i, val in enumerate(rowdata):
-                    rowdata[i] = 1.0/(val*val)
+                val = 1.0/(float(rowdata[0])*float(rowdata[0]))
+                dataInv.append(val)
                 #FIN AJ
                 data.extend(rowdata)
+                print("data", data, dataInv)
             meanRes = (sum(data) / len(data))
             data[:] = [(x - meanRes) ** 2 for x in data]
             varRes = (sum(data) / (len(data) - 1))
             stdRes = sqrt(varRes)
 
-            objId = validationMd.addObject()
-            validationMd.setValue(xmippLib.MDL_COUNT,
-                                  long(numberOfParticles[subset]),
-                                  objId)
-            validationMd.setValue(xmippLib.MDL_AVG, meanRes, objId)
-            validationMd.setValue(xmippLib.MDL_STDDEV, stdRes, objId)
+            meanResInv = (sum(dataInv) / len(dataInv))
+            dataInv[:] = [(x - meanResInv) ** 2 for x in dataInv]
+            varResInv = (sum(dataInv) / (len(dataInv) - 1))
+            stdResInv = sqrt(varResInv)
+
+            fnOut.write(str(numberOfParticles[subset]) + ' ' + str(meanRes)
+                        + ' ' + str(stdRes) + ' ' + str(meanResInv) + ' '
+                        + str(stdResInv) + '\n')
+        #
+        #     objId = validationMd.addObject()
+        #     validationMd.setValue(xmippLib.MDL_COUNT,
+        #                           long(numberOfParticles[subset]),
+        #                           objId)
+        #     validationMd.setValue(xmippLib.MDL_AVG, meanRes, objId)
+        #     validationMd.setValue(xmippLib.MDL_STDDEV, stdRes, objId)
             subset += 1
 
-        validationMd.write(outputFn)
+        # validationMd.write(outputFn)
+        fnOut.close()
 
-    def _defineResultsName(self):
-        return self._getExtraPath('results.xmd')
+    # def _defineResultsName(self):
+    #     return self._getExtraPath('results.xmd')
+    #
+    # def _defineResultsNoiseName(self):
+    #     return self._getExtraPath('resultsNoise.xmd')
 
-    def _defineResultsNoiseName(self):
-        return self._getExtraPath('resultsNoise.xmd')
+    def _defineResultsTxt(self):
+        return self._getExtraPath('outputValues.txt')
+
+    def _defineResultsNoiseTxt(self):
+        return self._getExtraPath('outputNoiseValues.txt')
