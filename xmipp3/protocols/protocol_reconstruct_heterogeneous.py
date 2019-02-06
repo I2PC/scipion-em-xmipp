@@ -23,32 +23,33 @@
 # *  e-mail address 'jmdelarosa@cnb.csic.es'
 # *
 # **************************************************************************
-"""
-Protocol to perform high-resolution reconstructions
-"""
 
 from glob import glob
 import math
 import numpy as np
+from os.path import join, exists
 
+from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, \
     BooleanParam, IntParam
 from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile
 from pyworkflow.em.protocol import ProtClassify3D
 from pyworkflow.em.metadata.utils import getFirstRow, getSize
-from os.path import join, exists
-from xmipp3.convert import createItemMatrix, setXmippAttributes, \
-    writeSetOfParticles, readSetOfParticles
 from pyworkflow.em.convert import ImageHandler
 import pyworkflow.em.metadata as md
 import pyworkflow.em as em
+
 import xmippLib
 from xmippLib import MetaData, MD_APPEND, MDL_CLASS_COUNT
+from xmipp3.convert import createItemMatrix, setXmippAttributes, \
+    writeSetOfParticles, readSetOfParticles
+
 
 class XmippProtReconstructHeterogeneous(ProtClassify3D):
     """3D Reconstruction with heterogeneous datasets"""
     _label = 'significant heterogeneity'
+    _lastUpdateVersion = VERSION_2_0
 
     def __init__(self, **args):
         ProtClassify3D.__init__(self, **args)
