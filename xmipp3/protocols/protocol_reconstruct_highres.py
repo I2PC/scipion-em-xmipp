@@ -828,7 +828,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                 else:
                                     if exists(fnAngles) and exists(fnAnglesGroup):
                                         self.runJob("xmipp_metadata_utilities","-i %s --set union_all %s"%(fnAngles,fnAnglesGroup),numberOfMpi=1)
-                    self.runJob("xmipp_metadata_utilities","-i %s --set join %s image"%(fnAngles,fnImgs),numberOfMpi=1)
+                    if exists(fnAngles) and exists(fnImgs):
+                        self.runJob("xmipp_metadata_utilities","-i %s --set join %s image"%(fnAngles,fnImgs),numberOfMpi=1)
                     if self.saveSpace and ctfPresent:
                         self.runJob("rm -f",fnDirSignificant+"/gallery*",numberOfMpi=1)
                 
@@ -1213,6 +1214,9 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     fnAnglesToUse = fnCorrectedImagesRoot+".xmd"
                     deleteStack = True
                     deletePattern = fnCorrectedImagesRoot+".*"
+                    if self.alignmentMethod!=self.STOCHASTIC_ALIGNMENT:
+                        self.runJob('xmipp_metadata_utilities','-i %s --set intersection %s particleId particleId'%(fnAngles,fnAnglesToUse),numberOfMpi=1) 
+                        # This is because eliminate_largeEnergy may have reduced the number of images in fnAngles
                 
                 if self.contGrayValues or (self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT and iteration>=5):
                     grayAdjusted=True
