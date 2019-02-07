@@ -846,7 +846,7 @@ def writeMicCoordinates(mic, coordList, outputFn, isManual=True,
             it can be useful for scaling the coordinates if needed.
     """
     if getPosFunc is None:
-        getPosFunc = lambda coord: coord.getPostion()
+        getPosFunc = lambda coord: coord.getPosition()
 
     state = 'Manual' if isManual else 'Supervised'
     f = openMd(outputFn, state)
