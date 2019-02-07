@@ -33,13 +33,16 @@ from pyworkflow.utils.path import cleanPath
 from pyworkflow.protocol.constants import (STEPS_PARALLEL, STEPS_SERIAL, LEVEL_ADVANCED)
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtParticlePicking
-from pyworkflow.em.data import SetOfCoordinates, Coordinate
+from pyworkflow.em.data import SetOfCoordinates, Coordinate, Micrograph
 import pyworkflow.em.metadata as MD
-from xmipp3.convert import writeSetOfCoordinates, readSetOfCoordinates
+from xmipp3.convert import writeSetOfCoordinates, writeMicCoordinates, readSetOfCoordinates
 from xmipp3 import XmippProtocol
-import numpy as np
-from scipy.spatial.distance import cdist
+
 from pyworkflow.object import Float
+
+
+IN_COORDS_POS_DIR_BASENAME= "pickNoiseInPosCoordinates"
+OUT_COORDS_POS_DIR_BASENAME= "pickNoiseOutPosCoordinates"
 
 class XmippProtPickNoise(ProtParticlePicking, XmippProtocol):
     """Protocol to pick noise particles"""
@@ -81,8 +84,8 @@ class XmippProtPickNoise(ProtParticlePicking, XmippProtocol):
         boxSize = setOfCoords.getBoxSize()
         inCoordsFname= setOfCoords.getFileName()
         outPath = self._getExtraPath()
-        inCoordsPosDir= os.path.join(outPath,  "inPosCoordinates")
-        outCoordsRawTxtDir=os.path.join(outPath, "outPosCoordinates")
+        inCoordsPosDir= os.path.join(outPath,  IN_COORDS_POS_DIR_BASENAME)
+        outCoordsPosDir=os.path.join(outPath, OUT_COORDS_POS_DIR_BASENAME)
         
         mics= setOfCoords.getMicrographs()
         for mic in setOfCoords.getMicrographs():   
@@ -92,20 +95,20 @@ class XmippProtPickNoise(ProtParticlePicking, XmippProtocol):
         argTuple=(boxSize, outPath, mics_dir, )
         deps=[]
         deps.append(self._insertFunctionStep("prepareInput"))
-        deps.append(self._insertFunctionStep("pickNoiseStep", mics_dir, inCoordsPosDir, outCoordsRawTxtDir, 
+        deps.append(self._insertFunctionStep("pickNoiseStep", mics_dir, inCoordsPosDir, outCoordsPosDir, 
                                               boxSize, self.extractNoiseNumber.get(),
                                               self.numberOfThreads.get()) )
                                               
-#        deps.append(self._insertFunctionStep("loadCoords", mics_dir, outCoordsRawTxtDir, boxSize)
+#        deps.append(self._insertFunctionStep("loadCoords", mics_dir, outCoordsPosDir, boxSize)
         
-        self._insertFunctionStep('createOutputStep', outCoordsRawTxtDir, prerequisites=deps)
+        self._insertFunctionStep('createOutputStep', outCoordsPosDir, prerequisites=deps)
         
     #--------------------------- STEPS functions -------------------------------
     
-    def pickNoiseStep(self, mics_dir, inCoordsPosDir, outCoordsRawTxtDir, 
+    def pickNoiseStep(self, mics_dir, inCoordsPosDir, outCoordsPosDir, 
                             boxSize, extractNoiseNumber, nThr):
                                               
-        args=" -i %s -c %s -o %s -s %s -n %s -t %s"%(mics_dir, inCoordsPosDir, outCoordsRawTxtDir, 
+        args=" -i %s -c %s -o %s -s %s -n %s -t %s"%(mics_dir, inCoordsPosDir, outCoordsPosDir, 
                                  boxSize, extractNoiseNumber,nThr)
                                  
         self.runJob('xmipp_pick_noise', args, numberOfMpi=1)
@@ -114,9 +117,9 @@ class XmippProtPickNoise(ProtParticlePicking, XmippProtocol):
     def prepareInput(self):
       pickNoise_prepareInput(self.inputCoordinates.get(), self._getExtraPath())
         
-    def createOutputStep( self, outCoordsRawTxtDir):
-      noiseCoords= writeSetOfCoordsFromPosFnames(txt_coords_dirPath=outCoordsRawTxtDir, 
-                                              setOfInputCoords=self.inputCoordinates.get())
+    def createOutputStep( self, outCoordsPosDir):
+      noiseCoords= readSetOfCoordsFromPosFnames(outCoordsPosDir, sqliteOutName=self._getExtraPath('consensus_NOISE.sqlite') ,
+                                                setOfInputCoords=self.inputCoordinates.get())
 
       coordSet = self._createSetOfCoordinates(self.inputCoordinates.get().getMicrographs() )
       coordSet.copyInfo(noiseCoords)
@@ -143,58 +146,90 @@ class XmippProtPickNoise(ProtParticlePicking, XmippProtocol):
         return summary
 
 
-def writeSetOfCoordsFromPosFnames( txt_coords_dirPath, setOfInputCoords, sqliteOutName=None):
+#def readSetOfCoordsFromPosFnames( txt_coords_dirPath, setOfInputCoords, sqliteOutName=None):
+#  '''
+#  txt_coords_dirPath: path where there are txt files with coordinates
+#  setOfInputCoords. Set to find micrographs
+#  setOfOutputCoordinates if not none, set where results will be written.
+#  '''
+#  sufix="_raw_coords.txt"  
+#  inputMics = setOfInputCoords.getMicrographs()
+#  micIds= inputMics.getIdSet()
+#  micNameToMicId={}
+#  for micId in micIds:
+#    mic= inputMics[micId]
+#    micNameToMicId[".".join( os.path.basename(mic.getFileName()).split(".")[:-1] )]= micId
+
+#  if not sqliteOutName:
+#    sqliteOutName= os.path.join(txt_coords_dirPath, 'consensus_NOISE.sqlite')
+#  cleanPath('coordinates_randomPick.sqlite')
+#  cleanPath(sqliteOutName)
+
+#  setOfOutputCoordinates= SetOfCoordinates(filename= sqliteOutName)
+#  setOfOutputCoordinates.setMicrographs(inputMics)
+#  setOfOutputCoordinates.setBoxSize( setOfInputCoords.getBoxSize())
+#  nCoords=0
+#  for fname in os.listdir( txt_coords_dirPath ):
+#    if sufix is None or fname.endswith(sufix):
+#      with open(os.path.join(txt_coords_dirPath, fname)) as f:
+#        mic_name= f.readline().split()[0]
+#        try:
+#          inputMic= inputMics[micNameToMicId[mic_name]]
+#        except KeyError as e:
+#          print("Error, micName not found %s"% mic_name)
+#          continue
+#        for line in f:
+#          x_new, y_new = line.split()
+#          x_new, y_new = int(x_new), int(y_new)
+#          aux = Coordinate()
+#          aux.setMicrograph( inputMics[micNameToMicId[mic_name]] )
+#          aux.setX(x_new)
+#          aux.setY(y_new)
+#          setOfOutputCoordinates.append(aux )
+#          nCoords+=1
+#  if nCoords==0:
+#    raise Exception("No coordinates were picked. Check if the micrographs are in place") 
+#  setOfOutputCoordinates.write()
+#  return setOfOutputCoordinates
+
+
+def readSetOfCoordsFromPosFnames( posDir, setOfInputCoords, sqliteOutName, write=True):
   '''
-  txt_coords_dirPath: path where there is txt files with coordinates
+  posDir: path where there are .pos files with coordinates
   setOfInputCoords. Set to find micrographs
-  setOfNoiseCoordinates if not none, set where results will be written.
+  setOfOutputCoordinates if not none, set where results will be written.
   '''
-  sufix="_raw_coords.txt"  
+
   inputMics = setOfInputCoords.getMicrographs()
   micIds= inputMics.getIdSet()
   micNameToMicId={}
   for micId in micIds:
     mic= inputMics[micId]
-    micNameToMicId[".".join( mic.getMicName().split(".")[:-1] )]= micId
+    micNameToMicId[".".join( os.path.basename(mic.getFileName()).split(".")[:-1] )]= micId
 
-  if not sqliteOutName:
-    sqliteOutName= os.path.join(txt_coords_dirPath, 'consensus_NOISE.sqlite')
-  cleanPath('coordinates_randomPick.sqlite')
-  cleanPath(sqliteOutName)
-
-  setOfNoiseCoordinates= SetOfCoordinates(filename= sqliteOutName)
-  setOfNoiseCoordinates.setMicrographs(inputMics)
-  setOfNoiseCoordinates.setBoxSize( setOfInputCoords.getBoxSize())
-
-  for fname in os.listdir( txt_coords_dirPath ):
-    if sufix is None or fname.endswith(sufix):
-      with open(os.path.join(txt_coords_dirPath, fname)) as f:
-        mic_name= f.readline().split()[0]
-        for line in f:
-          x_new, y_new = line.split()
-          x_new, y_new = int(x_new), int(y_new)
-          try:
-            aux = Coordinate()
-            aux.setMicrograph( inputMics[micNameToMicId[mic_name]] )
-            aux.setX(x_new)
-            aux.setY(y_new)
-            setOfNoiseCoordinates.append(aux )
-          except KeyError as e:
-            print( e)
-            continue
-
-  setOfNoiseCoordinates.write()
-  return setOfNoiseCoordinates
+  if write:
+    cleanPath(sqliteOutName)
+#  print("Creating output sqlite %s"%(sqliteOutName))
+  setOfOutputCoordinates= SetOfCoordinates(filename= sqliteOutName)
+  setOfOutputCoordinates.setMicrographs(inputMics)
+  setOfOutputCoordinates.setBoxSize( setOfInputCoords.getBoxSize())
+  readSetOfCoordinates(posDir, micSet=inputMics, coordSet=setOfOutputCoordinates, readDiscarded=False)
+  if write:
+    setOfOutputCoordinates.write()
+  return setOfOutputCoordinates
 
 
-def pickNoise_prepareInput(setOfCoords, outPath, outCoordsRawTxtDir=None): 
+def pickNoise_prepareInput(setOfCoords, outPath, outCoordsPosDir=None): 
 
   boxSize = setOfCoords.getBoxSize()
   inCoordsFname= setOfCoords.getFileName()
 
-  inCoordsPosDir= os.path.join(outPath,  "inPosCoordinates")
-  if outCoordsRawTxtDir is None:
-    outCoordsRawTxtDir=os.path.join(outPath, "outPosCoordinates")
+  inCoordsPosDir= os.path.join(outPath,  IN_COORDS_POS_DIR_BASENAME)
+  if not os.path.isdir(inCoordsPosDir):   os.mkdir(inCoordsPosDir) 
+  
+  if outCoordsPosDir is None:
+    outCoordsPosDir=os.path.join(outPath, OUT_COORDS_POS_DIR_BASENAME)
+  if not os.path.isdir(outCoordsPosDir):   os.mkdir(outCoordsPosDir)
   
   mics= setOfCoords.getMicrographs()
   for mic in setOfCoords.getMicrographs():   
@@ -203,33 +238,49 @@ def pickNoise_prepareInput(setOfCoords, outPath, outCoordsRawTxtDir=None):
   mics_dir =  os.path.split(mic_fname)[0]
   argTuple=(boxSize, outPath, mics_dir, )
         
-  inCoordsFname= setOfCoords.getFileName()
-  inCoordsPosDir= os.path.join(outPath,  "inPosCoordinates")
-  if not os.path.isdir(inCoordsPosDir):   os.mkdir(inCoordsPosDir) 
-  outCoordsRawTxtDir=os.path.join(outPath, "outPosCoordinates")
-  if not os.path.isdir(outCoordsRawTxtDir):   os.mkdir(outCoordsRawTxtDir)
-  writeSetOfCoordinates(inCoordsPosDir, setOfCoords, 
+
+  writeSetOfCoordinates(inCoordsPosDir, setOfCoords,
                           scale=setOfCoords.getBoxSize())
 
-  return {"boxSize":boxSize, "inCoordsPosDir": inCoordsPosDir, "outCoordsRawTxtDir":outCoordsRawTxtDir,
+  return {"boxSize":boxSize, "inCoordsPosDir": inCoordsPosDir, "outCoordsPosDir":outCoordsPosDir,
           "outPath":outPath, "mics_dir":mics_dir }
 
+#def writeCoordsListToPosFname(mic_fname, list_x_y, outputRoot, mic_id=999999):
 
-#def loadCoords(mics_dir, outCoordsRawTxtDir, boxSize):
-#    setOfCoordinates = SetOfCoordinates(filename=self._getExtraPath("picknoise_coords.sqlite") )
-#    setOfCoordinates.setMicrographs( self.inputCoordinates.get() )
-#    setOfCoordinates.setBoxSize(boxSize)
-#        
-#    for micrograph in inputMics:
-#        fnTmp = os.path.join(outCoordsRawTxtDir, '%s_raw_coords.txt' % micrograph.getObjId())
-#        if os.path.exists(fnTmp):
-#            coords = np.loadtxt(fnTmp, skiprows=1)
-#            if coords.size == 2:  # special case with only one coordinate in consensus
-#                coords = [coords]
-#            for coord in coords:
-#                aux = Coordinate()
-#                aux.setMicrograph(micrograph)
-#                aux.setX(coord[0])
-#                aux.setY(coord[1])
-#                setOfCoordinates.append(aux)
-#    setOfCoordinates.write()
+#  baseName= os.path.basename(mic_fname).split(".")[0]
+#  mic = Micrograph()
+##  mic._objId= mic_id
+#  mic.setFileName(mic_fname)
+#  coords=[]
+#  for i, (coordX, coordY) in enumerate(list_x_y):
+#    c= Coordinate()
+#    c.setX(coordX)
+#    c.setY(coordY)
+#    c.setMicrograph(mic)
+##    c._objId= i
+#    coords.append( c )
+#  print("%d %s %s"%(len(coords), mic.getFileName(), os.path.join(outputRoot, baseName+".pos")))
+#  writeMicCoordinates(mic, coords, os.path.join(outputRoot, baseName+".pos"))
+  
+def writeCoordsListToPosFname(mic_fname, list_x_y, outputRoot):
+
+  s = """# XMIPP_STAR_1 *
+#
+data_header
+loop_
+ _pickingMicrographState
+Auto
+data_particles
+loop_
+ _xcoor
+ _ycoor
+"""
+  baseName= os.path.basename(mic_fname).split(".")[0]
+  print("%d %s %s"%(len(list_x_y), mic_fname, os.path.join(outputRoot, baseName+".pos")))
+
+  if len(list_x_y)>0:
+    with open(os.path.join(outputRoot, baseName+".pos"), "w") as f:
+        f.write(s)
+        for x, y in list_x_y:
+          f.write(" %d %d\n"%(x,y) )
+          

@@ -81,10 +81,7 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
                       label='Number of different negative dataset',
                       default='1', condition="not doContinue or keepTraining",
                       help='Data from all negative datasets will be used for training. '
-                           'Maximun number is 4.\n'
-                           'Recomended negative data sets are 2:\n'
-                           '1) Random picked (pick noise protocol)\n'
-                           '2) Bad Z-score from multiple picker OR consensus\n')
+                           'Maximun number is 4.\n')
 
         for num in range(1, N_MAX_NEG_SETS):
             form.addParam('negativeSet_%d' % num, params.PointerParam,
@@ -111,7 +108,7 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
         form.addParam('predictSetOfParticles', params.PointerParam,
                       label="Set of putative particles to predict",
                       pointerClass='SetOfParticles',
-                      help='Select the set of putative particles particles to classify.')
+                      help='Select the set of putative particles to classify.')
 
         form.addSection(label='Training')
         
@@ -196,7 +193,7 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
                     
         setPredictDict = {self._getExtraPath("predictSetOfParticles.xmd"): 1}
 
-        if self.testPosSetOfParticles.get() and self.testNegSetOfParticles.get():
+        if self.doTesting.get() and self.testPosSetOfParticles.get() and self.testNegSetOfParticles.get():
           setTestPosDict = {self._getExtraPath("testTrueParticlesSet.xmd"): 1}
           setTestNegDict = {self._getExtraPath("testFalseParticlesSet.xmd"): 1}
         else:
@@ -206,7 +203,8 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
         self._insertFunctionStep('convertInputStep', posSetTrainDict,
                                  negSetTrainDict, setPredictDict,
                                  setTestPosDict, setTestNegDict)
-        self._insertFunctionStep('train', posSetTrainDict, negSetTrainDict)
+        if not self.doContinue.get() or self.keepTraining.get():
+          self._insertFunctionStep('train', posSetTrainDict, negSetTrainDict)
         self._insertFunctionStep('predict', setTestPosDict, setTestNegDict,setPredictDict)
         self._insertFunctionStep('createOutputStep')
 
@@ -252,8 +250,14 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
         """
             posTrainDict, negTrainDict: { fnameToMetadata: weight (int) }
         """
+        nEpochs = self.nEpochs.get()
         netDataPath = self._getExtraPath('nnetData')
-
+        if self.doContinue.get():
+            prevRunPath = self.continueRun.get()._getExtraPath('nnetData')
+            copyTree(prevRunPath, netDataPath)
+            if not self.keepTraining.get():
+                nEpochs = 0
+                
         if self.usesGpu():
             numberOfThreads = None
             gpuToUse = self.getGpuList()[0]
@@ -261,12 +265,6 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
             numberOfThreads = self.numberOfThreads.get()
             gpuToUse = None
 
-        nEpochs = self.nEpochs.get()
-        if self.doContinue.get():
-            prevRunPath = self.continueRun.get()._getExtraPath('nnetData')
-            copyTree(prevRunPath, netDataPath)
-            if not self.keepTraining.get():
-                nEpochs = 0
           
         fnamesPos, weightsPos= self.__dataDict_toStrs(posTrainDict)
         fnamesNeg, weightsNeg= self.__dataDict_toStrs(negTrainDict)
@@ -288,6 +286,9 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
             posTestDict, negTestDict, predictDict: { fnameToMetadata: { weight:int }
         """        
         netDataPath = self._getExtraPath('nnetData')
+        if not os.path.isdir(netDataPath) and self.doContinue.get():
+            prevRunPath = self.continueRun.get()._getExtraPath('nnetData')
+            copyTree(prevRunPath, netDataPath)
 
         if self.usesGpu():
             numberOfThreads = None
@@ -302,8 +303,8 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
         args= " -n %s --mode score -i %s -o %s "%(netDataPath, fnamesPred, outParticlesPath)
                 
         if posTestDict and negTestDict:
-          fnamesPosTest, weightsPosTest= self.__dataDict_toStrs(posTrainDict)
-          fnamesNegTest, weightsNegTest= self.__dataDict_toStrs(negTrainDict)
+          fnamesPosTest, weightsPosTest= self.__dataDict_toStrs(posTestDict)
+          fnamesNegTest, weightsNegTest= self.__dataDict_toStrs(negTestDict)
           args+= " --testingTrue %s --testingFalse %s "%(fnamesPosTest, fnamesNegTest)
           
         if not gpuToUse is None:
