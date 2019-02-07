@@ -1,16 +1,43 @@
+# **************************************************************************
+# *
+# * Authors:     Javier Mota
+# *
+# * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# *
+# * This program is free software; you can redistribute it and/or modify
+# * it under the terms of the GNU General Public License as published by
+# * the Free Software Foundation; either version 2 of the License, or
+# * (at your option) any later version.
+# *
+# * This program is distributed in the hope that it will be useful,
+# * but WITHOUT ANY WARRANTY; without even the implied warranty of
+# * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# * GNU General Public License for more details.
+# *
+# * You should have received a copy of the GNU General Public License
+# * along with this program; if not, write to the Free Software
+# * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
+# * 02111-1307  USA
+# *
+# *  All comments concerning this program package may be sent to the
+# *  e-mail address 'scipion@cnb.csic.es'
+# *
+# **************************************************************************
 
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+
+from pyworkflow import VERSION_2_0
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
-import numpy as np
+import pyworkflow.em.metadata as md
+from pyworkflow.utils.path import cleanPath
 
 import xmippLib
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes, xmippToLocation
-import matplotlib.pyplot as plt
 from xmipp3.utils import getMdSize
-import pyworkflow.em.metadata as md
-from pyworkflow.utils.path import cleanPath
-import os
 
 
 def updateEnviron(gpuNum):
@@ -26,6 +53,7 @@ ITER_PREDICT = 1
 class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
     _label ="deep denoising"
+    _lastUpdateVersion = VERSION_2_0
 
     def _defineParams(self, form):
 

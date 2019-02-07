@@ -24,18 +24,20 @@
 # *
 # **************************************************************************
 
+from shutil import copy
 
+from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import MultiPointerParam, PointerParam
 from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.em.data import Volume, Class3D
-from shutil import copy
+
 
 class XmippMetaProtCreateOutput(EMProtocol):
     """ Metaprotocol to run together all the protocols to discover discrete
     heterogeneity in a set of particles
      """
     _label = 'metaprotocol heterogeneity output'
-
+    _lastUpdateVersion = VERSION_2_0
 
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):

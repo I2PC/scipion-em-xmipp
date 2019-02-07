@@ -24,21 +24,21 @@
 # *
 # **************************************************************************
 
+import sys, time
 
+from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
                                         IntParam, StringParam, LEVEL_ADVANCED)
+from pyworkflow.em.protocol import ProtMonitor
+from pyworkflow.project import Manager
+from pyworkflow.em.data import Volume
+from pyworkflow.protocol import getProtocolFromDb
+import pyworkflow.object as pwobj
+
 from xmipp3.protocols import XmippProtSplitVolumeHierarchical
 from xmipp3.protocols import XmippProtReconstructHeterogeneous
 from xmipp3.protocols import XmippMetaProtCreateOutput
 from xmipp3.protocols import XmippMetaProtCreateSubset
-import time
-from pyworkflow.em.protocol import ProtMonitor
-import pyworkflow.object as pwobj
-from pyworkflow.manager import Manager
-from pyworkflow.em.data import Volume
-from pyworkflow.protocol import getProtocolFromDb
-
-import sys
 
 
 class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
@@ -46,6 +46,7 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
     heterogeneity in a set of particles
      """
     _label = 'metaprotocol heterogeneity'
+    _lastUpdateVersion = VERSION_2_0
 
     def __init__(self, **kwargs):
         ProtMonitor.__init__(self, **kwargs)

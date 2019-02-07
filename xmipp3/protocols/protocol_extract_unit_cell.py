@@ -24,7 +24,7 @@
 # **************************************************************************
 
 
-from pyworkflow import VERSION_1_2
+from pyworkflow import VERSION_2_0
 from pyworkflow.em import Volume
 from pyworkflow.em.constants import (SYM_I222, SYM_I222r, SYM_In25, SYM_In25r,
                                      SYM_CYCLIC, SYM_DIHEDRAL, SYM_TETRAHEDRAL,
@@ -46,7 +46,7 @@ class XmippProtExtractUnit(EMProtocol):
     """
     _label = 'extract unit cell'
     _program = ""
-    _version = VERSION_1_2
+    _version = VERSION_2_0
 
     def __init__(self, **kwargs):
         EMProtocol.__init__(self, **kwargs)

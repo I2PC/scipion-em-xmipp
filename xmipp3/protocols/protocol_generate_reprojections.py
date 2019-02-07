@@ -25,23 +25,22 @@
 # *
 # **************************************************************************
 
-from math import floor
 import os
+from shutil import copy
+from math import floor
 
-from pyworkflow import VERSION_1_1
+from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.em.constants import ALIGN_PROJ
 from pyworkflow.utils.path import cleanPath
 from pyworkflow.em.protocol import ProtAnalysis3D
 from pyworkflow.em.data import SetOfClasses2D, Image, SetOfAverages, SetOfParticles, Class2D
-from xmipp3.convert import setXmippAttributes, xmippToLocation, rowToAlignment
 import pyworkflow.em.metadata as md
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
-from shutil import copy
 import xmippLib
-
+from xmipp3.convert import setXmippAttributes, xmippToLocation, rowToAlignment
 
         
 class XmippProtGenerateReprojections(ProtAnalysis3D):
@@ -53,7 +52,7 @@ class XmippProtGenerateReprojections(ProtAnalysis3D):
     its determinant [Cherian2013]. The extremes of this score (called zScoreResCov), that is
     values particularly low or high, may indicate outliers."""
     _label = 'generate reprojections'
-    _lastUpdateVersion = VERSION_1_1
+    _lastUpdateVersion = VERSION_2_0
     
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)

@@ -281,8 +281,35 @@ class TestCorrelationAlignment(BaseTest):
         self.assertEqual(goldRoi, roi,
                          msgRoi % (goldRoi, roi, type(goldRoi), type(roi)))
 
+    def test_qbeta_cpu(self):
+        prot = self.newProtocol(XmippProtMovieCorr,doPSD=True, useGpu=False, doLocalAlignment=False)
+        prot.inputMovies.set(self.protImport1.outputMovies)
+        self.launchProtocol(prot)
+
+        self._checkMicrographs(prot)
+        self._checkAlignment(prot.outputMovies[1],
+                             (1,7), [0, 0, 0, 0])
+
     def test_qbeta(self):
         prot = self.newProtocol(XmippProtMovieCorr,doPSD=True)
+        prot.inputMovies.set(self.protImport1.outputMovies)
+        self.launchProtocol(prot)
+
+        self._checkMicrographs(prot)
+        self._checkAlignment(prot.outputMovies[1],
+                             (1,7), [0, 0, 0, 0])
+
+    def test_qbeta_patches(self):
+        prot = self.newProtocol(XmippProtMovieCorr,doPSD=True, patchX=7, patchY=7)
+        prot.inputMovies.set(self.protImport1.outputMovies)
+        self.launchProtocol(prot)
+
+        self._checkMicrographs(prot)
+        self._checkAlignment(prot.outputMovies[1],
+                             (1,7), [0, 0, 0, 0])
+
+    def test_qbeta_corrDownscale(self):
+        prot = self.newProtocol(XmippProtMovieCorr,doPSD=True, corrDownscale=3)
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
 
