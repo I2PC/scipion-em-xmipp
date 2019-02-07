@@ -124,17 +124,17 @@ class XmippMonoDirViewer(ProtocolViewer):
 
         groupDoA = form.addGroup('Anisotropy information')
        
-        groupDoA.addParam('doShowDoAHistogram', LabelParam,
-              label="Show DoA histogram")
+#        groupDoA.addParam('doShowDoAHistogram', LabelParam,
+#              label="Show DoA histogram")
         
         groupDoA.addParam('doShowDoAColorPol', LabelParam,
-               label="Show DoA metric slices")
+               label="Show Half Interquartile Range")
         
         groupDoA.addParam('doShowDoAColorMean', LabelParam,
-               label="Show DoA mean slices")
+               label="Show ADR Average Directional Resolution")
         
-        groupDoA.addParam('doShowChimera', LabelParam,
-                       label="Show DoA map in Chimera")
+#        groupDoA.addParam('doShowChimera', LabelParam,
+#                       label="Show DoA map in Chimera")
         
         groupRadAzim = form.addGroup('Radial and azimuthal information')
         
@@ -156,8 +156,8 @@ class XmippMonoDirViewer(ProtocolViewer):
         groupRadAzim.addParam('doShowLowestResolutionMap', LabelParam,
                label="Show lowest Resolution Map")        
         
-        groupRadAzim.addParam('doshowAnisotropyResolution', LabelParam,
-               label="Anisotropy and resolution")  
+#        groupRadAzim.addParam('doshowAnisotropyResolution', LabelParam,
+#               label="Anisotropy and resolution")  
         
         groupRadAzim.addParam('doShowDirectionsHistogram', LabelParam,
                label="Show directions histogram")
@@ -165,8 +165,8 @@ class XmippMonoDirViewer(ProtocolViewer):
         groupRadAzim.addParam('doShowDirectionsSphere', LabelParam,
                label="Show directions sphere")
         
-        groupRadAzim.addParam('doshowZscoreMap', LabelParam,
-               label="Show zscore map")
+#        groupRadAzim.addParam('doshowZscoreMap', LabelParam,
+#               label="Show zscore map")
         
         groupRadAzim.addParam('doShowRadialAverages', LabelParam,
                label="Show radial averages")
@@ -191,20 +191,20 @@ class XmippMonoDirViewer(ProtocolViewer):
         
     def _getVisualizeDict(self):
         return {'doShowOriginalVolumeSlices': self._showOriginalVolumeSlices,
-                'doShowDoAColorMean': self._showDoAColorMean,
-                'doShowDoAColorPol': self._showDoAColorPol,
+                'doShowDoAColorMean': self._showColorMeanResADR,
+                'doShowDoAColorPol': self._showHalfInterQuartile,
                 'doShowRadialColorSlices': self._showRadialColorSlices,
                 'doShowAzimuthalColorSlices': self._showAzimuthalColorSlices,
                 'doShowHighestResolutionMap': self._showHighestResolutionColorSlices,
                 'doShowLowestResolutionMap': self._showLowestResolutionColorSlices,
-                'doShowChimera': self._showChimera,
-                'doShowDoAHistogram': self._plotHistogramDoA,
+                #'doShowChimera': self._showChimera,
+                #'doShowDoAHistogram': self._plotHistogramDoA,
                 'doShowRadialHistogram': self._plotHistogramRadial,
                 'doShowAzimuthalHistogram': self._plotHistogramAzimuthal,
                 'doShowDirectionsHistogram': self._plotHistogramDirections,
                 'doShowDirectionsSphere': self._show2DDistribution,
-                'doshowAnisotropyResolution': self._showAnisotropyResolution,
-                'doshowZscoreMap': self._showZscoreMap,
+                #'doshowAnisotropyResolution': self._showAnisotropyResolution,
+                #'doshowZscoreMap': self._showZscoreMap,
                 'doShowRadialAverages': self._showRadialAverages
      }
 
@@ -212,17 +212,17 @@ class XmippMonoDirViewer(ProtocolViewer):
         cm = DataView(self.protocol._getExtraPath(OUTPUT_DOA_FILE))
         return [cm]  
  
-    def _showDoAColorPol(self, param=None):
-        self._showColorSlices(OUTPUT_DOA1_FILE, False, 'Resolutions range', -1, -1)
+    def _showHalfInterQuartile(self, param=None):
+        self._showColorSlices(OUTPUT_DOA1_FILE, False, 'Half Interquartile Range', -1, -1)
         
-    def _showDoAColorMean(self, param=None):
-        self._showColorSlices(OUTPUT_DOA2_FILE, False, 'Mean resolution (DoA)', -1, -1)
+    def _showColorMeanResADR(self, param=None):
+        self._showColorSlices(OUTPUT_DOA2_FILE, False, 'Mean resolution (ADR)', -1, -1)
         
     def _showRadialColorSlices(self, param=None):
         self._showColorSlices(OUTPUT_RADIAL_FILE, False, 'Radial Resolution', -1, -1)
         
-    def _showZscoreMap(self, param=None):
-        self._showColorSlices(OUTPUT_ZSCOREMAP_FILE, True, 'Zscore map', 0, 5)
+#    def _showZscoreMap(self, param=None):
+#        self._showColorSlices(OUTPUT_ZSCOREMAP_FILE, True, 'Zscore map', 0, 5)
         
     def _showHighestResolutionColorSlices(self, param=None):
         self._showColorSlices(OUTPUT_RESOLUTION_HIGHEST_FILE, False, 'Highest Resolution', -1, -1)
@@ -231,10 +231,10 @@ class XmippMonoDirViewer(ProtocolViewer):
         self._showColorSlices(OUTPUT_RESOLUTION_LOWEST_FILE, False, 'Lowest Resolution', -1, -1)
         
     def _showAzimuthalColorSlices(self, param=None):
-        self._showColorSlices(OUTPUT_AZIMUHTAL_FILE, False, 'Azimuthal Resolution', -1, -1)
+        self._showColorSlices(OUTPUT_AZIMUHTAL_FILE, False, 'Tangential Resolution', -1, -1)
         
-    def _showAnisotropyResolution(self, param=None):
-        self.plotAnisotropyResolution(self.protocol._getExtraPath('anires.xmd'))
+#    def _showAnisotropyResolution(self, param=None):
+#        self.plotAnisotropyResolution(self.protocol._getExtraPath('anires.xmd'))
         
     def _show2DDistribution(self, param=None):
         self._createAngDist2D(self.protocol._getExtraPath('hist_prefdir.xmd'))
