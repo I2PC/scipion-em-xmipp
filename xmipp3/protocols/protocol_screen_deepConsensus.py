@@ -44,14 +44,12 @@ import pyworkflow.protocol.params as params
 import pyworkflow.em.metadata as MD
 
 import xmippLib as xmipp
+
 import xmipp3
 from xmipp3 import XmippProtocol
-
-from xmipp3.protocols.protocol_pick_noise import (pickNoise_prepareInput, writeCoordsListToPosFname,
-                                                  readSetOfCoordsFromPosFnames)
-from xmipp3.convert import (readSetOfParticles, setXmippAttributes,
-                            writeSetOfCoordinates, micrographToCTFParam,
-                            writeSetOfParticles)
+from xmipp3.protocols.protocol_pick_noise import pickNoise_prepareInput
+from xmipp3.protocols.coordinates_tools.io_coordinates import readSetOfCoordsFromPosFnames, writeCoordsListToPosFname
+from xmipp3.convert import readSetOfParticles, setXmippAttributes, micrographToCTFParam, writeSetOfParticles
 
 DEEP_PARTICLE_SIZE = 128
 MIN_NUM_CONSENSUS_COORDS = 256
@@ -349,7 +347,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         elif self.addTrainingData.get() == self.ADD_TRAIN_MODEL:
             writeSetOfParticles(self.retrieveTrainSets(),
                                 self._getTmpPath("addNegTrainParticles.xmd"))
-                                
 
         if self.checkIfPrevRunIsCompatible():
             for mode in ["OR", "AND", "NOISE"]:
@@ -724,17 +721,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
 
     def prepareExtractParticles(self, mode):
-#        try:
-#            coordSet= self.coordinatesDict[mode]
-#        except KeyError:
-#            coordSet= SetOfCoordinates(filename=self._getExtraPath('consensus_%s.sqlite'%mode))
-
-#        coordSet.setBoxSize(1)
-#        mics_ = self._getInputMicrographs()
-#        coordSet.setMicrographs(mics_)
-#        makePath(self._getExtraPath('coord_%s' % mode))
-#        writeSetOfCoordinates(self._getExtraPath('coord_%s' % mode), coordSet, 
-#                              scale= coordSet.getBoxSize())
         self.loadCoords(self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE %(mode)),
                         mode, writeSet=True)
         makePath(self._getExtraPath('parts_%s' % mode))
@@ -853,9 +839,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         
         args= " -n %s --mode score -i %s -o %s "%(netDataPath, fnamesPred, outParticlesPath)
                 
-        if posTestDict and negTestDict:
-          fnamesPosTest, weightsPosTest= self.__dataDict_toStrs(posTrainDict)
-          fnamesNegTest, weightsNegTest= self.__dataDict_toStrs(negTrainDict)
+        if posTestDict and posTestDict:
+          fnamesPosTest, weightsPosTest= self.__dataDict_toStrs(posTestDict)
+          fnamesNegTest, weightsNegTest= self.__dataDict_toStrs(posTestDict)
           args+= " --testingTrue %s --testingFalse %s "%(fnamesPosTest, fnamesNegTest)
           
         if not gpuToUse is None:
@@ -905,8 +891,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             self._defineSourceRelation(inSetOfCoords.get(), coordSet)
             self._defineSourceRelation(inSetOfCoords.get(), partSet)
 
-#        print(self.coordinatesDict['OR'].getBoxSize())
-
+        print("OR", self.coordinatesDict['OR'].getBoxSize())
+#        raise ValueError("peta")
 
     def _summary(self):
         message = []
