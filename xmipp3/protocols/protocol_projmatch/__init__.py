@@ -28,4 +28,4 @@ This sub-package contains projection matching related utilities.
 """
 
 from .protocol_projmatch import XmippProtProjMatch
-from .viewer_projmatch import XmippProjMatchViewer
+

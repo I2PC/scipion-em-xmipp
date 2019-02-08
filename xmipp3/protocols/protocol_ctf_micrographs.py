@@ -27,7 +27,7 @@
 # **************************************************************************
 
 import sys
-from os.path import join, exists, getmtime
+import os
 
 from pyworkflow.object import Set, String
 import pyworkflow.em as em
@@ -38,6 +38,7 @@ import pyworkflow.utils as pwutils
 
 from xmipp3.utils import isMdEmpty
 from xmipp3.convert import mdToCTFModel, readCTFModel
+from xmippLib import Image
 
 
 class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
@@ -65,7 +66,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         em.ProtCTFMicrographs.__init__(self, **args)
 
     def _createFilenameTemplates(self):
-        prefix = join('%(micDir)s', 'xmipp_ctf')
+        prefix = '%(root)s/%(micBase)s_xmipp_ctf'
         _templateDict = {
                         # This templates are relative to a micDir
                         'micrographs': 'micrographs.xmd',
@@ -77,6 +78,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                         'ctfmodel_quadrant': prefix + '_ctfmodel_quadrant.xmp',
                         'ctfmodel_halfplane': prefix + '_ctfmodel_halfplane.xmp',
                         'ctf': prefix + '.xmd',
+                        'rejected': prefix + '_rejected.xmd'
                         }
         self._updateFilenamesDict(_templateDict)
 
@@ -111,23 +113,15 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                            'Downsample factor; and if it fails, +1; '
                            'and if it fails, -1.')
 
-        form.addParam('doAutomaticRejection', params.BooleanParam,
-                      default=False, label="Automatic rejection",
-                      expertLevel=pwconst.LEVEL_ADVANCED,
-                      help='Automatically reject micrographs whose CTF looks '
-                           'suspicious.')
-
     def getInputMicrographs(self):
         return self.inputMicrographs.get()
 
     # --------------------------- STEPS functions ------------------------------
-
     def calculateAutodownsampling(self,samplingRate, coeff=1.5):
         ctfDownFactor = coeff / samplingRate
         if ctfDownFactor < 1.0:
             ctfDownFactor = 1.0
         return ctfDownFactor
-
 
     def _calculateDownsampleList(self, samplingRate):
         
@@ -149,11 +143,18 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                     downsampleList.append((ctfDownFactor + 1) / 2)
         return downsampleList
 
-    def _estimateCTF(self, micFn, micDir, micName):
+    def _estimateCTF(self, mic, *args):
         """ Run the estimate CTF program """
-        doneFile = join(micDir, 'done.txt')
+        micFn = mic.getFileName()
+        micName = mic.getMicName()
+        micBase = self._getMicBase(mic)
+        micDir = self._getMicrographDir(mic)
 
         localParams = self.__params.copy()
+
+        localParams['pieceDim'] = self.windowSize.get()
+        localParams['ctfmodelSize'] = self.windowSize.get()
+
         if self.doInitialCTF:
             if self.ctfDict[micName] > 0:
                 localParams['defocusU'], localParams['phaseShift0'] = \
@@ -170,79 +171,58 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
 
         # Create micrograph dir under extra directory
         pwutils.path.makePath(micDir)
-        if not exists(micDir):
+        if not os.path.exists(micDir):
             raise Exception("No created dir: %s " % micDir)
 
         finalName = micFn
+        def _getFn(key):
+            return self._getFileName(key, micBase=micBase, root=micDir)
+        localParams['root'] = _getFn('prefix')
+        downsampleList = self._calculateDownsampleList(mic.getSamplingRate())
 
-        downsampleList=self._calculateDownsampleList(
-            self.inputMics.getSamplingRate())
-        deleteTmp = ""
-        #self.downsample = 0
         try:
-            for downFactor in downsampleList:
+            for i, downFactor in enumerate(downsampleList):
                 # Downsample if necessary
                 if downFactor != 1:
                     # Replace extension by 'mrc' cause there are some formats that
                     # cannot be written (such as dm3)
-                    baseFn = pwutils.path.replaceBaseExt(micFn, 'mrc')
-                    finalName = self._getTmpPath(baseFn)
+                    baseFn = pwutils.replaceBaseExt(micFn, 'mrc')
+                    finalName = os.path.join(micDir, baseFn)
                     self.runJob("xmipp_transform_downsample",
                                 "-i %s -o %s --step %f --method fourier"
                                 % (micFn, finalName, downFactor))
-                    deleteTmp = finalName
-                if downFactor!=downsampleList[0]:
-                    localParams['micDir'] = self._getTmpPath(baseFn+"_xmipp_ctf")
-                    isFirstDownsample = False
-                else:
-                    localParams['micDir'] = self._getFileName('prefix',
-                                                              micDir=micDir)
-                    isFirstDownsample = True
+                    psd = Image(finalName)
+                    psd = psd.getData()
+                    if psd.shape[0] < self.windowSize.get():
+                        localParams['pieceDim'] = self.windowSize.get()/2
+                        localParams['ctfmodelSize'] = self.windowSize.get()/2
+
+
                 # Update _params dictionary with mic and micDir
                 localParams['micFn'] = finalName
-                localParams['samplingRate'] = \
-                    self.inputMics.getSamplingRate() * downFactor
+                localParams['samplingRate'] = mic.getSamplingRate() * downFactor
 
                 # CTF estimation with Xmipp
-                try:
-                    if self.doInitialCTF:
-                        self.runJob(self._program,
-                                self._args % localParams +
-                                " --downSamplingPerformed %f" % downFactor)
-                    else:
-                        self.runJob(self._program,
-                                    self._args % localParams +
-                                    " --downSamplingPerformed %f" % downFactor
-                                    + " --selfEstimation")
 
-                except Exception, ex:
-                    print >> sys.stderr, "xmipp_ctf_estimate_from_micrograph has " \
-                                         "failed with micrograph %s" % finalName
+                params = self._args % localParams
+                params += " --downSamplingPerformed %f" % downFactor
+                if not self.doInitialCTF:
+                    params += " --selfEstimation "
+                self.runJob(self._program, params)
+
+
                 # Check the quality of the estimation and reject it necessary
-                good = self.evaluateSingleMicrograph(micFn, micDir)
-                #self.downsample += 1
+                good = self.evaluateSingleMicrograph(mic)
                 if good:
                     break
 
-            if isFirstDownsample == False:
-                orig = localParams['micDir']
-                pwutils.path.moveFile(orig + "_ctfmodel_halfplane.xmp",
-                                      join(micDir,
-                                           "xmipp_ctf_ctfmodel_halfplane.xmp"))
-                pwutils.path.moveFile(orig + "_ctfmodel_quadrant.xmp",
-                                      join(micDir,
-                                           "xmipp_ctf_ctfmodel_quadrant.xmp"))
-                pwutils.path.moveFile(orig + ".ctfparam",join(micDir,
-                                           "xmipp_ctf.ctfparam"))
+            for key in ['ctfParam', 'psd', 'enhanced_psd', 'ctfmodel_halfplane',
+                        'ctfmodel_quadrant', 'ctf']:
+                pwutils.moveFile(_getFn(key), self._getExtraPath())
 
-        except:
-            pass
-        # Let's notify that this micrograph have been processed
-        # just creating an empty file at the end (after success or failure)
-        open(doneFile, 'w')
-
-        if deleteTmp != "":
-            pwutils.path.cleanPath(deleteTmp)
+        except Exception as ex:
+            print >> sys.stderr, "xmipp_ctf_estimate_from_micrograph has " \
+                     "failed with micrograph %s" % finalName
 
     def _restimateCTF(self, micId):
         """ Run the estimate CTF program """
@@ -251,8 +231,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         # CTF estimation with Xmipp
         self.runJob(self._program, self._args % self._params)
         mic = ctfModel.getMicrograph()
-        micDir = self._getMicrographDir(mic)
-        self.evaluateSingleMicrograph(mic.getFileName(), micDir)
+        self.evaluateSingleMicrograph(mic)
 
     def _createOutputStep(self):
         pass
@@ -294,17 +273,14 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
 
     # --------------------------- UTILS functions ------------------------------
     def _prepareArgs(self, params):
-        if not self.findPhaseShift:
-            self._args = ("--micrograph %(micFn)s --oroot %(micDir)s "
-                          "--sampling_rate %(samplingRate)s --defocusU %("
-                          "defocusU)f --defocus_range %(defocus_range)f "
-                          "--overlap 0.7 --acceleration1D ")
-        else:
-            self._args = ("--micrograph %(micFn)s --oroot %(micDir)s "
-                          "--sampling_rate %(samplingRate)s --defocusU %("
-                          "defocusU)f --defocus_range %(defocus_range)f "
-                          "--overlap 0.7 --acceleration1D "
-                          "--phase_shift %(phaseShift0)f --VPP_radius 0.005")
+        self._args = ("--micrograph %(micFn)s --oroot %(root)s "
+                      "--sampling_rate %(samplingRate)s --defocusU %("
+                      "defocusU)f --defocus_range %(defocus_range)f "
+                      "--overlap 0.7 --pieceDim %(pieceDim)s "
+                      "--ctfmodelSize %(ctfmodelSize)s --acceleration1D ")
+
+        if self.findPhaseShift:
+            self._args += "--phase_shift %(phaseShift0)f --VPP_radius 0.005"
 
         for par, val in params.iteritems():
             self._args += " --%s %s" % (par, str(val))
@@ -338,11 +314,11 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         # command options
         self.__params = {'kV': self._params['voltage'],
                          'Cs': self._params['sphericalAberration'],
-                         'ctfmodelSize': self._params['windowSize'],
+                         #'ctfmodelSize': self._params['windowSize'],
                          'Q0': self._params['ampContrast'],
                          'min_freq': self._params['lowRes'],
                          'max_freq': self._params['highRes'],
-                         'pieceDim': self._params['windowSize']
+                         #'pieceDim': self._params['windowSize']
                          }
 
         self._prepareArgs(self.__params)
@@ -365,7 +341,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
             micDir = self._getMicrographDir(mic)
             downFactor = self._calculateDownsampleList(mic.getSamplingRate())[0]
 
-            params2 = {'psdFn': join(micDir, psdFile),
+            params2 = {'psdFn': os.path.join(micDir, psdFile),
                        'defocusU': float(line[0]),
                        }
             self._params = dict(self._params.items() + params2.items())
@@ -385,7 +361,8 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                              }
 
             if self.findPhaseShift:
-                fnCTFparam = self._getFileName('ctfParam', micDir=micDir)
+                fnCTFparam = self._getFileName('ctfParam',
+                                               micBase=self._getMicBase(mic))
                 mdCTFParam = md.MetaData(fnCTFparam)
                 phase_shift = mdCTFParam.getValue(md.MDL_CTF_PHASE_SHIFT,
                                                   mdCTFParam.firstObject())
@@ -395,57 +372,54 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
             for par, val in self.__params.iteritems():
                 self._args += " --%s %s" % (par, str(val))
 
-    def _setPsdFiles(self, ctfModel, micDir):
-        ctfModel._psdFile = String(self._getFileName('psd', micDir=micDir))
-        ctfModel._xmipp_enhanced_psd = \
-            String(self._getFileName('enhanced_psd', micDir=micDir))
-        ctfModel._xmipp_ctfmodel_quadrant = \
-            String(self._getFileName('ctfmodel_quadrant', micDir=micDir))
-        ctfModel._xmipp_ctfmodel_halfplane = \
-            String(self._getFileName('ctfmodel_halfplane', micDir=micDir))
+    def _setPsdFiles(self, ctfModel):
+        micBase = self._getMicBase(ctfModel.getMicrograph())
+        extra = self._getExtraPath()
 
-    def evaluateSingleMicrograph(self, micFn, micDir):
+        def _getString(key):
+            return String(self._getFileName(key, micBase=micBase, root=extra))
 
-        fnCTF = self._getFileName('ctfParam', micDir=micDir)
+        ctfModel._psdFile = _getString('psd')
+        ctfModel._xmipp_enhanced_psd = _getString('enhanced_psd')
+        ctfModel._xmipp_ctfmodel_quadrant = _getString('ctfmodel_quadrant')
+        ctfModel._xmipp_ctfmodel_halfplane = _getString('ctfmodel_halfplane')
+
+    def evaluateSingleMicrograph(self, mic):
+        micFn = mic.getFileName()
+        micBase = self._getMicBase(mic)
+        micDir = self._getMicrographDir(mic)
+
+        def _getStr(key):
+            return str(self._getFileName(key, micBase=micBase, root=micDir))
+
+        fnCTF = _getStr('ctfParam')
         mdCTFparam = md.MetaData(fnCTF)
         objId = mdCTFparam.firstObject()
         mdCTFparam.setValue(md.MDL_MICROGRAPH, micFn, objId)
-        mdCTFparam.setValue(md.MDL_PSD,
-                            str(self._getFileName('psd', micDir=micDir)), objId)
-        mdCTFparam.setValue(md.MDL_PSD_ENHANCED,
-                            str(self._getFileName('enhanced_psd',
-                                                  micDir=micDir)), objId)
-        mdCTFparam.setValue(md.MDL_CTF_MODEL,
-                            str(self._getFileName('ctfParam',
-                                                  micDir=micDir)), objId)
-        mdCTFparam.setValue(md.MDL_IMAGE1,
-                            str(self._getFileName('ctfmodel_quadrant',
-                                                  micDir=micDir)), objId)
-        mdCTFparam.setValue(md.MDL_IMAGE2,
-                            str(self._getFileName('ctfmodel_halfplane',
-                                                  micDir=micDir)), objId)
+        mdCTFparam.setValue(md.MDL_PSD, _getStr('psd'), objId)
+        mdCTFparam.setValue(md.MDL_PSD_ENHANCED, _getStr('enhanced_psd'), objId)
+        mdCTFparam.setValue(md.MDL_CTF_MODEL, _getStr('ctfParam'), objId)
+        mdCTFparam.setValue(md.MDL_IMAGE1, _getStr('ctfmodel_quadrant'), objId)
+        mdCTFparam.setValue(md.MDL_IMAGE2, _getStr('ctfmodel_halfplane'), objId)
 
-        fnEval = self._getFileName('ctf', micDir=micDir)
+        fnEval = _getStr('ctf')
         mdCTFparam.write(fnEval)
 
         # Evaluate if estimated ctf is good enough
         try:
-            self.runJob("xmipp_ctf_sort_psds", "-i %s" % (fnEval))
+            self.runJob("xmipp_ctf_sort_psds", "-i %s" % fnEval)
         except Exception:
             pass
 
         # Check if it is a good micrograph
-        fnRejected = self._getTmpPath(pwutils.path.basename(micFn +
-                                                        "_rejected.xmd"))
+        fnRejected = _getStr('rejected')
         if self.findPhaseShift:
-            self.runJob("xmipp_metadata_utilities",
-                        '-i %s --query select "%s" -o %s'
-                        % (fnEval, self._criterion_phaseplate, fnRejected))
-
+            criterion = self._criterion_phaseplate
         else:
-            self.runJob("xmipp_metadata_utilities",
+            criterion = self._criterion
+        self.runJob("xmipp_metadata_utilities",
                     '-i %s --query select "%s" -o %s'
-                    % (fnEval, self._criterion, fnRejected))
+                    % (fnEval, criterion, fnRejected))
 
         retval = True
         if not isMdEmpty(fnRejected):
@@ -457,21 +431,23 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
             if Iceness > 1.03:
                 retval = True
 
-        pwutils.path.cleanPath(fnRejected)
         return retval
 
     def _createCtfModel(self, mic, updateSampling=True):
         if updateSampling:
             newSampling = mic.getSamplingRate() * self.ctfDownFactor.get()
             mic.setSamplingRate(newSampling)
-        micDir = self._getMicrographDir(mic)
-        ctfParam = self._getFileName('ctf', micDir=micDir)
+        ctfParam = self._getFileName('ctf', micBase=self._getMicBase(mic),
+                                     root=self._getExtraPath())
         ctfModel2 = readCTFModel(ctfParam, mic)
-        self._setPsdFiles(ctfModel2, micDir)
+        ctfModel2.setMicrograph(mic)
+        self._setPsdFiles(ctfModel2)
         return ctfModel2
 
-    def _createErrorCtfParam(self, micDir):
-        ctfParam = self._getFileName('ctfErrorParam', micDir=micDir)
+    def _createErrorCtfParam(self, mic):
+        ctfParam = self._getFileName('ctfErrorParam',
+                                     micBase=self._getMicBase(mic),
+                                     root=self._getExtraPath())
         f = open(ctfParam, 'w+')
         lines = """# XMIPP_STAR_1 *
 #
@@ -547,4 +523,7 @@ data_fullMicrograph
 """
         f.write(lines)
         f.close()
-        return ctfparam
+        return ctfParam
+
+    def _getMicBase(self, mic):
+        return pwutils.removeBaseExt(mic.getFileName())

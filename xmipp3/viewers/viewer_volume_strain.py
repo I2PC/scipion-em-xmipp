@@ -28,7 +28,7 @@
 # **************************************************************************
 
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.em.viewer import DataView, ChimeraView
+from pyworkflow.em.viewers import DataView, ChimeraView
 
 from .viewer import XmippViewer
 from xmipp3.protocols.protocol_volume_strain import XmippProtVolumeStrain
@@ -54,4 +54,5 @@ class XmippVolumeStrainViewer(XmippViewer):
         fnCmd = self.protocol._getPath('result_morph_chimera.cmd')
         if os.path.exists(fnCmd):
             self._views.append(ChimeraView(fnCmd))
+        return self._views
 
