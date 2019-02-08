@@ -32,7 +32,7 @@ from math import sqrt
 from glob import glob
 import numpy as np
 import json
-from pyworkflow.utils.path import makePath, cleanPattern, cleanPath, copyTree, createLink, copyFile
+from pyworkflow.utils.path import makePath, cleanPattern, cleanPath, copyTree, createLink
 from pyworkflow.protocol.constants import *
 from pyworkflow.em.constants import RELATION_CTF, ALIGN_NONE
 from pyworkflow.em.convert import ImageHandler
@@ -275,7 +275,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                            'additional data is equal to the contribution of '
                            'internal particles')
 
-        form.addParallelSection(threads=2, mpi=0)
+        form.addParallelSection(threads=2, mpi=1)
 
     def _validate(self):
         errorMsg = []
@@ -300,6 +300,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         deps = []
         deps.append(self._insertFunctionStep("initializeStep", prerequisites=deps))
         depsPrepMic = self.insertMicsPreprocSteps(allMicIds, prerequisites=deps)
+
         # OR before noise always
         depsOr_cons = self.insertCaculateConsensusSteps(allMicIds, 'OR',
                                                         prerequisites=depsPrepMic)
@@ -329,7 +330,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         """
             Create paths where data will be saved
         """
-                            
         makePath(self._getExtraPath('preProcMics'))
         if self.doTesting.get() and self.testPosSetOfParticles.get() and self.testNegSetOfParticles.get():
             writeSetOfParticles(self.testPosSetOfParticles.get(),
@@ -372,12 +372,13 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                 for mode in ["AND", "OR", "NOISE"]:
                   consensusCoordsPath = self.CONSENSUS_COOR_PATH_TEMPLATE % mode
                   makePath(self._getExtraPath(consensusCoordsPath))
-                        
+         
         preprocessParamsFname= self._getExtraPath("preprocess_params.json")
         preprocParams= self.getPreProcParamsFromForm()
         with open(preprocessParamsFname, "w") as f:
           json.dump(preprocParams, f)
-          
+
+        
     def retrieveTrainSets(self):
         """ Retrieve, link and return a setOfParticles
             corresponding to the NegativeTrain DeepConsensus trainning set
@@ -418,6 +419,10 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
               print("WARNING. PROVIDE MICROGRAPHS FIRST")
             else:
               self.inputMicrographs = self.inputCoordinates[0].get().getMicrographs()
+
+        print(self.inputCoordinates[0].get())
+        print(self.inputCoordinates[0].get().getMicrographs())
+        print(dir(self.inputCoordinates[0]._micrographsPointer))
         return self.inputMicrographs
 
     def _getBoxSize(self):
@@ -443,12 +448,11 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         #TODO: make it parallel. It does not work due to concurrency and sqlite cursor
         
         deps = []
-
         consensus = -1 if mode=="AND" else 1
         coordsDataPath = self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE% mode)
         if not self.checkIfPrevRunIsCompatible( "coords_"):
           dep_ = prerequisites
-          makePath(self._getExtraPath(coordsDataPath))
+          makePath(coordsDataPath)
           for micId in micIds:
             dep = self._insertFunctionStep('calculateConsensusStep', micId,
                                        coordsDataPath, consensus, prerequisites=dep_)
@@ -560,7 +564,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
           argsDict=pickNoise_prepareInput(self.coordinatesDict['OR'], self._getTmpPath())
           argsDict["outputPosDir"]= outputPosDir
-          argsDict["nThrs"] = self.numberOfThreads.get()
+          argsDict["nThrs"] = self.numberOfThreads.get() if self.numberOfThreads else self.numberOfMpi.get()
           argsDict["nToPick"]=-1
           args=(" -i %(mics_dir)s -c %(inCoordsPosDir)s -o %(outputPosDir)s -s %(boxSize)s "+
                 "-n %(nToPick)s -t %(nThrs)s")%argsDict
@@ -704,7 +708,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                 mic = mics_[micId]
                 fnMic = mic.getFileName()
                 fnMic = self._getExtraPath('preProcMics', os.path.basename(fnMic))
-##                fnPos = self._getExtraPath('coord_%s' % mode,
                 fnPos = self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE% mode,
                                            pwutils.replaceBaseExt(fnMic, "pos"))
                 deps.append(self._insertFunctionStep("extractParticlesStep", fnMic,
@@ -787,7 +790,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             numberOfThreads = None
             gpuToUse = self.getGpuList()[0]
         else:
-            numberOfThreads = self.numberOfThreads.get()
+            numberOfThreads = self.numberOfThreads.get() if self.numberOfThreads else self.numberOfMpi.get()
             gpuToUse = None
 
         if self.trainPosSetOfParticles.get():
@@ -823,7 +826,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             numberOfThreads = None
             gpuToUse = self.getGpuList()[0]
         else:
-            numberOfThreads = self.numberOfThreads.get()
+            numberOfThreads = self.numberOfThreads.get() if self.numberOfThreads else self.numberOfMpi.get()
             gpuToUse = None
 
         predictDict = {self._getExtraPath("particles_OR.xmd"): 1}
