@@ -64,7 +64,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         neural network predictions.
     """
     _label = 'deep consensus picking'
-    CONSENSUS_COOR_PATH_TEMPLATE="consensus_%s"
+    CONSENSUS_COOR_PATH_TEMPLATE="consensus_coords_%s"
+    CONSENSUS_PARTS_PATH_TEMPLATE="consensus_parts_%s"
+    PRE_PROC_MICs_PATH="preProcMics"
 
     ADD_TRAIN_TYPES = ["None", "Precompiled", "Custom"]
     ADD_TRAIN_NONE = 0
@@ -275,7 +277,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                            'additional data is equal to the contribution of '
                            'internal particles')
 
-        form.addParallelSection(threads=2, mpi=1)
+        form.addParallelSection(threads=2, mpi=0)
 
     def _validate(self):
         errorMsg = []
@@ -330,7 +332,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         """
             Create paths where data will be saved
         """
-        makePath(self._getExtraPath('preProcMics'))
+        makePath(self._getExtraPath(self.PRE_PROC_MICs_PATH))
         if self.doTesting.get() and self.testPosSetOfParticles.get() and self.testNegSetOfParticles.get():
             writeSetOfParticles(self.testPosSetOfParticles.get(),
                                 self._getExtraPath("testTrueParticlesSet.xmd"))
@@ -419,10 +421,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
               print("WARNING. PROVIDE MICROGRAPHS FIRST")
             else:
               self.inputMicrographs = self.inputCoordinates[0].get().getMicrographs()
-
-        print(self.inputCoordinates[0].get())
-        print(self.inputCoordinates[0].get().getMicrographs())
-        print(dir(self.inputCoordinates[0]._micrographsPointer))
         return self.inputMicrographs
 
     def _getBoxSize(self):
@@ -564,7 +562,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
           argsDict=pickNoise_prepareInput(self.coordinatesDict['OR'], self._getTmpPath())
           argsDict["outputPosDir"]= outputPosDir
-          argsDict["nThrs"] = self.numberOfThreads.get() if self.numberOfThreads else self.numberOfMpi.get()
+          argsDict["nThrs"] = self.numberOfThreads.get()
           argsDict["nToPick"]=-1
           args=(" -i %(mics_dir)s -c %(inCoordsPosDir)s -o %(outputPosDir)s -s %(boxSize)s "+
                 "-n %(nToPick)s -t %(nThrs)s")%argsDict
@@ -625,130 +623,107 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         mics_ = self._getInputMicrographs()
         samplingRate = self._getInputMicrographs().getSamplingRate()
 
-        preproDep = self._insertFunctionStep("preprocessMicsInitStep", micIds, prerequisites=prerequisites)
-                                             
-        if self.checkIfPrevRunIsCompatible( "mics_"):
-            print("copying preprocess mics")
-            createLink( self.continueRun.get()._getExtraPath('preProcMics'), 
-                      self._getExtraPath('preProcMics'))
-            alreadyPreProMics= set([  fname for fname in os.listdir(self._getExtraPath('preProcMics'))])
-        else:
-          alreadyPreProMics= []
-        for micId in micIds:
-            mic = mics_[micId]
-            fnMic = mic.getFileName()
-            if not os.path.basename(fnMic) in alreadyPreProMics:
-              deps.append(self._insertFunctionStep("preprocessOneMicStep",
-                                                   micId, fnMic, samplingRate,
-                                                   prerequisites=[preproDep]))
+        preproDep = self._insertFunctionStep("preprocessMicsStep", micIds, samplingRate, prerequisites=prerequisites)
 
         return deps
 
 
-    def preprocessMicsInitStep(self, micIds):
+    def preprocessMicsStep(self, micIds, samplingRate):
+    
         self._getDownFactor()
         mics_ = self._getInputMicrographs()
+        micsFnameSet = { mic.getMicName(): mic.getFileName() for mic in mics_ }
+        if self.ignoreCTF.get():
+          preproMicsContent="#mics\n"
+          for micName in micsFnameSet:
+            preproMicsContent+= "%s\n"%(micsFnameSet[micName])
+        else:
+          preproMicsContent="#mics ctfs\n"
+          setOfMicCtf= self.ctfRelations.get()
+          if setOfMicCtf.getSize() != len(micIds):
+            raise ValueError("Error, there are different number of CTFs compared to "+
+                              "the number of micrographs where particles were picked")
+          else:
+            assert setOfMicCtf is not None, "Error, CTFs must be provided to compute phase flip"
+            for ctf in setOfMicCtf:
+              ctf_mic = ctf.getMicrograph()
+              ctfMicName = ctf_mic.getMicName()
+              if ctfMicName in micsFnameSet:
+                ctf_mic.setCTF(ctf)
+                ctfMicName= micsFnameSet[ctfMicName]
+                fnCTF = self._getTmpPath("%s.ctfParam" % os.path.basename(ctfMicName))
+                micrographToCTFParam(ctf_mic, fnCTF) 
+                preproMicsContent+= "%s %s\n"%(ctfMicName, fnCTF)
+                      
 
-        if not self.ignoreCTF.get():
-            
-            setOfMicCtf= self.ctfRelations.get()
-            if setOfMicCtf.getSize() != len(micIds):
-              raise ValueError("Error, there are different number of CTFs compared to "+
-                                "the number of micrographs where particles were picked")
-            else:
-                assert setOfMicCtf is not None, \
-                        "Error, CTFs must be provided to compute phase flip"
-
-                self.micToCtf = {}
-                micsFnameSet = set( [ mic.getMicName() for mic in mics_])
-
-                for ctf in setOfMicCtf:
-                    ctf_mic = ctf.getMicrograph()
-                    ctfMicName = ctf_mic.getMicName()
-
-                    if ctfMicName in micsFnameSet:
-                        self.micToCtf[ctfMicName] = ctf_mic
-                        ctf_mic.setCTF(ctf)        
-
-    def preprocessOneMicStep(self, micId, fnMic, samplingRate):
+        inputsFname= self._getExtraPath("preprocMic_inputs.txt")
+        ouputDir= self._getExtraPath(self.PRE_PROC_MICs_PATH)
+        nThrs= self.numberOfThreads.get()
+        with open(inputsFname, "w") as f:
+          f.write(preproMicsContent)
         downFactor = self._getDownFactor()
-        fnPreproc = self._getExtraPath('preProcMics', os.path.basename(fnMic))
-
-        if downFactor != 1: 
-            args = "-i %s -o %s --step %f --method fourier" % (fnMic, fnPreproc, downFactor)
-            self.runJob('xmipp_transform_downsample', args, numberOfMpi=1)
-            fnMic = fnPreproc
+        args= "-i %s -s %s -d %s -o %s -t %d"%(inputsFname, samplingRate, downFactor, ouputDir, nThrs)
+        if self.doInvert.get():
+          args+=" --invert_contrast"
             
         if not self.ignoreCTF.get():
-            if not hasattr(self, "micToCtf"):
-                self.preprocessMicsInitStep()
-
-            fnCTF = self._getTmpPath("%s.ctfParam" % os.path.basename(fnMic))
-            micrographToCTFParam(self.micToCtf[os.path.basename(fnMic)], fnCTF)
-            
-            args = " -i %s -o %s --ctf %s --sampling %f"
-            self.runJob('xmipp_ctf_phase_flip',
-                        args % (fnMic, fnPreproc, fnCTF, samplingRate*downFactor),
-                        numberOfMpi=1)
-            fnMic = fnPreproc
-            
-        args = "-i %s -o %s --method OldXmipp" % (fnMic, fnPreproc)
-        if self.doInvert.get():
-            args += " --invert"
-        self.runJob('xmipp_transform_normalize', args, numberOfMpi=1)
+          args+=" --phase_flip"
+          
+        self.runJob('xmipp_preprocess_mics', args, numberOfMpi=1)
         
     def insertExtractPartSteps(self, micIds, mode, prerequisites):
         deps = []
+        boxSize = self._getBoxSize()
         mics_ = self._getInputMicrographs()
         if not self.checkIfPrevRunIsCompatible(""):
-            newDep = self._insertFunctionStep("prepareExtractParticles", mode,
-                                                prerequisites= prerequisites)
-            prerequisites = [newDep]
-            for micId in micIds:
-                mic = mics_[micId]
-                fnMic = mic.getFileName()
-                fnMic = self._getExtraPath('preProcMics', os.path.basename(fnMic))
-                fnPos = self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE% mode,
-                                           pwutils.replaceBaseExt(fnMic, "pos"))
-                deps.append(self._insertFunctionStep("extractParticlesStep", fnMic,
-                                                     fnPos, mode, numberOfMpi=1,
-                                                     prerequisites= prerequisites))
-
-            newDep= self._insertFunctionStep("joinSetOfParticlesStep", micIds, mode,
-                                             prerequisites= deps)
-            deps = [newDep]
+          newDep = self._insertFunctionStep("extractParticles", mode, prerequisites= prerequisites)
+          deps.append(newDep)
+          newDep= self._insertFunctionStep("joinSetOfParticlesStep", micIds, mode, prerequisites= deps)
+          deps.append(newDep)
         else:
-            deps = prerequisites
-
+          deps = prerequisites
+          
         return deps
 
+    def extractParticles(self, mode):
 
-    def prepareExtractParticles(self, mode):
-        self.loadCoords(self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE %(mode)),
-                        mode, writeSet=True)
-        makePath(self._getExtraPath('parts_%s' % mode))
+        downFactor = self._getDownFactor()
+        mics_ = self._getInputMicrographs()
+        micsFnameSet = {}
+        preprocMicsPath= self._getExtraPath(self.PRE_PROC_MICs_PATH)
+        for micFname in os.listdir(preprocMicsPath):
+          micFnameBase= micFname.split(".")[0]
+          micFname= os.path.join(preprocMicsPath, micFname)
+          micsFnameSet[micFnameBase]= micFname
+        extractCoordsContent="#mics coords\n"
+        posDir= self._getExtraPath( self.CONSENSUS_COOR_PATH_TEMPLATE%mode )
+        for posFname in os.listdir(posDir):
+          posNameBase=  posFname.split(".")[0]
+          posFname= os.path.join(posDir, posFname)
+          if posNameBase in micsFnameSet:
+            extractCoordsContent+= "%s particles@%s\n"%(micsFnameSet[posNameBase], posFname)
+          else:
+            print("WARNING, no micFn for coords %s"%(posFname))
+          
+        inputsFname= self._getExtraPath("extractParticles_inputs.txt")
+        ouputDir= self._getExtraPath(self.CONSENSUS_PARTS_PATH_TEMPLATE% mode)
+        makePath(ouputDir)
+        nThrs= self.numberOfThreads.get()
+        with open(inputsFname, "w") as f:
+          f.write(extractCoordsContent)
+        downFactor= self._getDownFactor()
+        args= "-i %s -s %s -d %s -o %s -t %d"%(inputsFname, DEEP_PARTICLE_SIZE, downFactor, ouputDir, nThrs)
 
-
-    def extractParticlesStep(self, fnMic, fnPos, mode):
-        if os.path.isfile(fnPos):
-            fnPos = "particles@"+fnPos            
-            outputStack = self._getExtraPath('parts_%s' % mode,
-                                             pwutils.removeBaseExt(fnMic))
-            args = " -i %s --pos %s" % (fnMic, fnPos)
-            args += " -o %s --Xdim %d" % (outputStack, int( self._getBoxSize() / self._getDownFactor()))
-            args += " --downsampling %f --fillBorders" % self._getDownFactor()
-            self.runJob("xmipp_micrograph_scissor", args, numberOfMpi=1)
-        else:
-            print("There may be an error as %s file does not exist"%(fnPos))
-
+        self.runJob('xmipp_extract_particles', args, numberOfMpi=1)   
+          
     def joinSetOfParticlesStep( self, micIds, mode):
-        #Create images.xmd metadata
+        #Create images.xmd metadata joining from different .stk
         fnImages = self._getExtraPath("particles_%s.xmd" % mode)
         imgsXmd = MD.MetaData()
         posFiles = glob(self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE%mode, '*.pos'))
 
         for posFn in posFiles:
-            xmdFn = self._getExtraPath("parts_%s" % mode,
+            xmdFn = self._getExtraPath(self.CONSENSUS_PARTS_PATH_TEMPLATE%mode,
                                        pwutils.replaceBaseExt(posFn, "xmd"))
             if os.path.exists(xmdFn):
                 mdFn = MD.MetaData(xmdFn)
@@ -760,7 +735,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                              % os.path.basename(posFn))
                 self.warning("Maybe you are extracting over a subset of micrographs")
         imgsXmd.write(fnImages)
-
+        
     def __dataDict_toStrs(self, dataDict):
         fnamesStr=[]
         weightsStr=[]
@@ -790,7 +765,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             numberOfThreads = None
             gpuToUse = self.getGpuList()[0]
         else:
-            numberOfThreads = self.numberOfThreads.get() if self.numberOfThreads else self.numberOfMpi.get()
+            numberOfThreads = self.numberOfThreads.get()
             gpuToUse = None
 
         if self.trainPosSetOfParticles.get():
@@ -826,7 +801,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             numberOfThreads = None
             gpuToUse = self.getGpuList()[0]
         else:
-            numberOfThreads = self.numberOfThreads.get() if self.numberOfThreads else self.numberOfMpi.get()
+            numberOfThreads = self.numberOfThreads.get()
             gpuToUse = None
 
         predictDict = {self._getExtraPath("particles_OR.xmd"): 1}
