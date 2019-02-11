@@ -28,6 +28,7 @@
 
 import subprocess
 
+import pyworkflow as pw
 from pyworkflow.em.data import SetOfVolumes
 from pyworkflow.tests import *
 from pyworkflow.utils.properties import colorText
@@ -215,7 +216,7 @@ class TestConvertBase(BaseTest):
             print colorText.RED + colorText.BOLD + "WARNING: Gold file '%s' missing!!!" % goldFn + colorText.END
 
         if CLEAN_IMAGES:
-            cleanPath(outputFn)
+            pw.utils.cleanPath(outputFn)
                 
     
 class TestAlignment(TestConvertBase):

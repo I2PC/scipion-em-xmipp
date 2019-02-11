@@ -24,16 +24,17 @@
 # *
 # **************************************************************************
 
-
+from pyworkflow.em.viewers import showj
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO, CommandView
 from pyworkflow.em.protocol import *
 
 from pyworkflow.em.viewers.viewers_data import DataViewer
 from pyworkflow.em.viewers.plotter import EmPlotter
-from pyworkflow.em.viewers.views  import CtfView, ObjectView
+from pyworkflow.em.viewers.views import CtfView, ObjectView
 from pyworkflow.em.viewers.showj import *
 from pyworkflow.em.viewers.viewer_monitors import MovieGainMonitorPlotter
 
+import xmippLib
 from xmipp3.convert import *
 from xmipp3.protocols.protocol_compare_reprojections import XmippProtCompareReprojections
 from xmipp3.protocols.protocol_compare_angles import XmippProtCompareAngles
@@ -49,6 +50,7 @@ from xmipp3.protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
 from xmipp3.protocols.protocol_multireference_alignability import XmippProtMultiRefAlignability
 from xmipp3.protocols.protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from xmipp3.protocols.protocol_movie_gain import XmippProtMovieGain
+from xmipp3.protocols.protocol_deep_denoising import XmippProtDeepDenoising
 
 
 class XmippViewer(DataViewer):
@@ -70,7 +72,8 @@ class XmippViewer(DataViewer):
                 XmippProtValidateNonTilt,
                 XmippProtAssignmentTiltPair,
                 XmippProtMultiRefAlignability,
-                XmippProtMovieGain
+                XmippProtMovieGain,
+                XmippProtDeepDenoising
                 ]
 
     def __createTemporaryCtfs(self, obj, setOfMics):
@@ -100,7 +103,7 @@ class XmippViewer(DataViewer):
 
         if issubclass(cls, SetOfNormalModes):
             fn = obj.getFileName()
-            from nma.viewer_nma import OBJCMD_NMA_PLOTDIST, OBJCMD_NMA_VMD
+            from .viewer_nma import OBJCMD_NMA_PLOTDIST, OBJCMD_NMA_VMD
             objCommands = "'%s' '%s'" % (OBJCMD_NMA_PLOTDIST, OBJCMD_NMA_VMD)
             self._views.append(ObjectView(self._project, self.protocol.strId(),
                                           fn, obj.strId(),
@@ -142,6 +145,19 @@ class XmippViewer(DataViewer):
                     xplotter.createSubPlot("Variance Histogram", "Variance", "Number of particles")
                     xplotter.plotMd(md, False, mdLabelY=xmippLib.MDL_SCORE_BY_VAR, nbins=100)
                     self._views.append(xplotter)
+
+
+        elif issubclass(cls, XmippProtDeepDenoising):
+            fn = obj.outputParticles.getFileName()
+            self._views.append(ObjectView(self._project, obj.outputParticles.strId(),
+                                          fn,
+                                          viewParams={VISIBLE:  'enabled id _filename '
+                                                  '_xmipp_corrDenoisedProjection '
+                                                  '_xmipp_corrDenoisedNoisy '
+                                                  '_xmipp_imageOriginal _xmipp_imageRef',
+                                          SORT_BY: 'id',
+                                          MODE: MODE_MD}))
+
 
         elif issubclass(cls, XmippProtMovieGain):
             self._visualize(obj.outputMovies)
@@ -202,7 +218,7 @@ class XmippViewer(DataViewer):
                 inTmpFolder = True
 
             posDir = obj._getExtraPath()
-            memory = '%dg'%obj.memory.get(),
+            memory = showj.getJvmMaxMemory()
             launchSupervisedPickerGUI(micsfn, posDir, obj, mode='review', memory=memory, inTmpFolder=inTmpFolder)
 
          # We need this case to happens before the ProtParticlePicking one
@@ -210,19 +226,6 @@ class XmippViewer(DataViewer):
             if obj.getOutputsSize() >= 1:
                 coordsSet = obj.getCoordsTiltPair()
                 self._visualize(coordsSet)
-
-        elif issubclass(cls, ProtParticlePicking):
-            if obj.getOutputsSize() >= 1:
-                coordsSet = obj.getCoords()
-                self._visualize(coordsSet)
-                
-        elif issubclass(cls, ProtImportMovies):
-            movs = obj.outputMovies
-            self._visualize(movs)
-            gainFn = movs.getGain()
-            if os.path.exists(gainFn):
-                self._views.append(DataView(gainFn))
-
 
         elif issubclass(cls, XmippProtValidateNonTilt):
             outputVols = obj.outputVolumes

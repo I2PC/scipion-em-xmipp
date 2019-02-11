@@ -284,16 +284,20 @@ def rowToObject(row, obj, attrDict, extraLabels=[]):
             labelStr = xmippLib.label2Str(label)
             setattr(obj, '_xmipp_%s' % labelStr, row.getValueAsObject(label))
 
-
 def setXmippAttributes(obj, objRow, *labels):
     """ Set an attribute to obj from a label that is not
     basic ones. The new attribute will be named _xmipp_LabelName
     and the datatype will be set correctly.
     """
     for label in labels:
-        setattr(obj, '_xmipp_%s' % xmippLib.label2Str(label),
-                objRow.getValueAsObject(label))
+        setXmippAttribute(obj, label, objRow.getValueAsObject(label))
 
+def setXmippAttribute(obj, label, value):
+    """ Sets an attribute of an object prefixing it with xmipp"""
+    setattr(obj, prefixAttribute(xmippLib.label2Str(label)), value)
+
+def prefixAttribute(attribute):
+    return '_xmipp_%s' % attribute
 
 def rowFromMd(md, objId):
     row = XmippMdRow()
@@ -842,7 +846,7 @@ def writeMicCoordinates(mic, coordList, outputFn, isManual=True,
             it can be useful for scaling the coordinates if needed.
     """
     if getPosFunc is None:
-        getPosFunc = lambda coord: coord.getPostion()
+        getPosFunc = lambda coord: coord.getPosition()
 
     state = 'Manual' if isManual else 'Supervised'
     f = openMd(outputFn, state)
