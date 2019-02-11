@@ -116,14 +116,16 @@ class Plugin(pyworkflow.em.Plugin):
 
         env.addPackage('xmippSrc', version=_currentVersion,
                        tar='xmippSrc-%s.tgz' % _currentVersion,
-                       commands=[(installCmd, target)])
+                       commands=[(installCmd,
+                                  [target, cls.getHome()+'/xmipp.bashrc'])],
+                       default=True)
 
         env.addPackage('xmippBin', version=_currentVersion,
                        tar='xmippBin-%s.tgz' % _currentVersion,
-                       commands=[("cp -r ../xmippBin-%s ../xmipp-%s"
-                                  % (_currentVersion, _currentVersion),
-                                  target)],
-                       default=True)
+                       commands=[("rm -rf %s ; ln -s xmippBin-%s %s"
+                                  % (cls.getHome(), _currentVersion, cls.getHome()),
+                                  [target, cls.getHome()+'/xmipp.conf'])],
+                       default=False)
 
         # Old dependencies now are taken into account inside xmipp script:
         #   scons, fftw3, scikit, nma, tiff, sqlite, opencv, sh_alignment, hdf5
@@ -220,6 +222,6 @@ class Plugin(pyworkflow.em.Plugin):
             tar='sh_alignment.tgz',
             commands=[('cd software/tmp/sh_alignment; make install',
                        'software/lib/python2.7/site-packages/sh_alignment/frm.py')],
-            default=True)
+            default=False)  # FIXME: I set this to False because is not compiling...
 
 pyworkflow.em.Domain.registerPlugin(__name__)
