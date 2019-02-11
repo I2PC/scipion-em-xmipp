@@ -28,9 +28,8 @@
 Deep Consensus picking protocol
 """
 import os
-from math import sqrt
 from glob import glob
-import numpy as np
+
 import json
 from pyworkflow.utils.path import makePath, cleanPattern, cleanPath, copyTree, createLink
 from pyworkflow.protocol.constants import *
@@ -48,8 +47,9 @@ import xmippLib as xmipp
 import xmipp3
 from xmipp3 import XmippProtocol
 from xmipp3.protocols.protocol_pick_noise import pickNoise_prepareInput
-from xmipp3.protocols.coordinates_tools.io_coordinates import readSetOfCoordsFromPosFnames, writeCoordsListToPosFname
-from xmipp3.convert import readSetOfParticles, setXmippAttributes, micrographToCTFParam, writeSetOfParticles
+from xmipp3.protocols.coordinates_tools.io_coordinates import readSetOfCoordsFromPosFnames
+from xmipp3.convert import readSetOfParticles, setXmippAttributes, micrographToCTFParam, \
+                           writeSetOfParticles, writeSetOfCoordinates
 
 DEEP_PARTICLE_SIZE = 128
 MIN_NUM_CONSENSUS_COORDS = 256
@@ -90,7 +90,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                        help="GPU may have several cores. Set it to zero"
                             " if you do not know what we are talking about."
                             " First core index is 0, second 1 and so on.")
-
+                            
+        form.addParallelSection(threads=2, mpi=0)
+        
         form.addSection(label='Input')
         #CONTINUE FROM PREVIOUS TRAIN
         form.addParam('doContinue', params.BooleanParam, default=False,
@@ -203,11 +205,11 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                       label='Perform testing after training?', expertLevel=params.LEVEL_ADVANCED,
                       help='If you set to *Yes*, you should select a testing '
                            'positive set and a testing negative set')
-        form.addParam('testPosSetOfParticles', params.PointerParam,
+        form.addParam('testTrueSetOfParticles', params.PointerParam,
                       label="Set of positive test particles", expertLevel=params.LEVEL_ADVANCED,
                       pointerClass='SetOfParticles',condition='doTesting',
                       help='Select the set of ground true positive particles.')
-        form.addParam('testNegSetOfParticles', params.PointerParam,
+        form.addParam('testFalseSetOfParticles', params.PointerParam,
                       label="Set of negative test particles", expertLevel=params.LEVEL_ADVANCED,
                       pointerClass='SetOfParticles', condition='doTesting',
                       help='Select the set of ground false positive particles.')
@@ -242,7 +244,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                            'input coorditanes (*%s*).'
                            % (self.ADD_TRAIN_CUST, self.ADD_TRAIN_MODEL,
                               self.ADD_TRAIN_NONE))
-        form.addParam('trainPosSetOfParticles', params.PointerParam,
+        form.addParam('trainTrueSetOfParticles', params.PointerParam,
                       label="Positive train particles 128px (optional)",
                       pointerClass='SetOfParticles', allowsNull=True,
                       condition='addTrainingData==%s'%self.ADD_TRAIN_CUST,
@@ -258,7 +260,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                            'If weight is -1, weight will be calculated such that '
                            'the contribution of additional data is equal to '
                            'the contribution of internal particles')
-        form.addParam('trainNegSetOfParticles', params.PointerParam,
+        form.addParam('trainFalseSetOfParticles', params.PointerParam,
                       label="Negative train particles 128px (optional)",
                       pointerClass='SetOfParticles',  allowsNull=True,
                       condition='addTrainingData==%s'%self.ADD_TRAIN_CUST,
@@ -277,8 +279,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                            'additional data is equal to the contribution of '
                            'internal particles')
 
-        form.addParallelSection(threads=2, mpi=0)
-
     def _validate(self):
         errorMsg = []
         if self._getBoxSize()< DEEP_PARTICLE_SIZE:
@@ -288,6 +288,18 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         if not self.ignoreCTF.get() and self.ctfRelations.get() is None:
           errorMsg.append("Error, CTFs must be provided to compute phase flip. "
                           "Please, provide a set of CTFs.")
+
+        if  self.trainTrueSetOfParticles.get() and self.trainTrueSetOfParticles.get().getXDim()!=DEEP_PARTICLE_SIZE:
+          errorMsg.append("Error, trainTrueSetOfParticles needed to be 128 px")
+
+        if  self.trainFalseSetOfParticles.get() and self.trainFalseSetOfParticles.get().getXDim()!=DEEP_PARTICLE_SIZE:
+          errorMsg.append("Error, trainFalseSetOfParticles needed to be 128 px")
+
+        if  self.testTrueSetOfParticles.get() and self.testTrueSetOfParticles.get().getXDim()!=DEEP_PARTICLE_SIZE:
+          errorMsg.append("Error, testTrueSetOfParticles needed to be 128 px")
+          
+        if  self.testFalseSetOfParticles.get() and self.testFalseSetOfParticles.get().getXDim()!=DEEP_PARTICLE_SIZE:
+          errorMsg.append("Error, testFalseSetOfParticles needed to be 128 px")
         return errorMsg
 
 #--------------------------- INSERT steps functions ---------------------------
@@ -333,18 +345,18 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             Create paths where data will be saved
         """
         makePath(self._getExtraPath(self.PRE_PROC_MICs_PATH))
-        if self.doTesting.get() and self.testPosSetOfParticles.get() and self.testNegSetOfParticles.get():
-            writeSetOfParticles(self.testPosSetOfParticles.get(),
+        if self.doTesting.get() and self.testTrueSetOfParticles.get() and self.testFalseSetOfParticles.get():
+            writeSetOfParticles(self.testTrueSetOfParticles.get(),
                                 self._getExtraPath("testTrueParticlesSet.xmd"))
-            writeSetOfParticles(self.testNegSetOfParticles.get(),
+            writeSetOfParticles(self.testFalseSetOfParticles.get(),
                                 self._getExtraPath("testFalseParticlesSet.xmd"))
 
         if self.addTrainingData.get() == self.ADD_TRAIN_CUST:
-            if self.trainPosSetOfParticles.get():
-                writeSetOfParticles(self.trainPosSetOfParticles.get(),
+            if self.trainTrueSetOfParticles.get():
+                writeSetOfParticles(self.trainTrueSetOfParticles.get(),
                                     self._getExtraPath("trainTrueParticlesSet.xmd"))
-            if self.trainNegSetOfParticles.get():
-                writeSetOfParticles(self.trainNegSetOfParticles.get(),
+            if self.trainFalseSetOfParticles.get():
+                writeSetOfParticles(self.trainFalseSetOfParticles.get(),
                                     self._getExtraPath("trainFalseParticlesSet.xmd"))
         elif self.addTrainingData.get() == self.ADD_TRAIN_MODEL:
             writeSetOfParticles(self.retrieveTrainSets(),
@@ -443,107 +455,63 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
 
     def insertCaculateConsensusSteps(self, micIds, mode, prerequisites):
-        #TODO: make it parallel. It does not work due to concurrency and sqlite cursor
         
         deps = []
-        consensus = -1 if mode=="AND" else 1
-        coordsDataPath = self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE% mode)
+        outCoordsDataPath = self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE% mode)
         if not self.checkIfPrevRunIsCompatible( "coords_"):
           dep_ = prerequisites
-          makePath(coordsDataPath)
-          for micId in micIds:
-            dep = self._insertFunctionStep('calculateConsensusStep', micId,
-                                       coordsDataPath, consensus, prerequisites=dep_)
-            dep_ = [dep]
-            deps.append(dep)
-          newDep = self._insertFunctionStep('loadCoords', coordsDataPath,
-                                          mode, True, prerequisites=deps)
+          makePath(outCoordsDataPath)
+          newDep=self._insertFunctionStep('calculateCoorConsensusStep', outCoordsDataPath, mode, prerequisites=prerequisites)
+          deps = [newDep]
+          newDep = self._insertFunctionStep('loadCoords', outCoordsDataPath,
+                                          mode, write=True, prerequisites=deps)
           deps = [newDep]
         else:
           deps= prerequisites
         return deps
         
-    def calculateConsensusStep(self, micId, coordsDataPath, consensus):
+    def calculateCoorConsensusStep(self, outCoordsDataPath, mode):
+      Tm = []
+      for coordinatesP in self.inputCoordinates:
+          mics= coordinatesP.get().getMicrographs()
+          Tm.append(mics.getSamplingRate())
+      nCoordsSets= len(Tm)
+      inputCoordsFnames={}
+      for coord_num, coordinatesP in enumerate(self.inputCoordinates):
+          tmpPosDir= self._getTmpPath("input_coords_%d"%(coord_num))
+          makePath(tmpPosDir)
+          writeSetOfCoordinates(tmpPosDir, coordinatesP.get(), scale=float(Tm[coord_num])/float(Tm[0]))
+          for fname in os.listdir(tmpPosDir):
+              baseName, extension= os.path.basename(fname).split(".")
+              if extension=="pos":
+                if baseName not in inputCoordsFnames:
+                    inputCoordsFnames[baseName]=["None"]*nCoordsSets
+                inputCoordsFnames[baseName][coord_num]= os.path.join(tmpPosDir, fname)
+      inputFileStr=""
+      for baseName in inputCoordsFnames:
+         fnames= inputCoordsFnames[baseName]
+         inputFileStr+=" ".join(fnames)+"\n"
+             
+      assert len(inputFileStr)>0, "Error, no consensus can be computed as there are mismatch in coordinate sets filenames"
+      consensus = -1 if mode=="AND" else 1
+      configFname= self._getExtraPath("consensus_%s_inputs.txt"%(mode) )
+      with open(configFname, "w") as f:
+          f.write(inputFileStr)
+          
+      args="-i %s -s %d -c %d -d %f -o %s -t %d"%(configFname, self._getBoxSize(), consensus, self.consensusRadius.get(),
+                                                 outCoordsDataPath, self.numberOfThreads.get())
+      self.runJob('xmipp_coordinates_consensus', args, numberOfMpi=1)
 
-        Tm = []
-        mic_fname=None
-        for coordinates in self.inputCoordinates:
-            mics= coordinates.get().getMicrographs()
-            Tm.append(mics.getSamplingRate())
-            if mic_fname==None:
-              try:
-                mic_fname= mics[micId].getFileName()
-              except KeyError as e:
-                print("Exception",e)
-                raise e
         
-        # Get all coordinates for this micrograph
-        coords = []
-        Ncoords = 0
-        n = 0
-
-        for coordinates in self.inputCoordinates:
-            coordArray = np.asarray([x.getPosition() for x in
-                                     coordinates.get().iterCoordinates(micId)],
-                                    dtype=float)
-            coordArray *= float(Tm[n])/float(Tm[0])
-            coords.append(np.asarray(coordArray, dtype=int))
-            Ncoords += coordArray.shape[0]
-            n += 1
-        
-        allCoords = np.zeros([Ncoords, 2])
-        votes = np.zeros(Ncoords)
-        
-        # Add all coordinates in the first method
-        N0 = coords[0].shape[0]
-        inAllMicrographs = consensus <= 0 or consensus == len(self.inputCoordinates)
-        if N0 == 0 and inAllMicrographs:
-            return
-        elif N0 > 0:
-            allCoords[0:N0, :] = coords[0]
-            votes[0:N0] = 1
-        
-        boxSize = self._getBoxSize()
-        consensusNpixels = self.consensusRadius.get() * boxSize
-
-        # Add the rest of coordinates
-        Ncurrent = N0
-        for n in range(1, len(self.inputCoordinates)):
-            for coord in coords[n]:
-                if Ncurrent > 0:
-                    dist = np.sum((coord - allCoords[0:Ncurrent])**2, axis=1)
-                    imin = np.argmin(dist)
-                    if sqrt(dist[imin]) < consensusNpixels:
-                        newCoord = (votes[imin]*allCoords[imin,]+coord)/(votes[imin]+1)
-                        allCoords[imin,] = newCoord
-                        votes[imin] += 1
-                    else:
-                        allCoords[Ncurrent, :] = coord
-                        votes[Ncurrent] = 1
-                        Ncurrent += 1
-                else:
-                    allCoords[Ncurrent, :] = coord
-                    votes[Ncurrent] = 1
-                    Ncurrent += 1
-
-        # Select those in the consensus
-        if consensus <= 0:
-            consensus = len(self.inputCoordinates)
-
-        consensusCoords = allCoords[votes >= consensus, :]
-        # Write the consensus file only if there are some coordinates (size > 0)
-        if consensusCoords.size>0:
-            writeCoordsListToPosFname(mic_fname, consensusCoords, outputRoot=coordsDataPath)
-
     def loadCoords(self, posCoorsPath, mode, writeSet=False):
         boxSize = self._getBoxSize()
         inputMics = self._getInputMicrographs()
         sqliteName= self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE%mode)+".sqlite"
         if os.path.isfile(self._getExtraPath(sqliteName)):
             cleanPath(self._getExtraPath(sqliteName))
-        print(posCoorsPath, mode, sqliteName)
         setOfCoordinates= readSetOfCoordsFromPosFnames(posCoorsPath, setOfInputCoords= self.inputCoordinates[0].get(),
                                    sqliteOutName= sqliteName, write=writeSet )
+        print("Coordinates %s size: %d"%( mode, setOfCoordinates.getSize()) )
         assert setOfCoordinates.getSize() > MIN_NUM_CONSENSUS_COORDS, \
                 ("Error, the consensus (%s) of your input coordinates was too small (%s). "+
                 "It must be > %s. Try a different input..."
@@ -595,7 +563,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
     def checkIfPrevRunIsCompatible(self, inputType=""):
         '''
-        inputType can be mics_ or coords_
+        inputType can be mics_ or coords_ or ""
         '''
         def _makeTupleIfList(candidateList):
           if isinstance(candidateList, list):
@@ -715,7 +683,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         args= "-i %s -s %s -d %s -o %s -t %d"%(inputsFname, DEEP_PARTICLE_SIZE, downFactor, ouputDir, nThrs)
 
         self.runJob('xmipp_extract_particles', args, numberOfMpi=1)   
-          
+        
     def joinSetOfParticlesStep( self, micIds, mode):
         #Create images.xmd metadata joining from different .stk
         fnImages = self._getExtraPath("particles_%s.xmd" % mode)
@@ -768,10 +736,10 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             numberOfThreads = self.numberOfThreads.get()
             gpuToUse = None
 
-        if self.trainPosSetOfParticles.get():
+        if self.trainTrueSetOfParticles.get():
             posTrainFn = self._getExtraPath("trainTrueParticlesSet.xmd")
             posTrainDict[posTrainFn] = self.trainPosWeight.get()
-        if self.trainNegSetOfParticles.get():
+        if self.trainFalseSetOfParticles.get():
             negTrainFn = self._getExtraPath("trainFalseParticlesSet.xmd")
             negTrainDict[negTrainFn] = self.trainNegWeight.get()
 
@@ -805,7 +773,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             gpuToUse = None
 
         predictDict = {self._getExtraPath("particles_OR.xmd"): 1}
-        if self.doTesting.get() and self.testPosSetOfParticles.get() and self.testNegSetOfParticles.get():
+        if self.doTesting.get() and self.testTrueSetOfParticles.get() and self.testFalseSetOfParticles.get():
             posTestDict = {self._getExtraPath("testTrueParticlesSet.xmd"): 1}
             negTestDict = {self._getExtraPath("testFalseParticlesSet.xmd"): 1}
         else:            
