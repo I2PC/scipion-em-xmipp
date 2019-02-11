@@ -171,39 +171,54 @@ class Plugin(pyworkflow.em.Plugin):
         if nvccProgram != "":
             nvccVersion = subprocess.Popen(["nvcc", '--version'],
                                            stdout=subprocess.PIPE).stdout.read()
-            #TODO: check if cuda 9 or 10  or 7.5 ..., Try to autoInstall cudnn. Probar pip install cudnnenv
+            print(nvccVersion)
+
             if "release 8.0" in nvccVersion: #cuda 8
                 tensorFlowTarget = "1.4.1"
-
-            tensor = env.addPipModule('tensorflow-gpu', target='tensorflow*',
+                cudNN_version="v6-cuda8"
+            elif "release 9.0" in nvccVersion: #cuda 8
+                tensorFlowTarget = "1.10.0"
+                cudNN_version="v7.0.1-cuda9"
+            else:
+                raise ValueError("Error, tensorflow requires CUDA 8.0 or CUDA 9.0")
+                
+#            if os.path.exios.path.join(getXmippPath('lib'), "libcudnn.so")
+            cudNN_installCmd="cudnnenv install %s; cp -r $HOME/.cudnn/active/cuda/lib64/* %s"%(cudNN_version, 
+                                                                                            getXmippPath('lib'))
+            cudNN_installer = tryAddPipModule('cudnnenv',target="cudnnenv", default=False, 
+                                              pipCmd="%s git+https://github.com/unnonouno/cudnnenv.git"%pipCmdScipion)
+            
+            tensor = tryAddPipModule('tensorflow-gpu', target='tensorflow*',
                                       default=False,
                                       pipCmd="%s https://storage.googleapis.com/"
                                              "tensorflow/linux/gpu/"
                                              "tensorflow_gpu-%s-cp27-none-"
                                              "linux_x86_64.whl"
                                              % (pipCmdScipion, tensorFlowTarget))
-            keras=env.addPipModule('keras', '2.1.5', target='keras*', default=False,
+            keras=tryAddPipModule('keras', '2.1.5', target='keras*', default=False,
                                    deps=[cv2, h5py])
+            deepLearnigTools = [cudNN_installer, keras, tensor,scikit_learn]
         else:
-            tensor = env.addPipModule('tensorflow', target='tensorflow*',
+            print("WARNING: Installing tensorflow without GPU support. Just CPU computations enabled")
+            tensor = tryAddPipModule('tensorflow', target='tensorflow*',
                                       default=False,
                                       pipCmd="%s https://storage.googleapis.com/"
                                              "tensorflow/linux/cpu/"
                                              "tensorflow-%s-cp27-none-"
                                              "linux_x86_64.whl"
                                              % (pipCmdScipion, tensorFlowTarget))
-            keras = env.addPipModule('keras', '2.2.2', target='keras',
+            keras = tryAddPipModule('keras', '2.2.2', target='keras',
                                      default=False, deps=[cv2, h5py])
 
-        deppLearnigTools = [scikit_learn, keras._name, tensor._name]
-        target = "installed_%s" % '_'.join([tool for tool in deppLearnigTools])
+            deepLearnigTools = [ keras._name, tensor._name, scikit_learn]
+        target = "installed_%s" % '_'.join([tool for tool in deepLearnigTools])
         env.addPackage('deepLearnigToolkit', urlSuffix='external',
-                       commands=[("echo;echo ' > DeepLearnig-Toolkit installed: %s';"
+                       commands=[("%s ;echo;echo ' > DeepLearnig-Toolkit installed: %s';"
                                   "echo ; touch %s"
-                                  % (str([tool for tool in deppLearnigTools]),
+                                  % (cudNN_installCmd, str([tool for tool in deepLearnigTools]),
                                      target),
                                   target)],
-                       deps=deppLearnigTools)
+                       deps=deepLearnigTools)
 
         ## --- END OF DEEP LEARNING TOOLKIT --- ##
 

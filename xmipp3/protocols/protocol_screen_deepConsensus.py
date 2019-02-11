@@ -837,7 +837,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             self._defineSourceRelation(inSetOfCoords.get(), coordSet)
             self._defineSourceRelation(inSetOfCoords.get(), partSet)
 
-        print("OR", self.coordinatesDict['OR'].getBoxSize())
+#        print("OR", self.coordinatesDict['OR'].getBoxSize())
 #        raise ValueError("peta")
 
     def _summary(self):
