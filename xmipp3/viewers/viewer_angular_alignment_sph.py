@@ -30,8 +30,10 @@ import pyworkflow.em.metadata as md
 from pyworkflow.em.metadata.utils import iterRows
 import numpy as np
 import matplotlib as mpl
+import math
 import matplotlib.pyplot as plt
-from xmipp3.protocols.nma.gui import ClusteringWindow
+from scipy.interpolate import griddata
+from .nma_gui import ClusteringWindow
 from xmipp3.protocols.nma.data import Point, Data
 from pyworkflow.utils.path import cleanPath
 from pyworkflow.em.data import SetOfParticles
@@ -80,17 +82,62 @@ class XmippAngularAlignmentSphViewer(ProtocolViewer):
 
     def _doShowHist2D(self, param=None):
         tsne2D = self.loadData2D()
-        H, xedges, yedges = np.histogram2d(tsne2D[:,0], tsne2D[:,1], bins=(50,50))
-        H = H.T
-        fig = plt.figure()
-        ax = fig.add_subplot(111, title='SPH coefficients histogram in 2D',
-                             aspect = 'equal', xlim = xedges[[0, -1]],
-                             ylim = yedges[[0, -1]])
-        im = mpl.image.NonUniformImage(ax, interpolation='bilinear')
-        xcenters = (xedges[:-1] + xedges[1:]) / 2
-        ycenters = (yedges[:-1] + yedges[1:]) / 2
-        im.set_data(xcenters, ycenters, H)
-        ax.images.append(im)
+        # H, xedges, yedges = np.histogram2d(tsne2D[:,0], tsne2D[:,1], bins=(50,50))
+        # H = H.T
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111, title='SPH coefficients histogram in 2D',
+        #                      aspect = 'equal', xlim = xedges[[0, -1]],
+        #                      ylim = yedges[[0, -1]])
+        # im = mpl.image.NonUniformImage(ax, interpolation='bilinear')
+        # xcenters = (xedges[:-1] + xedges[1:]) / 2
+        # ycenters = (yedges[:-1] + yedges[1:]) / 2
+        # im.set_data(xcenters, ycenters, H)
+        # ax.images.append(im)
+        # plt.show()
+
+        #AJ trying something new...
+        x = tsne2D[:,0]
+        y = tsne2D[:,1]
+
+        rangeX = np.max(x)-np.min(x)
+        rangeY = np.max(y)-np.min(y)
+        if rangeX>rangeY:
+            sigma = rangeX/50
+        else:
+            sigma = rangeY/50
+        print("sigma",sigma)
+
+        # define grid.
+        xi = np.linspace(min(x)-0.1, max(x)+0.1, 100)
+        yi = np.linspace(min(x)-0.1, max(x)+0.1, 100)
+
+        print(x.shape)
+        print(y.shape)
+        print(xi.shape)
+        print(yi.shape)
+
+        z = np.zeros((100, 100), float)
+        zSize = z.shape
+        N = len(x)
+        for c in range(zSize[1]):
+            for r in range(zSize[0]):
+                for d in range(N):
+                    z[r,c] = z[r,c] + (1.0/N) * (1.0/((2*math.pi)*sigma**2)) * math.exp(-((xi[c]-x[d])**2 + (yi[r]-y[d])**2)/(2*sigma**2))
+
+        # grid the data
+        #zi = griddata((x, y), z, (xi, yi), method='cubic')
+        zMax = np.max(z)
+        z = z/zMax
+
+        # contour the gridded data, plotting dots at the randomly spaced data points.
+        CS = plt.contour(xi, yi, z, 15, linewidths=0.5, colors='k')
+        CS = plt.contourf(xi, yi, z, 15, cmap=plt.cm.jet)
+        plt.colorbar()  # draw colorbar
+        # plot data points.
+        # plt.scatter(x, y, marker='o', c='b', s=0.5)
+        # plt.xlim(-2, 2)
+        # plt.ylim(-2, 2)
+        plt.title('griddata test')
         plt.show()
 
 

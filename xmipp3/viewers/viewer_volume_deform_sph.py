@@ -25,11 +25,10 @@
 # **************************************************************************
 
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-from pyworkflow.em.viewer import ChimeraView
+from pyworkflow.em.viewers import ChimeraView
 import pyworkflow.protocol.params as params
 from pyworkflow.utils import getExt, removeExt
 from os.path import abspath
-from .viewer import XmippViewer
 from xmipp3.protocols.protocol_volume_deform_sph import XmippProtVolumeDeformSPH
 
 
