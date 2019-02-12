@@ -26,11 +26,16 @@
 # *
 # **************************************************************************
 
+import subprocess
+
+import pyworkflow as pw
 from pyworkflow.em.data import SetOfVolumes
 from pyworkflow.tests import *
 from pyworkflow.utils.properties import colorText
 
 import xmippLib
+
+import xmipp3
 from xmipp3.base import *
 from xmipp3.convert import *
 from xmipp3.constants import *
@@ -87,15 +92,15 @@ class TestBasic(BaseTest):
         self.assertEquals(filename, img.getFileName())
 
 
-SHOW_IMAGES  = True  # Launch xmipp_showj to open intermediate results
-CLEAN_IMAGES = True  # Remove the output temporary files
+SHOW_IMAGES  = False  # Launch xmipp_showj to open intermediate results
+CLEAN_IMAGES = True   # Remove the output temporary files
 PRINT_MATRIX = True
 PRINT_FILES  = True
 
 
 def runXmippProgram(cmd):
     print ">>>", cmd
-    p = subprocess.Popen(cmd, shell=True, env=xmipp3.getEnviron())
+    p = subprocess.Popen(cmd, shell=True, env=xmipp3.Plugin.getEnviron())
     return p.wait()
 
 
@@ -211,7 +216,7 @@ class TestConvertBase(BaseTest):
             print colorText.RED + colorText.BOLD + "WARNING: Gold file '%s' missing!!!" % goldFn + colorText.END
 
         if CLEAN_IMAGES:
-            cleanPath(outputFn)
+            pw.utils.cleanPath(outputFn)
                 
     
 class TestAlignment(TestConvertBase):

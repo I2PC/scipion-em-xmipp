@@ -24,6 +24,7 @@
 # *
 # **************************************************************************
 
+from pyworkflow import VERSION_2_0
 from pyworkflow.em.protocol.protocol import EMProtocol
 from pyworkflow.protocol.params import MultiPointerParam
 from pyworkflow.em import Class3D
@@ -34,7 +35,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         Return the intersection of the input classes.
     """
     _label = 'consensus classes 3D'
-
+    _lastUpdateVersion = VERSION_2_0
     intersectsList = []
 
     def _defineParams(self, form):
@@ -142,7 +143,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
             clRep = setRep[clsRepId]
 
             newClass = Class3D()
-            newClass.copyInfo(clRep)
+            # newClass.copyInfo(clRep)
             newClass.setAcquisition(clRep.getAcquisition())
             newClass.setRepresentative(clRep.getRepresentative())
 
