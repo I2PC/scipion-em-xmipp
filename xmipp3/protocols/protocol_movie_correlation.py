@@ -234,7 +234,6 @@ class XmippProtMovieCorr(ProtAlignMovies):
             args += ' --device %(GPU)s'
             if self.doLocalAlignment.get():
                 args += ' --processLocalShifts '
-            args += ' --oBSpline ' + self._getExtraPath(self._getMovieRoot(movie) + "_bsplines.txt")
             args += ' --storage ' + self._getExtraPath("fftBenchmark.txt")
             args += ' --controlPoints %d %d %d' % (self.controlPointX, self.controlPointY, self.controlPointT)
             args += ' --patches %d %d' % (self.patchX, self.patchY)
