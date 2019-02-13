@@ -149,7 +149,11 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
                       help='CTF to be compared with reference CTF')
         form.addParam('minConsResol', params.FloatParam,
                       condition="calculateConsensus", default=15.0,
-                      label='Minimum consensus resolution in angstroms.')
+                      label='Minimum consensus resolution (A).',
+                      help="Minimum value for the consensus resolution in "
+                           "Angstroms.\nIf there are noticeable discrepancies "
+                           "between the two estimations below this resolution, "
+                           "it will be discarded.")
 
         form.addParallelSection(threads=0, mpi=0)
 
@@ -594,10 +598,63 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
         return ['Marabini2014a']
 
     def _summary(self):
-        message = []
-        for i, ctfs in enumerate([self.inputCTF, self.inputCTF2]):
-            protocol = self.getMapper().getParent(ctfs.get())
-            message.append("Method %d: %s" % (i+1, protocol.getClassLabel()))
+
+        acceptedSize = (self.outputCTF.getSize()
+                        if hasattr(self, "outputCTF") else 0)
+
+        discardedSize = (self.outputCTFDiscarded.getSize()
+                         if hasattr(self, "outputCTFDiscarded") else 0)
+
+        message = ["%d/%d CTF processed (%d accepted and %d discarded)."
+                   % (acceptedSize+discardedSize,
+                      self.inputCTF.get().getSize(),
+                      acceptedSize, discardedSize)]
+
+        message.append("*General Criteria*:")
+        if self.useDefocus:
+            message.append(" - _Defocus range_: %.0f - %.0f"
+                           % (self.minDefocus, self.maxDefocus))
+
+        if self.useAstigmatism:
+            message.append(" - _Astigmatism threshold_: %.0f" % self.astigmatism)
+
+        if self.useResolution:
+            message.append(" - _Resolution threshold_: %.0f" % self.resolution)
+
+        if self.useCritXmipp:
+            message.append("*Xmipp criteria*:")
+            message.append(" - _First zero threshold_: %.0f" % self.critFirstZero)
+            message.append(" - _First zero astigmatism range_: %.2f - %.2f"
+                           % (self.minCritFirstZeroRatio,
+                              self.maxCritFirstZeroRatio))
+            message.append(" - _Correlation Experimental-Estimated threshold_: %.2f"
+                           % self.critCorr)
+            message.append(" - _CTF margin threshold_: %.2f" % self.critCtfMargin)
+            message.append(" - _Iceness threshold_: %.2f" % self.critIceness)
+            message.append(" - _Non Astigmatic validation range_: %.2f - %.2f"
+                           % (self.minCritNonAstigmaticValidity,
+                              self.maxCritNonAstigmaticValidity))
+
+        if self.calculateConsensus:
+            def getProtocolInfo(inCtf):
+                protocol = self.getMapper().getParent(inCtf)
+                runName = protocol.getRunName()
+                classLabel = protocol.getClassLabel()
+                if runName == classLabel:
+                    infoStr = runName
+                else:
+                    infoStr = "%s (%s)" % (runName, classLabel)
+
+                return infoStr
+
+            message.append("*CTF consensus*:")
+            message.append(" - _Consensus resolution threshold_: %.0f"
+                           % self.minConsResol)
+            message.append(" - _Primary CTF_: %s"
+                           % getProtocolInfo(self.inputCTF.get()))
+            message.append(" - _Reference CTF_: %s"
+                           % getProtocolInfo(self.inputCTF2.get()))
+
         return message
 
     def _validate(self):
@@ -607,8 +664,9 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
         """
         # same micrographs in both CTF??
         errors = []
-        if self.useCritXmipp.get() and not self.usingXmipp(self.inputCTF.get()):
-            errors.append("The primary CTF input (_Input CTF_) must be estimated"
+        if (self.useCritXmipp.get() and
+            not self.usingXmipp(self.inputCTF.get().getFirstItem())):
+            errors.append("The primary CTF input ( _Input CTF_ ) must be estimated"
                           " using the _Xmipp - CTF estimation_ protocol.")
         return errors
 
