@@ -182,7 +182,6 @@ class Plugin(pyworkflow.em.Plugin):
             else:
                 raise ValueError("Error, tensorflow requires CUDA 8.0 or CUDA 9.0")
                 
-#            if os.path.exios.path.join(getXmippPath('lib'), "libcudnn.so")
             cudNN_installCmd="cudnnenv install %s; cp -r $HOME/.cudnn/active/cuda/lib64/* %s"%(cudNN_version, 
                                                                                             getXmippPath('lib'))
             cudNN_installer = tryAddPipModule('cudnnenv',target="cudnnenv", default=False, 
