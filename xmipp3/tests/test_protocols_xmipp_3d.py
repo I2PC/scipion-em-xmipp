@@ -349,7 +349,7 @@ class TestXmippResolution3D(TestXmippBase):
 class TestXmippFilterVolumes(TestXmippBase):
     @classmethod
     def setUpClass(cls):
-        print "\n", greenStr(" Filter Volumes Set Up - Collect data ".center(75, '-'))
+        print ("\n", greenStr(" Filter Volumes Set Up - Collect data ".center(75, '-')))
         setupTestProject(cls)
         TestXmippBase.setData()
         cls.protImport1 = cls.runImportVolumes(cls.volumes, 9.896)

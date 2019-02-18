@@ -342,7 +342,7 @@ class XmippProtOFAlignment(ProtAlignMovies):
         return self._getNameExt(movie, '_aligned_corrected', 'psd', extra=True)
 
     def _loadMeanShifts(self, movie):
-        alignMd = md.MetaData(self._getOutputShifts(movie))
+        alignMd = md.MetaData("frameShifts@" + self._getOutputShifts(movie))
         meanX = alignMd.getColumnValues(md.MDL_OPTICALFLOW_MEANX)
         meanY = alignMd.getColumnValues(md.MDL_OPTICALFLOW_MEANY)
 
