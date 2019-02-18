@@ -28,7 +28,7 @@ from os.path import join, exists
 import math
 
 import pyworkflow.protocol.params as params
-from pyworkflow import VERSION_1_2
+from pyworkflow import VERSION_2_0
 from pyworkflow.utils.path import makePath, cleanPattern, moveFile
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.em.constants import ALIGN_PROJ
@@ -52,7 +52,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
     """
 
     _label = 'split volume hierarchical'
-    _lastUpdateVersion = VERSION_1_2
+    _lastUpdateVersion = VERSION_2_0
 
     def __init__(self, *args, **kwargs):
         ProtAnalysis3D.__init__(self, *args, **kwargs)

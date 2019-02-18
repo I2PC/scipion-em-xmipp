@@ -103,8 +103,7 @@ class TestMixedMovies(BaseTest):
                                objLabel='CC (no-write)',
                                alignFrame0=2, alignFrameN=10,
                                useAlignToSum=True,
-                               splineOrder=XmippProtMovieCorr.INTERP_CUBIC,
-                               numberOfThreads=4)
+                               splineOrder=XmippProtMovieCorr.INTERP_CUBIC)
         mc1.inputMovies.set(protMovieImport.outputMovies)
         self.launchProtocol(mc1)
 
@@ -120,8 +119,7 @@ class TestMixedMovies(BaseTest):
                                alignFrame0=2, alignFrameN=10,
                                useAlignToSum=True,
                                splineOrder=XmippProtMovieCorr.INTERP_CUBIC,
-                               doSaveMovie=True,
-                               numberOfThreads=4)
+                               doSaveMovie=True)
         mc2.inputMovies.set(protMovieImport.outputMovies)
         self.launchProtocol(mc2)
 
