@@ -413,10 +413,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         prefixYES = ''
         prefixNO = 'no'
         modelType = "negativeTrain_%sPhaseFlip_%sInvert.mrcs" % (
-                    prefixYES if self.doInvert.get() else prefixNO,
-                    prefixYES if self.ignoreCTF.get() else prefixNO)
+                    prefixNO if self.ignoreCTF.get() else prefixYES,
+                    prefixYES if self.doInvert.get() else prefixNO)
         modelPath = xmipp3.Plugin.getModel("deepConsensus", modelType)
-        print("Precompiled negative particles found at %s"%( modelPath))
         modelFn = self._getTmpPath(modelType)
         pwutils.createLink(modelPath, modelFn)
 
@@ -770,8 +769,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           else:
             effectiveSize=50000
           modelTypeDir= "keras_models/%sPhaseFlip_%sInvert/nnetData_%d/tfchkpoints_0" % (
-                    "" if self.doInvert.get() else "no",
-                    "" if self.ignoreCTF.get() else "no", effectiveSize)
+                              "no" if self.ignoreCTF.get() else "",
+                              "" if self.doInvert.get() else "no", effectiveSize)
           modelTypeDir= xmipp3.Plugin.getModel("deepConsensus", modelTypeDir)
           for i in range(self.nModels.get()):
             targetPath= os.path.join(netDataPath, "tfchkpoints_%d"%(i))
