@@ -25,50 +25,36 @@
 # *
 # **************************************************************************
 
-import csv
-import numpy as np
-
-from pyworkflow import VERSION_1_1
-from pyworkflow.protocol.params import (PointerParam, StringParam, 
-                                        BooleanParam, FloatParam,
-                                        LEVEL_ADVANCED)
+from pyworkflow import VERSION_2_0
+from pyworkflow.protocol.params import PointerParam
 from pyworkflow.em import ProtMicrographs
 from pyworkflow.object import Integer
-from pyworkflow.em import ImageHandler
-from pyworkflow.utils import getExt
-from pyworkflow.em.data import EMObject
-import pyworkflow.em.metadata as md
+
 from xmipp3.convert import writeSetOfMicrographs
 import xmipp3
 
-from os.path import expanduser # TODO: can be removed when moving the weights/scaler to scipion folders
-
 
 class XmippProtParticleBoxsize(ProtMicrographs):
-    """    
-    Given a map the protocol assigns local resolutions to each voxel of the map.
+    """ Given a set of micrographs, the protocol estimate the particle box size.
     """
-    _label = 'particle_boxsize'
-    _lastUpdateVersion = VERSION_1_1
+    _label = 'particle boxsize'
+    _lastUpdateVersion = VERSION_2_0
     
     def __init__(self, **args):
         ProtMicrographs.__init__(self, **args)
-        self.particle_boxsize = None
+        self.particleBoxsize = None
     
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-
-
-        form.addParam('micrographs', PointerParam, pointerClass='SetOfMicrographs',
-                      label="Input Micrographs", important=True,
+        form.addParam('micrographs', PointerParam, important=True,
+                      label="Input Micrographs", pointerClass='SetOfMicrographs',
                       help='Select a set of micrographs for determining the '
-                      'particle boxsize.')
+                           'particle boxsize.')
 
-    # --------------------------- INSERT steps functions --------------------------------------------
-
+    # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
-            # Convert input into xmipp Metadata format
+        # Convert input into xmipp Metadata format
         self._insertFunctionStep('convertInputStep')
         self._insertFunctionStep('boxsizeStep')
         self._insertFunctionStep('createOutputStep')
@@ -78,51 +64,49 @@ class XmippProtParticleBoxsize(ProtMicrographs):
                               self._getExtraPath('input_micrographs.xmd'))
 
     def boxsizeStep(self):
-        # TODO: hardcoded values: this should be changed!! 
-        FN_PARTICLE_BOXSIZE = self._getExtraPath('particle_boxsize.xmd')
-        img_size = 300  # This should match the img_size used for training weights? Add as metada?
-        weights = xmipp3.Plugin.getHDF5model('boxsize/weights.hdf5')  #    expanduser('/home/vilas/Downloads/boxsize/weights.hdf5')
-        feature_scaler = xmipp3.Plugin.getHDF5model('boxsize/feature_scaler.pkl')  #expanduser('/home/vilas/Downloads/boxsize/feature_scaler.pkl')
-        base_params = ' --img_size %d' % img_size
-        base_params += ' --weights %s' % weights
-        base_params += ' --feature_scaler %s' % feature_scaler
-        base_params += ' --output %s' % FN_PARTICLE_BOXSIZE
-        
-        
-        filenames = [mic.getFileName() + '\n' for mic in self.micrographs.get()]
+        particleBoxSizeFn = self._getExtraPath('particle_boxsize.xmd')
+        imgSize = 300  # This should match the img_size used for training weights? Add as metada?
+        weights = xmipp3.Plugin.getModel('boxsize', 'weights.hdf5')
+        featureScaler = xmipp3.Plugin.getModel('boxsize', 'feature_scaler.pkl')
+
+        params  = ' --img_size %d' % imgSize
+        params += ' --weights %s' % weights
+        params += ' --feature_scaler %s' % featureScaler
+        params += ' --output %s' % particleBoxSizeFn
+
+        fileNames = [mic.getFileName() + '\n' for mic in self.micrographs.get()]
         # TODO: output name is hardcoded
-        mic_names_path = self._getTmpPath('mic_names.csv')
-        with open(mic_names_path, 'wb') as csvfile:
-            csvfile.writelines(filenames)
-        params = base_params + ' --micrographs %s' % mic_names_path
+        micNamesPath = self._getTmpPath('mic_names.csv')
+        with open(micNamesPath, 'wb') as csvFile:
+            csvFile.writelines(fileNames)
+        params += ' --micrographs %s' % micNamesPath
         self.runJob('xmipp_particle_boxsize', params)
         
-        with open(FN_PARTICLE_BOXSIZE, 'r') as fp:
-            self.particle_boxsize = int(fp.read().rstrip('\n'))
-        
-        print(self.particle_boxsize)
+        with open(particleBoxSizeFn, 'r') as fp:
+            self.particleBoxsize = int(fp.read().rstrip('\n'))
 
-       
+        print(self.particleBoxsize)
+
     def createOutputStep(self):
-        output = EMObject()
-        output.boxsize = Integer(self.particle_boxsize)
-        
-        self._defineOutputs(boxsize=output)
-
-                            
+        """ The output is just an Integer. Other protocols can use it in those
+            IntParam if it has set allowsPointer=True
+        """
+        boxSize = Integer(self.particleBoxsize)
+        self._defineOutputs(boxsize=boxSize)
+        self._defineSourceRelation(self.micrographs.get(), boxSize)
 
     # --------------------------- INFO functions ------------------------------
-
     def _methods(self):
         messages = []
-        if hasattr(self, 'resolution_Volume'):
-            messages.append(
-                'Information about the method/article in ' + MONORES_METHOD_URL)
+        if hasattr(self, 'boxsize'):
+            messages.append('Estimated box size: %s pixels' % self.boxsize)
         return messages
     
     def _summary(self):
-        summary = []
-        return summary
+        messages = []
+        if hasattr(self, 'boxsize'):
+            messages.append('Estimated box size: %s pixels' % self.boxsize)
+        return messages
 
     def _citations(self):
         return ['']
