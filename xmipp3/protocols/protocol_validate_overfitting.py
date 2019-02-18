@@ -82,13 +82,11 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                       label='New size (px)',
                       help="Resizing input particles and volume"
                            "using fourier method")
-        # AJ NEW
         form.addParam('doNoise', BooleanParam, default=False,
                       label='Calculate the noise bound for resolution?',
                       help="Select if you want to obtain the noise bound for "
                            "resolution. This calculation will increase the "
                            "computational time of this protocol.")
-        # END AJ
         form.addParam('input3DReference', PointerParam,
                       pointerClass='Volume,SetOfVolumes',
                       label='Initial 3D reference volume',
@@ -100,10 +98,8 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                       help="See [[Xmipp Symmetry][http://www2.mrc-lmb.cam.ac.uk/Xmipp/index.php/Conventions_%26_File_formats#Symmetry]] page"
                            "for a description of the symmetry format"
                            "accepted by Xmipp")
-        # AJ NEW
         form.addParam('useGpu', BooleanParam, default=False,
                       label='Use GPU?')
-        # END AJ
         form.addParam('numberOfParticles', NumericListParam,
                       default="10 20 50 100 200 500 1000 1500 2000 3000 5000",
                       expertLevel=LEVEL_ADVANCED,
@@ -150,7 +146,6 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
         # for debugging purpose
         debugging = False
 
-        # AJ NEW condition
         if self.doNoise.get():
             inputNameRefVol = self.input3DReference.get().getFileName()
             fnNewVol = self._getExtraPath('newVolume.vol')
@@ -158,7 +153,6 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
         fnNewImgMd = self._getExtraPath('newImages.xmd')
         # do resizing
         if self.doResize.get():
-            # AJ NEW condition
             if self.doNoise.get():
                 args = "-i %s ""-o %s --fourier %f " % (inputNameRefVol,
                                                         fnNewVol,
@@ -185,7 +179,6 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
             self.runJob('xmipp_metadata_utilities', args, numberOfMpi=1)
 
         # projections from reference volume
-        # AJ NEW condition
         if self.doNoise.get():
             if self.doResize.get():
                 args = "-i %s -o %s" % (fnNewVol,
@@ -251,7 +244,6 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
             # params += ' --thr %d' % self.numberOfThreads.get()
             params += ' --sampling %f' % Ts
 
-            # AJ NEW condition
             if not self.useGpu.get():
                 self.runJob('xmipp_reconstruct_fourier', params)
             else:
@@ -259,7 +251,6 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                 self.runJob('xmipp_cuda_reconstruct_fourier', params, numberOfMpi=1)
 
             # for noise
-            # AJ NEW condition
             if self.doNoise.get():
                 noiseStk = fnRoot + "_noises_%02d.stk" % i
                 self.runJob("xmipp_image_convert",
@@ -307,7 +298,6 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                 # params += ' --thr %d' % self.numberOfThreads.get()
                 params += ' --sampling %f' % Ts
 
-                # AJ NEW condition
                 if not self.useGpu.get():
                     self.runJob('xmipp_reconstruct_fourier', params)
                 else:
@@ -333,7 +323,6 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
         fh.close()
 
         # for noise
-        # AJ NEW condition
         if self.doNoise.get():
             self.runJob('xmipp_resolution_fsc',
                         "--ref %s -i %s -o %s --sampling_rate %f" % (
@@ -362,7 +351,6 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
             cleanPattern(fnRoot + "_images_0?_0?.xmd")
             cleanPattern(fnRoot + "_fsc_0?.xmd")
             cleanPattern(fnRoot + "_noises_0?.stk")
-            # AJ NEW condition
             if self.doNoise.get():
                 cleanPattern(fnImgsAlign + "_0?_0?.xmd")
                 cleanPattern(fnRootN + "_0?_0?.vol")
@@ -371,7 +359,6 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
     def gatherResultsStep(self, debugging):
         self._writeFreqsMetaData("fraction*_freq.txt",
                                  self._defineResultsTxt())
-        # AJ NEW condition
         if self.doNoise.get():
             self._writeFreqsMetaData("Nfraction*_freq.txt",
                                      self._defineResultsNoiseTxt())
@@ -380,7 +367,6 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
             #cleanPattern(self._getExtraPath("fraction*_freq.txt")) AJ volver
             cleanPattern(self._getExtraPath('newImages.stk'))
             cleanPattern(self._getExtraPath('newImages.xmd'))
-            # AJ NEW condition
             if self.doNoise.get():
                 cleanPattern(self._getExtraPath("Nfraction*_freq.txt"))
                 cleanPattern(self._getExtraPath('Ref_Projections*'))
