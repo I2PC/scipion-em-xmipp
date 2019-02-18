@@ -28,6 +28,7 @@ from shutil import copy
 from os.path import join, exists
 from os import mkdir, remove, listdir
 
+from pyworkflow import VERSION_1_2
 from pyworkflow.em.protocol import ProtAlign2D
 import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
@@ -43,6 +44,7 @@ from xmipp3.convert import (rowToAlignment, xmippToLocation,
 class XmippProtGpuCrrCL2D(ProtAlign2D):
     """ 2D alignment using Xmipp GPU Correlation algorithm. """
     _label = 'gl2d'
+    _lastUpdateVersion = VERSION_1_2
 
 
     # --------------------------- DEFINE param functions -----------------------
