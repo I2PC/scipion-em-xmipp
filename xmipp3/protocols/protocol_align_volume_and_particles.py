@@ -113,8 +113,6 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
         alignSteps.append(stepId1)     
         stepId2 = self._insertFunctionStep('alignParticlesStep', prerequisites=alignSteps)
         alignSteps.append(stepId2)
-        stepId3 = self._insertFunctionStep('compareAlignStep', self.symmetryGroup, prerequisites=alignSteps)
-        alignSteps.append(stepId3)
 
         self._insertFunctionStep('createOutputStep', prerequisites=alignSteps)
         
@@ -206,34 +204,6 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
         outputParts.write(outParticlesFn)
 
 
-    def compareAlignStep(self, symmetryGroup):
-
-        copy(self._getExtraPath('outputParticles.xmd'),
-             self._getExtraPath("angles1.xmd"))
-        copy(self.imgsRefFn, self._getExtraPath("angles2.xmd"))
-
-        self.runJob("xmipp_metadata_utilities","-i %s -o %s --operate keep_column itemId"%\
-                    (self._getExtraPath("angles1.xmd"),self._getTmpPath("ids1.xmd")))
-        self.runJob("xmipp_metadata_utilities","-i %s -o %s --operate keep_column itemId"%\
-                    (self._getExtraPath("angles2.xmd"),self._getTmpPath("ids2.xmd")))
-        self.runJob("xmipp_metadata_utilities","-i %s --set intersection %s itemId -o %s"%\
-                    (self._getTmpPath("ids1.xmd"),self._getTmpPath("ids2.xmd"),self._getTmpPath("ids.xmd")))
-        self.runJob("xmipp_metadata_utilities","-i %s --set intersection %s itemId -o %s"%\
-                    (self._getExtraPath("angles1.xmd"),self._getTmpPath("ids.xmd"),self._getExtraPath("angles1_common.xmd")))
-        self.runJob("xmipp_metadata_utilities","-i %s --set intersection %s itemId -o %s"%\
-                    (self._getExtraPath("angles2.xmd"),self._getTmpPath("ids.xmd"),self._getExtraPath("angles2_common.xmd")))
-        self.runJob("xmipp_metadata_utilities","-i %s --operate sort itemId"%self._getExtraPath("angles1_common.xmd"))
-        self.runJob("xmipp_metadata_utilities","-i %s --operate sort itemId"%self._getExtraPath("angles2_common.xmd"))
-
-        self.runJob("xmipp_angular_distance","--ang1 %s --ang2 %s --sym %s --check_mirrors --oroot %s"%\
-                    (self._getExtraPath("angles1_common.xmd"),self._getExtraPath("angles2_common.xmd"),
-                     symmetryGroup,self._getTmpPath("angular_distance")))
-        self.runJob("xmipp_metadata_utilities",'-i %s -o %s --operate keep_column "angleDiff shiftDiff"'%\
-                    (self._getTmpPath("angular_distance.xmd"),self._getTmpPath("diffs.xmd")))
-        self.runJob("xmipp_metadata_utilities","-i %s --set merge %s"%\
-                    (self._getExtraPath("angles1_common.xmd"),self._getTmpPath("diffs.xmd")))
-    
-
     def createOutputStep(self):   
 
         outVolFn = self._getExtraPath("inputVolumeAligned.vol")
@@ -260,31 +230,11 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
         self._defineSourceRelation(self.inputVolumes, outVol)
 
         #particles....
-        # outParticlesFn = self._getExtraPath('angles1_common.xmd')
         outParticlesFn = self._getExtraPath('outputParticles.xmd')
-        # Xdim = self.inputParticles.get().getXDim()
-        # if self.newXdim != Xdim:
-        #     self.runJob("xmipp_image_resize",
-        #                 "-i %s -o %s --save_metadata_stack %s --fourier %d" %
-        #                 (outParticlesFn,
-        #                  self._getExtraPath('scaled_output_particles.stk'),
-        #                  self._getExtraPath('scaled_output_particles.xmd'),
-        #                  self.newXdim))
-        #     moveFile(self._getExtraPath('scaled_output_particles.xmd'), outParticlesFn)
         outputParticles = self._createSetOfParticles()
         outputParticles.copyInfo(self.inputParticles.get())
         outputParticles.setAlignmentProj()
-
         readSetOfParticles(outParticlesFn, outputParticles)
-
-        # AJ esto no lo tengo claro, esto o la linea anterior del readSetOfParticles
-        # AJ creo que si seria correcto
-        # self.iterMd = md.iterRows(self._getExtraPath("angles1_common.xmd"),
-        #                           md.MDL_ITEM_ID)
-        # self.lastRow = next(self.iterMd)
-        # outputParticles.copyItems(self.inputParticles.get(),
-        #                     updateItemCallback=self._updateItem)
-            
         outputArgs = {'outputParticles': outputParticles}
         self._defineOutputs(**outputArgs)
         self._defineSourceRelation(self.inputParticles, outputParticles)
@@ -339,7 +289,6 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
         mdInfo.setValue(label, value, objId)
         mdInfo.write("%s@%s" % (block, join(fnDir, "info.xmd")),
                      xmippLib.MD_APPEND)
-
 
     def _getMaskArgs(self):
         maskArgs = ''
