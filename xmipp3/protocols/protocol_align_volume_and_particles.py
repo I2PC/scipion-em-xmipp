@@ -66,10 +66,7 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
         form.addParam('inputVolumes', params.PointerParam, pointerClass='Volume',  
                       label="Input volume", important=True, 
                       help='Select one volume to be aligned against the reference volume.')
-        form.addParam('refParticles', params.PointerParam, pointerClass='SetOfParticles',  
-                      label="Reference particles", important=True, 
-                      help='Reference set of particles to be used for the alignment.')
-        form.addParam('inputParticles', params.PointerParam, pointerClass='SetOfParticles',  
+        form.addParam('inputParticles', params.PointerParam, pointerClass='SetOfParticles',
                       label="Input particles", important=True, 
                       help='Select one set of particles to be aligned against the reference set of particles using the transformation calculated with the reference and input volumes.')
         form.addParam('symmetryGroup', params.StringParam, default='c1',
@@ -99,7 +96,6 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
         #Some definitions of filenames
         self.fnRefVol = self._getExtraPath("refVolume.vol")
         self.fnInputVol = self._getExtraPath("inputVolume.vol")
-        self.imgsRefFn = self._getExtraPath("referenceParticles.xmd")
         self.imgsInputFn = self._getExtraPath("inputParticles.xmd")
 
         # Iterate through all input volumes and align them 
@@ -121,8 +117,6 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
 
     def convertStep(self):
 
-        refParts = self.refParticles.get()
-        writeSetOfParticles(refParts, self.imgsRefFn)
         inputParts = self.inputParticles.get()
         writeSetOfParticles(inputParts, self.imgsInputFn)
 
@@ -133,10 +127,8 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
         ih.convert(self.inputVolumes.get(), self.fnInputVol)
         XdimInput = self.inputVolumes.get().getDim()[0]
 
-        if XdimRef>XdimInput:
+        if XdimRef!=XdimInput:
             self.runJob("xmipp_image_resize", "-i %s --dim %d"%(self.fnRefVol, XdimInput), numberOfMpi=1)
-        elif XdimRef<XdimInput:
-            self.runJob("xmipp_image_resize", "-i %s --dim %d" % (self.fnInputVol, XdimRef), numberOfMpi=1)
 
         # #Resizing refParts
         # refParts = self.refParticles.get()
@@ -207,13 +199,6 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
     def createOutputStep(self):   
 
         outVolFn = self._getExtraPath("inputVolumeAligned.vol")
-        XdimRef = self.inputReference.get().getDim()[0]
-        XdimInput = self.inputVolumes.get().getDim()[0]
-        if XdimRef < XdimInput:
-            self.runJob("xmipp_image_resize",
-                        "-i %s --dim %d" % (outVolFn, XdimInput),
-                        numberOfMpi=1)
-
         outVol = em.Volume()
         outVol.setLocation(outVolFn)
         #set transformation matrix             
