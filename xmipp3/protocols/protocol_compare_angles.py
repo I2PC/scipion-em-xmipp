@@ -25,7 +25,7 @@
 # **************************************************************************
 
 import pyworkflow.protocol.params as params
-from pyworkflow import VERSION_1_2
+from pyworkflow import VERSION_2_0
 from pyworkflow.em.protocol import ProtAnalysis3D
 import pyworkflow.em.metadata as md
 
@@ -43,7 +43,7 @@ class XmippProtCompareAngles(ProtAnalysis3D):
     """
 
     _label = 'compare angles'
-    _lastUpdateVersion = VERSION_1_2
+    _lastUpdateVersion = VERSION_2_0
     
     def __init__(self, *args, **kwargs):
         ProtAnalysis3D.__init__(self, *args, **kwargs)

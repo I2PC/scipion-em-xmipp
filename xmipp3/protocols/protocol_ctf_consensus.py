@@ -28,18 +28,20 @@
 # **************************************************************************
 
 import os
-
-import xmippLib
-import xmipp3
 from datetime import datetime
+
+from pyworkflow import VERSION_2_0
 from pyworkflow.em.data import SetOfCTF
 from pyworkflow.object import Set, Float
-from xmipp3.convert import setXmippAttribute, prefixAttribute
 import pyworkflow.protocol.params as params
 import pyworkflow.em as em
 import pyworkflow.utils as pwutils
 from pyworkflow.em.metadata import Row, MetaData
 from pyworkflow.protocol.constants import (STATUS_NEW)
+
+import xmippLib
+import xmipp3
+from xmipp3.convert import setXmippAttribute, prefixAttribute
 
 
 class XmippProtCTFConsensus(em.ProtCTFMicrographs):
@@ -49,6 +51,7 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
     the agreement with a secondary CTF for the same set of micrographs.
     """
     _label = 'ctf consensus'
+    _lastUpdateVersion = VERSION_2_0
 
     def __init__(self, **args):
         em.ProtCTFMicrographs.__init__(self, **args)

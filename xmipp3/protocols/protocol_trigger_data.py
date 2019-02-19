@@ -30,6 +30,7 @@ import time
 from datetime import datetime
 
 import pyworkflow.protocol.constants as cons
+from pyworkflow import VERSION_2_0
 from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import BooleanParam, IntParam, PointerParam
@@ -52,6 +53,7 @@ class XmippProtTriggerData(EMProtocol):
                 a certain number of images (completely in streaming).
     """
     _label = 'trigger data'
+    _lastUpdateVersion = VERSION_2_0
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):

@@ -27,7 +27,7 @@
 
 import numpy as np
 
-from pyworkflow import VERSION_1_1
+from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import (PointerParam, StringParam, 
                                         BooleanParam, FloatParam,
                                         LEVEL_ADVANCED)
@@ -57,7 +57,7 @@ class XmippProtMonoTomo(ProtAnalysis3D):
     Given a map the protocol assigns local resolutions to each voxel of the map.
     """
     _label = 'local MonoTomo'
-    _lastUpdateVersion = VERSION_1_1
+    _lastUpdateVersion = VERSION_2_0
     
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)

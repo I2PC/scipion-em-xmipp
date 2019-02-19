@@ -24,7 +24,7 @@
 # *
 # **************************************************************************
 
-
+from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import PointerParam, IntParam
 from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.em.data import Volume
@@ -35,7 +35,7 @@ class XmippMetaProtCreateSubset(EMProtocol):
     Volume from a SetOfVolumes
      """
     _label = 'metaprotocol heterogeneity subset'
-
+    _lastUpdateVersion = VERSION_2_0
 
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):

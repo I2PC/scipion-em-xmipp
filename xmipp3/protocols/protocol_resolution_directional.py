@@ -24,18 +24,21 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-from pyworkflow import VERSION_1_1
+
+import numpy as np
+
+from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam, LEVEL_ADVANCED)
 from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
 from pyworkflow.em.data import Volume
 from pyworkflow.object import Float
 from pyworkflow.em import ImageHandler
 from pyworkflow.utils import getExt
-import numpy as np
 import pyworkflow.em.metadata as md
+
 from xmippLib import (MDL_XCOOR, MDL_YCOOR, MDL_ZCOOR,
-                                              MDL_ANGLE_ROT, MDL_ANGLE_TILT, 
-                                              MDL_MAX, MDL_MIN, MDL_INTSCALE)
+                      MDL_ANGLE_ROT, MDL_ANGLE_TILT,
+                      MDL_MAX, MDL_MIN, MDL_INTSCALE)
 
 
 MONORES_METHOD_URL = 'http://github.com/I2PC/scipion/wiki/XmippProtMonoDir'
@@ -71,7 +74,7 @@ class XmippProtMonoDir(ProtAnalysis3D):
     Given a map the protocol assigns local resolutions to each voxel of the map.
     """
     _label = 'directional ResDir'
-    _lastUpdateVersion = VERSION_1_1
+    _lastUpdateVersion = VERSION_2_0
     
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
