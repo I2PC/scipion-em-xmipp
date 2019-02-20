@@ -103,7 +103,7 @@ class TestMixedMovies(BaseTest):
                                objLabel='CC (no-write)',
                                alignFrame0=2, alignFrameN=10,
                                useAlignToSum=True,
-                               splineOrder=XmippProtMovieCorr.INTERP_CUBIC)
+                               doLocalAlignment=False)
         mc1.inputMovies.set(protMovieImport.outputMovies)
         self.launchProtocol(mc1)
 
@@ -118,7 +118,7 @@ class TestMixedMovies(BaseTest):
                                objLabel='CC (write)',
                                alignFrame0=2, alignFrameN=10,
                                useAlignToSum=True,
-                               splineOrder=XmippProtMovieCorr.INTERP_CUBIC,
+                               doLocalAlignment=False,
                                doSaveMovie=True)
         mc2.inputMovies.set(protMovieImport.outputMovies)
         self.launchProtocol(mc2)
@@ -142,7 +142,8 @@ class TestMixedMovies(BaseTest):
                                 objLabel='AVG (2)',
                                 sumFrame0=2, sumFrameN=10,
                                 splineOrder=XmippProtMovieAverage.INTERP_CUBIC,
-                                numberOfThreads=4)
+                                numberOfThreads=4,
+                                useAlignment=False) # do not apply the shift again
 
         avg2.inputMovies.set(mc2.outputMovies)
         self.launchProtocol(avg2)

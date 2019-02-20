@@ -139,7 +139,7 @@ class XmippProtOFAlignment(ProtAlignMovies):
         gpuId = self.gpuList.get()
         inputMd = self._getFnInMovieFolder(movie, 'input_movie.xmd')
         writeMovieMd(movie, inputMd, a0, aN, useAlignment=self.useAlignment)
-        
+
         args = '-i %s ' % inputMd
         args += '-o "%s" ' % self._getOutputShifts(movie)
         args += ' --frameRange %d %d ' % (0, aN - a0)
@@ -342,7 +342,7 @@ class XmippProtOFAlignment(ProtAlignMovies):
         return self._getNameExt(movie, '_aligned_corrected', 'psd', extra=True)
 
     def _loadMeanShifts(self, movie):
-        alignMd = md.MetaData("frameShifts@" + self._getOutputShifts(movie))
+        alignMd = md.MetaData(self._getOutputShifts(movie))
         meanX = alignMd.getColumnValues(md.MDL_OPTICALFLOW_MEANX)
         meanY = alignMd.getColumnValues(md.MDL_OPTICALFLOW_MEANY)
 
