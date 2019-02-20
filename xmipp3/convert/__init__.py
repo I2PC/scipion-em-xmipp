@@ -26,4 +26,5 @@
 
 from .convert import *
 from .dataimport import *
+from .io_coordinates import *
 
