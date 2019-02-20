@@ -57,6 +57,7 @@ class Plugin(pyworkflow.em.Plugin):
         environ.update({
             'PATH': getXmippPath('bin'),
             'LD_LIBRARY_PATH': getXmippPath('lib'),
+            'PYTHONPATH': getXmippPath('pylib')
         }, position=pos)
 
         if os.environ['CUDA'] != 'False':  # environ variables are strings not booleans
