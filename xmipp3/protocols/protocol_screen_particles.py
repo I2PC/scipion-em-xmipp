@@ -47,8 +47,14 @@ from xmipp3.convert import readSetOfParticles, writeSetOfParticles
 
 
 class XmippProtScreenParticles(ProtProcessParticles):
-    """ Classify particles according their similarity to the others in order
-    to detect outliers. """
+    """ Attach different merit values to every particle in order to
+        prune the set.
+        zScore evaluates the similarity of a particles with an average
+        (lower zScore -> high similarity).
+        SSNR evaluates the signal/noise ration in the Fourier space.
+        Variance evaluates the varaince on the micrographs context where
+        the particle was picked.
+    """
 
     _label = 'screen particles'
 
@@ -64,68 +70,66 @@ class XmippProtScreenParticles(ProtProcessParticles):
     REJ_VARGINI = 2
 
     # --------------------------- DEFINE param functions ---------------------
-
     def _defineProcessParams(self, form):
-
+        # --- zScore rejection ---
         form.addParam('autoParRejection', EnumParam,
                       choices=self.ZSCORE_CHOICES,
-                      label="Automatic particle rejection based on Zscore",
+                      label="Automatic rejection by Zscore",
                       default=self.REJ_NONE,
                       display=EnumParam.DISPLAY_COMBO,
-                      expertLevel=LEVEL_ADVANCED,
-                      help='How to automatically reject particles. It can be:\n'
+                      help='zScore evaluates the similarity of a particles '
+                           'with an average. The rejection can be:\n'
                            '  None (no rejection)\n'
-                           '  MaxZscore (reject a particle if its Zscore [a '
-                           'similarity index] is larger than this value).\n '
-                           '  Percentage (reject a given percentage in each '
-                           'one of the screening criteria).')
-        form.addParam('maxZscore', FloatParam, default=3,
-                      condition='autoParRejection==1',
-                      label='Maximum Zscore', expertLevel=LEVEL_ADVANCED,
-                      help='Maximum Zscore.', validators=[Positive])
-        form.addParam('percentage', IntParam, default=5,
+                           '  MaxZscore (reject a particle if its zScore '
+                           'is larger than this value).\n '
+                           '  Percentage (reject a given percentage for '
+                           'this criteria).')
+        form.addParam('maxZscore', FloatParam, default=3, validators=[Positive],
+                      condition='autoParRejection==1', label='zScore threshold',
+                      help='Maximum Zscore.')
+        form.addParam('percentage', IntParam, default=5, label='Percentage (%)',
                       condition='autoParRejection==2',
-                      label='Percentage (%)', expertLevel=LEVEL_ADVANCED,
                       help='The worse percentage of particles according to '
                            'metadata labels: ZScoreShape1, ZScoreShape2, '
                            'ZScoreSNR1, ZScoreSNR2, ZScoreHistogram are '
-                           'automatically disabled. Therefore, the total '
-                           'number of disabled particles belongs to ['
-                           'percetage, 5*percentage]',
+                           'automatically disabled.',
                       validators=[Range(0, 100, error="Percentage must be "
                                                       "between 0 and 100.")])
+        # --- SSNR rejection ---
         form.addParam('autoParRejectionSSNR', EnumParam,
                       choices=self.SSNR_CHOICES,
-                      label="Automatic particle rejection based on SSNR",
+                      label="Automatic rejection by SSNR",
                       default=self.REJ_NONE, display=EnumParam.DISPLAY_COMBO,
-                      expertLevel=LEVEL_ADVANCED,
-                      help='How to automatically reject particles based on '
-                           'SSNR. It can be:\n'
+                      help='SSNR evaluates the signal/noise ration in the '
+                           'Fourier space. The rejection can be:\n'
                            '  None (no rejection)\n'
-                           'Percentage (reject a given percentage of the '
+                           '  Percentage (reject a given percentage of the '
                            'lowest SSNRs).')
         form.addParam('percentageSSNR', IntParam, default=5,
                       condition='autoParRejectionSSNR==1',
-                      label='Percentage (%)', expertLevel=LEVEL_ADVANCED,
+                      label='Percentage (%)',
                       help='The worse percentage of particles according to '
                            'SSNR are automatically disabled.',
                       validators=[Range(0, 100, error="Percentage must be "
                                                       "between 0 and 100.")])
+        # --- Variance rejection ---
         form.addParam('autoParRejectionVar', EnumParam, default=self.REJ_NONE,
                       choices=self.VAR_CHOICES,
-                      label='Automatic particle rejection based on Variance',
-                      expertLevel=LEVEL_ADVANCED,
-                      help='How to automatically reject particles based on '
-                           'Variance. It can be:\n'
+                      label='Automatic rejection by Variance',
+                      help='Variance evaluates the varaince on the micrographs '
+                           'context where the particle was picked. '
+                           'The rejection can be:\n'
                            '  None (no rejection)\n'
                            '  Variance (taking into account only the variance)\n'
-                           '  Var. and Gini (taking into account also the Gini coeff.)')
+                           '  Var. and Gini (taking into account also the Gini '
+                           'coeff.)')
+        # --- Add features ---
         form.addParam('addFeatures', BooleanParam, default=False,
                       label='Add features', expertLevel=LEVEL_ADVANCED,
                       help='Add features used for the ranking to each one '
                            'of the input particles')
-        form.addParallelSection(threads=0, mpi=0)
 
+        form.addParallelSection(threads=0, mpi=0)
 
     def _getDefaultParallel(self):
         """This protocol doesn't have mpi version"""

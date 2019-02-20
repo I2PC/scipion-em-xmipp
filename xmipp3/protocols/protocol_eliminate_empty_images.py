@@ -55,6 +55,24 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         ProtClassify2D.__init__(self, **args)
         self.stepsExecutionMode = em.STEPS_PARALLEL
 
+    def addAdvancedParams(self, form):
+        form.addParam('addFeatures', param.BooleanParam, default=False,
+                      label='Add features', expertLevel=param.LEVEL_ADVANCED,
+                      help='Add features used for the ranking to each '
+                           'one of the input particles')
+        form.addParam('useDenoising', param.BooleanParam, default=True,
+                      label='Turning on denoising',
+                      expertLevel=param.LEVEL_ADVANCED,
+                      help='Option for turning on denoising method '
+                           'while computing emptiness feature')
+        form.addParam('denoising', param.FloatParam, default=5.0,
+                      expertLevel=param.LEVEL_ADVANCED,
+                      condition='useDenoising',
+                      label='Denoising factor:',
+                      help='Factor to be used during Gaussian blurring. '
+                           'Higher value applies stronger denoising,'
+                           'could be more precise but also slower.')
+
     # --------------------------- INSERT steps functions ----------------------
     def _insertAllSteps(self):
         self.outputSize = 0
@@ -185,28 +203,14 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
         form.addParam('inputParticles', param.PointerParam, important=True,
                       label="Input particles", pointerClass='SetOfParticles',
                       help='Select the input particles to be classified.')
-        form.addParam('threshold', param.FloatParam, default=1.5,
+        form.addParam('threshold', param.FloatParam, default=1.1,
                       label='Threshold used in elimination:',
                       help='Higher threshold => more particles will be '
-                           'eliminated. Set to -1 for no elimination.')
+                           'eliminated. Set to -1 for no elimination, even so '
+                           'the _xmipp_scoreEmptiness_ value will be attached to'
+                           'every paricle for a posterior inspection.')
 
-        # - - - A D V A N C E D - - -
-        form.addParam('addFeatures', param.BooleanParam, default=False,
-                      label='Add features', expertLevel=param.LEVEL_ADVANCED,
-                      help='Add features used for the ranking to each '
-                           'one of the input particles')
-        form.addParam('useDenoising', param.BooleanParam, default=True,
-                      label='Turning on denoising',
-                      expertLevel=param.LEVEL_ADVANCED,
-                      help='Option for turning on denoising method '
-                           'while computing emptiness feature')
-        form.addParam('denoising', param.FloatParam, default=5.0,
-                      expertLevel=param.LEVEL_ADVANCED,
-                      condition='useDenoising',
-                      label='Denoising factor:',
-                      help='Factor to be used during Gaussian blurring. '
-                           'Higher value applies stronger denoising,'
-                           'could be more precise but also slower.')
+        self.addAdvancedParams(form)
 
     # --------------------------- INSERT steps functions ----------------------
     def _checkNewInput(self):
@@ -326,23 +330,7 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                            "Classes with less population than the mean population "
                            "times this value will be rejected.")
 
-        # - - - A D V A N C E D - - -
-        form.addParam('addFeatures', param.BooleanParam, default=False,
-                      label='Add features', expertLevel=param.LEVEL_ADVANCED,
-                      help='Add features used for the ranking to each '
-                           'one of the input particles')
-        form.addParam('useDenoising', param.BooleanParam, default=True,
-                      label='Turning on denoising',
-                      expertLevel=param.LEVEL_ADVANCED,
-                      help='Option for turning on denoising method '
-                           'while computing emptiness feature')
-        form.addParam('denoising', param.FloatParam, default=5.0,
-                      expertLevel=param.LEVEL_ADVANCED,
-                      condition='useDenoising',
-                      label='Denoising factor:',
-                      help='Factor to be used during Gaussian blurring. '
-                           'Higher value applies stronger denoising,'
-                           'could be more precise but also slower.')
+        self.addAdvancedParams(form)
 
     # --------------------------- INSERT steps functions ----------------------
     def _checkNewInput(self):
