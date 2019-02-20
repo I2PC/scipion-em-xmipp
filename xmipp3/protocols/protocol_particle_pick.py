@@ -26,7 +26,6 @@
 # **************************************************************************
 
 from pyworkflow.em import *
-from pyworkflow.protocol.launch import launch
 from pyworkflow.utils.path import *
 from pyworkflow.em.viewers.showj import launchSupervisedPickerGUI
 
