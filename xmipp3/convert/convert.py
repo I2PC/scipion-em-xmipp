@@ -31,19 +31,20 @@ This module contains converter functions that will serve to:
 """
 
 import os
-from os.path import join, dirname
+from os.path import join, exists
 from collections import OrderedDict
 from itertools import izip
 import numpy
 
-from pyworkflow.utils.path import replaceBaseExt, removeExt, findRootFrom
+from pyworkflow.em import Angles
+from pyworkflow.utils import replaceBaseExt
+from pyworkflow.em.data import *
+from pyworkflow.em.convert import ImageHandler
 import pyworkflow.em.metadata as md
-from pyworkflow.em import *
 
 import xmippLib
 from xmipp3.base import XmippMdRow, getLabelPythonType, RowMetaData
 from xmipp3.utils import iterMdRows
-
 
 
 # This dictionary will be used to map
@@ -283,16 +284,20 @@ def rowToObject(row, obj, attrDict, extraLabels=[]):
             labelStr = xmippLib.label2Str(label)
             setattr(obj, '_xmipp_%s' % labelStr, row.getValueAsObject(label))
 
-
 def setXmippAttributes(obj, objRow, *labels):
     """ Set an attribute to obj from a label that is not
     basic ones. The new attribute will be named _xmipp_LabelName
     and the datatype will be set correctly.
     """
     for label in labels:
-        setattr(obj, '_xmipp_%s' % xmippLib.label2Str(label),
-                objRow.getValueAsObject(label))
+        setXmippAttribute(obj, label, objRow.getValueAsObject(label))
 
+def setXmippAttribute(obj, label, value):
+    """ Sets an attribute of an object prefixing it with xmipp"""
+    setattr(obj, prefixAttribute(xmippLib.label2Str(label)), value)
+
+def prefixAttribute(attribute):
+    return '_xmipp_%s' % attribute
 
 def rowFromMd(md, objId):
     row = XmippMdRow()
@@ -397,6 +402,7 @@ def micrographToCTFParam(mic, ctfparam):
     row.writeToMd(md, md.addObject())
     md.write(ctfparam)
     return ctfparam
+
 
 def imageToRow(img, imgRow, imgLabel, **kwargs):
     # Provide a hook to be used if something is needed to be
@@ -840,7 +846,7 @@ def writeMicCoordinates(mic, coordList, outputFn, isManual=True,
             it can be useful for scaling the coordinates if needed.
     """
     if getPosFunc is None:
-        getPosFunc = lambda coord: coord.getPostion()
+        getPosFunc = lambda coord: coord.getPosition()
 
     state = 'Manual' if isManual else 'Supervised'
     f = openMd(outputFn, state)
@@ -998,6 +1004,9 @@ def readAnglesFromMicrographs(micFile, anglesSet):
 #    micMd.removeDisabled()
 
     for objId in micMd:
+        # TODO I have added the import from pyworkflow.em import Angles
+        # because next line gave an error. I do not know if this
+        # is the right Angle class
         angles = Angles()
         row = rowFromMd(micMd, objId)
         rowToObject(row, angles, ANGLES_DICT)
@@ -1252,43 +1261,6 @@ def readSetOfClassesVol(classesVolSet, filename,
     __readSetOfClasses(SetOfVolumes, readSetOfVolumes,
                        classesVolSet, filename, classesBlock, **kwargs)
 
-    return
-
-    # FIXME: Delete from here
-
-    blocks = xmippLib.getBlocksInMetaDataFile(filename)
-    classesMd = xmippLib.MetaData('%s@%s' % (classesBlock, filename))
-
-    # Provide a hook to be used if something is needed to be
-    # done for special cases before converting row to class
-    preprocessClass = kwargs.get('preprocessClass', None)
-    postprocessClass = kwargs.get('postprocessClass', None)
-
-    for objId in classesMd:
-        classVol = classesVolSet.ITEM_TYPE()
-        classRow = rowFromMd(classesMd, objId)
-        classVol = rowToClass(classRow, classVol)
-        # FIXME: the following is only valid for SetOfParticles
-        SetOfParticles.copyInfo(classVol, classesVolSet.getImages())
-
-        if preprocessClass:
-            preprocessClass(classVol, classRow)
-
-        classesVolSet.append(classVol)
-        ref = classVol.getObjId()
-        b = 'class%06d_images' % ref
-
-        if b in blocks:
-            readSetFunc = _readSetFunc()
-            readSetOfVolumes('%s@%s' % (b, filename), classVol, **kwargs)
-
-        if postprocessClass:
-            postprocessClass(classVol, classRow)
-
-        # Update with new properties of classItem such as _size
-        classesVolSet.update(classVol)
-
-
 def writeSetOfMovies(moviesSet, filename, moviesBlock='movies'):
     """ This function will write a SetOfMovies as Xmipp metadata.
     Params:
@@ -1308,58 +1280,8 @@ def writeSetOfMovies(moviesSet, filename, moviesBlock='movies'):
             micRow.writeToMd(micrographsMd, micrographsMd.addObject())
         micrographsMd.write(micrographsFn, xmippLib.MD_APPEND)
 
-
-def createXmippInputImages(prot, imgSet, imagesFn=None):
-    raise Exception('createXmippInputImages is DEPRECATED!!!')
-    if prot is not None:
-        imgsFn = prot._getPath(imagesFn or 'input_images.xmd')
-
-    writeSetOfParticles(imgSet, imgsFn)
-    return imgsFn
-
-
-def createXmippInputMicrographs(prot, micSet, micsFn=None):
-    raise Exception('createXmippInputMicrographs is DEPRECATED!!!')
-    if prot is not None:
-        micsFn = prot._getPath('input_micrographs.xmd')
-
-    writeSetOfMicrographs(micSet, micsFn)
-    return micsFn
-
-
-def createXmippInputVolumes(prot, volSet, volsFn=None):
-    raise Exception('createXmippInputVolumes is DEPRECATED!!!')
-    if volsFn is None:
-        volsFn = prot._getPath('input_volumes.xmd')
-
-    writeSetOfVolumes(volSet, volsFn)
-    return volsFn
-
-
-def createXmippInputClasses2D(prot, classSet, classFn=None):
-    raise Exception('createXmippInputClasses2D is DEPRECATED!!!')
-    if prot is not None and classFn is None:
-        classFn = prot._getPath('input_classes.xmd')
-
-    writeSetOfClasses2D(classSet, classFn)
-    return classFn
-
-
-def createXmippInputCTF(prot, ctfSet, ctfFn=None):
-    raise Exception('createXmippInputCTF is DEPRECATED!!!')
-    ctfMd = getattr(ctfSet, '_xmippMd', None)
-    if ctfMd is None:
-        if prot is not None:
-            ctfFn = prot._getPath('input_ctfs.xmd')
-
-        writeSetOfCTFs(ctfSet, ctfFn)
-    else:
-        ctfFn = ctfMd.get()
-    return ctfFn
-
-
 def geometryFromMatrix(matrix, inverseTransform):
-    from pyworkflow.em.transformations import \
+    from pyworkflow.em.convert.transformations import  \
         translation_from_matrix, euler_from_matrix
     if inverseTransform:
         matrix = numpy.linalg.inv(matrix)
@@ -1374,7 +1296,7 @@ def matrixFromGeometry(shifts, angles, inverseTransform):
     """ Create the transformation matrix from a given
     2D shifts in X and Y...and the 3 euler angles.
     """
-    from pyworkflow.em.transformations import euler_matrix
+    from pyworkflow.em.convert.transformations import  euler_matrix
     radAngles = -numpy.deg2rad(angles)
 
     M = euler_matrix(radAngles[0], radAngles[1], radAngles[2], 'szyz')

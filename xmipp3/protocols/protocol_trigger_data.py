@@ -30,6 +30,7 @@ import time
 from datetime import datetime
 
 import pyworkflow.protocol.constants as cons
+from pyworkflow import VERSION_2_0
 from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import BooleanParam, IntParam, PointerParam
@@ -52,6 +53,7 @@ class XmippProtTriggerData(EMProtocol):
                 a certain number of images (completely in streaming).
     """
     _label = 'trigger data'
+    _lastUpdateVersion = VERSION_2_0
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -69,7 +71,7 @@ class XmippProtTriggerData(EMProtocol):
                       label='Send all items to output?',
                       help='If NO is selected, only a subset of "Output size" '
                            'items will be send to output.')
-        form.addParam('splitImages', BooleanParam, default=True,
+        form.addParam('splitImages', BooleanParam, default=False,
                       label='Split items to multiple sets?',
                       condition='allImages',
                       help='If YES is selected, multiple closed outputs of '

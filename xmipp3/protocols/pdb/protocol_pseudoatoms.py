@@ -28,9 +28,7 @@
 # **************************************************************************
 
 from pyworkflow.protocol.params import PointerParam
-from pyworkflow.em.data import PdbFile, Volume
-from pyworkflow.em.data import Transform
-from pyworkflow.em.viewers.chimera_utils import createCoordinateAxisFile
+from pyworkflow.em.data import AtomStruct, Volume, Transform
 
 from xmipp3.convert import getImageLocation
 from .protocol_pseudoatoms_base import XmippProtConvertToPseudoAtomsBase
@@ -60,11 +58,11 @@ class XmippProtConvertToPseudoAtoms(XmippProtConvertToPseudoAtomsBase):
     def createOutputStep(self):
         inputVol = self.inputStructure.get()
         samplingRate = inputVol.getSamplingRate()
-        volume=Volume()
+        volume = Volume()
         volume.setFileName(self._getExtraPath("pseudoatoms_approximation.vol"))
         volume.setSamplingRate(samplingRate)
         x, y, z = volume.getDim()
-        xv,yv,zv=inputVol.getOrigin(force=True).getShifts()
+        xv, yv, zv = inputVol.getOrigin(force=True).getShifts()
         t = Transform()
         t.setShifts((x / 2. * samplingRate) - xv,
                     (y / 2. * samplingRate) - yv,
@@ -72,9 +70,9 @@ class XmippProtConvertToPseudoAtoms(XmippProtConvertToPseudoAtomsBase):
         volume.setOrigin(inputVol.getOrigin())
 
         self._defineOutputs(outputVolume=volume)
-        self._defineSourceRelation(self.inputStructure.get(),volume)
+        self._defineSourceRelation(self.inputStructure.get(), volume)
 
-        pdb = PdbFile(self._getPath('pseudoatoms.pdb'), pseudoatoms=True)
+        pdb = AtomStruct(self._getPath('pseudoatoms.pdb'), pseudoatoms=True)
         pdb.setVolume(volume)
         pdb.setOrigin(t)
         self.createChimeraScript(inputVol, pdb)
@@ -90,10 +88,11 @@ class XmippProtConvertToPseudoAtoms(XmippProtConvertToPseudoAtomsBase):
 
     def _methods(self):
         summary = []
-        summary.append('We converted the volume %s into a pseudoatomic representation with Gaussian atoms (sigma=%f A and a target error'\
-                       ' of %f%%) [Nogales2013].' % (self.inputStructure.get().getNameId(),
-                                     self.pseudoAtomRadius.get()*self.inputStructure.get().getSamplingRate(),
-                                     self.pseudoAtomTarget.get()));
+        summary.append('We converted the volume %s into a pseudoatomic representation with Gaussian atoms'
+                       ' (sigma=%f A and a target error of %f%%) '
+                       '[Nogales2013].' % (self.inputStructure.get().getNameId(),
+                                           self.pseudoAtomRadius.get()*self.inputStructure.get().getSamplingRate(),
+                                           self.pseudoAtomTarget.get()))
         if self.hasAttribute('outputPdb'):
             summary.append('We refer to the pseudoatomic model as %s.' % self.outputPdb.getNameId())
         return summary
