@@ -73,7 +73,8 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
                             help='Minimum and maximum values for defocus in '
                                  'Angstroms.\nMicrographs out of this range '
                                  'will left out of the output.')
-        line.addParam('minDefocus', params.FloatParam, default=4000, label='Min')
+        line.addParam('minDefocus', params.FloatParam, default=4000,
+                      label='Min')
         line.addParam('maxDefocus', params.FloatParam,
                       default=40000, label='Max')
 
