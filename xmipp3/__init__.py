@@ -173,7 +173,6 @@ class Plugin(pyworkflow.em.Plugin):
         if nvccProgram != "":
             nvccVersion = subprocess.Popen(["nvcc", '--version'],
                                            stdout=subprocess.PIPE).stdout.read()
-            print(nvccVersion)
 
             if "release 8.0" in nvccVersion: #cuda 8
                 tensorFlowTarget = "1.4.1"

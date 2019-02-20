@@ -11,11 +11,11 @@ def readSetOfCoordsFromPosFnames( posDir, setOfInputCoords, sqliteOutName, write
   '''
 
   inputMics = setOfInputCoords.getMicrographs()
-  micIds= inputMics.getIdSet()
-  micNameToMicId={}
-  for micId in micIds:
-    mic= inputMics[micId]
-    micNameToMicId[".".join( os.path.basename(mic.getFileName()).split(".")[:-1] )]= micId
+#  micIds= inputMics.getIdSet()
+#  micNameToMicId={}
+#  for micId in micIds:
+#    mic= inputMics[micId]
+#    micNameToMicId[".".join( os.path.basename(mic.getFileName()).split(".")[:-1] )]= micId
 
   cleanPath(sqliteOutName)
   setOfOutputCoordinates= SetOfCoordinates(filename= sqliteOutName)

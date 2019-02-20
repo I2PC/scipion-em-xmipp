@@ -74,7 +74,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
     ADD_DATA_TRAIN_TYPES = ["None", "Precompiled", "Custom"]
     ADD_DATA_TRAIN_NONE = 0
-    ADD_DATA_TRAIN_MODEL = 1
+    ADD_DATA_TRAIN_PRECOMP = 1
     ADD_DATA_TRAIN_CUST = 2
 
     ADD_MODEL_TRAIN_TYPES = ["New", "Pretrained", "PreviousRun"]
@@ -236,7 +236,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         form.addParam('addTrainingData', params.EnumParam,
                       condition="modelInitialization==%s or not skipTraining"%self.ADD_MODEL_TRAIN_NEW,
                       choices=self.ADD_DATA_TRAIN_TYPES,
-                      default=self.ADD_DATA_TRAIN_MODEL,
+                      default=self.ADD_DATA_TRAIN_PRECOMP,
                       label='Additional training data',
                       help='If you set to *%s*, you should select positive and/or '
                            'negative sets of particles. Regard that our method, '
@@ -350,11 +350,12 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         deps.append(self._insertFunctionStep("initializeStep", prerequisites=deps))
         depsPrepMic = self._insertFunctionStep("preprocessMicsStep", prerequisites=deps)
         depsPrepMic=[depsPrepMic]
-        # OR before noise always
+        # OR before noise always, as noise needs to need the number of OR coords
         depsOr_cons = self.insertCaculateConsensusSteps('OR', prerequisites=depsPrepMic)
         depsOr = self.insertExtractPartSteps('OR', prerequisites=depsOr_cons)
         depsTrain = depsOr
-        if len(self.inputCoordinates)>1 and ( self._doContinue() or not self.skipTraining.get()):
+
+        if len(self.inputCoordinates)>1 and  not self.skipTraining.get():
           depNoise = self._insertFunctionStep('pickNoise', prerequisites=depsOr)
           depsNoise = self.insertExtractPartSteps('NOISE', prerequisites=[depNoise])
 
@@ -386,7 +387,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             if self.trainFalseSetOfParticles.get():
                 writeSetOfParticles(self.trainFalseSetOfParticles.get(),
                                     self._getExtraPath("trainFalseParticlesSet.xmd"))
-        elif self.addTrainingData.get() == self.ADD_DATA_TRAIN_MODEL:
+        elif self.addTrainingData.get() == self.ADD_DATA_TRAIN_PRECOMP:
             writeSetOfParticles(self.retrieveTrainSets(),
                                 self._getTmpPath("addNegTrainParticles.xmd"))
 
@@ -499,7 +500,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           newDep=self._insertFunctionStep('calculateCoorConsensusStep', outCoordsDataPath, mode, prerequisites=prerequisites)
           deps = [newDep]
           newDep = self._insertFunctionStep('loadCoords', outCoordsDataPath,
-                                          mode, write=True, prerequisites=deps)
+                                          mode, prerequisites=deps)
           deps = [newDep]
         else:
           deps= prerequisites
@@ -516,13 +517,13 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           tmpPosDir= self._getTmpPath("input_coords_%d"%(coord_num))
           makePath(tmpPosDir)
           writeSetOfCoordinates(tmpPosDir, coordinatesP.get(), scale=float(Tm[coord_num])/float(Tm[0]))
-          for fname in os.listdir(tmpPosDir):
-              baseName, extension= os.path.basename(fname).split(".")
+          for posFname in os.listdir(tmpPosDir):
+              baseName, extension= os.path.basename(posFname).split(".")
               if extension=="pos":
                 if baseName not in inputCoordsFnames:
                     inputCoordsFnames[baseName]=["None"]*nCoordsSets
-                inputCoordsFnames[baseName][coord_num]= os.path.join(tmpPosDir, fname)
-      inputFileStr=""
+                inputCoordsFnames[baseName][coord_num]= os.path.join(tmpPosDir, posFname)
+      inputFileStr="#pos_i"
       for baseName in inputCoordsFnames:
          fnames= inputCoordsFnames[baseName]
          inputFileStr+=" ".join(fnames)+"\n"
@@ -538,7 +539,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       self.runJob('xmipp_coordinates_consensus', args, numberOfMpi=1)
 
         
-    def loadCoords(self, posCoorsPath, mode, writeSet=False):
+    def loadCoords(self, posCoorsPath, mode, writeSet=True):
         boxSize = self._getBoxSize()
         inputMics = self._getInputMicrographs()
         sqliteName= self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE%mode)+".sqlite"
@@ -561,7 +562,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           outputPosDir= self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE % "NOISE")
           if not "OR" in self.coordinatesDict:  # fill self.coordinatesDict['OR']
               self.loadCoords( self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE % 'OR'),
-                               'OR', writeSet=False)
+                               'OR')
 
           argsDict=pickNoise_prepareInput(self.coordinatesDict['OR'], self._getTmpPath())
           argsDict["outputPosDir"]= outputPosDir
@@ -573,7 +574,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           if not self.checkIfPrevRunIsCompatible( "coords_"):                
               self.runJob('xmipp_pick_noise', args, numberOfMpi=1)
               
-          self.loadCoords(outputPosDir, 'NOISE', writeSet=True)
+          self.loadCoords(outputPosDir, 'NOISE')
           
         
     def getPreProcParamsFromForm(self):
@@ -798,7 +799,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         posTrainDict = {self._getExtraPath("particles_AND.xmd"):  1}
         negTrainDict = {self._getExtraPath("particles_NOISE.xmd"):  1}
 
-        if self.addTrainingData.get() == self.ADD_DATA_TRAIN_MODEL:
+        if self.addTrainingData.get() == self.ADD_DATA_TRAIN_PRECOMP:
           negTrainDict[self._getTmpPath("addNegTrainParticles.xmd")]= 1
         
         if self.usesGpu():
@@ -904,8 +905,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         if self.checkIfPrevRunIsCompatible("coords_"):
           writeSet=True
         if not "OR" in self.coordinatesDict:
-            self.loadCoords(self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE % 'OR'),
-                                     'OR', writeSet=False)
+            self.loadCoords(self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE % 'OR'),'OR')
 
         coordSet = SetOfCoordinates(filename=self._getPath("coordinates.sqlite"))
         coordSet.copyInfo(self.coordinatesDict['OR'])
@@ -916,7 +916,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         for part in partSet:
             coord = part.getCoordinate().clone()
             coord.scale(downFactor)
-
             deepZscoreLabel = '_xmipp_%s' % xmipp.label2Str(MD.MDL_ZSCORE_DEEPLEARNING1)
             setattr(coord, deepZscoreLabel, getattr(part, deepZscoreLabel))
             coordSet.append(coord)
@@ -930,7 +929,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         for inSetOfCoords in self.inputCoordinates:
             self._defineSourceRelation(inSetOfCoords.get(), coordSet)
             self._defineSourceRelation(inSetOfCoords.get(), partSet)
-
 
     def _summary(self):
         message = []
