@@ -270,8 +270,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
          The shifts should refer to the original micrograph without any binning.
          In case of a bining greater than 1, the shifts should be scaled.
         """
-
-        shiftsMd = md.MetaData(self._getShiftsFile(movie))
+        shiftsMd = md.MetaData("frameShifts@" + self._getShiftsFile(movie))
         return readShiftsMovieAlignment(shiftsMd)
 
     def _storeSummary(self, movie):
@@ -286,7 +285,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
                                     "alignment to 0")
 
     def _loadMeanShifts(self, movie):
-        alignMd = md.MetaData(self._getShiftsFile(movie))
+        alignMd = md.MetaData("frameShifts@" + self._getShiftsFile(movie))
         meanX = alignMd.getColumnValues(md.MDL_SHIFT_X)
         meanY = alignMd.getColumnValues(md.MDL_SHIFT_Y)
 

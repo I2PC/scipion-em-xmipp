@@ -29,7 +29,7 @@
 from __future__ import print_function
 
 from pyworkflow.tests.test_utils import wait
-from pyworkflow.utils import magentaStr, importFromPlugin
+from pyworkflow.utils import greenStr, magentaStr, importFromPlugin
 from pyworkflow.tests import *
 from pyworkflow.em.protocol import *
 
