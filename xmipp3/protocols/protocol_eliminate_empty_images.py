@@ -65,7 +65,7 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
                       expertLevel=param.LEVEL_ADVANCED,
                       help='Option for turning on denoising method '
                            'while computing emptiness feature')
-        form.addParam('denoising', param.FloatParam, default=5.0,
+        form.addParam('denoising', param.IntParam, default=5,
                       expertLevel=param.LEVEL_ADVANCED,
                       condition='useDenoising',
                       label='Denoising factor:',
