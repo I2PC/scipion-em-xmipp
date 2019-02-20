@@ -52,6 +52,16 @@ class TestXmippCTFConsensusBase(BaseTest):
 
         return ctf
 
+    def checkOutputSize(self, ctfConsensusProt):
+        inSize = ctfConsensusProt.inputCTF.get().getSize()
+        outSize = 0
+        outSize += ctfConsensusProt.outputCTF.getSize() \
+                       if hasattr(ctfConsensusProt, 'outputCTF') else 0
+        outSize += ctfConsensusProt.outputCTFDiscarded.getSize() \
+                       if hasattr(ctfConsensusProt, 'outputCTFDiscarded') else 0
+        self.assertEqual(inSize, outSize, "Input size must be equal to the sum"
+                                          " of the outputs!")
+
     def testCtfConsensus1(self):
         # create one micrograph set
         fnMicSet = self.proj.getTmpPath("mics.sqlite")
@@ -120,6 +130,7 @@ class TestXmippCTFConsensusBase(BaseTest):
         protCtfConsensus.inputCTF.set(protCTF1.outputCTF)
         protCtfConsensus.setObjLabel('ctf consensus')
         self.launchProtocol(protCtfConsensus)
+        self.checkOutputSize(protCtfConsensus)
         ctf0 = protCtfConsensus.outputCTF.getFirstItem()
         resolution = int(ctf0.getResolution())
         defocusU = int(ctf0.getDefocusU())

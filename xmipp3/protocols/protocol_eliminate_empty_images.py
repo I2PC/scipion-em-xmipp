@@ -26,17 +26,19 @@
 # *****************************************************************************
 
 import os
+from datetime import datetime
 
 import pyworkflow.em as em
 import pyworkflow.em.metadata as md
 import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as param
-from datetime import datetime
+from pyworkflow import VERSION_2_0
 from pyworkflow.em.protocol import ProtClassify2D
 from pyworkflow.em.data import SetOfParticles
 from pyworkflow.object import Set
 from pyworkflow.utils import cleanPath
 from pyworkflow.utils.properties import Message
+
 from xmipp3.convert import writeSetOfParticles, \
     readSetOfParticles, setXmippAttributes
 
@@ -47,6 +49,7 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
     where there is no object/particle (only noise is presented there).
     Threshold parameter can be used for fine-tuning the algorithm for type of data.
     """
+    _lastUpdateVersion = VERSION_2_0
 
     def __init__(self, **args):
         ProtClassify2D.__init__(self, **args)
