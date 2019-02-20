@@ -170,7 +170,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
         inputMd = os.path.join(movieFolder, 'input_movie.xmd')
         writeMovieMd(movie, inputMd, a0, aN, useAlignment=False)
 
-        args  = '-i "%s" ' % inputMd
+        args = '-i "%s" ' % inputMd
         args += '-o "%s" ' % self._getShiftsFile(movie)
         args += '--sampling %f ' % movie.getSamplingRate()
         args += '--max_freq %f ' % self.maxFreq
@@ -207,7 +207,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
             args += "--outside value %f" % self.outsideValue
 
         args += ' --frameRange %d %d ' % (0, aN-a0)
-        args += ' --frameRangeSum %d %d ' % (s0-a0, sN-s0)
+        args += ' --frameRangeSum %d %d ' % (s0-a0, sN-a0)
         args += ' --max_shift %d ' % self.maxShift
 
         if self.doSaveAveMic or self.doComputePSD:
