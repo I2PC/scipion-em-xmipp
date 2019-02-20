@@ -285,7 +285,7 @@ class XmippProtLocSharp(ProtAnalysis3D):
         for i in range(self.iteration):
             vol = Volume()       
             vol.setLocation(i, self._getExtraPath('sharpenedMap_%d.mrc' % (i+1)))
-            print ('sharpenedMap_%d.mrc' % (i+1))
+            vol.setObjComment("Sharpened Map, \n Epoch %d"%(i+1))
             volumesSet.append(vol)  
             
         self._defineOutputs(outputVolumes=volumesSet)
