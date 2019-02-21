@@ -124,7 +124,7 @@ class XmippViewer(DataViewer):
                 self.getCTFViews(ctfSet)
 
         elif (issubclass(cls, XmippProtScreenDeepConsensus) or
-              issubclass(cls, XmippProtScreenDeepLearning)):
+              issubclass(cls, XmippProtScreenDeepLearning)) and obj.hasAttribute('outputParticles'):
             parts = obj.outputParticles
             fnParts = parts.getFileName()
             

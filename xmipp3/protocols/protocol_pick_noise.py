@@ -33,9 +33,8 @@ import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtParticlePicking
 
 import pyworkflow.em.metadata as MD
-from xmipp3.convert import writeSetOfCoordinates
+from xmipp3.convert import writeSetOfCoordinates, readSetOfCoordsFromPosFnames, writeCoordsListToPosFname
 from xmipp3 import XmippProtocol
-from xmipp3.protocols.coordinates_tools.io_coordinates import readSetOfCoordsFromPosFnames, writeCoordsListToPosFname
 
 IN_COORDS_POS_DIR_BASENAME= "pickNoiseInPosCoordinates"
 OUT_COORDS_POS_DIR_BASENAME= "pickNoiseOutPosCoordinates"
