@@ -36,7 +36,7 @@ from pyworkflow.protocol.constants import *
 from pyworkflow.em.constants import RELATION_CTF, ALIGN_NONE
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.em.data import SetOfCoordinates, Coordinate, SetOfParticles
-from pyworkflow.em.protocol import ProtParticlePicking
+from pyworkflow.em.protocol import ProtParticlePicking, ProtUserSubSet
 
 import pyworkflow.utils as pwutils
 import pyworkflow.protocol.params as params
@@ -897,3 +897,53 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             item._appendItem = False
         else:
             item._appendItem = True
+
+
+class XmippProtDeepConsSubSet(ProtUserSubSet):
+    """ Create subsets from the GUI for the Deep Consensus protocol.
+        This protocol will be executed mainly calling the script 'pw_create_image_subsets.py'
+        from the ShowJ gui. The enabled/disabled changes will be stored in a temporary sqlite
+        file that will be read to create the new subset.
+        """
+
+    def __init__(self, **args):
+        ProtUserSubSet.__init__(self, **args)
+
+    def createSetStep(self):
+        setObj = self.createSetObject()
+        inputObj = self.inputObject.get()
+        other = self.other.get()
+
+        if isinstance(inputObj, SetOfParticles) and \
+                        other.startswith('coordsCons'):
+            coordsId = int(other.strip('coordsCons'))
+            coordsSet = self.getProject().mapper.selectById(coordsId)
+            output = self._createCoordsFromParticles(inputObj, coordsSet)
+
+    def _createCoordsFromParticles(self, inputObj, coordsSet):
+        modifiedSet = inputObj.getClass()(filename=self._dbName, prefix=self._dbPrefix)
+
+        output = self._createSetOfCoordinates(coordsSet.getMicrographs())
+
+        boxSize = coordsSet.getBoxSize()
+        downFactor = boxSize / float(inputObj.getXDim())
+        for part in modifiedSet:
+            if part.isEnabled():
+                coord = part.getCoordinate().clone()
+                coord.scale(downFactor)
+                output.append(coord)
+
+        output.copyInfo(coordsSet)
+        output.setBoxSize(boxSize)
+
+        # Register outputs
+        self._defineOutput(coordsSet.getClassName(), output)
+
+        if inputObj.hasObjId():
+            self._defineTransformRelation(inputObj, output)
+
+        if coordsSet.hasObjId():
+            self._defineTransformRelation(coordsSet, output)
+
+        return output
+

@@ -129,17 +129,18 @@ class XmippViewer(DataViewer):
             fnParts = parts.getFileName()
             
             fnXml = obj._getPath('particles.xmd')
-            md = xmippLib.MetaData(fnXml)
-            if md.containsLabel(xmippLib.MDL_ZSCORE_DEEPLEARNING1):
-                from plotter import XmippPlotter
-                xplotter = XmippPlotter(windowTitle="Deep consensus score")
-                xplotter.createSubPlot("Deep consensus score",
-                                       "Deep consensus score",
-                                       "Number of Particle")
-                xplotter.plotMd(md, False,
-                                mdLabelY=xmippLib.MDL_ZSCORE_DEEPLEARNING1,
-                                nbins=200)
-                self._views.append(xplotter)
+            if os.path.isfile(fnXml):
+                md = xmippLib.MetaData(fnXml)
+                if md.containsLabel(xmippLib.MDL_ZSCORE_DEEPLEARNING1):
+                    from plotter import XmippPlotter
+                    xplotter = XmippPlotter(windowTitle="Deep consensus score")
+                    xplotter.createSubPlot("Deep consensus score",
+                                           "Deep consensus score",
+                                           "Number of Particle")
+                    xplotter.plotMd(md, False,
+                                    mdLabelY=xmippLib.MDL_ZSCORE_DEEPLEARNING1,
+                                    nbins=200)
+                    self._views.append(xplotter)
 
             labels  = 'id enabled _index _filename _xmipp_zScoreDeepLearning1 '
             labels += '_xmipp_zScore _xmipp_cumulativeSSNR _sampling '
@@ -149,7 +150,7 @@ class XmippViewer(DataViewer):
                 coordsId = obj.outputCoordinates.strId()
                 self._views.append(
                     ObjectView(self._project, parts.strId(), fnParts,
-                               other='coordsCons%s'%coordsId,
+                               other='%s,deepCons'%coordsId,
                                viewParams={ORDER: labels, VISIBLE: labels,
                                            'sortby': '_xmipp_zScoreDeepLearning1 asc',
                                            RENDER:'_filename'}))

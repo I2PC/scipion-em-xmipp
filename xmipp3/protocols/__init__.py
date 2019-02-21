@@ -92,7 +92,7 @@ from .protocol_resolution_monotomo import XmippProtMonoTomo
 from .protocol_rotational_spectra import XmippProtRotSpectra
 from .protocol_rotational_symmetry import XmippProtRotationalSymmetry
 from .protocol_screen_particles import XmippProtScreenParticles
-from .protocol_screen_deepConsensus import XmippProtScreenDeepConsensus
+from .protocol_screen_deepConsensus import XmippProtScreenDeepConsensus, XmippProtDeepConsSubSet
 #from .protocol_prepare_deepConsensus import XmippProtPrepareDeepConsensus
 from .protocol_screen_deeplearning import XmippProtScreenDeepLearning
 from .protocol_solid_angles import XmippProtSolidAngles
