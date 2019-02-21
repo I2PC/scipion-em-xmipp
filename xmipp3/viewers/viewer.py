@@ -61,7 +61,7 @@ class XmippViewer(DataViewer):
                 XmippProtCompareReprojections,
                 XmippProtCompareAngles,
                 XmippParticlePickingAutomatic,
-                # XmippProtExtractParticles,
+                XmippProtExtractParticles,
                 XmippProtExtractParticlesPairs,
                 XmippProtKerdensom,
                 XmippProtParticlePickingPairs,
