@@ -936,6 +936,13 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             protocol = self.getMapper().getParent(coordinates.get())
             message.append("Data source  %d %s" % (i + 1, protocol.getClassLabel()))
         message.append("Relative Radius = %f" % self.consensusRadius)
+        message.append("\nThe output contains the OR junction of all the input "
+                       "coordinates. The Score deepConsensus has been attached "
+                       "to every coordinate. Please, click on 'Analyze Results'."
+                       "\nNotice, the *outputParticles has a reduced size* since "
+                       "they have been extracted only for analysis propouses. "
+                       "A full size particles must be extracted from the "
+                       "selection in the 'Analyze Results'.")
         return message
 
     def _methods(self):

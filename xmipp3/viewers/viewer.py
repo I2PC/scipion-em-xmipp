@@ -45,8 +45,6 @@ from xmipp3.protocols.protocol_particle_pick_automatic import XmippParticlePicki
 from xmipp3.protocols.protocol_particle_pick_pairs import XmippProtParticlePickingPairs
 from xmipp3.protocols.protocol_rotational_spectra import XmippProtRotSpectra
 from xmipp3.protocols.protocol_screen_particles import XmippProtScreenParticles
-from xmipp3.protocols.protocol_screen_deepConsensus import XmippProtScreenDeepConsensus
-from xmipp3.protocols.protocol_screen_deeplearning import XmippProtScreenDeepLearning
 from xmipp3.protocols.protocol_ctf_micrographs import XmippProtCTFMicrographs
 from xmipp3.protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
 from xmipp3.protocols.protocol_multireference_alignability import XmippProtMultiRefAlignability
@@ -63,10 +61,8 @@ class XmippViewer(DataViewer):
                 XmippProtCompareReprojections,
                 XmippProtCompareAngles,
                 XmippParticlePickingAutomatic,
-                XmippProtExtractParticles,
+                # XmippProtExtractParticles,
                 XmippProtExtractParticlesPairs,
-                XmippProtScreenDeepConsensus,
-                XmippProtScreenDeepLearning,
                 XmippProtKerdensom,
                 XmippProtParticlePickingPairs,
                 XmippProtRotSpectra,
@@ -122,44 +118,6 @@ class XmippViewer(DataViewer):
                 self._views.append(self.infoMessage("No CTF estimation has finished yet"))
             else:
                 self.getCTFViews(ctfSet)
-
-        elif (issubclass(cls, XmippProtScreenDeepConsensus) or
-              issubclass(cls, XmippProtScreenDeepLearning)) and obj.hasAttribute('outputParticles'):
-            parts = obj.outputParticles
-            fnParts = parts.getFileName()
-            
-            fnXml = obj._getPath('particles.xmd')
-            if os.path.isfile(fnXml):
-                md = xmippLib.MetaData(fnXml)
-                if md.containsLabel(xmippLib.MDL_ZSCORE_DEEPLEARNING1):
-                    from plotter import XmippPlotter
-                    xplotter = XmippPlotter(windowTitle="Deep consensus score")
-                    xplotter.createSubPlot("Deep consensus score",
-                                           "Deep consensus score",
-                                           "Number of Particle")
-                    xplotter.plotMd(md, False,
-                                    mdLabelY=xmippLib.MDL_ZSCORE_DEEPLEARNING1,
-                                    nbins=200)
-                    self._views.append(xplotter)
-
-            labels  = 'id enabled _index _filename _xmipp_zScoreDeepLearning1 '
-            labels += '_xmipp_zScore _xmipp_cumulativeSSNR _sampling '
-            labels += '_xmipp_scoreEmptiness _ctfModel._defocusU _ctfModel._defocusV '
-            labels += '_ctfModel._defocusAngle _transform._matrix'
-            if issubclass(cls, XmippProtScreenDeepConsensus):
-                coordsId = obj.outputCoordinates.strId()
-                self._views.append(
-                    ObjectView(self._project, parts.strId(), fnParts,
-                               other='%s,deepCons'%coordsId,
-                               viewParams={ORDER: labels, VISIBLE: labels,
-                                           'sortby': '_xmipp_zScoreDeepLearning1 asc',
-                                           RENDER:'_filename'}))
-            else:
-                self._views.append(
-                    ObjectView(self._project, parts.strId(), fnParts,
-                               viewParams={ORDER: labels, VISIBLE: labels,
-                                           'sortby': '_xmipp_zScoreDeepLearning1 asc',
-                                           RENDER:'_filename'}))
                                            
         elif (issubclass(cls, XmippProtExtractParticles) or
               issubclass(cls, XmippProtScreenParticles)):
