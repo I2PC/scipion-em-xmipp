@@ -37,9 +37,7 @@ from xmipp3.protocols.protocol_screen_deeplearning import XmippProtScreenDeepLea
 
 
 class XmippDeepConsensusViewer(ProtocolViewer):
-    """ This protocol computes the maximum resolution up to which two
-     CTF estimations would be ``equivalent'', defining ``equivalent'' as having
-      a wave aberration function shift smaller than 90 degrees
+    """ TODO: PUT SOME HELP !!!
     """
     _label = 'viewer Deep Consensus'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
