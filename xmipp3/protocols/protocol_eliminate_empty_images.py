@@ -59,18 +59,18 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         form.addParam('addFeatures', param.BooleanParam, default=False,
                       label='Add features', expertLevel=param.LEVEL_ADVANCED,
                       help='Add features used for the ranking to each '
-                           'one of the input particles')
+                           'one of the input particles.')
         form.addParam('useDenoising', param.BooleanParam, default=True,
                       label='Turning on denoising',
                       expertLevel=param.LEVEL_ADVANCED,
                       help='Option for turning on denoising method '
-                           'while computing emptiness feature')
+                           'while computing emptiness feature.')
         form.addParam('denoising', param.IntParam, default=5,
                       expertLevel=param.LEVEL_ADVANCED,
                       condition='useDenoising',
                       label='Denoising factor:',
                       help='Factor to be used during Gaussian blurring. '
-                           'Higher value applies stronger denoising,'
+                           'Higher value applies stronger denoising, '
                            'could be more precise but also slower.')
 
     # --------------------------- INSERT steps functions ----------------------
@@ -207,7 +207,7 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
                       label='Threshold used in elimination:',
                       help='Higher threshold => more particles will be '
                            'eliminated. Set to -1 for no elimination, even so '
-                           'the _xmipp_scoreEmptiness_ value will be attached to'
+                           'the "xmipp_scoreEmptiness" value will be attached to '
                            'every paricle for a posterior inspection.')
 
         self.addAdvancedParams(form)
@@ -315,15 +315,16 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                       label="Input classes", pointerClass='SetOfClasses',
                       help='Select the input averages to be classified.')
         form.addParam('threshold', param.FloatParam, default=8.0,
-                      label='Threshold used in elimination:',
-                      help='Higher threshold => more averages will be '
-                           'eliminated. Set to -1 for no elimination.')
+                      label='Threshold used in elimination',
+                      help='Higher threshold => more particles will be '
+                           'eliminated. Set to -1 for no elimination, even so '
+                           'the "xmipp_scoreEmptiness" value will be attached to '
+                           'every paricle for a posterior inspection.')
         form.addParam('usePopulation', param.BooleanParam, default=True,
                       label='Use class population',
-                      # expertLevel=param.LEVEL_ADVANCED,
                       help="Use class population to reject a class.")
         form.addParam('minPopulation', param.FloatParam, default=0.2,
-                      label='Min. population below the mean.',
+                      label='Min. population below the mean',
                       condition="usePopulation",
                       expertLevel=param.LEVEL_ADVANCED,
                       help="Minimum of the population to accept a class.\n"
@@ -368,8 +369,7 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
         self.inputImages.close()
         self.lenPartsSet = len(self.inputImages)
 
-        if self.usePopulation.get():
-            self.rejectByPopulation(idsToCheck)
+        self.rejectByPopulation(idsToCheck)
 
         args = "-i %s -o %s -e %s -t %f" % (
             fnInputMd, self.fnOutputMd, self.fnElimMd, self.threshold.get())
@@ -413,6 +413,8 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                 self._updateOutputSet('%sAverages' % suffix, outSet, streamMode)
                 cleanPath(mdFn)
 
+                self.createOutputClasses(suffix, streamMode, newData)
+
         newAccData = os.path.exists(self.fnOutMdTmp) \
                          or ACCEPTED in self.enableCls.values()
         updateOutputs(self.fnOutMdTmp, 'output', newAccData)
@@ -421,8 +423,8 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                          or DISCARDED in self.enableCls.values()
         updateOutputs(self.fnElimMdTmp, 'eliminated', newDisData)
 
-        self.createOutputClasses('output', streamMode, newAccData)
-        self.createOutputClasses('eliminated', streamMode, newDisData)
+        # self.createOutputClasses('output', streamMode, newAccData)
+        # self.createOutputClasses('eliminated', streamMode, newDisData)
 
     # ------------- UTILS Fuctions ------------------------------------
     def preparePartsSet(self):
@@ -437,26 +439,27 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
         self.inputImages.copyAttributes(inClasses, '_streamState')
 
         for cls in inClasses:
-
             self.inputImages.append(cls.getRepresentative().clone())
 
         self.inputImages.write()
         self._store(self.inputImages)
 
     def rejectByPopulation(self, ids):
-        sizeDict = {}
-        for key, value in self.sizeDict.iteritems():
-            if key in ids:
-                sizeDict[key] = value
+        if self.usePopulation.get():
+            sizeDict = {}
+            for key, value in self.sizeDict.iteritems():
+                if key in ids:
+                    sizeDict[key] = value
 
-        meanPop = sum(sizeDict.values())/len(sizeDict)
+            meanPop = sum(sizeDict.values())/len(sizeDict)
 
-        for clsId, size in sizeDict.iteritems():
-            decision = int(size > meanPop * self.minPopulation.get())
-            self.enableCls[clsId] = ACCEPTED if decision else DISCARDED
+            for clsId, size in sizeDict.iteritems():
+                decision = int(size > meanPop * self.minPopulation.get())
+                self.enableCls[clsId] = ACCEPTED if decision else DISCARDED
+        else:
+            self.enableCls = {clsId: ACCEPTED for clsId in ids}
 
     def createOutputClasses(self, suffix, streamingState, fillCls):
-
         baseName = '%sClasses.sqlite' % suffix
         setFile = self._getPath(baseName)
         if os.path.exists(setFile):
@@ -472,16 +475,16 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
         if fillCls:
             # FIXME: Review this !!!
             decision = ACCEPTED if suffix == 'output' else DISCARDED
-            print("in createOutput...\n - %s" % ('ACCEPTED' if suffix == 'output' else 'DISCARDED'))
+            print("in createOutput... %s" % ('ACCEPTED' if suffix == 'output' else 'DISCARDED'))
             desiredIds = [ids for ids, enable in self.enableCls.iteritems()
                           if enable == decision]
             print("self.enableCls: %s" % self.enableCls)
             print("desiredIds: %s" % desiredIds)
 
             for cls in self.inputClasses.get():
-                if cls.getObjId() in desiredIds:
+                repId = cls.getObjId()
+                if repId in desiredIds:
                     representative = cls.getRepresentative()
-                    repId = cls.getObjId()
                     newClass = em.Class2D(objId=repId)
                     newClass.setAlignment2D()
                     newClass.copyInfo(self.inputImages)
@@ -492,8 +495,8 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                     outputSet.append(newClass)
 
             for cls in self.inputClasses.get():
-                if cls.getObjId() in desiredIds:
-                    repId = cls.getObjId()
+                repId = cls.getObjId()
+                if repId in desiredIds:
                     newClass = outputSet[repId]
                     for img in cls:
                         newClass.append(img)
