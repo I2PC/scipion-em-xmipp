@@ -190,15 +190,13 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         img = ImageHandler()
         img.convert(inputVolume, self._getInputVolFn())
 
+        Xdim = inputParticles.getXDim()
+        Ts = inputParticles.getSamplingRate()
         if self._useSeveralClasses():
             # Scale particles
-            Xdim = inputParticles.getXDim()
-            Ts = inputParticles.getSamplingRate()
             newTs = self.targetResolution.get() * 0.4
             newTs = max(Ts, newTs)
             newXdim = long(Xdim * Ts / newTs)
-            self.writeInfoField(self._getExtraPath(),"sampling",xmippLib.MDL_SAMPLINGRATE,newTs)
-            self.writeInfoField(self._getExtraPath(),"size",xmippLib.MDL_XSIZE,newXdim)
             self.runJob("xmipp_image_resize",
                         "-i %s -o %s --save_metadata_stack %s --fourier %d" %
                         (self._getExpParticlesFn(),
@@ -210,6 +208,11 @@ class XmippProtSolidAngles(ProtAnalysis3D):
             if Xdim != newXdim:
                 self.runJob("xmipp_image_resize", "-i %s --dim %d"
                             % (self._getInputVolFn(), newXdim), numberOfMpi=1)
+            
+            Xdim=newXdim
+            Ts=newTs
+        self.writeInfoField(self._getExtraPath(),"sampling",xmippLib.MDL_SAMPLINGRATE,Ts)
+        self.writeInfoField(self._getExtraPath(),"size",xmippLib.MDL_XSIZE,long(Xdim))
 
     def constructGroupsStep(self, particlesId, angularSampling,
                             angularDistance, symmetryGroup):
@@ -465,7 +468,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         if exists(fnHomogeneous):
             homogeneousSet = self._createSetOfParticles()
             homogeneousSet.copyInfo(inputParticles)
-            homogeneousSet.getImages().setSamplingRate(newTs)
+            homogeneousSet.setSamplingRate(newTs)
             homogeneousSet.setAlignmentProj()
             self.iterMd = md.iterRows(fnHomogeneous, md.MDL_PARTICLE_ID)
             self.lastRow = next(self.iterMd) 
