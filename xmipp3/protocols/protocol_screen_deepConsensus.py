@@ -31,6 +31,7 @@ import os
 from glob import glob
 import six
 import json
+
 from pyworkflow.utils.path import makePath, cleanPattern, cleanPath, copyTree, createLink
 from pyworkflow.protocol.constants import *
 from pyworkflow.em.constants import RELATION_CTF, ALIGN_NONE
@@ -43,11 +44,10 @@ import pyworkflow.protocol.params as params
 import pyworkflow.em.metadata as MD
 
 import xmippLib as xmipp
-
 import xmipp3
 from xmipp3 import XmippProtocol
 from xmipp3.protocols.protocol_pick_noise import pickNoise_prepareInput
-from xmipp3.convert import readSetOfParticles, setXmippAttributes, micrographToCTFParam, \
+from xmipp3.convert import readSetOfParticles, setXmippAttributes, micrographToCTFParam,\
                            writeSetOfParticles, writeSetOfCoordinates, readSetOfCoordsFromPosFnames
 
 
@@ -91,8 +91,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
                        expertLevel=params.LEVEL_ADVANCED,
                        label="Use GPU (vs CPU)",
-                       help="Set to true if you want to use GPU implementation "
-                            "of Optical Flow.")
+                       help="Set to true if you want to use GPU implementation ")
         form.addHidden(params.GPU_LIST, params.StringParam, default='0',
                        expertLevel=params.LEVEL_ADVANCED,
                        label="Choose GPU ID",
@@ -407,7 +406,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         else:
           if self.checkIfPrevRunIsCompatible( "mics_"):
             sourcePath= self.continueRun.get()._getTmpPath(self.PRE_PROC_MICs_PATH )
-            print("copying mics")
+            print("copying mics from %s"%(sourcePath))
             createLink( sourcePath, self._getTmpPath(self.PRE_PROC_MICs_PATH ))
           else:
             makePath(self._getTmpPath(self.PRE_PROC_MICs_PATH))
@@ -539,14 +538,14 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       self.runJob('xmipp_coordinates_consensus', args, numberOfMpi=1)
 
         
-    def loadCoords(self, posCoorsPath, mode, writeSet=True):
+    def loadCoords(self, posCoorsPath, mode):
         boxSize = self._getBoxSize()
         inputMics = self._getInputMicrographs()
         sqliteName= self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE%mode)+".sqlite"
         if os.path.isfile(self._getExtraPath(sqliteName)):
             cleanPath(self._getExtraPath(sqliteName))
         setOfCoordinates= readSetOfCoordsFromPosFnames(posCoorsPath, setOfInputCoords= self.inputCoordinates[0].get(),
-                                   sqliteOutName= sqliteName, write=writeSet )
+                                   sqliteOutName= sqliteName, write=True )
         print("Coordinates %s size: %d"%( mode, setOfCoordinates.getSize()) )
         assert setOfCoordinates.getSize() > MIN_NUM_CONSENSUS_COORDS, \
                 ("Error, the consensus (%s) of your input coordinates was too small (%s). "+
@@ -624,20 +623,13 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             for key in preprocParams_loaded:
               if "path" in key:
                 for val in preprocParams_loaded[key]:
-#                  print(val, os.path.exists(val))
                   if not val=="None" and not os.path.exists(val):
-#                    print(val, "does not exists")
                     return False
 
         
             shared_items = {k: preprocParams_loaded[k] for k in preprocParams_loaded if 
                                   k in preprocParams and preprocParams_loaded[k] == preprocParams[k]}
-
-#            print(preprocParams_loaded)
-#            print( preprocParams)
-#            print(shared_items)
-#            if inputType.startswith("mics_"):
-#              raise ValueError("peta")     
+  
                                     
             return len(shared_items)==len(preprocParams) and len(shared_items)==len(preprocParams_loaded) and \
                    len(shared_items)>0
@@ -890,29 +882,26 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         if not numberOfThreads is None:
           args+= " -t %s"%(numberOfThreads)
         self.runJob('xmipp_deep_consensus', args, numberOfMpi=1)
-        
+                
     def createOutputStep(self):
         # PARTICLES
         cleanPattern(self._getPath("*.sqlite"))
-        partSet = self._createSetOfParticles()
+        partSet = self._createSetOfParticles("outputParts_tmp")
         readSetOfParticles(self._getPath("particles.xmd"), partSet)
         inputSampling = self.inputCoordinates[0].get().getMicrographs().getSamplingRate()
         partSet.setSamplingRate(self._getDownFactor() * inputSampling)
         boxSize = self._getBoxSize()
-
+        
+        parSetCorrected= self._createSetOfParticles()
+        parSetCorrected.copyInfo(partSet)
         # COORDINATES
-        writeSet=False
-        if self.checkIfPrevRunIsCompatible("coords_"):
-          writeSet=True
         if not "OR" in self.coordinatesDict:
             self.loadCoords(self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE % 'OR'),'OR')
 
-        # coordSet = SetOfCoordinates(filename=self._getPath("coordinates.sqlite"))
         coordSet = self._createSetOfCoordinates(
             self.coordinatesDict['OR'].getMicrographs())
         coordSet.copyInfo(self.coordinatesDict['OR'])
         coordSet.setBoxSize(boxSize)
-        # coordSet.setMicrographs(self.coordinatesDict['OR'].getMicrographs())
 
         downFactor = self._getDownFactor()
         for part in partSet:
@@ -920,17 +909,20 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             coord.scale(downFactor)
             deepZscoreLabel = '_xmipp_%s' % xmipp.label2Str(MD.MDL_ZSCORE_DEEPLEARNING1)
             setattr(coord, deepZscoreLabel, getattr(part, deepZscoreLabel))
+            part = part.clone()
+            part.scaleCoordinate(downFactor)
             coordSet.append(coord)
-        
+            parSetCorrected.append(part)
+            
         coordSet.write()
-        partSet.write()
-        
-        self._defineOutputs(outputCoordinates=coordSet)        
-        # self._defineOutputs(outputParticles=partSet)
+        parSetCorrected.write()
+        cleanPattern(self._getPath("particles.xmd"))    
+        cleanPattern(self._getPath("*outputParts_tmp.sqlite"))
+        writeSetOfParticles(parSetCorrected, self._getPath("particles.xmd") )
+        self._defineOutputs(outputCoordinates=coordSet)
 
         for inSetOfCoords in self.inputCoordinates:
             self._defineSourceRelation(inSetOfCoords.get(), coordSet)
-            # self._defineSourceRelation(inSetOfCoords.get(), partSet)
 
     def _summary(self):
         message = []
@@ -977,7 +969,7 @@ class XmippProtDeepConsSubSet(ProtUserSubSet):
         for item in modifiedSet:
             if item.isEnabled():
                 coord = item.getCoordinate().clone()
-                coord.scale(1)  # FIXME: should we sclade the coords??
+                coord.scale(1)
                 output.append(coord)
 
         output.copyInfo(inputObj)

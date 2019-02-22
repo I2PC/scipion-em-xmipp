@@ -37,10 +37,11 @@ from xmipp3.protocols.protocol_screen_deeplearning import XmippProtScreenDeepLea
 from .plotter import XmippPlotter
 
 class XmippDeepConsensusViewer(ProtocolViewer):
-    """         Viewer for the 'Xmipp - deep consensus picker' and
+    """         
+        Viewer for the 'Xmipp - deep consensus picker' and
         'Xmipp - screen deep learning' protocols.\n
-        Select those particles with a high 'zScoreDeepLearning1' value and save them.
-        The Histogram may help you on decide a threshold.
+        Select those particles/cooridantes with high (close to 1.0) 'zScoreDeepLearning1' value and save them.
+        The Histogram may help you to decide a threshold.
     """
     _label = 'viewer deepConsensus'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
@@ -57,9 +58,9 @@ class XmippDeepConsensusViewer(ProtocolViewer):
                            "will be launched. Select all those "
                            "particles/coordinates with high scores and "
                            "save them.\n"
-                           "Particles can be sort by any column.")
-        form.addParam('visualizeHistogram', IntParam, default=200,
-                      label="Visualize Histogram (Bin size)",
+                           "Particles can be sorted by any column.")
+        form.addParam('visualizeHistogram', IntParam, default=100,
+                      label="Visualize Deep Scores Histogram (Bin size)",
                       help="Plot a histogram of the 'zScoreDeepLearning1' "
                            "to visual setting of a threshold.")
 
@@ -111,7 +112,7 @@ class XmippDeepConsensusViewer(ProtocolViewer):
                 xplotter = XmippPlotter(windowTitle="Deep consensus score")
                 xplotter.createSubPlot("Deep consensus score",
                                        "Deep consensus score",
-                                       "Number of Particle")
+                                       "Number of Particles")
                 xplotter.plotMd(md, False,
                                 mdLabelY=xmippLib.MDL_ZSCORE_DEEPLEARNING1,
                                 nbins=numberOfBins)

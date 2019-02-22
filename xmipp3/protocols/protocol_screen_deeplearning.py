@@ -47,15 +47,14 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
         form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
                        expertLevel=params.LEVEL_ADVANCED,
                        label="Use GPU (vs CPU)",
-                       help="Set to true if you want to use GPU implementation "
-                            "of Optical Flow.")
+                       help="Set to true if you want to use GPU implementation")
         form.addHidden(params.GPU_LIST, params.StringParam, default='0',
                        expertLevel=params.LEVEL_ADVANCED,
                        label="Choose GPU IDs",
                        help="GPU may have several cores. Set it to zero"
                             " if you do not know what we are talking about."
                             " First core index is 0, second 1 and so on.")
-
+        form.addParallelSection(threads=2, mpi=0)
         form.addSection(label='Input')
         form.addParam('doContinue', params.BooleanParam, default=False,
                       label='Use previously trained model?',
@@ -71,11 +70,10 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
                       default=True,condition='doContinue',
                       help='If you set to *Yes*, you should provide training set')
             
-        form.addParam('inPosSetOfParticles', params.PointerParam,
+        form.addParam('inTrueSetOfParticles', params.PointerParam,
                       label="True particles", pointerClass='SetOfParticles',
                       allowsNull=True, condition="not doContinue or keepTraining",
-                      help='Select a set of particles that are mostly true particles.\n'
-                           'Recomended set: good Z-score of AND consensus of two pickers')
+                      help='Select a set of particles that contains mostly true particles')
 
         form.addParam('numberOfNegativeSets', params.IntParam,
                       label='Number of different negative dataset',
@@ -106,9 +104,10 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
                                'equal to the contribution of positive particles')
 
         form.addParam('predictSetOfParticles', params.PointerParam,
-                      label="Set of putative particles to predict",
+                      label="Set of putative particles to score",
                       pointerClass='SetOfParticles',
-                      help='Select the set of putative particles to classify.')
+                      help='Select the set of putative particles to classify as good (score close '
+                            'to 1.0) or bad (score close to 0.0).')
 
         form.addSection(label='Training')
         
@@ -160,8 +159,6 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
                       pointerClass='SetOfParticles', condition='doTesting',
                       help='Select the set of ground false positive particles.')
 
-        form.addParallelSection(threads=8, mpi=0)
-
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         """            
@@ -212,7 +209,7 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
     def convertInputStep(self, *dataDicts):
         def __getSetOfParticlesFromFname(fname):
           if fname== self._getExtraPath("inputTrueParticlesSet.xmd"):
-            return self.inPosSetOfParticles.get()
+            return self.inTrueSetOfParticles.get()
           elif fname== self._getExtraPath("predictSetOfParticles.xmd"):
             return self.predictSetOfParticles.get()
           elif fname== self._getExtraPath("testTrueParticlesSet.xmd"):
@@ -229,7 +226,7 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
                      
         if ((not self.doContinue.get() or self.keepTraining.get())
                 and self.nEpochs.get() > 0):
-            assert not self.inPosSetOfParticles.get() is None, \
+            assert not self.inTrueSetOfParticles.get() is None, \
                     "Positive particles must be provided for training if nEpochs!=0"
                     
         for dataDict in dataDicts:

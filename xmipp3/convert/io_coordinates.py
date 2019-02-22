@@ -7,16 +7,10 @@ def readSetOfCoordsFromPosFnames( posDir, setOfInputCoords, sqliteOutName, write
   '''
   posDir: path where there are .pos files with coordinates
   setOfInputCoords. Set to find micrographs
-  setOfOutputCoordinates if not none, set where results will be written.
+  sqliteOutName. Path where sqlite map will be created. Warning, it overwrites content
   '''
 
   inputMics = setOfInputCoords.getMicrographs()
-#  micIds= inputMics.getIdSet()
-#  micNameToMicId={}
-#  for micId in micIds:
-#    mic= inputMics[micId]
-#    micNameToMicId[".".join( os.path.basename(mic.getFileName()).split(".")[:-1] )]= micId
-
   cleanPath(sqliteOutName)
   setOfOutputCoordinates= SetOfCoordinates(filename= sqliteOutName)
   setOfOutputCoordinates.setMicrographs(inputMics)
