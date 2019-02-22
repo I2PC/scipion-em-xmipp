@@ -93,11 +93,15 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                       'you can choose your own model trained. If you choose'
                       '"no" a general model pretrained will be assign')
 
-        form.addParam('ownModel', params.PointerParam,
-                      pointerClass=self.getClassName(),
-                      condition='modelPretrain==True and model==%d'%ITER_PREDICT,
-                      label='Set your model',
-                      help='Choose the protocol where your model is trained')
+        # form.addParam('ownModel', params.PointerParam,
+        #               pointerClass=self.getClassName(),
+        #               condition='modelPretrain==True and model==%d'%ITER_PREDICT,
+        #               label='Set your model',
+        #               help='Choose the protocol where your model is trained')
+
+        form.addParam('ownModel', params.FileParam,
+                      label="Modl path", condition='modelPretrain==True and model==%d'%ITER_PREDICT,
+                      help='Choose the file path where your model is stored')
 
         form.addParam('inputParticles', params.PointerParam,
                       pointerClass='SetOfParticles', important=True,
@@ -179,7 +183,8 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
         if self.model.get() == ITER_PREDICT:
             if self.modelPretrain:
-                model = self.ownModel.get()._getPath('ModelTrained.h5')
+                # model = self.ownModel.get()._getPath('ModelTrained.h5')
+                model = self.ownModel.get()
                 model = load_model(model)
             else:
                 model = load_model(self._getPath('PretrainModel.h5'))
@@ -561,12 +566,16 @@ class GAN(XmippProtDeepDenoising):
             evaluate = self.generator.evaluate(self.noise, self.true)
             print "Validation =", evaluate
 
+            if len(self.validation)>0:
+                print("BBBBBBB", np.min(self.validation))
             if epoch > 500 and evaluate <= np.min(self.validation):
                 self.generatorNoParallel.save(self.dir2)
+            #AJ y que pasa si no se cumple esto???
 
             self.lossD.append(d_loss[0])
             self.lossG.append(g_loss)
-            self.validation.append(evaluate)
+            if epoch >= 500:
+                self.validation.append(evaluate)
             lossEpoch.append(d_loss[0])
             # If at save interval => save generated image samples
             if epoch % save_interval == 0:
