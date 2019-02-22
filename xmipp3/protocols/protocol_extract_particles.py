@@ -38,7 +38,6 @@ from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtExtractParticles
 from pyworkflow.em.data import Particle
-from pyworkflow.object import Float, ObjectWrap
 from pyworkflow.em.constants import RELATION_CTF
 
 from xmipp3.base import XmippProtocol
@@ -46,7 +45,6 @@ from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
                             xmippToLocation, setXmippAttributes)
 from xmipp3.constants import SAME_AS_PICKING, OTHER
 
-import xmippLib
 
 class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
     """Protocol to extract particles from a set of coordinates"""
