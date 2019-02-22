@@ -32,8 +32,11 @@ import pyworkflow.em.metadata as md
 from pyworkflow.gui.plotter import plt
 
 import xmippLib
-from xmipp3.protocols.protocol_validate_overfitting import XmippProtValidateOverfitting
+from xmipp3.protocols.protocol_validate_overfitting import \
+    XmippProtValidateOverfitting
 from .plotter import XmippPlotter
+from os.path import exists
+from math import log10
 
 
 class XmippValidateOverfittingViewer(Viewer):
@@ -43,65 +46,115 @@ class XmippValidateOverfittingViewer(Viewer):
     _label = 'viewer validate_overfitting'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
     _targets = [XmippProtValidateOverfitting]
-        
+
     def _visualize(self, e=None):
-        fnOutput = self.protocol._defineResultsName()
+        views=[]
+        fnOutput = self.protocol._defineResultsTxt()
         if not os.path.exists(fnOutput):
-            return [self.errorMessage('The necessary metadata was not produced\n'
-                                      'Execute again the protocol\n',
-                                      title='Missing result file')]
-        plotter = self._createPlot("Validation 3D Reconstruction (Overfitting)",
-                                    "Number of Particles", 
-                                    "Resolution for FSC=0.5 (A)", 
-                                    fnOutput, xmippLib.MDL_COUNT, xmippLib.MDL_AVG)
-        #for noise
-        fnOutputN = self.protocol._defineResultsNoiseName()
-        if not os.path.exists(fnOutputN):
-            return [self.errorMessage('The necessary metadata was not produced\n'
-                                      'Execute again the protocol\n',
-                                      title='Missing noise result file')]
-               
-        return [plotter]         
-               
-    def _createPlot(self, title, xTitle, yTitle, fnOutput, mdLabelX,
-                    mdLabelY, color = 'g', figure=None):        
+            return [
+                self.errorMessage('The necessary metadata was not produced\n'
+                                  'Execute again the protocol\n',
+                                  title='Missing result file')]
+        plotter = self._createPlotInv()
+        views.append(plotter)
+
+        plotter = self._createPlot()
+        views.append(plotter)
+
+        # for noise
+        # fnOutputN = self.protocol._defineResultsNoiseName()
+        # if not os.path.exists(fnOutputN):
+        #    return [self.errorMessage('The necessary metadata was not produced\n'
+        #                              'Execute again the protocol\n',
+        #                              title='Missing noise result file')]
+
+        return views
+
+    def _createPlotInv(self, figure=None):
+
         xplotter = XmippPlotter(figure=figure)
         xplotter.plot_title_fontsize = 11
-        ax=xplotter.createSubPlot(title, xTitle, yTitle, 1, 1)
+        title = 'Validation 3D Reconstruction (Overfitting)'
+        xTitle = 'log10(# Particles)'
+        yTitle = '1/Resolution^2 in 1/A^2'
+        ax = xplotter.createSubPlot(title, xTitle, yTitle, 1, 1)
+
+        # plot real data-set
+        fnOutput = self.protocol._defineResultsTxt()
+        if exists(fnOutput):
+            fileValues = open(fnOutput,'r')
+            xValInv=[]
+            yValInv=[]
+            yErrInv=[]
+            for line in fileValues:
+                values = line.split()
+                xValInv.append(log10(float(values[0])))
+                yValInv.append(float(values[3]))
+                yErrInv.append(float(values[4]))
+
+            plt.plot(xValInv, yValInv, color='g', label='Aligned particles')
+            plt.errorbar(xValInv, yValInv, yErrInv, fmt='o')
+            plt.legend(loc='upper right', fontsize=11)
+
+        # plot noise and related errorbar
+        fnOutputN = self.protocol._defineResultsNoiseTxt()
+        if exists(fnOutputN):
+            fileNoise = open(fnOutputN,'r')
+            yValNInv=[]
+            yErrNInv=[]
+            for line in fileNoise:
+                values = line.split()
+                yValNInv.append(float(values[3]))
+                yErrNInv.append(float(values[4]))
+
+            plt.plot(xValInv, yValNInv, '--', color='r',
+                     label='Aligned gaussian noise')
+            plt.errorbar(xValInv, yValNInv, yErrNInv, fmt='o', color='k')
+
+        return xplotter
+
+
+    def _createPlot(self, figure=None):
+
+        xplotter = XmippPlotter(figure=figure)
+        xplotter.plot_title_fontsize = 11
+        title = 'Validation 3D Reconstruction (Overfitting)'
+        xTitle = '# Particles'
+        yTitle = 'Resolution in A'
+        ax = xplotter.createSubPlot(title, xTitle, yTitle, 1, 1)
         ax.set_yscale('log')
         ax.set_xscale('log')
-                        
-        #plot noise and related errorbar
-        fnOutputN = self.protocol._defineResultsNoiseName()
-        md = xmippLib.MetaData(fnOutputN)
-        xValueN = md.getColumnValues(xmippLib.MDL_COUNT)
-        yValueN = md.getColumnValues(xmippLib.MDL_AVG)
-        plt.plot(xValueN, yValueN, '--', color='r',
-                label='Aligned gaussian noise')
-        
-        # putting error bar
-        md = xmippLib.MetaData(fnOutputN)
-        yErrN = md.getColumnValues(xmippLib.MDL_STDDEV)
-        xValueNe = md.getColumnValues(xmippLib.MDL_COUNT)
-        yValueNe = md.getColumnValues(xmippLib.MDL_AVG)
-        plt.errorbar(xValueNe, yValueNe, yErrN, fmt='o', color='k')
-                
-        #plot real data-set
-        fnOutput = self.protocol._defineResultsName()
-        md = xmippLib.MetaData(fnOutput)
-        xValue = md.getColumnValues(xmippLib.MDL_COUNT)
-        yValue = md.getColumnValues(xmippLib.MDL_AVG)
-        plt.plot(xValue, yValue, color='g', label='Aligned particles')
-                
-        # putting error bar 
-        md = xmippLib.MetaData(fnOutput)
-        yErr = md.getColumnValues(xmippLib.MDL_STDDEV)
-        xValue = md.getColumnValues(xmippLib.MDL_COUNT)
-        yValue = md.getColumnValues(xmippLib.MDL_AVG)
-        plt.errorbar(xValue, yValue, yErr, fmt='o')        
-            
-        plt.legend(loc='upper right' , fontsize = 11)
-        
+
+        # plot real data-set
+        fnOutput = self.protocol._defineResultsTxt()
+        if exists(fnOutput):
+            fileValues = open(fnOutput,'r')
+            xVal=[]
+            yVal=[]
+            yErr=[]
+            for line in fileValues:
+                values = line.split()
+                xVal.append(float(values[0]))
+                yVal.append(float(values[1]))
+                yErr.append(float(values[2]))
+
+            plt.plot(xVal, yVal, color='g', label='Aligned particles')
+            plt.errorbar(xVal, yVal, yErr, fmt='o')
+            plt.legend(loc='upper right', fontsize=11)
+
+        # plot noise and related errorbar
+        fnOutputN = self.protocol._defineResultsNoiseTxt()
+        if exists(fnOutputN):
+            fileNoise = open(fnOutputN,'r')
+            yValN=[]
+            yErrN=[]
+            for line in fileNoise:
+                values = line.split()
+                yValN.append(float(values[1]))
+                yErrN.append(float(values[2]))
+
+            plt.plot(xVal, yValN, '--', color='r',
+                     label='Aligned gaussian noise')
+            plt.errorbar(xVal, yValN, yErrN, fmt='o', color='k')
+
         return xplotter
-    
-    
