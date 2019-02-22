@@ -81,16 +81,16 @@ class TestDirectionalClasses(BaseTest):
 
         # Let's keep a smaller subset of particles to speed-up computations
         protSubset = self.newProtocol(ProtSubSet,
-                                      objLabel='subset 1K',
+                                      objLabel='subset 500',
                                       chooseAtRandom=True,
-                                      nElements=1000)
+                                      nElements=500)
 
         protSubset.inputFullSet.set(protImportParts.outputParticles)
         self.launchProtocol(protSubset)
 
         # We use a coarse angular sampling of 20 to speed-up test
         protSolid = self.newProtocol(XmippProtSolidAngles,
-                                objLabel='directional classes 1',
+                                objLabel='solid angles 1',
                                 angularSampling=20,
                                 angularDistance=25,
                                 numberOfMpi=4
@@ -102,7 +102,7 @@ class TestDirectionalClasses(BaseTest):
         self.checkOutput(protSolid, 'outputClasses')
 
         protSolid = self.newProtocol(XmippProtSolidAngles,
-                                objLabel='directional classes 2',
+                                objLabel='solid angles 2',
                                 angularSampling=20,
                                 angularDistance=25,
                                 directionalClasses=2,
@@ -130,3 +130,33 @@ class TestDirectionalClasses(BaseTest):
         protSplit.directionalClasses.set(protSet.outputRepresentatives)
         self.launchProtocol(protSplit)
         self.checkOutput(protSplit, 'outputVolumes')
+
+        # We use a coarse angular sampling of 20 to speed-up test
+        protSolid = self.newProtocol(XmippProtSolidAngles,
+                                objLabel='solid angles 3',
+                                angularSampling=20,
+                                angularDistance=25,
+                                numberOfMpi=4,
+                                directionalClasses=2,
+                                splitVolume=True,
+                                Nrec=50,
+                                )
+
+        protSolid.inputVolume.set(protImportVol.outputVolume)
+        protSolid.inputParticles.set(protSubset.outputParticles)
+        self.launchProtocol(protSolid)
+        self.checkOutput(protSolid, 'outputClasses')
+
+        # We use a coarse angular sampling of 20 to speed-up test
+        protSolid = self.newProtocol(XmippProtSolidAngles,
+                                objLabel='solid angles 4',
+                                angularSampling=20,
+                                angularDistance=25,
+                                homogeneize=30,
+                                numberOfMpi=4
+                                )
+
+        protSolid.inputVolume.set(protImportVol.outputVolume)
+        protSolid.inputParticles.set(protSubset.outputParticles)
+        self.launchProtocol(protSolid)
+        self.checkOutput(protSolid, 'outputClasses')
