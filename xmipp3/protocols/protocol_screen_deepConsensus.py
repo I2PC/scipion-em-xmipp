@@ -907,10 +907,12 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         if not "OR" in self.coordinatesDict:
             self.loadCoords(self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE % 'OR'),'OR')
 
-        coordSet = SetOfCoordinates(filename=self._getPath("coordinates.sqlite"))
+        # coordSet = SetOfCoordinates(filename=self._getPath("coordinates.sqlite"))
+        coordSet = self._createSetOfCoordinates(
+            self.coordinatesDict['OR'].getMicrographs())
         coordSet.copyInfo(self.coordinatesDict['OR'])
         coordSet.setBoxSize(boxSize)
-        coordSet.setMicrographs(self.coordinatesDict['OR'].getMicrographs())
+        # coordSet.setMicrographs(self.coordinatesDict['OR'].getMicrographs())
 
         downFactor = self._getDownFactor()
         for part in partSet:
@@ -924,11 +926,11 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         partSet.write()
         
         self._defineOutputs(outputCoordinates=coordSet)        
-        self._defineOutputs(outputParticles=partSet)
+        # self._defineOutputs(outputParticles=partSet)
 
         for inSetOfCoords in self.inputCoordinates:
             self._defineSourceRelation(inSetOfCoords.get(), coordSet)
-            self._defineSourceRelation(inSetOfCoords.get(), partSet)
+            # self._defineSourceRelation(inSetOfCoords.get(), partSet)
 
     def _summary(self):
         message = []
@@ -937,12 +939,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             message.append("Data source  %d %s" % (i + 1, protocol.getClassLabel()))
         message.append("Relative Radius = %f" % self.consensusRadius)
         message.append("\nThe output contains the OR junction of all the input "
-                       "coordinates. The Score deepConsensus has been attached "
-                       "to every coordinate. Please, click on 'Analyze Results'."
-                       "\nNotice, the *outputParticles has a reduced size* since "
-                       "they have been extracted only for analysis propouses. "
-                       "A full size particles must be extracted from the "
-                       "selection in the 'Analyze Results'.")
+                       "coordinates with a 'zScoreDeepLearning1' value attached.\n"
+                       "Please, click on 'Analyze Results' to make a subset.")
         return message
 
     def _methods(self):
@@ -968,41 +966,27 @@ class XmippProtDeepConsSubSet(ProtUserSubSet):
     def __init__(self, **args):
         ProtUserSubSet.__init__(self, **args)
 
-    def createSetStep(self):
-        setObj = self.createSetObject()
-        inputObj = self.inputObject.get()
-        other = self.other.get()
+    def _createSimpleSubset(self, inputObj):
+        modifiedSet = inputObj.getClass()(filename=self._dbName,
+                                          prefix=self._dbPrefix)
 
-        if isinstance(inputObj, SetOfParticles) and \
-                        other.startswith('coordsCons'):
-            coordsId = int(other.strip('coordsCons'))
-            coordsSet = self.getProject().mapper.selectById(coordsId)
-            output = self._createCoordsFromParticles(inputObj, coordsSet)
+        className = inputObj.getClassName()
+        createFunc = getattr(self, '_create' + className)
+        output = createFunc(inputObj.getMicrographs())
 
-    def _createCoordsFromParticles(self, inputObj, coordsSet):
-        modifiedSet = inputObj.getClass()(filename=self._dbName, prefix=self._dbPrefix)
-
-        output = self._createSetOfCoordinates(coordsSet.getMicrographs())
-
-        boxSize = coordsSet.getBoxSize()
-        downFactor = boxSize / float(inputObj.getXDim())
-        for part in modifiedSet:
-            if part.isEnabled():
-                coord = part.getCoordinate().clone()
-                coord.scale(downFactor)
+        for item in modifiedSet:
+            if item.isEnabled():
+                coord = item.getCoordinate().clone()
+                coord.scale(1)  # FIXME: should we sclade the coords??
                 output.append(coord)
 
-        output.copyInfo(coordsSet)
-        output.setBoxSize(boxSize)
+        output.copyInfo(inputObj)
+        output.setBoxSize(inputObj.getBoxSize())
 
         # Register outputs
-        self._defineOutput(coordsSet.getClassName(), output)
+        self._defineOutput(className, output)
 
         if inputObj.hasObjId():
             self._defineTransformRelation(inputObj, output)
 
-        if coordsSet.hasObjId():
-            self._defineTransformRelation(coordsSet, output)
-
         return output
-

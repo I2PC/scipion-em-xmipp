@@ -26,6 +26,7 @@
 
 import os
 
+from pyworkflow.em import SetOfParticles
 from pyworkflow.em.viewers import EmPlotter, ObjectView
 from pyworkflow.em.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER, SORT_BY
 from pyworkflow.protocol.params import IntParam, LabelParam, StringParam
@@ -37,35 +38,31 @@ from xmipp3.protocols.protocol_screen_deeplearning import XmippProtScreenDeepLea
 
 
 class XmippDeepConsensusViewer(ProtocolViewer):
-    """ TODO: PUT SOME HELP !!!
+    """         Viewer for the 'Xmipp - deep consensus picker' and
+        'Xmipp - screen deep learning' protocols.\n
+        Select those particles with a high 'zScoreDeepLearning1' value and save them.
+        The Histogram may help you on decide a threshold.
     """
-    _label = 'viewer Deep Consensus'
+    _label = 'viewer deepConsensus'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
     _targets = [XmippProtScreenDeepConsensus, XmippProtScreenDeepLearning]
 
     def _defineParams(self, form):
         form.addSection(label='Visualization')
-        form.addParam('noteViz', LabelParam,
-                      label='A score has been attached to all the input '
-                            'coordinates in order to set a manual threshold.')
-        form.addParam('visualizeParticles', LabelParam,
-                      label="Select particles/coordinates", important=True,
-                      help="A viewer with all the extracted particles "
-                           "will be launched. Every particle have "
-                           "the 'deepConsensus Score' attached.\n"
-                           "Select all those particles and click on "
-                           "'+Coordinates' to save the selection.\n"
+        form.addParam('noteViz', LabelParam, label="\n")
+        form.addParam('visualizeParticles', LabelParam, important=True,
+                      label="Select particles/coordinates with high "
+                            "'zScoreDeepLearning1' values",
+                      help="A viewer with all particles/coordinates "
+                           "with a 'zScoreDeepLearning1' attached "
+                           "will be launched. Select all those "
+                           "particles/coordinates with high scores and "
+                           "save them.\n"
                            "Particles can be sort by any column.")
         form.addParam('visualizeHistogram', IntParam, default=200,
                       label="Visualize Histogram (Bin size)",
-                      help="Histogram of the 'deepConsensus Score' "
-                           "to help in the thresholding.")
-        form.addParam('noteViz2', LabelParam,
-                      label='*Notice, the outputParticles have a reduced '
-                            'size since they have been extracted only to '
-                            'inspection proporses. Therefore, a full size of '
-                            'setOfParticles must be extracted using the '
-                            'selected coordinates from this viewer.')
+                      help="Plot a histogram of the 'zScoreDeepLearning1' "
+                           "to visual setting of a threshold.")
 
     def _getVisualizeDict(self):
         return {'visualizeParticles': self._visualizeParticles,
@@ -79,17 +76,22 @@ class XmippDeepConsensusViewer(ProtocolViewer):
         labels += '_xmipp_scoreEmptiness'
 
         otherParam = {}
+        objId = 0
         if (isinstance(self.protocol, XmippProtScreenDeepConsensus) and
             self.protocol.hasAttribute('outputCoordinates')):
-            coordsId = self.protocol.outputCoordinates.strId()
-            otherParam = {'other': '%s,deepCons' % coordsId}
+            fnParts = self.protocol._getPath("particles.sqlite")
+            objId = self.protocol.outputCoordinates.strId()
+            otherParam = {'other': 'deepCons'}
 
-        if hasattr(self.protocol, 'outputParticles'):
+        elif (isinstance(self.protocol, XmippProtScreenDeepLearning) and
+              self.protocol.hasAttribute('outputParticles')):
             parts = self.protocol.outputParticles
             fnParts = parts.getFileName()
+            objId = parts.strId()
 
+        if objId:
             views.append(ObjectView(
-                self._project, parts.strId(), fnParts,
+                self._project, objId, fnParts,
                 viewParams={ORDER: labels, VISIBLE: labels,
                             SORT_BY: '_xmipp_zScoreDeepLearning1 asc',
                             RENDER: '_filename',
@@ -115,9 +117,9 @@ class XmippDeepConsensusViewer(ProtocolViewer):
                                 nbins=numberOfBins)
                 views.append(xplotter)
             else:
-                print("'%s' don't have 'xmipp_Zscore_deepLearning1' label."
+                print(" > '%s' don't have 'xmipp_zScoreDeepLearning1' label."
                       % fnXml)
         else:
-            print("Metadata file is not found in '%s'" % fnXml)
+            print(" > Metadata file is not found in '%s'" % fnXml)
 
         return views
