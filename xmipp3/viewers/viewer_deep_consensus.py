@@ -26,16 +26,15 @@
 
 import os
 
-from pyworkflow.em import SetOfParticles
-from pyworkflow.em.viewers import EmPlotter, ObjectView
+from pyworkflow.em.viewers import ObjectView
 from pyworkflow.em.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER, SORT_BY
-from pyworkflow.protocol.params import IntParam, LabelParam, StringParam
+from pyworkflow.protocol.params import IntParam, LabelParam
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 
 import xmippLib
 from xmipp3.protocols.protocol_screen_deepConsensus import XmippProtScreenDeepConsensus
 from xmipp3.protocols.protocol_screen_deeplearning import XmippProtScreenDeepLearning
-
+from .plotter import XmippPlotter
 
 class XmippDeepConsensusViewer(ProtocolViewer):
     """         Viewer for the 'Xmipp - deep consensus picker' and
@@ -96,6 +95,8 @@ class XmippDeepConsensusViewer(ProtocolViewer):
                             SORT_BY: '_xmipp_zScoreDeepLearning1 asc',
                             RENDER: '_filename',
                             MODE: MODE_MD}, **otherParam))
+        else:
+            print(" > Not output found, yet.")
 
         return views
 
@@ -107,7 +108,6 @@ class XmippDeepConsensusViewer(ProtocolViewer):
         if os.path.isfile(fnXml):
             md = xmippLib.MetaData(fnXml)
             if md.containsLabel(xmippLib.MDL_ZSCORE_DEEPLEARNING1):
-                from plotter import XmippPlotter
                 xplotter = XmippPlotter(windowTitle="Deep consensus score")
                 xplotter.createSubPlot("Deep consensus score",
                                        "Deep consensus score",
