@@ -45,8 +45,10 @@ ALIGN_MASK_BINARY_FILE = 1
 
 class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
     """ 
-    Aligns a set of volumes using cross correlation 
-    or a Fast Fourier method. 
+    Aligns a volume (inputVolume) using a Fast Fourier method
+    with respect to a reference one (inputReference).
+     The obtained alignment parameters are used to align the set of particles
+     (inputParticles) that generated the input volume.
     
     *Note:* Fast Fourier requires compilation of Xmipp with --cltomo flag
      """
@@ -63,12 +65,14 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
         form.addParam('inputReference', params.PointerParam, pointerClass='Volume', 
                       label="Reference volume", important=True, 
                       help='Reference volume to be used for the alignment.')    
-        form.addParam('inputVolumes', params.PointerParam, pointerClass='Volume',  
+        form.addParam('inputVolume', params.PointerParam, pointerClass='Volume',
                       label="Input volume", important=True, 
                       help='Select one volume to be aligned against the reference volume.')
         form.addParam('inputParticles', params.PointerParam, pointerClass='SetOfParticles',
                       label="Input particles", important=True, 
-                      help='Select one set of particles to be aligned against the reference set of particles using the transformation calculated with the reference and input volumes.')
+                      help='Select one set of particles to be aligned against '
+                           'the reference set of particles using the transformation '
+                           'calculated with the reference and input volumes.')
         form.addParam('symmetryGroup', params.StringParam, default='c1',
                       label="Symmetry group",
                       help='See %s page for a description of the symmetries '
@@ -78,15 +82,20 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
         group1.addParam('applyMask', params.BooleanParam, default=False, 
                       label='Apply mask?',
                       help='Apply a 3D Binary mask to the volumes')
-        group1.addParam('maskType', params.EnumParam, choices=['circular','binary file'], default=ALIGN_MASK_CIRCULAR, 
-                      label='Mask type', display=params.EnumParam.DISPLAY_COMBO, condition='applyMask',
+        group1.addParam('maskType', params.EnumParam,
+                        choices=['circular','binary file'],
+                        default=ALIGN_MASK_CIRCULAR,
+                        label='Mask type', display=params.EnumParam.DISPLAY_COMBO,
+                        condition='applyMask',
                       help='Select the type of mask you want to apply')
-        group1.addParam('maskRadius', params.IntParam, default=-1, condition='applyMask and maskType==%d' % ALIGN_MASK_CIRCULAR,
-                      label='Mask radius', 
-                      help='Insert the radius for the mask')
-        group1.addParam('maskFile', params.PointerParam, condition='applyMask and maskType==%d' % ALIGN_MASK_BINARY_FILE,
-                      pointerClass='VolumeMask', label='Mask file', 
-                      help='Select the volume mask object')
+        group1.addParam('maskRadius', params.IntParam, default=-1,
+                        condition='applyMask and maskType==%d' % ALIGN_MASK_CIRCULAR,
+                        label='Mask radius',
+                        help='Insert the radius for the mask')
+        group1.addParam('maskFile', params.PointerParam,
+                        condition='applyMask and maskType==%d' % ALIGN_MASK_BINARY_FILE,
+                        pointerClass='VolumeMask', label='Mask file',
+                        help='Select the volume mask object')
 
         form.addParallelSection(threads=8, mpi=1)
         
@@ -98,16 +107,16 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
         self.fnInputVol = self._getExtraPath("inputVolume.vol")
         self.imgsInputFn = self._getExtraPath("inputParticles.xmd")
 
-        # Iterate through all input volumes and align them 
-        # againt the reference volume
         maskArgs = self._getMaskArgs()
         alignSteps = []
 
         stepId0 = self._insertFunctionStep('convertStep', prerequisites=[])
         alignSteps.append(stepId0) 
-        stepId1 = self._insertFunctionStep('alignVolumeStep', maskArgs, prerequisites=alignSteps)
+        stepId1 = self._insertFunctionStep('alignVolumeStep', maskArgs,
+                                           prerequisites=alignSteps)
         alignSteps.append(stepId1)     
-        stepId2 = self._insertFunctionStep('alignParticlesStep', prerequisites=alignSteps)
+        stepId2 = self._insertFunctionStep('alignParticlesStep',
+                                           prerequisites=alignSteps)
         alignSteps.append(stepId2)
 
         self._insertFunctionStep('createOutputStep', prerequisites=alignSteps)
@@ -120,41 +129,16 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
         inputParts = self.inputParticles.get()
         writeSetOfParticles(inputParts, self.imgsInputFn)
 
-        #Resizing input and reference volumes
+        #Resizing inputs
         ih = ImageHandler()
         ih.convert(self.inputReference.get(), self.fnRefVol)
         XdimRef = self.inputReference.get().getDim()[0]
-        ih.convert(self.inputVolumes.get(), self.fnInputVol)
-        XdimInput = self.inputVolumes.get().getDim()[0]
+        ih.convert(self.inputVolume.get(), self.fnInputVol)
+        XdimInput = self.inputVolume.get().getDim()[0]
 
         if XdimRef!=XdimInput:
-            self.runJob("xmipp_image_resize", "-i %s --dim %d"%(self.fnRefVol, XdimInput), numberOfMpi=1)
-
-        # #Resizing refParts
-        # refParts = self.refParticles.get()
-        # writeSetOfParticles(refParts, self.imgsRefFn)
-        # Xdim = refParts.getXDim()
-        # if self.newXdim != Xdim:
-        #     self.runJob("xmipp_image_resize",
-        #                 "-i %s -o %s --save_metadata_stack %s --fourier %d" %
-        #                 (self.imgsRefFn,
-        #                  self._getExtraPath('scaled_particles.stk'),
-        #                  self._getExtraPath('scaled_particles.xmd'),
-        #                  self.newXdim))
-        #     moveFile(self._getExtraPath('scaled_particles.xmd'), self.imgsRefFn)
-        #
-        # #Resizing inputParts
-        # inputParts = self.inputParticles.get()
-        # writeSetOfParticles(inputParts, self.imgsInputFn)
-        # Xdim = inputParts.getXDim()
-        # if self.newXdim != Xdim:
-        #     self.runJob("xmipp_image_resize",
-        #                 "-i %s -o %s --save_metadata_stack %s --fourier %d" %
-        #                 (self.imgsRefFn,
-        #                  self._getExtraPath('scaled_particles.stk'),
-        #                  self._getExtraPath('scaled_particles.xmd'),
-        #                  self.newXdim))
-        #     moveFile(self._getExtraPath('scaled_particles.xmd'), self.imgsInputFn)
+            self.runJob("xmipp_image_resize", "-i %s --dim %d" %
+                        (self.fnRefVol, XdimInput), numberOfMpi=1)
 
 
     def alignVolumeStep(self, maskArgs):
@@ -162,7 +146,8 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
         fhInputTranMat = self._getExtraPath('transformation-matrix.txt')
         outVolFn = self._getExtraPath("inputVolumeAligned.vol")
       
-        args = "--i1 %s --i2 %s --apply %s" % (self.fnRefVol, self.fnInputVol, outVolFn)
+        args = "--i1 %s --i2 %s --apply %s" % \
+               (self.fnRefVol, self.fnInputVol, outVolFn)
         args += maskArgs
         args += " --frm "
         args += " --copyGeo %s" % fhInputTranMat        
@@ -185,10 +170,8 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
             inMat = rowToAlignment(row, ALIGN_PROJ)
             partTransformMat = inMat.getMatrix()
             partTransformMatrix = np.matrix(partTransformMat)
-            #print(partTransformMatrix, transformationMat)
             newTransformMatrix = np.matmul(transformationMat, partTransformMatrix)
             resultMat.setMatrix(newTransformMatrix)
-            #print(newTransformMatrix, resultMat)
             rowOut = md.Row()
             rowOut.copyFromRow(row)
             alignmentToRow(resultMat, rowOut, ALIGN_PROJ)
@@ -208,11 +191,11 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
         transform = em.Transform()
         transform.setMatrix(transformationMat)
         outVol.setTransform(transform)
-        outVol.setSamplingRate(self.inputVolumes.get().getSamplingRate())
+        outVol.setSamplingRate(self.inputVolume.get().getSamplingRate())
 
         outputArgs = {'outputVolume': outVol}
         self._defineOutputs(**outputArgs)
-        self._defineSourceRelation(self.inputVolumes, outVol)
+        self._defineSourceRelation(self.inputVolume, outVol)
 
         #particles....
         outParticlesFn = self._getExtraPath('outputParticles.xmd')
@@ -224,25 +207,6 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
         self._defineOutputs(**outputArgs)
         self._defineSourceRelation(self.inputParticles, outputParticles)
 
-
-    def _updateItem(self, particle, row):
-        count = 0
-
-        while self.lastRow and particle.getObjId() == self.lastRow.getValue(
-                md.MDL_ITEM_ID):
-            count += 1
-            if count:
-                self._createItemMatrix(particle, self.lastRow)
-            try:
-                self.lastRow = next(self.iterMd)
-            except StopIteration:
-                self.lastRow = None
-
-        particle._appendItem = count > 0
-
-    def _createItemMatrix(self, particle, row):
-        setXmippAttributes(particle, row, xmippLib.MDL_SHIFT_DIFF,
-                           xmippLib.MDL_ANGLE_DIFF)
 
     #--------------------------- INFO functions --------------------------------------------
     
@@ -264,17 +228,6 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
         return ['Chen2013']
         
     #--------------------------- UTILS functions -------------------------------
-    def readInfoField(self, fnDir, block, label):
-        mdInfo = xmippLib.MetaData("%s@%s" % (block, join(fnDir, "info.xmd")))
-        return mdInfo.getValue(label, mdInfo.firstObject())
-
-    def writeInfoField(self, fnDir, block, label, value):
-        mdInfo = xmippLib.MetaData()
-        objId = mdInfo.addObject()
-        mdInfo.setValue(label, value, objId)
-        mdInfo.write("%s@%s" % (block, join(fnDir, "info.xmd")),
-                     xmippLib.MD_APPEND)
-
     def _getMaskArgs(self):
         maskArgs = ''
         if self.applyMask:
