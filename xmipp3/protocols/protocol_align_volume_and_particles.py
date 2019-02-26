@@ -49,8 +49,6 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
     with respect to a reference one (inputReference).
      The obtained alignment parameters are used to align the set of particles
      (inputParticles) that generated the input volume.
-    
-    *Note:* Fast Fourier requires compilation of Xmipp with --cltomo flag
      """
     _label = 'align volume and particles'
     nVols = 0
