@@ -46,7 +46,7 @@ class XmippProtLocSharp(ProtAnalysis3D):
     """    
     Given a resolution map the protocol calculate the sharpened map.
     """
-    _label = 'localdeblur sharpening'
+    _label = 'localdeblur sharpeningggg'
     _lastUpdateVersion = VERSION_1_1
     
     def __init__(self, **args):
@@ -262,7 +262,8 @@ class XmippProtLocSharp(ProtAnalysis3D):
             if (max_res-min_res<0.75):
                 nextIter = False
                 break
-                
+
+        # TODO: please copy the file using python not the operating system
         os.system('cp '  +self._getExtraPath('sharpenedMap_'+str(iteration)+'.mrc')+
                    ' '  +self._getExtraPath('sharpenedMap_last.mrc'))
         
@@ -278,9 +279,11 @@ class XmippProtLocSharp(ProtAnalysis3D):
   
              
     def createOutputStep(self):
+
         volume=Volume()
         volume.setFileName(self._getExtraPath('sharpenedMap_last.mrc'))
         volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
+        volume.setOrigin(self.inputVolume.get().getOrigin(True))
 
         self._defineOutputs(sharpened_map=volume)
         self._defineSourceRelation(self.inputVolume, volume)          
