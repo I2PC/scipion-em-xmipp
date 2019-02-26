@@ -139,7 +139,7 @@ class XmippProtOFAlignment(ProtAlignMovies):
         gpuId = self.gpuList.get()
         inputMd = self._getFnInMovieFolder(movie, 'input_movie.xmd')
         writeMovieMd(movie, inputMd, a0, aN, useAlignment=self.useAlignment)
-        
+
         args = '-i %s ' % inputMd
         args += '-o "%s" ' % self._getOutputShifts(movie)
         args += ' --frameRange %d %d ' % (0, aN - a0)

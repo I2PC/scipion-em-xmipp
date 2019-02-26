@@ -74,7 +74,8 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
         line = form.addLine('Defocus (A)', condition="useDefocus",
                             help='Minimum and maximum values for defocus in '
                                  'Angstroms')
-        line.addParam('minDefocus', params.FloatParam, default=4000, label='Min')
+        line.addParam('minDefocus', params.FloatParam, default=4000,
+                      label='Min')
         line.addParam('maxDefocus', params.FloatParam,
                       default=40000, label='Max')
 
