@@ -27,6 +27,7 @@
 import os, sys
 import re
 
+from pyworkflow import VERSION_2_0
 from pyworkflow.utils.path import copyTree
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtProcessParticles
@@ -40,6 +41,7 @@ N_MAX_NEG_SETS= 5
 class XmippProtScreenDeepLearning(ProtProcessParticles):
     """ Protocol for screening particles using deep learning. """
     _label = 'screen deep learning'
+    _lastUpdateVersion = VERSION_2_0
 
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):

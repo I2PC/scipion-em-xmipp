@@ -32,6 +32,7 @@ from glob import glob
 import six
 import json
 
+from pyworkflow import VERSION_2_0
 from pyworkflow.utils.path import makePath, cleanPattern, cleanPath, copyTree, createLink
 from pyworkflow.protocol.constants import *
 from pyworkflow.em.constants import RELATION_CTF, ALIGN_NONE
@@ -68,6 +69,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         neural network predictions.
     """
     _label = 'deep consensus picking'
+    _lastUpdateVersion = VERSION_2_0
+
     CONSENSUS_COOR_PATH_TEMPLATE="consensus_coords_%s"
     CONSENSUS_PARTS_PATH_TEMPLATE="consensus_parts_%s"
     PRE_PROC_MICs_PATH="preProcMics"
