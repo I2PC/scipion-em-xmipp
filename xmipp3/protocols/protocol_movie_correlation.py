@@ -137,12 +137,6 @@ class XmippProtMovieCorr(ProtAlignMovies):
         line.addParam('patchX', params.IntParam, default=10, label='X')
         line.addParam('patchY', params.IntParam, default=10, label='Y')
 
-        group.addParam('corrDownscale', params.IntParam,
-                    default=4, label='Correlation downscale',
-                    expertLevel=cons.LEVEL_ADVANCED,
-                    help='Downscale coefficient of the correlations used for local alignment.',
-                    condition='doLocalAlignment')
-
         group.addParam('groupNFrames', params.IntParam, default=3,
                     expertLevel=cons.LEVEL_ADVANCED,
                     label='Group N frames',
@@ -170,7 +164,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
         inputMd = os.path.join(movieFolder, 'input_movie.xmd')
         writeMovieMd(movie, inputMd, a0, aN, useAlignment=False)
 
-        args  = '-i "%s" ' % inputMd
+        args = '-i "%s" ' % inputMd
         args += '-o "%s" ' % self._getShiftsFile(movie)
         args += '--sampling %f ' % movie.getSamplingRate()
         args += '--max_freq %f ' % self.maxFreq
@@ -207,7 +201,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
             args += "--outside value %f" % self.outsideValue
 
         args += ' --frameRange %d %d ' % (0, aN-a0)
-        args += ' --frameRangeSum %d %d ' % (s0-a0, sN-s0)
+        args += ' --frameRangeSum %d %d ' % (s0-a0, sN-a0)
         args += ' --max_shift %d ' % self.maxShift
 
         if self.doSaveAveMic or self.doComputePSD:
@@ -234,11 +228,10 @@ class XmippProtMovieCorr(ProtAlignMovies):
             args += ' --device %(GPU)s'
             if self.doLocalAlignment.get():
                 args += ' --processLocalShifts '
-            args += ' --oBSpline ' + self._getExtraPath(self._getMovieRoot(movie) + "_bsplines.txt")
             args += ' --storage ' + self._getExtraPath("fftBenchmark.txt")
             args += ' --controlPoints %d %d %d' % (self.controlPointX, self.controlPointY, self.controlPointT)
             args += ' --patches %d %d' % (self.patchX, self.patchY)
-            args += ' --locCorrDownscale %d %d' % (self.corrDownscale, self.corrDownscale)
+            args += ' --locCorrDownscale 4 4'
             args += ' --patchesAvg %d' % self.groupNFrames
             self.runJob('xmipp_cuda_movie_alignment_correlation', args, numberOfMpi=1)
         else:
