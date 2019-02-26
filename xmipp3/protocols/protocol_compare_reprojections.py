@@ -171,7 +171,9 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                            xmippLib.MDL_ZSCORE_RESCOV, xmippLib.MDL_IMAGE_ORIGINAL,
                            xmippLib.MDL_COST, xmippLib.MDL_CONTINUOUS_GRAY_A,
                            xmippLib.MDL_CONTINUOUS_GRAY_B, xmippLib.MDL_CONTINUOUS_X,
-                           xmippLib.MDL_CONTINUOUS_Y)
+                           xmippLib.MDL_CONTINUOUS_Y,
+                           xmippLib.MDL_CORRELATION_IDX, xmippLib.MDL_CORRELATION_MASK,
+                           xmippLib.MDL_CORRELATION_WEIGHT, xmippLib.MDL_IMED)
         def __setXmippImage(label):
             attr = '_xmipp_' + xmippLib.label2Str(label)
             if not hasattr(particle, attr):

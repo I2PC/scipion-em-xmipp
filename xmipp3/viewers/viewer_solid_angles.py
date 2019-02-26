@@ -79,12 +79,10 @@ class SolidAnglesViewer(Viewer):
                                                 showj.ORDER: labels,
                                                 showj.VISIBLE: labels,
                                                 showj.RENDER: '_filename'}))
+
         fnBasis=self.protocol._getExtraPath('split_pc1.vol')
         if exists(fnBasis):
             views.append(DataView(fnBasis))
-
-        else:
-            views.append(self.infoMessage("No output has been generate yet"))
         
         return views
 
