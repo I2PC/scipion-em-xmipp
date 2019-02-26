@@ -415,7 +415,8 @@ class XmippProtMonoRes(ProtAnalysis3D):
         volume.setFileName(self._getFileName(OUTPUT_RESOLUTION_FILE))
         if (self.halfVolumes):
             volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
-            volume.setShiftsInOrigin(self.inputVolume.get().getShiftsFromOrigin())
+            x, y, z = self.inputVolume.get().getShiftsFromOrigin()
+            volume.setShiftsInOrigin(x, y, z)
             self._defineOutputs(resolution_Volume=volume)
             self._defineSourceRelation(self.inputVolume, volume)
             inputVolumeFileName = self.inputVolume.get().getFileName()
