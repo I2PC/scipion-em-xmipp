@@ -27,17 +27,12 @@
 import numpy as np
 import pyworkflow.protocol.params as params
 import pyworkflow.em as em
-from ..convert import writeSetOfParticles, readSetOfParticles
 from pyworkflow.em.convert import ImageHandler
-from pyworkflow.utils import moveFile
 import pyworkflow.em.metadata as md
 from pyworkflow.em.data import Transform
 from pyworkflow.em import ALIGN_PROJ
-from xmipp3.convert import rowToAlignment, alignmentToRow, setXmippAttributes
+from xmipp3.convert import rowToAlignment, alignmentToRow, writeSetOfParticles, readSetOfParticles
 from xmipp3.constants import SYM_URL
-import xmippLib
-from shutil import copy
-from os.path import join
 
 ALIGN_MASK_CIRCULAR = 0
 ALIGN_MASK_BINARY_FILE = 1
