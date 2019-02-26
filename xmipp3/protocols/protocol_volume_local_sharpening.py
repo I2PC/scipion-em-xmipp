@@ -46,7 +46,7 @@ class XmippProtLocSharp(ProtAnalysis3D):
     """    
     Given a resolution map the protocol calculate the sharpened map.
     """
-    _label = 'localdeblur sharpeningggg'
+    _label = 'localdeblur sharpening'
     _lastUpdateVersion = VERSION_1_1
     
     def __init__(self, **args):
