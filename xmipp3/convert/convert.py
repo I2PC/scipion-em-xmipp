@@ -198,6 +198,7 @@ IMAGE_EXTRA_LABELS = [
     xmippLib.MDL_FRAME_ID,
     xmippLib.MDL_SCORE_BY_VAR,
     xmippLib.MDL_SCORE_BY_GINI,
+    xmippLib.MDL_ZSCORE_DEEPLEARNING1
     ]
 
 ANGLES_DICT = OrderedDict([
