@@ -25,12 +25,13 @@
 # *****************************************************************************
 
 import os
+from datetime import datetime
 
 import pyworkflow.em as em
 import pyworkflow.em.metadata as md
 import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as param
-from datetime import datetime
+from pyworkflow import VERSION_2_0
 from pyworkflow.em.protocol import ProtClassify2D
 from pyworkflow.em.data import SetOfParticles
 from pyworkflow.object import Set
@@ -46,6 +47,7 @@ class XmippProtEliminateEmptyParticles(ProtClassify2D):
     parameter can be used for fine-tuning the algorithm for type of data. """
 
     _label = 'eliminate empty particles'
+    _lastUpdateVersion = VERSION_2_0
 
     def __init__(self, **args):
         ProtClassify2D.__init__(self, **args)

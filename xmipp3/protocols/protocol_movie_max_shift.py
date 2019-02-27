@@ -27,10 +27,10 @@
 from os.path import exists
 import numpy as np
 
+from pyworkflow import VERSION_2_0
 from pyworkflow.em.protocol.protocol_movies import ProtProcessMovies
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
-
 from pyworkflow.object import Set
 from pyworkflow.protocol.constants import STATUS_NEW
 from pyworkflow.protocol.params import PointerParam
@@ -53,6 +53,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                                              above are met.
     """
     _label = 'movie maxshift'
+    _lastUpdateVersion = VERSION_2_0
     
     REJ_TYPES = ['by frame', 'by whole movie', 'by frame and movie', 
                  'by frame or movie']

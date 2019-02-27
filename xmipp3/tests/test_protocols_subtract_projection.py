@@ -41,7 +41,7 @@ from xmipp3 import Plugin
 from xmipp3.convert import writeSetOfParticles
 from xmipp3.protocols import XmippProtSubtractProjection
 
-ProtRelionSubtract = importFromPlugin('relion.protocols', 'ProtRelionSubtract')
+ProtRelionSubtract = importFromPlugin('relion.protocols', 'ProtRelionSubtract', doRaise=True)
 
 
 proj1 = [(0, 0, 53, 55, 0.5), (0, 0, 53, 56, 1.0), (0, 0, 53, 57, 0.5), (0, 0, 53, 63, 0.5), (0, 0, 53, 64, 1.0),

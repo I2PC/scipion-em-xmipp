@@ -31,7 +31,7 @@ from __future__ import print_function
 from pyworkflow.tests.test_utils import wait
 from pyworkflow.utils import magentaStr, importFromPlugin
 from pyworkflow.tests import *
-from pyworkflow.em.protocol.protocol_import import *
+from pyworkflow.em.protocol import *
 
 import xmipp3
 from xmipp3.base import *
@@ -490,17 +490,17 @@ class TestXmippTriggerParticles(TestXmippBase):
 
         print("Run Trigger Particles")
         protTrigger = self.newProtocol(XmippProtTriggerData,
-                                       allParticles=False, outputSize=50,
+                                       allImages=False, outputSize=50,
                                        checkInterval=2)
-        protTrigger.inputParticles.set(protStream)
-        protTrigger.inputParticles.setExtended("outputParticles")
+        protTrigger.inputImages.set(protStream)
+        protTrigger.inputImages.setExtended("outputParticles")
         self.proj.scheduleProtocol(protTrigger)
 
         protTrigger2 = self.newProtocol(XmippProtTriggerData,
-                                       allParticles=True, outputSize=50,
+                                       allImages=True, outputSize=50,
                                        checkInterval=2)
-        protTrigger2.inputParticles.set(protStream)
-        protTrigger2.inputParticles.setExtended("outputParticles")
+        protTrigger2.inputImages.set(protStream)
+        protTrigger2.inputImages.setExtended("outputParticles")
         self.proj.scheduleProtocol(protTrigger2)
 
 
@@ -863,9 +863,9 @@ class TestXmippDenoiseParticles(TestXmippBase):
     """Check protocol Denoise Particles"""
     @classmethod
     def setUpClass(cls):
-        ProtRelionClassify2D = importFromPlugin('relion.protocols', 'ProtRelionClassify2D')
-        ProtRelionPreprocessParticles = importFromPlugin('relion.protocols', 'ProtRelionPreprocessParticles')
-        isVersion2 = importFromPlugin('relion.protocols', 'Plugin').isVersion2Active()
+        ProtRelionClassify2D = importFromPlugin('relion.protocols', 'ProtRelionClassify2D', doRaise=True)
+        ProtRelionPreprocessParticles = importFromPlugin('relion.protocols', 'ProtRelionPreprocessParticles', doRaise=True)
+        isVersion2 = importFromPlugin('relion', 'Plugin', doRaise=True).isVersion2Active()
         # To denoise particles we need to import the particles and the
         # classes, and particles must be aligned with classes. As this
         # is the usual situation after a CL2D, we just run that protocol.
@@ -892,7 +892,7 @@ class TestXmippDenoiseParticles(TestXmippBase):
         cls.protRelion2DClass.numberOfIterations.set(3)
         cls.protRelion2DClass.inputParticles.set(cls.protNormalize.outputParticles)
 
-        if isVersion2():
+        if isVersion2:
             cls.protRelion2DClass.doGpu.set(False)
 
         cls.launchProtocol(cls.protRelion2DClass)

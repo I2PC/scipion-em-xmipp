@@ -470,7 +470,7 @@ class TestXmippCropResizeVolumes(TestXmippBase):
         self.assertAlmostEqual(outV.getSamplingRate(),
                                inV.getSamplingRate() * (inV.getDim()[0] / float(newSize)))
         self.assertTrue(outV.equalAttributes(
-            inV, ignore=['_index', '_filename', '_samplingRate'], verbose=True))
+            inV, ignore=['_index', '_filename', '_samplingRate', '_origin', '_matrix'], verbose=True))
 
     def testSingleFactorAndCrop(self):
         inV = self.protImport2.outputVolume  # short notation

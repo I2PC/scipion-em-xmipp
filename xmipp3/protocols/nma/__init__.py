@@ -32,7 +32,4 @@ from .protocol_nma_dimred import XmippProtDimredNMA
 from .protocol_batch_cluster import BatchProtNMACluster
 from .protocol_structure_mapping import XmippProtStructureMapping
 
-from .viewer_nma import XmippNMAViewer
-from .viewer_nma_alignment import XmippAlignmentNMAViewer
-from .viewer_nma_dimred import XmippDimredNMAViewer
-from .viewer_structure_mapping import XmippProtStructureMappingViewer
+

@@ -34,14 +34,14 @@ from pyworkflow.utils import getExt, removeExt
 from os.path import abspath
 
 from pyworkflow.gui.plotter import Plotter
-from pyworkflow.em.viewer import LocalResolutionViewer
+from pyworkflow.em.viewers import LocalResolutionViewer
 from pyworkflow.em.constants import (COLOR_JET, COLOR_TERRAIN,
  COLOR_GIST_EARTH, COLOR_GIST_NCAR, COLOR_GNU_PLOT, COLOR_GNU_PLOT2,
  COLOR_OTHER, COLOR_CHOICES, AX_X, AX_Y, AX_Z)
 from pyworkflow.protocol.params import (LabelParam, StringParam, EnumParam,
                                         IntParam, LEVEL_ADVANCED)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
-from pyworkflow.em.viewer import ChimeraView, DataView
+from pyworkflow.em.viewers import ChimeraView, DataView
 from pyworkflow.em.metadata import MetaData, MDL_X, MDL_COUNT
 from pyworkflow.em import ImageHandler
 

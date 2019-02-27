@@ -29,11 +29,10 @@ visualization program.
 """
 
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.em import *
-
+from pyworkflow.em.viewers import showj
 from xmipp3.viewers import XmippViewer
 from xmipp3.protocols.protocol_ransac import XmippProtRansac
-
+from pyworkflow.em.viewers.views import ObjectView
 
 class XmippViewerRansac(XmippViewer):
     """ Wrapper to visualize Ransac results """
@@ -54,3 +53,4 @@ class XmippViewerRansac(XmippViewer):
                                                       showj.VISIBLE: labels, 
                                                       showj.MODE: showj.MODE_MD,
                                                       showj.RENDER:'_filename'}))
+        return self._views

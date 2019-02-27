@@ -29,8 +29,8 @@ from pyworkflow.em.protocol.protocol_sets import ProtSubSet
 from xmipp3.protocols.protocol_extract_particles import *
 from xmipp3.protocols.protocol_classification_gpuCorr import *
 
-ProtCTFFind = importFromPlugin('grigoriefflab.protocols', 'ProtCTFFind')
-SparxGaussianProtPicking = importFromPlugin('eman2.protocols', 'SparxGaussianProtPicking')
+ProtCTFFind = importFromPlugin('grigoriefflab.protocols', 'ProtCTFFind', doRaise=True)
+SparxGaussianProtPicking = importFromPlugin('eman2.protocols', 'SparxGaussianProtPicking', doRaise=True)
 
 
 # Number of mics to be processed

@@ -25,8 +25,8 @@
 # **************************************************************************
 
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.em.showj import RENDER, ORDER, VISIBLE, MODE, MODE_MD
-from pyworkflow.em.viewer import DataView
+from pyworkflow.em.viewers.showj import RENDER, ORDER, VISIBLE, MODE, MODE_MD
+from pyworkflow.em.viewers import DataView
 from pyworkflow.protocol.params import LabelParam, StringParam
 import pyworkflow.em.metadata as md
 

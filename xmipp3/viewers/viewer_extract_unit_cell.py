@@ -35,9 +35,7 @@ from pyworkflow.em.constants import SYM_I222
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.em.data import (SetOfVolumes)
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-from pyworkflow.em.viewers.chimera_utils import (createCoordinateAxisFile,
-                                                 symMapperScipionchimera,
-                                                 getProgram)
+from pyworkflow.em.viewers.viewer_chimera import Chimera, ChimeraView
 from xmipp3.protocols.protocol_extract_unit_cell import XmippProtExtractUnit
 
 
@@ -74,7 +72,7 @@ class viewerXmippProtExtractUnit(ProtocolViewer):
         }
 
     def _validate(self):
-        if find_executable(getProgram()) is None:
+        if find_executable(Chimera.getProgram()) is None:
             return ["chimera is not available. Either install it or choose"
                     " option 'slices'. "]
         return []
@@ -109,11 +107,12 @@ class viewerXmippProtExtractUnit(ProtocolViewer):
         dim = self.protocol.inputVolumes.get().getDim()[0]
         sampling = self.protocol.inputVolumes.get().getSamplingRate()
         tmpFileName = os.path.abspath(self.protocol._getTmpPath("axis.bild"))
-        createCoordinateAxisFile(dim,
+        Chimera.createCoordinateAxisFile(dim,
                                  bildFileName=tmpFileName,
                                  sampling=sampling)
         f.write("open %s\n" % tmpFileName)
-
+        f.write("cofr 0,0,0\n")  # set center of coordinates
+        
         _inputVol = self.protocol.inputVolumes.get()
         _outputVol = self.protocol.outputVolume
         inputVolFileName = os.path.abspath(ImageHandler.removeFileType(
@@ -140,8 +139,7 @@ class viewerXmippProtExtractUnit(ProtocolViewer):
         d = {}
         d['outerRadius'] = self.protocol.outerRadius.get() * sampling
         d['innerRadius'] = self.protocol.innerRadius.get() * sampling
-        d['symmetry'] = \
-            symMapperScipionchimera[self.protocol.symmetryGroup.get()]
+        d['symmetry'] = Chimera.getSymmetry(self.protocol.symmetryGroup.get())
 
         if self.protocol.symmetryGroup >= SYM_I222:
             f.write("shape icosahedron mesh true radius %(outerRadius)d "
@@ -157,7 +155,7 @@ class viewerXmippProtExtractUnit(ProtocolViewer):
 
         f.close()
 
-        return [em.ChimeraView(tmpFileNameCMD)]
+        return [ChimeraView(tmpFileNameCMD)]
 
     def _showVolumesXmipp(self):
 

@@ -30,11 +30,11 @@ from xmipp3.protocols.protocol_extract_particles import *
 from xmipp3.protocols.protocol_cl2d import *
 from xmipp3.protocols.protocol_realignment_classes import *
 
-ProtCTFFind = importFromPlugin('grigoriefflab.protocols', 'ProtCTFFind')
+ProtCTFFind = importFromPlugin('grigoriefflab.protocols', 'ProtCTFFind', doRaise=True)
 try:
     from eman2.protocols.protocol_autopick_sparx import *
 except:
-    pluginNotFound('Eman2', "Eman2 is needed to run this test.")
+    pluginNotFound('Eman2', "Eman2 is needed to run this test.", doRaise=True)
 
 
 # Number of mics to be processed
@@ -84,7 +84,8 @@ class TestRealignmentClasses(BaseTest):
         """ Run a particle picking. """
         protPicking = SparxGaussianProtPicking(boxSize=64,
                                                numberOfThreads=1,
-                                               numberOfMpi=1)
+                                               numberOfMpi=1,
+                                               lowerThreshold=0.001)
         protPicking.inputMicrographs.set(inputMicrographs)
         self.launchProtocol(protPicking)
 
@@ -146,8 +147,9 @@ class TestRealignmentClasses(BaseTest):
         if protPicking.isFailed():
             self.assertTrue(False)
 
-        protExtract = self.runExtractParticles(protPicking.outputCoordinates,
-                                               protCtf.outputCTF)
+        protExtract = self.runExtractParticles\
+            (protPicking.outputCoordinates,
+             protCtf.outputCTF)
         if protExtract.isFailed():
             self.assertTrue(False)
 

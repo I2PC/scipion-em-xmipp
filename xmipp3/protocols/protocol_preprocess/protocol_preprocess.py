@@ -30,11 +30,11 @@ from pyworkflow.utils import *
 from pyworkflow.protocol.params import *
 from pyworkflow.utils.path import cleanPath
 from pyworkflow.em import Volume
-
+import xmippLib
 from xmipp3.constants import *
-from xmipp3.convert import getImageLocation
-from xmipp3.convert import locationToXmipp, writeSetOfParticles
-from .protocol_process import XmippProcessParticles, XmippProcessVolumes
+from xmipp3.convert import  writeSetOfParticles
+from .protocol_process import XmippProcessParticles,\
+    XmippProcessVolumes
 
 
 class XmippPreprocessHelper():
@@ -526,12 +526,12 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
             localArgs = self._adjustLocalArgs(inputFn, self.outputStk, args)
             self.runJob("xmipp_transform_adjust_volume_grey_levels", localArgs)
         else:
-            volMd = md.MetaData(self.inputFn)
-            outVolMd = md.MetaData(self.outputMd)
+            volMd = xmippLib.MetaData(self.inputFn)
+            outVolMd = xmippLib.MetaData(self.outputMd)
             for objId in volMd:
                 args = self._argsAdjust(objId-1)
-                inputVol = volMd.getValue(md.MDL_IMAGE, objId)
-                outputVol = outVolMd.getValue(md.MDL_IMAGE, objId)
+                inputVol = volMd.getValue(xmippLib.MDL_IMAGE, objId)
+                outputVol = outVolMd.getValue(xmippLib.MDL_IMAGE, objId)
                 localArgs = self._adjustLocalArgs(inputVol, outputVol, args)
                 self.runJob("xmipp_transform_adjust_volume_grey_levels", localArgs)
     
@@ -550,11 +550,11 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
             maskArgs = self._segMentMaskArgs(inputFn, self.outputStk, fnMask)
             self._segmentVolume(localArgs, maskArgs, fnMask)
         else:
-            volMd = md.MetaData(inputFn)
-            outVolMd = md.MetaData(self.outputMd)
+            volMd = xmippLib.MetaData(inputFn)
+            outVolMd = xmippLib.MetaData(self.outputMd)
             for objId in volMd:
-                inputVol = volMd.getValue(md.MDL_IMAGE, objId)
-                outputVol = outVolMd.getValue(md.MDL_IMAGE, objId)
+                inputVol = volMd.getValue(xmippLib.MDL_IMAGE, objId)
+                outputVol = outVolMd.getValue(xmippLib.MDL_IMAGE, objId)
                 localArgs = self._segmentLocalArgs(inputVol, fnMask, args)
                 maskArgs = self._segMentMaskArgs(inputVol, outputVol, fnMask)
                 self._segmentVolume(localArgs, maskArgs, fnMask)

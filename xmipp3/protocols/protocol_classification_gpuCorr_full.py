@@ -42,6 +42,7 @@ from pyworkflow.object import Set
 from pyworkflow.protocol.constants import STATUS_NEW
 import pyworkflow.protocol.constants as const
 
+import xmippLib
 from xmippLib import Image, MD_APPEND, DT_DOUBLE
 from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
                             rowToAlignment, rowToParticle)
@@ -452,7 +453,8 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
 
             im1 = Image(nameRefLastClasses)
             im2 = Image(nameRefNewClasses)
-            im1.align(im2)
+            im2 = xmippLib.image_align(im1, im2)
+
             im1.inplaceMultiply(listToMultiply[0])
             im2.inplaceMultiply(listToMultiply[1])
             im1.convert2DataType(DT_DOUBLE)

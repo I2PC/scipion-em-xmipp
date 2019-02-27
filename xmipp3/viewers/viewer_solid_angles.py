@@ -28,9 +28,11 @@ This module implement the wrappers around xmipp_showj
 visualization program.
 """
 
+from os.path import exists
+
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.em.viewer import ObjectView
-import pyworkflow.em.showj as showj 
+from pyworkflow.em.viewers import ObjectView, DataView
+import pyworkflow.em.viewers.showj as showj
 
 from xmipp3.protocols.protocol_solid_angles import XmippProtSolidAngles
 
@@ -58,16 +60,29 @@ class SolidAnglesViewer(Viewer):
                                                 showj.RENDER: renderLabels,
                                                 showj.MODE: showj.MODE_MD}))
 
-            outputAverages = getattr(obj, 'outputAverages', None)
-            if outputAverages is not None:
-                renderLabels = '_filename'
-                labels = 'id enabled %s _xmipp_angleRot _xmipp_angleTilt _xmipp_classCount' % renderLabels
-                views.append(ObjectView(self._project, outputAverages.strId(),
-                                        outputAverages.getFileName(),
-                                        viewParams={showj.ORDER: labels, 
-                                                    showj.VISIBLE: labels,
-                                                    showj.RENDER: renderLabels,
-                                                    showj.MODE: showj.MODE_MD}))            
+#             outputAverages = getattr(obj, 'outputAverages', None)
+#             if outputAverages is not None:
+#                 renderLabels = '_filename'
+#                 labels = 'id enabled %s _xmipp_angleRot _xmipp_angleTilt _xmipp_classCount' % renderLabels
+#                 views.append(ObjectView(self._project, outputAverages.strId(),
+#                                         outputAverages.getFileName(),
+#                                         viewParams={showj.ORDER: labels,
+#                                                     showj.VISIBLE: labels,
+#                                                     showj.RENDER: renderLabels,
+#                                                     showj.MODE: showj.MODE_MD}))
+
+        if hasattr(obj, 'outputVolumes'):
+            outputVolumes = obj.outputVolumes
+            labels = 'id enabled comment _filename '
+            views.append(ObjectView(self._project, outputVolumes.strId(), outputVolumes.getFileName(),
+                                    viewParams={showj.MODE: showj.MODE_MD,
+                                                showj.ORDER: labels,
+                                                showj.VISIBLE: labels,
+                                                showj.RENDER: '_filename'}))
+        fnBasis=self.protocol._getExtraPath('split_pc1.vol')
+        if exists(fnBasis):
+            views.append(DataView(fnBasis))
+
         else:
             views.append(self.infoMessage("No output has been generate yet"))
         

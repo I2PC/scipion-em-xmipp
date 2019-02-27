@@ -32,8 +32,6 @@ import math
 from pyworkflow import VERSION_1_1
 from pyworkflow.em.data import SetOfMovies, Movie
 from pyworkflow.em.protocol import EMProtocol, ProtProcessMovies
-from pyworkflow.em.protocol.monitors import (MonitorMovieGain,
-                                             MovieGainMonitorPlotter)
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import (PointerParam, IntParam,
                                         BooleanParam, LEVEL_ADVANCED)
@@ -56,7 +54,7 @@ class XmippProtMovieGain(ProtProcessMovies):
         EMProtocol.__init__(self, **args)
         self.stepsExecutionMode = em.STEPS_PARALLEL
 
-    #--------------------------- DEFINE param functions ----------------------
+    # -------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label=Message.LABEL_INPUT)
  
@@ -86,8 +84,7 @@ class XmippProtMovieGain(ProtProcessMovies):
                            'movies protocol.')
         form.addParallelSection(threads=1, mpi=1)
 
-
-    #--------------------------- STEPS functions -------------------------------
+    # -------------------------- STEPS functions ------------------------------
 
     def createOutputStep(self):
         pass
@@ -115,7 +112,6 @@ class XmippProtMovieGain(ProtProcessMovies):
                     deps.append(stepId)
                     insertedDict[movie.getObjId()] = stepId
         return deps
-
 
     def _processMovie(self, movie):
         movieId = movie.getObjId()
@@ -156,7 +152,6 @@ class XmippProtMovieGain(ProtProcessMovies):
                                    (movieId, dev, p[0], p[4], max))
             fnMonitorSummary.close()
 
-
     def _loadOutputSet(self, SetClass, baseName, fixSampling=True):
         """
         Load the output set if it exists or create a new one.
@@ -195,7 +190,6 @@ class XmippProtMovieGain(ProtProcessMovies):
             imageSet = self._loadOutputSet(em.data.SetOfImages,
                                            'movies.sqlite',
                                            fixSampling=saveMovie)
-
             movie = self.inputMovies.get()
             imgOut = em.data.Image()
             imgOut.setObjId(movie.getObjId())
@@ -210,7 +204,6 @@ class XmippProtMovieGain(ProtProcessMovies):
             outputStep.setStatus(cons.STATUS_NEW)
             self.finished = True
         else:
-
             # Load previously done items (from text file)
             doneList = self._readDoneList()
             # Check for newly done items
@@ -258,7 +251,6 @@ class XmippProtMovieGain(ProtProcessMovies):
                 if outputStep and outputStep.isWaiting():
                     outputStep.setStatus(cons.STATUS_NEW)
 
-
     def _updateOutputSet(self, outputName, outputSet, state=Set.STREAM_OPEN):
         outputSet.setStreamState(state)
 
@@ -277,7 +269,7 @@ class XmippProtMovieGain(ProtProcessMovies):
         # Close set databaset to avoid locking it
         outputSet.close()
 
-    #--------------------------- INFO functions -------------------------------
+    # --------------------------- INFO functions -------------------------------
     def _summary(self):
         fnSummary = self._getPath("summary.txt")
         if not os.path.exists(fnSummary):

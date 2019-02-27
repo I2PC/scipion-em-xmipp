@@ -23,9 +23,6 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-"""
-Protocol to perform high-resolution reconstructions
-"""
 
 from glob import glob
 import math
@@ -33,7 +30,7 @@ import random
 from itertools import izip
 from os.path import join, exists
 
-from pyworkflow import VERSION_1_1
+from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam, IntParam, EnumParam, NumericListParam
 from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile, createLink
@@ -62,7 +59,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
        and only a fraction of the particles are used to update the volumes and evaluate them.
     """
     _label = 'swarm consensus'
-    _version = VERSION_1_1
+    _version = VERSION_2_0
     
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):

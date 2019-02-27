@@ -35,9 +35,9 @@ from pyworkflow.protocol.params import StringParam, BooleanParam
 from pyworkflow.viewer import (ProtocolViewer, CommandView,
                                DESKTOP_TKINTER, WEB_DJANGO)
 import xmippLib
-from .data import Point, Data
-from .plotter import XmippNmaPlotter
-from .protocol_nma_alignment import XmippProtAlignmentNMA
+from xmipp3.protocols.nma.data import Point, Data
+from .nma_plotter import XmippNmaPlotter
+from xmipp3.protocols.nma import XmippProtAlignmentNMA
 
         
 class XmippAlignmentNMAViewer(ProtocolViewer):

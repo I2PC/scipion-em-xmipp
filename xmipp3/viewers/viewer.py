@@ -24,37 +24,25 @@
 # *
 # **************************************************************************
 
-import os
-from os.path import dirname, join
-
+from pyworkflow.em.viewers import showj
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO, CommandView
-from pyworkflow.em.data import *
 from pyworkflow.em.protocol import *
-from pyworkflow.em.data_tiltpairs import MicrographsTiltPair, ParticlesTiltPair, CoordinatesTiltPair
-from pyworkflow.utils import makePath, runJob, copyTree, cleanPath
-import pyworkflow as pw
-from pyworkflow.em.showj import *
-import pyworkflow.gui.dialog as dialog
-import matplotlib.pyplot as plt
-import numpy as np
+
+from pyworkflow.em.viewers.viewers_data import DataViewer
+from pyworkflow.em.viewers.plotter import EmPlotter
+from pyworkflow.em.viewers.views import CtfView, ObjectView
+from pyworkflow.em.viewers.showj import *
+from pyworkflow.em.viewers.viewer_monitors import MovieGainMonitorPlotter
 
 import xmippLib
-import xmipp3
 from xmipp3.convert import *
-from xmipp3.protocols.protocol_cl2d_align import XmippProtCL2DAlign
-from xmipp3.protocols.protocol_cl2d import XmippProtCL2D
 from xmipp3.protocols.protocol_compare_reprojections import XmippProtCompareReprojections
 from xmipp3.protocols.protocol_compare_angles import XmippProtCompareAngles
-from xmipp3.protocols.protocol_ctf_discrepancy import XmippProtCTFDiscrepancy
 from xmipp3.protocols.protocol_extract_particles import XmippProtExtractParticles
 from xmipp3.protocols.protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
-from xmipp3.protocols.protocol_helical_parameters import XmippProtHelicalParameters
 from xmipp3.protocols.protocol_kerdensom import XmippProtKerdensom
 from xmipp3.protocols.protocol_particle_pick_automatic import XmippParticlePickingAutomatic
-from xmipp3.protocols.protocol_particle_pick import XmippProtParticlePicking
 from xmipp3.protocols.protocol_particle_pick_pairs import XmippProtParticlePickingPairs
-from xmipp3.protocols.protocol_preprocess import XmippProtPreprocessVolumes
-from xmipp3.protocols.protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
 from xmipp3.protocols.protocol_rotational_spectra import XmippProtRotSpectra
 from xmipp3.protocols.protocol_screen_particles import XmippProtScreenParticles
 from xmipp3.protocols.protocol_ctf_micrographs import XmippProtCTFMicrographs
@@ -62,33 +50,21 @@ from xmipp3.protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
 from xmipp3.protocols.protocol_multireference_alignability import XmippProtMultiRefAlignability
 from xmipp3.protocols.protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from xmipp3.protocols.protocol_movie_gain import XmippProtMovieGain
+from xmipp3.protocols.protocol_deep_denoising import XmippProtDeepDenoising
 
 
-class XmippViewer(Viewer):
+class XmippViewer(DataViewer):
     """ Wrapper to visualize different type of objects
     with the Xmipp program xmipp_showj
     """
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
     _targets = [
-                CoordinatesTiltPair,
-                Image,
-                MicrographsTiltPair,
-                ParticlesTiltPair,
-                SetOfClasses2D,
-                SetOfClasses3D,
-                SetOfCoordinates,
-                SetOfCTF,
-                SetOfImages,
-                SetOfMovies,
-                SetOfNormalModes,
-                SetOfPDBs,
                 XmippProtCompareReprojections,
                 XmippProtCompareAngles,
                 XmippParticlePickingAutomatic,
                 XmippProtExtractParticles,
                 XmippProtExtractParticlesPairs,
                 XmippProtKerdensom,
-                ProtParticlePicking,
                 XmippProtParticlePickingPairs,
                 XmippProtRotSpectra,
                 XmippProtScreenParticles,
@@ -96,19 +72,9 @@ class XmippViewer(Viewer):
                 XmippProtValidateNonTilt,
                 XmippProtAssignmentTiltPair,
                 XmippProtMultiRefAlignability,
-                XmippProtMovieGain
+                XmippProtMovieGain,
+                XmippProtDeepDenoising
                 ]
-
-    def __init__(self, **kwargs):
-        Viewer.__init__(self, **kwargs)
-        self._views = []
-
-    # FIXME: JMRT: I think this function is not necessary, we should remove it
-    def visualize(self, obj, **kwargs):
-        self._visualize(obj, **kwargs)
-
-        for v in self._views:
-            v.show()
 
     def __createTemporaryCtfs(self, obj, setOfMics):
         pwutils.cleanPath(obj._getPath("ctfs_temporary.sqlite"))
@@ -135,125 +101,16 @@ class XmippViewer(Viewer):
     def _visualize(self, obj, **kwargs):
         cls = type(obj)
 
-        if issubclass(cls, Volume):
-            fn = getImageLocation(obj)
-            self._views.append(ObjectView(self._project, obj.strId(), fn,
-                                          viewParams={RENDER: 'image',
-                                                      SAMPLINGRATE: obj.getSamplingRate()}))
-
-        elif issubclass(cls, Image):
-            fn = getImageLocation(obj)
-            self._views.append(ObjectView(self._project, obj.strId(), fn))
-
-        elif issubclass(cls, SetOfNormalModes):
+        if issubclass(cls, SetOfNormalModes):
             fn = obj.getFileName()
-            from nma.viewer_nma import OBJCMD_NMA_PLOTDIST, OBJCMD_NMA_VMD
+            from .viewer_nma import OBJCMD_NMA_PLOTDIST, OBJCMD_NMA_VMD
             objCommands = "'%s' '%s'" % (OBJCMD_NMA_PLOTDIST, OBJCMD_NMA_VMD)
             self._views.append(ObjectView(self._project, self.protocol.strId(),
                                           fn, obj.strId(),
                                           viewParams={OBJCMDS: objCommands},
                                           **kwargs))
 
-        elif issubclass(cls, SetOfPDBs):
-            fn = obj.getFileName()
-            labels = 'id _filename '
-            self._views.append(ObjectView(self._project, obj.strId(), fn,
-                                          viewParams={ORDER: labels,
-                                                      VISIBLE: labels,
-                                                      MODE: MODE_MD, RENDER: "no"}))
-
-        elif issubclass(cls, SetOfMovies):
-            fn = obj.getFileName()
-            # Enabled for the future has to be available
-            labels = 'id _filename _samplingRate  '
-            moviesView = ObjectView(self._project, obj.strId(), fn,
-                                          viewParams={ORDER: labels,
-                                                      VISIBLE: labels,
-                                                  MODE: MODE_MD, RENDER: "no"})
-            # For movies increase the JVM memory by 1 GB, just in case
-            moviesView.setMemory(showj.getJvmMaxMemory() + 1)
-            self._views.append(moviesView)
-
-        elif issubclass(cls, SetOfMicrographs):
-            self._views.append(MicrographsView(self._project, obj, **kwargs))
-
-        elif issubclass(cls, MicrographsTiltPair):
-            labels = 'id enabled _untilted._filename _tilted._filename'
-            self._views.append(ObjectView(self._project, obj.strId(), obj.getFileName(),
-                                          viewParams={ORDER: labels,
-                                                      VISIBLE: labels,
-                                                      MODE: MODE_MD,
-                                                      RENDER: '_untilted._filename _tilted._filename'}))
-
-        elif issubclass(cls, ParticlesTiltPair):
-            labels = 'id enabled _untilted._filename _tilted._filename'
-            self._views.append(ObjectView(self._project, obj.strId(), obj.getFileName(),
-                                          viewParams={ORDER: labels,
-                                                      VISIBLE: labels,
-                                                      RENDER:'_untilted._filename _tilted._filename',
-                                                      MODE: MODE_MD}))
-
-        elif issubclass(cls, SetOfCoordinates):
-            micSet = obj.getMicrographs()  # accessing mics to provide metadata file
-            if micSet is None:
-                raise Exception('visualize: SetOfCoordinates has no micrographs set.')
-
-            mdFn = getattr(micSet, '_xmippMd', None)
-            if mdFn:
-                fn = mdFn.get()
-            else:  # happens if protocol is not an xmipp one
-                fn = self._getTmpPath(micSet.getName() + '_micrographs.xmd')
-                writeSetOfMicrographs(micSet, fn)
-            tmpDir = self._getTmpPath(obj.getName())
-            cleanPath(tmpDir)
-            makePath(tmpDir)
-            # FIXME: (JMRT) We are always writing the SetOfCoordinates and removing
-            # the tmpDir, we need to take into account if the user have pick
-            # some particles in the tmpDir and have not save them, that now
-            # will loose all picked particles.
-            # A possible solution could be to alert that changes have not been
-            # written during modification of tmpDir or create a new Xmipp picking
-            # protocol to continue picking later without loosing the coordinates.
-            writeSetOfCoordinates(tmpDir, obj)
-            self._views.append(CoordinatesObjectView(self._project, fn, tmpDir,
-                                                     self.protocol,
-                                                     inTmpFolder=True))
-
-        elif issubclass(cls, SetOfParticles):
-            fn = obj.getFileName()
-            labels = 'id enabled _index _filename _xmipp_zScore _xmipp_cumulativeSSNR ' \
-                     '_sampling _xmipp_scoreByVariance _xmipp_scoreEmptiness ' \
-                     '_ctfModel._defocusU _ctfModel._defocusV _ctfModel._defocusAngle ' \
-                     '_transform._matrix'
-            self._views.append(ObjectView(self._project, obj.strId(), fn,
-                                          viewParams={ORDER: labels,
-                                                      VISIBLE: labels,
-                                                      'sortby': '_xmipp_zScore asc',
-                                                      RENDER: '_filename'}))
-
-        elif issubclass(cls, SetOfVolumes):
-            fn = obj.getFileName()
-            labels = 'id enabled comment _filename '
-            self._views.append(ObjectView(self._project, obj.strId(), fn,
-                                          viewParams={MODE: MODE_MD,
-                                                      ORDER: labels,
-                                                      VISIBLE: labels,
-                                                      RENDER: '_filename'}))
-
-        elif issubclass(cls, SetOfClasses2D):
-            fn = obj.getFileName()
-            self._views.append(ClassesView(self._project, obj.strId(), fn, **kwargs))
-
-        elif issubclass(cls, SetOfClasses3D):
-            fn = obj.getFileName()
-            self._views.append(Classes3DView(self._project, obj.strId(), fn))
-
-        elif issubclass(cls, SetOfImages):
-            fn = obj.getFileName()
-            self._views.append(
-                ObjectView(self._project, obj.strId(), fn, **kwargs))
-
-        if issubclass(cls, XmippProtCTFMicrographs):
+        elif issubclass(cls, XmippProtCTFMicrographs):
             if obj.hasAttribute('outputCTF'):
                 ctfSet = obj.outputCTF
             else:
@@ -265,30 +122,9 @@ class XmippViewer(Viewer):
             else:
                 self.getCTFViews(ctfSet)
 
-
-        elif issubclass(cls, SetOfCTF):
-            self._views.append(CtfView(self._project, obj))
-
-        elif issubclass(cls, CoordinatesTiltPair):
-            tmpDir = self._getTmpPath(obj.getName())
-            makePath(tmpDir)
-
-            mdFn = join(tmpDir, 'input_micrographs.xmd')
-            writeSetOfMicrographsPairs(obj.getUntilted().getMicrographs(),
-                                        obj.getTilted().getMicrographs(),
-                                        mdFn)
-            parentProtId = obj.getObjParentId()
-            parentProt = self.getProject().mapper.selectById(parentProtId)
-            extraDir = parentProt._getExtraPath()
-
- #           extraDir = parentProt._getExtraPath()
-            #TODO: Review this if ever a non Xmipp CoordinatesTiltPair is available
-            writeSetOfCoordinates(tmpDir, obj.getUntilted())
-            writeSetOfCoordinates(tmpDir, obj.getTilted())
-            launchTiltPairPickerGUI(mdFn, tmpDir, self.protocol)
-
         elif (issubclass(cls, XmippProtExtractParticles) or
               issubclass(cls, XmippProtScreenParticles)):
+            print("visualizaing XmippProtExtractParticles or XmippProtScreenParticles")
             particles = obj.outputParticles
             self._visualize(particles)
 
@@ -309,6 +145,19 @@ class XmippViewer(Viewer):
                     xplotter.createSubPlot("Variance Histogram", "Variance", "Number of particles")
                     xplotter.plotMd(md, False, mdLabelY=xmippLib.MDL_SCORE_BY_VAR, nbins=100)
                     self._views.append(xplotter)
+
+
+        elif issubclass(cls, XmippProtDeepDenoising):
+            fn = obj.outputParticles.getFileName()
+            self._views.append(ObjectView(self._project, obj.outputParticles.strId(),
+                                          fn,
+                                          viewParams={VISIBLE:  'enabled id _filename '
+                                                  '_xmipp_corrDenoisedProjection '
+                                                  '_xmipp_corrDenoisedNoisy '
+                                                  '_xmipp_imageOriginal _xmipp_imageRef',
+                                          SORT_BY: 'id',
+                                          MODE: MODE_MD}))
+
 
         elif issubclass(cls, XmippProtMovieGain):
             self._visualize(obj.outputMovies)
@@ -336,8 +185,6 @@ class XmippViewer(Viewer):
                                        'render': 'average._filename _representative._filename',
                                        'labels': '_size',
                                        'sortby': 'id'})
-
-
 
         elif issubclass(cls, XmippProtCompareReprojections):
                 fn = obj.outputParticles.getFileName()
@@ -371,18 +218,13 @@ class XmippViewer(Viewer):
                 inTmpFolder = True
 
             posDir = obj._getExtraPath()
-            memory = '%dg'%obj.memory.get(),
+            memory = showj.getJvmMaxMemory()
             launchSupervisedPickerGUI(micsfn, posDir, obj, mode='review', memory=memory, inTmpFolder=inTmpFolder)
 
          # We need this case to happens before the ProtParticlePicking one
         elif issubclass(cls, XmippProtAssignmentTiltPair):
             if obj.getOutputsSize() >= 1:
                 coordsSet = obj.getCoordsTiltPair()
-                self._visualize(coordsSet)
-
-        elif issubclass(cls, ProtParticlePicking):
-            if obj.getOutputsSize() >= 1:
-                coordsSet = obj.getCoords()
                 self._visualize(coordsSet)
 
         elif issubclass(cls, XmippProtValidateNonTilt):
@@ -410,31 +252,29 @@ class XmippViewer(Viewer):
 
             fn = obj._getExtraPath('vol001_pruned_particles_alignability.xmd')
             md = xmippLib.MetaData(fn)
-            from plotter import XmippPlotter
-            from pyworkflow.em.plotter import EmPlotter
+            from .plotter import XmippPlotter
             plotter = XmippPlotter()
             plotter.createSubPlot('Soft-alignment validation plot','Angular Precision', 'Angular Accuracy')
             plotter.plotMdFile(md, xmippLib.MDL_SCORE_BY_ALIGNABILITY_PRECISION, xmippLib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY,
                                marker='.', markersize=.55, color='red', linestyle='')
             self._views.append(plotter)
 
-
         elif issubclass(cls, XmippProtExtractParticlesPairs):
             self._visualize(obj.outputParticlesTiltPair)
 
+        else:
+            # Use default visualization defined in base class
+            DataViewer._visualize(self, obj, **kwargs)
+
         return self._views
 
-
     def getCTFViews(self, ctfSet):
-    # This could be used by any CTF viewer to show CTF plus, phaseShift plot
-    # if applies.
-
+        # This could be used by any CTF viewer to show CTF plus, phaseShift plot
+        # if applies.
         # Return phaseShift plot if apply
         firstCtf = ctfSet.getFirstItem()
 
         if firstCtf.hasPhaseShift():
-
-            from pyworkflow.em.plotter import EmPlotter
             phase_shift = []
 
             for ctf in ctfSet.iterItems():

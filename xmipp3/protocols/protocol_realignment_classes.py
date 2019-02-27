@@ -26,6 +26,7 @@
 
 import numpy as np
 
+from pyworkflow import VERSION_2_0
 from pyworkflow.em import ALIGN_2D
 from pyworkflow.em.data import Class2D, Particle, Coordinate
 from pyworkflow.em.protocol import ProtClassify2D
@@ -41,6 +42,7 @@ from xmipp3.convert import (rowToAlignment, alignmentToRow,
 class XmippProtReAlignClasses(ProtClassify2D):
     """ Realignment of un-centered classes. """
     _label = 'realignment classes'
+    _lastUpdateVersion = VERSION_2_0
 
     # --------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):

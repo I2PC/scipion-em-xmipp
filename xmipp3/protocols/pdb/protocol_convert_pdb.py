@@ -34,7 +34,7 @@ import sys
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as const
 import pyworkflow.em as em
-from pyworkflow.em.convert_atom_struct import cifToPdb
+from pyworkflow.em.convert.atom_struct import cifToPdb
 from pyworkflow.utils import replaceBaseExt, removeExt, getExt
 
 

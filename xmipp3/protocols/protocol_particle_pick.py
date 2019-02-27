@@ -28,7 +28,7 @@
 from pyworkflow.em import *
 from pyworkflow.protocol.launch import launch
 from pyworkflow.utils.path import *
-from pyworkflow.em.showj import launchSupervisedPickerGUI
+from pyworkflow.em.viewers.showj import launchSupervisedPickerGUI
 
 import xmippLib
 from xmipp3.base import XmippProtocol

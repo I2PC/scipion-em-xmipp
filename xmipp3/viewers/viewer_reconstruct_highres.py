@@ -33,8 +33,8 @@ from os.path import exists, join
 from pyworkflow.protocol.params import EnumParam, NumericRangeParam, LabelParam, IntParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-from pyworkflow.em.viewer import ObjectView, DataView, ChimeraClientView
-import pyworkflow.em.showj as showj
+from pyworkflow.em.viewers import ObjectView, DataView, ChimeraClientView
+import pyworkflow.em.viewers.showj as showj
 
 from xmippLib import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
                    MDL_RESOLUTION_FREQ, MDL_RESOLUTION_FRC, MetaData)
@@ -270,7 +270,7 @@ Examples:
         view=None
         if exists(fnAngles):
             fnAnglesSqLite = join(fnDir,"angles.sqlite")
-            from pyworkflow.em.plotter import EmPlotter
+            from pyworkflow.em.viewers import EmPlotter
             if not exists(fnAnglesSqLite):
                 from pyworkflow.em.metadata.utils import getSize
                 self.createAngDistributionSqlite(fnAnglesSqLite, getSize(fnAngles), itemDataIterator=self._iterAngles(fnAngles))

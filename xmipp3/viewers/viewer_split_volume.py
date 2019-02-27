@@ -33,9 +33,7 @@ import glob
 
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.em import *
-from pyworkflow.gui.text import *
-from pyworkflow.gui.dialog import showError, showWarning
-from pyworkflow.protocol.params import LabelParam, LEVEL_ADVANCED
+from pyworkflow.em.viewers import DataView
 
 from xmipp3.viewers import XmippViewer
 from xmipp3.protocols.protocol_split_volume import XmippProtSplitvolume
@@ -58,3 +56,5 @@ class XmippViewerSplitVolume(XmippViewer):
         fnBasis=self.protocol._getExtraPath('split_pc1.vol')
         if exists(fnBasis):
             self._views.append(DataView(fnBasis))
+
+        return self._views
