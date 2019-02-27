@@ -38,6 +38,7 @@ from pyworkflow.utils.path import cleanPath
 import xmippLib
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes, xmippToLocation
 from xmipp3.utils import getMdSize
+import xmipp3
 
 
 def updateEnviron(gpuNum):
