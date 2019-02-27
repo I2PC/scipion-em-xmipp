@@ -34,7 +34,7 @@ from pyworkflow.em.metadata.utils import iterRows
 from pyworkflow.em.convert import ImageHandler
 from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
                             setXmippAttributes)
-from xmipp3.utils import writeInfoField
+from xmipp3.utils import writeInfoField, readInfoField
 from pyworkflow.utils.path import moveFile
 import numpy as np
 from sklearn.manifold import TSNE
@@ -55,9 +55,15 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         form.addParam('targetResolution', params.FloatParam, label="Target resolution", default=8.0,
                       help="In Angstroms, the images and the volume are rescaled so that this resolution is at "
                            "2/3 of the Fourier spectrum.")
-        form.addParam('depth', params.IntParam, default=1,
+        form.addParam('depth', params.IntParam, default=3,
                       label='Harmonical depth', expertLevel=params.LEVEL_ADVANCED,
                       help='Harmonical depth of the deformation=1,2,3,...')
+        form.addParam('maxShift', params.FloatParam, default=0.1,
+                      label='Max. Shift', expertLevel=params.LEVEL_ADVANCED,
+                      help='Fraction of the image size')
+        form.addParam('maxRot', params.FloatParam, default=10,
+                      label='Max. Rotation', expertLevel=params.LEVEL_ADVANCED,
+                      help='In degrees')
         form.addParallelSection(threads=1, mpi=8)
 
     def _createFilenameTemplates(self):
@@ -111,8 +117,10 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         imgsFn = self._getFileName('imgsFn')
         fnVol = self._getFileName('fnVol')
         fnOut =  self._getFileName('fnOut')
-        params = ' -i %s --ref %s -o %s --optimizeAlignment --optimizeDeformation --depth %d' %\
-                 (imgsFn, fnVol, fnOut, self.depth.get())
+        newTs = readInfoField(self._getExtraPath(), "sampling", md.MDL_SAMPLINGRATE)
+        params = ' -i %s --ref %s -o %s --optimizeAlignment --optimizeDeformation --depth %d --max_shift %f --max_angular_change %f --max_resolution %f --sampling %f' %\
+                 (imgsFn, fnVol, fnOut, self.depth.get(),float(self.maxShift.get())*self.inputParticles.get().getXDim(),
+                    self.maxRot.get(),self.targetResolution.get(),newTs)
         self.runJob("xmipp_angular_sph_alignment", params, numberOfMpi=self.numberOfMpi.get())
 
 
