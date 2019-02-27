@@ -182,7 +182,8 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                 model = self.ownModel.get()._getPath('ModelTrained.h5')
                 model = load_model(model)
             else:
-                model = load_model(self._getPath('PretrainModel.h5'))
+                myModelfile = xmipp3.Plugin.getModel('deepDenoising', 'PretrainModel.h5')
+                model = load_model(myModelfile)
         for num in range(1,dimMetadata,self.groupParticles):
             self.noisyParticles = self.gan.extractInfoMetadata(metadataPart,
                                     xmippLib.MDL_IMAGE, img, num,
