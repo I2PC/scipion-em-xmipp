@@ -74,6 +74,7 @@ from .protocol_multireference_alignability import XmippProtMultiRefAlignability
 from .protocol_normalize_strain import XmippProtNormalizeStrain
 from .protocol_particle_pick_automatic import XmippParticlePickingAutomatic
 from .protocol_particle_pick_consensus import XmippProtConsensusPicking
+from .protocol_pick_noise import XmippProtPickNoise
 from .protocol_particle_pick import XmippProtParticlePicking
 from .protocol_particle_pick_pairs import XmippProtParticlePickingPairs
 from .protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
@@ -93,6 +94,8 @@ from .protocol_resolution_monotomo import XmippProtMonoTomo
 from .protocol_rotational_spectra import XmippProtRotSpectra
 from .protocol_rotational_symmetry import XmippProtRotationalSymmetry
 from .protocol_screen_particles import XmippProtScreenParticles
+from .protocol_screen_deepConsensus import XmippProtScreenDeepConsensus, XmippProtDeepConsSubSet
+from .protocol_screen_deeplearning import XmippProtScreenDeepLearning
 from .protocol_solid_angles import XmippProtSolidAngles
 from .protocol_split_volume import XmippProtSplitvolume
 from .protocol_trigger_data import XmippProtTriggerData
@@ -109,3 +112,5 @@ from .protocol_reconstruct_heterogeneous import XmippProtReconstructHeterogeneou
 from .protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
 from .protocol_metaprotocol_create_output import XmippMetaProtCreateOutput
 from .protocol_metaprotocol_discrete_heterogeneity_scheduler import XmippMetaProtDiscreteHeterogeneityScheduler # keep this after XmippMetaProtCreateSubset and XmippMetaProtCreateOutput
+
+from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles

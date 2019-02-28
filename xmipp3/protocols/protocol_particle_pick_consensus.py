@@ -2,7 +2,6 @@
 # *
 # * Authors:    Carlos Oscar Sorzano (coss@cnb.csic.es)
 # *             Tomas Majtner (tmajtner@cnb.csic.es)  -- streaming version
-# *             David Maluenda    (dmaluenda@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -278,7 +277,6 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             consensusCoords = allCoords[votes >= consensus, :]
         else:
             consensusCoords = allCoords[votes == consensus, :]
-
         try:
             jaccardIdx = float(len(consensusCoords)) / (
                 float(len(allCoords)) / len(self.inputCoordinates))
