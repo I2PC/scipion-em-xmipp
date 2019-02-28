@@ -62,6 +62,7 @@ class Plugin(pyworkflow.em.Plugin):
 
         if os.environ['CUDA'] != 'False':  # environ variables are strings not booleans
             environ.update({
+                'PATH': os.environ['CUDA_BIN'],
                 'LD_LIBRARY_PATH': os.environ['NVCC_LIBDIR']
             }, position=pos)
 
@@ -166,45 +167,62 @@ class Plugin(pyworkflow.em.Plugin):
                               target="cv2", default=False)
         # TensorFlow
         tensorFlowTarget = "1.10.0" #cuda 9
-        nvccProgram = subprocess.Popen(["which", "nvcc"],
+        nvccProgram = subprocess.Popen(["which", "nvcc"], env=cls.getEnviron(),
                                        stdout=subprocess.PIPE).stdout.read()
         pipCmdScipion = '%s %s/pip install' % (env.getBin('python'),
                                                env.getPythonPackagesFolder())
         if nvccProgram != "":
-            nvccVersion = subprocess.Popen(["nvcc", '--version'],
+            nvccVersion = subprocess.Popen(["nvcc", '--version'], env=cls.getEnviron(),
                                            stdout=subprocess.PIPE).stdout.read()
+
             if "release 8.0" in nvccVersion: #cuda 8
                 tensorFlowTarget = "1.4.1"
-
-            tensor = env.addPipModule('tensorflow-gpu', target='tensorflow*',
+                cudNN_version="v6-cuda8"
+            elif "release 9.0" in nvccVersion: #cuda 9
+                tensorFlowTarget = "1.10.0"
+                cudNN_version="v7.0.1-cuda9"
+            else:
+                print("Error, tensorflow requires CUDA 8.0 or CUDA 9.0")
+                cudNN_version = None
+               
+        if cudNN_version:
+            cudNN_installCmd="cudnnenv install %s; cp -r $HOME/.cudnn/active/cuda/lib64/* %s"%(cudNN_version, 
+                                                                                            getXmippPath('lib'))
+            cudNN_installer = tryAddPipModule('cudnnenv',target="cudnnenv", default=False, 
+                                              pipCmd="%s git+https://github.com/unnonouno/cudnnenv.git"%pipCmdScipion)
+            
+            tensor = tryAddPipModule('tensorflow-gpu', target='tensorflow*',
                                       default=False,
                                       pipCmd="%s https://storage.googleapis.com/"
                                              "tensorflow/linux/gpu/"
                                              "tensorflow_gpu-%s-cp27-none-"
                                              "linux_x86_64.whl"
                                              % (pipCmdScipion, tensorFlowTarget))
-            keras=env.addPipModule('keras', '2.1.5', target='keras*', default=False,
+            keras=tryAddPipModule('keras', '2.1.5', target='keras*', default=False,
                                    deps=[cv2, h5py])
+            deepLearningTools = [cudNN_installer, keras, tensor, scikit_learn]
         else:
-            tensor = env.addPipModule('tensorflow', target='tensorflow*',
+            cudNN_installCmd = ''
+            print("WARNING: Installing tensorflow without GPU support. Just CPU computations enabled")
+            tensor = tryAddPipModule('tensorflow', target='tensorflow*',
                                       default=False,
                                       pipCmd="%s https://storage.googleapis.com/"
                                              "tensorflow/linux/cpu/"
                                              "tensorflow-%s-cp27-none-"
                                              "linux_x86_64.whl"
                                              % (pipCmdScipion, tensorFlowTarget))
-            keras = env.addPipModule('keras', '2.2.2', target='keras',
+            keras = tryAddPipModule('keras', '2.2.2', target='keras',
                                      default=False, deps=[cv2, h5py])
 
-        deppLearnigTools = [scikit_learn, keras._name, tensor._name]
-        target = "installed_%s" % '_'.join([tool for tool in deppLearnigTools])
+            deepLearningTools = [ keras, tensor, scikit_learn]
+        target = "installed_%s" % '_'.join([tool for tool in deepLearningTools])
         env.addPackage('deepLearnigToolkit', urlSuffix='external',
-                       commands=[("echo;echo ' > DeepLearnig-Toolkit installed: %s';"
+                       commands=[("%s ;echo;echo ' > DeepLearnig-Toolkit installed: %s';"
                                   "echo ; touch %s"
-                                  % (str([tool for tool in deppLearnigTools]),
+                                  % (cudNN_installCmd, str([tool for tool in deepLearningTools]),
                                      target),
                                   target)],
-                       deps=deppLearnigTools)
+                       deps=deepLearningTools)
 
         ## --- END OF DEEP LEARNING TOOLKIT --- ##
 

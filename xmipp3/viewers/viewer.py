@@ -52,7 +52,6 @@ from xmipp3.protocols.protocol_assignment_tilt_pair import XmippProtAssignmentTi
 from xmipp3.protocols.protocol_movie_gain import XmippProtMovieGain
 from xmipp3.protocols.protocol_deep_denoising import XmippProtDeepDenoising
 
-
 class XmippViewer(DataViewer):
     """ Wrapper to visualize different type of objects
     with the Xmipp program xmipp_showj
@@ -75,7 +74,6 @@ class XmippViewer(DataViewer):
                 XmippProtMovieGain,
                 XmippProtDeepDenoising
                 ]
-
     def __createTemporaryCtfs(self, obj, setOfMics):
         pwutils.cleanPath(obj._getPath("ctfs_temporary.sqlite"))
         self.protocol._createFilenameTemplates()
@@ -100,7 +98,6 @@ class XmippViewer(DataViewer):
 
     def _visualize(self, obj, **kwargs):
         cls = type(obj)
-
         if issubclass(cls, SetOfNormalModes):
             fn = obj.getFileName()
             from .viewer_nma import OBJCMD_NMA_PLOTDIST, OBJCMD_NMA_VMD
@@ -121,10 +118,9 @@ class XmippViewer(DataViewer):
                 self._views.append(self.infoMessage("No CTF estimation has finished yet"))
             else:
                 self.getCTFViews(ctfSet)
-
+                                           
         elif (issubclass(cls, XmippProtExtractParticles) or
               issubclass(cls, XmippProtScreenParticles)):
-            print("visualizaing XmippProtExtractParticles or XmippProtScreenParticles")
             particles = obj.outputParticles
             self._visualize(particles)
 
@@ -157,6 +153,7 @@ class XmippViewer(DataViewer):
                                                   '_xmipp_imageOriginal _xmipp_imageRef',
                                           SORT_BY: 'id',
                                           MODE: MODE_MD}))
+
 
 
         elif issubclass(cls, XmippProtMovieGain):

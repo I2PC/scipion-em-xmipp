@@ -490,6 +490,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                     # adding the variance and Gini coeff. value of the mic zone
                     setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
                     setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
+                    setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
 
                     # disabled particles (in metadata) should not add to the
                     # final set
