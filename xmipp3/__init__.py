@@ -46,7 +46,7 @@ class Plugin(pyworkflow.em.Plugin):
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(XMIPP_HOME, 'xmipp-%s' % _currentVersion)
+        cls._defineEmVar(XMIPP_HOME, 'xmipp')
         cls._defineEmVar(NMA_HOME, 'nma')
 
     @classmethod
@@ -60,10 +60,11 @@ class Plugin(pyworkflow.em.Plugin):
             'PYTHONPATH': getXmippPath('pylib')
         }, position=pos)
 
-        if os.environ['CUDA'] != 'False':  # environ variables are strings not booleans
+        # environ variables are strings not booleans
+        if os.environ.get('CUDA', 'False') != 'False':
             environ.update({
-                'PATH': os.environ['CUDA_BIN'],
-                'LD_LIBRARY_PATH': os.environ['NVCC_LIBDIR']
+                'PATH': os.environ.get('CUDA_BIN', ''),
+                'LD_LIBRARY_PATH': os.environ.get('NVCC_LIBDIR', '')
             }, position=pos)
 
         return environ
@@ -80,8 +81,8 @@ class Plugin(pyworkflow.em.Plugin):
         scripts using the Xmipp binding.
         """
         env = pwutils.getEnviron()
-        env.set('PATH', os.environ['MATLAB_BINDIR'], pwutils.Environ.BEGIN)
-        env.set('LD_LIBRARY_PATH', os.environ['MATLAB_LIBDIR'],
+        env.set('PATH', os.environ.get('MATLAB_BINDIR', ''), pwutils.Environ.BEGIN)
+        env.set('LD_LIBRARY_PATH', os.environ.get('MATLAB_LIBDIR', ''),
                 pwutils.Environ.BEGIN)
         for toolpath in toolPaths:
             env.set('MATLABPATH', toolpath, pwutils.Environ.BEGIN)
@@ -186,10 +187,14 @@ class Plugin(pyworkflow.em.Plugin):
                 cudNN_version = None
                
         if cudNN_version:
-            cudNN_installCmd="cudnnenv install %s; cp -r $HOME/.cudnn/active/cuda/lib64/* %s"%(cudNN_version, 
-                                                                                            getXmippPath('lib'))
-            cudNN_installer = tryAddPipModule('cudnnenv',target="cudnnenv", default=False, 
-                                              pipCmd="%s git+https://github.com/unnonouno/cudnnenv.git"%pipCmdScipion)
+            cudNN_installCmd=("cudnnenv install %s; "
+                              "cp -r $HOME/.cudnn/active/cuda/lib64/* %s"
+                              %(cudNN_version, getXmippPath('lib')))
+            cudNN_installer = tryAddPipModule('cudnnenv', target="cudnnenv",
+                                              pipCmd="%s git+https://github.com/"
+                                                     "unnonouno/cudnnenv.git"
+                                                     % pipCmdScipion,
+                                              default=False)
             
             tensor = tryAddPipModule('tensorflow-gpu', target='tensorflow*',
                                       default=False,
@@ -203,7 +208,8 @@ class Plugin(pyworkflow.em.Plugin):
             deepLearningTools = [cudNN_installer, keras, tensor, scikit_learn]
         else:
             cudNN_installCmd = ''
-            print("WARNING: Installing tensorflow without GPU support. Just CPU computations enabled")
+            print("WARNING: Installing tensorflow without GPU support. "
+                  "Just CPU computations enabled (only predictions recommended).")
             tensor = tryAddPipModule('tensorflow', target='tensorflow*',
                                       default=False,
                                       pipCmd="%s https://storage.googleapis.com/"
@@ -214,26 +220,25 @@ class Plugin(pyworkflow.em.Plugin):
             keras = tryAddPipModule('keras', '2.2.2', target='keras',
                                      default=False, deps=[cv2, h5py])
 
-            deepLearningTools = [ keras, tensor, scikit_learn]
-        target = "installed_%s" % '_'.join([tool for tool in deepLearningTools])
+            deepLearningTools = [keras, tensor, scikit_learn]
+        deepLearningToolsStr = [str(tool) for tool in deepLearningTools]
+        target = "installed_%s" % '_'.join(deepLearningToolsStr)
         env.addPackage('deepLearnigToolkit', urlSuffix='external',
-                       commands=[("%s ;echo;echo ' > DeepLearnig-Toolkit installed: %s';"
-                                  "echo ; touch %s"
-                                  % (cudNN_installCmd, str([tool for tool in deepLearningTools]),
-                                     target),
+                       commands=[("%s ; echo ; "
+                                  "echo ' > DeepLearnig-Toolkit installed: %s';"
+                                  "echo ; touch %s" % (cudNN_installCmd,
+                                   ', '.join(deepLearningToolsStr), target),
                                   target)],
                        deps=deepLearningTools)
 
         ## --- END OF DEEP LEARNING TOOLKIT --- ##
 
         # NMA
-        env.addPackage('nma',
-                       tar='nma.tgz',
-                       commands=[('cd ElNemo; make; mv nma_* ..', 'nma_elnemo_pdbmat'),
-                                 ('cd NMA_cart; LDFLAGS=-L%s make; mv nma_* ..' %
-                                  env.getLibFolder(), 'nma_diag_arpack')],
-                       deps=['arpack'],
-                       default=False)
+        env.addPackage('nma', tar='nma.tgz', default=False, deps=['arpack'],
+                       commands=[('cd ElNemo; make; mv nma_* ..',
+                                  'nma_elnemo_pdbmat'),
+                                 ('cd NMA_cart; LDFLAGS=-L%s make; mv nma_* ..'
+                                  % env.getLibFolder(), 'nma_diag_arpack')])
 
         # sh_alignment
         env.addLibrary(

@@ -39,9 +39,9 @@ from xmipp3.convert import (rowToAlignment, alignmentToRow,
                        rowToParticle, writeSetOfClasses2D)
 
 
-class XmippProtReAlignClasses(ProtClassify2D):
-    """ Realignment of un-centered classes. """
-    _label = 'realignment classes'
+class XmippProtCenterParticles(ProtClassify2D):
+    """ Realignment of un-centered particles. """
+    _label = 'center particles'
     _lastUpdateVersion = VERSION_2_0
 
     # --------------------------- DEFINE param functions -----------------------
@@ -62,7 +62,6 @@ class XmippProtReAlignClasses(ProtClassify2D):
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
-        """Mainly prepare the command line for call cuda corrrelation program"""
         self._insertFunctionStep('realignStep')
         self._insertFunctionStep('createOutputStep')
 
