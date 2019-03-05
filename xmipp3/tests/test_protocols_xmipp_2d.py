@@ -410,7 +410,7 @@ class TestXmippScreenParticles(TestXmippBase):
 
         print("Start Streaming Particles")
         protStream = self.newProtocol(ProtCreateStreamData, setof=3,
-                                      creationInterval=2, nDim=76,
+                                      creationInterval=5, nDim=76,
                                       groups=10)
         protStream.inputParticles.set(self.protImport.outputParticles)
         self.proj.launchProtocol(protStream, wait=False)

@@ -221,11 +221,8 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
         mTime = datetime.fromtimestamp(os.path.getmtime(partsFile))
         # If the input movies.sqlite have not changed since our last check,
         # it does not make sense to check for new input data
-        print("self.lastCheck: %s" % self.lastCheck)
-        print("mTime: %s" % mTime)
         if self.lastCheck > mTime:
             return None
-
         self.lastCheck = datetime.now()
 
         outputStep = self._getFirstJoinStep()
