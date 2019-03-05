@@ -138,7 +138,7 @@ setup(
     # MANIFEST.in as well.
     # include_package_data=True,
     package_data={  # Optional
-       'xmipp3': ['xmipp.png'],
+       'xmipp3': ['xmipp.png', 'protocols.conf'],
     },
 
     # Although 'package_data' is the preferred approach, in some case you may

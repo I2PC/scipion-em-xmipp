@@ -293,7 +293,8 @@ def setXmippAttributes(obj, objRow, *labels):
     for label in labels:
         value = objRow.getValueAsObject(label)
         # To avoid empty values
-        if str(value) != "None":  # value is pyworkflow.object.String
+
+        if objRow.containsLabel(label):
             setXmippAttribute(obj, label, value)
 
 def setXmippAttribute(obj, label, value):
