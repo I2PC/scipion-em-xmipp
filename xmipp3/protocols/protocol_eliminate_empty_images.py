@@ -170,6 +170,7 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
             self._store(outputAttr)
         else:
             self._defineOutputs(**{outputName: outputSet})
+            self._defineTransformRelation(self.inputParticles, outputSet)
             self._store(outputSet)
 
         # Close set databaset to avoid locking it
@@ -516,6 +517,7 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
             self._store(outputAttr)
         else:
             self._defineOutputs(**{outputName: outputSet})
+            self._defineSourceRelation(self.inputClasses, outputSet)
             self._store(outputSet)
 
         # Close set databaset to avoid locking it
