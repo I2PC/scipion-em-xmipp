@@ -291,7 +291,10 @@ def setXmippAttributes(obj, objRow, *labels):
     and the datatype will be set correctly.
     """
     for label in labels:
-        setXmippAttribute(obj, label, objRow.getValueAsObject(label))
+        value = objRow.getValueAsObject(label)
+        # To avoid empty values
+        if str(value) != "None":  # value is pyworkflow.object.String
+            setXmippAttribute(obj, label, value)
 
 def setXmippAttribute(obj, label, value):
     """ Sets an attribute of an object prefixing it with xmipp"""

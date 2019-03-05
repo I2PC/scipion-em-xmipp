@@ -37,9 +37,10 @@ from pyworkflow.em import ImageHandler
 from pyworkflow.utils import getExt
 from pyworkflow.em.data import Volume
 import pyworkflow.em.metadata as md
+from pyworkflow.em.convert import Ccp4Header
 
 
-CHIMERA_RESOLUTION_VOL = 'MG_Chimera_resolution.vol'
+CHIMERA_RESOLUTION_VOL = 'MG_Chimera_resolution.mrc'
 MONORES_METHOD_URL = 'http://github.com/I2PC/scipion/wiki/XmippProtMonoRes'
 OUTPUT_RESOLUTION_FILE = 'resolutionMap'
 FN_FILTERED_MAP = 'filteredMap'
@@ -176,15 +177,15 @@ class XmippProtMonoRes(ProtAnalysis3D):
     def _createFilenameTemplates(self):
         """ Centralize how files are called """
         myDict = {
-                 FN_MEAN_VOL: self._getExtraPath('mean_volume.vol'),
-                 OUTPUT_MASK_FILE: self._getExtraPath("output_Mask.vol"),
+                 FN_MEAN_VOL: self._getExtraPath('mean_volume.mrc'),
+                 OUTPUT_MASK_FILE: self._getExtraPath("output_Mask.mrc"),
                  OUTPUT_RESOLUTION_FILE_CHIMERA: self._getExtraPath(CHIMERA_RESOLUTION_VOL),
-                 FN_FILTERED_MAP: self._getExtraPath('filteredMap.vol'),
-                 OUTPUT_RESOLUTION_FILE: self._getExtraPath('mgresolution.vol'),
+                 FN_FILTERED_MAP: self._getExtraPath('filteredMap.mrc'),
+                 OUTPUT_RESOLUTION_FILE: self._getExtraPath('mgresolution.mrc'),
                  METADATA_MASK_FILE: self._getExtraPath('mask_data.xmd'),
                  FN_METADATA_HISTOGRAM: self._getExtraPath('hist.xmd'),
-                 BINARY_MASK: self._getExtraPath('binarized_mask.vol'),
-                 FN_GAUSSIAN_MAP: self._getExtraPath('gaussianfilted.vol')
+                 BINARY_MASK: self._getExtraPath('binarized_mask.mrc'),
+                 FN_GAUSSIAN_MAP: self._getExtraPath('gaussianfilted.mrc')
                  }
         self._updateFilenamesDict(myDict)
 
@@ -414,14 +415,17 @@ class XmippProtMonoRes(ProtAnalysis3D):
         volume.setFileName(self._getFileName(OUTPUT_RESOLUTION_FILE))
         if (self.halfVolumes):
             volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
+            volume.setOrigin(self.inputVolume.get().getOrigin(True))
             self._defineOutputs(resolution_Volume=volume)
             self._defineSourceRelation(self.inputVolume, volume)
+            inputVolumeFileName = self.inputVolume.get().getFileName()
         else:
             volume.setSamplingRate(self.inputVolumes.get().getSamplingRate())
+            volume.setOrigin(self.inputVolumes.get().getOrigin(True))
             self._defineOutputs(resolution_Volume=volume)
             self._defineSourceRelation(self.inputVolumes, volume)
-            
-            
+            inputVolumeFileName = self.inputVolumes.get().getFileName()
+
         #Setting the min max for the summary
         imageFile = self._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
         min_, max_ = self.getMinMax(imageFile)
@@ -443,7 +447,24 @@ class XmippProtMonoRes(ProtAnalysis3D):
                 self._defineSourceRelation(self.inputVolumes, volume)
             
 
-                
+        # fill ccp4 header so we can transfer the origin to the
+        # viewer (otherwise since imageFile is not a Scipion object
+        # no sampling/origin information can be transfered
+
+        Ccp4Header(imageFile).copyCCP4Header(
+            inputVolumeFileName, volume.getShiftsFromOrigin(),
+            volume.getSamplingRate(), originField=Ccp4Header.START)
+
+        # also update the output volume header. This is not needed
+        # since sampling and origin is in the database but
+        # it may be usefull if other programs -outside scipion-
+        # require  these data.
+
+        Ccp4Header(volume.getFileName()).copyCCP4Header(
+             inputVolumeFileName, volume.getShiftsFromOrigin(),
+             volume.getSamplingRate(), originField=Ccp4Header.START)
+
+
 
     # --------------------------- INFO functions ------------------------------
 
