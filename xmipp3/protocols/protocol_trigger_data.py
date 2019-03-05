@@ -231,6 +231,7 @@ class XmippProtTriggerData(EMProtocol):
             self._store(outputAttr)
         else:
             self._defineOutputs(**{outputName: outputSet})
+            self._defineTransformRelation(self.inputImages, outputSet)
             self._store(outputSet)
 
         # Close set database to avoid locking it

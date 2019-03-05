@@ -503,21 +503,30 @@ class TestXmippTriggerParticles(TestXmippBase):
         protTrigger2.inputImages.setExtended("outputParticles")
         self.proj.scheduleProtocol(protTrigger2)
 
+        protTrigger3 = self.newProtocol(XmippProtTriggerData,
+                                        allImages=True, splitImages=True,
+                                        outputSize=50, checkInterval=2)
+        protTrigger3.inputImages.set(protStream)
+        protTrigger3.inputImages.setExtended("outputParticles")
+        self.proj.scheduleProtocol(protTrigger3)
 
+        # when first trigger (non-streaming mode) finishes must have 50 parts.
         self.checkResults(protTrigger, 50)
+        # when second trigger (full-streaming mode) finishes must have all parts.
         self.checkResults(protTrigger2, 76)
 
+        # When all have finished, the third (spliting mode) must have two outputs
+        protTrigger3 = self._updateProtocol(protTrigger3)
+        self.assertSetSize(protTrigger3.outputParticles1, 50)
+        self.assertSetSize(protTrigger3.outputParticles2, 26)
 
     def checkResults(self, prot, size):
         t0 = time.time()
-
         while not prot.isFinished():
-
             # Time out 4 minutes, just in case
             tdelta = time.time() - t0
             if tdelta > 4 * 60:
                 break
-
             prot = self._updateProtocol(prot)
             time.sleep(2)
 
