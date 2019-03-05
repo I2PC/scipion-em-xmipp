@@ -123,13 +123,14 @@ class Plugin(pyworkflow.em.Plugin):
 
         env.addPackage('xmippSrc', version=_currentVersion,
                        tar='xmippSrc-%s.tgz' % _currentVersion,
-                       commands=[("rm -rf %s ; %s" % (cls.getHome(), installCmd),
+                       commands=[("rm -rf %s 2>/dev/null; %s" 
+                                  % (cls.getHome(), installCmd),
                                   [target, cls.getHome('xmipp.bashrc')])],
                        default=True)
 
         env.addPackage('xmippBin', version=_currentVersion,
                        tar='xmippBin-%s.tgz' % _currentVersion,
-                       commands=[("rm -rf %s; cd .. ; ln -sf xmippBin-%s %s"
+                       commands=[("rm -rf %s 2>/dev/null; cd .. ; ln -sf xmippBin-%s %s"
                                   % (cls.getHome(), _currentVersion, cls.getHome()),
                                   [target, cls.getHome("xmipp.conf")])],
                        default=False)
@@ -215,9 +216,6 @@ def installDeepLearningToolkit(plugin, env):
             print("Error, tensorflow requires CUDA 8.0 or CUDA 9.0")
 
     if cudNN_version is not None:
-        cudNN_installCmd = ("cudnnenv install %s; "
-                            "cp -r $HOME/.cudnn/active/cuda/lib64/* %s"
-                            % (cudNN_version, getXmippPath('lib')))
         cudNN_installer = tryAddPipModule(env, 'cudnnenv', target="cudnnenv",
                                           pipCmd="%s git+https://github.com/"
                                                  "unnonouno/cudnnenv.git"
@@ -237,8 +235,12 @@ def installDeepLearningToolkit(plugin, env):
         keras = tryAddPipModule(env, 'keras', '2.1.5', target='keras*',
                                 default=False, deps=[cv2, h5py])
         deepLearningTools.append(keras)
+        cudnnInstallCmd = ("cudnnenv install %s; "
+                           "cp -r $HOME/.cudnn/active/cuda/lib64/* %s"
+                            % (cudNN_version, getXmippPath('lib')),
+                           getXmippPath('lib', 'libcudnn.so'))
     else:
-        cudNN_installCmd = ''
+        cudnnInstallCmd = ("", "")
         print("WARNING: Installing tensorflow without GPU support. "
               "Just CPU computations enabled (only predictions recommended).")
         tensor = tryAddPipModule(env, 'tensorflow', target='tensorflow*',
@@ -265,9 +267,10 @@ def installDeepLearningToolkit(plugin, env):
     deepLearningToolsStr = [str(tool) for tool in deepLearningTools]
     target = "installed_%s" % '_'.join(deepLearningToolsStr)
     env.addPackage('deepLearningToolkit', urlSuffix='external',
-                   commands=[(cudNN_installCmd, getXmippPath('lib', 'libcudnn.so')),
-                             ("rm %s_* ; %s ; touch %s" % (modelsPrefix,
-                                modelsDownloadCmd, modelsTarget), modelsTarget),
+                   commands=[cudnnInstallCmd,
+                             ("rm %s_* 2>/dev/null; %s ; touch %s" 
+                              % (modelsPrefix, modelsDownloadCmd, modelsTarget), 
+                              modelsTarget),
                              ("echo ; echo ' > DeepLearnig-Toolkit installed: %s' ; "
                               "echo ; touch %s" % (', '.join(deepLearningToolsStr),
                                                    target),
