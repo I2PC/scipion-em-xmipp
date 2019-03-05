@@ -265,7 +265,7 @@ class XmippProtLocSharp(ProtAnalysis3D):
                 break
 
         # TODO: please copy the file using python not the operating system
-        os.system('cp '  +self._getExtraPath('sharpenedMap_'+str(iteration)+'.mrc')+
+        os.system('cp '  +self._getExtraPath('sharpenedMap_'+str(self.iteration)+'.mrc')+
                    ' '  +self._getExtraPath('sharpenedMap_last.mrc'))
 
         
