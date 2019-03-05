@@ -104,5 +104,5 @@ class TestHighres(BaseTest):
         else:
             md = xmippLib.MetaData("resolution@" + fnResolution)
             R = md.getValue(xmippLib.MDL_RESOLUTION_FREQREAL, md.firstObject())
-            # FIXME: Review HighRes, before pluginization 8A is achieved, after 8.2A
-            self.assertTrue(R < 8.5, "Resolution is not below 8.5A")
+            # FIXME: Review HighRes! Before pluginization under 8A is achieved
+            self.assertTrue(R < 9, "Resolution is not below 9A")
