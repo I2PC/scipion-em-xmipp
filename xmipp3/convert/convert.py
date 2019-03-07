@@ -46,11 +46,9 @@ import xmippLib
 from xmipp3.base import XmippMdRow, getLabelPythonType, RowMetaData
 from xmipp3.utils import iterMdRows
 
-if (hasattr(xmippLib, "GHOST_ACTIVATED") and
-    not getattr(xmippLib, "GHOST_ACTIVATED")):
+if not getattr(xmippLib, "GHOST_ACTIVATED", False):
     """ Some of MDL may not exist when Ghost is activated
     """
-
     # This dictionary will be used to map
     # between CTFModel properties and Xmipp labels
     ACQUISITION_DICT = OrderedDict([
