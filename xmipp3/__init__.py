@@ -137,7 +137,7 @@ class Plugin(pyworkflow.em.Plugin):
 
         ## EXTRA PACKAGES ##
         # joblib
-        tryAddPipModule(env, 'joblib', '0.11', target='joblib*')
+        tryAddPipModule(env, 'joblib', '0.11', default=True, target='joblib*')
 
         installDeepLearningToolkit(cls, env)
 
@@ -216,10 +216,7 @@ def installDeepLearningToolkit(plugin, env):
             print("Error, tensorflow requires CUDA 8.0 or CUDA 9.0")
 
     if cudNN_version is not None:
-        cudNN_installer = tryAddPipModule(env, 'cudnnenv', target="cudnnenv",
-                                          pipCmd="%s git+https://github.com/"
-                                                 "unnonouno/cudnnenv.git"
-                                                 % pipCmdScipion,
+        cudNN_installer = tryAddPipModule(env, 'cudnnenv','0.6.6', target="cudnnenv*",
                                           default=False)
         deepLearningTools.append(cudNN_installer)
 
