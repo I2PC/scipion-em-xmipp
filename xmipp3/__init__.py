@@ -136,13 +136,13 @@ class Plugin(pyworkflow.em.Plugin):
                                   targets+[cls.getHome("xmipp.conf")])],
                        default=False)
 
-        env.addPackage('xmippBin-oldDistros', version=_currentVersion,
+        env.addPackage('xmippBin_oldDistros', version=_currentVersion,
                        tar='xmippBin-oldDistros-%s.tgz' % _currentVersion,
                        commands=[("rm -rf %s 2>/dev/null; cd .. ; "
                                   "ln -sf xmippBin-oldDistros-%s %s"
                                   % (cls.getHome(), _currentVersion, cls.getHome()),
                                   [cls.getHome('bin', 'xmipp_reconstruct_significant'),
-                                   cls.getHome('v%s-oldDistros' % _currentVersion),
+                                   cls.getHome('v%s_oldDistros' % _currentVersion),
                                    cls.getHome("xmipp.conf")])],
                        default=False)
 
