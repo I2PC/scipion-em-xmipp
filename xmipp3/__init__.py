@@ -38,7 +38,7 @@ from .constants import XMIPP_HOME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.19.03b'
+_currentVersion = '3.19.03b2'
 
 class Plugin(pyworkflow.em.Plugin):
     _homeVar = XMIPP_HOME
@@ -115,34 +115,41 @@ class Plugin(pyworkflow.em.Plugin):
         """
 
         ## XMIPP SOFTWARE ##
-        compileCmd = ("src/xmipp/xmipp config ; src/xmipp/xmipp check_config ;"
-                      "src/xmipp/xmipp compile %d" % env.getProcessors())
-
+        lastCompiled = "lib/libXmippJNI.so"
+        compToken = "src/xmipp/bin/DONE"
         targets = [cls.getHome('bin', 'xmipp_reconstruct_significant'),
-                   cls.getHome('v%s' % _currentVersion)]
+                   cls.getHome(lastCompiled)]
+
+        # cls.getHome('v%s' % _currentVersion)
+
+        compileCmd = ("src/xmipp/xmipp config ; src/xmipp/xmipp check_config ;"
+                      "src/xmipp/xmipp compile %d ; " % env.getProcessors())
 
         env.addPackage('xmippSrc', version=_currentVersion,
-                       tar='xmippSrc-%s.tgz' % _currentVersion,
-                       commands=[(compileCmd, "src/xmipp/bin/xmipp_reconstruct_significant"),
-                                 ("rm -rf %s 2>/dev/null ; src/xmipp/xmipp install %s"
-                                  % (cls.getHome(), cls.getHome()),
-                                  targets+[cls.getHome('xmipp.bashrc')])],
+                       # tar='xmippSrc-%s.tgz' % _currentVersion,
+                       commands=[(compileCmd+"rm -rf %s 2>/dev/null"%cls.getHome(),
+                                  ["src/xmippViz/"+lastCompiled, compToken]),
+                                 ("rm %s 2>/dev/null ; src/xmipp/xmipp install %s"
+                                  % (compToken, cls.getHome()),
+                                  targets+[cls.getHome('xmipp.bashrc'),
+                                           cls.getHome('v%s' % _currentVersion)])],
                        deps=['hdf5'], default=True)
 
-        env.addPackage('xmippBin', version=_currentVersion,
-                       tar='xmippBin-%s.tgz' % _currentVersion,
-                       commands=[("rm -rf %s 2>/dev/null; cd .. ; ln -sf xmippBin-%s %s"
+        env.addPackage('xmippBin_Debian', version=_currentVersion,
+                       # tar='xmippBin-%s.tgz' % _currentVersion,
+                       commands=[("rm -rf %s 2>/dev/null; cd .. ; ln -sf xmippBin_Debian-%s %s"
                                   % (cls.getHome(), _currentVersion, cls.getHome()),
-                                  targets+[cls.getHome("xmipp.conf")])],
+                                  targets+[cls.getHome("xmipp.conf"),
+                                           cls.getHome('v%s_Debian' % _currentVersion)])],
                        default=False)
 
-        env.addPackage('xmippBin_oldDistros', version=_currentVersion,
-                       tar='xmippBin-oldDistros-%s.tgz' % _currentVersion,
+        env.addPackage('xmippBin_Centos', version=_currentVersion,
+                       # tar='xmippBin_Centos_noCUDA-%s.tgz' % _currentVersion,
                        commands=[("rm -rf %s 2>/dev/null; cd .. ; "
-                                  "ln -sf xmippBin-oldDistros-%s %s"
+                                  "ln -sf xmippBin_Centos-%s %s"
                                   % (cls.getHome(), _currentVersion, cls.getHome()),
                                   [cls.getHome('bin', 'xmipp_reconstruct_significant'),
-                                   cls.getHome('v%s_oldDistros' % _currentVersion),
+                                   cls.getHome('v%s_Centos' % _currentVersion),
                                    cls.getHome("xmipp.conf")])],
                        default=False)
 

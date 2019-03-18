@@ -40,12 +40,19 @@ setup(
     # For a discussion on single-sourcing the version across setup.py and the
     # project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
-    version='19.03.01b',  # Required
+    version='19.03.02b',  # Required
 
     # This is a one-line description or tagline of what your project does. This
     # corresponds to the "Summary" metadata field:
     # https://packaging.python.org/specifications/core-metadata/#summary
-    description='Plugin to use Xmipp programs within the Scipion framework.',  # Required
+    description='Plugin to use Xmipp programs within the Scipion framework.\n'
+                'Available software: - xmippSrc: Sources to compile Xmipp software\n'
+                '                    - xmippBin_Debian: Precompiled Xmipp software for Debian based distros\n'
+                '                    - xmippBin_Centos: Precompiled Xmipp software for Centos and SuSE based distros.\n'
+                '                    - nma: Software for (pseudo)atoms fitting to volumes using Normal Modes.\n'
+                '                    - deepLearningToolkit: toolkit to run deep learnig based protocols'
+                '(basically tensorflow, keras and pre-trained models)\n'
+                'NOTE: Cuda related code is implemented/compiled with CUDA 8.0',
 
     # This is an optional longer description of your project that represents
     # the body of text which users will see when they visit PyPI.
