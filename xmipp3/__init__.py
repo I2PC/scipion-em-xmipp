@@ -148,9 +148,8 @@ class Plugin(pyworkflow.em.Plugin):
                        commands=[("rm -rf %s 2>/dev/null; cd .. ; "
                                   "ln -sf xmippBin_Centos-%s %s"
                                   % (cls.getHome(), _currentVersion, cls.getHome()),
-                                  [cls.getHome('bin', 'xmipp_reconstruct_significant'),
-                                   cls.getHome('v%s_Centos' % _currentVersion),
-                                   cls.getHome("xmipp.conf")])],
+                                  targets+[cls.getHome("xmipp.conf"),
+                                           cls.getHome('v%s_Centos' % _currentVersion)])],
                        default=False)
 
         ## EXTRA PACKAGES ##
