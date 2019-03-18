@@ -155,7 +155,7 @@ class Plugin(pyworkflow.em.Plugin):
 
         ## EXTRA PACKAGES ##
         # joblib
-        tryAddPipModule(env, 'joblib', '0.11', target='joblib*')
+        tryAddPipModule(env, 'joblib', '0.11', default=True, target='joblib*')
 
         installDeepLearningToolkit(cls, env)
 
@@ -235,11 +235,8 @@ def installDeepLearningToolkit(plugin, env):
                                 "(8.0 recommended)")
 
     if cudNNversion is not None:
-        cudNN = tryAddPipModule(env, 'cudnnenv', target="cudnnenv",
-                                pipCmd="%s git+https://github.com/"
-                                       "unnonouno/cudnnenv.git"
-                                       % pipCmdScipion,
-                                default=False)
+        cudNN = tryAddPipModule(env, 'cudnnenv', version='0.6.6',
+                                target="cudnnenv", default=False)
         deepLearningTools.append(cudNN)
 
         tensor = tryAddPipModule(env, 'tensorflow-gpu', target='tensorflow*',
