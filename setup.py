@@ -47,8 +47,8 @@ setup(
     # https://packaging.python.org/specifications/core-metadata/#summary
     description='Plugin to use Xmipp programs within the Scipion framework.\n'
                 'Available software: - xmippSrc: Sources to compile Xmipp software\n'
-                '                    - xmippBin_Debian: Precompiled Xmipp software for Debian based distros\n'
-                '                    - xmippBin_Centos: Precompiled Xmipp software for Centos and SuSE based distros.\n'
+                '                    - xmippBin_Debian: Precompiled Xmipp software for Debian based distros (and OpenSUSE43.2).\n'
+                '                    - xmippBin_Centos: Precompiled Xmipp software for Centos based distros (and OpenSUSE15).\n'
                 '                    - nma: Software for (pseudo)atoms fitting to volumes using Normal Modes.\n'
                 '                    - deepLearningToolkit: toolkit to run deep learnig based protocols'
                 '(basically tensorflow, keras and pre-trained models)\n'
