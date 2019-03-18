@@ -50,7 +50,7 @@ setup(
                 '                    - xmippBin_Debian: Precompiled Xmipp software for Debian based distros (and OpenSUSE15).\n'
                 '                    - xmippBin_Centos: Precompiled Xmipp software for Centos based distros (and OpenSUSE42.3).\n'
                 '                    - nma: Software for (pseudo)atoms fitting to volumes using Normal Modes Analysis.\n'
-                '                    - deepLearningToolkit: toolkit to run deep learnig based protocols'
+                '                    - deepLearningToolkit: toolkit to run deep learning based protocols'
                 '(basically tensorflow, keras and pre-trained models)\n'
                 'NOTE: Cuda related code is implemented/compiled with CUDA 8.0',
 
