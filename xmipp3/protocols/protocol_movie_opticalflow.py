@@ -258,7 +258,7 @@ class XmippProtOFAlignment(ProtAlignMovies):
             errors.append("It seems that Xmipp Optical Alignment is not installed. "
                           "OpenCV should be installed in the system to compile it.\n"
                           "Please, install OpenCV in your system and, then, "
-                          "re-install Xmipp.")
+                          "re-install Xmipp by running 'scipion installb xmippSrc'.")
         else:
             if self.useGpu and not exists(ofGpu):
                 errors.append("It seems that Xmipp Optical Alignment has not been "
