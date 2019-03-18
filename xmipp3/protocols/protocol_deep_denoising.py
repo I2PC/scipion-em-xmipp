@@ -1,6 +1,7 @@
 # **************************************************************************
 # *
-# * Authors:     Javier Mota
+# * Authors:     Javier Mota   (original implementation)
+# *              Ruben Sanchez (added U-net)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -24,7 +25,7 @@
 # *
 # **************************************************************************
 
-import os
+import sys, os
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -48,8 +49,26 @@ def updateEnviron(gpuNum):
         os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
     else:
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
+        
+BAD_IMPORT_MSG='''
+Error, tensorflow/keras is probably not installed. Install it with:\n  ./scipion installb deepLearnigToolkit
+If gpu version of tensorflow desired, install cuda 8.0 or cuda 9.0
+We will try to automatically install cudnn, if unsucesfully, install cudnn and add to LD_LIBRARY_PATH
+add to SCIPION_DIR/config/scipion.conf
+CUDA = True
+CUDA_VERSION = 8.0  or 9.0
+CUDA_HOME = /path/to/cuda-%(CUDA_VERSION)
+CUDA_BIN = %(CUDA_HOME)s/bin
+CUDA_LIB = %(CUDA_HOME)s/lib64
+CUDNN_VERSION = 6 or 7
+'''
+        
 ITER_TRAIN = 0
 ITER_PREDICT = 1
+
+ADD_MODEL_TYPES = ["GAN", "U-Net"]
+ADD_MODEL_GAN = 0
+ADD_MODEL_UNET = 1
 
 class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
@@ -60,8 +79,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
         form.addSection('Input')
         form.addParam('deepMsg', params.LabelParam, default=True,
-                      label='WARNING! You need to have installed '
-                            'Keras programs')
+                      label='Ensure deepLearningToolkit is installed')
         form.addHidden(params.GPU_LIST, params.StringParam, default='',
                        expertLevel=cons.LEVEL_ADVANCED,
                        label="Choose GPU IDs",
@@ -70,33 +88,44 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                             " First core index is 0, second 1 and so on."
                             " In case to use several GPUs separate with comas:"
                             "0,1,2")
-        form.addParam('model', params.EnumParam, choices=['Train & Predict',
+                            
+        form.addParam('modelType', params.EnumParam,
+                      choices=ADD_MODEL_TYPES,
+                      default=ADD_MODEL_GAN,
+                      label='Select model type',
+                      help='If you set to *%s*, GAN will be employed '
+                           'employed. If you set to *%s* U-Net will be used instead'
+                           % tuple(ADD_MODEL_TYPES))
+                                                       
+        form.addParam('modelMode', params.EnumParam, choices=['Train & Predict',
                                                           'Predict'],
                        default=ITER_TRAIN,
+#                       condition='modelType==%d'%ADD_MODEL_GAN,
                        label='Train or predict model',
                        help='*Train*: Train the model using noisy particles '
                             'or their projections in an initial volume'
                             '*Predict*: The particles are denoised with a '
                             'pretrained model')
+                            
         form.addParam('inputProjections', params.PointerParam,
                       pointerClass='SetOfParticles', important=True,
-                      condition='model==%d'%ITER_TRAIN,
+                      condition='modelMode==%d'%ITER_TRAIN,
 
                       label='Input projections of the volume to train',
-                      help='use '
-                                                                       'the '
+                      help='use the '
                       'protocol generate reprojections to generate the '
                       'reprojections views')
 
         form.addParam('modelPretrain', params.BooleanParam, default = False,
-                      condition='model==%d'%ITER_PREDICT,label='Choose your '
+                      condition='modelMode==%d'%ITER_PREDICT,
+                      label='Choose your '
                       'own model', help='Setting "yes" '
                       'you can choose your own model trained. If you choose'
                       '"no" a general model pretrained will be assign')
 
         form.addParam('ownModel', params.PointerParam,
                       pointerClass=self.getClassName(),
-                      condition='modelPretrain==True and model==%d'%ITER_PREDICT,
+                      condition='modelPretrain==True and modelMode==%d'%ITER_PREDICT,
                       label='Set your model',
                       help='Choose the protocol where your model is trained')
 
@@ -115,22 +144,32 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                                         'must be even. Using high sizes '
                                         'several GPUs are required' )
 
+
+        form.addSection(label='Training')
+        
+        form.addParam('nEpochs', params.FloatParam,
+                      label="Number of epochs", default=5.0,
+                      help='Number of epochs for neural network training.')
+        form.addParam('learningRate', params.FloatParam,
+                      label="Learning rate", default=1e-4,
+                      help='Learning rate for neural network training')
+                      
         form.addParallelSection(threads=1, mpi=5)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
 	
-        updateEnviron(self.gpuList.get())
 
         self.newXdim = self.imageSize.get()
         self._insertFunctionStep('preprocessData')
-        if self.model.get() == ITER_TRAIN:
+        if self.modelMode.get() == ITER_TRAIN:
             self._insertFunctionStep('trainModel')
         self._insertFunctionStep('predictModel')
         self._insertFunctionStep('createOutputStep')
 
     def preprocessData(self):
-        self.numGPUs = self.gpuList.get()
+        if self.modelMode.get() == ITER_PREDICT and self.modelType == ADD_MODEL_UNET:
+          raise ValueError("Predict directly with UNET not implemented")
         self.particles = self._getExtraPath('noisyParticles.xmd')
         writeSetOfParticles(self.inputParticles.get(), self.particles)
         self.metadata = xmippLib.MetaData(self.particles)
@@ -138,74 +177,85 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (
             self.particles, fnNewParticles, self.newXdim))
 
-        if self.model.get() == ITER_TRAIN:
+        if self.modelMode.get() == ITER_TRAIN:
             projections = self._getExtraPath('projections.xmd')
             writeSetOfParticles(self.inputProjections.get(), projections)
             fnNewProjections = self._getExtraPath('resizedProjections.stk')
             self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (
                 projections, fnNewProjections, self.newXdim))
 
-        dir = self._getPath('ModelTrained.h5')
-        self.gan = GAN()
-        self.gan.setSize(self.imageSize.get())
-        self.gan.initModel(dir, self.numGPUs)
-
 
     def trainModel(self):
+        updateEnviron(self.gpuList.get())
+        try:
+          import keras
+        except ImportError as e:
+          print(e)
+          raise ValueError(BAD_IMPORT_MSG)
         from keras.models import load_model
-        self.X_train = self.gan.extractTrainData(self._getExtraPath(
-            'resizedProjections.xmd'), xmippLib.MDL_IMAGE, -1)
-        self.gan.train(self.X_train, epochs=10000,
-                                       batch_size=32, save_interval=200)
 
-        self.Generator = load_model(self._getPath('ModelTrained.h5'))
+        if self.modelType== ADD_MODEL_GAN:
+          self.model = GAN()
+        else:
+          self.model = UNET()
+          
+        modelFname = self._getPath('ModelTrained.h5')
 
+        self.model.initModel(self.learningRate.get(), self.imageSize.get(), modelFname, self.gpuList.get() )
+        
+        dataPathProjections= self._getExtraPath('resizedProjections.xmd')
+        if self.modelType== ADD_MODEL_GAN:
+          self.X_train = self.model.extractTrainData(dataPathProjections, xmippLib.MDL_IMAGE, -1)
+          self.model.train(self.X_train, epochs=int(self.nEpochs.get()), batch_size=32, save_interval=200)
+        else:
+          self.model.train( self.nEpochs.get(), self._getExtraPath('resizedParticles.xmd'), 
+                            self._getExtraPath('resizedProjections.xmd') )
+
+        
     def predictModel(self):
+        updateEnviron(self.gpuList.get())
+        try:
+          import keras
+        except ImportError as e:
+          print(e)
+          raise ValueError(BAD_IMPORT_MSG)
         from keras.models import load_model
-        metadataPart = xmippLib.MetaData(self._getExtraPath(
-            'resizedParticles.xmd'))
-        if self.model.get() == ITER_TRAIN:
-            metadataProj = xmippLib.MetaData(self._getExtraPath(
-            'resizedProjections.xmd'))
+        self.predictionModel = load_model(self._getPath('ModelTrained.h5'))
+        metadataPart = xmippLib.MetaData(self._getExtraPath('resizedParticles.xmd'))
+        if self.modelMode.get() == ITER_TRAIN:
+            metadataProj = xmippLib.MetaData(self._getExtraPath('resizedProjections.xmd'))
         img = xmippLib.Image()
-        dimMetadata = getMdSize(self._getExtraPath(
-                'resizedParticles.xmd'))
-        xmippLib.createEmptyFile(self._getExtraPath(
-            'particlesDenoised.stk'),self.newXdim, self.newXdim,1,
-            dimMetadata)
+        dimMetadata = getMdSize(self._getExtraPath('resizedParticles.xmd'))
+        xmippLib.createEmptyFile(self._getExtraPath('particlesDenoised.stk'),self.newXdim, self.newXdim,1, dimMetadata)
 
         mdNewParticles = md.MetaData()
 
         self.groupParticles = 5000
 
-        if self.model.get() == ITER_PREDICT:
-            if self.modelPretrain:
+        if self.modelMode.get() == ITER_PREDICT:
+            if self.modelModePretrain:
                 model = self.ownModel.get()._getPath('ModelTrained.h5')
                 model = load_model(model)
             else:
                 myModelfile = xmipp3.Plugin.getModel('deepDenoising', 'PretrainModel.h5')
                 model = load_model(myModelfile)
         for num in range(1,dimMetadata,self.groupParticles):
-            self.noisyParticles = self.gan.extractInfoMetadata(metadataPart,
-                                    xmippLib.MDL_IMAGE, img, num,
-                                                               self.groupParticles, -1)
+            self.noisyParticles = self.model.extractInfoMetadata(metadataPart,
+                                    xmippLib.MDL_IMAGE, img, num, self.groupParticles, -1)
 
-            if self.model.get() == ITER_TRAIN:
-                self.predict = self.gan.predict(self.Generator, self.noisyParticles)
-                self.projections = self.gan.extractInfoMetadata(metadataProj,
+            if self.modelMode.get() == ITER_TRAIN:
+                self.predict = self.model.predict(self.predictionModel, self.noisyParticles)
+                self.projections = self.model.extractInfoMetadata(metadataProj,
                                     xmippLib.MDL_IMAGE, img, num, self.groupParticles, 1)
             else:
-                self.predict = self.gan.predict(model, self.noisyParticles)
+                self.predict = self.model.predict(model, self.noisyParticles)
 
-            self.noisyParticles = self.gan.normalization(self.noisyParticles, 1)
+            self.noisyParticles = self.model.normalization(self.noisyParticles, 1)
             self.prepareMetadata(mdNewParticles, img, num)
 
-        mdNewParticles.write('particles@' + self._getExtraPath(
-            'particlesDenoised.xmd'), xmippLib.MD_APPEND)
+        mdNewParticles.write('particles@' + self._getExtraPath('particlesDenoised.xmd'), xmippLib.MD_APPEND)
         self.runJob("xmipp_transform_normalize", "-i %s --method NewXmipp "
-                                                 "--background circle %d "%
-                    (self._getExtraPath('particlesDenoised.stk'),
-                     self.newXdim/2))
+                    "--background circle %d "%(self._getExtraPath('particlesDenoised.stk'), self.newXdim/2))
 
     def prepareMetadata(self, metadata, image, initItem):
         newRow = md.Row()
@@ -220,7 +270,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
             newRow.setValue(md.MDL_IMAGE, path)
             newRow.setValue(md.MDL_IMAGE_ORIGINAL, pathNoise)
-            if self.model.get() == ITER_TRAIN:
+            if self.modelMode.get() == ITER_TRAIN:
                 from scipy.stats import pearsonr
                 pathProj = '%06d@' % (i + initItem) + self._getExtraPath(
                     'resizedProjections.stk')
@@ -255,7 +305,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
     def _processRow(self, particle, row):
         particle.setLocation(xmippToLocation(row.getValue(xmippLib.MDL_IMAGE)))
-        if self.model.get() == ITER_TRAIN:
+        if self.modelMode.get() == ITER_TRAIN:
             setXmippAttributes(particle, row,
                                xmippLib.MDL_CORR_DENOISED_PROJECTION)
 
@@ -269,31 +319,42 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
 class GAN(XmippProtDeepDenoising):
 
-    def initModel(self, saveModelDir, numGPUs):
+    def initModel(self, learningRate, boxSize, saveModelDir, numGPUs):
+        try:
+          import keras
+        except ImportError as e:
+          print(e)
+          raise ValueError(BAD_IMPORT_MSG)
         from keras.models import Model
         from keras.layers import Input
         from keras.optimizers import Adam
         from keras.utils import multi_gpu_model
 
         self.dir2 = saveModelDir
-        optimizer = Adam(0.00005)
-
+#        optimizer = Adam(0.00005)
+        optimizer = Adam(learningRate)
+        self.img_rows = boxSize
+        self.img_cols = boxSize
+        self.channels = 1
+        self.shape = self.img_rows * self.img_cols
+        self.img_shape = (self.img_rows, self.img_cols, self.channels)
+        
         # Build and compile the discriminator
         self.discriminator = self.build_discriminator()
         self.discriminator.compile(loss='binary_crossentropy',
                                    optimizer=optimizer,
                                    metrics=['accuracy'])
         # Build and compile the generator
-        self.generatorNoParallel = self.build_generator()
+        self.predictionModelNoParallel = self.build_generator()
         if len(numGPUs.split(',')) > 1:
-            self.generator = multi_gpu_model(self.generatorNoParallel)
+            self.predictionModel = multi_gpu_model(self.predictionModelNoParallel)
         else:
-            self.generator = self.generatorNoParallel
-        self.generator.compile(loss='mean_squared_error',
+            self.predictionModel = self.predictionModelNoParallel
+        self.predictionModel.compile(loss='mean_squared_error',
                                optimizer=optimizer)
         # The generator takes noise as input and generated imgs
         z = Input(shape=self.img_shape)
-        img = self.generator(z)
+        img = self.predictionModel(z)
         # For the combined model we will only train the generator
         self.discriminator.trainable = False
 
@@ -306,13 +367,8 @@ class GAN(XmippProtDeepDenoising):
             self.combined = multi_gpu_model(self.combined)
         self.combined.compile(loss='binary_crossentropy',
                               optimizer=optimizer)
-    def setSize(self, size):
 
-        self.img_rows = size
-        self.img_cols = size
-        self.channels = 1
-        self.shape = self.img_rows * self.img_cols
-        self.img_shape = (self.img_rows, self.img_cols, self.channels)
+
 
     def extractInfoMetadata(self, metadata, label, I, numOfParticles,
                             group, norm=-1):
@@ -381,22 +437,22 @@ class GAN(XmippProtDeepDenoising):
 
         return Image
 
-    def normalization(self, image, type='mean', reshape=True):
+    def normalization(self, image, nType='mean', reshape=True):
 
         NormalizedImage = []
         for im in image:
-            if type == 'mean':
+            if nType == 'mean':
                 Imnormalize = (im - np.mean(im)) / np.std(im)
 
-            if type == -1:
+            if nType == -1:
                 Imnormalize = 2 * (im - np.min(im)) / (
                         np.max(im) - np.min(im)) - 1
 
-            if type == 1:
+            if nType == 1:
                 Imnormalize = (im - np.min(im)) / (
                         np.max(im) - np.min(im))
 
-            if type == 'RGB':
+            if nType == 'RGB':
                 Imnormalize = np.floor(im * 255)
 
             NormalizedImage.append(Imnormalize)
@@ -526,7 +582,7 @@ class GAN(XmippProtDeepDenoising):
             # Select a random half batch of images
 	   
             # Generate a half batch of new images
-            gen_imgs = self.generator.predict(noise1)
+            gen_imgs = self.predictionModel.predict(noise1)
             gen_imgs = self.normalization(gen_imgs,1, False)
             # Train the discriminator
             d_loss_real = self.discriminator.train_on_batch(imgs,
@@ -560,11 +616,11 @@ class GAN(XmippProtDeepDenoising):
             print ("%d/5000 [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (
                 epoch, d_loss[0], 100 * d_loss[1], g_loss))
 
-            evaluate = self.generator.evaluate(self.noise, self.true)
+            evaluate = self.predictionModel.evaluate(self.noise, self.true)
             print "Validation =", evaluate
 
             if epoch > 500 and evaluate <= np.min(self.validation):
-                self.generatorNoParallel.save(self.dir2)
+                self.predictionModelNoParallel.save(self.dir2)
 
             self.lossD.append(d_loss[0])
             self.lossG.append(g_loss)
@@ -586,7 +642,7 @@ class GAN(XmippProtDeepDenoising):
         return predictEnhanced
 
     def save_imgs(self, epoch):
-        gen_imgs = self.generator.predict(self.noise)
+        gen_imgs = self.predictionModel.predict(self.noise)
 
         filename = "denoise_%d.png"
         # Rescale images 0 - 1
@@ -605,3 +661,216 @@ class GAN(XmippProtDeepDenoising):
         plt.savefig(filename % epoch)
         plt.close()
 
+
+
+
+    
+class UNET(GAN):
+
+  def initModel(self, learningRate, boxSize, saveModelDir, numGPUs, init_n_filters=64):
+    self.saveModelDir = saveModelDir
+    self.numGPUs= numGPUs
+    self.shape= (boxSize,boxSize,1)
+    self.init_n_filters= init_n_filters
+    self.batchSize= 16
+    self.epochSize= 50 #In batches
+    self.lr= learningRate
+    
+  def segmentationLoss(trn_labels_batch, logits):
+    '''
+    '''
+    import tensorflow as tf
+    logits=tf.reshape(logits, [-1])
+    trn_labels=tf.reshape(trn_labels_batch, [-1])
+    inter=tf.reduce_sum(tf.multiply(logits,trn_labels))
+    union=tf.reduce_sum(tf.subtract(tf.add(logits,trn_labels),tf.multiply(logits,trn_labels)))
+    loss=tf.subtract(tf.constant(1.0, dtype=tf.float32),tf.div(inter,union))
+    return loss
+
+
+  def conv_block(self, m, dim, acti, bn, res, do=0):
+      import keras
+      n = keras.layers.Conv2D(dim, 3, activation=acti, padding='same')(m)
+      n = keras.layers.BatchNormalization()(n) if bn else n
+      n = keras.layers.Dropout(do)(n) if do else n
+      n = keras.layers.Conv2D(dim, 3, activation=acti, padding='same')(n)
+      n = keras.layers.BatchNormalization()(n) if bn else n
+      return keras.layers.Concatenate()([m, n]) if res else n
+
+  def level_block(self, m, dim, depth, inc, acti, do, bn, mp, up, res):
+      import keras, math
+      if depth > 0:
+          n = self.conv_block(m, dim, acti, bn, res)
+          m = keras.layers.MaxPooling2D()(n) if mp else keras.layers.Conv2D(dim, 3, strides=2, padding='same')(n)
+          m = self.level_block(m, int(inc*dim), depth-1, inc, acti, do, bn, mp, up, res)
+          if up:
+              m = keras.layers.UpSampling2D()(m)
+              m = keras.layers.Conv2D(dim, 2, activation=acti, padding='same')(m)
+          else:
+              m = keras.layers.Conv2DTranspose(dim, 3, strides=2, activation=acti, padding='same')(m)
+          n = keras.layers.Concatenate()([n, m])
+          m = self.conv_block(n, dim, acti, bn, res)
+      else:
+          m = self.conv_block(m, dim, acti, bn, res, do)
+      return m
+
+  def UNet(self, img_shape, out_ch=1, start_ch=32, depth=3, inc_rate=2., activation='relu', 
+      dropout=0.5, batchnorm=False, maxpool=True, upconv=True, residual=False):
+      import keras, math
+      
+      i = keras.layers.Input(shape=img_shape)
+      PAD_SIZE= ( 2**(int(math.log(img_shape[1], 2))+1)-img_shape[1]) //2
+      x = keras.layers.ZeroPadding2D( (PAD_SIZE, PAD_SIZE) )( i ) #Padded to 2**N
+      o = self.level_block(x, start_ch, depth, inc_rate, activation, dropout, batchnorm, maxpool, upconv, residual)
+      o = keras.layers.Conv2D(out_ch, 1, activation='linear')(o)
+      o = keras.layers.Lambda(lambda m: m[:,PAD_SIZE:-PAD_SIZE,PAD_SIZE:-PAD_SIZE,:] )( o )
+      return  keras.models.Model(inputs=i, outputs=o)
+      
+
+  def getDataGenerator(self, imgsMd, masksMd, augmentData=True, nEpochs=-1, isTrain=True, valFraction=0.1): 
+    from sklearn.utils import shuffle
+    from sklearn.cross_validation import train_test_split
+    import random, scipy
+    def _random_flip_leftright( batchX, batchY):
+      for i in range(batchX.shape[0]):
+        if bool(random.getrandbits(1)):
+          batchX[i] = np.fliplr(batchX[i])
+          batchY[i] = np.fliplr(batchY[i])
+      return batchX, batchY
+
+    def _random_flip_updown( batchX, batchY):
+      for i in range(batchX.shape[0]):
+        if bool(random.getrandbits(1)):
+          batchX[i] = np.flipud(batchX[i])
+          batchY[i] = np.flipud(batchY[i])
+      return batchX, batchY
+
+    def _random_90degrees_rotation( batchX, batchY, rotations=[0, 1, 2, 3]):
+      for i in range(batchX.shape[0]):
+        num_rotations = random.choice(rotations)
+        batchX[i] = np.rot90(batchX[i], num_rotations)
+        batchY[i] = np.rot90(batchY[i], num_rotations)
+      return batchX, batchY
+
+    def _random_rotation( batchX, batchY, max_angle=25.):
+      for i in range(batchX.shape[0]):
+        if bool(random.getrandbits(1)):
+          # Random angle
+          angle = random.uniform(-max_angle, max_angle)
+          batchX[i] = scipy.ndimage.interpolation.rotate(batchX[i], angle,reshape=False, mode="reflect")
+          batchY[i] = scipy.ndimage.interpolation.rotate(batchY[i], angle,reshape=False, mode="reflect")
+      return batchX, batchY
+
+    def _random_blur( batchX, batchY, sigma_max):
+      for i in range(batchX.shape[0]):
+        if bool(random.getrandbits(1)):
+          # Random sigma
+          sigma = random.uniform(0., sigma_max)
+          batchX[i] = scipy.ndimage.filters.gaussian_filter(batchX[i], sigma)
+          batchY[i] = scipy.ndimage.filters.gaussian_filter(batchY[i], sigma)
+      return batchX, batchY
+
+    augmentFuns= [_random_flip_leftright, _random_flip_updown, _random_90degrees_rotation, _random_rotation]
+    if augmentData:
+      def augmentBatch( batchX, batchY):
+        for fun in augmentFuns:
+          if bool(random.getrandbits(1)):
+            batchX, batchY= fun(batchX, batchY)
+        return batchX, batchY
+    else:
+      def augmentBatch( batchX, batchY): return batchX, batchY
+
+
+    if nEpochs<1:
+      nEpochs= 9999999
+    mdImgs  = md.MetaData(imgsMd)
+    mdMasks  = md.MetaData(masksMd)  
+    nImages= int(mdImgs.size())
+
+    batchSize= self.batchSize
+    stepsPerEpoch= nImages//batchSize
+    I= xmippLib.Image()      
+
+    imgFnames = mdImgs.getColumnValues(md.MDL_IMAGE)
+    maskFnames= mdMasks.getColumnValues(md.MDL_IMAGE)
+    (imgFnames_train, imgFnames_val, maskFnames_train,
+     maskFnames_val) = train_test_split(imgFnames, maskFnames, test_size=valFraction, random_state=121)
+    if isTrain:
+      imgFnames, maskFnames= imgFnames_train, maskFnames_train
+    else:
+      imgFnames, maskFnames= imgFnames_val, maskFnames_val
+      
+    def dataIterator(imgFnames, maskFnames, nBatches=None):
+
+      batchStack = np.zeros((batchSize,)+self.shape )
+      batchLabels = np.zeros((batchSize,)+self.shape )
+      currNBatches=0 
+      for epoch in range(nEpochs):
+        imgFnames, maskFnames= shuffle(imgFnames, maskFnames)
+        n=0
+        for fnImageImg, fnImageMask in zip(imgFnames, maskFnames):
+          I.read(fnImageImg)
+          batchStack[n,...]= np.expand_dims(I.getData(),-1)
+          I.read(fnImageMask)
+          batchLabels[n,...]= np.expand_dims(I.getData(),-1)
+          n+=1
+          if n>=batchSize:
+            yield augmentBatch(batchStack, batchLabels)
+            n=0
+            currNBatches+=1
+            if nBatches and currNBatches>=nBatches:
+              break
+        if n>0:
+          yield augmentBatch(batchStack[:n,...], batchLabels[:n,...])
+    return dataIterator(imgFnames, maskFnames), stepsPerEpoch
+      
+  def train(self, nEpochs, xmdParticles, xmdProjections):
+  
+    try:
+      import keras
+    except ImportError as e:
+      print(e)
+      raise ValueError(BAD_IMPORT_MSG)
+      
+    try:
+      print("loading model ")
+      model = keras.models.load_model(self.saveModelDir, custom_objects={})
+      print("previous model loaded")
+    except Exception as e:
+      print(e)
+      model = self.UNet( img_shape=self.shape, start_ch=self.init_n_filters, batchnorm=False )
+      optimizer= keras.optimizers.Adam(lr=self.lr, beta_1=0.9, beta_2=0.999, epsilon=1e-8, decay=0)
+      model.compile(loss='mse', optimizer=optimizer)
+      
+      reduceLrCback= keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1, mode='auto', min_lr=1e-8)
+      earlyStopCBack= keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5, verbose=1, mode='auto')
+      saveModel= keras.callbacks.ModelCheckpoint(self.saveModelDir, monitor='val_loss', verbose=1, save_best_only=True)
+
+      trainIterator, stepsPerEpoch= self.getDataGenerator(xmdParticles, xmdProjections, isTrain=True, valFraction=0.1)
+      
+
+      valIterator, stepsPerEpoch_val= self.getDataGenerator(xmdParticles, xmdProjections, augmentData=False, 
+                                                             isTrain=False, valFraction=0.1)
+      maxBatches= min(10, stepsPerEpoch_val)
+      x_val=[]
+      y_val=[]
+      print("train/val split"); sys.stdout.flush()
+      for i, (x, y) in enumerate(valIterator):
+        x_val.append(x)
+        y_val.append(y)
+        if i== maxBatches:
+          break
+      valData=( np.concatenate(x_val, axis=0), np.concatenate(y_val, axis=0 ))
+#      print(valData[0].shape)
+      del valIterator
+#      valData=None
+      nEpochs_init= nEpochs
+      nEpochs= max(1, nEpochs_init*float(stepsPerEpoch)/self.epochSize)
+      print("nEpochs : %.1f --> Epochs: %d.\nTraining begins: Epoch 0/%d"%(nEpochs_init, nEpochs, nEpochs))
+      sys.stdout.flush()
+      
+      model.fit_generator(trainIterator, epochs= nEpochs, steps_per_epoch=self.epochSize, #steps_per_epoch=stepsPerEpoch,
+                        verbose=2, callbacks=[reduceLrCback, earlyStopCBack, saveModel],
+                        validation_data=valData, max_queue_size=12, workers=1, use_multiprocessing=False)
+                        
+                        

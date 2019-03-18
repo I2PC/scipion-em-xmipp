@@ -194,7 +194,12 @@ def installDeepLearningToolkit(plugin, env):
     scikit_learn = tryAddPipModule(env, 'scikit-learn', '0.19.1',
                                    target='scikit_learn*',
                                    default=False, deps=[scipy, cython])
+
+    scikit_image = tryAddPipModule(env, 'scikit-image', '0.14.1',
+                                   target='scikit_image*',
+                                   default=False, deps=[scipy, cython, scikit_learn])
     deepLearningTools.append(scikit_learn)
+    deepLearningTools.append(scikit_image)
 
     # Keras deps
     unittest2 = tryAddPipModule(env, 'unittest2', '0.5.1', target='unittest2*',
