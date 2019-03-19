@@ -38,7 +38,7 @@ from .constants import XMIPP_HOME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.19.03b'
+_currentVersion = '3.19.03b3'
 
 class Plugin(pyworkflow.em.Plugin):
     _homeVar = XMIPP_HOME
@@ -113,36 +113,48 @@ class Plugin(pyworkflow.em.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
+        scons = tryAddPipModule(env, 'scons', '3.0.4', default=False)
 
         ## XMIPP SOFTWARE ##
-        installCmd = ("src/xmipp/xmipp config ; src/xmipp/xmipp check_config ;"
-                      "src/xmipp/xmipp compile %d ; src/xmipp/xmipp install %s"
-                       % (env.getProcessors(), cls.getHome()))
+        lastCompiled = "lib/libXmippJNI.so"
+        targets = [cls.getHome('bin', 'xmipp_reconstruct_significant'),
+                   cls.getHome(lastCompiled)]
 
-        target = "%s/bin/xmipp_reconstruct_significant" % cls.getHome()
+        compileCmd = ("src/xmipp/xmipp config && src/xmipp/xmipp check_config && "
+                      "src/xmipp/xmipp compile %d && touch DONE && rm -rf %s 2>/dev/null"
+                      % (env.getProcessors(), cls.getHome()))
 
         env.addPackage('xmippSrc', version=_currentVersion,
-                       tar='xmippSrc-%s.tgz' % _currentVersion,
-                       commands=[("rm -rf %s 2>/dev/null; %s" 
-                                  % (cls.getHome(), installCmd),
-                                  [target, cls.getHome('xmipp.bashrc')])],
-                       default=True)
+                       commands=[(compileCmd, ["src/xmippViz/"+lastCompiled, "DONE"]),
+                                 ("rm DONE ; src/xmipp/xmipp install %s" % cls.getHome(),
+                                  targets+[cls.getHome('xmipp.bashrc'),
+                                           cls.getHome('v%s' % _currentVersion)])],
+                       deps=['hdf5', scons], default=True)
 
-        env.addPackage('xmippBin', version=_currentVersion,
-                       tar='xmippBin-%s.tgz' % _currentVersion,
-                       commands=[("rm -rf %s 2>/dev/null; cd .. ; ln -sf xmippBin-%s %s"
+        env.addPackage('xmippBin_Debian', version=_currentVersion,
+                       commands=[("rm -rf %s 2>/dev/null; cd .. ; "
+                                  "ln -sf xmippBin_Debian-%s %s"
                                   % (cls.getHome(), _currentVersion, cls.getHome()),
-                                  [target, cls.getHome("xmipp.conf")])],
+                                  targets+[cls.getHome("xmipp.conf"),
+                                           cls.getHome('v%s_Debian' % _currentVersion)])],
+                       default=False)
+
+        env.addPackage('xmippBin_Centos', version=_currentVersion,
+                       commands=[("rm -rf %s 2>/dev/null; cd .. ; "
+                                  "ln -sf xmippBin_Centos-%s %s"
+                                  % (cls.getHome(), _currentVersion, cls.getHome()),
+                                  targets+[cls.getHome("xmipp.conf"),
+                                           cls.getHome('v%s_Centos' % _currentVersion)])],
                        default=False)
 
         ## EXTRA PACKAGES ##
         # joblib
-        tryAddPipModule(env, 'joblib', '0.11', target='joblib*')
+        tryAddPipModule(env, 'joblib', '0.11', default=True, target='joblib*')
 
         installDeepLearningToolkit(cls, env)
 
         # NMA
-        env.addPackage('nma', tar='nma.tgz', default=False, deps=['arpack'],
+        env.addPackage('nma', version='1.2', tar='nma.tgz', default=False, deps=['arpack'],
                        commands=[('cd ElNemo; make; mv nma_* ..',
                                   'nma_elnemo_pdbmat'),
                                  ('cd NMA_cart; LDFLAGS=-L%s make; mv nma_* ..'
@@ -200,28 +212,26 @@ def installDeepLearningToolkit(plugin, env):
     pipCmdScipion = '%s %s/pip install' % (env.getBin('python'),
                                            env.getPythonPackagesFolder())
 
-
-    cudNN_version = None
+    cudNNwarning = []
+    cudNNversion = None
     if nvccProgram != "":
         nvccVersion = subprocess.Popen(["nvcc", '--version'], env=plugin.getEnviron(),
                                        stdout=subprocess.PIPE).stdout.read()
 
         if "release 8.0" in nvccVersion:  # cuda 8
             tensorFlowTarget = "1.4.1"
-            cudNN_version = "v6-cuda8"
+            cudNNversion = "v6-cuda8"
         elif "release 9.0" in nvccVersion:  # cuda 9
             tensorFlowTarget = "1.10.0"
-            cudNN_version = "v7.0.1-cuda9"
+            cudNNversion = "v7.0.1-cuda9"
         else:
-            print("Error, tensorflow requires CUDA 8.0 or CUDA 9.0")
+            cudNNwarning.append("cudNN requires CUDA 8.0 or CUDA 9.0 "
+                                "(8.0 recommended)")
 
-    if cudNN_version is not None:
-        cudNN_installer = tryAddPipModule(env, 'cudnnenv', target="cudnnenv",
-                                          pipCmd="%s git+https://github.com/"
-                                                 "unnonouno/cudnnenv.git"
-                                                 % pipCmdScipion,
-                                          default=False)
-        deepLearningTools.append(cudNN_installer)
+    if cudNNversion is not None:
+        cudNN = tryAddPipModule(env, 'cudnnenv', version='0.6.6',
+                                target="cudnnenv", default=False)
+        deepLearningTools.append(cudNN)
 
         tensor = tryAddPipModule(env, 'tensorflow-gpu', target='tensorflow*',
                                  default=False,
@@ -237,12 +247,16 @@ def installDeepLearningToolkit(plugin, env):
         deepLearningTools.append(keras)
         cudnnInstallCmd = ("cudnnenv install %s; "
                            "cp -r $HOME/.cudnn/active/cuda/lib64/* %s"
-                            % (cudNN_version, getXmippPath('lib')),
+                            % (cudNNversion, getXmippPath('lib')),
                            getXmippPath('lib', 'libcudnn.so'))
     else:
-        cudnnInstallCmd = ("", "")
-        print("WARNING: Installing tensorflow without GPU support. "
-              "Just CPU computations enabled (only predictions recommended).")
+        cudNNwarning.append("Installing tensorflow without GPU "
+                            "support. Just CPU computations enabled "
+                            "(only predictions recommended).")
+        warnStr = ' > WARNING: '
+        warnSep = '\n'+' '*len(warnStr)
+        cudnnInstallCmd = ("echo '\n%s%s\n'" % (warnStr, warnSep.join(cudNNwarning)),
+                           "")
         tensor = tryAddPipModule(env, 'tensorflow', target='tensorflow*',
                                  default=False,
                                  pipCmd="%s https://storage.googleapis.com/"
@@ -266,7 +280,7 @@ def installDeepLearningToolkit(plugin, env):
     modelsTarget = "%s_%s_%s_%s" % (modelsPrefix, now.day, now.month, now.year)
     deepLearningToolsStr = [str(tool) for tool in deepLearningTools]
     target = "installed_%s" % '_'.join(deepLearningToolsStr)
-    env.addPackage('deepLearningToolkit', urlSuffix='external',
+    env.addPackage('deepLearningToolkit', version='0.1', urlSuffix='external',
                    commands=[cudnnInstallCmd,
                              ("rm %s_* 2>/dev/null; %s ; touch %s" 
                               % (modelsPrefix, modelsDownloadCmd, modelsTarget), 
@@ -275,6 +289,6 @@ def installDeepLearningToolkit(plugin, env):
                               "echo ; touch %s" % (', '.join(deepLearningToolsStr),
                                                    target),
                               target)],
-                   deps=deepLearningTools)
+                   deps=deepLearningTools, tar='deepLearningToolkit.tgz')
 
 pyworkflow.em.Domain.registerPlugin(__name__)

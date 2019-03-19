@@ -102,6 +102,10 @@ class XmippProtParticlePicking(ProtParticlePicking, XmippProtocol):
         self._defineOutputs(outputCoordinates=coordSet)
         self._defineSourceRelation(self.inputMicrographs, coordSet)
 
+        boxSize = Integer(coordSet.getBoxSize())
+        self._defineOutputs(boxsize=boxSize)
+        self._defineSourceRelation(self.inputMicrographs.get(), boxSize)
+
     def createDiscardedStep(self):
         posDir = self._getExtraPath()
         suffixRoot = self._ProtParticlePicking__getOutputSuffix()

@@ -40,12 +40,19 @@ setup(
     # For a discussion on single-sourcing the version across setup.py and the
     # project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
-    version='19.03.01b',  # Required
+    version='19.03.03b6',  # Required
 
     # This is a one-line description or tagline of what your project does. This
     # corresponds to the "Summary" metadata field:
     # https://packaging.python.org/specifications/core-metadata/#summary
-    description='Plugin to use Xmipp programs within the Scipion framework.',  # Required
+    description='Plugin to use Xmipp programs within the Scipion framework. NOTE: CUDA 8.0 is used for GPU coding.',
+                 # 'Available software: - xmippSrc: Sources to compile Xmipp software\n'
+                 # '                    - xmippBin_Debian: Precompiled Xmipp software for Debian based distros (and OpenSUSE15).\n'
+                 # '                    - xmippBin_Centos: Precompiled Xmipp software for Centos based distros (and OpenSUSE42.3).\n'
+                 # '                    - nma: Software for (pseudo)atoms fitting to volumes using Normal Modes Analysis.\n'
+                 # '                    - deepLearningToolkit: toolkit to run deep learning based protocols'
+                 # '(basically tensorflow, keras and pre-trained models)\n'
+                 # 'NOTE: Cuda related code is implemented/compiled with CUDA 8.0'),
 
     # This is an optional longer description of your project that represents
     # the body of text which users will see when they visit PyPI.
@@ -138,7 +145,7 @@ setup(
     # MANIFEST.in as well.
     # include_package_data=True,
     package_data={  # Optional
-       'xmipp3': ['xmipp.png', 'protocols.conf'],
+      # 'xmipp3': ['xmipp_logo.png', 'protocols.conf'],
     },
 
     # Although 'package_data' is the preferred approach, in some case you may

@@ -30,6 +30,7 @@ from pyworkflow.em.protocol.protocol_create_stream_data import \
     SET_OF_MICROGRAPHS
 from pyworkflow.protocol import getProtocolFromDb
 
+from xmipp3.protocols import XmippProtPreprocessMicrographs
 from xmipp3.protocols.protocol_extract_particles import *
 from xmipp3.protocols.protocol_classification_gpuCorr_full import *
 
@@ -74,6 +75,13 @@ class TestGpuCorrFullStreaming(BaseTest):
 
         return protStream
 
+    def invertContrast(self, inputMics):
+        protInvCont = XmippProtPreprocessMicrographs(doInvert=True)
+        protInvCont.inputMicrographs.set(inputMics)
+        self.proj.launchProtocol(protInvCont, wait=False)
+
+        return protInvCont
+
     def calculateCtf(self, inputMics):
         protCTF = ProtCTFFind(useCftfind4=True)
         protCTF.inputMicrographs.set(inputMics)
@@ -87,7 +95,7 @@ class TestGpuCorrFullStreaming(BaseTest):
 
     def runPicking(self, inputMicrographs):
         """ Run a particle picking. """
-        protPicking = SparxGaussianProtPicking(boxSize=64)
+        protPicking = SparxGaussianProtPicking(boxSize=64, lowerThreshold=0.01)
         protPicking.inputMicrographs.set(inputMicrographs)
         self.proj.launchProtocol(protPicking, wait=False)
 
@@ -96,7 +104,7 @@ class TestGpuCorrFullStreaming(BaseTest):
     def runExtractParticles(self, inputCoord, setCtfs):
         protExtract = self.newProtocol(XmippProtExtractParticles,
                                        boxSize=64,
-                                       doInvert = True,
+                                       doInvert = False,
                                        doFlip = False)
 
         protExtract.inputCoordinates.set(inputCoord)
@@ -144,7 +152,17 @@ class TestGpuCorrFullStreaming(BaseTest):
         if protImportMicsStr.isFailed():
             self.assertTrue(False)
 
-        protCtf = self.calculateCtf(protImportMicsStr.outputMicrographs)
+        protInvContr = self.invertContrast(protImportMicsStr.outputMicrographs)
+        counter = 1
+        while not protInvContr.hasAttribute('outputMicrographs'):
+            time.sleep(2)
+            protInvContr = self._updateProtocol(protInvContr)
+            if counter > 100:
+                break
+            counter += 1
+        self.assertFalse(protInvContr.isFailed())
+
+        protCtf = self.calculateCtf(protInvContr.outputMicrographs)
         counter = 1
         while not protCtf.hasAttribute('outputCTF'):
             time.sleep(2)
@@ -155,7 +173,7 @@ class TestGpuCorrFullStreaming(BaseTest):
         if protCtf.isFailed():
             self.assertTrue(False)
 
-        protPicking = self.runPicking(protImportMicsStr.outputMicrographs)
+        protPicking = self.runPicking(protInvContr.outputMicrographs)
         counter = 1
         while not protPicking.hasAttribute('outputCoordinates'):
             time.sleep(2)
