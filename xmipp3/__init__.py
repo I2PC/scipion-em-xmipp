@@ -38,7 +38,7 @@ from .constants import XMIPP_HOME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.19.03b2'
+_currentVersion = '3.19.03b3'
 
 class Plugin(pyworkflow.em.Plugin):
     _homeVar = XMIPP_HOME
@@ -113,6 +113,7 @@ class Plugin(pyworkflow.em.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
+        scons = tryAddPipModule(env, 'scons', default=False)
 
         ## XMIPP SOFTWARE ##
         lastCompiled = "lib/libXmippJNI.so"
@@ -126,17 +127,15 @@ class Plugin(pyworkflow.em.Plugin):
                       "src/xmipp/xmipp compile %d ; " % env.getProcessors())
 
         env.addPackage('xmippSrc', version=_currentVersion,
-                       # tar='xmippSrc-%s.tgz' % _currentVersion,
                        commands=[(compileCmd+"rm -rf %s 2>/dev/null"%cls.getHome(),
                                   ["src/xmippViz/"+lastCompiled, compToken]),
                                  ("rm %s 2>/dev/null ; src/xmipp/xmipp install %s"
                                   % (compToken, cls.getHome()),
                                   targets+[cls.getHome('xmipp.bashrc'),
                                            cls.getHome('v%s' % _currentVersion)])],
-                       deps=['hdf5'], default=True)
+                       deps=['hdf5', scons], default=True)
 
         env.addPackage('xmippBin_Debian', version=_currentVersion,
-                       # tar='xmippBin-%s.tgz' % _currentVersion,
                        commands=[("rm -rf %s 2>/dev/null; cd .. ; ln -sf xmippBin_Debian-%s %s"
                                   % (cls.getHome(), _currentVersion, cls.getHome()),
                                   targets+[cls.getHome("xmipp.conf"),
@@ -144,7 +143,6 @@ class Plugin(pyworkflow.em.Plugin):
                        default=False)
 
         env.addPackage('xmippBin_Centos', version=_currentVersion,
-                       # tar='xmippBin_Centos_noCUDA-%s.tgz' % _currentVersion,
                        commands=[("rm -rf %s 2>/dev/null; cd .. ; "
                                   "ln -sf xmippBin_Centos-%s %s"
                                   % (cls.getHome(), _currentVersion, cls.getHome()),
