@@ -113,30 +113,27 @@ class Plugin(pyworkflow.em.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
-        scons = tryAddPipModule(env, 'scons', default=False)
+        scons = tryAddPipModule(env, 'scons', '3.0.4', default=False)
 
         ## XMIPP SOFTWARE ##
         lastCompiled = "lib/libXmippJNI.so"
-        compToken = "src/xmipp/bin/DONE"
         targets = [cls.getHome('bin', 'xmipp_reconstruct_significant'),
                    cls.getHome(lastCompiled)]
 
-        # cls.getHome('v%s' % _currentVersion)
-
-        compileCmd = ("src/xmipp/xmipp config ; src/xmipp/xmipp check_config ;"
-                      "src/xmipp/xmipp compile %d ; " % env.getProcessors())
+        compileCmd = ("src/xmipp/xmipp config && src/xmipp/xmipp check_config && "
+                      "src/xmipp/xmipp compile %d && touch DONE" % env.getProcessors())
 
         env.addPackage('xmippSrc', version=_currentVersion,
                        commands=[(compileCmd+"rm -rf %s 2>/dev/null"%cls.getHome(),
-                                  ["src/xmippViz/"+lastCompiled, compToken]),
-                                 ("rm %s 2>/dev/null ; src/xmipp/xmipp install %s"
-                                  % (compToken, cls.getHome()),
+                                  ["src/xmippViz/"+lastCompiled, "DONE"]),
+                                 ("rm DONE ; src/xmipp/xmipp install %s" % cls.getHome(),
                                   targets+[cls.getHome('xmipp.bashrc'),
                                            cls.getHome('v%s' % _currentVersion)])],
                        deps=['hdf5', scons], default=True)
 
         env.addPackage('xmippBin_Debian', version=_currentVersion,
-                       commands=[("rm -rf %s 2>/dev/null; cd .. ; ln -sf xmippBin_Debian-%s %s"
+                       commands=[("rm -rf %s 2>/dev/null; cd .. ; "
+                                  "ln -sf xmippBin_Debian-%s %s"
                                   % (cls.getHome(), _currentVersion, cls.getHome()),
                                   targets+[cls.getHome("xmipp.conf"),
                                            cls.getHome('v%s_Debian' % _currentVersion)])],
