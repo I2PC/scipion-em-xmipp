@@ -121,11 +121,11 @@ class Plugin(pyworkflow.em.Plugin):
                    cls.getHome(lastCompiled)]
 
         compileCmd = ("src/xmipp/xmipp config && src/xmipp/xmipp check_config && "
-                      "src/xmipp/xmipp compile %d && touch DONE" % env.getProcessors())
+                      "src/xmipp/xmipp compile %d && touch DONE && rm -rf %s 2>/dev/null"
+                      % (env.getProcessors(), cls.getHome()))
 
         env.addPackage('xmippSrc', version=_currentVersion,
-                       commands=[(compileCmd+"rm -rf %s 2>/dev/null"%cls.getHome(),
-                                  ["src/xmippViz/"+lastCompiled, "DONE"]),
+                       commands=[(compileCmd, ["src/xmippViz/"+lastCompiled, "DONE"]),
                                  ("rm DONE ; src/xmipp/xmipp install %s" % cls.getHome(),
                                   targets+[cls.getHome('xmipp.bashrc'),
                                            cls.getHome('v%s' % _currentVersion)])],
