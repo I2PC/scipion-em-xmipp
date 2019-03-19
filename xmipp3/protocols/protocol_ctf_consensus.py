@@ -569,7 +569,7 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
 
         firstCondition = defRangeCrit or astigCrit or singleResolCrit
 
-
+        consResolCrit = False
         if self.calculateConsensus:
             consResolCrit = self.minConsResol < self._freqResol[ctfId]
             if consResolCrit:
