@@ -102,7 +102,7 @@ class Plugin(pyworkflow.em.Plugin):
         model = getXmippPath('models', *modelPath)
         if not os.path.exists(model):
             raise Exception("'%s' model not found. Please, run: \n"
-                            " > scipion installb deepLearnigToolkit" % modelPath[0])
+                            " > scipion installb deepLearningToolkit" % modelPath[0])
         return model
 
     @classmethod
@@ -292,7 +292,7 @@ def installDeepLearningToolkit(plugin, env):
                              ("rm %s_* 2>/dev/null; %s ; touch %s" 
                               % (modelsPrefix, modelsDownloadCmd, modelsTarget), 
                               modelsTarget),
-                             ("echo ; echo ' > DeepLearnig-Toolkit installed: %s' ; "
+                             ("echo ; echo ' > DeepLearning-Toolkit installed: %s' ; "
                               "echo ; touch %s" % (', '.join(deepLearningToolsStr),
                                                    target),
                               target)],
