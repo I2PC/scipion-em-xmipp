@@ -81,7 +81,7 @@ from .protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
 from .protocol_projmatch import XmippProtProjMatch
 from .protocol_random_conical_tilt import XmippProtRCT
 from .protocol_ransac import XmippProtRansac
-from .protocol_realignment_classes import XmippProtReAlignClasses
+from .protocol_center_particles import XmippProtCenterParticles
 from .protocol_reconstruct_fourier import XmippProtReconstructFourier
 from .protocol_reconstruct_highres import XmippProtReconstructHighRes
 from .protocol_reconstruct_significant import XmippProtReconstructSignificant
@@ -110,3 +110,7 @@ from .protocol_reconstruct_heterogeneous import XmippProtReconstructHeterogeneou
 from .protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
 from .protocol_metaprotocol_create_output import XmippMetaProtCreateOutput
 from .protocol_metaprotocol_discrete_heterogeneity_scheduler import XmippMetaProtDiscreteHeterogeneityScheduler # keep this after XmippMetaProtCreateSubset and XmippMetaProtCreateOutput
+
+from .protocol_deep_similarity_cones3D import XmippProtDeepSimilarityCones3D
+from .protocol_deep_cones3D_highresGT import XmippProtDeepCones3DGT
+from .protocol_deep_cones3D_tests import XmippProtDeepCones3DTst

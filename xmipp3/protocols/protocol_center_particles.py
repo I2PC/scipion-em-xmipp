@@ -39,9 +39,9 @@ from xmipp3.convert import (rowToAlignment, alignmentToRow,
                        rowToParticle, writeSetOfClasses2D)
 
 
-class XmippProtReAlignClasses(ProtClassify2D):
+class XmippProtCenterParticles(ProtClassify2D):
     """ Realignment of un-centered classes. """
-    _label = 'realignment classes'
+    _label = 'center particles'
     _lastUpdateVersion = VERSION_2_0
 
     # --------------------------- DEFINE param functions -----------------------

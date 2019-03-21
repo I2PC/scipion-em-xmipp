@@ -101,7 +101,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         #               help='Choose the protocol where your model is trained')
 
         form.addParam('ownModel', params.FileParam,
-                      label="Modl path", condition='modelPretrain==True and model==%d'%ITER_PREDICT,
+                      label="Model path", condition='modelPretrain==True and model==%d'%ITER_PREDICT,
                       help='Choose the file path where your model is stored')
 
         form.addParam('inputParticles', params.PointerParam,

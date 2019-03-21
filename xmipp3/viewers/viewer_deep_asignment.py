@@ -38,7 +38,9 @@ from xmippLib import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
 from xmipp3.convert import getImageLocation
 from xmipp3.protocols.protocol_deep_cones3D import XmippProtDeepCones3D
 from xmipp3.protocols.protocol_deep_alignment3D import XmippProtDeepAlignment3D
+from xmipp3.protocols.protocol_deep_cones3D_highresGT import XmippProtDeepCones3DGT
 from .plotter import XmippPlotter
+from xmipp3.protocols.protocol_deep_cones3D_tests import XmippProtDeepCones3DTst
 
 # ITER_LAST = 0
 # ITER_SELECTION = 1
@@ -52,7 +54,7 @@ from .plotter import XmippPlotter
 class XmippDeepAsignmentViewer(ProtocolViewer):
     """ Visualize the output of protocol reconstruct highres """
     _label = 'viewer deep asignment'
-    _targets = [XmippProtDeepCones3D, XmippProtDeepAlignment3D]
+    _targets = [XmippProtDeepCones3D, XmippProtDeepAlignment3D, XmippProtDeepCones3DGT, XmippProtDeepCones3DTst]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
     
     def _defineParams(self, form):
@@ -197,10 +199,18 @@ class XmippDeepAsignmentViewer(ProtocolViewer):
     def _createAngDist2D(self):
         fnDir = self.protocol._getExtraPath()
         fnAngles = join(fnDir,"outConesParticles.xmd")
+        view=None
         if not exists(fnAngles):
             fnAngles = join(fnDir,"outputParticles.xmd")
-        from pyworkflow.em.viewers.plotter import EmPlotter
-        view = EmPlotter(x=1, y=1, windowTitle="Angular distribution")
-        view.plotAngularDistributionFromMd(fnAngles, '')
+        if exists(fnAngles):
+            fnAnglesSqLite = join(fnDir, "outConesParticles.sqlite")
+            if not exists(fnAnglesSqLite):
+                from pyworkflow.em.metadata.utils import getSize
+                self.createAngDistributionSqlite(fnAnglesSqLite, getSize(fnAngles), itemDataIterator=self._iterAngles(fnAngles))
+            from pyworkflow.em.viewers.plotter import EmPlotter
+            view = EmPlotter(x=1, y=1, windowTitle="Angular distribution")
+            view.plotAngularDistributionFromMd(fnAnglesSqLite, '')
         return view
+
+
     
