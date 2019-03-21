@@ -37,7 +37,7 @@ from pyworkflow.utils.path import cleanPath
 
 import xmippLib
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes, xmippToLocation
-from xmipp3.utils import getMdSize
+from xmipp3.utils import getMdSize, validateDLtoolkit
 import xmipp3
 
 
@@ -265,22 +265,12 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         return summary
 
     def _validate(self):
-        errors = []
-        try:
-            import keras
-        except:
-            errors.append("*Keras not found*. Required to run this protocol.")
 
-        if (self.model.get() == ITER_PREDICT and not self.modelPretrain and
-            not errors and not os.path.isfile(xmipp3.Plugin.getModel('deepDenoising',
-                                              'PretrainModel.h5', doRaise=False))):
-            errors.append("*Pre-trained model not found*. Required with "
-                          "'Predict' mode when no custom model is provided. ")
-
-        if errors:
-            errors.append("Please, *run* 'scipion installb deepLearningToolkit' "
-                          "or install the scipion-em-xmipp/deepLearningToolkit "
-                          "package using the *plugin manager*.")
+        assertModel = self.model.get()==ITER_PREDICT and not self.modelPretrain
+        errors = validateDLtoolkit(assertModel=assertModel,
+                                   model=('deepDenoising', 'PretrainModel.h5'),
+                                   errorMsg="Required with 'Predict' mode when "
+                                            "no custom model is provided.")
 
         return errors
 
