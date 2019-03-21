@@ -1,4 +1,5 @@
 import sys, os
+import random
 import numpy as np
 import keras
 from keras.models import Model, Sequential
@@ -11,18 +12,21 @@ from skimage.transform import rotate
 
 import xmippLib
 import matplotlib.pyplot as plt
-
+import pyworkflow.em.metadata as md
 from .DeepLearningGeneric import DeepLearningModel
-from .dataGenerator import normalization, getDataGenerator
+from .dataGenerator import normalization, getDataGenerator, extractNBatches
 
 
 BATCH_SIZE= 32
-CHECKPOINT_AT= 200 #50 #200
+CHECKPOINT_AT= 2
+NUM_BATCHES_PER_EPOCH= 25
 
 class GAN(DeepLearningModel):
-  def __init__(self,  boxSize, saveModelDir, gpuList="0", batchSize=BATCH_SIZE):
+  def __init__(self,  boxSize, saveModelDir, gpuList="0", batchSize=BATCH_SIZE, trainingDataMode="Synthetic"):
     DeepLearningModel.__init__(self, boxSize, saveModelDir, gpuList, batchSize)
-
+    self.epochSize= NUM_BATCHES_PER_EPOCH
+    self.trainingDataMode= trainingDataMode
+    
   def _setShape(self, boxSize):
     self.img_rows = boxSize
     self.img_cols = boxSize
@@ -30,42 +34,6 @@ class GAN(DeepLearningModel):
     self.shape = self.img_rows * self.img_cols
     self.img_shape = (self.img_rows, self.img_cols, self.channels)
     return self.shape, self.img_shape
-     
-  def extractTrainData(self, path, label, norm=-1):
-
-    metadata = xmippLib.MetaData(path)
-    Image = []
-    I = xmippLib.Image()
-    cont = 0
-    for itemId in metadata:
-      fn = metadata.getValue(label, itemId)
-      I.read(fn)
-      Imresize = I.getData()
-
-      if norm == -1:
-          Imnormalize = 2 * (Imresize - np.min(Imresize)) / (
-                  np.max(Imresize) - np.min(
-              Imresize)) - 1
-      elif norm == 0:
-          Imnormalize = Imresize
-      elif norm == 1:
-          Imnormalize = (Imresize - np.min(Imresize)) / (
-                  np.max(Imresize) - np.min(
-              Imresize))
-      else:
-          Imnormalize = (Imresize - np.mean(Imresize)) / np.std(
-              Imresize)
-      Image.append(Imnormalize)
-
-      if cont > 3000:
-          break
-      cont += 1
-
-    Image = np.array(Image).astype('float')
-    Image = Image.reshape(len(Image), Image.shape[1], Image.shape[2], 1)
-
-    return Image
-
 
   def addNoise(self, image):
 
@@ -82,7 +50,7 @@ class GAN(DeepLearningModel):
     imRotate = rotate(image, angle, mode='wrap')
     return imRotate
 
-  def generate_data(self, images, batch_size):
+  def generate_synt_data_fromProj(self, images, batch_size):
 
     proj = []
     noiseImage = []
@@ -152,6 +120,8 @@ class GAN(DeepLearningModel):
 
     return Model(img, validity)
 
+  def getRandomRows(self, x, n):
+      return x[np.random.choice(x.shape[0], n),... ]
 
   def train(self, learningRate, nEpochs, xmdParticles, xmdProjections, save_interval=CHECKPOINT_AT):
   
@@ -178,16 +148,30 @@ class GAN(DeepLearningModel):
     if len(self.gpuList.split(',')) > 1:
         combined = multi_gpu_model(combined)
         
+    trainIterator, stepsPerEpoch= getDataGenerator(xmdParticles, xmdProjections, isTrain=True, valFraction=0.1,
+                                 augmentData=False, batchSize=min(3000, md.MetaData(xmdParticles).size()))   
 
-    X_train = self.extractTrainData(xmdProjections, xmippLib.MDL_IMAGE, -1)
+    nEpochs_init= nEpochs
+    nEpochs= int(max(save_interval+1, nEpochs_init*float(stepsPerEpoch)/self.epochSize ))
+    print("nEpochs : %.1f --> Epochs: %d.\nTraining begins: Epoch 0/%d"%(nEpochs_init, nEpochs, nEpochs))
+    sys.stdout.flush()
+    
+#    X_train = self.extractTrainData(xmdProjections, xmippLib.MDL_IMAGE, -1)
+
+    valIterator, valStepsPerEpoch= getDataGenerator(xmdParticles, xmdProjections, isTrain=False, valFraction=0.1,
+                                           augmentData=False, nEpochs= 1, batchSize=100 )
     batch_size= self.batchSize
     half_batch = int(batch_size / 2)
-    trueData, noisedData = self.generate_data(X_train, 100)
+
+    particles_val, projections_val = extractNBatches(valIterator, 2)
+    del valIterator
+    trueData, noisedData = self.generate_synt_data_fromProj(projections_val, 2*100)
+#    trueData, noisedData = self.generate_synt_data_fromProj(X_train, 100)
     trueData = normalization(trueData, -1, False)
     noisedData = normalization(noisedData, -1, False)
     lossD = []
     lossG = []
-    validationMetricList = [99999999999999999]
+    bestValidationLoss = 99999999999999999
     lossEpoch = []
     saveImagesPath= os.path.split(xmdParticles)[0]
     #COMPILING MODELS
@@ -196,72 +180,98 @@ class GAN(DeepLearningModel):
                            optimizer=optimizer)
 
     combined.compile(loss='binary_crossentropy', optimizer=optimizer)
-    discriminator.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
-    nEpochs_init= nEpochs
-    nEpochs= save_interval+1+int(nEpochs*20)
-    print("nEpochs : %.1f --> Epochs: %d.\nTraining begins: Epoch 0/%d"%(nEpochs_init, nEpochs, nEpochs))
-    sys.stdout.flush()                     
-    for epoch in range( nEpochs ):
+    discriminator.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])       
+    
+    roundsToEearlyStopping=10
 
-      # ---------------------
-      #  Train Discriminator
-      # ---------------------
-      imgs, noise1 = self.generate_data(X_train, half_batch)
-      imgs = normalization(imgs,1, False)
-      noise1 = normalization(noise1, -1, False)
-      # Select a random half batch of images
+    if self.trainingDataMode== "Both":
+      selectProbas=[0.5,0.5]
+    elif self.trainingDataMode== "SyntheticFromProjections":
+      selectProbas=[1,0]
+    elif self.trainingDataMode== "Particles":
+      selectProbas=[0,1]
+      
+    for epoch, (X_particles, X_projections) in enumerate( trainIterator ):
+      for batch in range(NUM_BATCHES_PER_EPOCH):
+        # ---------------------
+        #  Train Discriminator
+        # ---------------------
+        randNum= np.random.rand()
+        if randNum< 1e-10+selectProbas[0]:
+          imgs, noise1 = self.generate_synt_data_fromProj(X_projections, half_batch)
+        else:
+          imgs, noise1= self.getRandomRows(X_projections, half_batch), self.getRandomRows(X_particles, half_batch)
+          
+        imgs = normalization(imgs,1, False)
+        noise1 = normalization(noise1, -1, False)
+        # Select a random half batch of images
 
-      # Generate a half batch of new images
-      gen_imgs = predictionModel.predict(noise1)
-      gen_imgs = normalization(gen_imgs,1, False)
-      # Train the discriminator
-      d_loss_real = discriminator.train_on_batch(imgs,
-                                                      np.round(
-                                                          np.random.uniform(
-                                                              0.9,
-                                                              1.0,
-                                                              half_batch),
-                                                          1))
-      d_loss_fake = discriminator.train_on_batch(gen_imgs,
-                                                      np.round(
-                                                          np.random.uniform(
-                                                              0.0,
-                                                              0.1,
-                                                              half_batch),
-                                                          1))
-      d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
-      # ---------------------
-      #  Train Generator
-      # ---------------------
-      imgs2, noise2 = self.generate_data(X_train, batch_size)
-      noise2 = normalization(noise2,-1,False)
-      # The generator wants the discriminator to label the generated samples
-      # as valid (ones)
-      valid_y = np.array([1] * batch_size)
+        # Generate a half batch of new images
+        gen_imgs = predictionModel.predict(noise1, verbose=0)
+        gen_imgs = normalization(gen_imgs,1, False)
+        # Train the discriminator
+        d_loss_real = discriminator.train_on_batch(imgs,
+                                                        np.round(
+                                                            np.random.uniform(
+                                                                0.9,
+                                                                1.0,
+                                                                half_batch),
+                                                            1))
+        d_loss_fake = discriminator.train_on_batch(gen_imgs,
+                                                        np.round(
+                                                            np.random.uniform(
+                                                                0.0,
+                                                                0.1,
+                                                                half_batch),
+                                                            1))
+        d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)
+        # ---------------------
+        #  Train Generator
+        # ---------------------
+##        imgs2, noise2 = self.generate_synt_data_fromProj(X_projections, batch_size)
+        
+        if randNum< 1e-10+selectProbas[0]:
+          imgs2, noise2 = self.generate_synt_data_fromProj(X_projections, batch_size)
+        else:
+          imgs2, noise2= self.getRandomRows(X_projections, batch_size), self.getRandomRows(X_particles, batch_size)
+        
+        noise2 = normalization(noise2,-1,False)
+        # The generator wants the discriminator to label the generated samples
+        # as valid (ones)
+        valid_y = np.array([1] * batch_size)
 
-      # Train the generator
-      g_loss = combined.train_on_batch(noise2, valid_y)
+        # Train the generator
+        g_loss = combined.train_on_batch(noise2, valid_y)
 
-      # Plot the progress
-      print ("%d/%d [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (
+        # Plot the progress
+      print ("epoch: %d/%d [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (
           epoch, nEpochs, d_loss[0], 100 * d_loss[1], g_loss))
+      evaluate = predictionModel.evaluate(noisedData, trueData, verbose=0)
+      print("Epoch end. Validation metrics = %s"%evaluate)
 
-      evaluate = predictionModel.evaluate(noisedData, trueData)
-      print("Validation = %s"%evaluate)
-
-      if epoch > save_interval and evaluate <= np.min(validationMetricList):
+      if evaluate <= bestValidationLoss:
+          print("Saving model. validation meanLoss improved from %s to %s"%(bestValidationLoss, evaluate ) )
           predictionModelNoParallel.save(self.saveModelDir)
-          validationMetricList.append(evaluate)
-
+          bestValidationLoss= evaluate
+      else:
+          print("Validation meanLoss did not improve from %s"%(bestValidationLoss ) )
+          roundsToEearlyStopping-=1
+      sys.stdout.flush()
+      
       lossD.append(d_loss[0])
       lossG.append(g_loss)
       lossEpoch.append(d_loss[0])
       # If at save interval => save generated image samples
       if epoch % save_interval == 0:
-          print("MeanLoss = ", np.mean(lossEpoch))
           self.save_imgs(predictionModel, noisedData, trueData, saveImagesPath, epoch)
           lossEpoch = []
-
+          
+      if epoch>= nEpochs:
+        break
+      elif roundsToEearlyStopping<0:
+        print("Early stopping")
+      print("----------------------------------------------------")
+      
   def yieldPredictions(self, xmdParticles, xmdProjections=None):
     print("applying denoising"); sys.stdout.flush()
     for batchX, batchY in DeepLearningModel.yieldPredictions(self, xmdParticles, xmdProjections):

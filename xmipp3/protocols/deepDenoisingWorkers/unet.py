@@ -47,11 +47,11 @@ class UNET(DeepLearningModel):
       earlyStopCBack= keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5, verbose=1, mode='auto')
       saveModel= AltModelCheckpoint(self.saveModelDir, model, monitor='val_loss', verbose=1, save_best_only=True)
 
-      trainIterator, stepsPerEpoch= getDataGenerator(xmdParticles, xmdProjections, isTrain=True, valFraction=0.1)
-      
+      trainIterator, stepsPerEpoch= getDataGenerator(xmdParticles, xmdProjections, isTrain=True, 
+                                                     valFraction=0.1, batchSize=self.batchSize)
       print("train/val split"); sys.stdout.flush()
       valIterator, stepsPerEpoch_val= getDataGenerator(xmdParticles, xmdProjections, augmentData=False, 
-                                                             isTrain=False, valFraction=0.1)
+                                                       isTrain=False, valFraction=0.1, batchSize=self.batchSize)
       valData= extractNBatches(valIterator, min(10, stepsPerEpoch_val))
       del valIterator
 #      valData=None
