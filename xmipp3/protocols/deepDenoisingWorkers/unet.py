@@ -1,11 +1,10 @@
-import sys
+import sys, os
 import keras
 import math
 from .DeepLearningGeneric import DeepLearningModel
 from .dataGenerator import getDataGenerator, extractNBatches, BATCH_SIZE
 
 NUM_BATCHES_PER_EPOCH= 50
-
 class UNET(DeepLearningModel):
 
   
@@ -19,20 +18,34 @@ class UNET(DeepLearningModel):
     self.shape= (boxSize,boxSize,1)
     return self.shape
     
-  def train(self, learningRate, nEpochs, xmdParticles, xmdProjections):        
-    try:
-      print("loading model ")
-      model = keras.models.load_model(self.saveModelDir, custom_objects={})
-      print("previous model loaded")
-    except Exception as e:
-      print(e)
-      model = self.UNet( img_shape=self.shape, start_ch=self.init_n_filters, batchnorm=False )
+  def train(self, learningRate, nEpochs, xmdParticles, xmdProjections):
+      
+    N_GPUs= len(self.gpuList.split(',')) 
+
+    if os.path.isfile(self.saveModelDir):
+      print("loading previous model")
+      if N_GPUs>1:
+        with tf.device('/cpu:0'):
+          model_1gpu = load_model(self.saveModelDir, custom_objects= customLayers)
+        model= keras.utils.multi_gpu_model(model_1gpu, gpus= N_GPUs)
+      else:
+        model_1gpu = load_model(self.saveModelDir, custom_objects= customLayers)
+        model= model_1gpu
+    else:
+      if N_GPUs>1:
+        with tf.device('/cpu:0'):
+          model_1gpu= self.UNet( img_shape=self.shape, start_ch=self.init_n_filters, batchnorm=False )
+        model= keras.utils.multi_gpu_model(model_1gpu, gpus= N_GPUs)
+      else:
+        model_1gpu= self.UNet( img_shape=self.shape, start_ch=self.init_n_filters, batchnorm=False )
+        model= model_1gpu
+    
       optimizer= keras.optimizers.Adam(lr= learningRate, beta_1=0.9, beta_2=0.999, epsilon=1e-8, decay=0)
       model.compile(loss='mse', optimizer=optimizer)
       
       reduceLrCback= keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=3, verbose=1, mode='auto', min_lr=1e-8)
       earlyStopCBack= keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5, verbose=1, mode='auto')
-      saveModel= keras.callbacks.ModelCheckpoint(self.saveModelDir, monitor='val_loss', verbose=1, save_best_only=True)
+      saveModel= AltModelCheckpoint(self.saveModelDir, model, monitor='val_loss', verbose=1, save_best_only=True)
 
       trainIterator, stepsPerEpoch= getDataGenerator(xmdParticles, xmdProjections, isTrain=True, valFraction=0.1)
       

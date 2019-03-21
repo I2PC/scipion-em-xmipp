@@ -17,9 +17,11 @@ from .dataGenerator import normalization, getDataGenerator
 
 
 BATCH_SIZE= 32
+CHECKPOINT_AT= 200 #50 #200
+
 class GAN(DeepLearningModel):
   def __init__(self,  boxSize, saveModelDir, gpuList="0", batchSize=BATCH_SIZE):
-    DeepLearningModel.__init__(self,boxSize, saveModelDir, gpuList, batchSize)
+    DeepLearningModel.__init__(self, boxSize, saveModelDir, gpuList, batchSize)
 
   def _setShape(self, boxSize):
     self.img_rows = boxSize
@@ -28,33 +30,7 @@ class GAN(DeepLearningModel):
     self.shape = self.img_rows * self.img_cols
     self.img_shape = (self.img_rows, self.img_cols, self.channels)
     return self.shape, self.img_shape
-    
-  def initModelsForTrainining(self):
-
-    # Build the discriminator
-    self.discriminator = self.build_discriminator()
-
-    # Build the generator
-    self.predictionModelNoParallel = self.build_generator()
-    if len(self.gpuList.split(',')) > 1:
-      self.predictionModel = multi_gpu_model(self.predictionModelNoParallel)
-    else:
-      self.predictionModel = self.predictionModelNoParallel
-
-    # The generator takes noise as input and generated imgs
-    z = Input(shape=self.img_shape)
-    img = self.predictionModel(z)
-    # For the combined model we will only train the generator
-    self.discriminator.trainable = False
-
-    # The valid takes generated images as input and determines validity
-    valid = self.discriminator(img)
-    # The combined model  (stacked generator and discriminator) takes
-    # noise as input => generates images => determines validity
-    self.combined = Model(z, valid)
-    if len(self.gpuList.split(',')) > 1:
-        self.combined = multi_gpu_model(self.combined)
-        
+     
   def extractTrainData(self, path, label, norm=-1):
 
     metadata = xmippLib.MetaData(path)
@@ -177,28 +153,52 @@ class GAN(DeepLearningModel):
     return Model(img, validity)
 
 
-  def train(self, learningRate, nEpochs, xmdParticles, xmdProjections, save_interval=200):
-    self.initModelsForTrainining()
+  def train(self, learningRate, nEpochs, xmdParticles, xmdProjections, save_interval=CHECKPOINT_AT):
+  
+    discriminator = self.build_discriminator()
+
+    # Build the generator
+    predictionModelNoParallel = self.build_generator()
+    if len(self.gpuList.split(',')) > 1:
+      predictionModel = multi_gpu_model(predictionModelNoParallel)
+    else:
+      predictionModel = predictionModelNoParallel
+
+    # The generator takes noise as input and generated imgs
+    z = Input(shape=self.img_shape)
+    img = predictionModel(z)
+    # For the combined model we will only train the generator
+    discriminator.trainable = False
+
+    # The valid takes generated images as input and determines validity
+    valid = discriminator(img)
+    # The combined model  (stacked generator and discriminator) takes
+    # noise as input => generates images => determines validity
+    combined = Model(z, valid)
+    if len(self.gpuList.split(',')) > 1:
+        combined = multi_gpu_model(combined)
+        
+
     X_train = self.extractTrainData(xmdProjections, xmippLib.MDL_IMAGE, -1)
     batch_size= self.batchSize
     half_batch = int(batch_size / 2)
-    self.true, self.noise = self.generate_data(X_train, 100)
-    self.true = normalization(self.true, -1, False)
-    self.noise = normalization(self.noise, -1, False)
-    self.lossD = []
-    self.lossG = []
-    self.validationMetricList = [99999999999999999]
+    trueData, noisedData = self.generate_data(X_train, 100)
+    trueData = normalization(trueData, -1, False)
+    noisedData = normalization(noisedData, -1, False)
+    lossD = []
+    lossG = []
+    validationMetricList = [99999999999999999]
     lossEpoch = []
     saveImagesPath= os.path.split(xmdParticles)[0]
     #COMPILING MODELS
     optimizer = Adam(learningRate*0.5)
-    self.predictionModel.compile(loss='mean_squared_error',
+    predictionModel.compile(loss='mean_squared_error',
                            optimizer=optimizer)
 
-    self.combined.compile(loss='binary_crossentropy', optimizer=optimizer)
-    self.discriminator.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+    combined.compile(loss='binary_crossentropy', optimizer=optimizer)
+    discriminator.compile(loss='binary_crossentropy', optimizer=optimizer, metrics=['accuracy'])
     nEpochs_init= nEpochs
-    nEpochs= save_interval+1+int(nEpochs*10)
+    nEpochs= save_interval+1+int(nEpochs*20)
     print("nEpochs : %.1f --> Epochs: %d.\nTraining begins: Epoch 0/%d"%(nEpochs_init, nEpochs, nEpochs))
     sys.stdout.flush()                     
     for epoch in range( nEpochs ):
@@ -212,17 +212,17 @@ class GAN(DeepLearningModel):
       # Select a random half batch of images
 
       # Generate a half batch of new images
-      gen_imgs = self.predictionModel.predict(noise1)
+      gen_imgs = predictionModel.predict(noise1)
       gen_imgs = normalization(gen_imgs,1, False)
       # Train the discriminator
-      d_loss_real = self.discriminator.train_on_batch(imgs,
+      d_loss_real = discriminator.train_on_batch(imgs,
                                                       np.round(
                                                           np.random.uniform(
                                                               0.9,
                                                               1.0,
                                                               half_batch),
                                                           1))
-      d_loss_fake = self.discriminator.train_on_batch(gen_imgs,
+      d_loss_fake = discriminator.train_on_batch(gen_imgs,
                                                       np.round(
                                                           np.random.uniform(
                                                               0.0,
@@ -240,35 +240,35 @@ class GAN(DeepLearningModel):
       valid_y = np.array([1] * batch_size)
 
       # Train the generator
-      g_loss = self.combined.train_on_batch(noise2, valid_y)
+      g_loss = combined.train_on_batch(noise2, valid_y)
 
       # Plot the progress
       print ("%d/%d [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (
           epoch, nEpochs, d_loss[0], 100 * d_loss[1], g_loss))
 
-      evaluate = self.predictionModel.evaluate(self.noise, self.true)
-      print "Validation =", evaluate
+      evaluate = predictionModel.evaluate(noisedData, trueData)
+      print("Validation = %s"%evaluate)
 
-      if epoch > save_interval and evaluate <= np.min(self.validationMetricList):
-          self.predictionModelNoParallel.save(self.saveModelDir)
-          self.validationMetricList.append(evaluate)
+      if epoch > save_interval and evaluate <= np.min(validationMetricList):
+          predictionModelNoParallel.save(self.saveModelDir)
+          validationMetricList.append(evaluate)
 
-      self.lossD.append(d_loss[0])
-      self.lossG.append(g_loss)
-#      self.validationMetricList.append(evaluate)
+      lossD.append(d_loss[0])
+      lossG.append(g_loss)
       lossEpoch.append(d_loss[0])
       # If at save interval => save generated image samples
       if epoch % save_interval == 0:
           print("MeanLoss = ", np.mean(lossEpoch))
-          self.save_imgs(saveImagesPath, epoch)
+          self.save_imgs(predictionModel, noisedData, trueData, saveImagesPath, epoch)
           lossEpoch = []
 
   def yieldPredictions(self, xmdParticles, xmdProjections=None):
+    print("applying denoising"); sys.stdout.flush()
     for batchX, batchY in DeepLearningModel.yieldPredictions(self, xmdParticles, xmdProjections):
       yield normalization(batchX, 1), normalization(batchY, 1)      
 
-  def save_imgs(self, saveImagesPath,  epoch):
-    gen_imgs = self.predictionModel.predict(self.noise)
+  def save_imgs(self, predictionModel, X, Y, saveImagesPath,  epoch):
+    gen_imgs = predictionModel.predict(X)
     filename = "denoise_%d.png"
     # Rescale images 0 - 1
     #gen_imgs = 0.5 * gen_imgs + 0.5
@@ -281,10 +281,10 @@ class GAN(DeepLearningModel):
         
     cnt = 0
     for i in range(10):
-        axs[i, 0].imshow(self.true[cnt, :, :, 0], cmap='gray')
+        axs[i, 0].imshow(Y[cnt, :, :, 0], cmap='gray')
         axs[i, 0].axis('off')
 
-        axs[i, 1].imshow(self.noise[cnt, :, :, 0], cmap='gray')
+        axs[i, 1].imshow(X[cnt, :, :, 0], cmap='gray')
         axs[i, 1].axis('off')
 
         axs[i, 2].imshow(gen_imgs[cnt, :, :, 0], cmap='gray')

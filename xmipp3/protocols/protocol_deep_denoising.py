@@ -57,7 +57,6 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
     def __init__(self, **args):
         XmippProtGenerateReprojections.__init__(self, **args)
-        self.stepsExecutionMode = params.STEPS_PARALLEL
         
     def _defineParams(self, form):
 
@@ -139,7 +138,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                       help='Learning rate for neural network training')
 
 
-        form.addParallelSection(threads=1, mpi=5)
+        form.addParallelSection(threads=2, mpi=0)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -184,7 +183,8 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         dataPathProjections= self._getExtraPath('resizedProjections.xmd')
 
         model.train( self.learningRate.get(), self.nEpochs.get(), dataPathParticles, dataPathProjections )
-
+        model.clean()
+        del model
 
     def predictModel(self):
         from scipy.stats import pearsonr
