@@ -392,14 +392,14 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                            })
             # Mapping between base protocol parameters and the package specific
             # command options
-            self.__params = {'sampling_rate': self._params['samplingRate'],
+            self.__params = {'sampling_rate': params['samplingRate'],
                              'downSamplingPerformed': downFactor,
-                             'kV': self._params['voltage'],
-                             'Cs': self._params['sphericalAberration'],
+                             'kV': params['voltage'],
+                             'Cs': params['sphericalAberration'],
                              'min_freq': line[3],
                              'max_freq': line[4],
-                             'defocusU': self._params['defocusU'],
-                             'Q0': self._params['ampContrast'],
+                             'defocusU': params['defocusU'],
+                             'Q0': params['ampContrast'],
                              'defocus_range': 5000,
                              'ctfmodelSize': size
                              }
