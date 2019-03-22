@@ -228,7 +228,6 @@ class GAN(DeepLearningModel):
         # ---------------------
         #  Train Generator
         # ---------------------
-##        imgs2, noise2 = self.generate_synt_data_fromProj(X_projections, batch_size)
         
         if randNum< 1e-10+selectProbas[0]:
           imgs2, noise2 = self.generate_synt_data_fromProj(X_projections, batch_size)
