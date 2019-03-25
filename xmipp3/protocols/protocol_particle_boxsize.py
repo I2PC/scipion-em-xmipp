@@ -31,6 +31,7 @@ from pyworkflow.object import Integer
 
 from xmipp3.convert import writeSetOfMicrographs
 import xmipp3
+from xmipp3.utils import validateDLtoolkit
 
 
 class XmippProtParticleBoxsize(ProtMicrographs):
@@ -110,3 +111,5 @@ class XmippProtParticleBoxsize(ProtMicrographs):
     def _citations(self):
         return ['']
 
+    def _validate(self):
+        return validateDLtoolkit(model=('boxsize', 'weights.hdf5'))
