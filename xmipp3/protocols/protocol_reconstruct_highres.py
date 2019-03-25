@@ -346,6 +346,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             imgSetOut = self._createSetOfParticles()
             imgSetOut.copyInfo(imgSet)
             imgSetOut.setAlignmentProj()
+            if imgSet.isPhaseFlipped():
+                imgSetOut.setIsPhaseFlipped(True)
             self.iterMd = md.iterRows(fnAngles, md.MDL_PARTICLE_ID)
             self.lastRow = next(self.iterMd) 
             imgSetOut.copyItems(imgSet,
@@ -1472,6 +1474,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if not self.doContinue and self.inputParticles.hasValue() and \
            self.alignmentMethod.get()==self.LOCAL_ALIGNMENT and not self.inputParticles.get().hasAlignmentProj():
             errors.append("If the first iteration is local, then the input particles must have an alignment")
+        if not self.inputParticles.get().isPhaseFlipped():
+            errors.append("The input particles must be phase flipped")
         return errors    
     
     def _warnings(self):
