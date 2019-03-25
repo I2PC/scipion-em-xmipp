@@ -112,6 +112,8 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                            'automatically tries by default the suggested '
                            'Downsample factor; and if it fails, +1; '
                            'and if it fails, -1.')
+        form.addParam('refineAmplitudeContrast', params.BooleanParam, default=False,
+                      label='Allow amplitude constrast refinement')
 
     def getInputMicrographs(self):
         return self.inputMicrographs.get()
@@ -310,7 +312,8 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
 
         if self.findPhaseShift:
             self._args += "--phase_shift %(phaseShift0)f --VPP_radius 0.005"
-
+        if self.refineAmplitudeContrast:
+            self._args += "--refine_amplitude_contrast"
         for par, val in params.iteritems():
             self._args += " --%s %s" % (par, str(val))
 
