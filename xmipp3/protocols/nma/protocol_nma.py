@@ -51,7 +51,7 @@ class XmippProtNMA(XmippProtNMABase):
         form.addSection(label='Normal Mode Analysis')
         form.addParam('inputStructure', PointerParam, label="Input structure",
                       important=True,
-                      pointerClass='PdbFile',
+                      pointerClass='AtomStruct',
                       help='The input structure can be an atomic model '
                            '(true PDB) or a pseudoatomic model\n'
                            '(an EM volume converted into pseudoatoms)')

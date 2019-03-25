@@ -46,7 +46,7 @@ class XmippProt3DBionotes(ProtAnalysis3D):
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('inputPDB', PointerParam, pointerClass='PdbFile',
+        form.addParam('inputPDB', PointerParam, pointerClass='AtomStruct',
                       label="Input PDB")
 #         form.addParam('inputVol', PointerParam, pointerClass='Volume',
 #                       label="Input volume", important=True)
