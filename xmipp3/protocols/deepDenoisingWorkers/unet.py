@@ -6,7 +6,6 @@ from .dataGenerator import getDataGenerator, extractNBatches, BATCH_SIZE
 
 NUM_BATCHES_PER_EPOCH= 50
 class UNET(DeepLearningModel):
-
   
   def __init__(self, boxSize, saveModelDir, gpuList="0", batchSize=BATCH_SIZE, init_n_filters=64):
   
@@ -34,10 +33,10 @@ class UNET(DeepLearningModel):
     else:
       if N_GPUs>1:
         with tf.device('/cpu:0'):
-          model_1gpu= self.UNet( img_shape=self.shape, start_ch=self.init_n_filters, batchnorm=False )
+          model_1gpu= build_UNet( img_shape=self.shape, start_ch=self.init_n_filters, batchnorm=False )
         model= keras.utils.multi_gpu_model(model_1gpu, gpus= N_GPUs)
       else:
-        model_1gpu= self.UNet( img_shape=self.shape, start_ch=self.init_n_filters, batchnorm=False )
+        model_1gpu= build_UNet( img_shape=self.shape, start_ch=self.init_n_filters, batchnorm=False )
         model= model_1gpu
     
       optimizer= keras.optimizers.Adam(lr= learningRate, beta_1=0.9, beta_2=0.999, epsilon=1e-8, decay=0)
@@ -64,41 +63,43 @@ class UNET(DeepLearningModel):
                         verbose=2, callbacks=[reduceLrCback, earlyStopCBack, saveModel],
                         validation_data=valData, max_queue_size=12, workers=1, use_multiprocessing=False)
                         
-      
-  def conv_block(self, m, dim, acti, bn, res, do=0):
-      n = keras.layers.Conv2D(dim, 3, activation=acti, padding='same')(m)
-      n = keras.layers.BatchNormalization()(n) if bn else n
-      n = keras.layers.Dropout(do)(n) if do else n
-      n = keras.layers.Conv2D(dim, 3, activation=acti, padding='same')(n)
-      n = keras.layers.BatchNormalization()(n) if bn else n
-      return keras.layers.Concatenate()([m, n]) if res else n
 
-  def level_block(self, m, dim, depth, inc, acti, do, bn, mp, up, res):
-      if depth > 0:
-          n = self.conv_block(m, dim, acti, bn, res)
-          m = keras.layers.MaxPooling2D()(n) if mp else keras.layers.Conv2D(dim, 3, strides=2, padding='same')(n)
-          m = self.level_block(m, int(inc*dim), depth-1, inc, acti, do, bn, mp, up, res)
-          if up:
-              m = keras.layers.UpSampling2D()(m)
-              m = keras.layers.Conv2D(dim, 2, activation=acti, padding='same')(m)
-          else:
-              m = keras.layers.Conv2DTranspose(dim, 3, strides=2, activation=acti, padding='same')(m)
-          n = keras.layers.Concatenate()([n, m])
-          m = self.conv_block(n, dim, acti, bn, res)
-      else:
-          m = self.conv_block(m, dim, acti, bn, res, do)
-      return m
 
-  def UNet(self, img_shape, out_ch=1, start_ch=32, depth=3, inc_rate=2., activation='relu', 
-      dropout=0.5, batchnorm=False, maxpool=True, upconv=True, residual=False):
-      
-      i = keras.layers.Input(shape=img_shape)
-      PAD_SIZE= ( 2**(int(math.log(img_shape[1], 2))+1)-img_shape[1]) //2
-      x = keras.layers.ZeroPadding2D( (PAD_SIZE, PAD_SIZE) )( i ) #Padded to 2**N
-      o = self.level_block(x, start_ch, depth, inc_rate, activation, dropout, batchnorm, maxpool, upconv, residual)
-      o = keras.layers.Conv2D(out_ch, 1, activation='linear')(o)
-      o = keras.layers.Lambda(lambda m: m[:,PAD_SIZE:-PAD_SIZE,PAD_SIZE:-PAD_SIZE,:] )( o )
-      return  keras.models.Model(inputs=i, outputs=o)
+def build_UNet( img_shape, out_ch=1, start_ch=32, depth=3, inc_rate=2., activation='relu', 
+    dropout=0.5, batchnorm=False, maxpool=True, upconv=True, residual=False):
+    
+
+    def conv_block( m, dim, acti, bn, res, do=0):
+        n = keras.layers.Conv2D(dim, 3, activation=acti, padding='same')(m)
+        n = keras.layers.BatchNormalization()(n) if bn else n
+        n = keras.layers.Dropout(do)(n) if do else n
+        n = keras.layers.Conv2D(dim, 3, activation=acti, padding='same')(n)
+        n = keras.layers.BatchNormalization()(n) if bn else n
+        return keras.layers.Concatenate()([m, n]) if res else n
+
+    def level_block( m, dim, depth, inc, acti, do, bn, mp, up, res):
+        if depth > 0:
+            n = conv_block(m, dim, acti, bn, res)
+            m = keras.layers.MaxPooling2D()(n) if mp else keras.layers.Conv2D(dim, 3, strides=2, padding='same')(n)
+            m = level_block(m, int(inc*dim), depth-1, inc, acti, do, bn, mp, up, res)
+            if up:
+                m = keras.layers.UpSampling2D()(m)
+                m = keras.layers.Conv2D(dim, 2, activation=acti, padding='same')(m)
+            else:
+                m = keras.layers.Conv2DTranspose(dim, 3, strides=2, activation=acti, padding='same')(m)
+            n = keras.layers.Concatenate()([n, m])
+            m = conv_block(n, dim, acti, bn, res)
+        else:
+            m = conv_block(m, dim, acti, bn, res, do)
+        return m
+    
+    i = keras.layers.Input(shape=img_shape)
+    PAD_SIZE= ( 2**(int(math.log(img_shape[1], 2))+1)-img_shape[1]) //2
+    x = keras.layers.ZeroPadding2D( (PAD_SIZE, PAD_SIZE) )( i ) #Padded to 2**N
+    o = level_block(x, start_ch, depth, inc_rate, activation, dropout, batchnorm, maxpool, upconv, residual)
+    o = keras.layers.Conv2D(out_ch, 1, activation='linear')(o)
+    o = keras.layers.Lambda(lambda m: m[:,PAD_SIZE:-PAD_SIZE,PAD_SIZE:-PAD_SIZE,:] )( o )
+    return  keras.models.Model(inputs=i, outputs=o)
 
 
 def segmentationLoss(trn_labels_batch, logits):
