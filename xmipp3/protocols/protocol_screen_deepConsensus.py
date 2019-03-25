@@ -330,7 +330,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           errorMsg.append("Error, just one coordinate set provided but trained desired. Select pretrained "+
                           "model or previous run model and *No* continue training from previous trained model "+
                           " to score coordiantes directly or add another set of particles and continue training")
-        errorMsg = validateDLtoolkit(errorMsg, model="deepConsensus4",
+        errorMsg = validateDLtoolkit(errorMsg, model="deepConsensus",
                                      assertModel=self.addTrainingData.get()==self.ADD_DATA_TRAIN_PRECOMP)
         return errorMsg
 
