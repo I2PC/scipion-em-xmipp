@@ -26,6 +26,7 @@ from pyworkflow.utils import importFromPlugin
 from pyworkflow.em.protocol import ProtImportAverages, ProtImportMicrographs
 from pyworkflow.em.protocol.protocol_sets import ProtSubSet
 
+from xmipp3.protocols import XmippProtPreprocessMicrographs
 from xmipp3.protocols.protocol_extract_particles import *
 from xmipp3.protocols.protocol_classification_gpuCorr import *
 
@@ -73,9 +74,15 @@ class TestGpuCorrClassifier(BaseTest):
 
         return protSubset
 
+    def invertContrast(self, inputMics):
+        protInvCont = XmippProtPreprocessMicrographs(doInvert=True)
+        protInvCont.inputMicrographs.set(inputMics)
+        self.launchProtocol(protInvCont)
+
+        return protInvCont
 
     def calculateCtf(self, inputMics):
-        protCTF = ProtCTFFind(useCftfind4=True)
+        protCTF = ProtCTFFind(useCftfind4=True, numberOfThreads=6)
         protCTF.inputMicrographs.set(inputMics)
         protCTF.ctfDownFactor.set(1.0)
         protCTF.lowRes.set(0.05)
@@ -88,8 +95,9 @@ class TestGpuCorrClassifier(BaseTest):
     def runPicking(self, inputMicrographs):
         """ Run a particle picking. """
         protPicking = SparxGaussianProtPicking(boxSize=64,
-                                               numberOfThreads=1,
-                                               numberOfMpi=1)
+                                               numberOfThreads=6,
+                                               numberOfMpi=1,
+                                               lowerThreshold=0.01)
         protPicking.inputMicrographs.set(inputMicrographs)
         self.launchProtocol(protPicking)
 
@@ -98,7 +106,8 @@ class TestGpuCorrClassifier(BaseTest):
     def runExtractParticles(self, inputCoord, setCtfs):
         protExtract = self.newProtocol(XmippProtExtractParticles,
                                        boxSize=64,
-                                       doInvert = True,
+                                       numberOfThreads=6,
+                                       doInvert = False,
                                        doFlip = False)
 
         protExtract.inputCoordinates.set(inputCoord)
@@ -155,7 +164,6 @@ class TestGpuCorrClassifier(BaseTest):
         protImportAvgs = self.importAverages()
         if protImportAvgs.isFailed():
             self.assertTrue(False)
-        outMics = protImportMics.outputMicrographs
 
         if NUM_MICS<20:
             protSubsetMics = self.subsetMics(protImportMics.outputMicrographs)
@@ -163,6 +171,9 @@ class TestGpuCorrClassifier(BaseTest):
                 self.assertTrue(False)
             outMics = protSubsetMics.outputMicrographs
 
+        protInvContr = self.invertContrast(outMics)
+        self.assertFalse(protInvContr.isFailed())
+        outMics = protInvContr.outputMicrographs
 
         protCtf = self.calculateCtf(outMics)
         if protCtf.isFailed():

@@ -50,7 +50,7 @@ from xmipp3 import XmippProtocol
 from xmipp3.protocols.protocol_pick_noise import pickNoise_prepareInput
 from xmipp3.convert import readSetOfParticles, setXmippAttributes, micrographToCTFParam,\
                            writeSetOfParticles, writeSetOfCoordinates, readSetOfCoordsFromPosFnames
-
+from xmipp3.utils import validateDLtoolkit
 
 MIN_NUM_CONSENSUS_COORDS = 256
 
@@ -330,6 +330,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           errorMsg.append("Error, just one coordinate set provided but trained desired. Select pretrained "+
                           "model or previous run model and *No* continue training from previous trained model "+
                           " to score coordiantes directly or add another set of particles and continue training")
+        errorMsg = validateDLtoolkit(errorMsg, model="deepConsensus",
+                                     assertModel=self.addTrainingData.get()==self.ADD_DATA_TRAIN_PRECOMP)
         return errorMsg
 
 #--------------------------- INSERT steps functions ---------------------------
