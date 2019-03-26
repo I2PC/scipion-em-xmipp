@@ -55,7 +55,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
 
     _criterion_phaseplate = ("ctfCritFirstZero<5 OR ctfCritMaxFreq>20 OR "
                   "ctfCritFirstMinFirstZeroRatio>50 AND "
-                             "ctfCritFirstMinFirstZeroRatio!=1000 "
+                  "ctfCritFirstMinFirstZeroRatio!=1000 "
                   "OR ctfCritfirstZeroRatio<0.9 OR ctfCritfirstZeroRatio>1.1 OR "
                   "ctfCritNonAstigmaticValidty<=0 OR ctfVPPphaseshift>140 OR " 
                   "ctfCritNonAstigmaticValidty>25 "
@@ -487,15 +487,21 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         return retval
 
     def _createCtfModel(self, mic, updateSampling=True):
-        if updateSampling:
-            newSampling = mic.getSamplingRate() * self.ctfDownFactor.get()
-            mic.setSamplingRate(newSampling)
-        ctfParam = self._getFileName('ctf', micBase=self._getMicBase(mic),
-                                     root=self._getExtraPath())
-        ctfModel2 = readCTFModel(ctfParam, mic)
-        ctfModel2.setMicrograph(mic)
-        self._setPsdFiles(ctfModel2)
-        return ctfModel2
+        try:
+            if updateSampling:
+                newSampling = mic.getSamplingRate() * self.ctfDownFactor.get()
+                mic.setSamplingRate(newSampling)
+            ctfParam = self._getFileName('ctf', micBase=self._getMicBase(mic),
+                                         root=self._getExtraPath())
+            ctfModel2 = readCTFModel(ctfParam, mic)
+            ctfModel2.setMicrograph(mic)
+            self._setPsdFiles(ctfModel2)
+            return ctfModel2
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print ("Error parsing CTF metadata.")
+            raise e
 
     def _createErrorCtfParam(self, mic):
         ctfParam = self._getFileName('ctfErrorParam',
