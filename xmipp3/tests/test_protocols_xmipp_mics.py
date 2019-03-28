@@ -818,6 +818,16 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         self.assertTrue(protCons1.consensusCoordinates.getSize() == 390,
                         "Output coordinates size does not is wrong.")
 
+        protConsOr = self.newProtocol(XmippProtConsensusPicking,
+                                      consensus=1)
+        protConsOr.inputCoordinates.set([self.protFaPi.outputCoordinates,
+                                        protAutomaticPP.outputCoordinates])
+        self.launchProtocol(protConsOr)
+
+        self.assertTrue(protConsOr.isFinished(), "Consensus failed")
+        self.assertTrue(protConsOr.consensusCoordinates.getSize() == 422,
+                        "Output coordinates size does not is wrong.")
+
         kwargs = {'nDim': 3,  # 3 objects
                   'creationInterval': 20,  # wait 1 sec. after creation
                   'setof': 1,  # create SetOfMicrographs

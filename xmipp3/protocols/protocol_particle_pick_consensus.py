@@ -77,12 +77,13 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                       help="All coordinates within this radius (in pixels) "
                            "are presumed to correspond to the same particle")
         form.addParam('consensus', params.IntParam, default=-1,
-                      label="Consensus", expertLevel=LEVEL_ADVANCED,
+                      label="Consensus",
                       help="How many times need a particle to be selected to "
-                           "be considered as a consensus particle. Set to -1 "
-                           "to indicate that it needs to be selected by all "
-                           "algorithms. Set to 1 to indicate that it suffices "
-                           "that only 1 algorithm selects the particle")
+                           "be considered as a consensus particle.\n"
+                           "*Set to -1* to indicate that it needs to be selected "
+                           "by all algorithms: *AND* operation.\n"
+                           "*Set to 1* to indicate that it suffices that only "
+                           "1 algorithm selects the particle: *OR* operation.")
 
         # FIXME: It's not using more than one since
         #         self.stepsExecutionMode = STEPS_SERIAL
@@ -239,8 +240,8 @@ class XmippProtConsensusPicking(ProtParticlePicking):
 
         # Add all coordinates in the first method
         N0 = coords[0].shape[0]
-        inAllMicrographs = self.consensus <= 0 or self.consensus == len(
-            self.inputCoordinates)
+        inAllMicrographs = (self.consensus <= 0 or
+                            self.consensus >= len(self.inputCoordinates))
         if N0 == 0 and inAllMicrographs:
             return
         elif N0 > 0:
@@ -269,7 +270,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                     Ncurrent += 1
 
         # Select those in the consensus
-        if self.consensus <= 0:
+        if self.consensus <= 0 or self.consensus > len(self.inputCoordinates):
             consensus = len(self.inputCoordinates)
         else:
             consensus = self.consensus.get()
