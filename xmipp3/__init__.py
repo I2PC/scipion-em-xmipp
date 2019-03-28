@@ -185,7 +185,7 @@ def tryAddPipModule(env, moduleName, *args, **kwargs):
     try:
         return env.addPipModule(moduleName, *args, **kwargs)._name
     except Exception as e:
-        if "Duplicated target '%s'" % moduleName == str(e):
+        if str(e) == "Duplicated target '%s'" % moduleName:
             return moduleName
         else:
             raise Exception(e)

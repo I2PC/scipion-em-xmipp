@@ -84,9 +84,9 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                            "algorithms. Set to 1 to indicate that it suffices "
                            "that only 1 algorithm selects the particle")
 
-        # form.addParallelSection(threads=4, mpi=0)  # FIXME: It's not using
-                                                     #   more than one since
-                                       # self.stepsExecutionMode = STEPS_SERIAL
+        # FIXME: It's not using more than one since
+        #         self.stepsExecutionMode = STEPS_SERIAL
+        # form.addParallelSection(threads=4, mpi=0)
 
 #--------------------------- INSERT steps functions ---------------------------
     def _insertAllSteps(self):
@@ -273,10 +273,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             consensus = len(self.inputCoordinates)
         else:
             consensus = self.consensus.get()
-        if self.consensus == 0:
-            consensusCoords = allCoords[votes >= consensus, :]
-        else:
-            consensusCoords = allCoords[votes == consensus, :]
+        consensusCoords = allCoords[votes >= consensus, :]
         try:
             jaccardIdx = float(len(consensusCoords)) / (
                 float(len(allCoords)) / len(self.inputCoordinates))
