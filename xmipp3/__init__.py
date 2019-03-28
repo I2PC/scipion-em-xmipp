@@ -120,8 +120,10 @@ class Plugin(pyworkflow.em.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
-        scons = tryAddPipModule(env, 'scons', '3.0.4', default=False)
+        scons = tryAddPipModule(env, 'scons', '3.0.4')
+        joblib = tryAddPipModule(env, 'joblib', '0.11', target='joblib*')
 
+        xmippDeps = ['hdf5', scons, joblib]
         ## XMIPP SOFTWARE ##
         lastCompiled = "lib/libXmippJNI.so"
         targets = [cls.getHome('bin', 'xmipp_reconstruct_significant'),
@@ -136,7 +138,7 @@ class Plugin(pyworkflow.em.Plugin):
                                  ("rm DONE ; src/xmipp/xmipp install %s" % cls.getHome(),
                                   targets+[cls.getHome('xmipp.bashrc'),
                                            cls.getHome('v%s' % _currentVersion)])],
-                       deps=['hdf5', scons], default=True)
+                       deps=xmippDeps, default=True)
 
         env.addPackage('xmippBin_Debian', version=_currentVersion,
                        commands=[("rm -rf %s 2>/dev/null; cd .. ; "
@@ -144,7 +146,7 @@ class Plugin(pyworkflow.em.Plugin):
                                   % (cls.getHome(), _currentVersion, cls.getHome()),
                                   targets+[cls.getHome("xmipp.conf"),
                                            cls.getHome('v%s_Debian' % _currentVersion)])],
-                       default=False)
+                       deps=xmippDeps, default=False)
 
         env.addPackage('xmippBin_Centos', version=_currentVersion,
                        commands=[("rm -rf %s 2>/dev/null; cd .. ; "
@@ -152,12 +154,9 @@ class Plugin(pyworkflow.em.Plugin):
                                   % (cls.getHome(), _currentVersion, cls.getHome()),
                                   targets+[cls.getHome("xmipp.conf"),
                                            cls.getHome('v%s_Centos' % _currentVersion)])],
-                       default=False)
+                       deps=xmippDeps, default=False)
 
         ## EXTRA PACKAGES ##
-        # joblib
-        tryAddPipModule(env, 'joblib', '0.11', default=True, target='joblib*')
-
         installDeepLearningToolkit(cls, env)
 
         # NMA
@@ -186,7 +185,7 @@ def tryAddPipModule(env, moduleName, *args, **kwargs):
     try:
         return env.addPipModule(moduleName, *args, **kwargs)._name
     except Exception as e:
-        if "Duplicated target '%s'" % moduleName == str(e):
+        if str(e) == "Duplicated target '%s'" % moduleName:
             return moduleName
         else:
             raise Exception(e)
