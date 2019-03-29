@@ -82,9 +82,12 @@ def validateDLtoolkit(errors=None, **kwargs):
     """ Validates if the deepLearningToolkit is installed.
         Additionally, it assert if a certain models is present when
         kwargs are present, following:
-          - 'assertModel': if models should be evaluated or not (default: True).
-          - 'model': a certain model name/route (default: only container folder).
-          - 'errorMsg': a custom message error (default: '').
+          - assertModel: if models should be evaluated or not (default: True).
+          - errorMsg: a custom message error (default: '').
+          - model: a certain model name/route/list (default: no model assert)
+            + model='myModel': asserts if myModel exists
+            + model=('myModel', 'myFile.h5'): asserts is myModel/myFile.h5 exists
+            + model=['myModel1', 'myModel2', ('myModel3', 'myFile3.h5')]: a combination
 
         usage (3 examples):
           errors = validateDLtoolkit(errors, doAssert=self.useModel.get(),
@@ -108,16 +111,18 @@ def validateDLtoolkit(errors=None, **kwargs):
         errors.append("*Keras/Tensorflow not found*. Required to run this protocol.")
         kerasError=True
 
-    # Asserting if the model exist only if the software is well installed
+    # Asserting if the model exists only if the software is well installed
     modelError = False
-    if not kerasError and kwargs.get('assertModel', True):
-        model = kwargs.get('model', '')
-        if isinstance(model, str):
-            if not exists(xmipp3.Plugin.getModel(model, doRaise=False)):
-                modelError = True
-        elif isinstance(model, tuple):
-            if not exists(xmipp3.Plugin.getModel(*model, doRaise=False)):
-                modelError = True
+    models = kwargs.get('model', '')
+    if not kerasError and kwargs.get('assertModel', True) and models != '':
+        models = models if isinstance(models, list) else [models]
+        for model in models:
+            if isinstance(model, str):
+                if not exists(xmipp3.Plugin.getModel(model, doRaise=False)):
+                    modelError = True
+            elif isinstance(model, tuple):
+                if not exists(xmipp3.Plugin.getModel(*model, doRaise=False)):
+                    modelError = True
         if modelError:
             errors.append("*Pre-trained model not found*. %s"
                           % kwargs.get('errorMsg', ''))
