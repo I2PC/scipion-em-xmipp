@@ -292,6 +292,28 @@ class TestXmippCTFEstimation(TestXmippBase):
         sampling = ctfModel.getMicrograph().getSamplingRate()
         self.assertAlmostEquals(sampling, 2.474, delta=0.001)
 
+class TestXmippBoxsize(TestXmippBase):
+    """This class check if the protocol to determine the BoxSize in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        TestXmippBase.setData()
+        fileName = DataSet.getDataSet('relion_tutorial').getFile('allMics')
+        cls.protImport = cls.runImportMicrograph(fileName,
+                                                 samplingRate=3.54,
+                                                 voltage=300,
+                                                 sphericalAberration=2,
+                                                 scannedPixelSize=None,
+                                                 magnification=56000)
+    def test1(self):
+        # Estimate CTF on the downsampled micrographs
+        print "Estimating boxsize..."
+        protCTF = XmippProtParticleBoxsize()
+        protCTF.inputMicrographs.set(self.protImport.outputMicrographs)
+        self.proj.launchProtocol(protCTF, wait=True)
+        self.assertIsNotNone(protCTF.boxsize, "Boxsize has not been produced.")
+        self.assertAlmostEquals(protCTF.boxsize.get(), 50, delta=10)
+
 
 class TestXmippAutomaticPicking(TestXmippBase):
     """This class check if the protocol to pick the micrographs automatically in Xmipp works properly."""
