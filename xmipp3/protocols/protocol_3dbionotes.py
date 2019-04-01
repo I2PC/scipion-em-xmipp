@@ -73,6 +73,9 @@ class XmippProt3DBionotes(ProtAnalysis3D):
         json_data = json.loads(response.text)
         url='http://3dbionotes.cnb.csic.es/programmatic/get/'+json_data['id']
         webbrowser.open_new(url)
+        fh=open(self._getExtraPath("id.txt"),"w")
+        fh.write(json_data['id'])
+        fh.close()
 
     #--------------------------- INFO functions --------------------------------
             
