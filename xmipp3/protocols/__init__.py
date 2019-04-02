@@ -115,3 +115,5 @@ from .protocol_metaprotocol_create_output import XmippMetaProtCreateOutput
 from .protocol_metaprotocol_discrete_heterogeneity_scheduler import XmippMetaProtDiscreteHeterogeneityScheduler # keep this after XmippMetaProtCreateSubset and XmippMetaProtCreateOutput
 
 from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
+from .protocol_local_ctf import XmippProtLocalCTF
+from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
