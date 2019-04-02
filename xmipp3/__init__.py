@@ -38,7 +38,7 @@ from .constants import XMIPP_HOME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.19.03b3'
+_currentVersion = '3.19.03b4'
 
 class Plugin(pyworkflow.em.Plugin):
     _homeVar = XMIPP_HOME
@@ -134,6 +134,8 @@ class Plugin(pyworkflow.em.Plugin):
                       % (env.getProcessors(), cls.getHome()))
 
         env.addPackage('xmippSrc', version=_currentVersion,
+                       # FIXME: adding 'v' before version to fix a package target (post-link)
+                       tar='xmippSrc-v'+_currentVersion+'.tgz',
                        commands=[(compileCmd, ["src/xmippViz/"+lastCompiled, "DONE"]),
                                  ("rm DONE ; src/xmipp/xmipp install %s" % cls.getHome(),
                                   targets+[cls.getHome('xmipp.bashrc'),
