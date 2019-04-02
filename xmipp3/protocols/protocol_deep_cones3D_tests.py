@@ -123,6 +123,7 @@ class XmippProtDeepCones3DTst(ProtRefine3D):
         self.lastIter = 0
         self.batchSize = 1024
         self.imgsFn = self._getExtraPath('input_imgs.xmd')
+        self.centerCones=[]
 
         self._insertFunctionStep("convertStep")
 
@@ -138,6 +139,7 @@ class XmippProtDeepCones3DTst(ProtRefine3D):
         for i in range(numConesRot):
             iniTilt = 0
             endTilt = stepTilt
+            self.centerCones.append([(endRot-iniRot)/2, (endTilt-iniTilt)/2])
             for j in range(numConesTilt):
                 if self.modelPretrain.get() is False:
                     self._insertFunctionStep("projectStep", 600, iniRot, endRot,
@@ -280,6 +282,30 @@ class XmippProtDeepCones3DTst(ProtRefine3D):
             Xdim, Ydim, _, _ = I.getDimensions()
             Xdim2 = Xdim / 2
             Ydim2 = Ydim / 2
+
+            # AJ aqui calcular la distancia angular entre particula y centro de cada cono
+            fileSoftLabels = open(self._getExtraPath('labelsSoft.txt'), "a")
+            for coneAngles in self.centerCones:
+                rot = mdIn.getValue(xmippLib.MDL_ANGLE_ROT, objId)
+                tilt = mdIn.getValue(xmippLib.MDL_ANGLE_TILT, objId)
+                rotCenterCone = coneAngles[0]
+                tiltCenterCone = coneAngles[1]
+                srot = math.sin(math.radians(rot))
+                crot = math.cos(math.radians(rot))
+                stilt = math.sin(math.radians(tilt))
+                ctilt = math.cos(math.radians(rot))
+                srotCone = math.sin(math.radians(rotCenterCone))
+                crotCone = math.cos(math.radians(rotCenterCone))
+                stiltCone = math.sin(math.radians(tiltCenterCone))
+                ctiltCone = math.cos(math.radians(tiltCenterCone))
+                aux = (stilt*crot*stiltCone*crotCone) + (stilt*srot*stiltCone*srotCone) + (ctilt*ctiltCone)
+                if aux<-1:
+                    aux=-1
+                elif aux>1:
+                    aux=1
+                dist = math.acos(aux)
+
+
 
             for i in range(Nrepeats):
                 psiDeg = np.random.uniform(-maxPsi, maxPsi)

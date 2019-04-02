@@ -27,7 +27,7 @@
 from os import remove
 from os.path import exists
 from pyworkflow import VERSION_1_2
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, IntParam
+from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, IntParam, BooleanParam
 from pyworkflow.utils.path import moveFile, cleanPattern
 from pyworkflow.em.protocol import ProtRefine3D
 from shutil import copy
@@ -68,25 +68,35 @@ class XmippProtDeepCones3DGT(ProtRefine3D):
         form.addParam('numEpochs', IntParam, label="Number of epochs for training",
                       default=10,
                       help="Number of epochs for training.")
-        form.addParam('numConesTilt', IntParam, label="Number of cones per 180 degrees",
-                      default=3,
-                      help="Number of cones per 180 degrees.")
+        form.addParam('spanConesTilt', IntParam, label="Span in degrees for every cone",
+                      default=45,
+                      help="Span in degrees for every cone.")
         form.addParam('numConesSelected', IntParam, label="Number of selected cones per image",
-                      default=2,
+                      default=1,
                       help="Number of selected cones per image.")
+        form.addParam('modelPretrain', BooleanParam, default = False,
+                      label='Choose your if you want to use pretrained models',
+                      help='Setting "yes" you can choose previously trained models. '
+                           'If you choose "no" new models will be trained.')
+        form.addParam('pretrainedModels', PointerParam,
+                      pointerClass=self.getClassName(),
+                      condition='modelPretrain==True',
+                      label='Set pretrained models',
+                      help='Choose the protocol where your models were trained. '
+                           'Be careful with using proper models for your new prediction.')
         form.addParallelSection(threads=0, mpi=8)
 
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self.lastIter = 0
-        self.batchSize = 1024
+        self.batchSize = 128 #1024
         self.imgsFn = self._getExtraPath('input_imgs.xmd')
         self.trainImgsFn = self._getExtraPath('train_input_imgs.xmd')
         
         self._insertFunctionStep("convertStep")
         self._insertFunctionStep("computeTrainingSet", 'projections')
         # Trainig steps
-        numConesTilt = int(self.numConesTilt)
+        numConesTilt = int(180/int(self.spanConesTilt))
         numConesRot = numConesTilt*2
         self.numCones = numConesTilt * numConesRot
         stepRot = int(360/numConesRot)
@@ -100,7 +110,9 @@ class XmippProtDeepCones3DGT(ProtRefine3D):
             for j in range(numConesTilt):
                 # self._insertFunctionStep("projectStep", 600, iniRot, endRot, iniTilt, endTilt, 'projections', counterCones+1)
                 self._insertFunctionStep("projectStep", 300, iniRot, endRot, iniTilt, endTilt, 'projectionsCudaCorr', counterCones + 1)
-                self._insertFunctionStep("generateExpImagesStep", 100, 'projections', 'projectionsExp', counterCones+1, False)
+                if self.modelPretrain.get() is False:
+                    self._insertFunctionStep("generateExpImagesStep", 10000, 'projections', 'projectionsExp', counterCones+1, False)
+                    #AJ posiblemente con alrededor de 8000 podria valer...
                 iniTilt +=stepTilt
                 endTilt +=stepTilt
                 counterCones+=1
@@ -146,7 +158,7 @@ class XmippProtDeepCones3DGT(ProtRefine3D):
         if self.newXdim != Xdim:
             self.runJob("xmipp_image_resize",
                         "-i %s -o %s --save_metadata_stack %s --fourier %d" %
-                        (self.imgsFn,
+                        (self.trainImgsFn,
                          self._getExtraPath('scaled_train_particles.stk'),
                          self._getExtraPath('scaled_train_particles.xmd'),
                          self.newXdim))
@@ -158,11 +170,11 @@ class XmippProtDeepCones3DGT(ProtRefine3D):
         ih.convert(self.inputVolume.get(), fnVol)
         Xdim = self.inputVolume.get().getDim()[0]
         if Xdim != self.newXdim:
-            self.runJob("xmipp_image_resize","-i %s --dim %d"%(fnVol,self.newXdim),numberOfMpi=1)
+            self.runJob("xmipp_image_resize","-i %s --fourier %d"%(fnVol,self.newXdim),numberOfMpi=1)
 
 
     def computeTrainingSet(self, nameTrain):
-        numConesTilt = int(self.numConesTilt)
+        numConesTilt = int(180/int(self.spanConesTilt))
         numConesRot = numConesTilt*2
         stepRot = int(360/numConesRot)
         stepTilt = int(180 / numConesTilt)
@@ -211,7 +223,7 @@ _noiseCoord   '0'
         self.runJob("xmipp_phantom_project","-i %s -o %s --method fourier 1 0.5 --params %s"%(fnVol,fnProjs,fnParams),numberOfMpi=1)
         cleanPattern(self._getExtraPath('uniformProjections'))
 
-    def generateExpImagesStep(self, Nrepeats, nameProj, nameExp, label, boolNoise):
+    def generateExpImagesStep(self, Nimgs, nameProj, nameExp, label, boolNoise):
 
         newXdim = readInfoField(self._getExtraPath(), "size",xmippLib.MDL_XSIZE)
         fnProj = self._getExtraPath(nameProj+"%d.xmd"%label)
@@ -226,6 +238,11 @@ _noiseCoord   '0'
         maxPsi = 180
         maxShift = round(newXdim / 10)
         idx=1
+        NimgsMd = mdIn.size()
+        Nrepeats = int(Nimgs / NimgsMd)
+        # if Nrepeats<10:
+        #     Nrepeats=10
+        print("Nrepeats", Nrepeats)
         for row in iterRows(mdIn):
             objId = row.getObjId()
             fnImg = mdIn.getValue(xmippLib.MDL_IMAGE, objId)
@@ -234,7 +251,6 @@ _noiseCoord   '0'
             Xdim, Ydim, _, _ = I.getDimensions()
             Xdim2 = Xdim / 2
             Ydim2 = Ydim / 2
-
             for i in range(Nrepeats):
                 psiDeg = np.random.uniform(-maxPsi, maxPsi)
                 psi = psiDeg * math.pi / 180.0
@@ -273,6 +289,10 @@ _noiseCoord   '0'
     def trainNClassifiers2ClassesStep(self, idx):
 
         modelFn = 'modelCone%d' % idx
+        if self.modelPretrain.get() is True:
+            copy(self.pretrainedModels.get()._getExtraPath(modelFn + '.h5'),
+                self._getExtraPath(modelFn + '.h5'))
+
         if not exists(self._getExtraPath(modelFn+'.h5')): #AJ no se si esto tiene mucho sentido o puede ser peligroso con modelos a medias de entrenamiento
             fnLabels = self._getExtraPath('labels.txt')
             fileLabels = open(fnLabels, "r")
@@ -407,10 +427,26 @@ _noiseCoord   '0'
 
         inputParticles = self.inputSet.get()
         fnOutputParticles = self._getExtraPath('outConesParticles.xmd')
+        # outputSetOfParticles = self._createSetOfParticles()
+        # outputSetOfParticles.copyInfo(inputParticles)
+        # readSetOfParticles(fnOutputParticles, outputSetOfParticles)
+        # self._defineOutputs(outputParticles=outputSetOfParticles)
+
+        Xdim = inputParticles.getXDim()
+        newXdim = readInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE)
+        if newXdim != Xdim:
+            self.runJob("xmipp_image_resize",
+                        "-i %s -o %s --save_metadata_stack %s --fourier %d" %
+                        (fnOutputParticles,
+                         self._getExtraPath('outConesParticlesScaled.stk'),
+                         self._getExtraPath('outConesParticlesScaled.xmd'),
+                         Xdim))
         outputSetOfParticles = self._createSetOfParticles()
         outputSetOfParticles.copyInfo(inputParticles)
-        readSetOfParticles(fnOutputParticles, outputSetOfParticles)
+        readSetOfParticles(self._getExtraPath('outConesParticlesScaled.xmd'),
+                           outputSetOfParticles)
         self._defineOutputs(outputParticles=outputSetOfParticles)
+
 
     #--------------------------- INFO functions --------------------------------
     def _summary(self):
