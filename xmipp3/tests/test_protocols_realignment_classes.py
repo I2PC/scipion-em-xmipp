@@ -40,7 +40,7 @@ except:
 # Number of mics to be processed
 NUM_MICS = 5
 
-class TestRealignmentClasses(BaseTest):
+class TestCenterParticles(BaseTest):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
@@ -118,7 +118,7 @@ class TestRealignmentClasses(BaseTest):
         return protClassify, numClasses
 
     def runRealign(self, inputClasses, inputMics):
-        protRealing = self.newProtocol(XmippProtReAlignClasses)
+        protRealing = self.newProtocol(XmippProtCenterParticles)
         protRealing.inputClasses.set(inputClasses)
         protRealing.inputMics.set(inputMics)
         self.launchProtocol(protRealing)

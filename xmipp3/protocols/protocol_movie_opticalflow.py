@@ -40,7 +40,7 @@ from pyworkflow.em.protocol import ProtAlignMovies
 from pyworkflow.em.protocol.protocol_align_movies import createAlignmentPlot
 
 from xmipp3.convert import writeMovieMd
-
+from xmipp3 import Plugin
 
 PLOT_CART = 0
 PLOT_POLAR = 1
@@ -139,7 +139,7 @@ class XmippProtOFAlignment(ProtAlignMovies):
         gpuId = self.gpuList.get()
         inputMd = self._getFnInMovieFolder(movie, 'input_movie.xmd')
         writeMovieMd(movie, inputMd, a0, aN, useAlignment=self.useAlignment)
-        
+
         args = '-i %s ' % inputMd
         args += '-o "%s" ' % self._getOutputShifts(movie)
         args += ' --frameRange %d %d ' % (0, aN - a0)
@@ -251,6 +251,23 @@ class XmippProtOFAlignment(ProtAlignMovies):
 
         if self.numberOfThreads > 1 and self.useGpu:
             errors.append("GPU and Parallelization can not be used together")
+
+        ofCpu = Plugin.getHome("bin", "xmipp_movie_optical_alignment_cpu")
+        ofGpu = Plugin.getHome("bin", "xmipp_movie_optical_alignment_gpu")
+        if not (exists(ofGpu) or exists(ofCpu)):
+            errors.append("It seems that Xmipp Optical Alignment is not installed. "
+                          "OpenCV should be installed in the system to compile it.\n"
+                          "Please, install OpenCV in your system and, then, "
+                          "re-install Xmipp by running 'scipion installb xmippSrc'.")
+        else:
+            if self.useGpu and not exists(ofGpu):
+                errors.append("It seems that Xmipp Optical Alignment has not been "
+                              "compiled with CUDA.\nPlease, try with *GPU=No*.\n"
+                              "Error: '%s' not found." % ofGpu)
+            if not self.useGpu and not exists(ofCpu):
+                errors.append("It seems that Xmipp Optical Alignment has been "
+                              "compiled with CUDA.\nPlease, try with *GPU=Yes*.\n"
+                              "Error: '%s' not found." % ofCpu)
 
         return errors
 

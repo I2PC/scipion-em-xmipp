@@ -37,7 +37,7 @@ from pyworkflow.utils.path import cleanPath
 
 import xmippLib
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes, xmippToLocation
-from xmipp3.utils import getMdSize
+from xmipp3.utils import getMdSize, validateDLtoolkit
 import xmipp3
 
 
@@ -59,9 +59,6 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
     def _defineParams(self, form):
 
         form.addSection('Input')
-        form.addParam('deepMsg', params.LabelParam, default=True,
-                      label='WARNING! You need to have installed '
-                            'Keras programs')
         form.addHidden(params.GPU_LIST, params.StringParam, default='',
                        expertLevel=cons.LEVEL_ADVANCED,
                        label="Choose GPU IDs",
@@ -89,10 +86,11 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                       'reprojections views')
 
         form.addParam('modelPretrain', params.BooleanParam, default = False,
-                      condition='model==%d'%ITER_PREDICT,label='Choose your '
-                      'own model', help='Setting "yes" '
-                      'you can choose your own model trained. If you choose'
-                      '"no" a general model pretrained will be assign')
+                      condition='model==%d'%ITER_PREDICT,
+                      label='Use a custom model',
+                      help='Setting "yes" you can choose your own model trained. '
+                           'If you choose "no" a general model pre-trained will '
+                           'be assign')
 
         # form.addParam('ownModel', params.PointerParam,
         #               pointerClass=self.getClassName(),
@@ -270,6 +268,16 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         summary = []
         summary.append("Particles denoised")
         return summary
+
+    def _validate(self):
+
+        assertModel = self.model.get()==ITER_PREDICT and not self.modelPretrain
+        errors = validateDLtoolkit(assertModel=assertModel,
+                                   model=('deepDenoising', 'PretrainModel.h5'),
+                                   errorMsg="Required with 'Predict' mode when "
+                                            "no custom model is provided.")
+
+        return errors
 
 
 class GAN(XmippProtDeepDenoising):
@@ -568,11 +576,8 @@ class GAN(XmippProtDeepDenoising):
             evaluate = self.generator.evaluate(self.noise, self.true)
             print "Validation =", evaluate
 
-            if len(self.validation)>0:
-                print("BBBBBBB", np.min(self.validation))
             if epoch > 500 and evaluate <= np.min(self.validation):
                 self.generatorNoParallel.save(self.dir2)
-            #AJ y que pasa si no se cumple esto???
 
             self.lossD.append(d_loss[0])
             self.lossG.append(g_loss)

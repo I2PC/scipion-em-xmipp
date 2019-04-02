@@ -26,7 +26,6 @@
 # **************************************************************************
 
 from pyworkflow.em import *
-from pyworkflow.protocol.launch import launch
 from pyworkflow.utils.path import *
 from pyworkflow.em.viewers.showj import launchSupervisedPickerGUI
 
@@ -53,7 +52,15 @@ class XmippProtParticlePicking(ProtParticlePicking, XmippProtocol):
         form.addParam('saveDiscarded', BooleanParam, default=False,
                       label='Save discarded particles',
                       help='Generates an output with '
-                           'the manually discarded particles.') 
+                           'the manually discarded particles.')
+        form.addParam('doInteractive', BooleanParam, default=True,
+                      label='Run in interactive mode',
+                      expertLevel=LEVEL_ADVANCED,
+                      help='If YES, you can pick particles in differents sessions.\n'
+                           'If NO, once an outputCoordinates is created, '
+                           'the protocol finishes. \n'
+                           '(the last can be useful when other protocol '
+                           'waits until this finish -internal scheduled-)')
               
     #--------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
@@ -65,7 +72,7 @@ class XmippProtParticlePicking(ProtParticlePicking, XmippProtocol):
         # Launch Particle Picking GUI
         if not self.importFolder.hasValue():
             self._insertFunctionStep('launchParticlePickGUIStep', micFn,
-                                      interactive=True)
+                                      interactive=self.doInteractive)
         else: # This is only used for test purposes
             self._insertFunctionStep('_importFromFolderStep')
             # Insert step to create output objects
@@ -94,6 +101,10 @@ class XmippProtParticlePicking(ProtParticlePicking, XmippProtocol):
         readSetOfCoordinates(posDir, self.inputMics, coordSet)
         self._defineOutputs(outputCoordinates=coordSet)
         self._defineSourceRelation(self.inputMicrographs, coordSet)
+
+        boxSize = Integer(coordSet.getBoxSize())
+        self._defineOutputs(boxsize=boxSize)
+        self._defineSourceRelation(self.inputMicrographs.get(), boxSize)
 
     def createDiscardedStep(self):
         posDir = self._getExtraPath()

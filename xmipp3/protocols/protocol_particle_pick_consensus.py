@@ -32,7 +32,7 @@ import os, time
 from math import sqrt
 import numpy as np
 
-from pyworkflow.object import Set, String
+from pyworkflow.object import Set, String, Pointer
 import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtParticlePicking
@@ -48,12 +48,12 @@ class XmippProtConsensusPicking(ProtParticlePicking):
     we consider N independent pickings. Then, a coordinate is considered
     to be a correct particle if M pickers have selected the same particle
     (within a radius in pixels specified in the form).
-    
+
     If you want to be very strict, then set M=N; that is, a coordinate
     represents a particle if it has been selected by all particles (this
     is the default behaviour). Then you may relax this condition by setting
     M=N-1, N-2, ...
-    
+
     If you want to be very flexible, set M=1, in this way it suffices that
     1 picker has selected the coordinate to be considered as a particle. Note
     that in this way, the cleaning of the dataset has to be performed by other
@@ -61,7 +61,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
     """
 
     _label = 'picking consensus'
-    
+
     def __init__(self, **args):
         ProtParticlePicking.__init__(self, **args)
         self.stepsExecutionMode = STEPS_SERIAL
@@ -84,16 +84,19 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                            "algorithms. Set to 1 to indicate that it suffices "
                            "that only 1 algorithm selects the particle")
 
-        form.addParallelSection(threads=4, mpi=0)
-        
+        # form.addParallelSection(threads=4, mpi=0)  # FIXME: It's not using
+                                                     #   more than one since
+                                       # self.stepsExecutionMode = STEPS_SERIAL
+
 #--------------------------- INSERT steps functions ---------------------------
     def _insertAllSteps(self):
         self.check = []
+        self.inputMics = 0
         for c in enumerate(self.inputCoordinates):
             self.check.append("")
         self.mics = []
         self.setOfCoords = []
-        self.inputs = min([coor.get() for coor in self.inputCoordinates])
+        self.inputs = self.inputCoordinates[0].get()#min([coor.get() for coor in ])
         coorSteps = self.insertNewCoorsSteps([])
         self._insertFunctionStep('createOutputStep',
                                  prerequisites=coorSteps, wait=True)
@@ -127,25 +130,26 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         self._checkNewOutput()
 
     def _checkNewInput(self):
-        self.streamClosed = True
         newMics = []
-        for idx, coor in enumerate(self.inputCoordinates):
-            coorSet = SetOfCoordinates(filename=coor.get().getFileName())
+        for idx, coordSet in enumerate(self.inputCoordinates):
+            coorSet = SetOfCoordinates(filename=coordSet.get().getFileName())
             coorSet._xmippMd = String()
             coorSet.loadAllProperties()
-            self.streamClosed = self.streamClosed and coorSet.isStreamClosed()
+            self.streamClosed = coorSet.isStreamClosed()
             coorSet.close()
             if self.check[idx] == "":
                 newMics.append(
-                    [c.clone() for c in coor.get().getMicrographs()])
+                    [c.clone() for c in coordSet.get().getMicrographs()])
             else:
                 newMics.append([c.clone() for c in
-                           coor.get().getMicrographs().iterItems(
-                               orderBy='creation', where='creation>"' + str(
-                                   self.check[idx]) + '"')])
-            if len(newMics[idx]) < 1: continue
+                                coordSet.get().getMicrographs().iterItems(
+                                    orderBy='creation',
+                                    where='creation>"' + str(
+                                        self.check[idx]) + '"')])
+            if len(newMics[idx]) < 1:
+                continue
             else:
-                for p in coor.get().getMicrographs().iterItems(
+                for p in coordSet.get().getMicrographs().iterItems(
                         orderBy='creation', direction='DESC'):
                     self.check[idx] = p.getObjCreation()
                     break
@@ -153,6 +157,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         newMics[:] = [item for item in newMics if len(item) > 0]
         if len(newMics) > 0:
             fDeps = self.insertNewCoorsSteps(min(newMics, key=len))
+            self.inputMics = self.inputMics + len(min(newMics, key=len))
             outputStep = self._getFirstJoinStep()
             if outputStep is not None:
                 outputStep.addPrerequisites(*fDeps)
@@ -161,12 +166,21 @@ class XmippProtConsensusPicking(ProtParticlePicking):
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
-        streamMode = Set.STREAM_CLOSED \
-            if getattr(self, 'finished', False) else Set.STREAM_OPEN
-        outSet = self._loadOutputSet(SetOfCoordinates, 'coordinates.sqlite')
-        self._updateOutputSet('consensusCoordinates', outSet, streamMode)
         self.finished = self.streamClosed and \
-                        (len(self.inputs.getMicrographs()) == len(self.mics))
+                        (self.inputMics == len(self.mics))
+        streamMode = Set.STREAM_CLOSED if getattr(self, 'finished', False) \
+                     else Set.STREAM_OPEN
+        if len(self.setOfCoords) > 0:
+            outSet = self._loadOutputSet(SetOfCoordinates, 'coordinates.sqlite')
+            for item in self.setOfCoords:
+                outSet.append(item.clone())
+            # outSet.copyItems(self.setOfCoords)
+            self.setOfCoords = []
+            self._updateOutputSet('consensusCoordinates', outSet, streamMode)
+            if self.firstTime:
+                for inCorrds in self.inputCoordinates:
+                    self._defineTransformRelation(inCorrds, outSet)
+            outSet.close()
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
@@ -174,93 +188,79 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         else:
             return
 
-
     def _loadOutputSet(self, SetClass, baseName):
         setFile = self._getPath(baseName)
+
         if os.path.exists(setFile):
+            self.firstTime = False
             outputSet = SetClass(filename=setFile)
+            outputSet.loadAllProperties()
             outputSet.enableAppend()
         else:
+            self.firstTime = True
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
+            outputSet.setBoxSize(self.inputs.getBoxSize())
 
-        outputSet.setBoxSize(self.inputs.getBoxSize())
-        outputSet.setMicrographs(self.inputs.getMicrographs())
-        outputSet.copyInfo(self.inputs)
-        outputSet.copyItems(self.setOfCoords)
-        self.setOfCoords = []
+        inMicsPointer = Pointer(self.getMapper().getParent(
+                                                  self.inputs.getMicrographs()),
+                                extended='outputMicrographs')
+        outputSet.setMicrographs(inMicsPointer)
+
         return outputSet
 
-
-    def _updateOutputSet(self, outputName, outputSet, state=Set.STREAM_OPEN):
-        outputSet.setStreamState(state)
-        if self.hasAttribute(outputName):
-            outputSet.write()  # Write to commit changes
-            outputAttr = getattr(self, outputName)
-            # Copy the properties to the object contained in the protocol
-            outputAttr.copy(outputSet, copyId=False)
-            # Persist changes
-            self._store(outputAttr)
-        else:
-            self._defineOutputs(**{outputName: outputSet})
-            self._store(outputSet)
-
-        # Close set databaset to avoid locking it
-        outputSet.close()
-
-    
     def calculateConsensusStep(self, micrograph):
         for coordinates in self.inputCoordinates:
             while len([x.getPosition() for x in
                        coordinates.get().iterCoordinates(
-                               micrograph.getObjId())]) < 1:
+                           micrograph.getObjId())]) < 1:
                 time.sleep(1)
 
         # Take the sampling rates
         Tm = []
         for coordinates in self.inputCoordinates:
             Tm.append(coordinates.get().getMicrographs().getSamplingRate())
-        
+
         # Get all coordinates for this micrograph
         coords = []
         Ncoords = 0
-        n=0
+        n = 0
         for coordinates in self.inputCoordinates:
             coordArray = np.asarray([x.getPosition() for x in
                                      coordinates.get().iterCoordinates(
                                          micrograph.getObjId())], dtype=float)
-            coordArray *= float(Tm[n])/float(Tm[0])
-            coords.append(np.asarray(coordArray,dtype=int))
+            coordArray *= float(Tm[n]) / float(Tm[0])
+            coords.append(np.asarray(coordArray, dtype=int))
             Ncoords += coordArray.shape[0]
-            n+=1
-        
-        allCoords = np.zeros([Ncoords,2])
+            n += 1
+
+        allCoords = np.zeros([Ncoords, 2])
         votes = np.zeros(Ncoords)
-        
+
         # Add all coordinates in the first method
         N0 = coords[0].shape[0]
         inAllMicrographs = self.consensus <= 0 or self.consensus == len(
             self.inputCoordinates)
-        if N0==0 and inAllMicrographs:
+        if N0 == 0 and inAllMicrographs:
             return
-        elif N0>0:
-            allCoords[0:N0,:] = coords[0]
+        elif N0 > 0:
+            allCoords[0:N0, :] = coords[0]
             votes[0:N0] = 1
-        
+
         # Add the rest of coordinates
         Ncurrent = N0
         for n in range(1, len(self.inputCoordinates)):
             for coord in coords[n]:
-                if Ncurrent>0:
-                    dist = np.sum((coord - allCoords[0:Ncurrent])**2, axis=1)
+                if Ncurrent > 0:
+                    dist = np.sum((coord - allCoords[0:Ncurrent]) ** 2, axis=1)
                     imin = np.argmin(dist)
                     if sqrt(dist[imin]) < self.consensusRadius:
                         newCoord = (votes[imin] * allCoords[imin,] + coord) / (
-                        votes[imin] + 1)
+                            votes[imin] + 1)
                         allCoords[imin,] = newCoord
                         votes[imin] += 1
                     else:
-                        allCoords[Ncurrent,:] = coord
+                        allCoords[Ncurrent, :] = coord
                         votes[Ncurrent] = 1
                         Ncurrent += 1
                 else:
@@ -273,13 +273,17 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             consensus = len(self.inputCoordinates)
         else:
             consensus = self.consensus.get()
-        consensusCoords = allCoords[votes>=consensus,:]
+        if self.consensus == 0:
+            consensusCoords = allCoords[votes >= consensus, :]
+        else:
+            consensusCoords = allCoords[votes == consensus, :]
         try:
             jaccardIdx = float(len(consensusCoords)) / (
-            float(len(allCoords)) / len(self.inputCoordinates))
+                float(len(allCoords)) / len(self.inputCoordinates))
             # COSS: Possible problem with concurrent writes
             with open(self._getExtraPath('jaccard.txt'), "a") as fhJaccard:
-                fhJaccard.write("%d %f\n"%(micrograph.getObjId(), jaccardIdx))
+                fhJaccard.write(
+                    "%d %f\n" % (micrograph.getObjId(), jaccardIdx))
         except:
             pass
         # Write the consensus file only if there

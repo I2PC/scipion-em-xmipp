@@ -43,8 +43,7 @@ class XmippProtAlignVolume(em.ProtAlignVolume):
     """ 
     Aligns a set of volumes using cross correlation 
     or a Fast Fourier method. 
-    
-    *Note:* Fast Fourier requires compilation of Xmipp with --cltomo flag
+
      """
     _label = 'align volume'
     nVols = 0

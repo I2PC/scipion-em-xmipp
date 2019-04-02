@@ -30,6 +30,7 @@ from .plotter import XmippPlotter
 from .viewer_cl2d import XmippCL2DViewer
 from .viewer_cltomo import XmippCLTomoViewer
 from .viewer_ctf_consensus import XmippCTFConsensusViewer
+from .viewer_deep_consensus import XmippDeepConsensusViewer
 from .viewer_ml2d import XmippML2DViewer
 from .viewer_mltomo import XmippMLTomoViewer
 from .viewer_movie_alignment import XmippMovieAlignViewer

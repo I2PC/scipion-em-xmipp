@@ -216,7 +216,7 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
                 break
             volCounter += 1
 
-        pdb = PdbFile(self._getPath('pseudoatoms.pdb'), pseudoatoms=True)
+        pdb = AtomStruct(self._getPath('pseudoatoms.pdb'), pseudoatoms=True)
         self._defineOutputs(outputPdb=pdb)
         modes = NormalModes(filename=self._getPath('modes.xmd'))
         self._defineOutputs(outputModes=modes)

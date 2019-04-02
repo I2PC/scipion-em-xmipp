@@ -33,11 +33,9 @@ import matplotlib.colors as mcolors
 from pyworkflow.utils import getExt, removeExt
 from os.path import abspath
 
-from pyworkflow.gui.plotter import Plotter
-from pyworkflow.em.viewers import LocalResolutionViewer
-from pyworkflow.em.constants import (COLOR_JET, COLOR_TERRAIN,
- COLOR_GIST_EARTH, COLOR_GIST_NCAR, COLOR_GNU_PLOT, COLOR_GNU_PLOT2,
- COLOR_OTHER, COLOR_CHOICES, AX_X, AX_Y, AX_Z)
+from pyworkflow.em.viewers import LocalResolutionViewer, EmPlotter
+from pyworkflow.em.constants import (COLOR_JET, COLOR_OTHER, COLOR_CHOICES,
+                                     AX_Z)
 from pyworkflow.protocol.params import (LabelParam, StringParam, EnumParam,
                                         IntParam, LEVEL_ADVANCED)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
@@ -49,6 +47,10 @@ from .plotter import XmippPlotter
 from xmipp3.protocols.protocol_resolution_monogenic_signal import \
         XmippProtMonoRes, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM, \
         OUTPUT_RESOLUTION_FILE_CHIMERA, CHIMERA_RESOLUTION_VOL
+
+from pyworkflow.em.data import *
+from pyworkflow.em.convert import Ccp4Header
+from pyworkflow.em.viewers.viewer_chimera import Chimera
 
 
 binaryCondition = ('(colorMap == %d) ' % (COLOR_OTHER))
@@ -189,26 +191,21 @@ class XmippMonoResViewer(LocalResolutionViewer):
         x_axis = []
         y_axis = []
 
-        i = 0
         for idx in md:
             x_axis_ = md.getValue(MDL_X, idx)
-            if i==0:
-                x0 = x_axis_
-            elif i==1:
-                x1 = x_axis_
             y_axis_ = md.getValue(MDL_COUNT, idx)
 
-            i+=1
             x_axis.append(x_axis_)
             y_axis.append(y_axis_)
-        delta = x1-x0
-        fig = plt.figure()
-        plt.bar(x_axis, y_axis, width = delta)
-        plt.title("Resolutions Histogram")
-        plt.xlabel("Resolution (A)")
-        plt.ylabel("Counts")
-        
-        return [Plotter(figure2 = fig)]
+
+        plotter = EmPlotter()
+        plotter.createSubPlot("Resolutions Histogram",
+                              "Resolution (A)", "# of Counts")
+        barwidth = (x_axis[-1] - x_axis[0])/len(x_axis)
+
+        plotter.plotDataBar(x_axis, y_axis, barwidth)
+
+        return [plotter]
 
     def _getAxis(self):
         return self.getEnumText('sliceAxis')
@@ -230,6 +227,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
         fnRoot = "extra/"
         scriptFile = self.protocol._getPath('Chimera_resolution.cmd')
         fhCmd = open(scriptFile, 'w')
+
         imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
         img = ImageHandler().read(imageFile)
         imgData = img.getData()
@@ -244,28 +242,49 @@ class XmippMonoResViewer(LocalResolutionViewer):
             #fhCmd.write("open %s\n" % (fnRoot+FN_MEAN_VOL)) #Perhaps to check 
             #the use of mean volume is useful
             fnbase = removeExt(self.protocol.inputVolume.get().getFileName())
-            ext = getExt(self.protocol.inputVolume.get().getFileName())
-            fninput = abspath(fnbase + ext[0:4])
-            fhCmd.write("open %s\n" % fninput)
+            inputVolume = self.protocol.inputVolume.get()
         else:
             fnbase = removeExt(self.protocol.inputVolumes.get().getFileName())
-            ext = getExt(self.protocol.inputVolumes.get().getFileName())
-            fninput = abspath(fnbase + ext[0:4])
-            fhCmd.write("open %s\n" % fninput)
+            inputVolume = self.protocol.inputVolumes.get()
 
+        ext = getExt(inputVolume.getFileName())
+        inputSmprt = inputVolume.getSamplingRate()
+        fninput = abspath(fnbase + ext[0:4])
+
+        dim = inputVolume.getDim()[0]
+        tmpFileName = os.path.abspath(self.protocol._getTmpPath("axis.bild"))
+        Chimera.createCoordinateAxisFile(dim,
+                                         bildFileName=tmpFileName,
+                                         sampling=inputSmprt)
+        fhCmd.write("open %s\n" % tmpFileName)
+        fhCmd.write("cofr 0,0,0\n")  # set center of coordinates
+        fhCmd.write("open %s\n" % fninput)
         fhCmd.write("open %s\n" % (fnRoot + CHIMERA_RESOLUTION_VOL))
-        if self.protocol.halfVolumes.get() is True:
-            smprt = self.protocol.inputVolume.get().getSamplingRate()
-        else:
-            smprt = self.protocol.inputVolumes.get().getSamplingRate()
-        fhCmd.write("volume #0 voxelSize %s\n" % (str(smprt)))
-        fhCmd.write("volume #1 voxelSize %s\n" % (str(smprt)))
-        fhCmd.write("vol #1 hide\n")
+        imageFileVolume = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
+        header = Ccp4Header(imageFileVolume, readHeader=True)
+
+
+        x, y, z = header.getSampling()
+        imageFileSmprt = x
+
+        # input vol(s) origin coordinates
+        x_input, y_input, z_input = inputVolume.getShiftsFromOrigin()
+        fhCmd.write("volume #1 voxelSize %f origin %0.2f,%0.2f,%0.2f\n"
+                    % (inputSmprt, x_input, y_input, z_input))
+
+        # image vol origin coordinates
+        x_output, y_output, z_output = header.getOrigin()
+        fhCmd.write("volume #2 voxelSize %f origin %0.2f,%0.2f,%0.2f\n"
+                    % (imageFileSmprt, x_output, y_output, z_output))
+
+        #### Check if the coordinate system works for a set of volumes
+
+        fhCmd.write("volume #2 hide\n")
         
         scolorStr = '%s,%s:' * numberOfColors
         scolorStr = scolorStr[:-1]
 
-        line = ("scolor #0 volume #1 perPixel false cmap " 
+        line = ("scolor #1 volume #2 perPixel false cmap "
                 + scolorStr + "\n") % colorList
         fhCmd.write(line)
 

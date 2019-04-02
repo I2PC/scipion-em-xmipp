@@ -39,6 +39,7 @@ from .protocol_apply_transformation_matrix import XmippProtApplyTransformationMa
 from .protocol_break_symmetry import XmippProtAngBreakSymmetry
 from .protocol_cl2d_align import XmippProtCL2DAlign
 from .protocol_cl2d import XmippProtCL2D
+from .protocol_classify_kmeans2d import XmippProtKmeansClassif2D
 from .protocol_cltomo import XmippProtCLTomo
 from .protocol_classification_gpuCorr import XmippProtGpuCrrCL2D
 from .protocol_classification_gpuCorr_semi import XmippProtStrGpuCrrSimple
@@ -53,10 +54,8 @@ from .protocol_ctf_correct_wiener2d import XmippProtCTFCorrectWiener2D
 from .protocol_consensus_classes3D import XmippProtConsensusClasses3D
 from .protocol_subtract_projection import XmippProtSubtractProjection
 from .protocol_denoise_particles import XmippProtDenoiseParticles
-from .protocol_deep_alignment3D import XmippProtDeepAlignment3D
-from .protocol_deep_correlation3D import XmippProtDeepCorrelation3D
-from .protocol_deep_cones3D import XmippProtDeepCones3D
-from .protocol_eliminate_empty_particles import XmippProtEliminateEmptyParticles
+from .protocol_eliminate_empty_images import XmippProtEliminateEmptyParticles, \
+                                             XmippProtEliminateEmptyClasses
 from .protocol_extract_particles import XmippProtExtractParticles
 from .protocol_extract_particles_movies import XmippProtExtractMovieParticles
 from .protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
@@ -75,6 +74,8 @@ from .protocol_multireference_alignability import XmippProtMultiRefAlignability
 from .protocol_normalize_strain import XmippProtNormalizeStrain
 from .protocol_particle_pick_automatic import XmippParticlePickingAutomatic
 from .protocol_particle_pick_consensus import XmippProtConsensusPicking
+from .protocol_pick_noise import XmippProtPickNoise
+from .protocol_particle_boxsize import XmippProtParticleBoxsize
 from .protocol_particle_pick import XmippProtParticlePicking
 from .protocol_particle_pick_pairs import XmippProtParticlePickingPairs
 from .protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
@@ -94,6 +95,8 @@ from .protocol_resolution_monotomo import XmippProtMonoTomo
 from .protocol_rotational_spectra import XmippProtRotSpectra
 from .protocol_rotational_symmetry import XmippProtRotationalSymmetry
 from .protocol_screen_particles import XmippProtScreenParticles
+from .protocol_screen_deepConsensus import XmippProtScreenDeepConsensus, XmippProtDeepConsSubSet
+from .protocol_screen_deeplearning import XmippProtScreenDeepLearning
 from .protocol_solid_angles import XmippProtSolidAngles
 from .protocol_split_volume import XmippProtSplitvolume
 from .protocol_trigger_data import XmippProtTriggerData
@@ -111,6 +114,11 @@ from .protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
 from .protocol_metaprotocol_create_output import XmippMetaProtCreateOutput
 from .protocol_metaprotocol_discrete_heterogeneity_scheduler import XmippMetaProtDiscreteHeterogeneityScheduler # keep this after XmippMetaProtCreateSubset and XmippMetaProtCreateOutput
 
+from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
+
 from .protocol_deep_similarity_cones3D import XmippProtDeepSimilarityCones3D
 from .protocol_deep_cones3D_highresGT import XmippProtDeepCones3DGT
 from .protocol_deep_cones3D_tests import XmippProtDeepCones3DTst
+from .protocol_deep_alignment3D import XmippProtDeepAlignment3D
+from .protocol_deep_correlation3D import XmippProtDeepCorrelation3D
+from .protocol_deep_cones3D import XmippProtDeepCones3D
