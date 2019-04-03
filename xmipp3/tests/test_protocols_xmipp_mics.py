@@ -312,7 +312,8 @@ class TestXmippBoxsize(TestXmippBase):
         protCTF.inputMicrographs.set(self.protImport.outputMicrographs)
         self.proj.launchProtocol(protCTF, wait=True)
         self.assertIsNotNone(protCTF.boxsize, "Boxsize has not been produced.")
-        self.assertAlmostEquals(protCTF.boxsize.get(), 50, delta=10)
+        self.assertAlmostEquals(protCTF.boxsize.get(), 50, delta=20,
+                                msg='Wrong estimated boxsize.')
 
 
 class TestXmippAutomaticPicking(TestXmippBase):
