@@ -1,66 +1,22 @@
-import numpy as np
 import pyworkflow.em.metadata as md
 import xmippLib
+import numpy as np
+import random
+
+from sklearn.utils import shuffle
+from sklearn.cross_validation import train_test_split
+from .augmentators import (_random_flip_leftright, _random_flip_updown, _mismatch_projection,
+                          _random_90degrees_rotation, _random_rotation,generateEmptyParticlesFunction)
+
 
 BATCH_SIZE= 16
-def getDataGenerator( imgsMd, masksMd, augmentData=True, nEpochs=-1, isTrain=True, valFraction=0.1, batchSize= BATCH_SIZE): 
-  from sklearn.utils import shuffle
-  from sklearn.cross_validation import train_test_split
-  import random, scipy
-  def _random_flip_leftright( batchX, batchY):
-    for i in range(batchX.shape[0]):
-      if bool(random.getrandbits(1)):
-        batchX[i] = np.fliplr(batchX[i])
-        batchY[i] = np.fliplr(batchY[i])
-    return batchX, batchY
+def getDataGenerator( imgsMdXmd, masksMdXmd, augmentData=True, nEpochs=-1, isTrain=True, valFraction=0.1, 
+                      batchSize= BATCH_SIZE, doTanhNormalize=False, simulateEmptyParts=True, addMismatch=False): 
 
-  def _random_flip_updown( batchX, batchY):
-    for i in range(batchX.shape[0]):
-      if bool(random.getrandbits(1)):
-        batchX[i] = np.flipud(batchX[i])
-        batchY[i] = np.flipud(batchY[i])
-    return batchX, batchY
-
-  def _random_90degrees_rotation( batchX, batchY, rotations=[0, 1, 2, 3]):
-    for i in range(batchX.shape[0]):
-      num_rotations = random.choice(rotations)
-      batchX[i] = np.rot90(batchX[i], num_rotations)
-      batchY[i] = np.rot90(batchY[i], num_rotations)
-    return batchX, batchY
-
-  def _random_rotation( batchX, batchY, max_angle=25.):
-    for i in range(batchX.shape[0]):
-      if bool(random.getrandbits(1)):
-        # Random angle
-        angle = random.uniform(-max_angle, max_angle)
-        batchX[i] = scipy.ndimage.interpolation.rotate(batchX[i], angle,reshape=False, mode="reflect")
-        batchY[i] = scipy.ndimage.interpolation.rotate(batchY[i], angle,reshape=False, mode="reflect")
-    return batchX, batchY
-
-  def _random_blur( batchX, batchY, sigma_max):
-    for i in range(batchX.shape[0]):
-      if bool(random.getrandbits(1)):
-        # Random sigma
-        sigma = random.uniform(0., sigma_max)
-        batchX[i] = scipy.ndimage.filters.gaussian_filter(batchX[i], sigma)
-        batchY[i] = scipy.ndimage.filters.gaussian_filter(batchY[i], sigma)
-    return batchX, batchY
-
-  augmentFuns= [_random_flip_leftright, _random_flip_updown, _random_90degrees_rotation, _random_rotation]
-  if augmentData:
-    def augmentBatch( batchX, batchY):
-      for fun in augmentFuns:
-        if bool(random.getrandbits(1)):
-          batchX, batchY= fun(batchX, batchY)
-      return batchX, batchY
-  else:
-    def augmentBatch( batchX, batchY): return batchX, batchY
-
-
-  if nEpochs<1:
+  if nEpochs<1: 
     nEpochs= 9999999
-  mdImgs  = md.MetaData(imgsMd)
-  mdMasks  = md.MetaData(masksMd)  
+  mdImgs  = md.MetaData(imgsMdXmd)
+  mdMasks  = md.MetaData(masksMdXmd)  
   nImages= int(mdImgs.size())
 
   stepsPerEpoch= nImages//batchSize
@@ -71,6 +27,22 @@ def getDataGenerator( imgsMd, masksMd, augmentData=True, nEpochs=-1, isTrain=Tru
   
   I.read( imgFnames[0] )
   shape= I.getData().shape+ (1,)
+  
+
+  if augmentData:
+    augmentFuns= [_random_flip_leftright, _random_flip_updown, _random_90degrees_rotation, _random_rotation ]
+    if simulateEmptyParts==True:
+      augmentFuns+= [generateEmptyParticlesFunction(shape, prob=0.2)]
+    if addMismatch==True:
+      augmentFuns+= [_mismatch_projection]
+    def augmentBatch( batchX, batchY):
+      for fun in augmentFuns:
+        if bool(random.getrandbits(1)):
+          batchX, batchY= fun(batchX, batchY)
+      return batchX, batchY
+  else:
+    def augmentBatch( batchX, batchY): return batchX, batchY
+    
   if valFraction>0:
     (imgFnames_train, imgFnames_val, maskFnames_train,
      maskFnames_val) = train_test_split(imgFnames, maskFnames, test_size=valFraction, random_state=121)  
@@ -90,9 +62,15 @@ def getDataGenerator( imgsMd, masksMd, augmentData=True, nEpochs=-1, isTrain=Tru
       n=0
       for fnImageImg, fnImageMask in zip(imgFnames, maskFnames):
         I.read(fnImageImg)
-        batchStack[n,...]= np.expand_dims(I.getData(),-1)
-        I.read(fnImageMask)
-        batchLabels[n,...]= np.expand_dims(I.getData(),-1)
+        if doTanhNormalize:
+          batchStack[n,...]= normalization(np.expand_dims(I.getData(), -1), use0_1_norm=False)
+          I.read(fnImageMask)
+          batchLabels[n,...]= normalization(np.expand_dims(I.getData(), -1), use0_1_norm=False)
+        else:
+          batchStack[n,...]= np.expand_dims(I.getData(),-1)
+          I.read(fnImageMask)
+          batchLabels[n,...]= np.expand_dims(I.getData(),-1)
+        
         n+=1
         if n>=batchSize:
           yield augmentBatch(batchStack, batchLabels)
@@ -114,37 +92,13 @@ def extractNBatches(valIterator, maxBatches=-1):
       break
   return ( np.concatenate(x_val, axis=0), np.concatenate(y_val, axis=0 ))
 
-def normalization( image, nType='mean', reshape=True):
-
-  NormalizedImage = []
-  for im in image:
-      if nType == 'mean':
-          Imnormalize = (im - np.mean(im)) / np.std(im)
-
-      if nType == -1:
-          Imnormalize = 2 * (im - np.min(im)) / (
-                  np.max(im) - np.min(im)) - 1
-
-      if nType == 1:
-          Imnormalize = (im - np.min(im)) / (
-                  np.max(im) - np.min(im))
-
-      if nType == 'RGB':
-          Imnormalize = np.floor(im * 255)
-
-      NormalizedImage.append(Imnormalize)
-
-  NormalizedImage = np.array(NormalizedImage).astype('float')
-  if reshape:
-      if len(np.shape(NormalizedImage)) > 2:
-          NormalizedImage = NormalizedImage.reshape(
-              len(NormalizedImage), NormalizedImage.shape[1],
-              NormalizedImage.shape[2], 1)
-      else:
-          NormalizedImage = NormalizedImage.reshape(1,
-                                                    NormalizedImage.shape[
-                                                        0],
-                                                    NormalizedImage.shape[
-                                                        1], 1)
-
-  return NormalizedImage
+def normalization( img, use0_1_norm=True):
+  normData= (img -np.min(img))/ (np.max(img)-np.min(img))
+  if not use0_1_norm:
+    normData= 2*normData -1
+  return normData
+  
+def normalizeImgs(batch_img, use0_1_norm=True):
+  for i in range(batch_img.shape[0]):
+    batch_img[i]= normalization(batch_img[i], use0_1_norm)
+  return batch_img

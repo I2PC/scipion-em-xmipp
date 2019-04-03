@@ -27,7 +27,6 @@
 
 import sys, os
 import numpy as np
-import matplotlib.pyplot as plt
 
 from pyworkflow import VERSION_2_0
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
@@ -52,11 +51,15 @@ MODEL_TYPE_GAN = 0
 MODEL_TYPE_UNET = 1
 
 
-TRAINING_DATA_MODE = ["Particles", "SyntheticFromProjections", "Both"]
-TRAINING_DATA_MODE_PARTS = 0
-TRAINING_DATA_MODE_SYN_PROJ = 1
-TRAINING_DATA_MODE_BOTH = 2
+TRAINING_DATA_MODE = ["ParticlesAndSyntheticNoise", "OnlyParticles"]
+TRAINING_DATA_MODE_SYNNOISE = 0
+TRAINING_DATA_MODE_PARTS = 1
 
+
+TRAINING_LOSS = [ "MSE", "PerceptualLoss", "Both"]
+TRAINING_LOSS_MSE = 0
+TRAINING_LOSS_PERCEPTUAL = 1
+TRAINING_LOSS_BOTH = 2
 
 class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
@@ -82,7 +85,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                             
         form.addParam('modelType', params.EnumParam,
                       choices=MODEL_TYPES,
-                      default=MODEL_TYPE_GAN,
+                      default=MODEL_TYPE_UNET,
                       label='Select model type',
                       help='If you set to *%s*, GAN will be employed '
                            'employed. If you set to *%s* U-Net will be used instead'
@@ -127,33 +130,58 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                       'predicting')
 
         form.addParam('imageSize', params.IntParam,
-                      label='Images size',
-                      default=64, help='It is recommended to use small sizes '
-                                        'to have a faster training. The size '
-                                        'must be even. Using high sizes '
-                                        'several GPUs are required' )
-
+                      label='Scale images to (px)',
+                      default=128, help='Scale particles to desired size to improve training'
+                                        'The recommended particle size is 128 px. The size must be even.'
+                                         'Do not use loss=perceptualLoss or loss=Both if  96< size <150')
 
         form.addSection(label='Training')
         
         form.addParam('nEpochs', params.FloatParam,
-                      label="Number of epochs", default=5.0,
-                      help='Number of epochs for neural network training.')
+                      label="Number of epochs", default=25.0,
+                      help='Number of epochs for neural network training. GAN requires much '
+                           'more epochs (>100) to obtain succesfull results')
                       
         form.addParam('learningRate', params.FloatParam,
                       label="Learning rate", default=1e-4,
                       help='Learning rate for neural network training')
 
-        form.addParam('trainingSetType', params.EnumParam, choices=TRAINING_DATA_MODE,
-                       default=TRAINING_DATA_MODE_BOTH,
-#                       expertLevel=cons.LEVEL_ADVANCED,
-                       condition='modelType==%d'%MODEL_TYPE_GAN,
-                       label='Select how to generate training set',
-                       help='*SyntheticFromProjections*: Train using synthetic data obtained from projections\n'
-                            'or\n*Particles*: Train using the noisy particles directly\n'
-                            'or\n*Both*: Train using both strategies')
+
+        form.addParam('modelDepth', params.IntParam, default=4,
+                       condition='modelMode==%d'%ITER_TRAIN, expertLevel=cons.LEVEL_ADVANCED,
+                       label='Model depth',
+                       help='Indicate the model depth. For 128-64 px images, 4 is the recommend value. '
+                            ' larger images may require bigger models') 
                             
-                      
+        form.addParam('trainingSetType', params.EnumParam, choices=TRAINING_DATA_MODE,
+                       default=TRAINING_DATA_MODE_SYNNOISE, expertLevel=cons.LEVEL_ADVANCED,
+                       label='Select how to generate training set',
+                       help='*ParticlesAndSyntheticNoise*: Train using particles and synthetic noise\n'
+                            'or\n*OnlyParticles*: using only particles\n'
+                            'or\n*Both*: Train using both strategies')
+                          
+        form.addParam('trainingLoss', params.EnumParam, choices=TRAINING_LOSS,
+                       default=TRAINING_LOSS_BOTH, expertLevel=cons.LEVEL_ADVANCED,
+                       label='Select loss for training',
+                       help='*MSE*: Train using mean squered error'
+                            'or\n*PerceptualLoss*: Train using DeepConsensus perceptual loss\n'
+                            'or\n*Both*: Train using both DeepConsensus perceptual loss and mean squered error\n')                                                   
+                          
+                            
+        form.addParam('numberOfDiscVsGenUpdates', params.IntParam, default=5,
+                       condition='modelType==%d'%MODEL_TYPE_GAN, expertLevel=cons.LEVEL_ADVANCED,
+                       label='D/G trainig ratio',
+                       help='Indicate the number of times the discriminator is trained for each '
+                            'generator training step. If discriminator loss is going to 0, make it '
+                            'smaller, whereas if the discriminator is not training, make it bigger')                           
+
+        form.addParam('loss_logWeight', params.FloatParam, default=3, expertLevel=cons.LEVEL_ADVANCED,
+                       condition='modelType==%d'%MODEL_TYPE_GAN,
+                       label='D/G loss ratio',
+                       help='Indicate the 10^lossRatio times that the generator loss is stronger than '
+                            ' the discriminator loss. If discriminator loss is going to 0, make it '
+                            'smaller, whereas if the generator is not training, make it bigger')    
+                            
         form.addParallelSection(threads=2, mpi=0)
 
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -169,6 +197,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         deps+= [ret]
         ret= self._insertFunctionStep('createOutputStep', prerequisites=deps)
         deps+= [ret]
+        
     def preprocessData(self):
         if self.modelMode.get() == ITER_PREDICT and self.modelType.get() == MODEL_TYPE_UNET and not self.modelPretrain:
           raise ValueError("Predict directly with UNET is not implemented yet")
@@ -193,9 +222,14 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         modelFname = self._getPath('ModelTrained.h5')
         ModelClass= getModelClass( MODEL_TYPES[self.modelType.get()], self.gpuList.get())
          
-        builder_args= {"boxSize":self.imageSize.get(), "saveModelDir":modelFname, "gpuList":self.gpuList.get()}
+        builder_args= {"boxSize":self.imageSize.get(), "saveModelFname":modelFname, 
+                       "modelDepth": self.modelDepth.get(), "gpuList":self.gpuList.get(),
+                       "generatorLoss": TRAINING_LOSS[self.trainingLoss.get()],
+                       "trainingDataMode": TRAINING_DATA_MODE[self.trainingSetType.get()] }
         if self.modelType.get() == MODEL_TYPE_GAN:
-          builder_args["trainingDataMode"]= TRAINING_DATA_MODE[self.trainingSetType.get()]
+
+          builder_args["training_DG_ratio"]= self.numberOfDiscVsGenUpdates.get()
+          builder_args["loss_logWeight"]= self.loss_logWeight.get()
           
         model = ModelClass( **builder_args )
         
@@ -205,7 +239,8 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         model.train( self.learningRate.get(), self.nEpochs.get(), dataPathParticles, dataPathProjections )
         model.clean()
         del model
-
+#        raise ValueError("training ended")
+        
     def predictModel(self):
         from scipy.stats import pearsonr
         
@@ -218,8 +253,12 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
             modelFname = self._getPath('ModelTrained.h5')
                 
         ModelClass= getModelClass( MODEL_TYPES[self.modelType.get()], self.gpuList.get())
-        
-        model = ModelClass( self.imageSize.get(), modelFname, self.gpuList.get(), batchSize= 2000)
+
+        builder_args= {"boxSize":self.imageSize.get(), "saveModelFname":modelFname, 
+                       "modelDepth": self.modelDepth.get(), "gpuList":self.gpuList.get(),
+                       "generatorLoss": TRAINING_LOSS[self.trainingLoss.get()], "batchSize": 2000}
+                       
+        model = ModelClass( **builder_args)
         
         inputParticlesMdName= self._getExtraPath('resizedParticles.xmd' )
         inputParticlesStackName= self._getExtraPath('resizedParticles.stk' )
@@ -239,12 +278,12 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         I = xmippLib.Image()
         i=1 #TODO. Is this the correct way? Should we use particle ids instead
         
-        for imgPred_batch, imgProjection_batch in model.yieldPredictions(inputParticlesMdName, metadataProjections 
+        for preds, particles, projections in model.yieldPredictions(inputParticlesMdName, metadataProjections 
                                                                           if self.modelMode.get() == ITER_TRAIN else None ):
           newRow = md.Row()
-          for img, projection in zip(imgPred_batch, imgProjection_batch):
+          for pred, particle, projection in zip(preds, particles, projections):
               outputImgpath = ('%06d@' %(i ,)) + outputParticlesStackName
-              I.setData(np.squeeze(img))
+              I.setData(np.squeeze(pred))
               I.write(outputImgpath)
 
               pathNoise = ('%06d@' %(i,)) + inputParticlesStackName
@@ -254,7 +293,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
               if self.modelMode.get() == ITER_TRAIN:
                   pathProj = ('%06d@' %(i ,)) + inputProjectionsStackName
                   newRow.setValue(md.MDL_IMAGE_REF, pathProj)
-                  correlations1, _ = pearsonr(img.ravel(), projection.ravel())
+                  correlations1, _ = pearsonr(pred.ravel(), projection.ravel())
                   newRow.setValue(md.MDL_CORR_DENOISED_PROJECTION, correlations1)
               newRow.addToMd(mdNewParticles)
               i+=1

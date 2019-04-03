@@ -1,5 +1,7 @@
 import os
 import numpy as np
+
+
 from dataGenerator import normalization
 from ..error_msgs import BAD_IMPORT_TENSORFLOW_KERAS_MSG
 
@@ -10,7 +12,6 @@ def updateEnviron(gpuNum):
         os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
     else:
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
-
 
 def getModelClass(modelTypeName, gpuList):
   '''
