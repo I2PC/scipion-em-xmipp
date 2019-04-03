@@ -290,7 +290,7 @@ def installDeepLearningToolkit(plugin, env):
     target = "installed_%s" % '_'.join(deepLearningToolsStr)
     env.addPackage('deepLearningToolkit', version='0.1', urlSuffix='external',
                    commands=[cudnnInstallCmd,
-                             ("rm %s_* 2>/dev/null ; %s ; touch %s"
+                             ("rm %s_* 2>/dev/null ; %s && touch %s"
                               % (modelsPrefix, modelsDownloadCmd, modelsTarget), 
                               modelsTarget),
                              ("echo ; echo ' > DeepLearnig-Toolkit installed: %s' ; "
