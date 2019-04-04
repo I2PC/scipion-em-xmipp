@@ -117,7 +117,7 @@ def generatePerceptualLoss(image_shape):
     targetLayer='activation_4'
     out= input_tensor
     for layer in evalModel.layers[1:]:
-      print(layer.name)
+#      print(layer.name)
       out= layer(out)
       if layer.name == targetLayer: break
     

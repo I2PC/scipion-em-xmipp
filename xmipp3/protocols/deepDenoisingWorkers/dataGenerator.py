@@ -96,6 +96,8 @@ def normalization( img, use0_1_norm=True):
   normData= (img -np.min(img))/ (np.max(img)-np.min(img))
   if not use0_1_norm:
     normData= 2*normData -1
+  if np.any( np.isnan(normData)):
+    normData= np.zeros_like(normData)
   return normData
   
 def normalizeImgs(batch_img, use0_1_norm=True):
