@@ -62,7 +62,7 @@ class GAN(DeepLearningModel):
 
     if os.path.exists(self.saveModelFname):
       print("loading previously saved model")
-      generator = keras.models.load_model(self.saveModelFname, custom_objects={})
+      generator = keras.models.load_model(self.saveModelFname, custom_objects={self.generatorLoss.__name__: self.generatorLoss})
       print("model loaded")
     else:
       generator = build_UNet( self.img_shape, out_ch=1, start_ch=32, depth=self.modelDepth, inc_rate=2., activation='relu', 
@@ -73,7 +73,7 @@ class GAN(DeepLearningModel):
     return build_discriminator( self.img_shape, self.modelDepth )
   
 
-  def train(self, learningRate, nEpochs, xmdParticles, xmdProjections):
+  def train(self, learningRate, nEpochs, xmdParticles, xmdProjections, xmdEmptyParts=None):
     saveImagesPath= self.createSaveImgsPath(xmdParticles)
     generator = self.buildGenerator()
     discriminator = self.buildDiscriminator()
@@ -125,14 +125,14 @@ class GAN(DeepLearningModel):
     real_labels_no_random = np.ones((self.batchSize, 1), dtype = np.float32)
 
     superBatchSize= int((1+self.trainingRatio)*self.batchSize)
-    trainIterator, stepsPerEpoch= getDataGenerator(xmdParticles, xmdProjections, isTrain=True, valFraction=0.1,
-                                                    augmentData=True, batchSize=superBatchSize, doTanhNormalize=True, 
-                                                    simulateEmptyParts=self.addSyntheticEmpty )  
-
+    trainIterator, stepsPerEpoch= getDataGenerator(xmdParticles, xmdProjections, xmdEmptyParts=xmdEmptyParts,
+                                                   isTrain=True, augmentData=True,
+                                                   valFraction=0.1, batchSize=superBatchSize, doTanhNormalize=True,
+                                                   simulateEmptyParts=self.addSyntheticEmpty) 
     nEpochs_init= nEpochs
     nEpochs= int(max(1, nEpochs_init*float(stepsPerEpoch)/self.epochSize ))
-    if nEpochs_init<200: 
-      print("WARNING: The number of epochs is probably to small to train a gan. If bad results, try to use at least 200 epochs")
+    if nEpochs<200: 
+      print("WARNING: The number of epochs is probably too small to train a gan. If bad results, try to use more epochs")
                                                               
     print("nEpochs : %.1f --> Epochs: %d.\nTraining begins: Epoch 0/%d"%(nEpochs_init, nEpochs, nEpochs))
     sys.stdout.flush()
@@ -145,11 +145,11 @@ class GAN(DeepLearningModel):
 
     bestValidationLoss = sys.maxsize
 
-    roundsToEarlyStopping=25
+    roundsToEarlyStopping=40
     roundsToLR_decay=10
     
-    remainingRoundsToTrainDiscr= 0 #To use in case some handicapt is desired
-    remainingBatchesToTrainGen= 0  #To use in case some handicapt is desired
+    remainingRoundsToTrainDiscr= 0 #To use in case some handicap is desired
+    remainingBatchesToTrainGen= 0  #To use in case some handicap is desired
     roundsNoImprovement=0
     currTime= time.time()
     for epoch in range(nEpochs):
@@ -230,18 +230,18 @@ class GAN(DeepLearningModel):
       sys.stdout.flush()
       
       if roundsNoImprovement== roundsToLR_decay:
-        new_lr= 0.1* learningRate
+        new_lr= max(1e-9, 0.05* learningRate)
         print("Decreasing learning rate to %f"%(learningRate) )
         K.set_value(optimizer_discriminator_model.lr, new_lr)
         K.set_value(optimizer_generatorGAN_model.lr, new_lr)
         learningRate= new_lr
         roundsNoImprovement=0
         
-#      if epoch>= nEpochs:
-#        break
-#      elif roundsToEarlyStopping<0:
-#        print("Early stopping")
-#        break
+      if epoch>= nEpochs:
+        break
+      elif roundsToEarlyStopping<0:
+        print("Early stopping")
+        break
       print("------------------------------------------------------------------------")
 
     

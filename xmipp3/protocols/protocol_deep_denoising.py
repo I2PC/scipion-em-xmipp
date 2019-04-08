@@ -113,27 +113,30 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         form.addParam('inputProjections', params.PointerParam, allowsNull=True,
                       pointerClass='SetOfParticles', important=False,
                       label='Input projections to train (mandatory)/compare (optional)',
-                      help='use the '
-                      'protocol generate reprojections to generate the '
+                      help='use the protocol generate reprojections to generate the '
                       'reprojections views')
 
 
 
         form.addParam('inputParticles', params.PointerParam,
                       pointerClass='SetOfParticles', important=True,
-                      label='Input noisy particles to denoise', help='Input '
-                                                                   'noisy '
+                      label='Input noisy particles to denoise', help='Input noisy '
                       'particles from the protocol generate reprojections if '
                       'you are training or from any other protocol if you are '
                       'predicting')
 
-        form.addParam('imageSize', params.IntParam, allowsNull=True,
+        form.addParam('emptyParticles', params.PointerParam, expertLevel=cons.LEVEL_ADVANCED,
+                      pointerClass='SetOfParticles',  allowsNull=True,
+                      label='Input "empty" particles', help='Input "empty" '
+                      'particles to learn how to deal with noise')
+                      
+        form.addParam('imageSize', params.IntParam, allowsNull=True, expertLevel=cons.LEVEL_ADVANCED,
                       condition='modelTrainPredMode==%d'%ITER_TRAIN,
                       label='Scale images to (px)',
                       default=-1, help='Scale particles to desired size to improve training'
                                         'The recommended particle size is 128 px. The size must be even.'
                                          'Do not use loss=perceptualLoss or loss=Both if  96< size <150.')
-
+                      
         form.addSection(label='Training')
         
         form.addParam('nEpochs', params.FloatParam,
@@ -224,21 +227,27 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         if self.modelTrainPredMode.get() == ITER_PREDICT and self.modelType.get() == MODEL_TYPE_UNET and not self.customModelOverPretrain:
           raise ValueError("Predict directly with UNET is not implemented yet")
           
-        self.particles = self._getExtraPath('noisyParticles.xmd')
-        writeSetOfParticles(self.inputParticles.get(), self.particles)
-        self.metadata = xmippLib.MetaData(self.particles)
+        particlesFname = self._getExtraPath('noisyParticles.xmd')
+        writeSetOfParticles(self.inputParticles.get(), particlesFname)
         fnNewParticles = self._getExtraPath('resizedParticles.stk')
 
         self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (
-            self.particles, fnNewParticles, self._getResizedSize()))
+            particlesFname, fnNewParticles, self._getResizedSize()))
 
         if not self.inputProjections.get() is None:
-            projections = self._getExtraPath('projections.xmd')
-            writeSetOfParticles(self.inputProjections.get(), projections)
+            projectionsFname = self._getExtraPath('projections.xmd')
+            writeSetOfParticles(self.inputProjections.get(), projectionsFname)
             fnNewProjections = self._getExtraPath('resizedProjections.stk')
             self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (
-                projections, fnNewProjections, self._getResizedSize()))
-
+                projectionsFname, fnNewProjections, self._getResizedSize()))
+                
+        if not self.emptyParticles.get() is None:
+            emptyPartsFname = self._getExtraPath('emptyParts.xmd')
+            writeSetOfParticles(self.emptyParticles.get(), emptyPartsFname)
+            fnNewEmptyParts = self._getExtraPath('resizedEmptyParts.stk')
+            self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (
+                emptyPartsFname, fnNewEmptyParts, self._getResizedSize()))
+        
 
     def trainModel(self):
 
@@ -258,8 +267,11 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         
         dataPathParticles= self._getExtraPath('resizedParticles.xmd')
         dataPathProjections= self._getExtraPath('resizedProjections.xmd')
-                    
-        model.train( self.learningRate.get(), self.nEpochs.get(), dataPathParticles, dataPathProjections )
+        dataPathEmpty= self._getExtraPath('resizedProjections.xmd')
+        if not os.path.isfile(dataPathEmpty):
+          dataPathEmpty= None
+        model.train( self.learningRate.get(), self.nEpochs.get(), dataPathParticles,
+                     dataPathProjections, dataPathEmpty )
         model.clean()
         del model
 #        raise ValueError("training ended")
