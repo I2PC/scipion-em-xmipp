@@ -51,6 +51,7 @@ from xmipp3.protocols.protocol_multireference_alignability import XmippProtMulti
 from xmipp3.protocols.protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from xmipp3.protocols.protocol_movie_gain import XmippProtMovieGain
 from xmipp3.protocols.protocol_deep_denoising import XmippProtDeepDenoising
+from xmipp3.protocols.protocol_particle_boxsize import XmippProtParticleBoxsize
 
 class XmippViewer(DataViewer):
     """ Wrapper to visualize different type of objects
@@ -72,7 +73,8 @@ class XmippViewer(DataViewer):
                 XmippProtAssignmentTiltPair,
                 XmippProtMultiRefAlignability,
                 XmippProtMovieGain,
-                XmippProtDeepDenoising
+                XmippProtDeepDenoising,
+                XmippProtParticleBoxsize
                 ]
     def __createTemporaryCtfs(self, obj, setOfMics):
         pwutils.cleanPath(obj._getPath("ctfs_temporary.sqlite"))
@@ -217,6 +219,31 @@ class XmippViewer(DataViewer):
             posDir = obj._getExtraPath()
             memory = showj.getJvmMaxMemory()
             launchSupervisedPickerGUI(micsfn, posDir, obj, mode='review', memory=memory, inTmpFolder=inTmpFolder)
+
+        elif issubclass(cls, XmippProtParticleBoxsize):
+            """ Launching a Coordinates viewer with only one coord in the center
+                with the estimated boxsize.
+            """
+            micSet = obj.inputMicrographs.get()
+
+            coordsFn = self._getTmpPath(micSet.getName()+'_coords_to_view.sqlite')
+            if not os.path.exists(coordsFn):
+                # Just creating the coords once
+                coordsSet = SetOfCoordinates(filename=coordsFn)
+                coordsSet.setBoxSize(obj.boxsize)
+                for mic in micSet:
+                    coord = Coordinate()
+                    coord.setMicrograph(mic)
+                    coord.setPosition(mic.getXDim()/2, mic.getYDim()/2)
+                    coordsSet.append(coord)
+                coordsSet.write()
+            else:
+                coordsSet = SetOfCoordinates(filename=coordsFn)
+                coordsSet.loadAllProperties()
+
+            coordsSet.setMicrographs(micSet)
+            coordsSet.setName(micSet.getName())
+            self._visualize(coordsSet)
 
          # We need this case to happens before the ProtParticlePicking one
         elif issubclass(cls, XmippProtAssignmentTiltPair):
