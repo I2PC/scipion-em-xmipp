@@ -261,9 +261,8 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
             print >> sys.stderr, "xmipp_ctf_estimate_from_micrograph has " \
                      "failed with micrograph %s" % finalName
 
-    def _restimateCTF(self, micId):
+    def _reEstimateCTF(self, mic, ctfModel):
         """ Run the estimate CTF program """
-        ctfModel = self.recalculateSet[micId]
         self._prepareRecalCommand(ctfModel)
         # CTF estimation with Xmipp
         self.runJob(self._program, self._args % self._params)
@@ -352,7 +351,9 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         if self.findPhaseShift and not self.ctfRelations.hasValue():
             self._params['phaseShift0'] = 1.57079
 
-    def _prepareCommand(self):
+    def _defineCtfParamsDict(self):
+        em.ProtCTFMicrographs._defineCtfParamsDict(self)
+
         if not hasattr(self, "ctfDict"):
             self.getPreviousParameters()
 
@@ -361,13 +362,14 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
 
         # Mapping between base protocol parameters and the package specific
         # command options
-        self.__params = {'kV': self._params['voltage'],
-                         'Cs': self._params['sphericalAberration'],
-                         #'ctfmodelSize': self._params['windowSize'],
-                         'Q0': self._params['ampContrast'],
-                         'min_freq': self._params['lowRes'],
-                         'max_freq': self._params['highRes'],
-                         #'pieceDim': self._params['windowSize']
+        params = self.getCtfParamsDict()
+        self.__params = {'kV': params['voltage'],
+                         'Cs': params['sphericalAberration'],
+                         #'ctfmodelSize': params['windowSize'],
+                         'Q0': params['ampContrast'],
+                         'min_freq': params['lowRes'],
+                         'max_freq': params['highRes'],
+                         #'pieceDim': params['windowSize']
                          }
 
         self._prepareArgs(self.__params)
@@ -394,21 +396,21 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                 pwutils.copyFile(self._getExtraPath(psdFile),fnPsd)
             downFactor = self._calculateDownsampleList(mic.getSamplingRate())[0]
 
-            params2 = {'psdFn': fnPsd,
-                       'defocusU': float(line[0]),
-                       }
-            self._params = dict(self._params.items() + params2.items())
+            params = dict(self.getCtfParamsDict())
+            params.update(self.getRecalCtfParamsDict())
+            params.update({'psdFn': fnPsd,
+                           'defocusU': float(line[0])
+                           })
             # Mapping between base protocol parameters and the package specific
             # command options
-            self.__params = {'sampling_rate': self._params['samplingRate']
-                                              * downFactor,
+            self.__params = {'sampling_rate': params['samplingRate'],
                              'downSamplingPerformed': downFactor,
-                             'kV': self._params['voltage'],
-                             'Cs': self._params['sphericalAberration'],
+                             'kV': params['voltage'],
+                             'Cs': params['sphericalAberration'],
                              'min_freq': line[3],
                              'max_freq': line[4],
-                             'defocusU': self._params['defocusU'],
-                             'Q0': self._params['ampContrast'],
+                             'defocusU': params['defocusU'],
+                             'Q0': params['ampContrast'],
                              'defocus_range': 5000,
                              'ctfmodelSize': size
                              }

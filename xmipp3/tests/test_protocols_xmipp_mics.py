@@ -292,6 +292,29 @@ class TestXmippCTFEstimation(TestXmippBase):
         sampling = ctfModel.getMicrograph().getSamplingRate()
         self.assertAlmostEquals(sampling, 2.474, delta=0.001)
 
+class TestXmippBoxsize(TestXmippBase):
+    """This class check if the protocol to determine the BoxSize in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        TestXmippBase.setData()
+        fileName = DataSet.getDataSet('relion_tutorial').getFile('allMics')
+        cls.protImport = cls.runImportMicrograph(fileName,
+                                                 samplingRate=3.54,
+                                                 voltage=300,
+                                                 sphericalAberration=2,
+                                                 scannedPixelSize=None,
+                                                 magnification=56000)
+    def test1(self):
+        # Estimate CTF on the downsampled micrographs
+        print "Estimating boxsize..."
+        protCTF = XmippProtParticleBoxsize()
+        protCTF.inputMicrographs.set(self.protImport.outputMicrographs)
+        self.proj.launchProtocol(protCTF, wait=True)
+        self.assertIsNotNone(protCTF.boxsize, "Boxsize has not been produced.")
+        self.assertAlmostEquals(protCTF.boxsize.get(), 50, delta=20,
+                                msg='Wrong estimated boxsize.')
+
 
 class TestXmippAutomaticPicking(TestXmippBase):
     """This class check if the protocol to pick the micrographs automatically in Xmipp works properly."""
@@ -816,6 +839,16 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
 
         self.assertTrue(protCons1.isFinished(), "Consensus failed")
         self.assertTrue(protCons1.consensusCoordinates.getSize() == 390,
+                        "Output coordinates size does not is wrong.")
+
+        protConsOr = self.newProtocol(XmippProtConsensusPicking,
+                                      consensus=1)
+        protConsOr.inputCoordinates.set([self.protFaPi.outputCoordinates,
+                                        protAutomaticPP.outputCoordinates])
+        self.launchProtocol(protConsOr)
+
+        self.assertTrue(protConsOr.isFinished(), "Consensus failed")
+        self.assertTrue(protConsOr.consensusCoordinates.getSize() == 422,
                         "Output coordinates size does not is wrong.")
 
         kwargs = {'nDim': 3,  # 3 objects
