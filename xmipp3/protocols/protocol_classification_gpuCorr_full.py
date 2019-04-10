@@ -74,6 +74,13 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
 
     # --------------------------- DEFINE param functions -----------------------
     def _defineAlignParams(self, form):
+        form.addHidden(params.GPU_LIST, params.StringParam, default='',
+                       expertLevel=const.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="GPU may have several cores. Set it to zero"
+                            " if you do not know what we are talking about."
+                            " First core index is 0, second 1 and so on."
+                            " In this protocol is not possible to use several GPUs.")
         form.addParam('maxShift', params.IntParam, default=10,
                       label='Maximum shift (%):',
                       help='Maximum shift allowed during the alignment as '
@@ -112,7 +119,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
                       label='Maximum number of classes',
                       help='Maximum number of classes to be generated',
                       expertLevel=const.LEVEL_ADVANCED)
-        form.addParallelSection(threads=0, mpi=0)
+        form.addParallelSection(threads=0, mpi=8)
 
 
     # --------------------------- INSERT steps functions -----------------------
@@ -570,8 +577,8 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
                    '--maxShift %(maxshift)d --odir %(outDir)s --oroot %(' \
                    'rootFn)s'
 
-            self.runJob("mpirun -np 4 -bynode xmipp_mpi_classify_CL2D",
-                        args % self._params)
+            self.runJob("xmipp_classify_CL2D",
+                        args % self._params, numberOfMpi=self.numberOfMpi.get())
 
             fileTocopy = classesOut.replace('.xmd','_classes.xmd')
             fileTocopy = fileTocopy.replace('extra/', 'extra/level_00/')

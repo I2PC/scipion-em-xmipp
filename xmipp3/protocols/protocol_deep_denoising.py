@@ -266,8 +266,9 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         outputParticlesMdName= self._getExtraPath('particlesDenoised.xmd' )
         inputProjectionsStackName= self._getExtraPath('resizedProjections.stk' )
            
-        metadataParticles = xmippLib.MetaData(inputParticlesMdName )
-        metadataProjections = xmippLib.MetaData(inputProjectionsStackName )
+        #metadataParticles = xmippLib.MetaData(inputParticlesMdName )
+        if self.modelMode.get() == ITER_TRAIN:
+            metadataProjections = xmippLib.MetaData(inputProjectionsStackName )
 
         dimMetadata = getMdSize(inputParticlesMdName )
         xmippLib.createEmptyFile(outputParticlesStackName, self.imageSize.get(),

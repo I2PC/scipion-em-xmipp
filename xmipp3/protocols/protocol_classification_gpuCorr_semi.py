@@ -74,6 +74,13 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
 
     # --------------------------- DEFINE param functions -----------------------
     def _defineAlignParams(self, form):
+        form.addHidden(params.GPU_LIST, params.StringParam, default='',
+                       expertLevel=const.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="GPU may have several cores. Set it to zero"
+                            " if you do not know what we are talking about."
+                            " First core index is 0, second 1 and so on."
+                            " In this protocol is not possible to use several GPUs.")
         form.addParam('inputRefs', params.PointerParam,
                       pointerClass='SetOfClasses2D, SetOfAverages',
                       important=True,
@@ -90,7 +97,7 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
                       label='Number of best images:',
                       help='Number of the best images to keep for every class',
                       expertLevel=const.LEVEL_ADVANCED)
-        form.addParallelSection(threads=0, mpi=0)
+        form.addParallelSection(threads=0, mpi=8)
 
 
     # --------------------------- INSERT steps functions -----------------------

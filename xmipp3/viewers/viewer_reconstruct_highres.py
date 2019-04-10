@@ -77,7 +77,6 @@ Examples:
   
         group = form.addGroup('Particles')
         group.addParam('showOutputParticles', LabelParam, default=False, label='Display output particles')
-        group.addParam('showInternalParticles', LabelParam, default=False, label='Display internal particles')
         group.addParam('showAngDist', EnumParam, choices=['2D plot', 'chimera'],
                        display=EnumParam.DISPLAY_HLIST, default=ANGDIST_2DPLOT,
                        label='Display angular distribution',
@@ -86,15 +85,6 @@ Examples:
         group.addParam('spheresScale', IntParam, default=50, 
                        expertLevel=LEVEL_ADVANCED,
                        label='Spheres size')
-        group.addParam('plotHistogramAngularMovement', LabelParam, default=False,
-                      label='Plot histogram with angular changes',
-                      help="""Plot histogram with angular changes from one iteration to next. 
-                              Available from iteration 2""")
-        group.addParam('numberOfBins', IntParam, default=100, 
-                      condition='plotHistogramAngularMovement',
-                      expertLevel=LEVEL_ADVANCED,
-                      label='Number of bins',
-                      help='Number of bins in histograms')
 
         group = form.addGroup('Volumes')
         group.addParam('displayVolume', EnumParam, choices=['Reference', 'Reconstructed', 'Filtered'],
@@ -112,8 +102,6 @@ Examples:
         return {
                 'displayVolume' : self._showVolume,
                 'showOutputParticles' : self._showOutputParticles,
-                'showInternalParticles' : self._showInternalParticles,
-                'plotHistogramAngularMovement' : self._plotHistogramAngularMovement,
                 'showAngDist': self._showAngularDistribution,
                 'showResolutionPlots': self._showFSC
                 }
@@ -206,27 +194,6 @@ Examples:
                                                       showj.RENDER:'_filename'}))
         return views
 
-    def _showInternalParticles(self, paramName=None):
-        views = []
-        for it in self._iterations:
-            fnDir = self.protocol._getExtraPath("Iter%03d"%it)
-            fnAngles = join(fnDir,"angles.xmd")
-            if exists(fnAngles):
-                views.append(DataView(fnAngles, viewParams={showj.MODE: showj.MODE_MD}))
-        return views
-    
-    def _plotHistogramAngularMovement(self, paramName=None):
-        views = []
-        for it in self._iterations:
-            fnDir = self.protocol._getExtraPath("Iter%03d"%it)
-            fnAngles = join(fnDir,"angles.xmd")
-            if self.protocol.weightJumper and it>1:
-                import xmippLib
-                xplotter = XmippPlotter(windowTitle="Jumper weight")
-                a = xplotter.createSubPlot("Jumper weight", "Weight", "Count")
-                xplotter.plotMdFile(fnAngles,xmippLib.MDL_WEIGHT_JUMPER,xmippLib.MDL_WEIGHT_JUMPER,nbins=100)
-                views.append(xplotter)
-        return views
     
 #===============================================================================
 # showAngularDistribution

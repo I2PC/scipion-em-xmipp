@@ -39,6 +39,8 @@ import math
 from pyworkflow.em.metadata.utils import iterRows
 import cv2
 import pyworkflow.em.metadata as md
+from xmipp3.convert import createItemMatrix, setXmippAttributes
+import pyworkflow.em as em
 
         
 class XmippProtDeepCones3DGT(ProtRefine3D):
@@ -427,25 +429,58 @@ _noiseCoord   '0'
 
         inputParticles = self.inputSet.get()
         fnOutputParticles = self._getExtraPath('outConesParticles.xmd')
-        # outputSetOfParticles = self._createSetOfParticles()
-        # outputSetOfParticles.copyInfo(inputParticles)
-        # readSetOfParticles(fnOutputParticles, outputSetOfParticles)
-        # self._defineOutputs(outputParticles=outputSetOfParticles)
+
+        outputSetOfParticles = self._createSetOfParticles()
+        outputSetOfParticles.copyInfo(inputParticles)
+        outputSetOfParticles.setAlignmentProj()
 
         Xdim = inputParticles.getXDim()
         newXdim = readInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE)
+        Ts = readInfoField(self._getExtraPath(), "sampling", xmippLib.MDL_SAMPLINGRATE)
         if newXdim != Xdim:
-            self.runJob("xmipp_image_resize",
-                        "-i %s -o %s --save_metadata_stack %s --fourier %d" %
-                        (fnOutputParticles,
-                         self._getExtraPath('outConesParticlesScaled.stk'),
-                         self._getExtraPath('outConesParticlesScaled.xmd'),
-                         Xdim))
-        outputSetOfParticles = self._createSetOfParticles()
-        outputSetOfParticles.copyInfo(inputParticles)
-        readSetOfParticles(self._getExtraPath('outConesParticlesScaled.xmd'),
-                           outputSetOfParticles)
+
+            # Option 1
+            # self.runJob("xmipp_image_resize",
+            #             "-i %s -o %s --save_metadata_stack %s --fourier %d" %
+            #             (fnOutputParticles,
+            #              self._getExtraPath('outConesParticlesScaled.stk'),
+            #              self._getExtraPath('outConesParticlesScaled.xmd'),
+            #              Xdim))
+            # fnOutputParticles = self._getExtraPath('outConesParticlesScaled.xmd')
+            # readSetOfParticles(fnOutputParticles, outputSetOfParticles)
+
+            # Option 2, evitando el resize
+            self.scaleFactor = Ts / inputParticles.getSamplingRate()
+            self.iterMd = md.iterRows(fnOutputParticles, xmippLib.MDL_ITEM_ID)
+            self.lastRow = next(self.iterMd)
+            outputSetOfParticles.copyItems(inputParticles,
+                                updateItemCallback=self._updateItem)
+        else:
+            readSetOfParticles(fnOutputParticles, outputSetOfParticles)
         self._defineOutputs(outputParticles=outputSetOfParticles)
+
+    def _updateItem(self, particle, row):
+        count = 0
+        while self.lastRow and particle.getObjId() == self.lastRow.getValue(xmippLib.MDL_ITEM_ID):
+            count += 1
+            if count:
+                self._createItemMatrix(particle, self.lastRow)
+            try:
+                self.lastRow = next(self.iterMd)
+            except StopIteration:
+                self.lastRow = None
+        particle._appendItem = count > 0
+
+    def _createItemMatrix(self, particle, row):
+
+        row.setValue(xmippLib.MDL_SHIFT_X,
+                     row.getValue(xmippLib.MDL_SHIFT_X) * self.scaleFactor)
+        row.setValue(xmippLib.MDL_SHIFT_Y,
+                     row.getValue(xmippLib.MDL_SHIFT_Y) * self.scaleFactor)
+        setXmippAttributes(particle, row, xmippLib.MDL_SHIFT_X, xmippLib.MDL_SHIFT_Y,
+                           xmippLib.MDL_ANGLE_ROT, xmippLib.MDL_ANGLE_TILT,
+                           xmippLib.MDL_ANGLE_PSI)
+        createItemMatrix(particle, row, align=em.ALIGN_PROJ)
 
 
     #--------------------------- INFO functions --------------------------------

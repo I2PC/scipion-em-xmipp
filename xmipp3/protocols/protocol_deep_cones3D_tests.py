@@ -121,7 +121,7 @@ class XmippProtDeepCones3DTst(ProtRefine3D):
         updateEnviron(self.gpuList.get())
 
         self.lastIter = 0
-        self.batchSize = 1024
+        self.batchSize = 128
         self.imgsFn = self._getExtraPath('input_imgs.xmd')
         self.centerCones=[]
 
@@ -267,7 +267,8 @@ class XmippProtDeepCones3DTst(ProtRefine3D):
         fnLabels = self._getExtraPath('labels.txt')
         if (label == 1 and exists(fnLabels)):
             remove(fnLabels)
-        fileLabels = open(fnLabels, "a")
+        #fileLabels = open(fnLabels, "a")
+        fileSoftLabels = open(self._getExtraPath('labelsSoft.txt'), "a")
         mdIn = xmippLib.MetaData(fnProj)
         mdExp = xmippLib.MetaData()
         newImage = xmippLib.Image()
@@ -282,30 +283,6 @@ class XmippProtDeepCones3DTst(ProtRefine3D):
             Xdim, Ydim, _, _ = I.getDimensions()
             Xdim2 = Xdim / 2
             Ydim2 = Ydim / 2
-
-            # AJ aqui calcular la distancia angular entre particula y centro de cada cono
-            fileSoftLabels = open(self._getExtraPath('labelsSoft.txt'), "a")
-            for coneAngles in self.centerCones:
-                rot = mdIn.getValue(xmippLib.MDL_ANGLE_ROT, objId)
-                tilt = mdIn.getValue(xmippLib.MDL_ANGLE_TILT, objId)
-                rotCenterCone = coneAngles[0]
-                tiltCenterCone = coneAngles[1]
-                srot = math.sin(math.radians(rot))
-                crot = math.cos(math.radians(rot))
-                stilt = math.sin(math.radians(tilt))
-                ctilt = math.cos(math.radians(rot))
-                srotCone = math.sin(math.radians(rotCenterCone))
-                crotCone = math.cos(math.radians(rotCenterCone))
-                stiltCone = math.sin(math.radians(tiltCenterCone))
-                ctiltCone = math.cos(math.radians(tiltCenterCone))
-                aux = (stilt*crot*stiltCone*crotCone) + (stilt*srot*stiltCone*srotCone) + (ctilt*ctiltCone)
-                if aux<-1:
-                    aux=-1
-                elif aux>1:
-                    aux=1
-                dist = math.acos(aux)
-
-
 
             for i in range(Nrepeats):
                 psiDeg = np.random.uniform(-maxPsi, maxPsi)
@@ -329,9 +306,37 @@ class XmippProtDeepCones3DTst(ProtRefine3D):
                 myRow.setValue(xmippLib.MDL_SHIFT_Y, deltaY)
                 myRow.addToMd(mdExp)
                 idx += 1
-                fileLabels.write(str(label - 1) + '\n')
+                #fileLabels.write(str(label - 1) + '\n')
+
+                # AJ aqui calcular la distancia angular entre particula y centro de cada cono
+                for i, coneAngles in enumerate(self.centerCones):
+                    rot = mdIn.getValue(xmippLib.MDL_ANGLE_ROT, objId)
+                    tilt = mdIn.getValue(xmippLib.MDL_ANGLE_TILT, objId)
+                    rotCenterCone = coneAngles[0]
+                    tiltCenterCone = coneAngles[1]
+                    srot = math.sin(math.radians(rot))
+                    crot = math.cos(math.radians(rot))
+                    stilt = math.sin(math.radians(tilt))
+                    ctilt = math.cos(math.radians(rot))
+                    srotCone = math.sin(math.radians(rotCenterCone))
+                    crotCone = math.cos(math.radians(rotCenterCone))
+                    stiltCone = math.sin(math.radians(tiltCenterCone))
+                    ctiltCone = math.cos(math.radians(tiltCenterCone))
+                    aux = (stilt * crot * stiltCone * crotCone) + (
+                            stilt * srot * stiltCone * srotCone) + (
+                                  ctilt * ctiltCone)
+                    if aux < -1:
+                        aux = -1
+                    elif aux > 1:
+                        aux = 1
+                    dist = math.acos(aux)
+                    fileSoftLabels.write(str(dist) + ' ')  # AAAAJJJJ str????
+                    if i == len(self.centerCones) - 1:
+                        fileSoftLabels.write('\n')
+
         mdExp.write(fnExp)
-        fileLabels.close()
+        #fileLabels.close()
+        fileSoftLabels.close()
         if (label - 1) > 0:
             lastFnExp = self._getExtraPath(nameExp + "%d.xmd" % (label - 1))
             self.runJob("xmipp_metadata_utilities",
@@ -345,7 +350,6 @@ class XmippProtDeepCones3DTst(ProtRefine3D):
 
     def trainNClassifiers2ClassesStep(self):
 
-
         for i in range(self.numCones):
             idx = i + 1
             modelFn = 'modelCone%d' % idx
@@ -354,18 +358,20 @@ class XmippProtDeepCones3DTst(ProtRefine3D):
                     modelFn + '.h5'),
                      self._getExtraPath(modelFn + '.h5'))
 
-            # Be careful with models in between training (training not completely finished)
+            # A condition to be careful with models in between training (training not completely finished)
+            if self.modelPretrain.get() is False and \
+                    exists(self._getExtraPath(modelFn + '.h5')) and \
+                    not exists (self._getExtraPath('modelCone%d' % idx+1 + '.h5')):
+                remove(self._getExtraPath(modelFn + '.h5'))
             if not exists(self._getExtraPath(modelFn + '.h5')):
-                fnLabels = self._getExtraPath('labels.txt')
+                fnLabels = self._getExtraPath('labelsSoft.txt')
                 fileLabels = open(fnLabels, "r")
                 newFnLabels = self._getExtraPath('labels%d.txt' % idx)
                 newFileLabels = open(newFnLabels, "w")
                 lines = fileLabels.readlines()
                 for line in lines:
-                    if line == str(idx - 1) + '\n':
-                        newFileLabels.write('1\n')
-                    else:
-                        newFileLabels.write('0\n')
+                    listLabels = line.split()
+                    newFileLabels.write(listLabels[i] + '\n')
                 newFileLabels.close()
                 fileLabels.close()
 
