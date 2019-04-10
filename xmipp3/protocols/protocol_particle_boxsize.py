@@ -85,7 +85,7 @@ class XmippProtParticleBoxsize(ProtMicrographs):
         with open(particleBoxSizeFn, 'r') as fp:
             self.particleBoxsize = int(fp.read().rstrip('\n'))
 
-        print(self.particleBoxsize)
+        print("\n > Estimated box size: %d \n" % self.particleBoxsize)
 
     def createOutputStep(self):
         """ The output is just an Integer. Other protocols can use it in those
@@ -112,4 +112,5 @@ class XmippProtParticleBoxsize(ProtMicrographs):
         return ['']
 
     def _validate(self):
-        return validateDLtoolkit(model=('boxsize', 'weights.hdf5'))
+        return validateDLtoolkit(model=[('boxsize', 'weights.hdf5'),
+                                        ('boxsize', 'feature_scaler.pkl')])
