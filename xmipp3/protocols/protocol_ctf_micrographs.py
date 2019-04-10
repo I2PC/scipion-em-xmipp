@@ -387,7 +387,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
 
             params = dict(self.getCtfParamsDict())
             params.update(self.getRecalCtfParamsDict())
-            params.update({'psdFn': os.path.join(micDir, psdFile),
+            params.update({'psdFn': fnPsd,
                            'defocusU': float(line[0])
                            })
             # Mapping between base protocol parameters and the package specific
