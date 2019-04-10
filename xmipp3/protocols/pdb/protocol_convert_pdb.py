@@ -58,7 +58,7 @@ class XmippProtConvertPdb(em.ProtInitialVolume):
         form.addParam('pdbId', params.StringParam, condition='inputPdbData == IMPORT_FROM_ID',
                       label="Pdb Id ", allowsNull=True,
                       help='Type a pdb Id (four alphanumeric characters).')
-        form.addParam('pdbObj', params.PointerParam, pointerClass='PdbFile',
+        form.addParam('pdbObj', params.PointerParam, pointerClass='AtomStruct',
                       label="Input pdb ", condition='inputPdbData == IMPORT_OBJ', allowsNull=True,
                       help='Specify a pdb object.')
         form.addParam('pdbFile', params.FileParam,
