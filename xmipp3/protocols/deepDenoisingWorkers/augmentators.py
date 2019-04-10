@@ -43,9 +43,10 @@ def _random_blur( batchX, batchY, sigma_max):
 
 
 def _mismatch_projection( batchX, batchY, p=0.05):
+  maxMismatch= 1+int(batchX.shape[1]*.01)
   for i in range(batchX.shape[0]):
     if np.random.rand()<p:
-      angle = random.uniform(-2,-2)
+      angle = random.uniform(-maxMismatch,-maxMismatch)
       batchX[i] = scipy.ndimage.interpolation.rotate(batchX[i], angle,reshape=False, mode="reflect")
   return batchX, batchY
   

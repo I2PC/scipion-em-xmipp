@@ -33,7 +33,7 @@ class DeepLearningModel():
   def getRandomRows(self, x, n):
     return x[np.random.choice(x.shape[0], n),... ]
       
-  def train(self, learningRate, nEpochs, xmdParticles, xmdProjections):        
+  def train(self, learningRate, nEpochs, xmdParticles, xmdProjections, xmdEmptyParts=None):        
     raise ValueError("Not implemented yet")
                         
 
@@ -113,11 +113,10 @@ def generatePerceptualLoss(image_shape):
     input_tensor= Input(image_shape[:-1]+(1,))
     evalModel= load_model(modelFname)
 
-#    targetLayer='max_pooling2d_3'
     targetLayer='activation_4'
     out= input_tensor
     for layer in evalModel.layers[1:]:
-      print(layer.name)
+#      print(layer.name)
       out= layer(out)
       if layer.name == targetLayer: break
     

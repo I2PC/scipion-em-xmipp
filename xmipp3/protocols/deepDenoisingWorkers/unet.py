@@ -9,7 +9,6 @@ from .dataGenerator import getDataGenerator, extractNBatches, BATCH_SIZE
 
 NUM_BATCHES_PER_EPOCH= 256
 
-CUSTOM_OBJECTS={}
 class UNET(DeepLearningModel):
   
   def __init__(self, boxSize, saveModelFname, gpuList="0", batchSize=BATCH_SIZE, modelDepth=4, generatorLoss="MSE",
@@ -23,7 +22,7 @@ class UNET(DeepLearningModel):
     self.img_shape= (boxSize,boxSize,1)
     return self.img_shape
     
-  def train(self, learningRate, nEpochs, xmdParticles, xmdProjections):
+  def train(self, learningRate, nEpochs, xmdParticles, xmdProjections, xmdEmptyParts=None):
 
     saveImagesPath= self.createSaveImgsPath(xmdParticles)
     N_GPUs= len(self.gpuList.split(',')) 
@@ -34,7 +33,7 @@ class UNET(DeepLearningModel):
           model_1gpu = load_model(self.saveModelFname, custom_objects= CUSTOM_OBJECTS)
         model= keras.utils.multi_gpu_model(model_1gpu, gpus= N_GPUs)
       else:
-        model_1gpu = load_model(self.saveModelFname, custom_objects= CUSTOM_OBJECTS)
+        model_1gpu = load_model(self.saveModelFname, custom_objects= {self.generatorLoss.__name__: self.generatorLoss})
         model= model_1gpu
     else:
       paramsNewUnet={"img_shape":self.img_shape, "out_ch":1, "start_ch":32, "depth": self.modelDepth,
@@ -56,7 +55,8 @@ class UNET(DeepLearningModel):
                                                      isTrain=False, valFraction=0.1, batchSize=self.batchSize)
     valData= extractNBatches(valIterator, min(10, stepsPerEpoch_val)); del valIterator
     
-    trainIterator, stepsPerEpoch= getDataGenerator(xmdParticles, xmdProjections, isTrain=True, augmentData=True,
+    trainIterator, stepsPerEpoch= getDataGenerator(xmdParticles, xmdProjections, xmdEmptyParts=xmdEmptyParts,
+                                                   isTrain=True, augmentData=True,
                                                    valFraction=0.1, batchSize=self.batchSize, doTanhNormalize=False,
                                                    simulateEmptyParts=self.addSyntheticEmpty)            
     cBacks=[]
