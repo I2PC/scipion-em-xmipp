@@ -179,6 +179,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         micBase = self._getMicBase(mic)
         micDir = self._getMicrographDir(mic)
 
+        self._defineCtfParamsDict()
         localParams = self.__params.copy()
 
         localParams['pieceDim'] = self.windowSize.get()
