@@ -263,9 +263,11 @@ class XmippProtLocSharp(ProtAnalysis3D):
             if (max_res-min_res<0.75):
                 nextIter = False
                 break
-                
-#         os.system('cp '  +self._getExtraPath('sharpenedMap_'+str(iteration)+'.mrc')+
-#                    ' '  +self._getExtraPath('sharpenedMap_last.mrc'))
+
+        # TODO: please copy the file using python not the operating system
+        os.system('cp '  +self._getExtraPath('sharpenedMap_'+str(self.iteration)+'.mrc')+
+                   ' '  +self._getExtraPath('sharpenedMap_last.mrc'))
+
         
         resFile = self.resolutionVolume.get().getFileName()        
         pathres=dirname(resFile)
@@ -278,7 +280,13 @@ class XmippProtLocSharp(ProtAnalysis3D):
                    '\n====================\n')           
   
              
-    def createOutputStep(self):        
+    def createOutputStep(self):
+
+        volume=Volume()
+        volume.setFileName(self._getExtraPath('sharpenedMap_last.mrc'))
+        volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
+        volume.setOrigin(self.inputVolume.get().getOrigin(True))
+
 
         volumesSet = self._createSetOfVolumes()
         volumesSet.setSamplingRate(self.inputVolume.get().getSamplingRate()) 

@@ -32,7 +32,7 @@ from datetime import datetime
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.em.data import SetOfCTF
-from pyworkflow.object import Set, Float
+from pyworkflow.object import Set, Float, Integer
 import pyworkflow.protocol.params as params
 import pyworkflow.em as em
 import pyworkflow.utils as pwutils
@@ -46,11 +46,9 @@ from xmipp3.convert import setXmippAttribute, prefixAttribute
 
 class XmippProtCTFConsensus(em.ProtCTFMicrographs):
     """
-    Protocol to estimate the agreement between different estimation of the CTF
-    for the same set of micrographs. The algorithm assumes that two CTF are
-    consistent if the phase (wave aberration function) of the two CTFs are
-    closer than 90 degrees. The reported resolution is the resolution at
-    which the two CTF phases differ in 90 degrees.
+    Protocol to make a selection of meaningful CTFs in basis of the defocus
+    values, the astigmatism, the resolution, other Xmipp parameters, and
+    the agreement with a secondary CTF for the same set of micrographs.
     """
     _label = 'ctf consensus'
     _lastUpdateVersion = VERSION_2_0
@@ -65,15 +63,16 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
         form.addParam('inputCTF', params.PointerParam, pointerClass='SetOfCTF',
                       label="Input CTF", important=True,
                       help='Select the estimated CTF to evaluate')
+
         form.addParam('useDefocus', params.BooleanParam, default=True,
                       label='Use Defocus for selection',
                       help='Use this button to decide if carry out the '
                            'selection taking into account or not the defocus '
                            'values.')
-
         line = form.addLine('Defocus (A)', condition="useDefocus",
                             help='Minimum and maximum values for defocus in '
-                                 'Angstroms')
+                                 'Angstroms.\nMicrographs out of this range '
+                                 'will left out of the output.')
         line.addParam('minDefocus', params.FloatParam, default=4000,
                       label='Min')
         line.addParam('maxDefocus', params.FloatParam,
@@ -87,9 +86,9 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
         form.addParam('astigmatism', params.FloatParam, default=1000,
                       label='Astigmatism (A)', condition="useAstigmatism",
                       help='Maximum value allowed for astigmatism in '
-                           'Angstroms. If the evaluated CTF does'
-                           ' not fulfill '
-                           'this requirement, it will be discarded.')
+                           'Angstroms. If the evaluated CTF has a '
+                           'larger Astigmatism, it will be discarded.')
+
         form.addParam('useResolution', params.BooleanParam, default=True,
                       label='Use Resolution for selection',
                       help='Use this button to decide if carry out the '
@@ -99,16 +98,17 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
                       label='Resolution (A)',
                       condition="useResolution",
                       help='Minimum value for resolution in Angstroms. '
-                           'If the evaluated CTF does not fulfill this '
-                           'requirement, it will be discarded.')
+                           'If the evaluated CTF has not reached that minimum, '
+                           'it will be discarded.')
 
+        form.addSection(label='Xmipp criteria')
         form.addParam('useCritXmipp', params.BooleanParam, default=False,
                       label='Use Xmipp criteria for selection',
                       help='Use this button to decide if carrying out the '
-                           'selection taking into account the Xmipp '
-                           'Crit parameters. \n'
-                           'Only available when Xmipp CTF'
-                           ' estimation was used.')
+                           'selection taking into account the Xmipp parameters.\n'
+                           'Only available when Xmipp CTF estimation was used '
+                           'for the _Input CTF_ or for the _Secondary CTF_.')
+
         form.addParam('critFirstZero', params.FloatParam, default=5,
                       condition="useCritXmipp", label='Minimum 1st zero',
                       help='Minimun value of CritFirstZero')
@@ -119,7 +119,6 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
                       label='Min')
         line.addParam('maxCritFirstZeroRatio', params.FloatParam, default=1.1,
                       label='Max')
-         # The following default value is important to avoid energy explosions in Wiener filter
         form.addParam('critCorr', params.FloatParam, default=0.05,
                       condition="useCritXmipp", label='Correlation 1st-3rd zero',
                       help='Minimum value of correlation between 1st and 3rd zeros')
@@ -137,16 +136,28 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
                       default=0.3, label='Min')
         line.addParam('maxCritNonAstigmaticValidity', params.FloatParam,
                       default=9, label='Max')
+
+        form.addSection(label='Consensus')
         form.addParam('calculateConsensus', params.BooleanParam, default=False,
                       label='Calculate Consensus Resolution',
-                      help='Option for calculating consensus resolution.')
+                      help='Option for calculating consensus resolution. '
+                           'The algorithm assumes that two CTF are '
+                           'consistent if the phase (wave aberration function) '
+                           'of the two CTFs are closer than 90 degrees.\n'
+                           'The reported consensusResolution is the resolution '
+                           'at which the two CTF phases differ in 90 degrees.')
         form.addParam('inputCTF2', params.PointerParam,
                       pointerClass='SetOfCTF', condition="calculateConsensus",
                       label="Secondary CTF",
                       help='CTF to be compared with reference CTF')
         form.addParam('minConsResol', params.FloatParam,
                       condition="calculateConsensus", default=15.0,
-                      label='Minimum consensus resolution in angstroms.')
+                      label='Minimum consensus resolution (A).',
+                      help="Minimum value for the consensus resolution in "
+                           "Angstroms.\nIf there are noticeable discrepancies "
+                           "between the two estimations below this resolution, "
+                           "it will be discarded.")
+
         form.addParallelSection(threads=0, mpi=0)
 
 # --------------------------- INSERT steps functions -------------------------
@@ -157,6 +168,7 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
         self.outputDict = []
         self.allCtf1 = []
         self.allCtf2 = []
+        self.initializeRejDict()
         if self.calculateConsensus:
             ctfSteps = self._checkNewInput()
         else:
@@ -493,6 +505,22 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
                 self._ctfToMd(ctf2, md2)
                 self._freqResol[ctfId] = xmippLib.errorMaxFreqCTFs2D(md1, md2)
 
+    def initializeRejDict(self):
+        self.discDict = {'defocus': 0,
+                              'astigmatism': 0,
+                              'singleResolution': 0,
+                              '_xmipp_ctfCritFirstZero': 0,
+                              '_xmipp_ctfCritfirstZeroRatio': 0,
+                              '_xmipp_ctfCritCorr13': 0,
+                              '_xmipp_ctfIceness': 0,
+                              '_xmipp_ctfCritCtfMargin': 0,
+                              '_xmipp_ctfCritNonAstigmaticValidty': 0,
+                              'consensusResolution': 0
+                              }
+        for k in self.discDict:
+            setattr(self, "rejBy"+k, Integer(0))
+        self._store()
+
     def _selectCTF(self, ctfId):
         # Depending on the flags selected by the user, we set the values of
         # the params to compare with
@@ -502,14 +530,17 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
             """
             if hasattr(ctf, label):
                 if comp == 'lt':
-                    return getattr(ctf, label).get() < crit
+                    discard = getattr(ctf, label).get() < crit
                 elif comp == 'bt':
-                    return getattr(ctf, label).get() > crit
+                    discard = getattr(ctf, label).get() > crit
                 else:
                     raise Exception("'comp' must be either 'lt' or 'bt'.")
             else:
                 print("%s not found. Skipping evaluation on that." % label)
                 return False
+            if discard:
+                self.discDict[label] += 1
+            return discard
 
         minDef, maxDef = self._getDefociValues()
         maxAstig = self._getMaxAstisgmatism()
@@ -520,20 +551,32 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
 
         defocusU = ctf.getDefocusU()
         defocusV = ctf.getDefocusV()
-        astigm = defocusU - defocusV
+        astigm = abs(defocusU - defocusV)
         resol = self._getCtfResol(ctf)
-        usingXmipp = self.usingXmipp(ctf)
 
-        firstCondition = ((defocusU < minDef) or (defocusU > maxDef) or
-                          (defocusV < minDef) or (defocusV > maxDef) or
-                          (astigm > maxAstig) or (resol > minResol))
+        defRangeCrit = (defocusU < minDef or defocusU > maxDef or
+                        defocusV < minDef or defocusV > maxDef)
+        if defRangeCrit:
+            self.discDict['defocus'] += 1
 
+        astigCrit = astigm > maxAstig
+        if astigCrit:
+            self.discDict['astigmatism'] += 1
+
+        singleResolCrit = resol > minResol
+        if singleResolCrit:
+            self.discDict['singleResolution'] += 1
+
+        firstCondition = defRangeCrit or astigCrit or singleResolCrit
+
+        consResolCrit = False
         if self.calculateConsensus:
-            firstCondition = firstCondition or (
-            self.minConsResol < self._freqResol[ctfId])
+            consResolCrit = self.minConsResol < self._freqResol[ctfId]
+            if consResolCrit:
+                self.discDict['consensusResolution'] += 1
 
         secondCondition = False
-        if (self.useCritXmipp and usingXmipp):
+        if self.useCritXmipp:
             firstZero = self._getCritFirstZero()
             minFirstZero, maxFirstZero = self._getCritFirstZeroRatio()
             corr = self._getCritCorr()
@@ -542,18 +585,19 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
             minNonAstigmatic, maxNonAstigmatic = \
                 self._getCritNonAstigmaticValidity()
 
+            ctfX = self.xmippCTF[ctfId]
             secondCondition = (
-                compareValue(ctf, '_xmipp_ctfCritFirstZero', 'lt', firstZero) or
-                compareValue(ctf, '_xmipp_ctfCritfirstZeroRatio', 'lt', minFirstZero) or
-                compareValue(ctf, '_xmipp_ctfCritfirstZeroRatio', 'bt', maxFirstZero) or
-                compareValue(ctf, '_xmipp_ctfCritCorr13', 'lt', corr) or
-                compareValue(ctf, '_xmipp_ctfIceness', 'bt', iceness) or
-                compareValue(ctf, '_xmipp_ctfCritCtfMargin', 'lt', ctfMargin) or
-                compareValue(ctf, '_xmipp_ctfCritNonAstigmaticValidty', 'lt', minNonAstigmatic) or
-                compareValue(ctf, '_xmipp_ctfCritNonAstigmaticValidty', 'bt', maxNonAstigmatic))
+                compareValue(ctfX, '_xmipp_ctfCritFirstZero', 'lt', firstZero) or
+                compareValue(ctfX, '_xmipp_ctfCritfirstZeroRatio', 'lt', minFirstZero) or
+                compareValue(ctfX, '_xmipp_ctfCritfirstZeroRatio', 'bt', maxFirstZero) or
+                compareValue(ctfX, '_xmipp_ctfCritCorr13', 'lt', corr) or
+                compareValue(ctfX, '_xmipp_ctfIceness', 'bt', iceness) or
+                compareValue(ctfX, '_xmipp_ctfCritCtfMargin', 'lt', ctfMargin) or
+                compareValue(ctfX, '_xmipp_ctfCritNonAstigmaticValidty', 'lt', minNonAstigmatic) or
+                compareValue(ctfX, '_xmipp_ctfCritNonAstigmaticValidty', 'bt', maxNonAstigmatic))
 
         """ Write to a text file the items that have been done. """
-        if firstCondition or secondCondition:
+        if firstCondition or consResolCrit or secondCondition:
             fn = self._getCtfSelecFileDiscarded()
             with open(fn, 'a') as f:
                 f.write('%d F\n' % ctf.getObjId())
@@ -566,6 +610,10 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
                 fn = self._getCtfSelecFileAccepted()
                 with open(fn, 'a') as f:
                     f.write('%d F\n' % ctf.getObjId())
+
+        for k, v in self.discDict.iteritems():
+            setattr(self, "rejBy"+k, Integer(v))
+        self._store()
 
     def _readDoneList(self):
         """ Read from a file the id's of the items that have been done. """
@@ -590,10 +638,86 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
         return ['Marabini2014a']
 
     def _summary(self):
-        message = []
-        for i, ctfs in enumerate([self.inputCTF, self.inputCTF2]):
-            protocol = self.getMapper().getParent(ctfs.get())
-            message.append("Method %d: %s" % (i+1, protocol.getClassLabel()))
+
+        if not (hasattr(self, "outputCTF") or hasattr(self, "outputCTFDiscarded")):
+            return ['No CTF processed, yet.']
+
+        acceptedSize = (self.outputCTF.getSize()
+                        if hasattr(self, "outputCTF") else 0)
+
+        discardedSize = (self.outputCTFDiscarded.getSize()
+                         if hasattr(self, "outputCTFDiscarded") else 0)
+
+        message = ["%d/%d CTF processed (%d accepted and %d discarded)."
+                   % (acceptedSize+discardedSize,
+                      self.inputCTF.get().getSize(),
+                      acceptedSize, discardedSize)]
+
+        def addDiscardedStr(label):
+            obj = getattr(self, "rejBy%s" % label, Integer(0))
+            number = obj.get()
+            return "" if number == 0 else "  (%d discarded)" % number
+
+        message.append("*General Criteria*:")
+        if self.useDefocus:
+            message.append(" - _Defocus range_: %.0f - %.0f %s"
+                           % (self.minDefocus, self.maxDefocus,
+                              addDiscardedStr('defocus')))
+
+        if self.useAstigmatism:
+            message.append(" - _Astigmatism threshold_: %.0f %s"
+                           % (self.astigmatism,
+                              addDiscardedStr('astigmatism')))
+
+        if self.useResolution:
+            message.append(" - _Resolution threshold_: %.0f %s"
+                           % (self.resolution,
+                              addDiscardedStr('singleResolution')))
+
+        if self.useCritXmipp:
+            message.append("*Xmipp criteria*:")
+            message.append(" - _First zero threshold_: %.0f %s"
+                           % (self.critFirstZero,
+                              addDiscardedStr('_xmipp_ctfCritFirstZero')))
+            message.append(" - _First zero astigmatism range_: %.2f - %.2f %s"
+                           % (self.minCritFirstZeroRatio,
+                              self.maxCritFirstZeroRatio,
+                              addDiscardedStr('_xmipp_ctfCritfirstZeroRatio')))
+            message.append(" - _Correlation Experimental-Estimated threshold_: "
+                           "%.2f %s" % (self.critCorr,
+                                        addDiscardedStr('_xmipp_ctfCritCorr13')))
+            message.append(" - _CTF margin threshold_: %.2f %s"
+                           % (self.critCtfMargin,
+                              addDiscardedStr('_xmipp_ctfCritCtfMargin')))
+            message.append(" - _Iceness threshold_: %.2f %s"
+                           % (self.critIceness,
+                              addDiscardedStr('_xmipp_ctfIceness')))
+            message.append(" - _Non Astigmatic validation range_: %.2f - %.2f %s"
+                           % (self.minCritNonAstigmaticValidity,
+                              self.maxCritNonAstigmaticValidity,
+                              addDiscardedStr('_xmipp_ctfCritNonAstigmaticValidty')))
+
+        if self.calculateConsensus:
+            def getProtocolInfo(inCtf):
+                protocol = self.getMapper().getParent(inCtf)
+                runName = protocol.getRunName()
+                classLabel = protocol.getClassLabel()
+                if runName == classLabel:
+                    infoStr = runName
+                else:
+                    infoStr = "%s (%s)" % (runName, classLabel)
+
+                return infoStr
+
+            message.append("*CTF consensus*:")
+            message.append(" - _Consensus resolution threshold_: %.0f %s"
+                           % (self.minConsResol,
+                              addDiscardedStr('consensusResolution')))
+            message.append("   > _Primary CTF_: %s"
+                           % getProtocolInfo(self.inputCTF.get()))
+            message.append("   > _Reference CTF_: %s"
+                           % getProtocolInfo(self.inputCTF2.get()))
+
         return message
 
     def _validate(self):
@@ -603,7 +727,20 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
         """
         # same micrographs in both CTF??
         errors = []
-        # Add some errors if input is not valid
+        if self.useCritXmipp.get() and not self.calculateConsensus.get():
+            if self.usingXmipp(self.inputCTF.get().getFirstItem()):
+                self.xmippCTF = self.inputCTF.get()
+            else:
+                errors.append("The primary CTF input ( _Input CTF_ ) must be "
+                              "estimated using the _Xmipp - CTF estimation_ "
+                              "protocol.")
+        if self.useCritXmipp.get() and self.calculateConsensus.get():
+            if self.usingXmipp(self.inputCTF2.get().getFirstItem()):
+                self.xmippCTF = self.inputCTF2.get()
+            else:
+                errors.append("One of the CTF inputs ( _Input CTF_ or "
+                              "_Secundary CTF_) must be estimated using the "
+                              "_Xmipp - CTF estimation_ protocol.")
         return errors
 
     def usingXmipp(self, ctf):

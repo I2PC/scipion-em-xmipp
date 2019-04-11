@@ -46,7 +46,7 @@ class XmippProt3DBionotes(ProtAnalysis3D):
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('inputPDB', PointerParam, pointerClass='PdbFile',
+        form.addParam('inputPDB', PointerParam, pointerClass='AtomStruct',
                       label="Input PDB")
 #         form.addParam('inputVol', PointerParam, pointerClass='Volume',
 #                       label="Input volume", important=True)
@@ -71,7 +71,11 @@ class XmippProt3DBionotes(ProtAnalysis3D):
 
         response = requests.post('http://3dbionotes.cnb.csic.es/programmatic/upload',data=data, files=files)
         json_data = json.loads(response.text)
-        webbrowser.open_new(json_data["url"])
+        url='http://3dbionotes.cnb.csic.es/programmatic/get/'+json_data['id']
+        webbrowser.open_new(url)
+        fh=open(self._getExtraPath("id.txt"),"w")
+        fh.write(json_data['id'])
+        fh.close()
 
     #--------------------------- INFO functions --------------------------------
             

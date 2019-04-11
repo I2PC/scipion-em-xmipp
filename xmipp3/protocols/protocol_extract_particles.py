@@ -70,7 +70,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
 
         form.addParam('boxSize', params.IntParam,
                       label='Particle box size (px)',
-                      validators=[params.Positive],
+                      # validators=[params.Positive],
                       help='This is size of the boxed particles (in pixels). '
                            'Note that if you use downsample option, the '
                            'particles are boxed out after downsampling. '
@@ -272,19 +272,25 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
     #--------------------------- INFO functions --------------------------------
     def _validate(self):
         errors = []
+        if self.boxSize.get() == -1:
+            self.boxSize.set(self.getBoxSize())
+
+        if self.boxSize <= 0:
+            errors.append('Box size must be positive.')
+
+        if self.doNormalize:
+            if self.backRadius > int(self.boxSize.get() / 2):
+                errors.append("Background radius for normalization should be "
+                              "equal or less than half of the box size.")
+
         # doFlip can only be selected if CTF information
         # is available on picked micrographs
         if self.doFlip and not self._useCTF():
             errors.append('Phase flipping cannot be performed unless '
                           'CTF information is provided.')
 
-        if self.doNormalize:
-            if self.backRadius > int(self.boxSize.get() / 2):
-                errors.append("Background radius for normalization should be "
-                              "equal or less than half of the box size.")
-        
         # We cannot check this if the protocol is in streaming.
-        
+
         #self._setupCtfProperties() # setup self.micKey among others
         # if self._useCTF() and self.micKey is None:
         #     errors.append('Some problem occurs matching micrographs and CTF.\n'
@@ -490,6 +496,8 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                     # adding the variance and Gini coeff. value of the mic zone
                     setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
                     setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
+                    if row.containsLabel(md.MDL_ZSCORE_DEEPLEARNING1):
+                        setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
 
                     # disabled particles (in metadata) should not add to the
                     # final set

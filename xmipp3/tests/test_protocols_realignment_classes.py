@@ -28,7 +28,7 @@ from pyworkflow.em.protocol.protocol_sets import ProtSubSet
 
 from xmipp3.protocols.protocol_extract_particles import *
 from xmipp3.protocols.protocol_cl2d import *
-from xmipp3.protocols.protocol_realignment_classes import *
+from xmipp3.protocols.protocol_center_particles import *
 
 ProtCTFFind = importFromPlugin('grigoriefflab.protocols', 'ProtCTFFind', doRaise=True)
 try:
@@ -40,7 +40,7 @@ except:
 # Number of mics to be processed
 NUM_MICS = 5
 
-class TestRealignmentClasses(BaseTest):
+class TestCenterParticles(BaseTest):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
@@ -118,7 +118,7 @@ class TestRealignmentClasses(BaseTest):
         return protClassify, numClasses
 
     def runRealign(self, inputClasses, inputMics):
-        protRealing = self.newProtocol(XmippProtReAlignClasses)
+        protRealing = self.newProtocol(XmippProtCenterParticles)
         protRealing.inputClasses.set(inputClasses)
         protRealing.inputMics.set(inputMics)
         self.launchProtocol(protRealing)

@@ -44,7 +44,7 @@ class XmippProtTriggerData(EMProtocol):
         - If *Send all particles to output?*' is _No_:
             Once the number of images is reached, a setOfImages is returned and
             the protocols finished (ending the streaming from this point).
-        - If *Send all particles to output?*' is _Yes_:
+        - If *Send all particles to output?*' is _Yes_ and:
             - If *Split particles to multiple sets?* is _Yes_:
                 Multiple closed outputs will be returned as soon as
                 the number of images is reached.
@@ -67,10 +67,11 @@ class XmippProtTriggerData(EMProtocol):
                       label='Minimum output size',
                       help='How many particles need to be on input to '
                            'create output set.')
-        form.addParam('allImages', BooleanParam, default=False,
+        form.addParam('allImages', BooleanParam, default=True,
                       label='Send all items to output?',
-                      help='If NO is selected, only a subset of "Output size" '
-                           'items will be send to output.')
+                      help='If NO is selected, only a closed subset of '
+                           '"Output size" items will be send to output.\n'
+                           'If YES is selected it will still running in streaming.')
         form.addParam('splitImages', BooleanParam, default=False,
                       label='Split items to multiple sets?',
                       condition='allImages',
@@ -230,6 +231,7 @@ class XmippProtTriggerData(EMProtocol):
             self._store(outputAttr)
         else:
             self._defineOutputs(**{outputName: outputSet})
+            self._defineTransformRelation(self.inputImages, outputSet)
             self._store(outputSet)
 
         # Close set database to avoid locking it

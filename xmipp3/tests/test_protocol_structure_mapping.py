@@ -52,6 +52,7 @@ class TestStructureMapping(BaseTest):
         protStrucMap.inputVolumes.append(self.protImport2.outputVolume)
         protStrucMap.numberOfModes.set(20)
         protStrucMap.pseudoAtomTarget.set(2.0)
-        protStrucMap.rcPercentage.set(97.0)
+        protStrucMap.pseudoAtomRadius.set(0.5)
+        protStrucMap.rcPercentage.set(90.0)
         protStrucMap.collectivityThreshold.set(0.2)
         self.launchProtocol(protStrucMap)

@@ -92,7 +92,7 @@ class TestLocalDeblur(TestLocalDeblurBase):
                                    filterInput=False,
                                    )
         self.launchProtocol(MonoRes)
-        self.assertTrue(exists(MonoRes._getExtraPath('mgresolution.vol')),
+        self.assertTrue(exists(MonoRes._getExtraPath('mgresolution.mrc')),
                         "MonoRes (no split, no premasked) has failed")
 
         LocalDeblur = self.newProtocol(XmippProtLocSharp,
