@@ -33,37 +33,37 @@ import matplotlib.colors as mcolors
 from pyworkflow.utils import getExt, removeExt
 from os.path import abspath
 
-from pyworkflow.gui.plotter import Plotter
-from pyworkflow.em.viewer import LocalResolutionViewer
+#from pyworkflow.gui.plotter import Plotter
+from pyworkflow.em.viewers import LocalResolutionViewer, EmPlotter
 from pyworkflow.em.constants import (COLOR_JET, COLOR_TERRAIN,
  COLOR_GIST_EARTH, COLOR_GIST_NCAR, COLOR_GNU_PLOT, COLOR_GNU_PLOT2,
  COLOR_OTHER, COLOR_CHOICES, AX_X, AX_Y, AX_Z)
 from pyworkflow.protocol.params import (LabelParam, StringParam, EnumParam,
                                         IntParam, LEVEL_ADVANCED)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
-from pyworkflow.em.viewer import ChimeraView, DataView
+from pyworkflow.em.viewers import ChimeraView, DataView
 from pyworkflow.em.metadata import MetaData, MDL_X, MDL_COUNT
 from pyworkflow.em import ImageHandler
 
 from .plotter import XmippPlotter
-from xmipp3.protocols.protocol_resolution_dl2r import \
-        XmippProtDl2r, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM, \
+from xmipp3.protocols.protocol_resolution_deepres import \
+        XmippProtDeepRes, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM, \
         OUTPUT_RESOLUTION_FILE_CHIMERA, CHIMERA_RESOLUTION_VOL, RESIZE_VOL
 
 
 binaryCondition = ('(colorMap == %d) ' % (COLOR_OTHER))
 
 
-class XmippResDl2rViewer(LocalResolutionViewer):
+class XmippResDeepResViewer(LocalResolutionViewer):
     """
-    Visualization tools for DL2R results.
+    Visualization tools for DeepRes results.
     
-    DL2R is a Xmipp package for computing the local resolution of 3D
+    DeepRes is a Xmipp package for computing the local resolution of 3D
     density maps studied in structural biology, primarily by cryo-electron
     microscopy (cryo-EM).
     """
-    _label = 'viewer DL2R'
-    _targets = [XmippProtDl2r]      
+    _label = 'viewer DeepRes'
+    _targets = [XmippProtDeepRes]      
     _environments = [DESKTOP_TKINTER]
 
     
@@ -184,26 +184,21 @@ class XmippResDl2rViewer(LocalResolutionViewer):
         x_axis = []
         y_axis = []
 
-        i = 0
         for idx in md:
             x_axis_ = md.getValue(MDL_X, idx)
-            if i==0:
-                x0 = x_axis_
-            elif i==1:
-                x1 = x_axis_
             y_axis_ = md.getValue(MDL_COUNT, idx)
 
-            i+=1
             x_axis.append(x_axis_)
             y_axis.append(y_axis_)
-        delta = x1-x0
-        fig = plt.figure()
-        plt.bar(x_axis, y_axis, width = delta)
-        plt.title("Resolutions Histogram")
-        plt.xlabel("Resolution (A)")
-        plt.ylabel("Counts")
-        
-        return [Plotter(figure2 = fig)]
+
+        plotter = EmPlotter()
+        plotter.createSubPlot("Resolutions Histogram",
+                              "Resolution (A)", "# of Counts")
+        barwidth = (x_axis[-1] - x_axis[0])/len(x_axis)
+
+        plotter.plotDataBar(x_axis, y_axis, barwidth)
+
+        return [plotter]
 
     def _getAxis(self):
         return self.getEnumText('sliceAxis')
