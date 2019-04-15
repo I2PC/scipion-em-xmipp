@@ -43,8 +43,7 @@ import pyworkflow.em.metadata as md
 import numpy as np
 
 import xmippLib
-from xmipp3.convert import setXmippAttributes, xmippToLocation, rowToAlignment
-from xmipp3.convert import readSetOfMicrographs, writeSetOfMicrographs, setOfMicrographsToMd
+from xmipp3.convert import readSetOfMicrographs, writeSetOfMicrographs, setOfMicrographsToMd, setXmippAttribute
 
 
         
@@ -128,10 +127,13 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
                 mdMics.setValue(xmippLib.MDL_CTF_DEFOCUS_R2, micR2, objId)
         mdMics.write(fnMics)
         outputSet = self._createSetOfMicrographs()
-        readSetOfMicrographs(fnMics, outputSet, readCTF=True)
+        outputSet.copyInfo(inputMicSet)
+        readSetOfMicrographs(fnMics, outputSet, extraLabels=[xmippLib.MDL_CTF_DEFOCUS_R2])
+
         self._defineOutputs(outputMicrographs=outputSet)
         self._defineSourceRelation(self.inputSet, outputSet)
         self._defineSourceRelation(inputMicSet, outputSet)
+
 
     #--------------------------- INFO functions --------------------------------------------
     def _summary(self):
