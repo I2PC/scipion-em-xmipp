@@ -48,7 +48,7 @@ from pyworkflow.em import ImageHandler
 from .plotter import XmippPlotter
 from xmipp3.protocols.protocol_resolution_deepres import \
         XmippProtDeepRes, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM, \
-        OUTPUT_RESOLUTION_FILE_CHIMERA, CHIMERA_RESOLUTION_VOL, RESIZE_VOL
+        OUTPUT_RESOLUTION_FILE_CHIMERA, RESIZE_VOL
 
 
 binaryCondition = ('(colorMap == %d) ' % (COLOR_OTHER))
@@ -220,8 +220,8 @@ class XmippResDeepResViewer(LocalResolutionViewer):
         fnRoot = "extra/"
         scriptFile = self.protocol._getPath('Chimera_resolution.cmd')
         fhCmd = open(scriptFile, 'w')
-#        imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
-        imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE)
+        imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
+        #imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE)
         img = ImageHandler().read(imageFile)
         imgData = img.getData()
         imgData = imgData[imgData!=0]
@@ -238,13 +238,13 @@ class XmippResDeepResViewer(LocalResolutionViewer):
 #         fhCmd.write("open %s\n" % fninput)
         fhCmd.write("open %s\n" % (fnRoot + RESIZE_VOL))
         
-        fhCmd.write("open %s\n" % (fnRoot + CHIMERA_RESOLUTION_VOL))
+        fhCmd.write("open %s\n" % (fnRoot + OUTPUT_RESOLUTION_FILE_CHIMERA))
 #        fhCmd.write("open %s\n" % (fnRoot + OUTPUT_RESOLUTION_FILE))        
 
-#        smprt = self.protocol.inputVolume.get().getSamplingRate()
+#        smprt = self.protocol.inputVolume.get().getSamplingRate()        
         smprt = 1.0
         
-        fhCmd.write("volume #0 voxelSize %s\n" % (str(smprt)))
+        fhCmd.write("volume #0 voxelSize %s step 1\n" % (str(smprt)))
         fhCmd.write("volume #1 voxelSize %s\n" % (str(smprt)))
         fhCmd.write("vol #1 hide\n")
         

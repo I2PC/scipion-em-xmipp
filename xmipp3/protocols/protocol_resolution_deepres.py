@@ -25,12 +25,11 @@
 # *
 # **************************************************************************
 
+import os
 import numpy as np
-
 from pyworkflow import VERSION_1_1
-from pyworkflow.protocol.params import (PointerParam, StringParam, 
-                                        BooleanParam, FloatParam,
-                                        EnumParam, LEVEL_ADVANCED)
+from pyworkflow.protocol.params import (PointerParam, EnumParam, 
+                                        StringParam, GPU_LIST)
 from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
 from pyworkflow.object import Float
 from pyworkflow.em import ImageHandler
@@ -38,16 +37,24 @@ from pyworkflow.utils import getExt
 from pyworkflow.em.data import Volume
 import pyworkflow.em.metadata as md
 import xmipp3
+from xmipp3.utils import validateDLtoolkit
 
+def updateEnviron(gpuNum):
+    """ Create the needed environment for TensorFlow programs. """
+    print("updating environ to select gpu %s" % (gpuNum))
+    if gpuNum == '':
+        os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+    else:
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
 
 DEEPRES_METHOD_URL = 'http://github.com/I2PC/scipion/wiki/XmippProtDeepRes'
 RESIZE_MASK = 'binaryMask.vol' 
 MASK_DILATE = 'Mask_dilate.vol'  
 RESIZE_VOL = 'originalVolume.vol'
 OPERATE_VOL = 'operateVolume.vol'
-CHIMERA_RESOLUTION_VOL = 'deepRes_resolution.vol'
+#CHIMERA_RESOLUTION_VOL = 'deepRes_resolution.vol'
 OUTPUT_RESOLUTION_FILE = 'resolutionMap'
-OUTPUT_RESOLUTION_FILE_CHIMERA = 'outputChimera'
+OUTPUT_RESOLUTION_FILE_CHIMERA = 'chimera_resolution.vol'
 METADATA_MASK_FILE = 'metadataresolutions'
 FN_METADATA_HISTOGRAM = 'mdhist'
 
@@ -72,6 +79,12 @@ class XmippProtDeepRes(ProtAnalysis3D):
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
+        
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       label="Choose GPU ID",
+                       help="GPU may have several cores. Set it to zero"
+                            " if you do not know what we are talking about."
+                            " First core index is 0, second 1 and so on.")               
 
         form.addParam('inputVolume', PointerParam, pointerClass='Volume',
                       label="Input Volume", important=True,
@@ -101,7 +114,8 @@ class XmippProtDeepRes(ProtAnalysis3D):
                  OPERATE_VOL: self._getTmpPath('operateVolume.vol'),                             
                  RESIZE_MASK: self._getExtraPath('binaryMask.vol'),                
                  RESIZE_VOL: self._getExtraPath('originalVolume.vol'),
-                 OUTPUT_RESOLUTION_FILE_CHIMERA: self._getExtraPath(CHIMERA_RESOLUTION_VOL),                
+                 OUTPUT_RESOLUTION_FILE_CHIMERA: self._getExtraPath('chimera_resolution.vol'),
+#                 OUTPUT_RESOLUTION_FILE_CHIMERA: self._getExtraPath(CHIMERA_RESOLUTION_VOL),                                 
                  OUTPUT_RESOLUTION_FILE: self._getExtraPath('deepRes_resolution.vol'),
                  FN_METADATA_HISTOGRAM: self._getExtraPath('hist.xmd')
                  }
@@ -109,6 +123,9 @@ class XmippProtDeepRes(ProtAnalysis3D):
 
     def _insertAllSteps(self):
             # Convert input into xmipp Metadata format
+        
+        updateEnviron(self.gpuList.get())    
+            
         self._createFilenameTemplates() 
         self._insertFunctionStep('convertInputStep')
         self._insertFunctionStep('transformStep')          
@@ -242,7 +259,22 @@ class XmippProtDeepRes(ProtAnalysis3D):
         max_res = round(np.amax(imgData) * 100) / 100
         median_res= round(np.median(imgData) * 100) / 100 
         return min_res, max_res, median_res
-
+    
+    def createChimeraOutput(self, vol, value):
+        Vx = xmipp3.Image(vol)
+        V = Vx.getData()
+        Zdim, Ydim, Xdim = V.shape
+#        Vout = V
+            
+        for z in range(0,Zdim):
+            for y in range(0,Ydim):
+                for x in range(0,Xdim):
+                    if V[z,y,x]==0:
+                        V[z,y,x]=value    
+        Vx.setData(V)                   
+#        Vx.write(Vout)     
+        return Vx
+                                                        
     def createOutputStep(self):
         if self.range == self.LOW_RESOL:
             sampling_new = 1.0
@@ -255,7 +287,6 @@ class XmippProtDeepRes(ProtAnalysis3D):
         self._defineOutputs(resolution_Volume=volume)
         self._defineTransformRelation(self.inputVolume, volume)
             
-            
         #Setting the min max and median for the summary
         imageFile = self._getFileName(OUTPUT_RESOLUTION_FILE)
         min_, max_, median_ = self.getMinMax(imageFile)
@@ -264,8 +295,20 @@ class XmippProtDeepRes(ProtAnalysis3D):
         self.median_res_init.set(round(median_*100)/100)        
         self._store(self.min_res_init)
         self._store(self.max_res_init)
-        self._store(self.median_res_init)        
-            
+        self._store(self.median_res_init)  
+        
+        #create Resolution Map to visialize in Chimera
+        #vol_chimera=Volume()         
+        vol_chimera = self.createChimeraOutput(
+                   self._getFileName(OUTPUT_RESOLUTION_FILE),self.median_res_init) 
+#        self.createChimeraOutput(self._getFileName(OUTPUT_RESOLUTION_FILE),
+#                                 self.median_res_init, 
+#                                 self._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA))
+        vol_chimera.write(self._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA))    
+#        vol_chimera.setFileName(self._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA))          
+#        self.vol_chimera.setSamplingRate(sampling_new)  
+#         self._defineOutputs(resolution_Volume=vol_chimera)
+#         self._defineTransformRelation(self.inputVolume, vol_chimera)             
                 
     # --------------------------- INFO functions ------------------------------
 
@@ -284,6 +327,17 @@ class XmippProtDeepRes(ProtAnalysis3D):
                                                          self.max_res_init))        
         return summary
 
+    @classmethod
+    def validateInstallation(cls):
+        """ Check if the installation of this protocol is correct.
+        Can't rely on package function since this is a "multi package" package
+        Returning an empty list means that the installation is correct
+        and there are not errors. If some errors are found, a list with
+        the error messages will be returned.
+        """
+        error=validateDLtoolkit(model="deepRes")
+        return error
+    
     def _citations(self):
         return ['Ramirez-Aportela-2019']
 
