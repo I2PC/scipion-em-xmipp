@@ -6,15 +6,15 @@ from matplotlib import pyplot as plt
 
 from dataGenerator import getDataGenerator,  BATCH_SIZE
 
-
 class DeepLearningModel():
   def __init__(self, boxSize, saveModelFname, gpuList, batchSize, generatorLoss, trainingDataMode, 
-                      modelDepth=4):
+                      modelDepth=4, regularizationStrength=1e-5):
   
     self.saveModelFname = saveModelFname
     self.gpuList= gpuList
     self.batchSize= batchSize
     self.modelDepth= modelDepth
+    self.regularizationStrength= regularizationStrength
     self._setShape(boxSize)
     self.addSyntheticEmpty= True if trainingDataMode=="ParticlesAndSyntheticNoise" else False
     
@@ -51,8 +51,8 @@ class DeepLearningModel():
     print("loading saved model")
     model = keras.models.load_model(self.saveModelFname, custom_objects={self.generatorLoss.__name__: self.generatorLoss})
     print("model loaded")
-    trainIterator, stepsPerEpoch= getDataGenerator(xmdParticles, xmdProjections, isTrain=False, 
-                                           valFraction=0, augmentData=False, nEpochs=1, batchSize= self.batchSize)
+    trainIterator, stepsPerEpoch= getDataGenerator(xmdParticles, xmdProjections, isTrain=False, valFraction=0, 
+                                                   augmentData=False, nEpochs=1, batchSize= self.batchSize)
     for noisyParticles, projections in trainIterator:
       yield model.predict(noisyParticles, batch_size=BATCH_SIZE), noisyParticles, projections
 

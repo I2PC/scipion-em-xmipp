@@ -3,6 +3,7 @@ import xmippLib
 import numpy as np
 import random
 
+from scipy.stats import iqr
 from sklearn.utils import shuffle
 from sklearn.cross_validation import train_test_split
 from .augmentators import (_random_flip_leftright, _random_flip_updown, _mismatch_projection,
@@ -11,7 +12,7 @@ from .augmentators import (_random_flip_leftright, _random_flip_updown, _mismatc
 
 BATCH_SIZE= 16
 def getDataGenerator( imgsMdXmd, masksMdXmd, xmdEmptyParts=None, augmentData=True, nEpochs=-1, isTrain=True, valFraction=0.1, 
-                      batchSize= BATCH_SIZE, doTanhNormalize=False, simulateEmptyParts=True, addMismatch=False): 
+            batchSize= BATCH_SIZE, doTanhNormalize=True, simulateEmptyParts=True, addMismatch=False, path_size_fraction=None): 
 
   if nEpochs<1: 
     nEpochs= 9999999
@@ -27,7 +28,9 @@ def getDataGenerator( imgsMdXmd, masksMdXmd, xmdEmptyParts=None, augmentData=Tru
   
   I.read( imgFnames[0] )
   shape= I.getData().shape+ (1,)
-
+  if not path_size_fraction is None and 0<path_size_fraction<1:
+    shape= tuple([int(path_size_fraction*elem) for elem in shape[:-1] ])+(1,)
+    
   if not xmdEmptyParts is None:
     mdEmpty= md.MetaData(xmdEmptyParts)
     nImages+= int(mdEmpty.size())
@@ -59,27 +62,47 @@ def getDataGenerator( imgsMdXmd, masksMdXmd, xmdEmptyParts=None, augmentData=Tru
       imgFnames, maskFnames= imgFnames_train, maskFnames_train
     else:
       imgFnames, maskFnames= imgFnames_val, maskFnames_val
- 
-  if doTanhNormalize:
-    def readImgAndMask(fnImageImg, fnImageMask):
-      I.read(fnImageImg)
-      img= normalization( np.expand_dims(I.getData(), -1), use0_1_norm_instead_1_1=False)
-      if fnImageMask is None:
-        mask= -1*np.ones_like(img)
-      else:
-        I.read(fnImageMask)
-        mask= normalization(np.expand_dims(I.getData(), -1), use0_1_norm_instead_1_1=False)
-      return img, mask
-  else:
-    def readImgAndMask(fnImageImg, fnImageMask):
-      I.read(fnImageImg)
-      img=np.expand_dims(I.getData(),-1)
-      if fnImageMask is None:
-        mask= -1*np.ones_like(img)
-      else:
-        I.read(fnImageMask)
-      mask= np.expand_dims(I.getData(),-1)
-      return img, mask
+
+  def readOneImage(fname):
+    I.read(fname)
+    return I.getData()
+      
+#  if doTanhNormalize:
+#    def readImgAndMask(fnImageImg, fnImageMask):
+#      img= normalization( np.expand_dims(readOneImage(fnImageImg), -1), sigmoidInsteadTanh=False)
+#      if fnImageMask is None:
+#        mask= -1*np.ones_like(img)
+#      else:
+#        mask= normalization(np.expand_dims(readOneImage(fnImageMask), -1), sigmoidInsteadTanh=False)
+#      return img, mask
+#  else:
+#    def readImgAndMask(fnImageImg, fnImageMask):
+#      img=np.expand_dims(readOneImage(fnImageImg),-1)
+#      if fnImageMask is None:
+#        mask= -1*np.ones_like(img)
+#      else:
+#        mask= np.expand_dims(readOneImage(fnImageMask),-1)
+#      return img, mask
+
+  def readImgAndMask(fnImageImg, fnImageMask):
+    img= normalization( np.expand_dims(readOneImage(fnImageImg), -1), sigmoidInsteadTanh= not doTanhNormalize)
+    if fnImageMask is None:
+      mask= -1*np.ones_like(img)
+    else:
+      mask= normalization(np.expand_dims(readOneImage(fnImageMask), -1), sigmoidInsteadTanh=not doTanhNormalize)
+    return img, mask
+      
+  def extractPatch(img, mask):
+    halfShape0= shape[0]//2
+    halfShape0Right= halfShape0 + shape[0]%2
+    halfShape1= shape[1]//2
+    halfShape1Right= halfShape1 + shape[1]%2  
+    hpos= random.randint(halfShape0, img.shape[0]-halfShape0Right)
+    wpos= random.randint(halfShape1, img.shape[1]-halfShape1Right)
+    
+    img= img[hpos-halfShape0: hpos+halfShape0Right, wpos-halfShape1: wpos+halfShape1Right]
+    mask= mask[hpos-halfShape0: hpos+halfShape0Right, wpos-halfShape1: wpos+halfShape1Right]
+    return img, mask
       
   def dataIterator(imgFnames, maskFnames, nBatches=None):
     
@@ -91,7 +114,11 @@ def getDataGenerator( imgsMdXmd, masksMdXmd, xmdEmptyParts=None, augmentData=Tru
         imgFnames, maskFnames= shuffle(imgFnames, maskFnames)
       n=0
       for fnImageImg, fnImageMask in zip(imgFnames, maskFnames):
-        batchStack[n,...], batchLabels[n,...]= readImgAndMask(fnImageImg, fnImageMask)
+        img, mask= readImgAndMask(fnImageImg, fnImageMask)
+        if not path_size_fraction is None:
+          img, mask= extractPatch(img, mask)
+#          print(img.shape, mask.shape)
+        batchStack[n,...], batchLabels[n,...]= img, mask
         n+=1
         if n>=batchSize:
           yield augmentBatch(batchStack, batchLabels)
@@ -114,15 +141,64 @@ def extractNBatches(valIterator, maxBatches=-1):
       break
   return ( np.concatenate(x_val, axis=0), np.concatenate(y_val, axis=0 ))
 
-def normalization( img, use0_1_norm_instead_1_1=True):
-  normData= (img -np.min(img))/ (np.max(img)-np.min(img))
-  if not use0_1_norm_instead_1_1:
-    normData= 2*normData -1
-  if np.any( np.isnan(normData)):
-    normData= np.zeros_like(normData)
-  return normData
+#def normalization( img, sigmoidInsteadTanh=True):
+#  normData= (img -np.min(img))/ (np.max(img)-np.min(img))
+#  if not sigmoidInsteadTanh:
+#    normData= 2*normData -1
+#  if np.any( np.isnan(normData)):
+#    normData= np.zeros_like(normData)
+#  return normData
+
+def normalization(img, sigmoidInsteadTanh=True):
+  '''
+  Proposed alternative normalization
+  '''
+  iqr_val= iqr(img, rng=(10,90) )
+  if iqr_val==0:
+      iqr_val= (np.max(img)-np.min(img)) + 1e-12
+  newImg=(img- np.median(img))/iqr_val
+  if sigmoidInsteadTanh:
+    newImg=1 / (1 + np.exp(-newImg))
+  else:
+    newImg= np.tanh(newImg)
+  return newImg
   
-def normalizeImgs(batch_img, use0_1_norm_instead_1_1=True):
+def normalizeImgs(batch_img, sigmoidInsteadTanh=True):
   for i in range(batch_img.shape[0]):
-    batch_img[i]= normalization(batch_img[i], use0_1_norm_instead_1_1)
+    batch_img[i]= normalization(batch_img[i], sigmoidInsteadTanh)
   return batch_img
+  
+if __name__=="__main__":
+  import sys, os
+  import matplotlib.pyplot as plt
+  runsPath="/home/rsanchez/ScipionUserData/projects/tryDenoiser"
+  xmdParticles=os.path.join(runsPath, "Runs/004808_XmippProtDeepDenoising/extra/resizedParticles.xmd")
+  xmdProjections=os.path.join(runsPath,"Runs/004808_XmippProtDeepDenoising/extra/resizedProjections.xmd")
+  xmdEmptyParts=None
+  os.chdir(runsPath)
+  trainIterator, stepsPerEpoch= getDataGenerator(xmdParticles, xmdProjections, xmdEmptyParts=xmdEmptyParts,
+                                                 isTrain=True, augmentData=True,
+                                                 valFraction=0.1, batchSize=32, doTanhNormalize=True)
+
+  for patch_x, patch_y in trainIterator:
+#  for patch_x, patch_y, fnames in one_gen:
+    print(patch_x.shape, patch_y.shape)
+    print(patch_x.mean(), patch_y.mean())
+    for x,y in zip( patch_x, patch_y ):
+#    for x,y,fname in zip( patch_x, patch_y, fnames ):
+      fig, axarr = plt.subplots(1, 3)
+#      fig.suptitle(fname)
+      if len(axarr.shape)==1:
+        axarr= np.expand_dims(axarr, axis=0)
+      k=0
+      axarr[k,0].imshow(  np.squeeze(x), cmap="gray" )
+      axarr[k,0].set_title("particle")
+#      axarr[k,0].axis('off')
+      axarr[k,1].imshow(  np.squeeze(y), cmap="gray" )
+      axarr[k,1].set_title("projection")
+#      axarr[k,1].axis('off')
+      axarr[k,2].imshow(  np.squeeze(x*y), cmap="gray" )
+      axarr[k,2].set_title("particle*projection")
+#      axarr[k,2].axis('off')
+      plt.show()
+  print("DONE")

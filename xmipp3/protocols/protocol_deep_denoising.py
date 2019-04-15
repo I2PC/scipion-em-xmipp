@@ -127,7 +127,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
         form.addParam('emptyParticles', params.PointerParam, expertLevel=cons.LEVEL_ADVANCED,
                       pointerClass='SetOfParticles',  allowsNull=True,
-                      label='Input "empty" particles', help='Input "empty" '
+                      label='Input "empty" particles (optional)', help='Input "empty" '
                       'particles to learn how to deal with noise')
                       
         form.addParam('imageSize', params.IntParam, allowsNull=True, expertLevel=cons.LEVEL_ADVANCED,
@@ -156,7 +156,13 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                        label='Model depth',
                        help='Indicate the model depth. For 128-64 px images, 4 is the recommend value. '
                             ' larger images may require bigger models') 
-                            
+
+        form.addParam('regularizationStrength', params.FloatParam, default=1e-5,
+                       condition='modelTrainPredMode==%d'%ITER_TRAIN, expertLevel=cons.LEVEL_ADVANCED,
+                       label='Regularization strength',
+                       help='Indicate the regularization strength. Make it bigger if sufferening overfitting'
+                            ' and smaller if suffering underfitting') 
+                                                     
         form.addParam('trainingSetType', params.EnumParam, choices=TRAINING_DATA_MODE,
                        condition='modelTrainPredMode==%d'%ITER_TRAIN,
                        default=TRAINING_DATA_MODE_SYNNOISE, expertLevel=cons.LEVEL_ADVANCED,
@@ -257,7 +263,8 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         builder_args= {"boxSize":self._getResizedSize(), "saveModelFname":modelFname, 
                        "modelDepth": self.modelDepth.get(), "gpuList":self.gpuList.get(),
                        "generatorLoss": TRAINING_LOSS[self.trainingLoss.get()],
-                       "trainingDataMode": TRAINING_DATA_MODE[self.trainingSetType.get()] }
+                       "trainingDataMode": TRAINING_DATA_MODE[self.trainingSetType.get()],
+                       "regularizationStrength": self.regularizationStrength.get() }
         if self.modelType.get() == MODEL_TYPE_GAN:
 
           builder_args["training_DG_ratio"]= self.numberOfDiscVsGenUpdates.get()

@@ -1,6 +1,6 @@
 import numpy as np
 import random, scipy
-
+import scipy.ndimage
 
 def _random_flip_leftright( batchX, batchY):
   for i in range(batchX.shape[0]):

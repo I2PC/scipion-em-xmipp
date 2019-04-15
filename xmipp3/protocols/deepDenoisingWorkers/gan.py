@@ -37,13 +37,15 @@ NUM_BATCHES_PER_EPOCH= 128
 
 TRAINING_RATIO= 5
 LOSS_WEIGHT= 3
+PATCH_SIZE_FRACTION= None #0.45
 
 class GAN(DeepLearningModel):
-  def __init__(self,  boxSize, saveModelFname, gpuList="0", batchSize=BATCH_SIZE, modelDepth=4, generatorLoss= "MSE",
-                  training_DG_ratio= TRAINING_RATIO, loss_logWeight=LOSS_WEIGHT, trainingDataMode="ParticlesAndSyntheticNoise"):
+  def __init__(self, boxSize, saveModelFname, gpuList="0", batchSize=BATCH_SIZE, modelDepth=4, generatorLoss= "MSE",
+                  training_DG_ratio= TRAINING_RATIO, loss_logWeight=LOSS_WEIGHT, trainingDataMode="ParticlesAndSyntheticNoise",
+                  regularizationStrength=1e-5):
 
     DeepLearningModel.__init__(self,boxSize, saveModelFname, gpuList, batchSize, generatorLoss= generatorLoss,
-                                trainingDataMode=trainingDataMode)
+                                trainingDataMode=trainingDataMode,  regularizationStrength= regularizationStrength)
                                 
     self.epochSize= NUM_BATCHES_PER_EPOCH
     self.trainingDataMode= trainingDataMode
@@ -55,7 +57,10 @@ class GAN(DeepLearningModel):
     self.img_cols = boxSize
     self.channels = 1
     self.shape = self.img_rows * self.img_cols
-    self.img_shape = (self.img_rows, self.img_cols, self.channels)
+    if not PATCH_SIZE_FRACTION is None:
+      self.img_shape = (int(self.img_rows*PATCH_SIZE_FRACTION), int(self.img_cols*PATCH_SIZE_FRACTION), self.channels)
+    else:
+      self.img_shape = (self.img_rows, self.img_cols, self.channels)
     return self.shape, self.img_shape
 
   def buildGenerator(self):
@@ -66,7 +71,7 @@ class GAN(DeepLearningModel):
       print("model loaded")
     else:
       generator = build_UNet( self.img_shape, out_ch=1, start_ch=32, depth=self.modelDepth, inc_rate=2., activation='relu', 
-                        dropout=0.5, batchnorm=True, residual=True, lastActivation="tanh")
+                        dropout=0.5, batchnorm=True, residual=True, lastActivation="tanh", l1l2_reg=self.regularizationStrength)
     return generator
                         
   def buildDiscriminator(self):
@@ -126,8 +131,8 @@ class GAN(DeepLearningModel):
 
     superBatchSize= int((1+self.trainingRatio)*self.batchSize)
     trainIterator, stepsPerEpoch= getDataGenerator(xmdParticles, xmdProjections, xmdEmptyParts=xmdEmptyParts,
-                                                   isTrain=True, augmentData=True,
-                                                   valFraction=0.1, batchSize=superBatchSize, doTanhNormalize=True,
+                                                   isTrain=True, augmentData=True, path_size_fraction=PATCH_SIZE_FRACTION,
+                                                   valFraction=0.1, batchSize=superBatchSize,
                                                    simulateEmptyParts=self.addSyntheticEmpty) 
     nEpochs_init= nEpochs
     nEpochs= int(max(1, nEpochs_init*float(stepsPerEpoch)/self.epochSize ))
@@ -139,17 +144,19 @@ class GAN(DeepLearningModel):
     
 
     valIterator, valStepsPerEpoch= getDataGenerator(xmdParticles, xmdProjections, isTrain=False, valFraction=0.1,
-                                           augmentData=False, nEpochs= 1, batchSize=100, doTanhNormalize=True )
+                                           path_size_fraction=PATCH_SIZE_FRACTION,
+                                           augmentData=False, nEpochs= 1, batchSize=100 )
 
     particles_val, projections_val = extractNBatches(valIterator, 2) ; del valIterator
 
     bestValidationLoss = sys.maxsize
 
     roundsToEarlyStopping=40
-    roundsToLR_decay=10
+    roundsToLR_decay=15
     
     remainingRoundsToTrainDiscr= 0 #To use in case some handicap is desired
     remainingBatchesToTrainGen= 0  #To use in case some handicap is desired
+    roundsNoImprovementSinceLRDecay=0
     roundsNoImprovement=0
     currTime= time.time()
     for epoch in range(nEpochs):
@@ -220,27 +227,27 @@ class GAN(DeepLearningModel):
         generator.save(self.saveModelFname)
         bestValidationLoss= generatorValLoss
         roundsNoImprovement= 0
+        roundsNoImprovementSinceLRDecay=0
       else:
         print("Validation meanLoss did not improve from %s"%(bestValidationLoss ) )
-        roundsToEarlyStopping-=1
         roundsNoImprovement+=1
-
+        roundsNoImprovementSinceLRDecay+=1
       self.save_imgs([generated_imgs, particles_val, projections_val], ["generated", "particles", "projections"],
                       saveImagesPath, epoch)
       sys.stdout.flush()
       
-      if roundsNoImprovement== roundsToLR_decay:
+      if roundsNoImprovement>= roundsToEarlyStopping:
+        print("Early stopping")
+        break
+      elif roundsNoImprovementSinceLRDecay== roundsToLR_decay:
         new_lr= max(1e-9, 0.05* learningRate)
-        print("Decreasing learning rate to %f"%(learningRate) )
+        print("Decreasing learning rate to %.2E"%(learningRate) )
         K.set_value(optimizer_discriminator_model.lr, new_lr)
         K.set_value(optimizer_generatorGAN_model.lr, new_lr)
         learningRate= new_lr
-        roundsNoImprovement=0
-        
+        roundsNoImprovementSinceLRDecay=0
+
       if epoch>= nEpochs:
-        break
-      elif roundsToEarlyStopping<0:
-        print("Early stopping")
         break
       print("------------------------------------------------------------------------")
 
