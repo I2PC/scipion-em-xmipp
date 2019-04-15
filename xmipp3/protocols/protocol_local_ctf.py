@@ -32,14 +32,10 @@ import os
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.em.constants import ALIGN_PROJ
-from pyworkflow.utils.path import cleanPath
+from pyworkflow.utils.path import cleanPattern
 from pyworkflow.em.protocol import ProtAnalysis3D
-from pyworkflow.em.data import Image, SetOfParticles
-import pyworkflow.em.metadata as md
 
 import xmippLib
-from xmipp3.convert import setXmippAttributes, xmippToLocation, rowToAlignment
 from xmipp3.convert import readSetOfParticles
 
 
@@ -64,8 +60,14 @@ class XmippProtLocalCTF(ProtAnalysis3D):
         form.addParam('inputVolume', PointerParam, label="Volume to compare images to",
                       pointerClass='Volume',
                       help='Volume to be used for class comparison')
-        form.addParam('maxDefocusChange', FloatParam, label="Maximum defocus change (A)", default=500,
+        form.addParam('maxDefocusChange', FloatParam, label="Maximum defocus change (A)", default=10000,
                       expertLevel=LEVEL_ADVANCED)
+        form.addParam('maxGrayScaleChange', FloatParam, label="Maximum gray scale change", default=1,
+                      expertLevel=LEVEL_ADVANCED,
+                      help="The reprojection is modified as a*P+b, a is restricted to the interval [1-maxGrayScale,1+maxGrayScale]")
+        form.addParam('maxGrayShiftChange', FloatParam, label="Maximum gray shift change", default=1,
+                      expertLevel=LEVEL_ADVANCED,
+                      help = "The reprojection is modified as a*P+b, b is restricted to the interval [-maxGrayShift,maxGrayShift]")
         form.addParallelSection(threads=0, mpi=8)
     
     #--------------------------- INSERT steps functions --------------------------------------------
@@ -90,40 +92,35 @@ class XmippProtLocalCTF(ProtAnalysis3D):
     
     def refineDefocus(self):
         fnVol = self._getExtraPath("volume.vol")
+        fnOut = self._getExtraPath('output_imgs.xmd')
         anglesOutFn=self._getExtraPath("anglesCont.stk")
         Ts=self.inputSet.get().getSamplingRate()
-        args="-i %s -o %s --ref %s --optimizeDefocus --max_defocus_change %d --sampling %f"%\
-                    (self._getExtraPath('input_imgs.xmd'),anglesOutFn,fnVol,self.maxDefocusChange.get(),Ts)
+        args="-i %s -o %s --ref %s --optimizeDefocus --max_defocus_change %d --sampling %f "\
+             "--optimizeGray --max_gray_scale %f --max_gray_shift %f"%\
+                    (fnOut,anglesOutFn,fnVol,self.maxDefocusChange.get(),Ts,self.maxGrayScaleChange.get(),
+                     self.maxGrayShiftChange.get())
         if self.inputSet.get().isPhaseFlipped():
             args += " --phaseFlipped"
         self.runJob("xmipp_angular_continuous_assign2", args)
 
-    def createOutputStep(self):
-        fnImgs = self._getExtraPath('anglesCont.stk')
-        if os.path.exists(fnImgs):
-            cleanPath(fnImgs)
-        fnIn = self._getExtraPath('input_imgs.xmd')
         fnCont = self._getExtraPath('anglesCont.xmd')
-        fnOut = self._getExtraPath('output_imgs.xmd')
         self.runJob("xmipp_metadata_utilities",'-i %s --operate keep_column "itemId ctfDefocusU ctfDefocusV ctfDefocusChange ctfDefocusAngle"'%
                     fnCont,numberOfMpi=1)
         self.runJob("xmipp_metadata_utilities",
                     '-i %s -o %s --operate drop_column "ctfDefocusU ctfDefocusV ctfDefocusChange ctfDefocusAngle"' % (
-                    fnIn, fnOut),numberOfMpi=1)
+                    fnOut),numberOfMpi=1)
         self.runJob("xmipp_metadata_utilities",
                     "-i %s --set join %s itemId itemId" % (fnOut, fnCont),numberOfMpi=1)
 
+        cleanPattern(self._getExtraPath("anglesCont.*"))
+
+    def createOutputStep(self):
         outputSet = self._createSetOfParticles()
         imgSet = self.inputSet.get()
         outputSet.copyInfo(imgSet)
-        readSetOfParticles(fnOut, outputSet)
+        readSetOfParticles(self._getExtraPath('output_imgs.xmd'), outputSet)
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(self.inputSet, outputSet)
-
-    def _processRow(self, particle, row):
-        setXmippAttributes(particle, row,
-                           xmippLib.MDL_CTF_DEFOCUSU, xmippLib.MDL_CTF_DEFOCUSV,
-                           xmippLib.MDL_CTF_DEFOCUS_ANGLE, xmippLib.MDL_CTF_DEFOCUS_CHANGE)
 
     #--------------------------- INFO functions --------------------------------------------
     def _summary(self):
