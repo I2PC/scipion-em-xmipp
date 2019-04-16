@@ -170,7 +170,7 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
             self._store(outputAttr)
         else:
             self._defineOutputs(**{outputName: outputSet})
-            self._defineTransformRelation(self.inputParticles, outputSet)
+            self._defineTransformRelation(self.getInput(), outputSet)
             self._store(outputSet)
 
         # Close set databaset to avoid locking it
@@ -183,6 +183,9 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
             item._appendItem = False
         else:
             item._appendItem = True
+
+    def getInput(self):
+        pass
 
 
 class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
@@ -286,6 +289,9 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
 
         updateOutputs(self.fnOutMdTmp, 'output')
         updateOutputs(self.fnElimMdTmp, 'eliminated')
+
+    def getInput(self):
+        return self.inputParticles.get()
 
 
 DISCARDED = 0
@@ -519,3 +525,6 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
 
         # Close set databaset to avoid locking it
         outputSet.close()
+
+    def getInput(self):
+        return self.inputClasses.get()

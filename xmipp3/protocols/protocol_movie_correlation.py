@@ -251,6 +251,13 @@ class XmippProtMovieCorr(ProtAlignMovies):
     def _getShiftsFile(self, movie):
         return self._getExtraPath(self._getMovieRoot(movie) + '_shifts.xmd')
 
+    def _stepsCheck(self):
+        # Input movie set can be loaded or None when checked for new inputs
+        # If None, we load it
+        self._checkNewInput()
+        self._checkNewOutput()
+        self.inputMovies.get().close()
+
     def _setControlPoints(self):
             _,_,frames = self.inputMovies.get().getDimensions()
             self.controlPointX.set( int(self.patchX) / 3 + 2)
