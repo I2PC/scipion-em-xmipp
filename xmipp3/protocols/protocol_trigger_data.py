@@ -93,7 +93,7 @@ class XmippProtTriggerData(EMProtocol):
         self.setImagesType()
 
         # steps
-        imsSteps = self.delayStep()
+        imsSteps = self._insertFunctionStep('delayStep')
         self._insertFunctionStep('createOutputStep',
                                  prerequisites=imsSteps, wait=True)
 
