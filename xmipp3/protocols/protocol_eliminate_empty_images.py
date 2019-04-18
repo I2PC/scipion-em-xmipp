@@ -523,8 +523,9 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
             # Persist changes
             self._store(outputAttr)
         else:
-            self._defineOutputs(**{outputName: outputSet})
-            self._defineSourceRelation(self.inputClasses, outputSet)
+            # FIXME: no outputClasses are generated because they are corrupted.
+            # self._defineOutputs(**{outputName: outputSet})
+            # self._defineSourceRelation(self.inputClasses, outputSet)
             self._store(outputSet)
 
         # Close set databaset to avoid locking it
