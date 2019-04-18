@@ -29,7 +29,7 @@ from os.path import getmtime
 from datetime import datetime
 from os.path import exists
 
-from pyworkflow import VERSION_1_2
+from pyworkflow import VERSION_2_0
 from pyworkflow.em import SetOfParticles, SetOfClasses2D, ALIGN_2D, ALIGN_NONE
 from pyworkflow.em.protocol import ProtAlign2D
 import pyworkflow.em.metadata as md
@@ -69,7 +69,7 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
     A previous set of classes must be provided to include the new images in the
     corresponding class although the representatives will be maintained."""
     _label = 'gl2d static'
-    _lastUpdateVersion = VERSION_1_2
+    _lastUpdateVersion = VERSION_2_0
 
 
     # --------------------------- DEFINE param functions -----------------------
