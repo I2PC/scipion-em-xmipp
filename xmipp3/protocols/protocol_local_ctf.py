@@ -35,8 +35,8 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.utils.path import cleanPattern
 from pyworkflow.em.protocol import ProtAnalysis3D
 
-import xmippLib
 from xmipp3.convert import readSetOfParticles
+import xmippLib
 
 
 class XmippProtLocalCTF(ProtAnalysis3D):
@@ -89,15 +89,16 @@ class XmippProtLocalCTF(ProtAnalysis3D):
         xDimImg = imgSet.getDim()[0]
         if xDimVol!=xDimImg:
             self.runJob("xmipp_image_resize","-i %s --dim %d"%(fnVol,xDimImg),numberOfMpi=1)
-    
+
     def refineDefocus(self):
         fnVol = self._getExtraPath("volume.vol")
+        fnIn = self._getExtraPath('input_imgs.xmd')
         fnOut = self._getExtraPath('output_imgs.xmd')
         anglesOutFn=self._getExtraPath("anglesCont.stk")
         Ts=self.inputSet.get().getSamplingRate()
         args="-i %s -o %s --ref %s --optimizeDefocus --max_defocus_change %d --sampling %f "\
              "--optimizeGray --max_gray_scale %f --max_gray_shift %f"%\
-                    (fnOut,anglesOutFn,fnVol,self.maxDefocusChange.get(),Ts,self.maxGrayScaleChange.get(),
+                    (fnIn,anglesOutFn,fnVol,self.maxDefocusChange.get(),Ts,self.maxGrayScaleChange.get(),
                      self.maxGrayShiftChange.get())
         if self.inputSet.get().isPhaseFlipped():
             args += " --phaseFlipped"
@@ -107,8 +108,8 @@ class XmippProtLocalCTF(ProtAnalysis3D):
         self.runJob("xmipp_metadata_utilities",'-i %s --operate keep_column "itemId ctfDefocusU ctfDefocusV ctfDefocusChange ctfDefocusAngle"'%
                     fnCont,numberOfMpi=1)
         self.runJob("xmipp_metadata_utilities",
-                    '-i %s -o %s --operate drop_column "ctfDefocusU ctfDefocusV ctfDefocusChange ctfDefocusAngle"' % (
-                    fnOut),numberOfMpi=1)
+                    '-i %s -o %s --operate drop_column "ctfDefocusU ctfDefocusV ctfDefocusChange ctfDefocusAngle"' %
+                    (fnIn,fnOut),numberOfMpi=1)
         self.runJob("xmipp_metadata_utilities",
                     "-i %s --set join %s itemId itemId" % (fnOut, fnCont),numberOfMpi=1)
 
@@ -118,7 +119,7 @@ class XmippProtLocalCTF(ProtAnalysis3D):
         outputSet = self._createSetOfParticles()
         imgSet = self.inputSet.get()
         outputSet.copyInfo(imgSet)
-        readSetOfParticles(self._getExtraPath('output_imgs.xmd'), outputSet)
+        readSetOfParticles(self._getExtraPath('output_imgs.xmd'), outputSet,  extraLabels=[xmippLib.MDL_CTF_DEFOCUS_CHANGE])
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(self.inputSet, outputSet)
 
