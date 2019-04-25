@@ -218,11 +218,11 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                 movie.setEnabled(enable)
                 movieSet.append(movie)
                 if self.inputMics is not None:
-                    mic = self.getMicFromMovie(movie)
+                    mic = self.getMicFromMovie(movie, isDoseWeighted=False)
                     mic.setEnabled(enable)
                     micsSet.append(mic)
                 if self.inputDwMics is not None:
-                    micDw = self.getDwMicFromMovie(movie)
+                    micDw = self.getMicFromMovie(movie, isDoseWeighted=True)
                     micDw.setEnabled(enable)
                     micsDwSet.append(micDw)
 
@@ -335,23 +335,16 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                                           '' if len(inNotFound)<2
                                                 else ', only movies'))
 
-    def getMicFromMovie(self, movie):
-        """ Get the Micrograph related with the movie
+    def getMicFromMovie(self, movie, isDoseWeighted):
+        """ Get the Micrograph/DwMicrograph related with a certain movie
         """
         movieMicName = movie.getMicName()
-        for mic in self.inputMics:
+        inMics = self.inputDwMics if isDoseWeighted else self.inputMics
+        for mic in inMics:  # self.inputMics:
             if mic.getMicName() == movieMicName:
                 return mic
-        self.warning('Mic NOT found for movie "%s"' % movieMicName)
-
-    def getDwMicFromMovie(self, movie):
-        """ Get the Micrograph related with the movie
-        """
-        movieMicName = movie.getMicName()
-        for mic in self.inputDwMics:
-            if mic.getMicName() == movieMicName:
-                return mic
-        self.warning('DWMic NOT found for movie "%s"' % movieMicName)
+        micStr = 'DwMic' if isDoseWeighted else 'Mic'
+        self.warning('%s NOT found for movie "%s"' % (micStr, movieMicName))
 
 
     # ---------------------- INFO functions ------------------------------------
