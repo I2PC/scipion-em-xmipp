@@ -1,7 +1,7 @@
 # **************************************************************************
 # *
-# * Authors:     Carlos Óscar Sánchez Sorzano
-# *              Estrella Fernández Giménez
+# * Authors:     Carlos Oscar Sanchez Sorzano
+# *              Estrella Fernandez Gimenez
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -25,13 +25,18 @@
 # *
 # **************************************************************************
 
-import matplotlib.pyplot as plt
+import numpy as np
+import xmippLib
+from os.path import exists
 
 from pyworkflow.viewer import (ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO)
-from pyworkflow.protocol.params import StringParam, LabelParam
+from pyworkflow.protocol.params import IntParam, LabelParam
+from pyworkflow.em.viewers import ObjectView
+import pyworkflow.em.viewers.showj as showj
 
-from protocols import XmippProtAnalyzeLocalCTF
-from protocols.nma.data import Point
+
+from xmipp3.protocols.protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
+from .plotter import XmippPlotter
 
 
 class XmippAnalyzeLocalCTFViewer(ProtocolViewer):
@@ -52,50 +57,54 @@ class XmippAnalyzeLocalCTFViewer(ProtocolViewer):
 
     def _defineParams(self, form):
         form.addSection(label='Visualization')
-        form.addParam('displayLocalDefocus', StringParam, default='1',
+        form.addParam('displayLocalDefocus', IntParam, default=1,
                       label='Display local defocus',
-                      help='Type the ID of the micrograph to see particle local defocus of that micrograph')
+                      help='Type the ID of the micrograph to see particle local defocus of the selected micrograph')
+        form.addParam('displayR2', LabelParam, default=False, label='Display particle R2')
 
     def _getVisualizeDict(self):
-        return {'displayLocalDefocus': self._viewLocalDefocus}
+        return {'displayLocalDefocus': self._viewLocalDefocus,
+                'displayR2' : self._viewR2,
+                }
 
-    def _viewLocalDefocus(self, paramName):
-        components = self.displayLocalDefocus.get()
-        return self._doViewLocalDefocus(components)
+    def _viewLocalDefocus(self, paramName=None):
+        views=[]
+        fnDefoci="%s"%(self.protocol._getExtraPath("micrographDefoci.xmd"))
+        if exists(fnDefoci):
+            try:
+                mdPoints = xmippLib.MetaData("mic_%d@%s"%(self.displayLocalDefocus.get(),fnDefoci))
 
-    def _doViewLocalDefocus(self, components):
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
+                x = mdPoints.getColumnValues(xmippLib.MDL_XCOOR)
+                y = mdPoints.getColumnValues(xmippLib.MDL_YCOOR)
+                defocusA = mdPoints.getColumnValues(xmippLib.MDL_CTF_DEFOCUSA)
+                residuals = mdPoints.getColumnValues(xmippLib.MDL_CTF_DEFOCUS_RESIDUAL)
 
-        data = self.loadData()
-        x = data.xbyId
-        y = data.ybyId
-        defocus = data.meanDefocusbyId
-        c = self._getExtraPath("micrographCoef.xmd")
-        pol = c(0) + c(1)*x + c(2)*y
+                title="Micrograph %d defocus"%self.displayLocalDefocus.get()
+                xplotter = XmippPlotter(windowTitle=title)
+                a = xplotter.createSubPlot(title, 'x', 'y', projection='3d')
+                a.set_zlabel('Defocus')
+                a.scatter(x, y, defocusA, c='r', marker='o')
+                a.scatter(x, y, np.asarray(defocusA)-np.asarray(residuals), c='b', marker='^')
+                legends = ['Avg. defocus','Adjusted defocus']
+                xplotter.showLegend(legends, loc=1)
+                views.append(xplotter)
+            except:
+                pass
 
-        for c, m in [('r','o'), ('b','^')]:
-            self.particlesDef = ax.scatter(x,y,defocus, c=c, marker=m)
-            self.plane = ax.scatter(x,y,pol, c=c, marker=m)
+        return views
 
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z (defocus)')
+    def _viewR2(self, paramName=None):
+        views = []
+        if hasattr(self.protocol, "outputMicrographs"):
+            obj = self.protocol.outputMicrographs
+            fn = obj.getFileName()
+            labels = 'id _filename _xmipp_ctfDefocusR2'
+            views.append(ObjectView(self._project, obj.strId(), fn,
+                                          viewParams={showj.ORDER: labels,
+                                                      showj.VISIBLE: labels,
+                                                      showj.MODE: showj.MODE_MD,
+                                                      showj.RENDER:'_filename'}))
+        return views
 
-        return (self.particlesDef, self.plane)
 
-    def loadData(self):
-        """ Iterate over the images and create a Data object with theirs Points.
-        """
-        particles = self.protocol.getInputParticles()
-        mics = self.protocol.getInputMics()
-
-        data = self._getExtraPath("micrographDefoci.xmd")
-        for i, particle in enumerate(particles):
-            data.addPoint(Point(pointId=particle.getObjId()))
-
-        for i, mic in enumerate(mics):
-            data.addPoint(Point(pointId=mic.getObjId()))
-
-        return data
 

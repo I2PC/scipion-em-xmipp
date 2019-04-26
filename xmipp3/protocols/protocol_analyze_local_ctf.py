@@ -1,8 +1,8 @@
 # coding=utf-8
 # **************************************************************************
 # *
-# * Authors:     Carlos Óscar Sánchez Sorzano
-# *              Estrella Fernández Giménez
+# * Authors:     Carlos Oscar Sanchez Sorzano
+# *              Estrella Fernandez Gimenez
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia, CSIC
 # *
@@ -26,11 +26,8 @@
 # *
 # **************************************************************************
 
-from math import floor
-import os
-
 from pyworkflow import VERSION_2_0
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam
+from pyworkflow.protocol.params import MultiPointerParam, PointerParam, StringParam, FloatParam, BooleanParam
 from pyworkflow.em.protocol import ProtAnalysis3D
 
 import pyworkflow.em.metadata as md
@@ -54,10 +51,10 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('inputSet', PointerParam, label="Input images",
-                      pointerClass='SetOfParticles')
         form.addParam('inputMics', PointerParam, label="Input micrographs",
                       pointerClass='SetOfMicrographs')
+        form.addParam('inputSet', PointerParam, label="Input images",
+                      pointerClass='SetOfParticles')
 
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -131,7 +128,6 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
 
 
     def createOutputStep(self):
-
         inputMicSet = self.inputMics.get()
         fnMics = self._getExtraPath('input_mics.xmd')
         writeSetOfMicrographs(inputMicSet, fnMics)
@@ -145,8 +141,6 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
         outputSet = self._createSetOfMicrographs()
         outputSet.copyInfo(inputMicSet)
         readSetOfMicrographs(fnMics, outputSet, extraLabels=[xmippLib.MDL_CTF_DEFOCUS_R2])
-
-        # Falta visor (como lo que represento en octave)
 
         self._defineOutputs(outputMicrographs=outputSet)
         self._defineSourceRelation(self.inputSet, outputSet)
