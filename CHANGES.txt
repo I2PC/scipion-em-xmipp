@@ -13,7 +13,7 @@
 - New protocols: Eliminate empty particles and eliminate empty classes
 - New protocol: Extract unit cell
 - New protocol: Generate reprojections
-- New protocol: metaprotcolo heterogenety output, metaprotocol heterogeneity subset and metaprotocol heterogeneity
+- New protocol: metaprotocol heterogenety output, metaprotocol heterogeneity subset and metaprotocol heterogeneity
 - New protocol: Movie Max Shift
 - New protocol: particle boxsize
 - New protocol: pick noise

@@ -271,6 +271,7 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
                 micFn = micOut.getFileName()  # Runs/..../extra/filename.mrc
                 errorStr = ('XmippError: Image Extension: '
                             'File %s has wrong size.' % micFn)
+                print("micFn: %s \nTries: %d" % (micFn, tries))
                 if errorStr in str(ex) and tries < 7:
                     from time import sleep
                     sleep(tries*3)
