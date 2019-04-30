@@ -5,6 +5,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 from dataGenerator import getDataGenerator,  BATCH_SIZE
+from augmentators import generateReverseNormalizationFunction
+
 
 class DeepLearningModel():
   def __init__(self, boxSize, saveModelFname, gpuList, batchSize, generatorLoss, trainingDataMode, 
@@ -53,15 +55,19 @@ class DeepLearningModel():
     print("model loaded")
     trainIterator, stepsPerEpoch= getDataGenerator(xmdParticles, xmdProjections, isTrain=False, valFraction=0, 
                                                    augmentData=False, nEpochs=1, batchSize= self.batchSize)
+    normalizePredFun= generateReverseNormalizationFunction(self.img_shape, radiusFraction=0.8)
     for noisyParticles, projections in trainIterator:
-      yield model.predict(noisyParticles, batch_size=BATCH_SIZE), noisyParticles, projections
+      preds= model.predict(noisyParticles, batch_size=BATCH_SIZE)
+      preds= normalizePredFun(preds, noisyParticles)
+      yield preds, noisyParticles, projections
 
   def clean(self):
     keras.backend.clear_session()
 
 
-  def save_imgs(self, imgs, titles, saveImagesPath,  epoch, plotInstead=False, nImagesToPlot=8):
-    save_imgs( imgs, titles, saveImagesPath,  epoch, plotInstead, nImagesToPlot)
+  def save_imgs(self, imgs, titles, saveImagesPath,  epoch, plotInstead=False, nImagesToPlot=8): #For debugging purposes
+#    save_imgs( imgs, titles, saveImagesPath,  epoch, plotInstead, nImagesToPlot)
+    return
     
   def takeListMean(self, x):
     if len(x)==0:

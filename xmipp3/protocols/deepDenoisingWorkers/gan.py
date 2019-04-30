@@ -251,13 +251,6 @@ class GAN(DeepLearningModel):
         break
       print("------------------------------------------------------------------------")
 
-    
-  def yieldPredictions(self, xmdParticles, xmdProjections=None):
-    for preds_noisyParticles_projections in DeepLearningModel.yieldPredictions(self, xmdParticles, xmdProjections):
-      yield [normalizeImgs(elem) for elem in preds_noisyParticles_projections]
-
-      
-
 def build_discriminator( img_shape, nConvLayers= 4):
   assert math.log(img_shape[1], 2)> nConvLayers, "Error, too small images: input %s. Min size %s"%(img_shape, 2**nConvLayers)
     

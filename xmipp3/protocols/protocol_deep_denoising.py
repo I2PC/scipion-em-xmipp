@@ -230,8 +230,8 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
       return resizedSize
       
     def preprocessData(self):
-        if self.modelTrainPredMode.get() == ITER_PREDICT and self.modelType.get() == MODEL_TYPE_UNET and not self.customModelOverPretrain:
-          raise ValueError("Predict directly with UNET is not implemented yet")
+#        if self.modelTrainPredMode.get() == ITER_PREDICT and self.modelType.get() == MODEL_TYPE_UNET and not self.customModelOverPretrain:
+#          raise ValueError("Predict directly with UNET is not implemented yet")
           
         particlesFname = self._getExtraPath('noisyParticles.xmd')
         writeSetOfParticles(self.inputParticles.get(), particlesFname)
@@ -347,9 +347,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
               i+=1
 
         mdNewParticles.write('particles@' + outputParticlesMdName, xmippLib.MD_APPEND)
-        self.runJob("xmipp_transform_normalize", "-i %s --method NewXmipp "
-                    "--background circle %d "%(outputParticlesStackName, self._getResizedSize()/2))
-                    
+
     def createOutputStep(self):
         imgSet = self.inputParticles.get()
         outputSet = self._createSetOfParticles()
