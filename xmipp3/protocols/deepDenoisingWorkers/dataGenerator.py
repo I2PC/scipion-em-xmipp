@@ -3,7 +3,6 @@ import xmippLib
 import numpy as np
 import random
 
-from scipy.stats import iqr
 from sklearn.utils import shuffle
 from sklearn.cross_validation import train_test_split
 from .augmentators import (_random_flip_leftright, _random_flip_updown, _mismatch_projection, 
@@ -132,19 +131,20 @@ def normalizationV1( img, sigmoidInsteadTanh=True):
     normData= np.zeros_like(normData)
   return normData
 
-def normalizationV2(img, sigmoidInsteadTanh=True):
-  '''
-  Proposed alternative normalization. Seems to be worse
-  '''
-  iqr_val= iqr(img, rng=(10,90) )
-  if iqr_val==0:
-      iqr_val= (np.max(img)-np.min(img)) + 1e-12
-  newImg=(img- np.median(img))/iqr_val
-  if sigmoidInsteadTanh:
-    newImg=1 / (1 + np.exp(-newImg))
-  else:
-    newImg= np.tanh(newImg)
-  return newImg
+#from scipy.stats import iqr
+#def normalizationV2(img, sigmoidInsteadTanh=True):
+#  '''
+#  Proposed alternative normalization. Seems to be worse
+#  '''
+#  iqr_val= iqr(img, rng=(10,90) )
+#  if iqr_val==0:
+#      iqr_val= (np.max(img)-np.min(img)) + 1e-12
+#  newImg=(img- np.median(img))/iqr_val
+#  if sigmoidInsteadTanh:
+#    newImg=1 / (1 + np.exp(-newImg))
+#  else:
+#    newImg= np.tanh(newImg)
+#  return newImg
 
 normalization= normalizationV1
 
