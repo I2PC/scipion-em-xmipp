@@ -215,14 +215,12 @@ def installDeepLearningToolkit(plugin, env):
 
     # TensorFlow defs
     tensorFlowTarget = "1.10.0"  # cuda 9
-    nvccProgram = subprocess.Popen(["which", "nvcc"], env=plugin.getEnviron(),
-                                   stdout=subprocess.PIPE).stdout.read()
     pipCmdScipion = '%s %s/pip install' % (env.getBin('python'),
                                            env.getPythonPackagesFolder())
 
     cudNNwarning = []
     cudNNversion = None
-    if nvccProgram != "":
+    if os.environ.get('CUDA', 'True') == 'True':
         nvccVersion = subprocess.Popen(["nvcc", '--version'], env=plugin.getEnviron(),
                                        stdout=subprocess.PIPE).stdout.read()
 
