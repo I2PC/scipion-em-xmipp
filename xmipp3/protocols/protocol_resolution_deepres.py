@@ -87,7 +87,7 @@ class XmippProtDeepRes(ProtAnalysis3D):
                             " First core index is 0, second 1 and so on.")               
 
         form.addParam('inputVolume', PointerParam, pointerClass='Volume',
-                      label="Input Volume", important=True,
+                      label="Input Volume", 
                       help='Select a volume for determining its '
                       'local resolution.')
 
