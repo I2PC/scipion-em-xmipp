@@ -28,6 +28,7 @@
 # **************************************************************************
 
 import os
+from math import ceil
 
 import pyworkflow.utils as pwutils
 import pyworkflow.object as pwobj
@@ -259,10 +260,10 @@ class XmippProtMovieCorr(ProtAlignMovies):
         self.inputMovies.get().close()
 
     def _setControlPoints(self):
-            _,_,frames = self.inputMovies.get().getDimensions()
+            _,_,frames = self.inputMovies.get().getDim()
             self.controlPointX.set( int(self.patchX) / 3 + 2)
             self.controlPointY.set(int(self.patchY) / 3 + 2)
-            self.controlPointT.set(int(frames) / 3 + 2)
+            self.controlPointT.set(ceil(frames/7.) + 2)
 
     def _getMovieShifts(self, movie):
         from ..convert import readShiftsMovieAlignment
@@ -364,7 +365,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
         if (self.controlPointT < 3):
             errors.append("You have to use at least 3 control points in T dim")
             return errors # to avoid possible division by zero later
-        _,_,frames = self.inputMovies.get().getDimensions()
+        _,_,frames = self.inputMovies.get().getDim()
         tPointsRatio = frames / (int(self.controlPointT) - 2)
         yPointsRatio = int(self.patchY) / (int(self.controlPointY) - 2)
         xPointsRatio = int(self.patchX) / (int(self.controlPointX) - 2)
