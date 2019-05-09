@@ -140,7 +140,7 @@ class Plugin(pyworkflow.em.Plugin):
                                  ("rm DONE ; src/xmipp/xmipp install %s" % cls.getHome(),
                                   targets+[cls.getHome('xmipp.bashrc'),
                                            cls.getHome('v%s' % _currentVersion)])],
-                       deps=xmippDeps, default=True)
+                       deps=xmippDeps, default=False)
 
         env.addPackage('xmippBin_Debian', version=_currentVersion,
                        commands=[("rm -rf %s 2>/dev/null; cd .. ; "
