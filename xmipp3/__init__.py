@@ -140,7 +140,7 @@ class Plugin(pyworkflow.em.Plugin):
                                  ("rm DONE ; src/xmipp/xmipp install %s" % cls.getHome(),
                                   targets+[cls.getHome('xmipp.bashrc'),
                                            cls.getHome('v%s' % _currentVersion)])],
-                       deps=xmippDeps, default=True)
+                       deps=xmippDeps, default=False)
 
         env.addPackage('xmippBin_Debian', version=_currentVersion,
                        commands=[("rm -rf %s 2>/dev/null; cd .. ; "
@@ -204,6 +204,13 @@ def installDeepLearningToolkit(plugin, env):
                                    target='scikit_learn*',
                                    default=False, deps=[scipy, cython])
     deepLearningTools.append(scikit_learn)
+    
+    #pandas
+    
+    pandas = tryAddPipModule(env, 'pandas', '0.20.1',
+                                   target='pandas*',
+                                   default=False, deps=[scipy])
+    deepLearningTools.append(pandas)
 
     # Keras deps
     unittest2 = tryAddPipModule(env, 'unittest2', '0.5.1', target='unittest2*',
@@ -215,14 +222,12 @@ def installDeepLearningToolkit(plugin, env):
 
     # TensorFlow defs
     tensorFlowTarget = "1.10.0"  # cuda 9
-    nvccProgram = subprocess.Popen(["which", "nvcc"], env=plugin.getEnviron(),
-                                   stdout=subprocess.PIPE).stdout.read()
     pipCmdScipion = '%s %s/pip install' % (env.getBin('python'),
                                            env.getPythonPackagesFolder())
 
     cudNNwarning = []
     cudNNversion = None
-    if nvccProgram != "":
+    if os.environ.get('CUDA', 'True') == 'True':
         nvccVersion = subprocess.Popen(["nvcc", '--version'], env=plugin.getEnviron(),
                                        stdout=subprocess.PIPE).stdout.read()
 

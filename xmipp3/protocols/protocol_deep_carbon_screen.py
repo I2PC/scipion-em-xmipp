@@ -1,10 +1,7 @@
 # **************************************************************************
 # *
-# * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
-# *              Laura del Cano (ldelcano@cnb.csic.es)
-# *              Adrian Quintana (aquintana@cnb.csic.es)
-# *              Javier Vargas (jvargas@cnb.csic.es)
-# *              Grigory Sharov (sharov@igbmc.fr)
+# * Authors:     Ruben Sanchez Garcia (rsanchez@cnb.csic.es)
+# *              David Maluenda (dmaluenda@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -43,16 +40,16 @@ from pyworkflow.object import Set
 from pyworkflow.em.constants import RELATION_CTF
 
 from xmipp3 import Plugin
-from xmipp3.base import XmippProtocol
+from xmipp3.base import XmippProtocol, createMetaDataFromPattern
 from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
                             xmippToLocation, setXmippAttributes, readSetOfCoordinates)
 from xmipp3.constants import SAME_AS_PICKING, OTHER
 from xmipp3.utils import validateDLtoolkit
 
 
-class XmippProtCarbonScreen(ProtExtractParticles, XmippProtocol):
+class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
     """Protocol to remove coordinates in carbon zones or large impurities"""
-    _label = 'carbon screen'
+    _label = 'deep carbon screen'
     
     def __init__(self, **kwargs):
         ProtExtractParticles.__init__(self, **kwargs)
@@ -101,8 +98,6 @@ class XmippProtCarbonScreen(ProtExtractParticles, XmippProtocol):
                       help="This value allows to group several items to be "
                            "processed inside the same protocol step. You can "
                            "use the following values: \n"
-                           "*1*    The default behavior, the items will be "
-                           "processed one by one.\n"
                            "*0*    Put in the same step all the items "
                            "available. If the sleep time is short, it could be "
                            "practically the same of one by one. If not, you "
@@ -113,8 +108,8 @@ class XmippProtCarbonScreen(ProtExtractParticles, XmippProtocol):
                            "a step.")
 
 
-        # self._defineStreamingParams(form)
-
+        #TODO: Add GPUs
+  
         form.addParallelSection(threads=4, mpi=1)
     
     #--------------------------- INSERT steps functions ------------------------
@@ -340,26 +335,30 @@ class XmippProtCarbonScreen(ProtExtractParticles, XmippProtocol):
         micsFnDone = self.getDoneMics()
         micLisfFn = [mic.getFileName() for mic in micList
                      if not pwutils.removeBaseExt(mic.getFileName()) in micsFnDone]
-
-        args  =  '-i %s' % ' '.join(micLisfFn)
+        inputMicsPathMetadataFname= self._getTmpPath("inputMics.xmd")
+        mics_md= createMetaDataFromPattern( micLisfFn )
+        mics_md.write(inputMicsPathMetadataFname)
+#        raise ValueError("peta")
+#        args  =  '-i %s' % ' '.join(micLisfFn)
+        args  =  '-i %s' % inputMicsPathMetadataFname
         args += ' -c %s' % self._getExtraPath('inputCoords')
         args += ' -o %s' % self._getExtraPath('outputCoords')
         args += ' -b %d' % self.getBoxSize()
         args += ' -s %d' % self.getBoxScale()
-        # args += ' -d %s' % Plugin.getModel('deepCarbonCleaner', 'defaultModel.keras')
+        args += ' -d %s' % Plugin.getModel('deepCarbonCleaner', 'defaultModel.keras')
 
         if self.threshold.get() > 0:
             args += ' --deepThr %f ' % self.threshold.get()
 
-        # self.runJob('xmipp_deep_carbon_cleaner', args)
-        for micFn in micLisfFn:
-            args = os.path.join(self._getExtraPath('inputCoords'),
-                                pwutils.removeBaseExt(micFn)+'.pos') + ' '
-            args += os.path.join(self._getExtraPath('outputCoords'),
-                                 pwutils.removeBaseExt(micFn)+'.pos')
-            self.runJob('cp', args)
+        self.runJob('xmipp_deep_carbon_cleaner', args)
+#        for micFn in micLisfFn:
+#            args = os.path.join(self._getExtraPath('inputCoords'),
+#                                pwutils.removeBaseExt(micFn)+'.pos') + ' '
+#            args += os.path.join(self._getExtraPath('outputCoords'),
+#                                 pwutils.removeBaseExt(micFn)+'.pos')
+#            self.runJob('cp', args)
 
-        self.runJob('ls', micLisfFn)
+#        self.runJob('ls', micLisfFn)
 
 
 
