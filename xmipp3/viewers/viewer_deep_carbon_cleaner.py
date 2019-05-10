@@ -26,17 +26,20 @@
 
 import os
 
-from pyworkflow.em.viewers import ObjectView, EmPlotter
+import xmipp3
+from pyworkflow.em import SetOfCoordinates
+from pyworkflow.em.viewers import ObjectView, EmPlotter, DataView, DataViewer, CoordinatesObjectView
 from pyworkflow.em.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER, SORT_BY
-from pyworkflow.protocol.params import IntParam, LabelParam
+from pyworkflow.protocol.params import IntParam, LabelParam, FloatParam
+from pyworkflow.utils import cleanPath, makePath
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 
 import xmippLib
 from xmipp3.convert import getXmippAttribute
-from xmipp3.protocols.protocol_carbon_screen import XmippProtCarbonScreen
+from xmipp3.protocols.protocol_deep_carbon_screen import XmippProtDeepCarbonScreen
 from .plotter import XmippPlotter
 
-class XmippDeepConsensusViewer(ProtocolViewer):
+class XmippDeepCarbonViewer(ProtocolViewer):
     """         
         Viewer for the 'Xmipp - deep carbon cleaner' protocols.\n
         Select those cooridantes with high (close to 1.0)
@@ -45,7 +48,7 @@ class XmippDeepConsensusViewer(ProtocolViewer):
     """
     _label = 'viewer deep Carbon CLeaner'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
-    _targets = [XmippProtCarbonScreen]
+    _targets = [XmippProtDeepCarbonScreen]
 
     def _defineParams(self, form):
         form.addSection(label='Visualization')
@@ -59,11 +62,11 @@ class XmippDeepConsensusViewer(ProtocolViewer):
         #                    "particles/coordinates with high scores and "
         #                    "save them.\n"
         #                    "Particles can be sorted by any column.")
-        form.addParam('visualizeHistogram', IntParam, default=100,
+        form.addParam('visualizeHistogram', IntParam, default=1000,
                       label="Visualize Deep Scores Histogram (Bin size)",
                       help="Plot an histogram of the 'zScoreDeepLearning2' "
                            "to visual setting of a good threshold.")
-        form.addParam('visualizeCoordinates', IntParam,  default=100,
+        form.addParam('visualizeCoordinates', FloatParam, default=0.5,
                       label="Visualize the good coordinates (threshold)",
                       help="Visualize the coordinates considered good according"
                            " to the threshold indicated in the box.\n"
@@ -77,33 +80,50 @@ class XmippDeepConsensusViewer(ProtocolViewer):
     def _visualizeCoordinates(self, e=None):
         views = []
 
-        # labels = 'id enabled _index _filename _xmipp_zScoreDeepLearning1 '
-        # labels += '_xmipp_zScore _xmipp_cumulativeSSNR '
-        # labels += '_xmipp_scoreEmptiness'
-        #
-        # otherParam = {}
-        # objId = 0
-        # if (isinstance(self.protocol, XmippProtScreenDeepConsensus) and
-        #     self.protocol.hasAttribute('outputCoordinates')):
-        #     fnParts = self.protocol._getPath("particles.sqlite")
-        #     objId = self.protocol.outputCoordinates.strId()
-        #     otherParam = {'other': 'deepCons'}
-        #
-        # elif (isinstance(self.protocol, XmippProtScreenDeepLearning) and
-        #       self.protocol.hasAttribute('outputParticles')):
-        #     parts = self.protocol.outputParticles
-        #     fnParts = parts.getFileName()
-        #     objId = parts.strId()
-        #
-        # if objId:
-        #     views.append(ObjectView(
-        #         self._project, objId, fnParts,
-        #         viewParams={ORDER: labels, VISIBLE: labels,
-        #                     SORT_BY: '_xmipp_zScoreDeepLearning1 asc',
-        #                     RENDER: '_filename',
-        #                     MODE: MODE_MD}, **otherParam))
-        # else:
-        #     print(" > Not output found, yet.")
+
+
+
+        outCoords = self.protocol.getOutput()
+        if outCoords:
+
+            coordsViewerFn = self.protocol._getTmpPath('coordsViewer.sqlite')
+
+            mdLabel = xmippLib.MDL_GOOD_REGION_SCORE
+            if getXmippAttribute(outCoords.getFirstItem(), mdLabel):
+
+                cleanPath(coordsViewerFn)
+                newOutput = SetOfCoordinates(filename=coordsViewerFn)
+                newOutput.copyInfo(outCoords)
+                # newOutput.copyAttributes(outCoords, '_xmippMd')
+                newOutput.setMicrographs(outCoords.getMicrographs())
+
+                thres = self.visualizeCoordinates.get()
+                for coord in outCoords:
+                    if getXmippAttribute(coord, mdLabel).get() > thres:
+                        newOutput.append(coord.clone())
+                # self.protocol._store(newOutput)
+                newOutput.write()
+                newOutput.close()
+
+                micSet = newOutput.getMicrographs()  # accessing mics to provide metadata file
+                if micSet is None:
+                    raise Exception('visualize: SetOfCoordinates has no micrographs set.')
+
+                fn = self.protocol._getExtraPath("allMics.xmd")
+                xmipp3.convert.writeSetOfMicrographs(micSet, fn)
+                tmpDir = self.protocol._getExtraPath('manualThresholding_%03d'%int(thres*100))
+                cleanPath(tmpDir)
+                makePath(tmpDir)
+                xmipp3.convert.writeSetOfCoordinates(tmpDir, newOutput)
+
+                views.append(CoordinatesObjectView(self._project, fn, tmpDir,
+                                                   self.protocol, inTmpFolder=True))
+
+            else:
+                print(" > outputCoordinates do NOT have 'MDL_GOOD_REGION_SCORE'!")
+
+        else:
+            print(" > Not output found, yet.")
 
         return views
 
@@ -111,21 +131,21 @@ class XmippDeepConsensusViewer(ProtocolViewer):
         views = []
         numberOfBins = self.visualizeHistogram.get()
 
-        # if self.protocol.hasAttribute('outputCoordinates'):
-        #     outCoords = self.protocol.outputCoordinates
-        #     if getXmippAttribute(outCoords.getFirstItem(),
-        #                          xmippLib.MDL_ZSCORE_DEEPLEARNING2):
-        #         plotter = EmPlotter()
-        #         plotter.createSubPlot("Deep carbon score",
-        #                               "Deep carbon score",
-        #                               "Number of Coordinates")
-        #         cScores = [getXmippAttribute(coord, xmippLib.MDL_ZSCORE_DEEPLEARNING2)
-        #                    for coord in outCoords]
-        #         plotter.plotHist(cScores, nbins=numberOfBins)
-        #         views.append(plotter)
-        #     else:
-        #         print(" > 'outputCoordinates' don't have 'xmipp_zScoreDeepLearning2' label.")
-        # else:
-        #     print(" > Output not ready yet.")
+        outCoords = self.protocol.getOutput()
+        if outCoords:
+            mdLabel = xmippLib.MDL_GOOD_REGION_SCORE
+            if getXmippAttribute(outCoords.getFirstItem(), mdLabel):
+                plotter = EmPlotter()
+                plotter.createSubPlot("Deep carbon score",
+                                      "Deep carbon score",
+                                      "Number of Coordinates")
+                cScores = [getXmippAttribute(coord, mdLabel).get()
+                           for coord in outCoords]
+                plotter.plotHist(cScores, nbins=numberOfBins)
+                views.append(plotter)
+            else:
+                print(" > 'outputCoordinates' don't have 'xmipp_zScoreDeepLearning2' label.")
+        else:
+            print(" > Output not ready yet.")
 
         return views

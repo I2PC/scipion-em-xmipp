@@ -67,7 +67,7 @@ if not getattr(xmippLib, "GHOST_ACTIVATED", False):
         md.RLN_PARTICLE_AUTOPICK_FOM,
         md.RLN_PARTICLE_CLASS,
         md.RLN_ORIENT_PSI,
-        xmippLib.MDL_ZSCORE_DEEPLEARNING2
+        xmippLib.MDL_GOOD_REGION_SCORE
         ]
 
     CTF_DICT = OrderedDict([

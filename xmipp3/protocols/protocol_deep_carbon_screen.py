@@ -36,7 +36,7 @@ from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtExtractParticles
 from pyworkflow.em.data import Particle
-from pyworkflow.object import Set
+from pyworkflow.object import Set, Pointer
 from pyworkflow.em.constants import RELATION_CTF
 
 from xmipp3 import Plugin
@@ -107,10 +107,17 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
                            "*>1*   The number of items that will be grouped into "
                            "a step.")
 
+        form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation. "
+                            "Select the one you want to use. CPU may become "
+                            "quite slow.")
 
-        #TODO: Add GPUs
-  
-        form.addParallelSection(threads=4, mpi=1)
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used.")
+
+        # form.addParallelSection(threads=4, mpi=1)
     
     #--------------------------- INSERT steps functions ------------------------
     def _insertInitialSteps(self):
@@ -453,9 +460,8 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
         if not micDoneList:
             return []
 
-        outputName = 'outputCoordinates'
         outputDir = self._getExtraPath('outputCoords')
-        outputCoords = getattr(self, outputName, None)
+        outputCoords = self.getOutput()
 
         # If there are not outputCoordinates yet, it means that is the first
         # time we are updating output coordinates, so we need to first create
@@ -464,7 +470,8 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
 
         if firstTime:
             micSetPtr = self.getInputMicrographs()
-            outputCoords = self._createSetOfCoordinates(micSetPtr)
+            outputCoords = self._createSetOfCoordinates(micSetPtr,
+                                                        suffix=self.getAutoSuffix())
             outputCoords.copyInfo(self.inputCoordinates.get())
         else:
             outputCoords.enableAppend()
@@ -472,7 +479,7 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
         self.info("Reading coordinates from mics: %s" % ','.join([mic.strId() for mic in micList]))
         self.readCoordsFromMics(outputDir, micDoneList, outputCoords)
         self.debug(" _updateOutputCoordSet Stream Mode: %s " % streamMode)
-        self._updateOutputSet(outputName, outputCoords, streamMode)
+        self._updateOutputSet(self.getOutputName(), outputCoords, streamMode)
 
         if firstTime:
             self._defineSourceRelation(micSetPtr,
@@ -488,9 +495,9 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
 
     #--------------------------- INFO functions --------------------------------
     def _validate(self):
-        errors =[]
-        # errors = validateDLtoolkit(assertModel=True,
-        #                            model=('deepCarbonCleaner', 'defaultModel.keras'))
+        # errors =[]
+        errors = validateDLtoolkit(assertModel=True,
+                                   model=('deepCarbonCleaner', 'defaultModel.keras'))
 
         if self.streamingBatchSize.get() == 1:
             errors.append('Batch size must be 0 (all at once) or larger than 1.')
@@ -577,10 +584,16 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
     def getCoords(self):
         return self.inputCoordinates.get()
 
+    def getAutoSuffix(self):
+        return '_Full' if self.threshold.get() < 0 else '_Auto'
+
+    def getOutputName(self):
+        return 'outputCoordinates' + self.getAutoSuffix()
+
     def getOutput(self):
-        if (self.hasAttribute('outputCoordinates') and
-            self.outputCoordinates.hasValue()):
-            return self.outputCoordinates
+        if (self.hasAttribute(self.getOutputName()) and
+            getattr(self, self.getOutputName()).hasValue()):
+            return getattr(self, self.getOutputName())
         else:
             return None
 
@@ -682,3 +695,28 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
             out.add(pwutils.removeBaseExt(fName))
 
         return out
+
+    def registerCoords(self, coordsDir):
+        """ This method is usually inherited by all Pickers
+        and it is used from the Java picking GUI to register
+        a new SetOfCoordinates when the user click on +Particles button.
+        """
+
+        inputset = self.getInputMicrographs()
+
+        mySuffix = '_Manual%02d' % self.getOutputsSize()
+        outputName = 'outputCoordinates' + mySuffix
+
+        outputset = self._createSetOfCoordinates(inputset, suffix=mySuffix)
+        readSetOfCoordinates(coordsDir, outputset.getMicrographs(), outputset)
+        # summary = self.getSummary(outputset)
+        # outputset.setObjComment(summary)
+        outputs = {outputName: outputset}
+        self._defineOutputs(**outputs)
+
+        # Using a pointer to define the relations is more robust to scheduling
+        # and id changes between the protocol run.db and the main project
+        # database. The pointer defined below points to the outputset object
+        self._defineSourceRelation(self.getInputMicrographs(),
+                                   Pointer(value=self, extended=outputName))
+        self._store()
