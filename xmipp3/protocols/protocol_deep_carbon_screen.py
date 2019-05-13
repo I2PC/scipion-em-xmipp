@@ -36,7 +36,7 @@ from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtExtractParticles
 from pyworkflow.em.data import Particle
-from pyworkflow.object import Set
+from pyworkflow.object import Set, Pointer
 from pyworkflow.em.constants import RELATION_CTF
 
 from xmipp3 import Plugin
@@ -111,8 +111,18 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
 
         form.addParam("saveMasks", params.BooleanParam, default=False,expertLevel=params.LEVEL_ADVANCED,
                       label="saveMasks", help="Save predicted masks?")
-        #TODO: Add GPUs
-  
+
+        form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation. "
+                            "Select the one you want to use. CPU may become "
+                            "quite slow.")
+
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used.")
+
+        # form.addParallelSection(threads=4, mpi=1)
     
     #--------------------------- INSERT steps functions ------------------------
     def _insertInitialSteps(self):
@@ -125,40 +135,19 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
         self._setupBasicProperties()
 
         return []
-    
-    #--------------------------- STEPS functions -------------------------------
-    # def _insertNewMicsSteps(self, inputMics):
-    #     """ Insert steps to process new mics (from streaming)
-    #     Params:
-    #         inputMics: input mics set to be check
-    #     """
-    #     return self._insertNewMics(inputMics,
-    #                                lambda mic: mic.getMicName(),
-    #                                self._insertExtractMicrographStepOwn,
-    #                                self._insertExtractMicrographListStepOwn,
-    #                                *self._getExtractArgs())
-    #
+
     def _insertNewMicsSteps(self, inputMics):
         """ Insert steps to process new mics (from streaming)
         Params:
             inputMics: input mics set to be check
         """
-        print(' >>>>> ROOT!! ')
         return self._insertNewMics(inputMics,
                                    lambda mic: mic.getMicName(),
                                    self._insertExtractMicrographStepOwn,
                                    self._insertExtractMicrographListStepOwn,
                                    *self._getExtractArgs())
 
-    #
-    # def _insertExtractMicrographStepOwn(self, mic, prerequisites, *args):
-    #     """ Basic method to insert a picking step for a given micrograph. """
-    #     print("I'm in _insertExtractMicrographStepOwn()")
-    #     micStepId = self._insertFunctionStep('extractMicrographStepOwn',
-    #                                          mic.getMicName(), *args,
-    #                                          prerequisites=prerequisites)
-    #     return micStepId
-    #
+
     def _insertExtractMicrographStepOwn(self, mic, prerequisites, *args):
         """ Basic method to insert a picking step for a given micrograph. """
         micStepId = self._insertFunctionStep('extractMicrographStepOwn',
@@ -166,50 +155,14 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
                                              prerequisites=prerequisites)
         return micStepId
 
-    # def _insertExtractMicrographListStepOwn(self, micList, prerequisites, *args):
-    #     """ Basic method to insert a picking step for a given micrograph. """
-    #     print("I'm in _insertExtractMicrographListStepOwn()")
-    #     return self._insertFunctionStep('extractMicrographListStepOwn',
-    #                                     [mic.getMicName() for mic in micList],
-    #                                     *args, prerequisites=prerequisites)
-    #
-    #
+
     def _insertExtractMicrographListStepOwn(self, micList, prerequisites, *args):
         """ Basic method to insert a picking step for a given micrograph. """
         return self._insertFunctionStep('extractMicrographListStepOwn',
                                         [mic.getMicName() for mic in micList],
                                         *args, prerequisites=prerequisites)
 
-    # def extractMicrographStepOwn(self, micKey, *args):
-    #     """ Step function that will be common for all extraction protocols.
-    #     It will take an id and will grab the micrograph from a micDict map.
-    #     The micrograph will be passed as input to the _extractMicrograph
-    #     function.
-    #     """
-    #     print("I'm in extractMicrographStep()")
-    #     # Retrieve the corresponding micrograph with this key and the
-    #     # associated list of coordinates
-    #     mic = self.micDict[micKey]
-    #
-    #     micDoneFn = self._getMicDone(mic)
-    #     micFn = mic.getFileName()
-    #
-    #     if self.isContinued() and os.path.exists(micDoneFn):
-    #         self.info("Skipping micrograph: %s, seems to be done" % micFn)
-    #         return
-    #
-    #     coordList = self.coordDict[mic.getObjId()]
-    #     self._convertCoordinates(mic, coordList)
-    #
-    #     # Clean old finished files
-    #     pwutils.cleanPath(micDoneFn)
-    #
-    #     self.info("Extracting micrograph: %s " % micFn)
-    #     self._extractMicrograph(mic, *args)
-    #
-    #     # Mark this mic as finished
-    #     open(micDoneFn, 'w').close()
-    #
+
     def extractMicrographStepOwn(self, micKey, *args):
         """ Step function that will be common for all extraction protocols.
         It will take an id and will grab the micrograph from a micDict map.
@@ -238,29 +191,7 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
 
         # Mark this mic as finished
         open(micDoneFn, 'w').close()
-    #
-    # def extractMicrographListStepOwn(self, micKeyList, *args):
-    #     print("I'm in extractMicrographListStepOwn()")
-    #     micList = []
-    #
-    #     for micName in micKeyList:
-    #         mic = self.micDict[micName]
-    #         micDoneFn = self._getMicDone(mic)
-    #         micFn = mic.getFileName()
-    #         if self.isContinued() and os.path.exists(micDoneFn):
-    #             self.info("Skipping micrograph: %s, seems to be done" % micFn)
-    #
-    #         else:
-    #             # Clean old finished files
-    #             pwutils.cleanPath(micDoneFn)
-    #             self.info("Extracting micrograph: %s " % micFn)
-    #             micList.append(mic)
-    #
-    #     self._extractMicrographListOwn(micList, *args)
-    #
-    #     for mic in micList:
-    #         # Mark this mic as finished
-    #         open(self._getMicDone(mic), 'w').close()
+
 
     def extractMicrographListStepOwn(self, micKeyList, *args):
         micList = []
@@ -287,26 +218,6 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
             open(self._getMicDone(mic), 'w').close()
 
 
-
-    #
-    # def _extractMicrographListOwn(self, micList, *args):
-    #     """ Extract more than one micrograph at once.
-    #     Here the default implementation is to iterate through the list and
-    #     call the single extract, but it could be re-implemented on each
-    #     subclass to provide a more efficient implementation.
-    #     """
-    #     print("I'm here!!! ")
-    #     # self.micBuffer += micList
-    #     # if len(self.micBuffer) >= self.batchSize:
-    #     #     self._extractMicrographOwn(self.micBuffer, *args)
-    #     #     self.micBuffer = []
-    #
-    #     self._extractMicrographOwn(mic, *args)
-
-
-
-
-
     def _extractMicrographListOwn(self, micList):
         """ Functional Step. Overrided in general protExtracParticle """
 
@@ -318,8 +229,7 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
         inputMicsPathMetadataFname= self._getTmpPath("inputMics.xmd")
         mics_md= createMetaDataFromPattern( micLisfFn )
         mics_md.write(inputMicsPathMetadataFname)
-#        raise ValueError("peta")
-#        args  =  '-i %s' % ' '.join(micLisfFn)
+
         args  =  '-i %s' % inputMicsPathMetadataFname
         args += ' -c %s' % self._getExtraPath('inputCoords')
         args += ' -o %s' % self._getExtraPath('outputCoords')
@@ -334,14 +244,6 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
             args += ' --predictedMaskDir %s ' % (self._getExtraPath("predictedMasks"))
             
         self.runJob('xmipp_deep_carbon_cleaner', args)
-#        for micFn in micLisfFn:
-#            args = os.path.join(self._getExtraPath('inputCoords'),
-#                                pwutils.removeBaseExt(micFn)+'.pos') + ' '
-#            args += os.path.join(self._getExtraPath('outputCoords'),
-#                                 pwutils.removeBaseExt(micFn)+'.pos')
-#            self.runJob('cp', args)
-
-#        self.runJob('ls', micLisfFn)
 
 
 
@@ -401,32 +303,6 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(STATUS_NEW)
 
-    # def _updateOutputCoordSet(self, micList, streamMode):
-    #     outputName = 'outputCoordinates'
-    #     outputCoords = getattr(self, outputName, None)
-    #     firstTime = True
-    #
-    #     if outputCoords is None:
-    #         inputMics = self.getInputMicrographs()
-    #         outputCoords = self._createSetOfCoordinates(inputMics)
-    #         outputCoords.copyInfo(self.inputCoordinates.get())
-    #
-    #
-    #         outputCoords.setBoxSize(self.inputCoordinates.get().getBoxSize())
-    #     else:
-    #         firstTime = False
-    #         outputCoords.enableAppend()
-    #
-    #     self.readPartsFromMics(micList, outputCoords)
-    #     self._updateOutputSet(outputName, outputCoords, streamMode)
-    #
-    #     if firstTime:
-    #         # self._storeMethodsInfo(fnImages)
-    #         self._defineSourceRelation(self.inputCoordinates, outputCoords)
-    #         if self._useCTF():
-    #             self._defineSourceRelation(self.ctfRelations, outputCoords)
-    #         if self._micsOther():
-    #             self._defineSourceRelation(self.inputMicrographs, outputCoords)
 
     def _updateOutputCoordSet(self, micList, streamMode):
         print("in _updateOutputCoordSet > micList: %s" % micList)
@@ -436,9 +312,8 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
         if not micDoneList:
             return []
 
-        outputName = 'outputCoordinates'
         outputDir = self._getExtraPath('outputCoords')
-        outputCoords = getattr(self, outputName, None)
+        outputCoords = self.getOutput()
 
         # If there are not outputCoordinates yet, it means that is the first
         # time we are updating output coordinates, so we need to first create
@@ -447,7 +322,8 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
 
         if firstTime:
             micSetPtr = self.getInputMicrographs()
-            outputCoords = self._createSetOfCoordinates(micSetPtr)
+            outputCoords = self._createSetOfCoordinates(micSetPtr,
+                                                        suffix=self.getAutoSuffix())
             outputCoords.copyInfo(self.inputCoordinates.get())
         else:
             outputCoords.enableAppend()
@@ -455,7 +331,7 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
         self.info("Reading coordinates from mics: %s" % ','.join([mic.strId() for mic in micList]))
         self.readCoordsFromMics(outputDir, micDoneList, outputCoords)
         self.debug(" _updateOutputCoordSet Stream Mode: %s " % streamMode)
-        self._updateOutputSet(outputName, outputCoords, streamMode)
+        self._updateOutputSet(self.getOutputName(), outputCoords, streamMode)
 
         if firstTime:
             self._defineSourceRelation(micSetPtr,
@@ -463,17 +339,15 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
 
         return micDoneList
 
-    def readSetOfCoordinates(self, workingDir, coordSet):
-        readSetOfCoordinates(workingDir, self.getInputMicrographs(), coordSet)
 
     def readCoordsFromMics(self, workingDir, micList, coordSet):
         readSetOfCoordinates(workingDir, micList, coordSet)
 
     #--------------------------- INFO functions --------------------------------
     def _validate(self):
-        errors =[]
-        # errors = validateDLtoolkit(assertModel=True,
-        #                            model=('deepCarbonCleaner', 'defaultModel.keras'))
+        # errors =[]
+        errors = validateDLtoolkit(assertModel=True,
+                                   model=('deepCarbonCleaner', 'defaultModel.keras'))
 
         if self.streamingBatchSize.get() == 1:
             errors.append('Batch size must be 0 (all at once) or larger than 1.')
@@ -486,16 +360,9 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
     
     def _summary(self):
         summary = []
-        # summary.append("Micrographs source: %s"
-        #                % self.getEnumText("downsampleType"))
-        # summary.append("Particle box size: %d" % self.boxSize)
-        #
-        # if not hasattr(self, 'outputParticles'):
-        #
-        #     summary.append("Output images not ready yet.")
-        # else:
-        #     summary.append("Particles extracted: %d" %
-        #                    self.outputParticles.getSize())
+         summary.append("Micrographs source: %s"
+                        % self.getEnumText("downsampleType"))
+         summary.append("Coordinates box size: %d" % self.getBoxSize())
         
         return summary
     
@@ -560,10 +427,16 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
     def getCoords(self):
         return self.inputCoordinates.get()
 
+    def getAutoSuffix(self):
+        return '_Full' if self.threshold.get() < 0 else '_Auto'
+
+    def getOutputName(self):
+        return 'outputCoordinates' + self.getAutoSuffix()
+
     def getOutput(self):
-        if (self.hasAttribute('outputCoordinates') and
-            self.outputCoordinates.hasValue()):
-            return self.outputCoordinates
+        if (self.hasAttribute(self.getOutputName()) and
+            getattr(self, self.getOutputName()).hasValue()):
+            return getattr(self, self.getOutputName())
         else:
             return None
 
@@ -602,48 +475,48 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
         self.imgSet.append(particle)
         item._appendItem = False
 
-    def readPartsFromMics(self, micList, outputParts):
-        """ Read the particles extract for the given list of micrographs
-        and update the outputParts set with new items.
-        """
-        p = Particle()
-        for mic in micList:
-            # We need to make this dict because there is no ID in the .xmd file
-            coordDict = {}
-            for coord in self.coordDict[mic.getObjId()]:
-                pos = self._getPos(coord)
-                if pos in coordDict:
-                    print("WARNING: Ignoring duplicated coordinate: %s, id=%s" %
-                          (coord.getObjId(), pos))
-                coordDict[pos] = coord
-
-            added = set() # Keep track of added coords to avoid duplicates
-            for row in md.iterRows(self._getMicXmd(mic)):
-                pos = (row.getValue(md.MDL_XCOOR), row.getValue(md.MDL_YCOOR))
-                coord = coordDict.get(pos, None)
-                if coord is not None and coord.getObjId() not in added:
-                    # scale the coordinates according to particles dimension.
-                    coord.scale(self.getBoxScale())
-                    p.copyObjId(coord)
-                    p.setLocation(xmippToLocation(row.getValue(md.MDL_IMAGE)))
-                    p.setCoordinate(coord)
-                    p.setMicId(mic.getObjId())
-                    p.setCTF(mic.getCTF())
-                    # adding the variance and Gini coeff. value of the mic zone
-                    setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
-                    setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
-                    if row.containsLabel(md.MDL_ZSCORE_DEEPLEARNING1):
-                        setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
-
-                    # disabled particles (in metadata) should not add to the
-                    # final set
-                    if row.getValue(md.MDL_ENABLED) > 0:
-                        outputParts.append(p)
-                        added.add(coord.getObjId())
-
-            # Release the list of coordinates for this micrograph since it
-            # will not be longer needed
-            del self.coordDict[mic.getObjId()]
+    # def readPartsFromMics(self, micList, outputParts):
+    #     """ Read the particles extract for the given list of micrographs
+    #     and update the outputParts set with new items.
+    #     """
+    #     p = Particle()
+    #     for mic in micList:
+    #         # We need to make this dict because there is no ID in the .xmd file
+    #         coordDict = {}
+    #         for coord in self.coordDict[mic.getObjId()]:
+    #             pos = self._getPos(coord)
+    #             if pos in coordDict:
+    #                 print("WARNING: Ignoring duplicated coordinate: %s, id=%s" %
+    #                       (coord.getObjId(), pos))
+    #             coordDict[pos] = coord
+    #
+    #         added = set() # Keep track of added coords to avoid duplicates
+    #         for row in md.iterRows(self._getMicXmd(mic)):
+    #             pos = (row.getValue(md.MDL_XCOOR), row.getValue(md.MDL_YCOOR))
+    #             coord = coordDict.get(pos, None)
+    #             if coord is not None and coord.getObjId() not in added:
+    #                 # scale the coordinates according to particles dimension.
+    #                 coord.scale(self.getBoxScale())
+    #                 p.copyObjId(coord)
+    #                 p.setLocation(xmippToLocation(row.getValue(md.MDL_IMAGE)))
+    #                 p.setCoordinate(coord)
+    #                 p.setMicId(mic.getObjId())
+    #                 p.setCTF(mic.getCTF())
+    #                 # adding the variance and Gini coeff. value of the mic zone
+    #                 setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
+    #                 setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
+    #                 if row.containsLabel(md.MDL_ZSCORE_DEEPLEARNING1):
+    #                     setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
+    #
+    #                 # disabled particles (in metadata) should not add to the
+    #                 # final set
+    #                 if row.getValue(md.MDL_ENABLED) > 0:
+    #                     outputParts.append(p)
+    #                     added.add(coord.getObjId())
+    #
+    #         # Release the list of coordinates for this micrograph since it
+    #         # will not be longer needed
+    #         del self.coordDict[mic.getObjId()]
 
     def _getMicPos(self, mic):
         """ Return the corresponding .pos file for a given micrograph. """
@@ -665,3 +538,28 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
             out.add(pwutils.removeBaseExt(fName))
 
         return out
+
+    def registerCoords(self, coordsDir):
+        """ This method is usually inherited by all Pickers
+        and it is used from the Java picking GUI to register
+        a new SetOfCoordinates when the user click on +Particles button.
+        """
+
+        inputset = self.getInputMicrographs()
+
+        mySuffix = '_Manual%02d' % self.getOutputsSize()
+        outputName = 'outputCoordinates' + mySuffix
+
+        outputset = self._createSetOfCoordinates(inputset, suffix=mySuffix)
+        readSetOfCoordinates(coordsDir, outputset.getMicrographs(), outputset)
+        # summary = self.getSummary(outputset)
+        # outputset.setObjComment(summary)
+        outputs = {outputName: outputset}
+        self._defineOutputs(**outputs)
+
+        # Using a pointer to define the relations is more robust to scheduling
+        # and id changes between the protocol run.db and the main project
+        # database. The pointer defined below points to the outputset object
+        self._defineSourceRelation(self.getInputMicrographs(),
+                                   Pointer(value=self, extended=outputName))
+        self._store()

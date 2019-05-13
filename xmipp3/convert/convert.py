@@ -66,7 +66,8 @@ if not getattr(xmippLib, "GHOST_ACTIVATED", False):
         # Additional autopicking-related metadata
         md.RLN_PARTICLE_AUTOPICK_FOM,
         md.RLN_PARTICLE_CLASS,
-        md.RLN_ORIENT_PSI
+        md.RLN_ORIENT_PSI,
+        xmippLib.MDL_GOOD_REGION_SCORE
         ]
 
     CTF_DICT = OrderedDict([
@@ -302,6 +303,9 @@ def setXmippAttributes(obj, objRow, *labels):
 def setXmippAttribute(obj, label, value):
     """ Sets an attribute of an object prefixing it with xmipp"""
     setattr(obj, prefixAttribute(xmippLib.label2Str(label)), value)
+
+def getXmippAttribute(obj, label, default=None):
+    return getattr(obj, prefixAttribute(xmippLib.label2Str(label)), default)
 
 def prefixAttribute(attribute):
     return '_xmipp_%s' % attribute
@@ -860,7 +864,7 @@ def writeMicCoordinates(mic, coordList, outputFn, isManual=True,
 
     for coord in coordList:
         x, y = getPosFunc(coord)
-        f.write(" %06d   1   %d  %d  %d   %06d\n"
+        f.write(" %06d   1   %d  %d  %d   %06d \n"
                 % (coord.getObjId(), x, y, 1, mic.getObjId()))
     
     f.close()
