@@ -64,7 +64,7 @@ class XmippProtDeepRes(ProtAnalysis3D):
     Given a map the protocol assigns local resolutions to each voxel of the map.
     """
     _label = 'local deepRes'
-    _lastUpdateVersion = VERSION_1_1
+    _lastUpdateVersion = VERSION_2_0
     
     #RESOLUTION RANGE
     LOW_RESOL = 0
@@ -328,7 +328,7 @@ class XmippProtDeepRes(ProtAnalysis3D):
         return summary
 
     @classmethod
-    def validateInstallation(cls):
+    def _validate():
         """ Check if the installation of this protocol is correct.
         Can't rely on package function since this is a "multi package" package
         Returning an empty list means that the installation is correct
