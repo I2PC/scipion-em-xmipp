@@ -30,7 +30,7 @@ from pyworkflow.em import exists
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 from pyworkflow.em.protocol import ProtImportVolumes
 
-from xmipp3.protocols import XmippProtMonoTomo
+from xmipp3.protocols import XmippProtMonoTomo, XmippProtCropResizeVolumes
 
 
 class TestMonoTomoBase(BaseTest):
@@ -49,28 +49,34 @@ class TestMonoTomoBase(BaseTest):
                                          samplingRate=samplingRate
                                          )
         cls.launchProtocol(cls.protImport)
-        return cls.protImport
+	cls.protResize = cls.newProtocol(XmippProtCropResizeVolumes,
+                                        inputVolumes = cls.protImport.outputVolume,
+					doResize = True,
+					resizeOption = 2,
+					resizeFactor = 5)
+	cls.launchProtocol(cls.protResize)
+        return cls.protResize
 
 class TestMonoTomo(TestMonoTomoBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
         TestMonoTomoBase.setData()
-        cls.protImportVol = cls.runImportVolumes(cls.map3D, 3.54)
         cls.protImportHalf1 = cls.runImportVolumes(cls.half1, 3.54)
         cls.protImportHalf2 = cls.runImportVolumes(cls.half2, 3.54)
+
 
     def testMonoTomo(self):
         MonoTomo = self.newProtocol(XmippProtMonoTomo,
                                    objLabel='two halves monores',
-                                   inputVolume=self.protImportHalf1.outputVolume,
-                                   inputVolume2=self.protImportHalf2.outputVolume,
+                                   inputVolume=self.protImportHalf1.outputVol,
+                                   inputVolume2=self.protImportHalf2.outputVol,
                                    provideMaskInHalves=True,
                                    useMask=False,
                                    minRes=1,
                                    maxRes=25,
                                    )
         self.launchProtocol(MonoTomo)
-        self.assertTrue(exists(MonoTomo._getExtraPath('mgresolution.vol')),
+        self.assertTrue(exists(MonoTomo._getExtraPath('mgresolution.mrc')),
                         "MonoTomo has failed")
  
