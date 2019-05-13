@@ -29,6 +29,7 @@ import requests
 import webbrowser
 
 # FIXME: Avoid this crazy import * statements
+from pyworkflow import VERSION_2_0
 from pyworkflow.em import *
 from pyworkflow.em.convert import ImageHandler, Ccp4Header
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
@@ -42,6 +43,7 @@ class XmippProt3DBionotes(ProtAnalysis3D):
        http://3dbionotes.cnb.csic.es
     """
     _label = '3d bionotes'
+    _lastUpdateVersion = VERSION_2_0
     
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
