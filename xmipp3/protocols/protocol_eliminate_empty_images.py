@@ -170,7 +170,7 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
             self._store(outputAttr)
         else:
             self._defineOutputs(**{outputName: outputSet})
-            self._defineTransformRelation(self.inputParticles, outputSet)
+            self._defineTransformRelation(self.getInput(), outputSet)
             self._store(outputSet)
 
         # Close set databaset to avoid locking it
@@ -183,6 +183,9 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
             item._appendItem = False
         else:
             item._appendItem = True
+
+    def getInput(self):
+        pass
 
 
 class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
@@ -286,6 +289,9 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
 
         updateOutputs(self.fnOutMdTmp, 'output')
         updateOutputs(self.fnElimMdTmp, 'eliminated')
+
+    def getInput(self):
+        return self.inputParticles.get()
 
 
 DISCARDED = 0
@@ -395,12 +401,16 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                     # updating the enableCls dictionary
                     print(" - %s:" % ("ACCEPTED" if suffix == 'output' else "DISCARTDED"))
                     for part in partsSet:
+                        partId = part.getObjId()
+                        if partId not in self.enableCls:
+                            # this happends when a classifier give an empty class
+                            continue
                         # - accept if we are in accepted and the current is accepted
                         # - discard if we are in the discarted scope and any
-                        currentStatus = self.enableCls[part.getObjId()]
+                        currentStatus = self.enableCls[partId]
                         decision = suffix == 'output' and currentStatus == ACCEPTED
-                        self.enableCls[part.getObjId()] = ACCEPTED if decision \
-                                                          else DISCARDED
+                        self.enableCls[partId] = ACCEPTED if decision \
+                                                   else DISCARDED
                     # updating the Averages set
                     outSet.copyItems(partsSet,
                                      updateItemCallback=self._updateParticle,
@@ -513,9 +523,13 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
             # Persist changes
             self._store(outputAttr)
         else:
-            self._defineOutputs(**{outputName: outputSet})
-            self._defineSourceRelation(self.inputClasses, outputSet)
+            # FIXME: no outputClasses are generated because they are corrupted.
+            # self._defineOutputs(**{outputName: outputSet})
+            # self._defineSourceRelation(self.inputClasses, outputSet)
             self._store(outputSet)
 
         # Close set databaset to avoid locking it
         outputSet.close()
+
+    def getInput(self):
+        return self.inputClasses.get()
