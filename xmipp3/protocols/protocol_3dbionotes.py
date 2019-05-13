@@ -29,6 +29,7 @@ import requests
 import webbrowser
 
 # FIXME: Avoid this crazy import * statements
+from pyworkflow import VERSION_2_0
 from pyworkflow.em import *
 from pyworkflow.em.convert import ImageHandler, Ccp4Header
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
@@ -42,11 +43,12 @@ class XmippProt3DBionotes(ProtAnalysis3D):
        http://3dbionotes.cnb.csic.es
     """
     _label = '3d bionotes'
+    _lastUpdateVersion = VERSION_2_0
     
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('inputPDB', PointerParam, pointerClass='PdbFile',
+        form.addParam('inputPDB', PointerParam, pointerClass='AtomStruct',
                       label="Input PDB")
 #         form.addParam('inputVol', PointerParam, pointerClass='Volume',
 #                       label="Input volume", important=True)
@@ -71,7 +73,11 @@ class XmippProt3DBionotes(ProtAnalysis3D):
 
         response = requests.post('http://3dbionotes.cnb.csic.es/programmatic/upload',data=data, files=files)
         json_data = json.loads(response.text)
-        webbrowser.open_new(json_data["url"])
+        url='http://3dbionotes.cnb.csic.es/programmatic/get/'+json_data['id']
+        webbrowser.open_new(url)
+        fh=open(self._getExtraPath("id.txt"),"w")
+        fh.write(json_data['id'])
+        fh.close()
 
     #--------------------------- INFO functions --------------------------------
             

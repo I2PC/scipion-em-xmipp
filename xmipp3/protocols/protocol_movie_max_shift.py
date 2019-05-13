@@ -68,6 +68,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         self.discardedMoviesList = []
         self.acceptedDone = 0
         self.discardedDone = 0
+        self.alreadyLoad = False
 
     # -------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
@@ -106,8 +107,9 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
     def _insertMovieStep(self, movie):
         """ Insert the processMovieStep for a given movie.
         """
-        # looking for a setOfMicrographs related to the inputMovies
-        self.setInputMics()
+        if not self.alreadyLoad:
+            # looking for a setOfMicrographs related to the inputMovies
+            self.setInputMics()
         # Insert the selection/rejection step
         movieStepId = self._insertFunctionStep('_evaluateMovieAlign',
                                                movie.clone(),
@@ -209,27 +211,41 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                                                      'movies%s.sqlite' % suffix)
             micsSet = self._loadOutputSet(SetOfMicrographs,
                                                   'micrographs%s.sqlite'%suffix)
+            micsDwSet = self._loadOutputSet(SetOfMicrographs,
+                                  'micrographs_dose-weighted%s.sqlite' % suffix)
+
             for movie in newDoneList:
                 movie.setEnabled(enable)
                 movieSet.append(movie)
                 if self.inputMics is not None:
-                    mic = self.getMicFromMovie(movie)
+                    mic = self.getMicFromMovie(movie, isDoseWeighted=False)
                     mic.setEnabled(enable)
                     micsSet.append(mic)
+                if self.inputDwMics is not None:
+                    micDw = self.getMicFromMovie(movie, isDoseWeighted=True)
+                    micDw.setEnabled(enable)
+                    micsDwSet.append(micDw)
 
             self._updateOutputSet('outputMovies%s' % suffix, movieSet,
                                   streamMode)
             if self.inputMics is not None:
                 self._updateOutputSet('outputMicrographs%s' % suffix, micsSet,
                                       streamMode)
+            if self.inputDwMics is not None:
+                self._updateOutputSet('outputMicrographsDoseWeighted%s' % suffix,
+                                      micsDwSet, streamMode)
             if firstTime:
                 # define relation just the first time
                 self._defineTransformRelation(self.inputMovies.get(), movieSet)
                 if self.inputMics is not None:
                     self._defineTransformRelation(self.inputMics, micsSet)
+                if self.inputDwMics is not None:
+                    self._defineTransformRelation(self.inputDwMics, micsDwSet)
             movieSet.close()
             if self.inputMics is not None:
                 micsSet.close()
+            if self.inputDwMics is not None:
+                micsDwSet.close()
 
         # We fill/update the output if there are something new or to close sets
         if newDoneAccepted or (self.finished and hasattr(self, 'outputMovies')):
@@ -244,8 +260,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         if self.finished:  
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(STATUS_NEW)            
-
+                outputStep.setStatus(STATUS_NEW)
 
     # FIXME: Methods will change when using the streaming for the output
     def createOutputStep(self):
@@ -260,9 +275,14 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             refers to that one.
         """
         if SetClass == SetOfMicrographs:
-            if self.inputMics is None:
-                # if no mics to do, do nothing and exit
-                return None
+            if 'dose-weighted' in baseName:
+                if self.inputDwMics is None:
+                    # if no DwMics to do, do nothing and exit
+                    return None
+            else:
+                if self.inputMics is None:
+                    # if no mics to do, do nothing and exit
+                    return None
         setFile = self._getPath(baseName)
 
         if exists(setFile):
@@ -289,23 +309,42 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
 
     def setInputMics(self):
         """ Setting the self.inputMics to the SetOfMics associated to
-            the input movies (or None if no relation is found)
+            the input movies (or None if no relation is found).
+            The same for DoseWeighted mics
         """
+        inNotFound = []
+        inNotFound2 = []
+        self.alreadyLoad = True
         parentProt = self.getMapper().getParent(self.inputMovies.get())
+
         self.inputMics = getattr(parentProt, 'outputMicrographs', None)
         if self.inputMics is None:
-            self.warning('The creator of the inputMovies has NOT '
-                         'outputMicrographs. Therefore, no Mics will be '
-                         'returned, only movies.')
+            inNotFound.append('outputMicrographs')
+            inNotFound2.append('Mics')
 
-    def getMicFromMovie(self, movie):
-        """ Get the Micrograph related with the movie
+        self.inputDwMics = getattr(parentProt, 'outputMicrographsDoseWeighted', None)
+        if self.inputDwMics is None:
+            inNotFound.append('outputMicrographsDoseWeighted')
+            inNotFound2.append('Dose Weighted Mics')
+
+        if inNotFound:
+            self.warning("WARNING: The '%s' has no %s. Then, no %s will be "
+                         "produced%s." % (parentProt.getObjLabel(),
+                                          ' nor '.join(inNotFound),
+                                          ' nor '.join(inNotFound2),
+                                          '' if len(inNotFound)<2
+                                                else ', only movies'))
+
+    def getMicFromMovie(self, movie, isDoseWeighted):
+        """ Get the Micrograph/DwMicrograph related with a certain movie
         """
         movieMicName = movie.getMicName()
-        for mic in self.inputMics:
+        inMics = self.inputDwMics if isDoseWeighted else self.inputMics
+        for mic in inMics:  # self.inputMics:
             if mic.getMicName() == movieMicName:
                 return mic
-        self.warning('Mic NOT found for movie "%s"' % movieMicName)
+        micStr = 'DwMic' if isDoseWeighted else 'Mic'
+        self.warning('%s NOT found for movie "%s"' % (micStr, movieMicName))
 
 
     # ---------------------- INFO functions ------------------------------------

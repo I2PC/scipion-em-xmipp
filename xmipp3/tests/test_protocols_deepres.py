@@ -1,7 +1,6 @@
 # **************************************************************************
 # *
-#* Authors:    Erney Ramirez-Aportela,                                    eramirez@cnb.csic.es
-# *             Jose Luis Vilas,                                           jlvilas@cnb.csic.es
+# * Authors:    Erney Ramirez-Aportela (eramirez@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -26,15 +25,15 @@
 # **************************************************************************
 
 import unittest, sys
-# import numpy as np
+
 from pyworkflow.em import exists
-#from pyworkflow.em.packages.xmipp3.protocol_resolution_monogenic_signal import OUTPUT_RESOLUTION_FILE
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
-from xmipp3.protocols import XmippProtMonoRes, XmippProtCreateMask3D, XmippProtLocSharp
 from pyworkflow.em.protocol import ProtImportVolumes
 
+from xmipp3.protocols import XmippProtDeepRes, XmippProtCreateMask3D
 
-class TestLocalDeblurBase(BaseTest):
+
+class TestDeepResBase(BaseTest):
     @classmethod
     def setData(cls, dataProject='resmap'):
         cls.dataset = DataSet.getDataSet(dataProject)
@@ -71,38 +70,22 @@ class TestLocalDeblurBase(BaseTest):
         return cls.msk
 
 
-class TestLocalDeblur(TestLocalDeblurBase):
+class TestDeepRes(TestDeepResBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
-        TestLocalDeblurBase.setData()
+        TestDeepResBase.setData()
         cls.protImportVol = cls.runImportVolumes(cls.map3D, 3.54)
         cls.protCreateMask = cls.runCreateMask(cls.protImportVol.outputVolume, 0.02)
 
-    def testLocalDeblur(self):
-        MonoRes = self.newProtocol(XmippProtMonoRes,
-                                   objLabel='single volume monores',
-                                   halfVolumes=False,
-                                   inputVolumes=self.protImportVol.outputVolume,
-                                   Mask=self.protCreateMask.outputMask,
-                                   symmetry='c1',
-                                   minRes=1,
-                                   maxRes=25,
-                                   isPremasked = False,
-                                   filterInput=False,
-                                   )
-        self.launchProtocol(MonoRes)
-        self.assertTrue(exists(MonoRes._getExtraPath('mgresolution.mrc')),
-                        "MonoRes (no split, no premasked) has failed")
-
-        LocalDeblur = self.newProtocol(XmippProtLocSharp,
-                                   objLabel='sharpening localdeblur',    
+    def testDeepRes1(self):
+        DeepRes = self.newProtocol(XmippProtDeepRes,
                                    inputVolume=self.protImportVol.outputVolume,
-                                   resolutionVolume=MonoRes.resolution_Volume,
-                                   const=1,
+                                   Mask=self.protCreateMask.outputMask,
+                                   range=0,
                                    )
-        self.launchProtocol(LocalDeblur)
-        self.assertTrue(exists(LocalDeblur._getExtraPath('sharpenedMap_last.mrc')),
-                        "LocalDeblur  has failed")
+        self.launchProtocol(DeepRes)
+        self.assertTrue(exists(DeepRes._getExtraPath('deepRes_resolution.vol')),
+                        "DeepRes has failed")
  
- 
+

@@ -40,12 +40,13 @@ setup(
     # For a discussion on single-sourcing the version across setup.py and the
     # project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
-    version='1.0.0b1',  # Required
+    version='19.04',  # Required
 
     # This is a one-line description or tagline of what your project does. This
     # corresponds to the "Summary" metadata field:
     # https://packaging.python.org/specifications/core-metadata/#summary
-    description='Plugin to use Xmipp programs within the Scipion framework.',  # Required
+    description='Plugin to use Xmipp programs within the Scipion framework. '
+                'NOTE: CUDA 8.0 is used for GPU coding.',
 
     # This is an optional longer description of your project that represents
     # the body of text which users will see when they visit PyPI.
@@ -97,7 +98,7 @@ setup(
     # project page. What does your project relate to?
     #
     # Note that this is a string of words separated by whitespace, not a list.
-    keywords='scipion cryoem imageprocessing scipion-1.2',  # Optional
+    keywords='scipion cryoem imageprocessing scipion-2.0',  # Optional
 
     # You can just specify package directories manually here if your project is
     # simple. Or you can use find_packages().
@@ -138,7 +139,7 @@ setup(
     # MANIFEST.in as well.
     # include_package_data=True,
     package_data={  # Optional
-       'xmipp3': ['xmipp.png'],
+      'xmipp3': ['xmipp_logo.png', 'protocols.conf'],
     },
 
     # Although 'package_data' is the preferred approach, in some case you may
