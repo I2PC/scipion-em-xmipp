@@ -133,6 +133,12 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
                            'will be affected. For cryo, 3.5 is a good value.'
                            'For high-contrast negative stain, the signal itself'
                            'may be affected so that a higher value may be preferable.')
+        form.addParam('doRandomize', BooleanParam, default=False,
+                      label="Randomize phases",
+                      help='Randomize phases beyond a certain frequency.')
+        form.addParam('maxResolutionRandomize', FloatParam, default=40,
+                      label="Maximum Resolution", condition='doRandomize',
+                      help='Angstroms.')
         form.addParam('doNormalize', BooleanParam, default=False,
                       label='Normalize', 
                       help='It subtract a ramp in the gray values and normalizes'
@@ -165,7 +171,11 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
         if self.doRemoveDust:
             args = self._argsRemoveDust()
             self._insertFunctionStep("removeDustStep", args, changeInserts)
-        
+
+        if self.doRandomize:
+            args = self._argsRandomize()
+            self._insertFunctionStep("randomizeStep", args, changeInserts)
+
         if self.doNormalize:
             args = self._argsNormalize()
             self._insertFunctionStep("normalizeStep", args, changeInserts)
@@ -179,6 +189,9 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
     #--------------------------- STEPS functions -------------------------------
     def invertStep(self, args, changeInserts):
         self.runJob('xmipp_image_operate', args)
+
+    def randomizeStep(self, args, changeInserts):
+        self.runJob("xmipp_transform_randomize_phases", args)
 
     def thresholdStep(self, args, changeInserts):
         self.runJob("xmipp_transform_threshold", args)
@@ -247,7 +260,18 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
             args = "-i %s" % self.outputStk
         args += " --bad_pixels outliers %f" % self.thresholdDust.get()
         return args
-    
+
+    def _argsRandomize(self):
+        if self.isFirstStep:
+            args = "-i %s -o %s --save_metadata_stack %s --keep_input_columns" \
+                   % (self.inputFn, self.outputStk, self.outputMd)
+            self._setFalseFirstStep()
+        else:
+            args = "-i %s" % self.outputStk
+        samplingRate = self.inputParticles.get().getSamplingRate()
+        args+= " --freq continuous %f %f"%(float(self.maxResolutionRandomize.get()),samplingRate)
+        return args
+
     def _argsNormalize(self):
         if self.isFirstStep:
             args = "-i %s -o %s --save_metadata_stack %s --keep_input_columns" \

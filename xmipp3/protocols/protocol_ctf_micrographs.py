@@ -172,6 +172,16 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                     downsampleList.append((ctfDownFactor + 1) / 2)
         return downsampleList
 
+    def _getFn(self,key,micBase,micDir):
+        return self._getFileName(key, micBase=micBase, root=micDir)
+
+    def bringResultsback(self,mic):
+        micBase = self._getMicBase(mic)
+        micDir = self._getMicrographDir(mic)
+        for key in ['ctfParam', 'psd', 'enhanced_psd', 'ctfmodel_halfplane',
+                    'ctfmodel_quadrant', 'ctf']:
+            pwutils.moveFile(self._getFn(key,micBase,micDir), self._getExtraPath())
+
     def _estimateCTF(self, mic, *args):
         """ Run the estimate CTF program """
         micFn = mic.getFileName()
@@ -206,9 +216,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
             raise Exception("No created dir: %s " % micDir)
 
         finalName = micFn
-        def _getFn(key):
-            return self._getFileName(key, micBase=micBase, root=micDir)
-        localParams['root'] = _getFn('prefix')
+        localParams['root'] = self._getFn('prefix',micBase,micDir)
         downsampleList = self._calculateDownsampleList(mic.getSamplingRate())
 
         try:
@@ -247,9 +255,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                 if good:
                     break
 
-            for key in ['ctfParam', 'psd', 'enhanced_psd', 'ctfmodel_halfplane',
-                        'ctfmodel_quadrant', 'ctf']:
-                pwutils.moveFile(_getFn(key), self._getExtraPath())
+            self.bringResultsback(mic)
 
         except Exception as ex:
             print >> sys.stderr, "xmipp_ctf_estimate_from_micrograph has " \
@@ -262,6 +268,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         self.runJob(self._program, self._args % self._params)
         mic = ctfModel.getMicrograph()
         self.evaluateSingleMicrograph(mic)
+        self.bringResultsback(mic)
 
     def _createOutputStep(self):
         pass
@@ -383,11 +390,15 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
 
             mic = ctfModel.getMicrograph()
             micDir = self._getMicrographDir(mic)
+            fnPsd = os.path.join(micDir, psdFile)
+            if not os.path.exists(micDir):
+                pwutils.makePath(micDir)
+                pwutils.copyFile(self._getExtraPath(psdFile),fnPsd)
             downFactor = self._calculateDownsampleList(mic.getSamplingRate())[0]
 
             params = dict(self.getCtfParamsDict())
             params.update(self.getRecalCtfParamsDict())
-            params.update({'psdFn': os.path.join(micDir, psdFile),
+            params.update({'psdFn': fnPsd,
                            'defocusU': float(line[0])
                            })
             # Mapping between base protocol parameters and the package specific
