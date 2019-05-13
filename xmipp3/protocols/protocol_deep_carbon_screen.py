@@ -90,11 +90,13 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
                       important=True, label='Input micrographs',
                       help='Select the SetOfMicrographs from which to extract.')
 
-        form.addParam("threshold", params.FloatParam, default=-1,
-                      label="Threshold")
+        form.addParam("threshold", params.FloatParam, default=-1,expertLevel=params.LEVEL_ADVANCED,
+                      label="Threshold", help="Deep learning goodness score to rule out coordinates. The bigger the treshold "+
+                           "the more coordiantes will be ruled out. Ranges from 0 to 1. Use -1 to pospone thresholding until "+
+                           "analyze results")
 
-        form.addParam("streamingBatchSize", params.IntParam, default=8,
-                      label="Batch size",
+        form.addParam("streamingBatchSize", params.IntParam, default=12,
+                      label="Batch size", expertLevel=params.LEVEL_ADVANCED,
                       help="This value allows to group several items to be "
                            "processed inside the same protocol step. You can "
                            "use the following values: \n"
@@ -107,10 +109,10 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
                            "*>1*   The number of items that will be grouped into "
                            "a step.")
 
-
+        form.addParam("saveMasks", params.BooleanParam, default=False,expertLevel=params.LEVEL_ADVANCED,
+                      label="saveMasks", help="Save predicted masks?")
         #TODO: Add GPUs
   
-        form.addParallelSection(threads=4, mpi=1)
     
     #--------------------------- INSERT steps functions ------------------------
     def _insertInitialSteps(self):
@@ -118,8 +120,8 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
         # before the actual processing
         pwutils.makePath(self._getExtraPath('inputCoords'))
         pwutils.makePath(self._getExtraPath('outputCoords'))
-        self.micBuffer = []
-
+        if self.saveMasks.get():
+          os.mkdir(self._getExtraPath("predictedMasks"))
         self._setupBasicProperties()
 
         return []
@@ -286,28 +288,6 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     #
     # def _extractMicrographListOwn(self, micList, *args):
     #     """ Extract more than one micrograph at once.
@@ -348,8 +328,11 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
         args += ' -d %s' % Plugin.getModel('deepCarbonCleaner', 'defaultModel.keras')
 
         if self.threshold.get() > 0:
-            args += ' --deepThr %f ' % self.threshold.get()
-
+            args += ' --deepThr %f ' % (1-self.threshold.get())
+        
+        if self.saveMasks.get():
+            args += ' --predictedMaskDir %s ' % (self._getExtraPath("predictedMasks"))
+            
         self.runJob('xmipp_deep_carbon_cleaner', args)
 #        for micFn in micLisfFn:
 #            args = os.path.join(self._getExtraPath('inputCoords'),
