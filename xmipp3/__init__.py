@@ -38,7 +38,7 @@ from .constants import XMIPP_HOME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.19.03b4'
+_currentVersion = '3.19.04'
 
 class Plugin(pyworkflow.em.Plugin):
     _homeVar = XMIPP_HOME
