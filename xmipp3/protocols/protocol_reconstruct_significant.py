@@ -300,7 +300,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
         cleanPath(fnSym)
 
         # To mask the volume
-        xdim = self.inputSet.get().getDimensions()[0]
+        xdim = self.inputSet.get().getDim()[0]
         maskArgs = "-i %s --mask circular %d -v 0" % (volFn, -xdim / 2)
         self.runJob('xmipp_transform_mask', maskArgs, numberOfMpi=1)
         # TODO mask the final volume in some smart way...
