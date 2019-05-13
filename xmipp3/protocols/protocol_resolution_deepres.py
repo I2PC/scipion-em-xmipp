@@ -27,7 +27,7 @@
 
 import os
 import numpy as np
-from pyworkflow import VERSION_1_1
+from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import (PointerParam, EnumParam, 
                                         StringParam, GPU_LIST)
 from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
@@ -327,8 +327,7 @@ class XmippProtDeepRes(ProtAnalysis3D):
                                                          self.max_res_init))        
         return summary
 
-    @classmethod
-    def _validate():
+    def _validate(self):
         """ Check if the installation of this protocol is correct.
         Can't rely on package function since this is a "multi package" package
         Returning an empty list means that the installation is correct
