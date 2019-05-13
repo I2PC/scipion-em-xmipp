@@ -131,7 +131,7 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
         pwutils.makePath(self._getExtraPath('inputCoords'))
         pwutils.makePath(self._getExtraPath('outputCoords'))
         if self.saveMasks.get():
-          os.mkdir(self._getExtraPath("predictedMasks"))
+          pwutils.makePath(self._getExtraPath("predictedMasks"))
         self._setupBasicProperties()
 
         return []
@@ -221,7 +221,7 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
     def _extractMicrographListOwn(self, micList):
         """ Functional Step. Overrided in general protExtracParticle """
 
-        print("micList: %s (%s)" % (str(micList), type(micList)))
+        print("micList: %s" % str(micList))
 
         micsFnDone = self.getDoneMics()
         micLisfFn = [mic.getFileName() for mic in micList
@@ -242,6 +242,11 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
         
         if self.saveMasks.get():
             args += ' --predictedMaskDir %s ' % (self._getExtraPath("predictedMasks"))
+            
+        if self.useGpu.get():
+            args += ' -g %s' % self.gpuList.get()
+        else:
+            args += ' -g -1'
             
         self.runJob('xmipp_deep_carbon_cleaner', args)
 
@@ -360,9 +365,9 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
     
     def _summary(self):
         summary = []
-         summary.append("Micrographs source: %s"
+        summary.append("Micrographs source: %s"
                         % self.getEnumText("downsampleType"))
-         summary.append("Coordinates box size: %d" % self.getBoxSize())
+        summary.append("Coordinates box size: %d" % self.getBoxSize())
         
         return summary
     
@@ -428,7 +433,7 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
         return self.inputCoordinates.get()
 
     def getAutoSuffix(self):
-        return '_Full' if self.threshold.get() < 0 else '_Auto'
+        return '_Full' if self.threshold.get() < 0 else '_Auto_%03d'%int(self.threshold.get()*100)
 
     def getOutputName(self):
         return 'outputCoordinates' + self.getAutoSuffix()
@@ -546,8 +551,8 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
         """
 
         inputset = self.getInputMicrographs()
-
-        mySuffix = '_Manual%02d' % self.getOutputsSize()
+        
+        mySuffix = '_Manual_%s' % coordsDir.split('manualThresholding_')[1]
         outputName = 'outputCoordinates' + mySuffix
 
         outputset = self._createSetOfCoordinates(inputset, suffix=mySuffix)
