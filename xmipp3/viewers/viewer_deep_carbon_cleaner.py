@@ -62,16 +62,16 @@ class XmippDeepCarbonViewer(ProtocolViewer):
         #                    "particles/coordinates with high scores and "
         #                    "save them.\n"
         #                    "Particles can be sorted by any column.")
-        form.addParam('visualizeHistogram', IntParam, default=1000,
+        form.addParam('visualizeHistogram', IntParam, default=100,
                       label="Visualize Deep Scores Histogram (Bin size)",
                       help="Plot an histogram of the 'zScoreDeepLearning2' "
                            "to visual setting of a good threshold.")
-        form.addParam('visualizeCoordinates', FloatParam, default=0.5,
-                      label="Visualize the good coordinates (threshold)",
+        form.addParam('visualizeCoordinates', FloatParam, default=0.75,
+                      label="Visualize good coordinates (threshold from 0 to 1)",
                       help="Visualize the coordinates considered good according"
                            " to the threshold indicated in the box.\n"
-                           "If you are agree with the result, save the result"
-                           " with the '+Coordinates'")
+                           "If you like the result, save the result"
+                           " with the '+Coordinates' button")
 
     def _getVisualizeDict(self):
         return {'visualizeCoordinates': self._visualizeCoordinates,
