@@ -108,7 +108,7 @@ class Plugin(pyworkflow.em.Plugin):
         # Raising an error to prevent posterior errors and to print a hint
         if kwargs.get('doRaise', True) and not os.path.exists(model):
             raise Exception("'%s' model not found. Please, run: \n"
-                            " > scipion installb deepLearnigToolkit" % modelPath[0])
+                            " > scipion installb deepLearningToolkit" % modelPath[0])
 
         return model
 
@@ -133,14 +133,15 @@ class Plugin(pyworkflow.em.Plugin):
                       "src/xmipp/xmipp compile %d && touch DONE && rm -rf %s 2>/dev/null"
                       % (env.getProcessors(), cls.getHome()))
 
-        env.addPackage('xmippSrc', version=_currentVersion,
-                       # FIXME: adding 'v' before version to fix a package target (post-link)
-                       tar='xmippSrc-v'+_currentVersion+'.tgz',
-                       commands=[(compileCmd, ["src/xmippViz/"+lastCompiled, "DONE"]),
-                                 ("rm DONE ; src/xmipp/xmipp install %s" % cls.getHome(),
-                                  targets+[cls.getHome('xmipp.bashrc'),
-                                           cls.getHome('v%s' % _currentVersion)])],
-                       deps=xmippDeps, default=False)
+        if os.path.exists(os.path.join(env.getIncludeFolder(), 'sqlite3.h')):
+            env.addPackage('xmippSrc', version=_currentVersion,
+                           # FIXME: adding 'v' before version to fix a package target (post-link)
+                           tar='xmippSrc-v'+_currentVersion+'.tgz',
+                           commands=[(compileCmd, ["src/xmippViz/"+lastCompiled, "DONE"]),
+                                     ("rm DONE ; src/xmipp/xmipp install %s" % cls.getHome(),
+                                      targets+[cls.getHome('xmipp.bashrc'),
+                                               cls.getHome('v%s' % _currentVersion)])],
+                           deps=xmippDeps, default=False)
 
         env.addPackage('xmippBin_Debian', version=_currentVersion,
                        commands=[("rm -rf %s 2>/dev/null; cd .. ; "
@@ -175,7 +176,7 @@ class Plugin(pyworkflow.em.Plugin):
             tar='sh_alignment.tgz',
             commands=[('cd software/tmp/sh_alignment; make install',
                        'software/lib/python2.7/site-packages/sh_alignment/frm.py')],
-            default=False)  # FIXME: I set this to False because is not compiling...
+            default=False)
 
 
 def tryAddPipModule(env, moduleName, *args, **kwargs):
@@ -286,8 +287,12 @@ def installDeepLearningToolkit(plugin, env):
     modelsTarget = "%s_%s_%s_%s" % (modelsPrefix, now.day, now.month, now.year)
     deepLearningToolsStr = [str(tool) for tool in deepLearningTools]
     target = "installed_%s" % '_'.join(deepLearningToolsStr)
+    xmippInstallCheck = ("if ls %s > /dev/null ; then touch xmippLibToken;"
+                         "else echo ; echo ' > Xmipp installation not found, "
+                         "please install it first (xmippSrc or xmippBin*).';echo;"
+                         " fi" % plugin.getHome('lib'), 'xmippLibToken')
     env.addPackage('deepLearningToolkit', version='0.1', urlSuffix='external',
-                   commands=[cudnnInstallCmd,
+                   commands=[xmippInstallCheck, cudnnInstallCmd,
                              ("rm %s_* 2>/dev/null ; %s && touch %s"
                               % (modelsPrefix, modelsDownloadCmd, modelsTarget), 
                               modelsTarget),
