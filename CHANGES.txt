@@ -1,8 +1,3 @@
-## devel
-
-- Randomize phases also available for images
-
-
 ## Release 3.19.04 -
 
 - Highres can now take a global alignment performed by any other method
