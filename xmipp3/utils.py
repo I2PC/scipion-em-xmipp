@@ -107,7 +107,7 @@ def validateDLtoolkit(errors=None, **kwargs):
     # Trying to import keras to assert if DeepLearningToolkit works fine.
     kerasError = False
     try:
-        subprocess.check_output('python -c "import keras"')
+        subprocess.check_output('python -c "import keras"', shell=True)
     except subprocess.CalledProcessError:
         errors.append("*Keras/Tensorflow not found*. Required to run this protocol.")
         kerasError=True
