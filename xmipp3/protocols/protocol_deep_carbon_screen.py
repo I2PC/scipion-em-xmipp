@@ -95,7 +95,7 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
                            "the more coordiantes will be ruled out. Ranges from 0 to 1. Use -1 to pospone thresholding until "+
                            "analyze results")
 
-        form.addParam("streamingBatchSize", params.IntParam, default=12,
+        form.addParam("streamingBatchSize", params.IntParam, default=36,
                       label="Batch size", expertLevel=params.LEVEL_ADVANCED,
                       help="This value allows to group several items to be "
                            "processed inside the same protocol step. You can "
