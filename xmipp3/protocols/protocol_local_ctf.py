@@ -34,8 +34,9 @@ from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, Bo
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.utils.path import cleanPattern
 from pyworkflow.em.protocol import ProtAnalysis3D
+from pyworkflow.em.convert import ImageHandler
 
-from xmipp3.convert import readSetOfParticles
+from xmipp3.convert import readSetOfParticles, writeSetOfParticles
 import xmippLib
 
 
@@ -78,10 +79,8 @@ class XmippProtLocalCTF(ProtAnalysis3D):
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self):
-        from ..convert import writeSetOfParticles
         imgSet = self.inputSet.get()
         writeSetOfParticles(imgSet, self._getExtraPath('input_imgs.xmd'))
-        from pyworkflow.em.convert import ImageHandler
         img = ImageHandler()
         fnVol = self._getExtraPath("volume.vol")
         img.convert(self.inputVolume.get(), fnVol)
