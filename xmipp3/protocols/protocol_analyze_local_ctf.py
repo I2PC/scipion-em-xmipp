@@ -27,7 +27,7 @@
 # **************************************************************************
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.protocol.params import MultiPointerParam, PointerParam, StringParam, FloatParam, BooleanParam
+from pyworkflow.protocol.params import PointerParam
 from pyworkflow.em.protocol import ProtAnalysis3D
 
 import pyworkflow.em.metadata as md
@@ -68,7 +68,6 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
         y=[]
         defocusU=[]
         defocusV=[]
-        # For each particle, take the micId, coordinates x,y and defocusU,V
         for particle in self.inputSet.get():
             micIds.append(particle.getMicId())
             particleIds.append(particle.getObjId())
@@ -80,7 +79,6 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
 
         uniqueMicIds = list(set(micIds))
         self.R2={}
-        # for each unique micId take all the defocusU,V and coordinates x,y of the particles of that mic
 
         md = xmippLib.MetaData()
 
@@ -103,12 +101,10 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
 
             #defocus = c*y + b*x + a = A * X; A=[x(i),y(i)]
             A = np.column_stack([np.ones(len(xbyId)),xbyId,ybyId])
-
             polynomial, residuals, _, _ = np.linalg.lstsq(A,meanDefocusbyId,rcond=None)
             meanDefocusbyIdArray = np.asarray(meanDefocusbyId)
             coefficients = np.asarray(polynomial)
             self.R2[micId] = 1 - residuals / sum((meanDefocusbyIdArray - meanDefocusbyIdArray.mean()) ** 2)
-
             mdBlock = xmippLib.MetaData()
             for xi, yi, deltafi, parti in zip(xbyId,ybyId,meanDefocusbyId,particleIdsbyMicId):
                 objId = mdBlock.addObject()
@@ -120,12 +116,6 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
                 residuali = deltafi - estimatedVal
                 mdBlock.setValue(xmippLib.MDL_CTF_DEFOCUS_RESIDUAL,residuali,objId)
             mdBlock.write("mic_%d@%s"%(micId,self._getExtraPath("micrographDefoci.xmd")),xmippLib.MD_APPEND)
-
-            # mdBlock = xmippLib.MetaData()
-            # objId = mdBlock.addObject()
-            # mdBlock.setValue(xmippLib.MDL_CTF_DEFOCUS_COEFS,coefficients.tolist(),objId)
-            # mdBlock.write("coef_mic_%d@%s"%(micId,self._getExtraPath("micrographCoef.xmd")),xmippLib.MD_APPEND)
-
             objId = md.addObject()
             md.setValue(xmippLib.MDL_CTF_DEFOCUS_COEFS,coefficients.tolist(),objId)
             md.write(self._getExtraPath("micrographCoef.xmd"),xmippLib.MD_APPEND)

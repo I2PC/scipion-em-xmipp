@@ -53,7 +53,6 @@ from .viewer_nma_dimred import XmippDimredNMAViewer
 from .viewer_structure_mapping import XmippProtStructureMappingViewer
 from .viewer_analyze_local_ctf import XmippAnalyzeLocalCTFViewer
 
-
 from .viewer_pseudoatoms import XmippPseudoAtomsViewer
 #from .viewer_combine_pdb import XmippProtCombinePdbViewer
 
