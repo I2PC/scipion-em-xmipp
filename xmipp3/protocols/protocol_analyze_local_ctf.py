@@ -40,8 +40,7 @@ from xmipp3.convert import readSetOfMicrographs, writeSetOfMicrographs, setOfMic
         
 class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
     """Assigns to each micrograph a coefficient (R2) which evaluates the result of the
-        adjustment of the defocus made by protocol_local_ctf. It computes the minimun
-        defocus between defocusU and defocusV."""
+        local defocus adjustment and displays the local defocus for all the particles in each micrograph."""
     _label = 'analyze local defocus'
     _lastUpdateVersion = VERSION_2_0
     
@@ -83,6 +82,8 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
         self.R2={}
         # for each unique micId take all the defocusU,V and coordinates x,y of the particles of that mic
 
+        md = xmippLib.MetaData()
+
         for micId in uniqueMicIds:
             idx = [i for i,j in enumerate(micIds) if j==micId]
             defocusUbyId = []
@@ -120,11 +121,14 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
                 mdBlock.setValue(xmippLib.MDL_CTF_DEFOCUS_RESIDUAL,residuali,objId)
             mdBlock.write("mic_%d@%s"%(micId,self._getExtraPath("micrographDefoci.xmd")),xmippLib.MD_APPEND)
 
-            mdBlock = xmippLib.MetaData()
-            for coefi in coefficients:
-                objId = mdBlock.addObject()
-                mdBlock.setValue(xmippLib.MDL_CTF_DEFOCUS_COEFS,coefi,objId)
-            mdBlock.write("coef_mic_%d@%s"%(micId,self._getExtraPath("micrographCoef.xmd")),xmippLib.MD_APPEND)
+            # mdBlock = xmippLib.MetaData()
+            # objId = mdBlock.addObject()
+            # mdBlock.setValue(xmippLib.MDL_CTF_DEFOCUS_COEFS,coefficients.tolist(),objId)
+            # mdBlock.write("coef_mic_%d@%s"%(micId,self._getExtraPath("micrographCoef.xmd")),xmippLib.MD_APPEND)
+
+            objId = md.addObject()
+            md.setValue(xmippLib.MDL_CTF_DEFOCUS_COEFS,coefficients.tolist(),objId)
+            md.write(self._getExtraPath("micrographCoef.xmd"),xmippLib.MD_APPEND)
 
 
     def createOutputStep(self):
@@ -150,7 +154,7 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
     #--------------------------- INFO functions --------------------------------------------
     def _summary(self):
         summary = []
-        summary.append("Local defocus analyzed of %i particles" % self.inputSet.get().getSize())
+        summary.append("Local defocus analyzed for %i particles" % self.inputSet.get().getSize())
         return summary
     
     def _methods(self):

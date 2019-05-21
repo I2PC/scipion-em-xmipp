@@ -38,6 +38,7 @@ import xmippLib
 from xmipp3.convert import *
 from xmipp3.protocols.protocol_compare_reprojections import XmippProtCompareReprojections
 from xmipp3.protocols.protocol_compare_angles import XmippProtCompareAngles
+from xmipp3.protocols.protocol_compare_local_ctf import XmippProtCompareLocalCTF
 from xmipp3.protocols.protocol_extract_particles import XmippProtExtractParticles
 from xmipp3.protocols.protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
 from xmipp3.protocols.protocol_kerdensom import XmippProtKerdensom
@@ -60,6 +61,7 @@ class XmippViewer(DataViewer):
     _targets = [
                 XmippProtCompareReprojections,
                 XmippProtCompareAngles,
+                XmippProtCompareLocalCTF,
                 XmippParticlePickingAutomatic,
                 XmippProtExtractParticles,
                 XmippProtExtractParticlesPairs,
@@ -202,6 +204,17 @@ class XmippViewer(DataViewer):
                                                       VISIBLE: labels,
                                                       SORT_BY: '_xmipp_angleDiff asc', RENDER:labelRender,
                                                       MODE: MODE_MD}))
+
+        elif issubclass(cls, XmippProtCompareLocalCTF):
+                fn = obj.outputParticles.getFileName()
+                labels = 'id enabled _index _filename _xmipp_ctfDefocusA _xmipp_ctfDefocusResidual'
+                labelRender = "_filename"
+                self._views.append(ObjectView(self._project, obj.outputParticles.strId(), fn,
+                                              viewParams={ORDER: labels,
+                                                      VISIBLE: labels,
+                                                      SORT_BY: '_xmipp_ctfDefocusResidual asc', RENDER:labelRender,
+                                                      MODE: MODE_MD}))
+
 
         elif issubclass(cls, XmippParticlePickingAutomatic):
             micSet = obj.getInputMicrographs()

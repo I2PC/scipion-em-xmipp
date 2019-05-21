@@ -58,9 +58,9 @@ class XmippAnalyzeLocalCTFViewer(ProtocolViewer):
     def _defineParams(self, form):
         form.addSection(label='Visualization')
         form.addParam('displayLocalDefocus', IntParam, default=1,
-                      label='Display local defocus',
+                      label='Display local defocus of micrograph:',
                       help='Type the ID of the micrograph to see particle local defocus of the selected micrograph')
-        form.addParam('displayR2', LabelParam, default=False, label='Display particle R2')
+        form.addParam('displayR2', LabelParam, default=False, label='Display micrograph R2')
 
     def _getVisualizeDict(self):
         return {'displayLocalDefocus': self._viewLocalDefocus,

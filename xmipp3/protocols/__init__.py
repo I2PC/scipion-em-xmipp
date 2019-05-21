@@ -117,3 +117,4 @@ from .protocol_metaprotocol_discrete_heterogeneity_scheduler import XmippMetaPro
 from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
 from .protocol_local_ctf import XmippProtLocalCTF
 from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
+from .protocol_compare_local_ctf import XmippProtCompareLocalCTF
