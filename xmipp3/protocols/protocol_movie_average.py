@@ -30,6 +30,7 @@ import os
 
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_1
+from pyworkflow.utils import getExt
 from pyworkflow.em.protocol import ProtAlignMovies
 
 from xmipp3.convert import writeMovieMd
@@ -158,7 +159,11 @@ class XmippProtMovieAverage(ProtAlignMovies):
     #--------------------------- UTILS functions -------------------------------
     def _getShiftsFile(self, movie):
         return self._getExtraPath(self._getMovieRoot(movie) + '_shifts.xmd')
-    
+
+    def _getConvertExtension(self, filename):
+        ext = getExt(filename).lower()
+        return None if ext in ['.mrc', '.mrcs', '.tiff', '.tif', '.stk'] else 'mrc'
+
     def _createOutputMovies(self):
         """ Returns True if an output set of movies will be generated.
         The most common case is to always generate output movies,
