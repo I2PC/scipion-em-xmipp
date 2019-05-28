@@ -33,7 +33,7 @@ from os.path import exists, join
 from pyworkflow.protocol.params import EnumParam, NumericRangeParam, LabelParam, IntParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-from pyworkflow.em.viewers import ObjectView, DataView, ChimeraClientView
+from pyworkflow.em.viewers import ObjectView, DataView, ChimeraClientView, EmPlotter
 import pyworkflow.em.viewers.showj as showj
 
 from xmippLib import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
@@ -41,6 +41,7 @@ from xmippLib import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
 from xmipp3.convert import getImageLocation
 from xmipp3.protocols.protocol_reconstruct_highres import XmippProtReconstructHighRes
 from .plotter import XmippPlotter
+import xmippLib
 
 ITER_LAST = 0
 ITER_SELECTION = 1
@@ -77,6 +78,10 @@ Examples:
   
         group = form.addGroup('Particles')
         group.addParam('showOutputParticles', LabelParam, default=False, label='Display output particles')
+        group.addParam('particleQualityDist', LabelParam, default=False,
+                       label='Display last particles quality distribution',
+                       help="Histogram of the correlation (global alignment) "
+                            "or the cost (local) for last particles")
         group.addParam('showAngDist', EnumParam, choices=['2D plot', 'chimera'],
                        display=EnumParam.DISPLAY_HLIST, default=ANGDIST_2DPLOT,
                        label='Display angular distribution',
@@ -103,7 +108,8 @@ Examples:
                 'displayVolume' : self._showVolume,
                 'showOutputParticles' : self._showOutputParticles,
                 'showAngDist': self._showAngularDistribution,
-                'showResolutionPlots': self._showFSC
+                'showResolutionPlots': self._showFSC,
+                'particleQualityDist': self._showParticleQualityDist
                 }
     
     def _validate(self):
@@ -192,6 +198,25 @@ Examples:
                                                       showj.VISIBLE: labels, 
                                                       showj.MODE: showj.MODE_MD,
                                                       showj.RENDER:'_filename'}))
+        return views
+
+
+    def _showParticleQualityDist(self, paramName=None):
+        views = []
+        plotter = EmPlotter()
+        fnDir = self.protocol._getPath('angles.xmd')
+        mdAngles = xmippLib.MetaData(fnDir)
+        if self.protocol.alignmentMethod == self.protocol.GLOBAL_ALIGNMENT:
+            allValues = mdAngles.getColumnValues(xmippLib.MDL_MAXCC)
+            plotter.createSubPlot("Correlation histogram","","")
+        elif self.protocol.alignmentMethod == self.protocol.LOCAL_ALIGNMENT:
+            allValues = mdAngles.getColumnValues(xmippLib.MDL_COST)
+            plotter.createSubPlot("Cost histogram","","")
+
+        numberOfBins=100
+        plotter.plotHist(allValues, nbins=numberOfBins)
+        views.append(plotter)
+
         return views
 
     

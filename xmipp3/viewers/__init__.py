@@ -57,3 +57,5 @@ from .viewer_pseudoatoms import XmippPseudoAtomsViewer
 #from .viewer_combine_pdb import XmippProtCombinePdbViewer
 
 from .viewer_projmatch import XmippProjMatchViewer
+
+from .viewer_metaprotocol_golden_highres import XmippMetaprotocolGoldenHighResViewer
