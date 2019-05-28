@@ -31,7 +31,8 @@ import os
 import math
 from os.path import basename, exists, join
 
-from pyworkflow.utils import redStr
+from pyworkflow.em.convert.atom_struct import cifToPdb
+from pyworkflow.utils import redStr, replaceBaseExt
 from pyworkflow.utils.path import copyFile, createLink, makePath, cleanPath, moveFile
 from pyworkflow.protocol.params import (PointerParam, IntParam, FloatParam, 
                                         LEVEL_ADVANCED)
@@ -51,7 +52,7 @@ class XmippProtNMA(XmippProtNMABase):
         form.addSection(label='Normal Mode Analysis')
         form.addParam('inputStructure', PointerParam, label="Input structure",
                       important=True,
-                      pointerClass='PdbFile',
+                      pointerClass='AtomStruct',
                       help='The input structure can be an atomic model '
                            '(true PDB) or a pseudoatomic model\n'
                            '(an EM volume converted into pseudoatoms)')
@@ -103,7 +104,7 @@ class XmippProtNMA(XmippProtNMABase):
         n = self.numberOfModes.get()
         # Link the input
         inputFn = self.inputStructure.get().getFileName()
-        localFn = self._getPath(basename(inputFn))
+        localFn = self._getPath(replaceBaseExt(basename(inputFn),'pdb'))
         self._insertFunctionStep('copyPdbStep', inputFn, localFn,
                                  self.structureEM)
         
@@ -147,12 +148,15 @@ class XmippProtNMA(XmippProtNMABase):
         self._insertFunctionStep('createOutputStep')
         
     def copyPdbStep(self, inputFn, localFn, isEM):
-        """ Copy the input pdb file and also create a link 'atoms.pdb' """
-        copyFile(inputFn, localFn)
+        """ Copy the input pdb file and also create a link 'atoms.pdb'
+        """
+        cifToPdb(inputFn, localFn)
+
         if isEM:
-            fnOut=self._getPath('pseudoatoms.pdb')
+            fnOut = self._getPath('pseudoatoms.pdb')
         else:
-            fnOut=self._getPath('atoms.pdb')
+            fnOut = self._getPath('atoms.pdb')
+
         if not os.path.exists(fnOut):
             createLink(localFn, fnOut)
         

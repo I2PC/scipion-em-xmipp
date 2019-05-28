@@ -33,13 +33,15 @@ class TestStructureMapping(BaseTest):
         setupTestProject(cls)
         cls.dsRelion = DataSet.getDataSet('relion_tutorial')
         cls.protImport1 = cls.newProtocol(ProtImportVolumes,
-                                         filesPath=cls.dsRelion.getFile('volumes/reference_rotated.vol'), 
+                                         filesPath=cls.dsRelion.getFile('volumes/reference_rotated_masked.vol'),
                                          samplingRate=1.0)
         cls.launchProtocol(cls.protImport1)        
         cls.protImport2 = cls.newProtocol(ProtImportVolumes,
-                                         filesPath=cls.dsRelion.getFile('volumes/reference.mrc'), 
+                                         filesPath=cls.dsRelion.getFile('volumes/reference_masked.vol'),
                                          samplingRate=1.0)
         cls.launchProtocol(cls.protImport2)
+
+
     
     def testStructureMapping(self):
         """ 
@@ -52,6 +54,7 @@ class TestStructureMapping(BaseTest):
         protStrucMap.inputVolumes.append(self.protImport2.outputVolume)
         protStrucMap.numberOfModes.set(20)
         protStrucMap.pseudoAtomTarget.set(2.0)
-        protStrucMap.rcPercentage.set(97.0)
+        protStrucMap.pseudoAtomRadius.set(0.75)
+        protStrucMap.rcPercentage.set(90.0)
         protStrucMap.collectivityThreshold.set(0.2)
         self.launchProtocol(protStrucMap)

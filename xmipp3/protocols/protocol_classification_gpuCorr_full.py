@@ -31,7 +31,7 @@ from os import system, popen, mkdir, listdir
 from os.path import join
 from random import randint
 
-from pyworkflow import VERSION_1_2
+from pyworkflow import VERSION_2_0
 from pyworkflow.em import SetOfParticles, ALIGN_2D, ALIGN_NONE
 from pyworkflow.em.protocol import ProtAlign2D
 import pyworkflow.em.metadata as md
@@ -69,7 +69,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
     The set of classes will be growing whilst new particle images are
     received."""
     _label = 'gl2d streaming'
-    _lastUpdateVersion = VERSION_1_2
+    _lastUpdateVersion = VERSION_2_0
     _stepsCheckSecs = 10
 
     # --------------------------- DEFINE param functions -----------------------
