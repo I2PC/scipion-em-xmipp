@@ -49,7 +49,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
 
     # --------------------------- DEFINE param functions -----------------------
     def _defineAlignParams(self, form):
-        form.addHidden(params.GPU_LIST, params.StringParam, default='',
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
                        expertLevel=const.LEVEL_ADVANCED,
                        label="Choose GPU IDs",
                        help="GPU may have several cores. Set it to zero"
@@ -388,6 +388,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                             'keepBest': self.keepBest.get(),
                             'maxshift': self.maximumShift,
                             'outputClassesFile': filename,
+                            'device': self.gpuList.get(),
                             }
         else:
             filename = 'general_level%03d' % level + '_classes.xmd'
@@ -400,13 +401,14 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                             'keepBest': self.keepBest.get(),
                             'maxshift': self.maximumShift,
                             'outputClassesFile': filename,
+                            'device': int(self.gpuList.get()),
                             }
         Nrefs = getSize(refSet)
         if Nrefs>2:
             args = '-i_ref %(imgsRef)s -i_exp %(imgsExp)s -o %(outputFile)s '\
                    '--odir %(tmpDir)s --keep_best %(keepBest)d '\
                    '--maxShift %(maxshift)d --classify %(outputClassesFile)s '\
-                   '--simplifiedMd'
+                   '--simplifiedMd --device %(device)d '
             self.runJob("xmipp_cuda_correlation", args % self._params,
                         numberOfMpi=1)
         else:
@@ -771,6 +773,8 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                                   'have different sizes')
             else:
                 errors.append("Please, enter the reference images")
+        if len(self.gpuList.get())>1:
+            errors.append("The GPU list only can have one value for this protocol.")
         return errors
 
     def _summary(self):

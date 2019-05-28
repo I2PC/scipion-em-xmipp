@@ -74,7 +74,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
 
     # --------------------------- DEFINE param functions -----------------------
     def _defineAlignParams(self, form):
-        form.addHidden(params.GPU_LIST, params.StringParam, default='',
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
                        expertLevel=const.LEVEL_ADVANCED,
                        label="Choose GPU IDs",
                        help="GPU may have several cores. Set it to zero"
@@ -590,11 +590,12 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
                             'outputFile': outImgs,
                             'keepBest': self.keepBest.get(),
                             'maxshift': self.maximumShift,
-                            'outputClassesFile': classesOut
+                            'outputClassesFile': classesOut,
+                            'device': int(self.gpuList.get()),
                             }
             args = '-i_ref %(imgsRef)s -i_exp %(imgsExp)s -o %(outputFile)s '\
                    '--keep_best %(keepBest)d --maxShift %(maxshift)d ' \
-                   '--classify %(outputClassesFile)s --simplifiedMd'
+                   '--classify %(outputClassesFile)s --simplifiedMd --device %(device)d '
             self.runJob("xmipp_cuda_correlation", args % self._params,
                         numberOfMpi=1)
 
@@ -970,6 +971,8 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
         if newSize>x or newSize>y:
             errors.append('The image size must be smaller than the size of '
                           'the input images')
+        if len(self.gpuList.get())>1:
+            errors.append("The GPU list only can have one value for this protocol.")
         return errors
 
     def _summary(self):
