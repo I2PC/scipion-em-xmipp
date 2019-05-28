@@ -122,7 +122,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                            'the current resolution(A) + resolutionOffset(A). If resolutionOffset>0, then fewer information' \
                            'is used (meant to avoid overfitting). If resolutionOffset<0, then more information is allowed '\
                            '(meant for a greedy convergence).')
-        form.addParam('nextResolutionCriterion',FloatParam, label="FSC criterion", default=0.143, expertLevel=LEVEL_ADVANCED,
+        form.addParam('nextResolutionCriterion',FloatParam, label="FSC criterion", default=0.5, expertLevel=LEVEL_ADVANCED,
                       help='The resolution of the reconstruction is defined as the inverse of the frequency at which '\
                       'the FSC drops below this value. Typical values are 0.143 and 0.5')
         form.addParam('nextResolutionOffset', FloatParam, label="Resolution offset (A)", default=2, expertLevel=LEVEL_ADVANCED, condition='nextLowPass')
@@ -381,7 +381,13 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if row.containsLabel(xmippLib.MDL_ANGLE_DIFF0):
             setXmippAttributes(particle, row, xmippLib.MDL_ANGLE_DIFF0, xmippLib.MDL_WEIGHT_JUMPER0)
         if row.containsLabel(xmippLib.MDL_CONTINUOUS_X):
-            setXmippAttributes(particle, row, xmippLib.MDL_COST, xmippLib.MDL_WEIGHT_CONTINUOUS2, xmippLib.MDL_COST_PERCENTILE)
+            setXmippAttributes(particle, row, xmippLib.MDL_COST,
+                               xmippLib.MDL_WEIGHT_CONTINUOUS2,
+                               xmippLib.MDL_COST_PERCENTILE,
+                               xmippLib.MDL_CORRELATION_IDX,
+                               xmippLib.MDL_CORRELATION_MASK,
+                               xmippLib.MDL_CORRELATION_WEIGHT,
+                               xmippLib.MDL_IMED)
             if row.containsLabel(xmippLib.MDL_CONTINUOUS_SCALE_X):
                 setXmippAttributes(xmippLib.MDL_CONTINUOUS_SCALE_X, xmippLib.MDL_CONTINUOUS_SCALE_Y)
             if row.containsLabel(xmippLib.MDL_CONTINUOUS_GRAY_A):
