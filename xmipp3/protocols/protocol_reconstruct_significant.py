@@ -51,6 +51,16 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
     # --------------------------- DEFINE param functions -----------------------
 
     def _defineParams(self, form):
+        form.addHidden(USE_GPU, BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       expertLevel=LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+
         form.addSection(label='Input')
         form.addParam('inputSet', PointerParam, label="Input classes",
                       important=True,
@@ -63,7 +73,6 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
                       help='See [[http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry][Symmetry]]'
                            'for a description of the symmetry groups format.'
                            ' If no symmetry is present, give c1.')
-        form.addParam('useGPU', BooleanParam, default=False, label="Use GPU")
         form.addParam('thereisRefVolume', BooleanParam, default=False,
                       label="Is there a reference volume(s)?",
                       help='You may use a reference volume to initialize  '
@@ -168,7 +177,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
                            "Check this box if you do not want to make "
                            "this preselection.")
 
-        form.addParallelSection(threads=0, mpi=8)
+        form.addParallelSection(threads=1, mpi=8)
 
     # --------------------------- INSERT steps functions -----------------------
 
@@ -229,7 +238,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
 
         t = Timer()
         t.tic()
-        if self.useGPU and iterNumber > 1:
+        if self.useGpu.get() and iterNumber > 1:
             # Generate projections
             fnGalleryRoot = join(iterDir, "gallery")
             args = "-i %s -o %s.stk --sampling_rate %f --sym %s " \
@@ -275,14 +284,19 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
             moveFile(os.path.join(iterDir, 'angles_iter001_00.xmd'), anglesFn)
         t.toc('Significant took: ')
 
-        reconsArgs = ' -i %s' % anglesFn
+        reconsArgs = ' -i %s --fast' % anglesFn
         reconsArgs += ' -o %s' % volFn
         reconsArgs += ' --weight -v 0  --sym %s ' % self.symmetryGroup
 
         print "Number of images for reconstruction: ", metadata.getSize(
             anglesFn)
         t.tic()
-        self.runJob("xmipp_reconstruct_fourier", reconsArgs)
+        if self.useGpu.get():
+            cudaReconArgs = reconsArgs + ' --thr %s' %  self.numberOfThreads.get()
+            cudaReconArgs += ' --device %(GPU)s'
+            self.runJob("xmipp_cuda_reconstruct_fourier", cudaReconArgs, numberOfMpi=1)
+        else:
+            self.runJob("xmipp_reconstruct_fourier_accel", reconsArgs)
         t.toc('Reconstruct fourier took: ')
 
         # Center the volume
