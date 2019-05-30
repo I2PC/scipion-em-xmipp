@@ -158,95 +158,98 @@ class XmippProtMovieCorr(ProtAlignMovies):
     def _processMovie(self, movie):
         movieFolder = self._getOutputMovieFolder(movie)
 
-        x, y, n = movie.getDim()
-        a0, aN = self._getFrameRange(n, 'align')
-        s0, sN = self._getFrameRange(n, 'sum')
+        try:
+            x, y, n = movie.getDim()
+            a0, aN = self._getFrameRange(n, 'align')
+            s0, sN = self._getFrameRange(n, 'sum')
 
-        inputMd = os.path.join(movieFolder, 'input_movie.xmd')
-        writeMovieMd(movie, inputMd, a0, aN, useAlignment=False)
+            inputMd = os.path.join(movieFolder, 'input_movie.xmd')
+            writeMovieMd(movie, inputMd, a0, aN, useAlignment=False)
 
-        args = '-i "%s" ' % inputMd
-        args += '-o "%s" ' % self._getShiftsFile(movie)
-        args += '--sampling %f ' % movie.getSamplingRate()
-        args += '--max_freq %f ' % self.maxFreq
-        args += '--Bspline %d ' % self.INTERP_MAP[self.splineOrder.get()]
+            args = '-i "%s" ' % inputMd
+            args += '-o "%s" ' % self._getShiftsFile(movie)
+            args += '--sampling %f ' % movie.getSamplingRate()
+            args += '--max_freq %f ' % self.maxFreq
+            args += '--Bspline %d ' % self.INTERP_MAP[self.splineOrder.get()]
 
-        if self.binFactor > 1:
-            args += '--bin %f ' % self.binFactor
-        # Assume that if you provide one cropDim, you provide all
+            if self.binFactor > 1:
+                args += '--bin %f ' % self.binFactor
+            # Assume that if you provide one cropDim, you provide all
 
-        offsetX = self.cropOffsetX.get()
-        offsetY = self.cropOffsetY.get()
-        cropDimX = self.cropDimX.get()
-        cropDimY = self.cropDimY.get()
+            offsetX = self.cropOffsetX.get()
+            offsetY = self.cropOffsetY.get()
+            cropDimX = self.cropDimX.get()
+            cropDimY = self.cropDimY.get()
 
-        args += '--cropULCorner %d %d ' % (offsetX, offsetY)
+            args += '--cropULCorner %d %d ' % (offsetX, offsetY)
 
-        if cropDimX <= 0:
-            dimX = x - 1
-        else:
-            dimX = offsetX + cropDimX - 1
+            if cropDimX <= 0:
+                dimX = x - 1
+            else:
+                dimX = offsetX + cropDimX - 1
 
-        if cropDimY <= 0:
-            dimY = y - 1
-        else:
-            dimY = offsetY + cropDimY - 1
+            if cropDimY <= 0:
+                dimY = y - 1
+            else:
+                dimY = offsetY + cropDimY - 1
 
-        args += '--cropDRCorner %d %d ' % (dimX, dimY)
+            args += '--cropDRCorner %d %d ' % (dimX, dimY)
 
-        if self.outsideMode == self.OUTSIDE_WRAP:
-            args += "--outside wrap"
-        elif self.outsideMode == self.OUTSIDE_AVG:
-            args += "--outside avg"
-        elif self.outsideMode == self.OUTSIDE_AVG:
-            args += "--outside value %f" % self.outsideValue
+            if self.outsideMode == self.OUTSIDE_WRAP:
+                args += "--outside wrap"
+            elif self.outsideMode == self.OUTSIDE_AVG:
+                args += "--outside avg"
+            elif self.outsideMode == self.OUTSIDE_AVG:
+                args += "--outside value %f" % self.outsideValue
 
-        args += ' --frameRange %d %d ' % (0, aN-a0)
-        args += ' --frameRangeSum %d %d ' % (s0-a0, sN-a0)
-        args += ' --max_shift %d ' % self.maxShift
+            args += ' --frameRange %d %d ' % (0, aN-a0)
+            args += ' --frameRangeSum %d %d ' % (s0-a0, sN-a0)
+            args += ' --max_shift %d ' % self.maxShift
 
-        if self.doSaveAveMic or self.doComputePSD:
-            fnAvg = self._getExtraPath(self._getOutputMicName(movie))
-            args += ' --oavg "%s"' % fnAvg
+            if self.doSaveAveMic or self.doComputePSD:
+                fnAvg = self._getExtraPath(self._getOutputMicName(movie))
+                args += ' --oavg "%s"' % fnAvg
 
-        if self.doComputePSD:
-            fnInitial = os.path.join(movieFolder, "initialMic.mrc")
-            args  += ' --oavgInitial %s' % fnInitial
+            if self.doComputePSD:
+                fnInitial = os.path.join(movieFolder, "initialMic.mrc")
+                args  += ' --oavgInitial %s' % fnInitial
 
-        if self.doSaveMovie:
-            args += ' --oaligned %s' % self._getExtraPath(self._getOutputMovieName(movie))
+            if self.doSaveMovie:
+                args += ' --oaligned %s' % self._getExtraPath(self._getOutputMovieName(movie))
 
-        if self.inputMovies.get().getDark():
-            args += ' --dark ' + self.inputMovies.get().getDark()
+            if self.inputMovies.get().getDark():
+                args += ' --dark ' + self.inputMovies.get().getDark()
 
-        if self.inputMovies.get().getGain():
-            args += ' --gain ' + self.inputMovies.get().getGain()
+            if self.inputMovies.get().getGain():
+                args += ' --gain ' + self.inputMovies.get().getGain()
 
-        if self.autoControlPoints.get():
-            self._setControlPoints()
+            if self.autoControlPoints.get():
+                self._setControlPoints()
 
-        if self.useGpu.get():
-            args += ' --device %(GPU)s'
-            if self.doLocalAlignment.get():
-                args += ' --processLocalShifts '
-            args += ' --storage ' + self._getExtraPath("fftBenchmark.txt")
-            args += ' --controlPoints %d %d %d' % (self.controlPointX, self.controlPointY, self.controlPointT)
-            args += ' --patches %d %d' % (self.patchX, self.patchY)
-            args += ' --locCorrDownscale 4 4'
-            args += ' --patchesAvg %d' % self.groupNFrames
-            self.runJob('xmipp_cuda_movie_alignment_correlation', args, numberOfMpi=1)
-        else:
-            self.runJob('xmipp_movie_alignment_correlation', args, numberOfMpi=1)
+            if self.useGpu.get():
+                args += ' --device %(GPU)s'
+                if self.doLocalAlignment.get():
+                    args += ' --processLocalShifts '
+                args += ' --storage ' + self._getExtraPath("fftBenchmark.txt")
+                args += ' --controlPoints %d %d %d' % (self.controlPointX, self.controlPointY, self.controlPointT)
+                args += ' --patches %d %d' % (self.patchX, self.patchY)
+                args += ' --locCorrDownscale 4 4'
+                args += ' --patchesAvg %d' % self.groupNFrames
+                self.runJob('xmipp_cuda_movie_alignment_correlation', args, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_movie_alignment_correlation', args, numberOfMpi=1)
 
-        if self.doComputePSD:
-            self.computePSDs(movie, fnInitial, fnAvg)
-            # If the micrograph was only saved for computing the PSD
-            # we can remove it
-            pwutils.cleanPath(fnInitial)
-            if not self.doSaveAveMic:
-                pwutils.cleanPath(fnAvg)
+            if self.doComputePSD:
+                self.computePSDs(movie, fnInitial, fnAvg)
+                # If the micrograph was only saved for computing the PSD
+                # we can remove it
+                pwutils.cleanPath(fnInitial)
+                if not self.doSaveAveMic:
+                    pwutils.cleanPath(fnAvg)
 
-        self._saveAlignmentPlots(movie)
+            self._saveAlignmentPlots(movie)
+        except:
+            print(yellowStr("We cannot process %s"%movieFolder))
 
     #--------------------------- UTILS functions ------------------------------
     def _getShiftsFile(self, movie):
