@@ -70,7 +70,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         form.addSection(label='Input')
         form.addParam('inputCoordinates', params.MultiPointerParam,
                       pointerClass='SetOfCoordinates',
-                      label="Input coordinates",
+                      label="Input coordinates", important=True,
                       help='Select the set of coordinates to compare')
         form.addParam('consensusRadius', params.IntParam, default=10,
                       label="Radius",

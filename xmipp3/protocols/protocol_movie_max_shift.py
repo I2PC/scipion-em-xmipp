@@ -214,33 +214,53 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             micsDwSet = self._loadOutputSet(SetOfMicrographs,
                                   'micrographs_dose-weighted%s.sqlite' % suffix)
 
+            def tryToAppend(outSet, micOut, tries=1):
+                """ When micrograph is very big, sometimes it's not ready to be read
+                Then we will wait for it up to a minute in 6 time-growing tries. 
+                Returns True if fails! """
+                try:
+                    outSet.append(micOut)
+                except Exception as ex:
+                    micFn = micOut.getFileName()  # Runs/..../extra/filename.mrc
+                    errorStr = ('Image Extension: File %s has wrong size.' % micFn)
+                    if errorStr in str(ex) and tries < 7:
+                        from time import sleep
+                        sleep(tries*3)
+                        tryToAppend(outSet, micOut, tries+1)
+                    else:
+                        print("The movie seems corrupted. Skkiping it...\n%s" % ex)
+                        return True
+
             for movie in newDoneList:
                 movie.setEnabled(enable)
-                movieSet.append(movie)
+                tryToAppend(movieSet, movie)
                 if self.inputMics is not None:
                     mic = self.getMicFromMovie(movie, isDoseWeighted=False)
                     mic.setEnabled(enable)
-                    micsSet.append(mic)
+                    tryToAppend(micsSet, mic)
                 if self.inputDwMics is not None:
                     micDw = self.getMicFromMovie(movie, isDoseWeighted=True)
                     micDw.setEnabled(enable)
-                    micsDwSet.append(micDw)
-
-            self._updateOutputSet('outputMovies%s' % suffix, movieSet,
-                                  streamMode)
-            if self.inputMics is not None:
+                    tryToAppend(micsDwSet, micDw)
+            
+            if movieSet.getSize() > 0:
+                self._updateOutputSet('outputMovies%s' % suffix, movieSet,
+                                      streamMode)
+                                      
+            if self.inputMics is not None and micsSet.getSize() > 0:
                 self._updateOutputSet('outputMicrographs%s' % suffix, micsSet,
                                       streamMode)
-            if self.inputDwMics is not None:
+            if self.inputDwMics is not None and micsDwSet.getSize() > 0:
                 self._updateOutputSet('outputMicrographsDoseWeighted%s' % suffix,
                                       micsDwSet, streamMode)
-            if firstTime:
-                # define relation just the first time
-                self._defineTransformRelation(self.inputMovies.get(), movieSet)
-                if self.inputMics is not None:
+            if firstTime:  # define relation just the first time
+                if movieSet.getSize() > 0:
+                    self._defineTransformRelation(self.inputMovies.get(), movieSet)
+                if self.inputMics is not None and micsSet.getSize() > 0:
                     self._defineTransformRelation(self.inputMics, micsSet)
-                if self.inputDwMics is not None:
+                if self.inputDwMics is not None and micsDwSet.getSize() > 0:
                     self._defineTransformRelation(self.inputDwMics, micsDwSet)
+            
             movieSet.close()
             if self.inputMics is not None:
                 micsSet.close()
