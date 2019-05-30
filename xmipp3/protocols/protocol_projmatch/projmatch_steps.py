@@ -517,8 +517,11 @@ def insertReconstructionStep(self, iterN, refN, suffix='', **kwargs):
             params['artLambda'] = self._artLambda[iterN]
     
     elif method == 'fourier':
-        program = 'xmipp_reconstruct_fourier'
-        args += ' --weight --padding %(pad)s %(pad)s'
+        program = 'xmipp_cuda_reconstruct_fourier' if self.useGpu.get() else 'xmipp_reconstruct_fourier_accel'
+        args += ' --weight --padding %(pad)s %(pad)s --fast'
+        if self.useGpu.get():
+            args += " --thr " % self.numberOfThreads.get()
+            args += " --device %(GPU)s"
         params['pad'] = self.paddingFactor.get()
         
     self._insertFunctionStep('reconstructionStep', iterN, refN, program, method, args % params, suffix, **kwargs)
