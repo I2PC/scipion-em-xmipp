@@ -579,6 +579,7 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
             else:
                 consResolCrit = True
                 self.discDict['consensusResolution'] += 1
+                self._freqResol[ctfId] = 9999
 
         secondCondition = False
         if self.useCritXmipp:
