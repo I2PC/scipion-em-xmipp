@@ -151,11 +151,13 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         return ctfDownFactor
 
     def _calculateDownsampleList(self, samplingRate):
+        downsampleList = []
         if self.AutoDownsampling:
             ctfDownFactor = self.calculateAutodownsampling(samplingRate, 1.75)
         else:
             ctfDownFactor = self.ctfDownFactor.get()
-        downsampleList = [ctfDownFactor]
+            downsampleList = [ctfDownFactor]
+            return downsampleList
 
         if self.doCTFAutoDownsampling:
             downsampleList.append(self.calculateAutodownsampling(samplingRate, 2.75))
