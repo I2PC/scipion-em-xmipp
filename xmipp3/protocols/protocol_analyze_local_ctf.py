@@ -53,7 +53,7 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
         form.addParam('inputMics', PointerParam, label="Input micrographs",
                       pointerClass='SetOfMicrographs')
         form.addParam('inputSet', PointerParam, label="Input images",
-                      pointerClass='SetOfParticles')
+                      pointerClass='SetOfParticles', help="Set of particles with assigned local defocus")
 
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
