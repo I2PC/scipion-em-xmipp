@@ -39,6 +39,7 @@ from xmipp3.convert import getImageLocation
 from xmipp3.protocols.protocol_deep_cones3D import XmippProtDeepCones3D
 from xmipp3.protocols.protocol_deep_alignment3D import XmippProtDeepAlignment3D
 from xmipp3.protocols.protocol_deep_cones3D_highresGT import XmippProtDeepCones3DGT
+from xmipp3.protocols.protocol_deep_cones3D_highresGT_prueba import XmippProtDeepCones3DGT_2
 from .plotter import XmippPlotter
 from xmipp3.protocols.protocol_deep_cones3D_tests import XmippProtDeepCones3DTst
 
@@ -54,7 +55,9 @@ from xmipp3.protocols.protocol_deep_cones3D_tests import XmippProtDeepCones3DTst
 class XmippDeepAsignmentViewer(ProtocolViewer):
     """ Visualize the output of protocol reconstruct highres """
     _label = 'viewer deep asignment'
-    _targets = [XmippProtDeepCones3D, XmippProtDeepAlignment3D, XmippProtDeepCones3DGT, XmippProtDeepCones3DTst]
+    _targets = [XmippProtDeepCones3D, XmippProtDeepAlignment3D,
+                XmippProtDeepCones3DGT, XmippProtDeepCones3DTst,
+                XmippProtDeepCones3DGT_2]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
     
     def _defineParams(self, form):

@@ -43,10 +43,10 @@ from xmipp3.convert import createItemMatrix, setXmippAttributes
 import pyworkflow.em as em
 
         
-class XmippProtDeepCones3DGT(ProtRefine3D):
+class XmippProtDeepCones3DGT_2(ProtRefine3D):
     """Performs a fast and approximate angular assignment that can be further refined
     with Xmipp highres local refinement"""
-    _label = 'deep cones3D highres GT'
+    _label = 'deep cones3D highres GT 2'
     _lastUpdateVersion = VERSION_1_2
     
     def __init__(self, **args):
@@ -84,9 +84,9 @@ class XmippProtDeepCones3DGT(ProtRefine3D):
         form.addParam('numEpochs', IntParam, label="Number of epochs for training",
                       default=10,
                       help="Number of epochs for training.", condition = 'modelPretrain==False')
-        form.addParam('spanConesTilt', FloatParam, label="Span in degrees for every cone",
+        form.addParam('spanConesTilt', FloatParam, label="Distance between cone centers",
                       default=45,
-                      help="Span in degrees for every cone.", condition = 'modelPretrain==False')
+                      help="Distance in degrees between cone centers.", condition = 'modelPretrain==False')
         form.addParam('numConesSelected', IntParam, label="Number of selected cones per image",
                       default=1,
                       help="Number of selected cones per image.")
@@ -99,38 +99,15 @@ class XmippProtDeepCones3DGT(ProtRefine3D):
         self.batchSize = 128 #1024
         self.imgsFn = self._getExtraPath('input_imgs.xmd')
         self.trainImgsFn = self._getExtraPath('train_input_imgs.xmd')
-        
+
         self._insertFunctionStep("convertStep")
         if self.modelPretrain.get() is False:
             self._insertFunctionStep("computeTrainingSet", 'projections')
+
         # Trainig steps
-        numConesTilt = int(180.0/self.spanConesTilt.get())
-        numConesRot = numConesTilt*2
-        self.numCones = numConesTilt * numConesRot
-        stepRot = int(360/numConesRot)
-        stepTilt = int(180 / numConesTilt)
-        iniRot = 0
-        endRot = stepRot
-        counterCones=0
-        for i in range(numConesRot):
-            iniTilt = 0
-            endTilt = stepTilt
-            for j in range(numConesTilt):
+        self._insertFunctionStep("prepareImagesForTraining")
 
-                # self._insertFunctionStep("projectStep", 600, iniRot, endRot, iniTilt, endTilt, 'projections', counterCones+1)
-
-                self._insertFunctionStep("projectStep", 300, iniRot, endRot, iniTilt, endTilt, 'projectionsCudaCorr', counterCones + 1)
-                if self.modelPretrain.get() is False:
-                    self._insertFunctionStep("generateExpImagesStep", 10000, 'projections', 'projectionsExp', counterCones+1, False)
-                    #AJ posiblemente con alrededor de 8000 podria valer...
-                iniTilt +=stepTilt
-                endTilt +=stepTilt
-                counterCones+=1
-            iniRot +=stepRot
-            endRot +=stepRot
-
-        for i in range(self.numCones):
-            self._insertFunctionStep("trainNClassifiers2ClassesStep", i+1)
+        self._insertFunctionStep("trainNClassifiers2ClassesStep")
 
         #self._insertFunctionStep("trainOneClassifierNClassesStep")
         # Predict step
@@ -190,30 +167,123 @@ class XmippProtDeepCones3DGT(ProtRefine3D):
                              self.newXdim))
                 moveFile(self._getExtraPath('scaled_train_particles.xmd'), self.trainImgsFn)
 
+    def generateConeCenters(self, fn):
+        fnVol = self._getTmpPath("volume.vol")
+        fnCenters = self._getExtraPath(fn + ".stk")
+        fnCentersMd = self._getExtraPath(fn + ".doc")
+        self.runJob("xmipp_angular_project_library",
+                    "-i %s -o %s --sym c1 --sampling_rate %d"
+                    % (fnVol, fnCenters, self.spanConesTilt.get()),
+                    numberOfMpi=1)
+        mdExp = xmippLib.MetaData(fnCentersMd)
+        return mdExp.size()
+
+
+    def angularDistance(self, rot, tilt, mdCones):
+        # AJ aqui calcular la distancia angular entre particula y centro de cada cono
+        dist=[]
+        for row in iterRows(mdCones):
+            rotCenterCone = row.getValue(xmippLib.MDL_ANGLE_ROT)
+            tiltCenterCone = row.getValue(xmippLib.MDL_ANGLE_TILT)
+            if rotCenterCone<0:
+                rotCenterCone=rotCenterCone+360
+            if tiltCenterCone<0:
+                tiltCenterCone=tiltCenterCone+360
+            srot = math.sin(math.radians(rot))
+            crot = math.cos(math.radians(rot))
+            stilt = math.sin(math.radians(tilt))
+            ctilt = math.cos(math.radians(tilt))
+            srotCone = math.sin(math.radians(rotCenterCone))
+            crotCone = math.cos(math.radians(rotCenterCone))
+            stiltCone = math.sin(math.radians(tiltCenterCone))
+            ctiltCone = math.cos(math.radians(tiltCenterCone))
+            aux = (stilt * crot * stiltCone * crotCone) + (
+                    stilt * srot * stiltCone * srotCone) + (
+                          ctilt * ctiltCone)
+            auxA=aux
+            if aux < -1:
+                auxA = -1
+            elif aux > 1:
+                auxA = 1
+            auxAcos = math.degrees(math.acos(auxA))
+            dist.append(auxAcos)
+            #print("angular distance:", rotCenterCone, tiltCenterCone, rot, tilt, aux, auxA, auxAcos)
+            #print("aux:", (stilt * crot * stiltCone * crotCone), (stilt * srot * stiltCone * srotCone), (ctilt * ctiltCone))
+        minDist = min(dist)
+        finalCone = dist.index(minDist)+1
+        #print("angular distance final:", minDist, finalCone)
+
+        return finalCone
+
 
     def computeTrainingSet(self, nameTrain):
-        numConesTilt = int(180/int(self.spanConesTilt.get()))
-        numConesRot = numConesTilt*2
-        stepRot = int(360/numConesRot)
-        stepTilt = int(180 / numConesTilt)
+
+        totalCones = self.generateConeCenters('coneCenters')
+        self.numCones = totalCones
+        fnCentersMd = self._getExtraPath("coneCenters.doc")
+        mdCones = xmippLib.MetaData(fnCentersMd)
+
+        auxList = []
+
         mdTrain = xmippLib.MetaData(self.trainImgsFn)
         mdList = []
-        for i in range(numConesRot*numConesTilt):
+        for i in range(totalCones):
             mdList.append(xmippLib.MetaData())
         for row in iterRows(mdTrain):
-            objId = row.getObjId()
-            rot = mdTrain.getValue(xmippLib.MDL_ANGLE_ROT, objId)
-            tilt = mdTrain.getValue(xmippLib.MDL_ANGLE_TILT, objId)
+            rot = row.getValue(xmippLib.MDL_ANGLE_ROT)
+            tilt = row.getValue(xmippLib.MDL_ANGLE_TILT)
             if rot<0:
                 rot=rot+360
             if tilt<0:
                 tilt=tilt+360
-            numCone = int(((rot//stepRot)*numConesTilt)+(tilt//stepTilt)+1)
+            numCone = self.angularDistance(rot, tilt, mdCones)
             mdCone = mdList[numCone-1]
+            auxList.append(numCone-1)
             row.addToMd(mdCone)
-        for i in range(numConesRot * numConesTilt):
+        print("SELECTED CONES", auxList)
+        for i in range(totalCones):
             fnTrain = self._getExtraPath(nameTrain+"%d.xmd"%(i+1))
             mdList[i].write(fnTrain)
+
+
+    def prepareImagesForTraining(self):
+
+        fnCentersMd = self._getExtraPath("coneCenters.doc")
+        mdCones = xmippLib.MetaData(fnCentersMd)
+        span = self.spanConesTilt.get()
+        counterCones=0
+        for row in iterRows(mdCones):
+            rotCenter = row.getValue(xmippLib.MDL_ANGLE_ROT)
+            tiltCenter = row.getValue(xmippLib.MDL_ANGLE_TILT)
+            if rotCenter<0:
+                rotCenter=rotCenter+360
+            if tiltCenter<0:
+                tiltCenter=tiltCenter+360
+            iniRot=rotCenter-span
+            endRot=rotCenter+span
+            iniTilt=tiltCenter-span
+            endTilt=tiltCenter+span
+            if iniRot<0:
+                iniRot=iniRot+360
+            if iniTilt<0:
+                iniTilt=iniTilt+360
+            if endRot < 0:
+                endRot = endRot + 360
+            if endTilt < 0:
+                endTilt = endTilt + 360
+            mdProj = xmippLib.MetaData(self._getExtraPath('projections%d.xmd'%(counterCones+1)))
+            sizeProj = mdProj.size()
+            if sizeProj>0:
+                lastLabel=counterCones+1
+                self.projectStep(300, iniRot, endRot, iniTilt, endTilt, 'projectionsCudaCorr', counterCones+1)
+                if self.modelPretrain.get() is False:
+                    self.generateExpImagesStep(10000, 'projections', 'projectionsExp', counterCones+1, False)
+                    #AJ posiblemente con alrededor de 8000 podria valer...
+            counterCones=counterCones+1
+
+        fnToFilter = self._getExtraPath('projectionsExp%d.xmd'%(lastLabel))
+        self.runJob("xmipp_transform_filter", " -i %s --fourier low_pass %f" %
+                    (fnToFilter, 0.15), numberOfMpi=1)
 
     def projectStep(self, numProj, iniRot, endRot, iniTilt, endTilt, fn, idx):
 
@@ -259,16 +329,6 @@ _noiseCoord   '0'
         maxShift = round(newXdim / 10)
         idx=1
         NimgsMd = mdIn.size()
-        print("AAAAAA", NimgsMd)
-        if NimgsMd==0:
-            if label == self.numCones:
-                for n in range(0, label):
-                    if exists(self._getExtraPath(nameExp + "%d.xmd" % (label - n))):
-                        self.runJob("xmipp_transform_filter", " -i %s --fourier low_pass %f" %
-                                    (self._getExtraPath(nameExp + "%d.xmd" % (label - n)),
-                                     0.15), numberOfMpi=1)
-                        break
-            return
         Nrepeats = int(Nimgs / NimgsMd)
         # if Nrepeats<10:
         #     Nrepeats=10
@@ -277,8 +337,7 @@ _noiseCoord   '0'
             remove(fnLabels)
         fileLabels=open(fnLabels,"a")
         for row in iterRows(mdIn):
-            objId = row.getObjId()
-            fnImg = mdIn.getValue(xmippLib.MDL_IMAGE, objId)
+            fnImg = row.getValue(xmippLib.MDL_IMAGE)
             myRow = row
             I = xmippLib.Image(fnImg)
             Xdim, Ydim, _, _ = I.getDimensions()
@@ -319,53 +378,54 @@ _noiseCoord   '0'
                 lastFnExp = self._getExtraPath(nameExp+"%d.xmd"%(labelPrev))
                 self.runJob("xmipp_metadata_utilities", " -i %s --set union %s -o %s " %
                             (lastFnExp, fnExp, fnExp), numberOfMpi=1)
-
-        if label==self.numCones:
-            self.runJob("xmipp_transform_filter", " -i %s --fourier low_pass %f" %
-                        (fnExp, 0.15), numberOfMpi=1)
+        remove(fnProj)
 
 
-    def trainNClassifiers2ClassesStep(self, idx):
+    def trainNClassifiers2ClassesStep(self):
 
-        modelFn = 'modelCone%d' % idx
-        if self.modelPretrain.get() is True:
-            if exists(self.pretrainedModels.get()._getExtraPath(modelFn + '.h5')):
-                copy(self.pretrainedModels.get()._getExtraPath(modelFn + '.h5'),
-                    self._getExtraPath(modelFn + '.h5'))
+        for i in range(self.numCones):
+            idx = i+1
 
-        expCheck = self._getExtraPath('projectionsExp%d.xmd' % idx)
-        if exists(expCheck):
-            if not exists(self._getExtraPath(modelFn+'.h5')): #AJ no se si esto tiene mucho sentido o puede ser peligroso con modelos a medias de entrenamiento
-                fnLabels = self._getExtraPath('labels.txt')
-                fileLabels = open(fnLabels, "r")
-                expSet = self._getExtraPath('projectionsExp%d.xmd' % self.numCones)
-                if not exists(expSet):
-                    for n in range(1, self.numCones):
-                        if exists(self._getExtraPath('projectionsExp%d.xmd' % (self.numCones - n))):
-                            expSet = self._getExtraPath('projectionsExp%d.xmd' % (self.numCones - n))
-                            break
-                newFnLabels = self._getExtraPath('labels%d.txt' %idx)
-                newFileLabels = open(newFnLabels, "w")
-                lines = fileLabels.readlines()
-                for line in lines:
-                    if line == str(idx-1)+'\n':
-                        newFileLabels.write('1\n')
-                    else:
-                        newFileLabels.write('0\n')
-                newFileLabels.close()
-                fileLabels.close()
+            modelFn = 'modelCone%d' % idx
+            if self.modelPretrain.get() is True:
+                if exists(self.pretrainedModels.get()._getExtraPath(modelFn + '.h5')):
+                    copy(self.pretrainedModels.get()._getExtraPath(modelFn + '.h5'),
+                        self._getExtraPath(modelFn + '.h5'))
 
-                newXdim = readInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE)
-                fnLabels = self._getExtraPath('labels%d.txt'%idx)
+            expCheck = self._getExtraPath('projectionsExp%d.xmd' % idx)
+            if exists(expCheck):
+                if not exists(self._getExtraPath(modelFn+'.h5')): #AJ no se si esto tiene mucho sentido o puede ser peligroso con modelos a medias de entrenamiento
+                    fnLabels = self._getExtraPath('labels.txt')
+                    fileLabels = open(fnLabels, "r")
+                    expSet = self._getExtraPath('projectionsExp%d.xmd' % self.numCones)
+                    if not exists(expSet):
+                        for n in range(1, self.numCones):
+                            if exists(self._getExtraPath('projectionsExp%d.xmd' % (self.numCones - n))):
+                                expSet = self._getExtraPath('projectionsExp%d.xmd' % (self.numCones - n))
+                                break
+                    newFnLabels = self._getExtraPath('labels%d.txt' %idx)
+                    newFileLabels = open(newFnLabels, "w")
+                    lines = fileLabels.readlines()
+                    for line in lines:
+                        if line == str(idx-1)+'\n':
+                            newFileLabels.write('1\n')
+                        else:
+                            newFileLabels.write('0\n')
+                    newFileLabels.close()
+                    fileLabels.close()
 
-                try:
-                    self.runJob("xmipp_cone_deepalign", "%s %s %s %s %d %d %d %d -1" %
-                                (expSet, fnLabels, self._getExtraPath(),
-                                 modelFn, self.numEpochs, newXdim, 2, self.batchSize), numberOfMpi=1)
-                except Exception as e:
-                    raise Exception("ERROR: Please, if you are having memory problems, "
-                                    "check the target resolution to work with lower dimensions.")
+                    newXdim = readInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE)
+                    fnLabels = self._getExtraPath('labels%d.txt'%idx)
 
+                    try:
+                        self.runJob("xmipp_cone_deepalign", "%s %s %s %s %d %d %d %d -1" %
+                                    (expSet, fnLabels, self._getExtraPath(),
+                                     modelFn, self.numEpochs, newXdim, 2, self.batchSize), numberOfMpi=1)
+                    except Exception as e:
+                        raise Exception("ERROR: Please, if you are having memory problems, "
+                                        "check the target resolution to work with lower dimensions.")
+
+                #remove(expSet)
 
 
     def predictStep(self):

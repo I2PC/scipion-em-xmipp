@@ -120,6 +120,7 @@ from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
 
 from .protocol_deep_similarity_cones3D import XmippProtDeepSimilarityCones3D
 from .protocol_deep_cones3D_highresGT import XmippProtDeepCones3DGT
+from .protocol_deep_cones3D_highresGT_prueba import XmippProtDeepCones3DGT_2
 from .protocol_deep_cones3D_tests import XmippProtDeepCones3DTst
 from .protocol_deep_alignment3D import XmippProtDeepAlignment3D
 from .protocol_deep_correlation3D import XmippProtDeepCorrelation3D
