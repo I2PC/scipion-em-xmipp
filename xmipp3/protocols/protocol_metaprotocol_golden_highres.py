@@ -145,7 +145,8 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 symmetryGroup=self.symmetryGroup.get(),
                 numberOfIterations=1,
                 particleRadius = self.particleRadius.get(),
-                maximumTargetResolution = targetResolution
+                maximumTargetResolution = targetResolution,
+                numberOfMpi=self.numberOfMpi.get()
             )
 
             previousProtPart = self
@@ -206,7 +207,8 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
             numberOfIterations=1,
             particleRadius=self.particleRadius.get(),
             maximumTargetResolution=targetResolution,
-            alignmentMethod = XmippProtReconstructHighRes.LOCAL_ALIGNMENT
+            alignmentMethod = XmippProtReconstructHighRes.LOCAL_ALIGNMENT,
+            numberOfMpi=self.numberOfMpi.get()
         )
         newHighResLocal.inputParticles.set(self)
         newHighResLocal.inputParticles.setExtended('outputParticlesLocal')
@@ -441,6 +443,10 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
     #--------------------------- INFO functions --------------------------------
     def _validate(self):
         errors = []
+        if not self.inputParticles.hasValue():
+            errors.append("You must provide input particles")
+        if not self.inputParticles.get().isPhaseFlipped():
+            errors.append("The input particles must be phase flipped")
         return errors
     
     def _summary(self):
