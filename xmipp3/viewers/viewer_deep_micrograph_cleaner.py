@@ -36,37 +36,29 @@ from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 
 import xmippLib
 from xmipp3.convert import getXmippAttribute
-from xmipp3.protocols.protocol_deep_carbon_screen import XmippProtDeepCarbonScreen
+from xmipp3.protocols.protocol_deep_micrograph_screen import XmippProtDeepMicrographScreen
 from .plotter import XmippPlotter
 
-class XmippDeepCarbonViewer(ProtocolViewer):
+class XmippDeepMicrographViewer(ProtocolViewer):
     """         
         Viewer for the 'Xmipp - deep carbon cleaner' protocols.\n
         Select those cooridantes with high (close to 1.0)
         'zScoreDeepLearning2' value and save them.
         The Histogram may help you to decide a threshold.
     """
-    _label = 'viewer deep Carbon CLeaner'
+    _label = 'viewer deep Micrograph cleaner'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
-    _targets = [XmippProtDeepCarbonScreen]
+    _targets = [XmippProtDeepMicrographScreen]
 
     def _defineParams(self, form):
         form.addSection(label='Visualization')
         form.addParam('noteViz', LabelParam, label="\n")
-        # form.addParam('visualizeParticles', LabelParam, important=True,
-        #               label="Select particles/coordinates with high "
-        #                     "'zScoreDeepLearning1' values",
-        #               help="A viewer with all particles/coordinates "
-        #                    "with a 'zScoreDeepLearning1' attached "
-        #                    "will be launched. Select all those "
-        #                    "particles/coordinates with high scores and "
-        #                    "save them.\n"
-        #                    "Particles can be sorted by any column.")
+
         form.addParam('visualizeHistogram', IntParam, default=100,
                       label="Visualize Deep Scores Histogram (Bin size)",
                       help="Plot an histogram of the 'zScoreDeepLearning2' "
                            "to visual setting of a good threshold.")
-        form.addParam('visualizeCoordinates', FloatParam, default=0.75,
+        form.addParam('visualizeCoordinates', FloatParam, default=0.8,
                       label="Visualize good coordinates (threshold from 0 to 1)",
                       help="Visualize the coordinates considered good according"
                            " to the threshold indicated in the box.\n"
