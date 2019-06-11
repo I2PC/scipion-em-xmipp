@@ -96,7 +96,7 @@ from .protocol_rotational_spectra import XmippProtRotSpectra
 from .protocol_rotational_symmetry import XmippProtRotationalSymmetry
 from .protocol_screen_particles import XmippProtScreenParticles
 from .protocol_screen_deepConsensus import XmippProtScreenDeepConsensus, XmippProtDeepConsSubSet
-from .protocol_deep_carbon_screen import  XmippProtDeepCarbonScreen
+from .protocol_deep_micrograph_screen import  XmippProtDeepMicrographScreen
 from .protocol_screen_deeplearning import XmippProtScreenDeepLearning
 from .protocol_solid_angles import XmippProtSolidAngles
 from .protocol_split_volume import XmippProtSplitvolume

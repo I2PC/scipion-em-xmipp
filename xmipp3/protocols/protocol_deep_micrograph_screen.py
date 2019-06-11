@@ -47,9 +47,9 @@ from xmipp3.constants import SAME_AS_PICKING, OTHER
 from xmipp3.utils import validateDLtoolkit
 
 
-class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
+class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     """Protocol to remove coordinates in carbon zones or large impurities"""
-    _label = 'deep carbon screen'
+    _label = 'deep micrograph cleaner'
     
     def __init__(self, **kwargs):
         ProtExtractParticles.__init__(self, **kwargs)
@@ -93,7 +93,7 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
         form.addParam("threshold", params.FloatParam, default=-1,expertLevel=params.LEVEL_ADVANCED,
                       label="Threshold", help="Deep learning goodness score to rule out coordinates. The bigger the treshold "+
                            "the more coordiantes will be ruled out. Ranges from 0 to 1. Use -1 to pospone thresholding until "+
-                           "analyze results")
+                           "analyze results. 0.75 <= Recommended threshold <= 0.9")
 
         form.addParam("streamingBatchSize", params.IntParam, default=36,
                       label="Batch size", expertLevel=params.LEVEL_ADVANCED,
@@ -234,7 +234,7 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
         args += ' -o %s' % self._getExtraPath('outputCoords')
         args += ' -b %d' % self.getBoxSize()
         args += ' -s 1' #Downsampling is automatically managed by scipion
-        args += ' -d %s' % Plugin.getModel('deepCarbonCleaner', 'defaultModel.keras')
+        args += ' -d %s' % Plugin.getModel('deepMicrographCleaner', 'defaultModel.keras')
 
         if self.threshold.get() > 0:
             args += ' --deepThr %f ' % (1-self.threshold.get())
@@ -247,7 +247,7 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
         else:
             args += ' -g -1'
             
-        self.runJob('xmipp_deep_carbon_cleaner', args)
+        self.runJob('xmipp_deep_micrograph_cleaner', args)
 
 
 
@@ -309,7 +309,6 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
 
 
     def _updateOutputCoordSet(self, micList, streamMode):
-        print("in _updateOutputCoordSet > micList: %s" % micList)
         micDoneList = micList  # [mic for mic in micList if self._micIsReady(mic)]
 
         # Do no proceed if there is not micrograph ready
@@ -352,7 +351,7 @@ class XmippProtDeepCarbonScreen(ProtExtractParticles, XmippProtocol):
     def _validate(self):
         # errors =[]
         errors = validateDLtoolkit(assertModel=True,
-                                   model=('deepCarbonCleaner', 'defaultModel.keras'))
+                                   model=('deepMicrographCleaner', 'defaultModel.keras'))
 
         if self.streamingBatchSize.get() == 1:
             errors.append('Batch size must be 0 (all at once) or larger than 1.')
