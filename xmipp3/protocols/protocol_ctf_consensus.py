@@ -549,6 +549,11 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
         # TODO: Change this way to get the ctf.
         ctf = self.inputCTF.get()[ctfId]
 
+        # FIXME: this is a workaround to skip errors, but it should be treat at checkNewInput
+        if ctf is None:
+            return
+
+
         defocusU = ctf.getDefocusU()
         defocusV = ctf.getDefocusV()
         astigm = abs(defocusU - defocusV)
