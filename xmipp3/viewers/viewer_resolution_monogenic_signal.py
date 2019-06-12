@@ -30,7 +30,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 import matplotlib.colors as mcolors
-from pyworkflow.utils import getExt, removeExt
+from pyworkflow.utils import getExt, removeExt, replaceExt
 from os.path import abspath
 
 from pyworkflow.em.viewers import LocalResolutionViewer, EmPlotter
@@ -146,6 +146,8 @@ class XmippMonoResViewer(LocalResolutionViewer):
     
     def _showVolumeColorSlices(self, param=None):
         imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE)
+        if not os.path.exists(imageFile):
+            imageFile = replaceExt(imageFile, 'vol')
         imgData, min_Res, max_Res = self.getImgData(imageFile)
 
         xplotter = XmippPlotter(x=2, y=2, mainTitle="Local Resolution Slices "
@@ -165,6 +167,8 @@ class XmippMonoResViewer(LocalResolutionViewer):
 
     def _showOneColorslice(self, param=None):
         imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE)
+        if not os.path.exists(imageFile):
+            imageFile = replaceExt(imageFile, 'vol')
         imgData, min_Res, max_Res = self.getImgData(imageFile)
 
         xplotter = XmippPlotter(x=1, y=1, mainTitle="Local Resolution Slices "
@@ -227,8 +231,10 @@ class XmippMonoResViewer(LocalResolutionViewer):
         fnRoot = "extra/"
         scriptFile = self.protocol._getPath('Chimera_resolution.cmd')
         fhCmd = open(scriptFile, 'w')
-
-        imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
+ 	imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
+        if not os.path.exists(imageFile):
+            imageFile = replaceExt(imageFile, 'vol')
+        
         img = ImageHandler().read(imageFile)
         imgData = img.getData()
         min_Res = round(np.amin(imgData)*100)/100
@@ -252,57 +258,98 @@ class XmippMonoResViewer(LocalResolutionViewer):
         fninput = abspath(fnbase + ext[0:4])
 
         dim = inputVolume.getDim()[0]
-        tmpFileName = os.path.abspath(self.protocol._getTmpPath("axis.bild"))
-        Chimera.createCoordinateAxisFile(dim,
+
+	imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
+
+        if not os.path.exists(imageFile):
+            if self.protocol.halfVolumes.get() is True:
+                smprt = self.protocol.inputVolume.get().getSamplingRate()
+            else:
+                smprt = self.protocol.inputVolumes.get().getSamplingRate()
+
+            imageFile = replaceExt(imageFile, 'vol')
+            fhCmd.write("open %s\n" % fninput)
+	    fhCmd.write("open %s\n" %  abspath(imageFile))
+	    fhCmd.write("volume #0 voxelSize %s\n" % (str(smprt)))
+            fhCmd.write("volume #1 voxelSize %s\n" % (str(smprt)))
+            fhCmd.write("vol #1 hide\n")
+        
+            scolorStr = '%s,%s:' * numberOfColors
+            scolorStr = scolorStr[:-1]
+
+            line = ("scolor #0 volume #1 perPixel false cmap " 
+                + scolorStr + "\n") % colorList
+            fhCmd.write(line)
+
+            scolorStr = '%s %s ' * numberOfColors
+            str_colors = ()
+            for idx, elem in enumerate(colorList):
+                if (idx % 2 == 0):
+                    if ((idx % 8) == 0):
+                        str_colors +=  str(elem),
+                    else:
+                        str_colors += '" "',
+                else:
+                    str_colors += elem,
+        
+            line = ("colorkey 0.01,0.05 0.02,0.95 " + scolorStr + "\n") % str_colors
+            fhCmd.write(line)
+
+            fhCmd.close()
+	else:
+
+            tmpFileName = os.path.abspath(self.protocol._getTmpPath("axis.bild"))
+            Chimera.createCoordinateAxisFile(dim,
                                          bildFileName=tmpFileName,
                                          sampling=inputSmprt)
-        fhCmd.write("open %s\n" % tmpFileName)
-        fhCmd.write("cofr 0,0,0\n")  # set center of coordinates
-        fhCmd.write("open %s\n" % fninput)
-        fhCmd.write("open %s\n" % (fnRoot + CHIMERA_RESOLUTION_VOL))
-        imageFileVolume = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
-        header = Ccp4Header(imageFileVolume, readHeader=True)
+            fhCmd.write("open %s\n" % tmpFileName)
+            fhCmd.write("cofr 0,0,0\n")  # set center of coordinates
+            fhCmd.write("open %s\n" % fninput)
+            fhCmd.write("open %s\n" % (fnRoot + CHIMERA_RESOLUTION_VOL))
+            imageFileVolume = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
+            header = Ccp4Header(imageFileVolume, readHeader=True)
 
 
-        x, y, z = header.getSampling()
-        imageFileSmprt = x
+            x, y, z = header.getSampling()
+            imageFileSmprt = x
 
-        # input vol(s) origin coordinates
-        x_input, y_input, z_input = inputVolume.getShiftsFromOrigin()
-        fhCmd.write("volume #1 voxelSize %f origin %0.2f,%0.2f,%0.2f\n"
+            # input vol(s) origin coordinates
+            x_input, y_input, z_input = inputVolume.getShiftsFromOrigin()
+            fhCmd.write("volume #1 voxelSize %f origin %0.2f,%0.2f,%0.2f\n"
                     % (inputSmprt, x_input, y_input, z_input))
 
-        # image vol origin coordinates
-        x_output, y_output, z_output = header.getOrigin()
-        fhCmd.write("volume #2 voxelSize %f origin %0.2f,%0.2f,%0.2f\n"
+            # image vol origin coordinates
+            x_output, y_output, z_output = header.getOrigin()
+            fhCmd.write("volume #2 voxelSize %f origin %0.2f,%0.2f,%0.2f\n"
                     % (imageFileSmprt, x_output, y_output, z_output))
 
-        #### Check if the coordinate system works for a set of volumes
+            #### Check if the coordinate system works for a set of volumes
 
-        fhCmd.write("volume #2 hide\n")
-        
-        scolorStr = '%s,%s:' * numberOfColors
-        scolorStr = scolorStr[:-1]
+            fhCmd.write("volume #2 hide\n")
+            
+            scolorStr = '%s,%s:' * numberOfColors
+            scolorStr = scolorStr[:-1]
 
-        line = ("scolor #1 volume #2 perPixel false cmap "
+            line = ("scolor #1 volume #2 perPixel false cmap "
                 + scolorStr + "\n") % colorList
-        fhCmd.write(line)
+            fhCmd.write(line)
 
-        scolorStr = '%s %s ' * numberOfColors
-        str_colors = ()
-        for idx, elem in enumerate(colorList):
-            if (idx % 2 == 0):
-                if ((idx % 8) == 0):
-                    str_colors +=  str(elem),
+            scolorStr = '%s %s ' * numberOfColors
+            str_colors = ()
+            for idx, elem in enumerate(colorList):
+                if (idx % 2 == 0):
+                    if ((idx % 8) == 0):
+                        str_colors +=  str(elem),
+                    else:
+                        str_colors += '" "',
                 else:
-                    str_colors += '" "',
-            else:
-                str_colors += elem,
+                    str_colors += elem,
         
-        line = ("colorkey 0.01,0.05 0.02,0.95 " + scolorStr + "\n") % str_colors
-        fhCmd.write(line)
+            line = ("colorkey 0.01,0.05 0.02,0.95 " + scolorStr + "\n") % str_colors
+            fhCmd.write(line)
 
-        fhCmd.close()
+            fhCmd.close()
+
 
     @staticmethod
     def colorMapToColorList(steps, colorMap):
