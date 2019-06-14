@@ -41,7 +41,7 @@ from .plotter import XmippPlotter
 
 class XmippDeepMicrographViewer(ProtocolViewer):
     """         
-        Viewer for the 'Xmipp - deep carbon cleaner' protocols.\n
+        Viewer for the 'Xmipp - deep Micrograph cleaner' protocols.\n
         Select those cooridantes with high (close to 1.0)
         'zScoreDeepLearning2' value and save them.
         The Histogram may help you to decide a threshold.
@@ -128,8 +128,8 @@ class XmippDeepMicrographViewer(ProtocolViewer):
             mdLabel = xmippLib.MDL_GOOD_REGION_SCORE
             if getXmippAttribute(outCoords.getFirstItem(), mdLabel):
                 plotter = EmPlotter()
-                plotter.createSubPlot("Deep carbon score",
-                                      "Deep carbon score",
+                plotter.createSubPlot("Deep micrograph score",
+                                      "Deep micrograph score",
                                       "Number of Coordinates")
                 cScores = [getXmippAttribute(coord, mdLabel).get()
                            for coord in outCoords]

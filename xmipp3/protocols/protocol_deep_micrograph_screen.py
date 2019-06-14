@@ -221,7 +221,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     def _extractMicrographListOwn(self, micList):
         """ Functional Step. Overrided in general protExtracParticle """
 
-        print("micList: %s" % str(micList))
+#        print("micList: %s" % [ mic.getMicName() for mic in micList ] )
 
         micsFnDone = self.getDoneMics()
         micLisfFn = [mic.getFileName() for mic in micList
