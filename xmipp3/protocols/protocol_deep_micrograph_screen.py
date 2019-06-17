@@ -65,12 +65,8 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
                       label="Input coordinates",
                       help='Select the SetOfCoordinates ')
 
-        # The name for the followig param is because historical reasons
-        # now it should be named better 'micsSource' rather than
-        # 'downsampleType', but this could make inconsistent previous executions
-        # of this protocols, we will keep the name
-        form.addParam('downsampleType', params.EnumParam,
-                      choices=['same as picking', 'other'],
+        form.addParam('micsSource', params.EnumParam,
+                      choices=['same as coordinates', 'other'],
                       default=0, important=True,
                       display=params.EnumParam.DISPLAY_HLIST,
                       label='Micrographs source',
@@ -86,14 +82,15 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
         form.addParam('inputMicrographs', params.PointerParam,
                       pointerClass='SetOfMicrographs',
-                      condition='downsampleType != %s' % SAME_AS_PICKING,
+                      condition='micsSource != %s' % SAME_AS_PICKING,
                       important=True, label='Input micrographs',
                       help='Select the SetOfMicrographs from which to extract.')
 
         form.addParam("threshold", params.FloatParam, default=-1,expertLevel=params.LEVEL_ADVANCED,
-                      label="Threshold", help="Deep learning goodness score to rule out coordinates. The bigger the treshold "+
-                           "the more coordiantes will be ruled out. Ranges from 0 to 1. Use -1 to pospone thresholding until "+
-                           "analyze results. 0.75 <= Recommended threshold <= 0.9")
+                      label="Threshold", help="Deep learning goodness score to select/discard coordinates. The bigger the threshold "+
+                           "the more coordiantes will be ruled out. Ranges from 0 to 1. Use -1 to skip thresholding. "+
+                           "Manual thresholding can be performed after execution through analyze results button. "+
+                           "\n0.75 <= Recommended threshold <= 0.9")
 
         form.addParam("streamingBatchSize", params.IntParam, default=36,
                       label="Batch size", expertLevel=params.LEVEL_ADVANCED,
@@ -101,11 +98,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
                            "processed inside the same protocol step. You can "
                            "use the following values: \n"
                            "*0*    Put in the same step all the items "
-                           "available. If the sleep time is short, it could be "
-                           "practically the same of one by one. If not, you "
-                           "could have steps with more items. If the steps will "
-                           "be executed in parallel, it is better not to use "
-                           "this option.\n"
+                           "available."
                            "*>1*   The number of items that will be grouped into "
                            "a step.")
 
@@ -149,11 +142,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
 
     def _insertExtractMicrographStepOwn(self, mic, prerequisites, *args):
-        """ Basic method to insert a picking step for a given micrograph. """
-        micStepId = self._insertFunctionStep('extractMicrographStepOwn',
-                                             mic.getMicName(), *args,
-                                             prerequisites=prerequisites)
-        return micStepId
+        raise ValueError("Batch size must be >1")
 
 
     def _insertExtractMicrographListStepOwn(self, micList, prerequisites, *args):
@@ -161,36 +150,6 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         return self._insertFunctionStep('extractMicrographListStepOwn',
                                         [mic.getMicName() for mic in micList],
                                         *args, prerequisites=prerequisites)
-
-
-    def extractMicrographStepOwn(self, micKey, *args):
-        """ Step function that will be common for all extraction protocols.
-        It will take an id and will grab the micrograph from a micDict map.
-        The micrograph will be passed as input to the _extractMicrograph
-        function.
-        """
-        # Retrieve the corresponding micrograph with this key and the
-        # associated list of coordinates
-        mic = self.micDict[micKey]
-
-        micDoneFn = self._getMicDone(mic)
-        micFn = mic.getFileName()
-
-        if self.isContinued() and os.path.exists(micDoneFn):
-            self.info("Skipping micrograph: %s, seems to be done" % micFn)
-            return
-
-        coordList = self.coordDict[mic.getObjId()]
-        self._convertCoordinates(mic, coordList)
-
-        # Clean old finished files
-        pwutils.cleanPath(micDoneFn)
-
-        self.info("Extracting micrograph: %s " % micFn)
-        self._extractMicrographOwn(mic, *args)
-
-        # Mark this mic as finished
-        open(micDoneFn, 'w').close()
 
 
     def extractMicrographListStepOwn(self, micKeyList, *args):
@@ -211,14 +170,14 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
                 self.info("Extracting micrograph: %s " % micFn)
                 micList.append(mic)
 
-        self._extractMicrographListOwn(micList, *args)
+        self._computeMaskForMicrographList(micList, *args)
 
         for mic in micList:
             # Mark this mic as finished
             open(self._getMicDone(mic), 'w').close()
 
 
-    def _extractMicrographListOwn(self, micList):
+    def _computeMaskForMicrographList(self, micList):
         """ Functional Step. Overrided in general protExtracParticle """
 
 #        print("micList: %s" % [ mic.getMicName() for mic in micList ] )
@@ -243,7 +202,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
             args += ' --predictedMaskDir %s ' % (self._getExtraPath("predictedMasks"))
             
         if self.useGpu.get():
-            args += ' -g %s' % self.gpuList.get()
+            args += ' -g %(GPU)s'
         else:
             args += ' -g -1'
             
@@ -309,10 +268,9 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
 
     def _updateOutputCoordSet(self, micList, streamMode):
-        micDoneList = micList  # [mic for mic in micList if self._micIsReady(mic)]
 
         # Do no proceed if there is not micrograph ready
-        if not micDoneList:
+        if not micList:
             return []
 
         outputDir = self._getExtraPath('outputCoords')
@@ -333,7 +291,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
             outputCoords.enableAppend()
 
         self.info("Reading coordinates from mics: %s" % ','.join([mic.strId() for mic in micList]))
-        self.readCoordsFromMics(outputDir, micDoneList, outputCoords)
+        readSetOfCoordinates(outputDir, micList, outputCoords)
         self.debug(" _updateOutputCoordSet Stream Mode: %s " % streamMode)
         self._updateOutputSet(self.getOutputName(), outputCoords, streamMode)
 
@@ -341,11 +299,8 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
             self._defineSourceRelation(micSetPtr,
                                        outputCoords)
 
-        return micDoneList
+        return micList
 
-
-    def readCoordsFromMics(self, workingDir, micList, coordSet):
-        readSetOfCoordinates(workingDir, micList, coordSet)
 
     #--------------------------- INFO functions --------------------------------
     def _validate(self):
@@ -365,7 +320,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     def _summary(self):
         summary = []
         summary.append("Micrographs source: %s"
-                        % self.getEnumText("downsampleType"))
+                        % self.getEnumText("micsSource"))
         summary.append("Coordinates box size: %d" % (1./self.getBoxScale()) )
         
         return summary
@@ -382,7 +337,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     
     def _micsOther(self):
         """ Return True if other micrographs are used for extract. """
-        return self.downsampleType == OTHER
+        return self.micsSource == OTHER
 
     def _doDownsample(self):
         return False
@@ -407,7 +362,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         mics = inputCoords.getMicrographs()
         self.samplingInput = inputCoords.getMicrographs().getSamplingRate()
         self.samplingMics = self.getInputMicrographs().getSamplingRate()
-        self.samplingFactor = float(self.samplingMics / self.samplingInput)
+        self.samplingFactor = float(self.samplingMics / float(self.samplingInput))
 
         scale = self.getBoxScale()
         self.debug("Scale: %f" % scale)
@@ -459,7 +414,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         samplingPicking = self.getCoordSampling()
         samplingExtract = self.getMicSampling()
         f = samplingPicking / samplingExtract
-        return f / self.downFactor.get() if self._doDownsample() else f
+        return float(f) / self.downFactor.get() if self._doDownsample() else f
 
     def getBoxSize(self):
         # This function is needed by the wizard

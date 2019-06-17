@@ -56,7 +56,7 @@ class XmippDeepMicrographViewer(ProtocolViewer):
 
         form.addParam('visualizeHistogram', IntParam, default=100,
                       label="Visualize Deep Scores Histogram (Bin size)",
-                      help="Plot an histogram of the 'zScoreDeepLearning2' "
+                      help="Plot a histogram of the 'zScoreDeepLearning2' "
                            "to visual setting of a good threshold.")
         form.addParam('visualizeCoordinates', FloatParam, default=0.8,
                       label="Visualize good coordinates (threshold from 0 to 1)",
@@ -72,50 +72,44 @@ class XmippDeepMicrographViewer(ProtocolViewer):
     def _visualizeCoordinates(self, e=None):
         views = []
 
-
-
-
         outCoords = self.protocol.getOutput()
-        if outCoords:
 
-            coordsViewerFn = self.protocol._getTmpPath('coordsViewer.sqlite')
+        if not outCoords:  print(" > Not output found, yet."); return
 
-            mdLabel = xmippLib.MDL_GOOD_REGION_SCORE
-            if getXmippAttribute(outCoords.getFirstItem(), mdLabel):
+        coordsViewerFn = self.protocol._getTmpPath('coordsViewer.sqlite')
 
-                cleanPath(coordsViewerFn)
-                newOutput = SetOfCoordinates(filename=coordsViewerFn)
-                newOutput.copyInfo(outCoords)
-                # newOutput.copyAttributes(outCoords, '_xmippMd')
-                newOutput.setMicrographs(outCoords.getMicrographs())
+        mdLabel = xmippLib.MDL_GOOD_REGION_SCORE
 
-                thres = self.visualizeCoordinates.get()
-                for coord in outCoords:
-                    if getXmippAttribute(coord, mdLabel).get() > thres:
-                        newOutput.append(coord.clone())
-                # self.protocol._store(newOutput)
-                newOutput.write()
-                newOutput.close()
+        if not getXmippAttribute(outCoords.getFirstItem(), mdLabel):
+            print(" > outputCoordinates do NOT have 'MDL_GOOD_REGION_SCORE'!"); return
 
-                micSet = newOutput.getMicrographs()  # accessing mics to provide metadata file
-                if micSet is None:
-                    raise Exception('visualize: SetOfCoordinates has no micrographs set.')
+        cleanPath(coordsViewerFn)
+        newOutput = SetOfCoordinates(filename=coordsViewerFn)
+        newOutput.copyInfo(outCoords)
+        # newOutput.copyAttributes(outCoords, '_xmippMd')
+        newOutput.setMicrographs(outCoords.getMicrographs())
 
-                fn = self.protocol._getExtraPath("allMics.xmd")
-                xmipp3.convert.writeSetOfMicrographs(micSet, fn)
-                tmpDir = self.protocol._getExtraPath('manualThresholding_%03d'%int(thres*100))
-                cleanPath(tmpDir)
-                makePath(tmpDir)
-                xmipp3.convert.writeSetOfCoordinates(tmpDir, newOutput)
+        thres = self.visualizeCoordinates.get()
+        for coord in outCoords:
+            if getXmippAttribute(coord, mdLabel).get() > thres:
+                newOutput.append(coord.clone())
+        # self.protocol._store(newOutput)
+        newOutput.write()
+        newOutput.close()
 
-                views.append(CoordinatesObjectView(self._project, fn, tmpDir,
-                                                   self.protocol, inTmpFolder=True))
+        micSet = newOutput.getMicrographs()  # accessing mics to provide metadata file
+        if micSet is None:
+            raise Exception('visualize: SetOfCoordinates has no micrographs set.')
 
-            else:
-                print(" > outputCoordinates do NOT have 'MDL_GOOD_REGION_SCORE'!")
+        fn = self.protocol._getExtraPath("allMics.xmd")
+        xmipp3.convert.writeSetOfMicrographs(micSet, fn)
+        tmpDir = self.protocol._getExtraPath('manualThresholding_%03d'%int(thres*100))
+        cleanPath(tmpDir)
+        makePath(tmpDir)
+        xmipp3.convert.writeSetOfCoordinates(tmpDir, newOutput)
 
-        else:
-            print(" > Not output found, yet.")
+        views.append(CoordinatesObjectView(self._project, fn, tmpDir,
+                                           self.protocol, inTmpFolder=True))
 
         return views
 
