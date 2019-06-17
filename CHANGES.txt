@@ -1,11 +1,7 @@
 ## Release 3.19.04 -
 
 - Highres can now take a global alignment performed by any other method
-<<<<<<< HEAD
 - Randomize phases also available for images
-
-
-=======
 - New protocol: 3D bionotes
 - New protocol: Align volume and particles
 - New protocol: Center particles
@@ -30,4 +26,3 @@
 - New protocol: screen deep learning
 - New protocol: split volume hierarchical
 - New protocol: trigger data
->>>>>>> release-19.03-fixes
