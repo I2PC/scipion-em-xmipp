@@ -70,12 +70,12 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
                       default=0, important=True,
                       display=params.EnumParam.DISPLAY_HLIST,
                       label='Micrographs source',
-                      help='By default the particles will be extracted '
-                           'from the micrographs used in the picking '
-                           'step ( _same as picking_ option ). \n'
-                           'If you select _other_ option, you must provide '
+                      help='By default, the micrographs from which the computation '
+                           'will be performed will be the ones used in the picking '
+                           'step ( same as coordinates option ). \n'
+                           'If you select other option, you must provide '
                            'a different set of micrographs to extract from. \n'
-                           '*Note*: In the _other_ case, ensure that provided '
+                           '*Note*: In the other case, ensure that provided '
                            'micrographs and coordinates are related '
                            'by micName or by micId. Difference in pixel size '
                            'will be handled automatically.')
@@ -180,12 +180,10 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     def _computeMaskForMicrographList(self, micList):
         """ Functional Step. Overrided in general protExtracParticle """
 
-#        print("micList: %s" % [ mic.getMicName() for mic in micList ] )
-
         micsFnDone = self.getDoneMics()
         micLisfFn = [mic.getFileName() for mic in micList
                      if not pwutils.removeBaseExt(mic.getFileName()) in micsFnDone]
-        inputMicsPathMetadataFname= self._getTmpPath("inputMics.xmd")
+        inputMicsPathMetadataFname= self._getTmpPath("inputMics"+str(hash(micLisfFn[0]))+".xmd")
         mics_md= createMetaDataFromPattern( micLisfFn )
         mics_md.write(inputMicsPathMetadataFname)
         args  =  '-i %s' % inputMicsPathMetadataFname
@@ -202,7 +200,10 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
             args += ' --predictedMaskDir %s ' % (self._getExtraPath("predictedMasks"))
             
         if self.useGpu.get():
-            args += ' -g %(GPU)s'
+            if self.useQueueForSteps() or self.useQueue():
+                args += ' -g all '
+            else:
+                args += ' -g %(GPU)s'
         else:
             args += ' -g -1'
             

@@ -56,8 +56,8 @@ class XmippDeepMicrographViewer(ProtocolViewer):
 
         form.addParam('visualizeHistogram', IntParam, default=100,
                       label="Visualize Deep Scores Histogram (Bin size)",
-                      help="Plot a histogram of the 'zScoreDeepLearning2' "
-                           "to visual setting of a good threshold.")
+                      help="Plot a histogram of the 'goodRegionScore' "
+                           "to visualize setting of a good threshold.")
         form.addParam('visualizeCoordinates', FloatParam, default=0.8,
                       label="Visualize good coordinates (threshold from 0 to 1)",
                       help="Visualize the coordinates considered good according"
@@ -71,7 +71,6 @@ class XmippDeepMicrographViewer(ProtocolViewer):
 
     def _visualizeCoordinates(self, e=None):
         views = []
-
         outCoords = self.protocol.getOutput()
 
         if not outCoords:  print(" > Not output found, yet."); return
@@ -86,16 +85,14 @@ class XmippDeepMicrographViewer(ProtocolViewer):
         cleanPath(coordsViewerFn)
         newOutput = SetOfCoordinates(filename=coordsViewerFn)
         newOutput.copyInfo(outCoords)
-        # newOutput.copyAttributes(outCoords, '_xmippMd')
         newOutput.setMicrographs(outCoords.getMicrographs())
 
         thres = self.visualizeCoordinates.get()
         for coord in outCoords:
             if getXmippAttribute(coord, mdLabel).get() > thres:
                 newOutput.append(coord.clone())
-        # self.protocol._store(newOutput)
         newOutput.write()
-        newOutput.close()
+        newOutput.close() #SetOfCoordinates does not implement __exit__, required for with
 
         micSet = newOutput.getMicrographs()  # accessing mics to provide metadata file
         if micSet is None:
