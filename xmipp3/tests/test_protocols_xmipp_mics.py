@@ -347,6 +347,103 @@ class TestXmippAutomaticPicking(TestXmippBase):
                              "There was a problem with the automatic particle picking")
 
 
+
+
+class TestXmippMicrographsCleaner(BaseTest):
+    """This class check if the protocol to extract particles
+    in Xmipp works properly.
+    """
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+
+        cls.dataset = DataSet(name='relion13_tutorial',
+                              folder='relion13_tutorial',
+                              files={'mics': 'betagal/Micrographs/*mrc',
+                                     'coords': 'betagal/PrecalculatedResults/Micrographs/*autopick.star'})
+        micsFn = cls.dataset.getFile('mics')
+        coordsDir = cls.dataset.getFile('coords')
+
+
+        # cls.DOWNSAMPLING = 5.0
+        cls.protImport = cls.newProtocol(ProtImportMicrographs,
+                                         samplingRateMode=0,
+                                         filesPath=micsFn,
+                                         samplingRate=3.54,
+                                         magnification=5000,
+                                         voltage=300,
+                                         sphericalAberration=2.7)
+        cls.launchProtocol(cls.protImport)
+
+        cls.protImportCoords = cls.newProtocol(ProtImportCoordinates,
+                                               filesPath=coordsDir,
+                                               boxSize=74)
+        cls.protImportCoords.inputMicrographs.set(cls.protImport)
+        cls.protImportCoords.inputMicrographs.setExtended('outputMicrographs')
+        cls.launchProtocol(cls.protImportCoords)
+
+
+    def _checkSamplingConsistency(self, outputSet):
+        """ Check that the set sampling is the same as item sampling. """
+        first = outputSet.getFirstItem()
+
+        self.assertAlmostEqual(outputSet.getSamplingRate(),
+                               first.getSamplingRate())
+
+    def _checkVarianceAndGiniCoeff(self, particle, varianceScore, giniScore):
+        """ Check the Variance and Gini coeff. added to a certain particle
+        """
+        self.assertTrue(particle.hasAttribute('_xmipp_scoreByVariance'),
+                        'Particle has not scoreByVariance attribute.')
+        self.assertAlmostEqual(particle._xmipp_scoreByVariance.get(), varianceScore,
+                               3, "The was a problem with the varianceScore")
+
+        self.assertTrue(particle.hasAttribute('_xmipp_scoreByGiniCoeff'),
+                        'Particle has not scoreByGiniCoeff attribute.')
+        self.assertAlmostEqual(particle._xmipp_scoreByGiniCoeff.get(), giniScore,
+                               3, "The was a problem with the giniCoeffScore")
+
+    def test_noThreshold(self):
+        print "Run extract particles from same micrographs as picking"
+        protCleaner = self.newProtocol(XmippProtDeepMicrographScreen,
+                                       boxSize=110,
+                                       micsSource=0,  # same as picking
+                                       saveMasks=True)
+        protCleaner.inputCoordinates.set(self.protImportCoords.outputCoordinates)
+        self.launchProtocol(protCleaner)
+
+
+        self.assertIsNotNone(protCleaner.outputCoordinates, 'Some error ocurred...')
+
+        self.assertIsNotEmpty(protCleaner.outputCoordinates)
+
+        self.assertEquals(protCleaner.outputCoordinates.getSize(),
+                          self.protImportCoords.outputCoordinates.getSize())
+
+        # from xmippLib import ImageHandler  # comparar media
+
+    def test_threshold(self):
+        print "Run extract particles from same micrographs as picking"
+        protCleaner = self.newProtocol(XmippProtDeepMicrographScreen,
+                                       boxSize=110,
+                                       micsSource=0,  # same as picking
+                                       saveMasks=True,
+                                       threshold=0.8)  # mirar esto
+        protCleaner.inputCoordinates.set(self.protImportCoords.outputCoordinates)
+        self.launchProtocol(protCleaner)
+
+        self.assertIsNotNone(protCleaner.outputCoordinates, 'Some error ocurred...')
+
+        self.assertIsNotEmpty(protCleaner.outputCoordinates)
+
+        self.assertAlmostEqual(protCleaner.outputCoordinates.getSize(),
+                               8000, delta=10)  # places=2
+
+
+
+
+
 class TestXmippExtractParticles(TestXmippBase):
     """This class check if the protocol to extract particles
     in Xmipp works properly.
@@ -359,13 +456,6 @@ class TestXmippExtractParticles(TestXmippBase):
         cls.protImport = cls.runImportMicrographBPV(cls.micsFn)
         cls.protDown = cls.runDownsamplingMicrographs(cls.protImport.outputMicrographs,
                                                       cls.DOWNSAMPLING)
-
-        cls.protCTF = cls.newProtocol(ProtImportCTF,
-                                      importFrom=ProtImportCTF.IMPORT_FROM_XMIPP3,
-                                      filesPath=cls.dataset.getFile('ctfsDir'),
-                                      filesPattern='*.ctfparam')
-        cls.protCTF.inputMicrographs.set(cls.protImport.outputMicrographs)
-        cls.proj.launchProtocol(cls.protCTF, wait=True)
 
         cls.protPP = cls.runFakedPicking(cls.protDown.outputMicrographs, cls.allCrdsDir)
 

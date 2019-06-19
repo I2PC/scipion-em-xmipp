@@ -72,13 +72,16 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
                       label='Micrographs source',
                       help='By default, the micrographs from which the computation '
                            'will be performed will be the ones used in the picking '
-                           'step ( same as coordinates option ). \n'
+                           'step ( _same as coordinates_ option ). \n'
                            'If you select other option, you must provide '
-                           'a different set of micrographs to extract from. \n'
-                           '*Note*: In the other case, ensure that provided '
+                           'a different set of micrographs to evaluate its regions. \n'
+                           '*Note*: In the _other_ case, ensure that provided '
                            'micrographs and coordinates are related '
                            'by micName or by micId. Difference in pixel size '
-                           'will be handled automatically.')
+                           'will be handled automatically.\n'
+                           '*Note2*: *Particles must be dark* over a bright '
+                           'background. If not, use the _other_ option to provide '
+                           'an inverted setOfMicrograph.')
 
         form.addParam('inputMicrographs', params.PointerParam,
                       pointerClass='SetOfMicrographs',
