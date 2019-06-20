@@ -349,7 +349,7 @@ class TestXmippAutomaticPicking(TestXmippBase):
 
 
 
-class TestXmippMicrographsCleaner(BaseTest):
+class TestXmippDeepMicrographsCleaner(BaseTest):
     """This class check if the protocol to extract particles
     in Xmipp works properly.
     """
@@ -394,6 +394,9 @@ class TestXmippMicrographsCleaner(BaseTest):
     def _checkVarianceAndGiniCoeff(self, particle, varianceScore, giniScore):
         """ Check the Variance and Gini coeff. added to a certain particle
         """
+
+        #TODO: check if coordinates have goodRegionScore label
+
         self.assertTrue(particle.hasAttribute('_xmipp_scoreByVariance'),
                         'Particle has not scoreByVariance attribute.')
         self.assertAlmostEqual(particle._xmipp_scoreByVariance.get(), varianceScore,
@@ -403,6 +406,17 @@ class TestXmippMicrographsCleaner(BaseTest):
                         'Particle has not scoreByGiniCoeff attribute.')
         self.assertAlmostEqual(particle._xmipp_scoreByGiniCoeff.get(), giniScore,
                                3, "The was a problem with the giniCoeffScore")
+
+    def _compareMaskAndGroundTruth(self, fnameMaskComputed, fnameMaskGroundTruth):
+      from xmippLib import Image # comparar media
+      import numpy as np
+      imgHandler = Image()
+      imgHandler.read(fnameMaskGroundTruth)
+      maskGroundTruth = imgHandler.getData()
+      imgHandler.read(fnameMaskComputed)
+      obtainedMask = imgHandler.getData()
+      self.assertAlmostEqual(np.mean(maskGroundTruth), np.mean(obtainedMask)
+                             , delta=0.05)
 
     def test_noThreshold(self):
         print "Run extract particles from same micrographs as picking"
@@ -421,7 +435,9 @@ class TestXmippMicrographsCleaner(BaseTest):
         self.assertEquals(protCleaner.outputCoordinates.getSize(),
                           self.protImportCoords.outputCoordinates.getSize())
 
-        # from xmippLib import ImageHandler  # comparar media
+        fnameMaskGroundTruth = CACA  # TODO
+        fnameMaskComputed = CACA2  # TODO
+        self._compareMaskAndGroundTruth(fnameMaskComputed, fnameMaskGroundTruth)
 
     def test_threshold(self):
         print "Run extract particles from same micrographs as picking"
