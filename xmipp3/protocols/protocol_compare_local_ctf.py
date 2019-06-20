@@ -91,9 +91,8 @@ class XmippProtCompareLocalCTF(ProtAnalysis3D):
         self.mad = np.empty_like(self.median)
         for k in enumerate(self.median):
             self.mad[k[0]] = np.nanmedian(np.abs(self.defMatrix[k[0],:] - self.median[k[0]]))
-        print(self.mad[342])
         self.defMatrix = np.hstack((self.defMatrix, self.median.reshape(len(self.median),1)))
-        self.corrMatrix = np.zeros((self.defMatrix.shape[0],self.defMatrix.shape[1]-3))
+        self.corrMatrix = np.zeros((self.defMatrix.shape[0],self.defMatrix.shape[1]))
         defMatrixInvalid = np.ma.masked_invalid(self.defMatrix)
         self.corrMatrix = np.ma.corrcoef(defMatrixInvalid,rowvar=False)
         np.savetxt(self._getExtraPath("defocusMatrix.txt"),self.defMatrix)
