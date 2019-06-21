@@ -444,11 +444,11 @@ class TestXmippDeepMicrographsCleaner(BaseTest):
 
 
         self.assertAlmostEqual(protCleaner.outputCoordinates_Auto_090.getSize(),
-                               9458, delta=5, "mismatch input output coordinates size")
-        self._compareCoorSetsBoxSizes(self.protImportCoords.outputCoordinates, protCleaner.outputCoordinates_Full, )
+                               9458, delta=5, msg="mismatch input output coordinates size")
+        self._compareCoorSetsBoxSizes(self.protImportCoords.outputCoordinates, protCleaner.outputCoordinates_Auto_090)
 
     def test_fromDownsampled(self):
-        #     print ("Run cleanMics from downsampled")
+        print ("Run cleanMics from downsampled")
 
         protCleaner = self.newProtocol(XmippProtDeepMicrographScreen,
                                        micsSource=1,  # other -> downsampled mics
@@ -469,6 +469,7 @@ class TestXmippDeepMicrographsCleaner(BaseTest):
           self._compareMaskAndGroundTruth( fname%predMasksPath, self.fnameMaskGroundTruth_toMeanVal[fname])
 
         self._compareCoorSetsBoxSizes(self.protImportCoords.outputCoordinates, protCleaner.outputCoordinates_Full, 2)
+
 class TestXmippExtractParticles(TestXmippBase):
     """This class check if the protocol to extract particles
     in Xmipp works properly.
