@@ -870,7 +870,7 @@ def writeMicCoordinates(mic, coordList, outputFn, isManual=True,
     f.close()
     
 
-def readSetOfCoordinates(outputDir, micSet, coordSet, readDiscarded=False):
+def readSetOfCoordinates(outputDir, micSet, coordSet, readDiscarded=False, scale=1):
     """ Read from Xmipp .pos files.
     Params:
         outputDir: the directory where the .pos files are.
@@ -880,6 +880,7 @@ def readSetOfCoordinates(outputDir, micSet, coordSet, readDiscarded=False):
             name should be the same of the micrographs.
         coordSet: the SetOfCoordinates that will be populated.
         readDiscarded: read only the coordinates with the MDL_ENABLE set at -1
+        scale: Factor to scale ONLY x,y coordinates, you are supposed to use an appropiate boxsize (you created the set)
     """
     # Read the boxSize from the config.xmd metadata
     configfile = join(outputDir, 'config.xmd')
@@ -887,15 +888,15 @@ def readSetOfCoordinates(outputDir, micSet, coordSet, readDiscarded=False):
         md = xmippLib.MetaData('properties@' + join(outputDir, 'config.xmd'))
         boxSize = md.getValue(xmippLib.MDL_PICKING_PARTICLE_SIZE,
                               md.firstObject())
-        coordSet.setBoxSize(boxSize)
+        coordSet.setBoxSize(int(boxSize)) #Only coordinates x,y are scaled, you are supposed to use an appropiate boxsize
     for mic in micSet:
         posFile = join(outputDir, replaceBaseExt(mic.getFileName(), 'pos'))
-        readCoordinates(mic, posFile, coordSet, outputDir, readDiscarded)
+        readCoordinates(mic, posFile, coordSet, outputDir, readDiscarded, scale=scale)
 
     coordSet._xmippMd = String(outputDir)
 
 
-def readCoordinates(mic, fileName, coordsSet, outputDir, readDiscarded=False):
+def readCoordinates(mic, fileName, coordsSet, outputDir, readDiscarded=False, scale=1):
         posMd = readPosCoordinates(fileName, readDiscarded)
         # TODO: CHECK IF THIS LABEL IS STILL NECESSARY
         posMd.addLabel(md.MDL_ITEM_ID)
@@ -910,8 +911,8 @@ def readCoordinates(mic, fileName, coordsSet, outputDir, readDiscarded=False):
 
             coord = rowToCoordinate(rowFromMd(posMd, objId))
             coord.setMicrograph(mic)
-            coord.setX(coord.getX())
-            coord.setY(coord.getY())
+            coord.setX(int(coord.getX()*scale))
+            coord.setY(int(coord.getY()*scale))
             coordsSet.append(coord)
             posMd.setValue(md.MDL_ITEM_ID, long(coord.getObjId()), objId)
 

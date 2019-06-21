@@ -89,6 +89,17 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
                       important=True, label='Input micrographs',
                       help='Select the SetOfMicrographs from which to extract.')
 
+        form.addParam('useOtherScale',params.EnumParam,
+                      choices=['same as coordinates', 'scale to micrographs'],
+                      default=0, condition='micsSource != %s' % SAME_AS_PICKING,
+                      display=params.EnumParam.DISPLAY_HLIST,
+                      label='Coordinates scale',
+                      help='If you select _same as coordinates_ option output coordinates '
+                           'will be mapped to the original micrographs and thus, they will preserve '
+                           'the scale.\nIf you select _scale to micrographs_ option, output coordinates '
+                           'will be mapped to the new micrographs and rescaled accordingly.')
+
+
         form.addParam("threshold", params.FloatParam, default=-1,expertLevel=params.LEVEL_ADVANCED,
                       label="Threshold", help="Deep learning goodness score to select/discard coordinates. The bigger the threshold "+
                            "the more coordiantes will be ruled out. Ranges from 0 to 1. Use -1 to skip thresholding. "+
@@ -286,16 +297,23 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         firstTime = outputCoords is None
 
         if firstTime:
-            micSetPtr = self.getInputMicrographs()
+            if self.micsSource==SAME_AS_PICKING or self.useOtherScale.get()==1:
+              boxSize= self.getBoxSize()
+              micSetPtr = self.getInputMicrographs()
+              scale= 1
+              print("AQUI", boxSize)
+            else:
+              boxSize= self.inputCoordinates.get().getBoxSize()
+              micSetPtr = self.inputCoordinates.get().getMicrographs()
+              scale=(1./self.getBoxScale())
             outputCoords = self._createSetOfCoordinates(micSetPtr,
                                                         suffix=self.getAutoSuffix())
             outputCoords.copyInfo(self.inputCoordinates.get())
-            outputCoords.setBoxSize(self.getBoxSize())
+            outputCoords.setBoxSize(boxSize)
         else:
             outputCoords.enableAppend()
-
         self.info("Reading coordinates from mics: %s" % ','.join([mic.strId() for mic in micList]))
-        readSetOfCoordinates(outputDir, micList, outputCoords)
+        readSetOfCoordinates(outputDir, micList, outputCoords, scale=scale)
         self.debug(" _updateOutputCoordSet Stream Mode: %s " % streamMode)
         self._updateOutputSet(self.getOutputName(), outputCoords, streamMode)
 
@@ -325,7 +343,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         summary = []
         summary.append("Micrographs source: %s"
                         % self.getEnumText("micsSource"))
-        summary.append("Coordinates box size: %d" % (1./self.getBoxScale()) )
+        summary.append("Coordinates scale: %d" % (1./self.getBoxScale()) )
         
         return summary
     
@@ -343,21 +361,18 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         """ Return True if other micrographs are used for extract. """
         return self.micsSource == OTHER
 
-    def _doDownsample(self):
-        return False
-
     def notOne(self, value):
         return abs(value - 1) > 0.0001
 
-    def _getNewSampling(self):
-        newSampling = self.samplingMics
-
-        if self._doDownsample():
-            # Set new sampling, it should be the input sampling of the used
-            # micrographs multiplied by the downFactor
-            newSampling *= self.downFactor.get()
-
-        return newSampling
+    # def _getNewSampling(self):
+    #     newSampling = self.samplingMics
+    #
+    #     if self._doDownsample():
+    #         # Set new sampling, it should be the input sampling of the used
+    #         # micrographs multiplied by the downFactor
+    #         newSampling *= self.downFactor.get()
+    #
+    #     return newSampling
 
     def _setupBasicProperties(self):
         # Set sampling rate (before and after doDownsample) and inputMics
@@ -417,8 +432,8 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         """
         samplingPicking = self.getCoordSampling()
         samplingExtract = self.getMicSampling()
-        f = samplingPicking / samplingExtract
-        return float(f) / self.downFactor.get() if self._doDownsample() else f
+        f = float(samplingPicking) / samplingExtract
+        return f
 
     def getBoxSize(self):
         # This function is needed by the wizard

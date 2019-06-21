@@ -347,7 +347,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             imgSetOut.copyInfo(imgSet)
             imgSetOut.setAlignmentProj()
             if imgSet.isPhaseFlipped():
-                imgSetOut.setIsPhaseFlipped(imgSet.isPhaseFlipped())
+                imgSetOut.setIsPhaseFlipped(True)
             self.iterMd = md.iterRows(fnAngles, md.MDL_PARTICLE_ID)
             self.lastRow = next(self.iterMd) 
             imgSetOut.copyItems(imgSet,

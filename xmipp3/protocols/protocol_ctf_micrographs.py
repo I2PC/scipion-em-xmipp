@@ -175,7 +175,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
     def _getFn(self,key,micBase,micDir):
         return self._getFileName(key, micBase=micBase, root=micDir)
 
-    def bringResultsBack(self,mic):
+    def bringResultsback(self,mic):
         micBase = self._getMicBase(mic)
         micDir = self._getMicrographDir(mic)
         for key in ['ctfParam', 'psd', 'enhanced_psd', 'ctfmodel_halfplane',
