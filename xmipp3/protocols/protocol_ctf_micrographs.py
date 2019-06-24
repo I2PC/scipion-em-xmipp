@@ -60,6 +60,8 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                              "ctfCritNonAstigmaticValidty<=0 OR ctfVPPphaseshift>140 OR "                   
                              "ctfCritNonAstigmaticValidty>25") #ctfCritCorr13==0 OR "ctfCritFirstMinFirstZeroRatio>50 AND "
 
+    _targetSamplingList = [1.75, 2.75]
+
     def __init__(self, **args):
         em.ProtCTFMicrographs.__init__(self, **args)
 
@@ -153,14 +155,14 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
     def _calculateDownsampleList(self, samplingRate):
         downsampleList = []
         if self.AutoDownsampling:
-            ctfDownFactor = self.calculateAutodownsampling(samplingRate, 1.75)
+            ctfDownFactor = self.calculateAutodownsampling(samplingRate, self._targetSamplingList[0])
         else:
             ctfDownFactor = self.ctfDownFactor.get()
             downsampleList = [ctfDownFactor]
             return downsampleList
 
         if self.doCTFAutoDownsampling:
-            downsampleList.append(self.calculateAutodownsampling(samplingRate, 2.75))
+            downsampleList.append(self.calculateAutodownsampling(samplingRate, self._targetSamplingList[1]))
             downsampleList.append(1.0)
         return downsampleList
 
@@ -211,9 +213,14 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                     # cannot be written (such as dm3)
                     baseFn = pwutils.replaceBaseExt(micFn, 'mrc')
                     finalName = os.path.join(micDir, baseFn)
-                    self.runJob("xmipp_transform_downsample",
-                                "-i %s -o %s --step %f --method fourier"
-                                % (micFn, finalName, downFactor))
+                    if downFactor>1:
+                        self.runJob("xmipp_transform_downsample",
+                                    "-i %s -o %s --step %f --method fourier"
+                                    % (micFn, finalName, downFactor))
+                    else:
+                        self.runJob("xmipp_image_resize",
+                                    "-i %s -o %s --factor %f --interp linear"
+                                    % (micFn, finalName, 1.0/downFactor))
                     psd = Image(finalName)
                     psd = psd.getData()
                     if psd.shape[0] < self.windowSize.get():
@@ -473,7 +480,13 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
             mdCTFparam.setValue(md.MDL_ENABLED, -1, mdCTFparam.firstObject())
             mdCTFparam.write(fnEval)
 
-        """self.runJob("xmipp_metadata_utilities",
+        # Un-commment the method to see with criteria y rejecting the estimated
+        #self.checkRejectedCriteria(fnEval, fnRejected)
+
+        return retval
+
+    def checkRejectedCriteria(self, fnEval, fnRejected):
+        self.runJob("xmipp_metadata_utilities",
                     '-i %s --query select "ctfCritFirstZero<5" -o %s'
                     % (fnEval, fnRejected))
         if not isMdEmpty(fnRejected):
@@ -532,9 +545,8 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                     '-i %s --query select "ctfCritPsdCorr90<0.1" -o %s'
                     % (fnEval, fnRejected))
         if not isMdEmpty(fnRejected):
-            print("Rejected ctfCritPsdCorr90<0.1")"""
+            print("Rejected ctfCritPsdCorr90<0.1")
 
-        return retval
 
     def _createCtfModel(self, mic, updateSampling=True):
         if updateSampling:
