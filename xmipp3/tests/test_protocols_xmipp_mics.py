@@ -482,6 +482,12 @@ class TestXmippExtractParticles(TestXmippBase):
         cls.protImport = cls.runImportMicrographBPV(cls.micsFn)
         cls.protDown = cls.runDownsamplingMicrographs(cls.protImport.outputMicrographs,
                                                       cls.DOWNSAMPLING)
+        cls.protCTF = cls.newProtocol(ProtImportCTF,
+                                      importFrom=ProtImportCTF.IMPORT_FROM_XMIPP3,
+                                      filesPath=cls.dataset.getFile('ctfsDir'),
+                                      filesPattern='*.ctfparam')
+        cls.protCTF.inputMicrographs.set(cls.protImport.outputMicrographs)
+        cls.proj.launchProtocol(cls.protCTF, wait=True)
 
         cls.protPP = cls.runFakedPicking(cls.protDown.outputMicrographs, cls.allCrdsDir)
 
