@@ -364,16 +364,6 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     def notOne(self, value):
         return abs(value - 1) > 0.0001
 
-    # def _getNewSampling(self):
-    #     newSampling = self.samplingMics
-    #
-    #     if self._doDownsample():
-    #         # Set new sampling, it should be the input sampling of the used
-    #         # micrographs multiplied by the downFactor
-    #         newSampling *= self.downFactor.get()
-    #
-    #     return newSampling
-
     def _setupBasicProperties(self):
         # Set sampling rate (before and after doDownsample) and inputMics
         # according to micsSource type

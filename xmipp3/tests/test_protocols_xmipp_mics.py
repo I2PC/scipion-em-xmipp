@@ -436,7 +436,7 @@ class TestXmippDeepMicrographsCleaner(BaseTest):
         protCleaner = self.newProtocol(XmippProtDeepMicrographScreen,
                                        micsSource=0,  # same as picking
                                        saveMasks=True,
-                                       threshold=0.9, wait=True)  # mirar esto
+                                       threshold=0.9)
         protCleaner.inputCoordinates.set(self.protImportCoords.outputCoordinates)
         self.launchProtocol(protCleaner)
 
