@@ -262,10 +262,11 @@ class XmippProtRansac(ProtInitialVolume):
             Nimages=getSize(fnRoot+".xmd")
             if Nimages>0:
                 if self.useGpu.get():
-                    args = "-i %s.xmd -o %s.vol --sym %s --thr %s --fast"\
-                           % (fnRoot, fnRoot, self.symmetryGroup.get(), self.numberOfThreads.get())
+                    # protocol will run several reconstructions at once, so execute each reconstruction separately
+                    args = "-i %s.xmd -o %s.vol --sym %s --thr 1 --fast"\
+                           % (fnRoot, fnRoot, self.symmetryGroup.get())
                     args += " --device %(GPU)s"
-                    self.runJob("xmipp_cuda_reconstruct_fourier", args , numberOfMpi=1)
+                    self.runJob("xmipp_cuda_reconstruct_fourier", args , numberOfMpi=1, numberOfThreads=1)
                 else:
                     self.runJob("xmipp_reconstruct_fourier_accel","-i %s.xmd -o %s.vol --sym %s "
                                 %(fnRoot,fnRoot,self.symmetryGroup.get()))
