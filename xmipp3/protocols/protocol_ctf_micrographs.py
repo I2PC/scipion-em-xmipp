@@ -156,6 +156,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         downsampleList = []
         if self.AutoDownsampling:
             ctfDownFactor = self.calculateAutodownsampling(samplingRate, self._targetSamplingList[0])
+            downsampleList.append(ctfDownFactor)
         else:
             ctfDownFactor = self.ctfDownFactor.get()
             downsampleList = [ctfDownFactor]
@@ -204,7 +205,6 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
             return self._getFileName(key, micBase=micBase, root=micDir)
         localParams['root'] = _getFn('prefix')
         downsampleList = self._calculateDownsampleList(mic.getSamplingRate())
-
         try:
             for i, downFactor in enumerate(downsampleList):
                 # Downsample if necessary
@@ -452,7 +452,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
 
         fnRejected = _getStr('rejected')
 
-        # Check if it is a good micrograph
+        # Check if it is a good PSD
         criterion = self._criterion_psd
         self.runJob("xmipp_metadata_utilities",
                     '-i %s --query select "%s" -o %s'
@@ -464,7 +464,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
             mdCTFparam.write(fnEval)
             return False
 
-         #Check if it is a good estimation
+         #Check if it is a good CTF estimation
         if self.findPhaseShift:
             criterion = self._criterion_phaseplate
         else:
@@ -480,7 +480,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
             mdCTFparam.setValue(md.MDL_ENABLED, -1, mdCTFparam.firstObject())
             mdCTFparam.write(fnEval)
 
-        # Un-commment the method to see with criteria y rejecting the estimated
+        #Un-commment the method to see which criteria is rejecting the estimated CTF
         #self.checkRejectedCriteria(fnEval, fnRejected)
 
         return retval
@@ -512,10 +512,10 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         if not isMdEmpty(fnRejected):
             print("Rejected ctfCritFirstMinFirstZeroRatio>10")
         self.runJob("xmipp_metadata_utilities",
-                    '-i %s --query select "ctfCritCorr13<0" -o %s'
+                    '-i %s --query select "ctfCritCorr13<0.27" -o %s'
                     % (fnEval, fnRejected))
         if not isMdEmpty(fnRejected):
-            print("Rejected ctfCritCorr13<0")
+            print("Rejected ctfCritCorr13<0.27")
         self.runJob("xmipp_metadata_utilities",
                     '-i %s --query select "ctfCritCtfMargin<1" -o %s'
                     % (fnEval, fnRejected))
@@ -527,15 +527,15 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         if not isMdEmpty(fnRejected):
             print("Rejected ctfCritNonAstigmaticValidty<0")
         self.runJob("xmipp_metadata_utilities",
-                    '-i %s --query select "ctfCritNonAstigmaticValidty>6" -o %s'
+                    '-i %s --query select "ctfCritNonAstigmaticValidty>6.5" -o %s'
                     % (fnEval, fnRejected))
         if not isMdEmpty(fnRejected):
-            print("Rejected ctfCritNonAstigmaticValidty>6")
-        self.runJob("xmipp_metadata_utilities",
-                    '-i %s --query select "ctfBgGaussianSigmaU<1000" -o %s'
-                    % (fnEval, fnRejected))
-        if not isMdEmpty(fnRejected):
-            print("Rejected ctfBgGaussianSigmaU<1000")
+            print("Rejected ctfCritNonAstigmaticValidty>6.5")
+        #self.runJob("xmipp_metadata_utilities",
+        #            '-i %s --query select "ctfBgGaussianSigmaU<1000" -o %s'
+        #            % (fnEval, fnRejected))
+        #if not isMdEmpty(fnRejected):
+        #    print("Rejected ctfBgGaussianSigmaU<1000")
         self.runJob("xmipp_metadata_utilities",
                     '-i %s --query select "ctfCritIceness>1.03" -o %s'
                     % (fnEval, fnRejected))
@@ -546,7 +546,6 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                     % (fnEval, fnRejected))
         if not isMdEmpty(fnRejected):
             print("Rejected ctfCritPsdCorr90<0.1")
-
 
     def _createCtfModel(self, mic, updateSampling=True):
         if updateSampling:
