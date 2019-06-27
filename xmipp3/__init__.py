@@ -283,7 +283,8 @@ def installDeepLearningToolkit(plugin, env):
 
     # pre-trained models
     url = "http://scipion.cnb.csic.es/downloads/scipion/software/em"
-    modelsDownloadCmd = ("%s update %s %s DLmodels"
+    modelsDownloadCmd = ("echo 'Downloading pre-trained models...' ; "
+                         "%s update %s %s DLmodels"
                          % (plugin.getHome('bin/xmipp_sync_data'),
                             plugin.getHome('models'), url))
     now = datetime.now()

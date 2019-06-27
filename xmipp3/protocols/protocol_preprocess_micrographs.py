@@ -270,9 +270,8 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
             except Exception as ex:
                 micFn = micOut.getFileName()  # Runs/..../extra/filename.mrc
                 errorStr = ('Image Extension: File %s has wrong size.' % micFn)
-                print("Tries: %d" % tries)
-                print("micFn: %s" % tries)
-                print("str(ex): %s" % str(ex))
+                print("Output micrographs not ready, yet. Try: %d/6 (next in %fs)"
+                      % (tries, tries*3))
                 if errorStr in str(ex) and tries < 7:
                     from time import sleep
                     sleep(tries*3)
@@ -283,7 +282,8 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
         for mic in newDone:
             micOut = em.data.Micrograph()
             if self.doDownsample:
-                micOut.setSamplingRate(self.inputMicrographs.get().getSamplingRate() * self.downFactor.get())
+                micOut.setSamplingRate(self.inputMicrographs.get().getSamplingRate()
+                                       * self.downFactor.get())
             micOut.setObjId(mic.getObjId())
             micOut.setFileName(self._getOutputMicrograph(mic))
             micOut.setMicName(mic.getMicName())
@@ -313,7 +313,8 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
         inputs = self.inputMicrographs.get()
         outputSet.copyInfo(inputs)
         if self.doDownsample:
-            outputSet.setSamplingRate(self.inputMicrographs.get().getSamplingRate() * self.downFactor.get())
+            outputSet.setSamplingRate(self.inputMicrographs.get().getSamplingRate()
+                                      * self.downFactor.get())
         return outputSet
 
 
