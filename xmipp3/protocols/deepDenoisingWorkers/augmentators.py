@@ -51,22 +51,43 @@ def _mismatch_projection( batchX, batchY, p=0.05):
   return batchX, batchY
   
 
-def generateEmptyParticlesFunction(img_shape, prob=0.2):
+def initPointsRadius(img_shape, aboveInsteadBelow=True, radiusFraction=0.9):
 
-  cornerSize= 8
-  imgSide= img_shape[1]
-  nTilesPerSide= imgSide//cornerSize
-  
-  radiusFraction=0.9
   xv, yv,= np.meshgrid(np.arange( img_shape[0] ), np.arange( img_shape[1] ), indexing="xy")
   allCoords= np.stack([xv, yv], axis=-1).reshape((-1,2))
   central_coords= np.array([img_shape[0]//2, img_shape[1]//2] )
   distMat= np.squeeze( np.sqrt( np.sum((central_coords- allCoords)**2, axis=1))  )
   distThr= int(radiusFraction*(img_shape[0]/2))
-  pointsAbove= allCoords[ distMat>distThr ].astype( np.int64)
+  if aboveInsteadBelow:
+    return allCoords[ distMat>distThr ].astype( np.int64)
+  else:
+    return allCoords[ distMat<distThr ].astype( np.int64)
+
   
+def generateReverseNormalizationFunction(img_shape, radiusFraction=0.8):
+  pointsBelow= initPointsRadius(img_shape, aboveInsteadBelow=False, radiusFraction=radiusFraction)
+  def reverseNormalization(imgs, refs):
+    imgsNorm= np.zeros_like(imgs)
+    for i in range(imgs.shape[0]):
+      img, ref= imgs[i], refs[i]
+      innerParRef= ref[ pointsBelow[...,0], pointsBelow[...,1] ]
+      innerParImg= img[ pointsBelow[...,0], pointsBelow[...,1] ]
+      innerMeanRef, innerStdRef= np.mean(innerParRef), np.std(innerParRef)
+      innerMeanImg, innerStdImg= np.mean(innerParImg), np.std(innerParImg)
+      imgsNorm[i]= (img- (innerMeanImg-innerMeanRef))/(innerStdImg/innerStdRef)
+    return imgsNorm
+  return reverseNormalization
+    
+def generateEmptyParticlesFunction(img_shape, prob=0.2):
+
+  cornerSize= 8
+  imgSide= min(img_shape[:2])
+  nTilesPerSide= imgSide//cornerSize
+  
+  pointsAboveRadius= initPointsRadius(img_shape, radiusFraction=0.9)
+
   def noisifyImg( img):
-    dataSlice= img[ pointsAbove[...,0], pointsAbove[...,1] ] 
+    dataSlice= img[ pointsAboveRadius[...,0], pointsAboveRadius[...,1] ] 
     meanVal= np.mean( dataSlice )
     stdVal= np.std( dataSlice )
     noise_img= np.random.normal(meanVal, stdVal, img.shape )

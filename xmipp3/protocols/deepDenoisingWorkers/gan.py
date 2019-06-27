@@ -97,15 +97,15 @@ class GAN(DeepLearningModel):
     output_discriminator_gan = discriminator_model(output_generator_gan)
 
     generatorGAN_model = Model(inputs=input_generator_gan, outputs=[output_generator_gan, output_discriminator_gan])
-    optimizer_generatorGAN_model= Adam(learningRate*0.5, beta_1=0.8)
-    generatorGAN_model.compile(loss=[self.generatorLoss, "binary_crossentropy"], loss_weights=[ 10**(self.loss_logWeight), 1.],
-                          optimizer=optimizer_generatorGAN_model)
-                      
+
 
     N_GPUs= len(self.gpuList.split(','))
     if N_GPUs > 1:
       generatorGAN_model = multi_gpu_model(generatorGAN_model, gpus= N_GPUs)
 
+    optimizer_generatorGAN_model= Adam(learningRate*0.5, beta_1=0.8)
+    generatorGAN_model.compile(loss=[self.generatorLoss, "binary_crossentropy"], loss_weights=[ 10**(self.loss_logWeight), 1.],
+                          optimizer=optimizer_generatorGAN_model)
 
     def generateLabels(nLabels, exact=False, fake_first=True, corruptLabelsProb=0):
       if exact:
@@ -250,13 +250,6 @@ class GAN(DeepLearningModel):
       if epoch>= nEpochs:
         break
       print("------------------------------------------------------------------------")
-
-    
-  def yieldPredictions(self, xmdParticles, xmdProjections=None):
-    for preds_noisyParticles_projections in DeepLearningModel.yieldPredictions(self, xmdParticles, xmdProjections):
-      yield [normalizeImgs(elem) for elem in preds_noisyParticles_projections]
-
-      
 
 def build_discriminator( img_shape, nConvLayers= 4):
   assert math.log(img_shape[1], 2)> nConvLayers, "Error, too small images: input %s. Min size %s"%(img_shape, 2**nConvLayers)

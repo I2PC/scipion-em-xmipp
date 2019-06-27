@@ -27,7 +27,7 @@
 
 import sys, os
 import numpy as np
-
+import re
 from pyworkflow import VERSION_2_0
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
 import pyworkflow.protocol.params as params
@@ -39,7 +39,7 @@ import xmippLib
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes, xmippToLocation
 from xmipp3.utils import getMdSize
 import xmipp3
-
+from shutil import copyfile
 from deepDenoisingWorkers.deepDenoising import getModelClass
        
 EXEC_MODES= ['Train & Predict','Predict'] 
@@ -89,15 +89,22 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                             '*Predict*: The particles are denoised with a '
                             'pretrained model')
 
+        form.addParam('continueTraining', params.BooleanParam, default = True,
+                      condition='modelTrainPredMode==%d'%ITER_TRAIN,
+                      label='Continue training? (or train from scratch)', help='Setting "yes" '
+                      'you can continue training from pretrained model '
+                      ' or your previous executions. If you choose'
+                      '"no" the model will be trained from scratch')
+
         form.addParam('customModelOverPretrain', params.BooleanParam, default = False,
-                      condition='modelTrainPredMode==%d'%ITER_PREDICT,
-                      label='Choose your own model or use pretrained', help='Setting "yes" '
+                      condition='modelTrainPredMode==%d or continueTraining'%ITER_PREDICT,
+                      label='Use your own model (or use pretrained)', help='Setting "yes" '
                       'you can choose your own model trained. If you choose'
                       '"no" a general model pretrained will be assign')
 
         form.addParam('ownModel', params.PointerParam,
                       pointerClass=self.getClassName(),
-                      condition='customModelOverPretrain==True and modelTrainPredMode==%d'%ITER_PREDICT,
+                      condition='customModelOverPretrain==True and (modelTrainPredMode==%d or continueTraining)'%ITER_PREDICT,
                       label='Set your model',
                       help='Choose the protocol where your model is trained')
                       
@@ -117,7 +124,6 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                       'reprojections views')
 
 
-
         form.addParam('inputParticles', params.PointerParam,
                       pointerClass='SetOfParticles', important=True,
                       label='Input noisy particles to denoise', help='Input noisy '
@@ -128,10 +134,10 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         form.addParam('emptyParticles', params.PointerParam, expertLevel=cons.LEVEL_ADVANCED,
                       pointerClass='SetOfParticles',  allowsNull=True,
                       label='Input "empty" particles (optional)', help='Input "empty" '
-                      'particles to learn how to deal with noise')
+                      'particles to learn how to deal with pure noise')
                       
         form.addParam('imageSize', params.IntParam, allowsNull=True, expertLevel=cons.LEVEL_ADVANCED,
-                      condition='modelTrainPredMode==%d'%ITER_TRAIN,
+                      condition='modelTrainPredMode==%d and not continueTraining'%ITER_TRAIN,
                       label='Scale images to (px)',
                       default=-1, help='Scale particles to desired size to improve training'
                                         'The recommended particle size is 128 px. The size must be even.'
@@ -175,9 +181,9 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                        condition='modelTrainPredMode==%d'%ITER_TRAIN,
                        default=TRAINING_LOSS_BOTH, expertLevel=cons.LEVEL_ADVANCED,
                        label='Select loss for training',
-                       help='*MSE*: Train using mean squered error'
-                            'or\n*PerceptualLoss*: Train using DeepConsensus perceptual loss\n'
-                            'or\n*Both*: Train using both DeepConsensus perceptual loss and mean squered error\n')                                                   
+                       help='*MSE*: Train using mean squered error or\n*PerceptualLoss*: '
+                            'Train using DeepConsensus perceptual loss\n or\n*Both*: Train '
+                            'using both DeepConsensus perceptual loss and mean squered error\n')                                                   
                           
                             
         form.addParam('numberOfDiscVsGenUpdates', params.IntParam, default=5,
@@ -229,32 +235,35 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
       resizedSize= resizedSize if resizedSize>0 else 128
       return resizedSize
       
+    def getStackOrResize(self, setOfParticles, mdFnameIn, stackFnameOut):
+
+
+        if self._getResizedSize()== self.inputParticles.get().getDimensions()[0]:
+            mdFname= re.sub(r"\.stk$", r".xmd", stackFnameOut)
+            writeSetOfParticles(setOfParticles, mdFname )
+            self.runJob("xmipp_image_convert", "-i %s -o %s " % (mdFname, stackFnameOut))
+        else:
+            writeSetOfParticles(setOfParticles, mdFnameIn)
+            self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (mdFnameIn, stackFnameOut,
+                                                                            self._getResizedSize()))
+
     def preprocessData(self):
-        if self.modelTrainPredMode.get() == ITER_PREDICT and self.modelType.get() == MODEL_TYPE_UNET and not self.customModelOverPretrain:
-          raise ValueError("Predict directly with UNET is not implemented yet")
           
         particlesFname = self._getExtraPath('noisyParticles.xmd')
-        writeSetOfParticles(self.inputParticles.get(), particlesFname)
         fnNewParticles = self._getExtraPath('resizedParticles.stk')
-
-        self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (
-            particlesFname, fnNewParticles, self._getResizedSize()))
+        self.getStackOrResize(self.inputParticles.get(), particlesFname, fnNewParticles)
 
         if not self.inputProjections.get() is None:
             projectionsFname = self._getExtraPath('projections.xmd')
-            writeSetOfParticles(self.inputProjections.get(), projectionsFname)
             fnNewProjections = self._getExtraPath('resizedProjections.stk')
-            self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (
-                projectionsFname, fnNewProjections, self._getResizedSize()))
-                
+            self.getStackOrResize(self.inputProjections.get(), projectionsFname, fnNewProjections)
+
         if not self.emptyParticles.get() is None:
             emptyPartsFname = self._getExtraPath('emptyParts.xmd')
-            writeSetOfParticles(self.emptyParticles.get(), emptyPartsFname)
             fnNewEmptyParts = self._getExtraPath('resizedEmptyParts.stk')
-            self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (
-                emptyPartsFname, fnNewEmptyParts, self._getResizedSize()))
-        
+            self.getStackOrResize(self.emptyParticles.get(), emptyPartsFname, fnNewEmptyParts)
 
+  
     def trainModel(self):
 
         modelFname = self._getPath('ModelTrained.h5')
@@ -283,17 +292,28 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         del model
 #        raise ValueError("training ended")
         
-    def predictModel(self):
-        from scipy.stats import pearsonr
-        
+
+    def _getModelFname(self):
         if self.modelTrainPredMode.get() == ITER_PREDICT:
           if self.customModelOverPretrain == True:
               modelFname = self.ownModel.get()._getPath('ModelTrained.h5')
           else:
-              modelFname = xmipp3.Plugin.getModel('deepDenoising', 'PretrainModel.h5')
+              modelFname = xmipp3.Plugin.getModel('deepDenoising', 'ModelTrained.h5')
         else:
           modelFname = self._getPath('ModelTrained.h5')
-                
+          if self.continueTraining.get():
+            if self.customModelOverPretrain == True:
+              modelFnameInit = self.ownModel.get()._getPath('ModelTrained.h5')
+            else:
+              modelFnameInit = xmipp3.Plugin.getModel('deepDenoising', 'ModelTrained.h5')
+
+            copyfile(xmipp3.Plugin.getModel('deepDenoising', 'ModelTrained.h5'), modelFname)
+        return modelFname
+
+    def predictModel(self):
+        from scipy.stats import pearsonr
+
+        modelFname = self._getModelFname()     
         ModelClass= getModelClass( MODEL_TYPES[self.modelType.get()], self.gpuList.get())
 
         builder_args= {"boxSize":self._getResizedSize(), "saveModelFname":modelFname, 
@@ -323,7 +343,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         mdNewParticles = md.MetaData()
         
         I = xmippLib.Image()
-        i=1 #TODO. Is this the correct way? Should we use particle ids instead
+        i=1 #TODO. Is this the correct way? Should we use particle ids instead?
         
         for preds, particles, projections in model.yieldPredictions(inputParticlesMdName, metadataProjections 
                                                                           if useProjections else None ):
@@ -337,19 +357,24 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
               newRow.setValue(md.MDL_IMAGE, outputImgpath)
               newRow.setValue(md.MDL_IMAGE_ORIGINAL, pathNoise)
+
+              correlations_input_vs_denoised, _ = pearsonr(pred.ravel(), particle.ravel())
+              newRow.setValue(md.MDL_CORR_DENOISED_NOISY, correlations_input_vs_denoised)
+
               if useProjections:
                   pathProj = ('%06d@' %(i ,)) + inputProjectionsStackName
                   newRow.setValue(md.MDL_IMAGE_REF, pathProj)
-                  correlations1, _ = pearsonr(pred.ravel(), projection.ravel())
-                  newRow.setValue(md.MDL_CORR_DENOISED_PROJECTION, correlations1)
+                  correlations_proj_vs_denoised, _ = pearsonr(pred.ravel(), projection.ravel())
+                  newRow.setValue(md.MDL_CORR_DENOISED_PROJECTION, correlations_proj_vs_denoised)
 
               newRow.addToMd(mdNewParticles)
               i+=1
 
         mdNewParticles.write('particles@' + outputParticlesMdName, xmippLib.MD_APPEND)
-        self.runJob("xmipp_transform_normalize", "-i %s --method NewXmipp "
-                    "--background circle %d "%(outputParticlesStackName, self._getResizedSize()/2))
-                    
+#        self.runJob("xmipp_transform_normalize", "-i %s --method NewXmipp "
+#                    "--background circle %d "%(outputParticlesStackName, self._getResizedSize()/2))
+        #TODO: HOW TO NORMALIZE OUTPUT
+
     def createOutputStep(self):
         imgSet = self.inputParticles.get()
         outputSet = self._createSetOfParticles()
@@ -358,11 +383,9 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         xdim = imgSet.getDimensions()[0]
         outputSet.setSamplingRate((Ts*xdim)/self._getResizedSize())
         imgFn = self._getExtraPath('particlesDenoised.xmd')
-        outputSet.copyItems(imgSet,
-                            updateItemCallback=self._processRow,
-                            itemDataIterator=md.iterRows(imgFn,
-                                                         sortByLabel=md.MDL_ITEM_ID)
-                            )
+        outputSet.copyItems(imgSet, updateItemCallback=self._processRow,
+                            itemDataIterator=md.iterRows(imgFn, sortByLabel=md.MDL_ITEM_ID) )
+
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(self.inputParticles, outputSet)
 
@@ -374,9 +397,12 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
     def _processRow(self, particle, row):
         particle.setLocation(xmippToLocation(row.getValue(xmippLib.MDL_IMAGE)))
-        if not self.inputProjections.get() is None:
-            setXmippAttributes(particle, row,
-                               xmippLib.MDL_CORR_DENOISED_PROJECTION)
+        if self.inputProjections.get() is not None:
+            mdToAdd= (md.MDL_IMAGE_ORIGINAL, md.MDL_IMAGE_REF, md.MDL_CORR_DENOISED_PROJECTION, md.MDL_CORR_DENOISED_NOISY)
+        else:
+            mdToAdd= (md.MDL_IMAGE_ORIGINAL, md.MDL_CORR_DENOISED_NOISY )
+        
+        setXmippAttributes(particle, row, *mdToAdd)
 
 
 

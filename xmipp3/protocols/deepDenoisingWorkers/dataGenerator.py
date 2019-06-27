@@ -3,12 +3,10 @@ import xmippLib
 import numpy as np
 import random
 
-from scipy.stats import iqr
 from sklearn.utils import shuffle
 from sklearn.cross_validation import train_test_split
-from .augmentators import (_random_flip_leftright, _random_flip_updown, _mismatch_projection,
+from .augmentators import (_random_flip_leftright, _random_flip_updown, _mismatch_projection, 
                           _random_90degrees_rotation, _random_rotation,generateEmptyParticlesFunction)
-
 
 BATCH_SIZE= 16
 def getDataGenerator( imgsMdXmd, masksMdXmd, xmdEmptyParts=None, augmentData=True, nEpochs=-1, isTrain=True, valFraction=0.1, 
@@ -21,7 +19,7 @@ def getDataGenerator( imgsMdXmd, masksMdXmd, xmdEmptyParts=None, augmentData=Tru
     
   nImages= int(mdImgs.size())
 
-  I= xmippLib.Image()      
+  I= xmippLib.Image()    
 
   imgFnames = mdImgs.getColumnValues(md.MDL_IMAGE)
   maskFnames= mdMasks.getColumnValues(md.MDL_IMAGE)
@@ -66,23 +64,7 @@ def getDataGenerator( imgsMdXmd, masksMdXmd, xmdEmptyParts=None, augmentData=Tru
   def readOneImage(fname):
     I.read(fname)
     return I.getData()
-      
-#  if doTanhNormalize:
-#    def readImgAndMask(fnImageImg, fnImageMask):
-#      img= normalization( np.expand_dims(readOneImage(fnImageImg), -1), sigmoidInsteadTanh=False)
-#      if fnImageMask is None:
-#        mask= -1*np.ones_like(img)
-#      else:
-#        mask= normalization(np.expand_dims(readOneImage(fnImageMask), -1), sigmoidInsteadTanh=False)
-#      return img, mask
-#  else:
-#    def readImgAndMask(fnImageImg, fnImageMask):
-#      img=np.expand_dims(readOneImage(fnImageImg),-1)
-#      if fnImageMask is None:
-#        mask= -1*np.ones_like(img)
-#      else:
-#        mask= np.expand_dims(readOneImage(fnImageMask),-1)
-#      return img, mask
+
 
   def readImgAndMask(fnImageImg, fnImageMask):
     img= normalization( np.expand_dims(readOneImage(fnImageImg), -1), sigmoidInsteadTanh= not doTanhNormalize)
@@ -141,28 +123,31 @@ def extractNBatches(valIterator, maxBatches=-1):
       break
   return ( np.concatenate(x_val, axis=0), np.concatenate(y_val, axis=0 ))
 
-#def normalization( img, sigmoidInsteadTanh=True):
-#  normData= (img -np.min(img))/ (np.max(img)-np.min(img))
-#  if not sigmoidInsteadTanh:
-#    normData= 2*normData -1
-#  if np.any( np.isnan(normData)):
-#    normData= np.zeros_like(normData)
-#  return normData
+def normalizationV1( img, sigmoidInsteadTanh=True):
+  normData= (img -np.min(img))/ (np.max(img)-np.min(img))
+  if not sigmoidInsteadTanh:
+    normData= 2*normData -1
+  if np.any( np.isnan(normData)):
+    normData= np.zeros_like(normData)
+  return normData
 
-def normalization(img, sigmoidInsteadTanh=True):
-  '''
-  Proposed alternative normalization
-  '''
-  iqr_val= iqr(img, rng=(10,90) )
-  if iqr_val==0:
-      iqr_val= (np.max(img)-np.min(img)) + 1e-12
-  newImg=(img- np.median(img))/iqr_val
-  if sigmoidInsteadTanh:
-    newImg=1 / (1 + np.exp(-newImg))
-  else:
-    newImg= np.tanh(newImg)
-  return newImg
-  
+#from scipy.stats import iqr
+#def normalizationV2(img, sigmoidInsteadTanh=True):
+#  '''
+#  Proposed alternative normalization. Seems to be worse
+#  '''
+#  iqr_val= iqr(img, rng=(10,90) )
+#  if iqr_val==0:
+#      iqr_val= (np.max(img)-np.min(img)) + 1e-12
+#  newImg=(img- np.median(img))/iqr_val
+#  if sigmoidInsteadTanh:
+#    newImg=1 / (1 + np.exp(-newImg))
+#  else:
+#    newImg= np.tanh(newImg)
+#  return newImg
+
+normalization= normalizationV1
+
 def normalizeImgs(batch_img, sigmoidInsteadTanh=True):
   for i in range(batch_img.shape[0]):
     batch_img[i]= normalization(batch_img[i], sigmoidInsteadTanh)
