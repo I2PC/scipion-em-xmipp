@@ -302,8 +302,8 @@ class XmippMonoResViewer(LocalResolutionViewer):
             Chimera.createCoordinateAxisFile(dim,
                                          bildFileName=tmpFileName,
                                          sampling=inputSmprt)
-            #fhCmd.write("open %s\n" % tmpFileName)
-            #fhCmd.write("cofr 0,0,0\n")  # set center of coordinates
+            fhCmd.write("open %s\n" % tmpFileName)
+            fhCmd.write("cofr 0,0,0\n")  # set center of coordinates
             fhCmd.write("open %s\n" % fninput)
             fhCmd.write("open %s\n" % (fnRoot + CHIMERA_RESOLUTION_VOL))
             imageFileVolume = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
@@ -314,23 +314,23 @@ class XmippMonoResViewer(LocalResolutionViewer):
             imageFileSmprt = x
 
             # input vol(s) origin coordinates
-            x_input, y_input, z_input = 0, 0, 0  # inputVolume.getShiftsFromOrigin()
-            fhCmd.write("volume #0 voxelSize %f origin %0.2f,%0.2f,%0.2f\n"
+            x_input, y_input, z_input = inputVolume.getShiftsFromOrigin()
+            fhCmd.write("volume #1 voxelSize %f origin %0.2f,%0.2f,%0.2f\n"
                     % (inputSmprt, x_input, y_input, z_input))
 
             # image vol origin coordinates
-            x_output, y_output, z_output = 0, 0, 0  # header.getOrigin()
-            fhCmd.write("volume #1 voxelSize %f origin %0.2f,%0.2f,%0.2f\n"
+            x_output, y_output, z_output = header.getOrigin()
+            fhCmd.write("volume #2 voxelSize %f origin %0.2f,%0.2f,%0.2f\n"
                     % (imageFileSmprt, x_output, y_output, z_output))
 
             #### Check if the coordinate system works for a set of volumes
 
-            fhCmd.write("volume #1 hide\n")
+            fhCmd.write("volume #2 hide\n")
             
             scolorStr = '%s,%s:' * numberOfColors
             scolorStr = scolorStr[:-1]
 
-            line = ("scolor #0 volume #1 perPixel false cmap "
+            line = ("scolor #1 volume #2 perPixel false cmap "
                 + scolorStr + "\n") % colorList
             fhCmd.write(line)
 
