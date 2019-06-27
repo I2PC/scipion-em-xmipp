@@ -68,6 +68,10 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                       label='Use input angular assignment (if available)')
         form.addParam('optimizeGray', BooleanParam, default=False,
                       label='Optimize gray scale')
+        form.addParam('ignoreCTF', BooleanParam, default=True,
+                      label='Ignore CTF')
+        form.addParam('evaluateResiduals', BooleanParam, default=False, expertLevel=LEVEL_ADVANCED,
+                      label='Evaluate residuals')
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group', 
                       help='See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
@@ -92,8 +96,10 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                                      anglesFn, self.inputVolume.get().getDim()[0])
         else:
             anglesFn=self.imgsFn
+
         self._insertFunctionStep("produceResiduals", vol.getFileName(), anglesFn, vol.getSamplingRate())
-        self._insertFunctionStep("evaluateResiduals")
+        if self.evaluateResiduals.get():
+            self._insertFunctionStep("evaluateResiduals")
         self._insertFunctionStep("createOutputStep")
 
     #--------------------------- STEPS functions ---------------------------------------------------
@@ -115,11 +121,15 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
     def produceResiduals(self, fnVol, fnAngles, Ts):
         fnVol = self._getTmpPath("volume.vol")
         anglesOutFn=self._getExtraPath("anglesCont.stk")
-        residualsOutFn=self._getExtraPath("residuals.stk")
+
         projectionsOutFn=self._getExtraPath("projections.stk")
         xdim=self._getDimensions()
         args="-i %s -o %s --ref %s --optimizeAngles --optimizeShift --max_shift %d --oresiduals %s --oprojections %s --sampling %f"%\
-                    (fnAngles,anglesOutFn,fnVol,floor(xdim*0.05),residualsOutFn,projectionsOutFn,Ts)
+                    (fnAngles,anglesOutFn,fnVol,floor(xdim*0.05),projectionsOutFn,Ts)
+        if self.evaluateResiduals:
+            args+=" --oresiduals %s"%self._getExtraPath("residuals.stk")
+        if self.ignoreCTF:
+            args+=" --ignoreCTF"
         if self.optimizeGray:
             args+="--optimizeGray --max_gray_scale 0.95 "
         self.runJob("xmipp_angular_continuous_assign2", args)
