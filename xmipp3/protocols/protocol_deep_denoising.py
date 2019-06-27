@@ -371,9 +371,6 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
               i+=1
 
         mdNewParticles.write('particles@' + outputParticlesMdName, xmippLib.MD_APPEND)
-#        self.runJob("xmipp_transform_normalize", "-i %s --method NewXmipp "
-#                    "--background circle %d "%(outputParticlesStackName, self._getResizedSize()/2))
-        #TODO: HOW TO NORMALIZE OUTPUT
 
     def createOutputStep(self):
         imgSet = self.inputParticles.get()
