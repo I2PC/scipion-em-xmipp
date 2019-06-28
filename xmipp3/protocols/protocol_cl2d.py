@@ -511,7 +511,7 @@ class XmippProtCL2D(ProtClassify2D):
             xmpMd = self._getLevelMdImages(level, subset)
 
         # Protection against unclassified images
-        self.runJob("xmipp_metadata_utilities",'-i %s --query select "ref>0"'%xmpMd)
+        self.runJob("xmipp_metadata_utilities",'-i %s --query select "ref>0"'%xmpMd,numberOfMpi=1)
             
         iterator = md.SetMdIterator(xmpMd, sortByLabel=md.MDL_ITEM_ID,
                                     updateItemCallback=self._updateParticle,
