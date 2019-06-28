@@ -189,7 +189,6 @@ class XmippProtAlignVolume(em.ProtAlignVolume):
         for vol in self._iterInputVolumes():
             outVol = em.Volume()
             outVol.setLocation(vol.outputName)
-            outVol.setObjLabel(vol.getObjLabel())
             outVol.setObjComment(vol.getObjComment())
             #set transformation matrix             
             volId = vol.getObjId()
