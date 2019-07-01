@@ -483,7 +483,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         if self.fr_approx.get():
             args += " --fast"
         if self.useGpu.get():
-            args += ' --thr' % self.fr_gpu_threads.get()
+            args += ' --thr %d' % self.fr_gpu_threads.get()
             args += ' --device %(GPU)s'
             self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=self.fr_gpu_mpi.get())
         else:
@@ -570,8 +570,8 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         defMd1.write(self._getExtraPath("split1.xmd"))
         defMd2.write(self._getExtraPath("split2.xmd"))
 
-        runReconstruction(self._getExtraPath("split1.xmd"), self._getExtraPath("split1.vol"))
-        runReconstruction(self._getExtraPath("split2.xmd"), self._getExtraPath("split2.vol"))
+        self.runReconstruction(self._getExtraPath("split1.xmd"), self._getExtraPath("split1.vol"))
+        self.runReconstruction(self._getExtraPath("split2.xmd"), self._getExtraPath("split2.vol"))
 
     def cleaningStep(self):
         cleanPattern(self._getExtraPath("gallery*"))
