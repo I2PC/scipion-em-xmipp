@@ -140,7 +140,7 @@ class TestConvertBase(BaseTest):
             goldFn = self.dataset.getFile(fileKey + '_Gold_output.mrcs')
         else:
             outputFn = self.getOutputPath(fileKey + "_output.vol")
-            goldFn = self.dataset.getFile(fileKey + '_Gold_output.vol')
+            goldFn = self.dataset.getFile(fileKey + 'Gold')
 
         if PRINT_FILES:
             print "BINARY DATA: ", stackFn
