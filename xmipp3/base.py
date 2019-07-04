@@ -718,7 +718,12 @@ class ScriptShowJ(ScriptAppIJ):
 def createMetaDataFromPattern(pattern, isStack=False, label="image"):
     ''' Create a metadata from files matching pattern'''
     import glob
-    files = glob.glob(pattern)
+    if isinstance(pattern, list):
+      files=[]
+      for pat in pattern:
+        files+= glob.glob(pat)
+    else:
+      files = glob.glob(pattern)
     files.sort()
 
     label = xmippLib.str2Label(label) #Check for label value

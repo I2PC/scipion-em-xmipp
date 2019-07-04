@@ -204,7 +204,17 @@ def tryAddPipModule(env, moduleName, *args, **kwargs):
 def installDeepLearningToolkit(plugin, env):
     deepLearningTools = []
 
+    # pandas
+    pandas = tryAddPipModule(env, 'pandas', '0.20.1',
+                                   target='pandas*',
+                                   default=False, deps=['scipy'])
+    deepLearningTools.append(pandas)
 
+    # scikit-image
+    skikit_image = tryAddPipModule(env, 'scikit-image', '0.14.2',
+                                   target='scikit_image*',
+                                   default=False, deps=['scipy'])
+    deepLearningTools.append(skikit_image)
 
     # Keras deps
     unittest2 = tryAddPipModule(env, 'unittest2', '0.5.1', target='unittest2*',
