@@ -124,7 +124,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
 
         projectionsOutFn=self._getExtraPath("projections.stk")
         xdim=self._getDimensions()
-        args="-i %s -o %s --ref %s --optimizeAngles --optimizeShift --max_shift %d --oresiduals %s --oprojections %s --sampling %f"%\
+        args="-i %s -o %s --ref %s --optimizeAngles --optimizeShift --max_shift %d --oprojections %s --sampling %f"%\
                     (fnAngles,anglesOutFn,fnVol,floor(xdim*0.05),projectionsOutFn,Ts)
         if self.evaluateResiduals:
             args+=" --oresiduals %s"%self._getExtraPath("residuals.stk")
