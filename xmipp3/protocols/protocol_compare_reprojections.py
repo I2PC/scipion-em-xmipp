@@ -169,21 +169,38 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             outputSet.copyInfo(imgSet)
             if not self.newAssignmentPerformed:
                 outputSet.setAlignmentProj()
+        self.iterMd = md.iterRows(imgFn, md.MDL_ITEM_ID)
+        self.lastRow = next(self.iterMd) 
         outputSet.copyItems(imgSet,
-                            updateItemCallback=self._processRow,
-                            itemDataIterator=md.iterRows(imgFn, sortByLabel=md.MDL_ITEM_ID))
+                            updateItemCallback=self._processRow)
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(self.inputSet, outputSet)
 
     def _processRow(self, particle, row):
+        count = 0
+        
+        while self.lastRow and particle.getObjId() == self.lastRow.getValue(md.MDL_ITEM_ID):
+            count += 1
+            if count:
+                self._createItemMatrix(particle, self.lastRow)
+            try:
+                self.lastRow = next(self.iterMd)
+            except StopIteration:
+                self.lastRow = None
+                    
+        particle._appendItem = count > 0
+
+    def _createItemMatrix(self, particle, row):
         setXmippAttributes(particle, row,
-                           xmippLib.MDL_ZSCORE_RESVAR, xmippLib.MDL_ZSCORE_RESMEAN,
-                           xmippLib.MDL_ZSCORE_RESCOV, xmippLib.MDL_IMAGE_ORIGINAL,
                            xmippLib.MDL_COST, xmippLib.MDL_CONTINUOUS_GRAY_A,
                            xmippLib.MDL_CONTINUOUS_GRAY_B, xmippLib.MDL_CONTINUOUS_X,
                            xmippLib.MDL_CONTINUOUS_Y,
                            xmippLib.MDL_CORRELATION_IDX, xmippLib.MDL_CORRELATION_MASK,
                            xmippLib.MDL_CORRELATION_WEIGHT, xmippLib.MDL_IMED)
+        if self.evaluateResiduals:
+            setXmippAttributes(particle, row,
+                               xmippLib.MDL_ZSCORE_RESVAR, xmippLib.MDL_ZSCORE_RESMEAN,
+                               xmippLib.MDL_ZSCORE_RESCOV)
         def __setXmippImage(label):
             attr = '_xmipp_' + xmippLib.label2Str(label)
             if not hasattr(particle, attr):
@@ -196,8 +213,9 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         
         __setXmippImage(xmippLib.MDL_IMAGE)
         __setXmippImage(xmippLib.MDL_IMAGE_REF)
-        __setXmippImage(xmippLib.MDL_IMAGE_RESIDUAL)
-        __setXmippImage(xmippLib.MDL_IMAGE_COVARIANCE)
+        if self.evaluateResiduals:
+            __setXmippImage(xmippLib.MDL_IMAGE_RESIDUAL)
+            __setXmippImage(xmippLib.MDL_IMAGE_COVARIANCE)
 
     #--------------------------- INFO functions --------------------------------------------
     def _summary(self):
