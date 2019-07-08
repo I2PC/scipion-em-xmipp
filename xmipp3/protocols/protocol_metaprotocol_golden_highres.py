@@ -96,9 +96,59 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                       help='See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
                            'If no symmetry is present, give c1')
         form.addParam('maximumTargetResolution', NumericListParam,
-                      label="Max. Target Resolution", default="15",
-                      help="In Angstroms. The actual maximum resolution will be the maximum between this number of 0.5 * previousResolution, meaning that"
-                           "in a single step you cannot increase the resolution more than 1/2")
+                      label="Initial resolution", default="15",
+                      help="In Angstroms. The maximum resolution to be used in the first step of the protocol. "
+                           "Then, the resolution will be automatically adjusted.")
+
+        form.addSection(label='Angular assignment')
+        form.addParam('maxShift', FloatParam, label="Max. shift (%)", default=10, expertLevel=LEVEL_ADVANCED,
+                      help='Maximum shift as a percentage of the image size')
+        line=form.addLine('Tilt angle:', help='0 degrees represent top views, 90 degrees represent side views', expertLevel=LEVEL_ADVANCED)
+        line.addParam('angularMinTilt', FloatParam, label="Min.", default=0, expertLevel=LEVEL_ADVANCED,
+                      help="Side views are around 90 degrees, top views around 0")
+        line.addParam('angularMaxTilt', FloatParam, label="Max.", default=90, expertLevel=LEVEL_ADVANCED,
+                      help="You may generate redudant galleries by setting this angle to 180, this may help if c1 symmetry is considered")
+
+        form.addSection(label='Post-processing')
+        form.addParam('postAdHocMask', PointerParam, label="Mask", pointerClass='VolumeMask', allowsNull=True,
+                      help='The mask values must be between 0 (remove these pixels) and 1 (let them pass). Smooth masks are recommended.')
+        groupSymmetry = form.addGroup('Symmetry', expertLevel=LEVEL_ADVANCED)
+        groupSymmetry.addParam('postSymmetryWithinMask', BooleanParam, label="Symmetrize volume within mask?", default=False)
+        groupSymmetry.addParam('postSymmetryWithinMaskType', StringParam, label="Mask symmetry", default="i1", condition="postSymmetryWithinMask",
+                           help='If See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
+                           'If no symmetry is present, give c1')
+        groupSymmetry.addParam('postSymmetryWithinMaskMask', PointerParam, label="Mask", pointerClass='VolumeMask', allowsNull=True, condition="postSymmetryWithinMask",
+                               help='The mask values must be between 0 (remove these pixels) and 1 (let them pass). Smooth masks are recommended.')
+        groupSymmetry.addParam('postSymmetryHelical', BooleanParam, label="Apply helical symmetry?", default=False)
+        groupSymmetry.addParam('postSymmetryHelicalRadius', IntParam, label="Radius", default=-1, condition='postSymmetryHelical',
+                               help="In Angstroms")
+        groupSymmetry.addParam('postSymmetryHelicalDihedral', BooleanParam, label="Dihedral symmetry", default=False,
+                               condition='postSymmetryHelical')
+        groupSymmetry.addParam('postSymmetryHelicalMinRot', FloatParam, label="Min. Rotation", default=0, condition='postSymmetryHelical',
+                               help="In degrees")
+        groupSymmetry.addParam('postSymmetryHelicalMaxRot', FloatParam, label="Max. Rotation", default=360, condition='postSymmetryHelical',
+                               help="In degrees")
+        groupSymmetry.addParam('postSymmetryHelicalMinZ', FloatParam, label="Min. Z shift", default=0, condition='postSymmetryHelical',
+                               help="In angstroms")
+        groupSymmetry.addParam('postSymmetryHelicalMaxZ', FloatParam, label="Max. Z shift", default=40, condition='postSymmetryHelical',
+                               help="In angstroms")
+        form.addParam('postScript', StringParam, label="Post-processing command", default="", expertLevel=LEVEL_ADVANCED,
+                      help='A command template that is used to post-process the reconstruction. The following variables can be used ' 
+                           '%(sampling)s %(dim)s %(volume)s %(iterDir)s. The command should read Spider volumes and modify the input volume.'
+                           'the command should be accessible either from the PATH or provide the absolute path.\n'
+                           'Examples: \n'
+                           'xmipp_transform_filter -i %(volume)s --fourier low_pass 15 --sampling %(sampling)s\n' 
+                           '/home/joe/myScript %(volume)s sampling=%(sampling)s dim=%(dim)s')
+        form.addParam('postSignificantDenoise', BooleanParam, label="Significant denoising Real space", expertLevel=LEVEL_ADVANCED, default=True)
+        form.addParam('postFilterBank', BooleanParam, label="Significant denoising Fourier space", expertLevel=LEVEL_ADVANCED, default=True)
+        form.addParam('postLaplacian', BooleanParam, label="Laplacian denoising", expertLevel=LEVEL_ADVANCED, default=True,
+                      help="It can only be used if there is a mask")
+        form.addParam('postDeconvolve', BooleanParam, label="Blind deconvolution", expertLevel=LEVEL_ADVANCED, default=True)
+        form.addParam('postSoftNeg', BooleanParam, label="Attenuate undershooting", expertLevel=LEVEL_ADVANCED, default=True)
+        form.addParam('postSoftNegK', FloatParam, label="Attenuate undershooting (K)", expertLevel=LEVEL_ADVANCED, default=9,
+                      help="Values below avg-K*sigma are attenuated")
+        form.addParam('postDifference', BooleanParam, label="Evaluate difference", expertLevel=LEVEL_ADVANCED, default=True)
+
 
         form.addParallelSection(threads=1, mpi=8)
             
@@ -118,16 +168,15 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
         manager = Manager()
         project = manager.loadProject(self.getProject().getName())
 
-        percentage = [1.15, 2.3, 3.45, 5.75, 9.2, 15, 24.14, 39.1]
-        numIters = len(percentage)+2
-        fnFSCs=open(self._getExtraPath('fnFSCs.txt'),'a')
-
-        self.convertInputStep(percentage)
+        percentage = [1.14, 2.29, 3.44, 5.74, 9.19, 14.94, 24.13, 39.08]
+        numGlobalIters = len(percentage)+2
 
         targetResolution = self.maximumTargetResolution.get()
 
         #Global iterations
-        for i in range(numIters):
+        for i in range(numGlobalIters):
+
+            self.convertInputStep(percentage, i)
 
             print("Target resolution - group %s: %f " %(chr(65+i), float(targetResolution)))
             sys.stdout.flush()
@@ -146,6 +195,28 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 numberOfIterations=1,
                 particleRadius = self.particleRadius.get(),
                 maximumTargetResolution = targetResolution,
+                angularMaxShift = self.maxShift.get(),
+                angularMinTilt = self.angularMinTilt.get(),
+                angularMaxTilt = self.angularMaxTilt.get(),
+                postAdHocMask = self.postAdHocMask.get(),
+                postSymmetryWithinMask = self.postSymmetryWithinMask.get(),
+                postSymmetryWithinMaskType = self.postSymmetryWithinMaskType.get(),
+                postSymmetryWithinMaskMask = self.postSymmetryWithinMaskMask.get(),
+                postSymmetryHelical = self.postSymmetryHelical.get(),
+                postSymmetryHelicalRadius = self.postSymmetryHelicalRadius.get(),
+                postSymmetryHelicalDihedral = self.postSymmetryHelicalDihedral.get(),
+                postSymmetryHelicalMinRot = self.postSymmetryHelicalMinRot.get(),
+                postSymmetryHelicalMaxRot= self.postSymmetryHelicalMaxRot.get(),
+                postSymmetryHelicalMinZ = self.postSymmetryHelicalMinZ.get(),
+                postSymmetryHelicalMaxZ = self.postSymmetryHelicalMaxZ.get(),
+                postScript = self.postScript.get(),
+                postSignificantDenoise = self.postSignificantDenoise.get(),
+                postFilterBank = self.postFilterBank.get(),
+                postLaplacian = self.postLaplacian.get(),
+                postDeconvolve = self.postDeconvolve.get(),
+                postSoftNeg = self.postSoftNeg.get(),
+                postSoftNegK = self.postSoftNegK.get(),
+                postDifference = self.postDifference.get(),
                 numberOfMpi=self.numberOfMpi.get()
             )
 
@@ -171,7 +242,9 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                     finishedIter = True
 
             fnDir = newHighRes._getExtraPath("Iter%03d"%1)
+            fnFSCs = open(self._getExtraPath('fnFSCs.txt'), 'a')
             fnFSCs.write(join(fnDir,"fsc.xmd") + " \n")
+            fnFSCs.close()
             targetResolution = self.checkOutputsStep(newHighRes, i, False)
 
             if i>=7: #We are in the last three iterations
@@ -179,7 +252,7 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 fnOutParticles = newHighRes._getPath('angles.xmd')
                 params = '-i %s --query select "enabled==1"' % (fnOutParticles)
                 self.runJob("xmipp_metadata_utilities", params, numberOfMpi=1)
-                fnFinal = self._getExtraPath('inputLocalHighRes.xmd')
+                fnFinal = self._getExtraPath('inputLocalHighRes1.xmd')
                 if i==7:
                     copy(fnOutParticles, fnFinal)
                 else:
@@ -190,52 +263,104 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                         outputinputSetOfParticles = self._createSetOfParticles()
                         outputinputSetOfParticles.copyInfo(self.inputParticles.get())
                         readSetOfParticles(fnFinal, outputinputSetOfParticles)
-                        self._defineOutputs(outputParticlesLocal=outputinputSetOfParticles)
+                        self._defineOutputs(outputParticlesLocal1=outputinputSetOfParticles)
                         self._store(outputinputSetOfParticles)
                         #self = self._updateProtocol(self)
 
         #Local iterations
-        print("Target resolution - INPUT local 1: %f " % (float(targetResolution)))
-        sys.stdout.flush()
-        previousProtVol = newHighRes
-        namePreviousVol = 'outputVolume'
-        #call highres local with the new input set
-        newHighResLocal = project.newProtocol(
-            XmippProtReconstructHighRes,
-            objLabel='HighRes - local %i' % 1,
-            symmetryGroup=self.symmetryGroup.get(),
-            numberOfIterations=1,
-            particleRadius=self.particleRadius.get(),
-            maximumTargetResolution=targetResolution,
-            alignmentMethod = XmippProtReconstructHighRes.LOCAL_ALIGNMENT,
-            numberOfMpi=self.numberOfMpi.get()
-        )
-        newHighResLocal.inputParticles.set(self)
-        newHighResLocal.inputParticles.setExtended('outputParticlesLocal')
-        newHighResLocal.inputVolumes.set(previousProtVol)
-        newHighResLocal.inputVolumes.setExtended(namePreviousVol)
+        numLocalIters = 10
+        for i in range(numLocalIters):
 
-        project.scheduleProtocol(newHighResLocal, self._runPrerequisites)
-        # Next schedule will be after this one
-        self._runPrerequisites.append(newHighResLocal.getObjId())
-        self.childs.append(newHighResLocal)
+            if i>1:
+                print("Checking the change in the target resolution", minPrevRes, maxPrevRes, prevTargetResolution, targetResolution)
+                minPrevRes = prevTargetResolution-(prevTargetResolution*0.1)
+                maxPrevRes = prevTargetResolution+(prevTargetResolution*0.1)
+                if targetResolution>minPrevRes and targetResolution<maxPrevRes:
+                    print("TARGET RESOLUTION IS STUCK", minPrevRes, maxPrevRes, targetResolution)
+                    break
 
-        finishedIter = False
-        while finishedIter == False:
-            time.sleep(15)
-            newHighResLocal = self._updateProtocol(newHighResLocal)
-            if newHighResLocal.isFailed() or newHighResLocal.isAborted():
-                raise Exception('XmippProtReconstructHighRes has failed')
-            if newHighResLocal.isFinished():
-                finishedIter = True
+            prevTargetResolution = targetResolution
 
-        fnDir = newHighResLocal._getExtraPath("Iter%03d" % 1)
-        fnFSCs.write(join(fnDir, "fsc.xmd") + " \n")
-        targetResolution = self.checkOutputsStep(newHighResLocal, numIters, True)
-        print("Target resolution - OUT local 1: %f " % (float(targetResolution)))
-        sys.stdout.flush()
+            print("Target resolution - INPUT local %d: %f " % ((i+1), float(targetResolution)))
+            sys.stdout.flush()
+            previousProtVol = newHighRes
+            namePreviousVol = 'outputVolume'
+            #call highres local with the new input set
+            newHighRes = project.newProtocol(
+                XmippProtReconstructHighRes,
+                objLabel='HighRes - local %d' % (i+1),
+                symmetryGroup=self.symmetryGroup.get(),
+                numberOfIterations=1,
+                particleRadius=self.particleRadius.get(),
+                maximumTargetResolution=targetResolution,
+                alignmentMethod=XmippProtReconstructHighRes.LOCAL_ALIGNMENT,
+                angularMaxShift=self.maxShift.get(),
+                angularMinTilt=self.angularMinTilt.get(),
+                angularMaxTilt=self.angularMaxTilt.get(),
+                postAdHocMask=self.postAdHocMask.get(),
+                postSymmetryWithinMask=self.postSymmetryWithinMask.get(),
+                postSymmetryWithinMaskType=self.postSymmetryWithinMaskType.get(),
+                postSymmetryWithinMaskMask=self.postSymmetryWithinMaskMask.get(),
+                postSymmetryHelical=self.postSymmetryHelical.get(),
+                postSymmetryHelicalRadius=self.postSymmetryHelicalRadius.get(),
+                postSymmetryHelicalDihedral=self.postSymmetryHelicalDihedral.get(),
+                postSymmetryHelicalMinRot=self.postSymmetryHelicalMinRot.get(),
+                postSymmetryHelicalMaxRot=self.postSymmetryHelicalMaxRot.get(),
+                postSymmetryHelicalMinZ=self.postSymmetryHelicalMinZ.get(),
+                postSymmetryHelicalMaxZ=self.postSymmetryHelicalMaxZ.get(),
+                postScript=self.postScript.get(),
+                postSignificantDenoise=self.postSignificantDenoise.get(),
+                postFilterBank=self.postFilterBank.get(),
+                postLaplacian=self.postLaplacian.get(),
+                postDeconvolve=self.postDeconvolve.get(),
+                postSoftNeg=self.postSoftNeg.get(),
+                postSoftNegK=self.postSoftNegK.get(),
+                postDifference=self.postDifference.get(),
+                numberOfMpi=self.numberOfMpi.get()
+            )
+            newHighRes.inputParticles.set(self)
+            namePreviousParticles = 'outputParticlesLocal%d' % (i+1)
+            newHighRes.inputParticles.setExtended(namePreviousParticles)
+            newHighRes.inputVolumes.set(previousProtVol)
+            newHighRes.inputVolumes.setExtended(namePreviousVol)
 
-        fnFSCs.close()
+            project.scheduleProtocol(newHighRes, self._runPrerequisites)
+            # Next schedule will be after this one
+            self._runPrerequisites.append(newHighRes.getObjId())
+            self.childs.append(newHighRes)
+
+            finishedIter = False
+            while finishedIter == False:
+                time.sleep(15)
+                newHighRes = self._updateProtocol(newHighRes)
+                if newHighRes.isFailed() or newHighRes.isAborted():
+                    raise Exception('XmippProtReconstructHighRes has failed')
+                if newHighRes.isFinished():
+                    finishedIter = True
+
+            fnDir = newHighRes._getExtraPath("Iter%03d" % 1)
+            fnFSCs = open(self._getExtraPath('fnFSCs.txt'), 'a')
+            fnFSCs.write(join(fnDir,"fsc.xmd") + " \n")
+            fnFSCs.close()
+            targetResolution = self.checkOutputsStep(newHighRes, numGlobalIters+i, True)
+            # newHighRes = self._updateProtocol(newHighRes)
+            # print("Target resolution - OUT local 1: %f " % (float(targetResolution)))
+            # sys.stdout.flush()
+
+            #Check the output particles and remove all the disabled ones
+            fnOutParticles = newHighRes._getPath('angles.xmd')
+            params = '-i %s --query select "enabled==1"' % (fnOutParticles)
+            self.runJob("xmipp_metadata_utilities", params, numberOfMpi=1)
+            fnFinal = self._getExtraPath('inputLocalHighRes%d.xmd'%(i+2))
+            copy(fnOutParticles, fnFinal)
+            outputinputSetOfParticles = self._createSetOfParticles()
+            outputinputSetOfParticles.copyInfo(self.inputParticles.get())
+            readSetOfParticles(fnFinal, outputinputSetOfParticles)
+            result = {'outputParticlesLocal%d' % (i+2): outputinputSetOfParticles}
+            self._defineOutputs(**result)
+            self._store(outputinputSetOfParticles)
+            #self = self._updateProtocol(self)
+
         self.createOutputStep(project)
 
 
@@ -254,60 +379,71 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
         prot2.closeMappers()
         return prot2
 
-    def convertInputStep(self, percentage):
-        outputVolumes = Volume()
-        outputVolumes.setFileName(self.inputVolumes.get().getFileName())
-        outputVolumes.setSamplingRate(self.inputVolumes.get().getSamplingRate())
-        self._defineOutputs(outputVolumesInit=outputVolumes)
-        self._store(outputVolumes)
+    def convertInputStep(self, percentage, i):
+
+        if i==0:
+            outputVolumes = Volume()
+            outputVolumes.setFileName(self.inputVolumes.get().getFileName())
+            outputVolumes.setSamplingRate(self.inputVolumes.get().getSamplingRate())
+            self._defineOutputs(outputVolumesInit=outputVolumes)
+            self._store(outputVolumes)
 
         #AJ to divide the input particles following Fibonacci percentages
         inputFullSet = self.inputParticles.get()
-        input=[]
-        for item in inputFullSet:
-            input.append(item.getObjId())
-        #input=range(1, len(inputFullSet)+1)
-        self.subsets=[]
-        for i, p in enumerate(percentage):
+        if i==0:
+            self.subsets = []
+            self.input = []
+            for item in inputFullSet:
+                self.input.append(item.getObjId())
+            self.origLenInput = len(self.input)
+            self.pp=[]
+            for p in percentage:
+                self.pp.append(int((p/100.)*float(self.origLenInput)))
+
+        if i<len(percentage):
+            #p=percentage[i]
+            p=self.pp[i]
+            print("AQUIII", len(self.input), p, self.pp)
             self.subsets.append(self._createSetOfParticles(str(i)))
             self.subsets[i].copyInfo(inputFullSet)
-            chosen = random.sample(xrange(len(input)), int((p/100.)*float(len(input))))
+            #chosen = random.sample(xrange(len(self.input)), int((p/100.)*float(self.origLenInput)))
+            chosen = random.sample(xrange(len(self.input)), p)
             for j in chosen:
-                id = input[j]
+                id = self.input[j]
                 self.subsets[i].append(inputFullSet[id])
             result = {'outputParticles%s'%chr(65+i) : self.subsets[i]}
             self._defineOutputs(**result)
             self._store(self.subsets[i])
-            input = [i for j, i in enumerate(input) if j not in chosen]
+            self.input = [i for j, i in enumerate(self.input) if j not in chosen]
 
         # percentage = [1.15, 2.3, 3.45, 5.75, 9.2, 15, 24.14, 39.1]
-        idx = len(percentage)
-        self.subsets.append(self._createSetOfParticles(str(idx)))
-        self.subsets[idx].copyInfo(inputFullSet)
-        for item in self.subsets[3]: #5.75
-            self.subsets[idx].append(item)
-        for item in self.subsets[6]: #24.14
-            self.subsets[idx].append(item)
-        result = {'outputParticles%s' % chr(65 + idx): self.subsets[idx]}
-        self._defineOutputs(**result)
-        self._store(self.subsets[idx])
+        if i == len(percentage):
+            self.subsets.append(self._createSetOfParticles(str(i)))
+            self.subsets[i].copyInfo(inputFullSet)
+            for item in self.subsets[3]: #5.75
+                self.subsets[i].append(item)
+            for item in self.subsets[6]: #24.14
+                self.subsets[i].append(item)
+            result = {'outputParticles%s' % chr(65 + i): self.subsets[i]}
+            self._defineOutputs(**result)
+            self._store(self.subsets[i])
 
-        idx = len(percentage)+1
-        self.subsets.append(self._createSetOfParticles(str(idx)))
-        self.subsets[idx].copyInfo(inputFullSet)
-        for item in self.subsets[0]: #1.15
-            self.subsets[idx].append(item)
-        for item in self.subsets[1]: #2.3
-            self.subsets[idx].append(item)
-        for item in self.subsets[2]: #3.45
-            self.subsets[idx].append(item)
-        for item in self.subsets[4]: #9.2
-            self.subsets[idx].append(item)
-        for item in self.subsets[5]: #15
-            self.subsets[idx].append(item)
-        result = {'outputParticles%s' % chr(65 + idx): self.subsets[idx]}
-        self._defineOutputs(**result)
-        self._store(self.subsets[idx])
+        if i == len(percentage)+1:
+            self.subsets.append(self._createSetOfParticles(str(i)))
+            self.subsets[i].copyInfo(inputFullSet)
+            for item in self.subsets[0]: #1.15
+                self.subsets[i].append(item)
+            for item in self.subsets[1]: #2.3
+                self.subsets[i].append(item)
+            for item in self.subsets[2]: #3.45
+                self.subsets[i].append(item)
+            for item in self.subsets[4]: #9.2
+                self.subsets[i].append(item)
+            for item in self.subsets[5]: #15
+                self.subsets[i].append(item)
+            result = {'outputParticles%s' % chr(65 + i): self.subsets[i]}
+            self._defineOutputs(**result)
+            self._store(self.subsets[i])
 
 
 
@@ -370,12 +506,14 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 # mdParticles.write(fnOutParticles)
 
                 #test de hipotesis ????????
-                p0 = clf2.weights_[0,0]/(clf2.weights_[0,0]+clf2.weights_[1,0])
-                p1 = clf2.weights_[1,0]/(clf2.weights_[0,0]+clf2.weights_[1,0])
+                p0 = clf2.weights_[0]/(clf2.weights_[0]+clf2.weights_[1])
+                p1 = clf2.weights_[1]/(clf2.weights_[0]+clf2.weights_[1])
                 mu0=clf2.means_[0,0]
                 mu1=clf2.means_[1,0]
-                std0 = clf2.covars_[0,0]
-                std1 = clf2.covars_[1,0]
+                var0 = clf2.covars_[0,0]
+                var1 = clf2.covars_[1,0]
+                std0 = math.sqrt(var0)
+                std1 = math.sqrt(var1)
                 termR = math.log(p0)-math.log(p1)-math.log(std0/std1)
                 for row in iterRows(mdParticles):
                     objId = row.getObjId()
@@ -383,14 +521,16 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                         z = row.getValue(xmippLib.MDL_MAXCC)
                     else:
                         z = row.getValue(xmippLib.MDL_COST)
-                    termL = (((z-mu1)**2)/(2*(std1**2))) + (((z-mu0)**2)/(2*(std0**2)))
+                    termL = (((z-mu1)**2)/(2*(var1))) + (((z-mu0)**2)/(2*(var0)))
                     if termL<termR:
+                        print("Descartamos particula:", termL, termR, z)
                         mdParticles.setValue(xmippLib.MDL_ENABLED, 0, objId)
                 mdParticles.write(fnOutParticles)
 
 
-            #AJ cleaning with shift (removing particles with shift values higher than +-3sigma)
+            #AJ cleaning with shift (removing particles with shift values higher than +-4sigma)
             #also cleaning with negative correlations
+            #mdParticles = xmippLib.MetaData(fnOutParticles) # AJ Creo que esto no hace falta
             shiftXList = mdParticles.getColumnValues(xmippLib.MDL_SHIFT_X)
             shiftYList = mdParticles.getColumnValues(xmippLib.MDL_SHIFT_Y)
             stdShiftX = np.std(np.asanyarray(shiftXList))
@@ -399,8 +539,11 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 objId = row.getObjId()
                 x = row.getValue(xmippLib.MDL_SHIFT_X)
                 y = row.getValue(xmippLib.MDL_SHIFT_Y)
-                cc = row.getValue(xmippLib.MDL_MAXCC)
-                if x>4*stdShiftX or x<-4*stdShiftX or y>4*stdShiftY or y<-4*stdShiftY or cc<0: #poner 4 stds y 0 en cc
+                if iter<9:
+                    cc = row.getValue(xmippLib.MDL_MAXCC)
+                else:
+                    cc = 1.0
+                if x>4*stdShiftX or x<-4*stdShiftX or y>4*stdShiftY or y<-4*stdShiftY or cc<0.0: #poner 4 stds y 0 en cc
                     print("Shift or negative CC condition", objId)
                     sys.stdout.flush()
                     mdParticles.setValue(xmippLib.MDL_ENABLED, 0, objId)
