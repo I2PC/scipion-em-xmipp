@@ -25,7 +25,6 @@
 # *
 # **************************************************************************
 
-import os
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
@@ -35,9 +34,7 @@ from os.path import abspath
 
 from pyworkflow.gui.plotter import Plotter
 from pyworkflow.em.viewers import LocalResolutionViewer
-from pyworkflow.em.constants import (COLOR_JET, COLOR_TERRAIN,
- COLOR_GIST_EARTH, COLOR_GIST_NCAR, COLOR_GNU_PLOT, COLOR_GNU_PLOT2,
- COLOR_OTHER, COLOR_CHOICES, AX_X, AX_Y, AX_Z)
+from pyworkflow.em.constants import COLOR_JET, COLOR_OTHER, COLOR_CHOICES, AX_Z
 from pyworkflow.protocol.params import (LabelParam, StringParam, EnumParam,
                                         IntParam, LEVEL_ADVANCED)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
@@ -47,8 +44,7 @@ from pyworkflow.em import ImageHandler
 
 from .plotter import XmippPlotter
 from xmipp3.protocols.protocol_resolution_monotomo import \
-        XmippProtMonoTomo, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM, FN_FILTERED_MAP#, \
-#         OUTPUT_RESOLUTION_FILE_CHIMERA, CHIMERA_RESOLUTION_VOL, FN_FILTERED_MAP
+        XmippProtMonoTomo, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM, FN_FILTERED_MAP
 
 
 binaryCondition = ('(colorMap == %d) ' % (COLOR_OTHER))
@@ -107,9 +103,6 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
 
         group.addParam('doShowVolumeColorSlices', LabelParam,
               label="Show colored resolution slices")
-        
-        #group.addParam('doShowVolumeColorFiltered', LabelParam,
-        #      label="Show colored filtered resolution slices")
         
         group.addParam('doShowOneColorslice', LabelParam, 
                        expertLevel=LEVEL_ADVANCED, 
@@ -179,7 +172,7 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
     def _showVolumeColorSlicesTwoMaps(self, mapFile1, mapFile2):
         imageFile = self.protocol._getFileName(mapFile1)
         imgData, min_Res, max_Res = self.getImgData(imageFile)
-	imageFile = self.protocol._getFileName(mapFile2)
+        imageFile = self.protocol._getFileName(mapFile2)
         imgData, min__, max__ = self.getImgData(imageFile)
 
         xplotter = XmippPlotter(x=2, y=2, mainTitle="Local Resolution Slices "
@@ -340,4 +333,4 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
             cmap = cm.get_cmap(COLOR_CHOICES[self.colorMap.get()])
         if cmap is None:
             cmap = cm.jet
-	return cmap
+        return cmap
