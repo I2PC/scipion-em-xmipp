@@ -43,6 +43,8 @@ import pyworkflow.em.metadata as md
 from xmipp3.convert import createItemMatrix, setXmippAttributes
 import pyworkflow.em as em
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
+import os
+import sys
 
 
 class XmippProtDeepCones3DGT_2(ProtRefine3D):
@@ -130,8 +132,15 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         firstStepId = self._insertFunctionStep("prepareImagesForTraining", prerequisites=[firstStepId])
 
         myStr = self.gpuList.get()
+        #import os
+        #print('os.environ["CUDA_VISIBLE_DEVICES"]',os.environ["CUDA_VISIBLE_DEVICES"])
+        #myStr = " "
+        #myStr = os.environ["CUDA_VISIBLE_DEVICES"]
+        print("AAAAA", myStr)
         numGPU = myStr.split(',')
+        print("GPUUUUU", myStr, numGPU)
         for idx, gpuId in enumerate(numGPU):
+            print("Bucle GPUUUUUUU", idx, gpuId)
             stepId = self._insertFunctionStep("trainNClassifiers2ClassesStep", idx, gpuId, len(numGPU), prerequisites=[firstStepId])
             deps.append(stepId)
 
@@ -431,6 +440,9 @@ _noiseCoord   '0'
             if (idx % totalGpu) != thIdx:
                 continue
 
+            print("GPU:", thIdx, gpuId, idx, totalGpu)
+            sys.stdout.flush()
+
             modelFn = 'modelCone%d' % idx
             if self.modelPretrain.get() is True:
                 if exists(self.pretrainedModels.get()._getExtraPath(modelFn + '.h5')):
@@ -470,6 +482,7 @@ _noiseCoord   '0'
                         modelFn, self.numEpochs, newXdim, 2, self.batchSize)
                         #args += " %(GPU)s"
                         args += " %s " % (gpuId)
+                        print("2 ARGS", args)
                         self.runJob("xmipp_cone_deepalign", args, numberOfMpi=1)
                     except Exception as e:
                         raise Exception(
@@ -479,6 +492,13 @@ _noiseCoord   '0'
                 # remove(expSet)
 
     def predictStep(self):
+
+        #CAMBIAR DESPUES PARA QUE FUNCIONE TAMBIEN CON STEPS PARALLEL
+        myStr = os.environ["CUDA_VISIBLE_DEVICES"]
+        numGPU = myStr.split(',')
+        numGPU = numGPU[0]
+        print("Predict", myStr, numGPU)
+        sys.stdout.flush()
 
         mdNumCones = xmippLib.MetaData(self._getExtraPath("coneCenters.doc"))
         self.numCones = mdNumCones.size()
@@ -496,7 +516,10 @@ _noiseCoord   '0'
                                 xmippLib.MDL_XSIZE)
         args = "%s %s %d %d %d " % (
         imgsOutXmd, self._getExtraPath(), newXdim, self.numCones, numMax)
-        args += " %(GPU)s"
+        #args += " %(GPU)s"
+        args += " %s "%(numGPU)
+        print("AAAAARRRRGGGGSSSSS", args)
+        sys.stdout.flush()
         self.runJob("xmipp_cone_deepalign_predict", args, numberOfMpi=1)
 
         # Cuda Correlation step - creating the metadata
@@ -543,6 +566,7 @@ _noiseCoord   '0'
                                  '--maxShift 10 ' % (fnProjCone, fnExpCone, fnOutCone,
                                  self._getExtraPath())
                         params += ' --device %(GPU)s'
+                        #params += ' --device %d' %(numGPU)
                         self.runJob("xmipp_cuda_correlation", params, numberOfMpi=1)
                     else:
                         args = '-i %s --initgallery %s --odir %s --dontReconstruct --useForValidation %d ' % \
