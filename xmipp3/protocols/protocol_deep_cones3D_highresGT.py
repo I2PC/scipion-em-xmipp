@@ -27,7 +27,8 @@
 from os import remove
 from os.path import exists
 from pyworkflow import VERSION_1_2
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, IntParam, BooleanParam
+from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, \
+    IntParam, BooleanParam, GPU_LIST
 from pyworkflow.utils.path import moveFile, cleanPattern
 from pyworkflow.em.protocol import ProtRefine3D
 from shutil import copy
@@ -41,6 +42,7 @@ import cv2
 import pyworkflow.em.metadata as md
 from xmipp3.convert import createItemMatrix, setXmippAttributes
 import pyworkflow.em as em
+from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
         
 class XmippProtDeepCones3DGT(ProtRefine3D):
@@ -54,6 +56,13 @@ class XmippProtDeepCones3DGT(ProtRefine3D):
     
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       expertLevel=LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="GPU may have several cores. Set it to zero"
+                            " if you do not know what we are talking about."
+                            " First core index is 0, second 1 and so on."
+                            " In this protocol is not possible to use several GPUs.")
         form.addSection(label='Input')
         form.addParam('inputSet', PointerParam, label="Input images", pointerClass='SetOfParticles')
 
@@ -95,6 +104,7 @@ class XmippProtDeepCones3DGT(ProtRefine3D):
 
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
+
         self.lastIter = 0
         self.batchSize = 128 #1024
         self.imgsFn = self._getExtraPath('input_imgs.xmd')
@@ -359,9 +369,10 @@ _noiseCoord   '0'
                 fnLabels = self._getExtraPath('labels%d.txt'%idx)
 
                 try:
-                    self.runJob("xmipp_cone_deepalign", "%s %s %s %s %d %d %d %d -1" %
-                                (expSet, fnLabels, self._getExtraPath(),
-                                 modelFn, self.numEpochs, newXdim, 2, self.batchSize), numberOfMpi=1)
+		    args = "%s %s %s %s %d %d %d %d " % (expSet, fnLabels, self._getExtraPath(),
+                                 modelFn, self.numEpochs, newXdim, 2, self.batchSize)
+		    args+= " -1"#" %(GPU)s"
+                    self.runJob("xmipp_cone_deepalign", args, numberOfMpi=1)
                 except Exception as e:
                     raise Exception("ERROR: Please, if you are having memory problems, "
                                     "check the target resolution to work with lower dimensions.")
@@ -380,8 +391,9 @@ _noiseCoord   '0'
 
         numMax = int(self.numConesSelected)
         newXdim = readInfoField(self._getExtraPath(), "size",xmippLib.MDL_XSIZE)
-        self.runJob("xmipp_cone_deepalign_predict", "%s %s %d %d %d" %
-                    (imgsOutXmd, self._getExtraPath(), newXdim, self.numCones, numMax), numberOfMpi=1)
+        args = "%s %s %d %d %d " % (imgsOutXmd, self._getExtraPath(), newXdim, self.numCones, numMax)
+        args += " -1"#" %(GPU)s"
+        self.runJob("xmipp_cone_deepalign_predict", args, numberOfMpi=1)
         #AJ cuidado con el filtro, cambia self.imgsFn por imgsOutXmd en la linea anterior
 
         #Cuda Correlation step - creating the metadata
@@ -425,6 +437,7 @@ _noiseCoord   '0'
                     params = ' -i_ref %s -i_exp %s -o %s --odir %s --keep_best 1 ' \
                              '--maxShift 10 '%(fnProjCone, fnExpCone, fnOutCone,
                                                self._getExtraPath())
+                    params += ' --device %(GPU)s'
                     self.runJob("xmipp_cuda_correlation", params, numberOfMpi=1)
 
                 if numMax==1:
@@ -540,4 +553,5 @@ _noiseCoord   '0'
             methods.append("We evaluated %i input images %s regarding to volume %s."\
                            %(self.inputSet.get().getSize(), self.getObjectTag('inputSet'), self.getObjectTag('inputVolume')) )
         return methods
+
 

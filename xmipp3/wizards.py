@@ -41,7 +41,8 @@ from .protocols import (
     XmippProtMaskVolumes, XmippProtAlignVolume, XmippProtCL2D,
     XmippProtHelicalParameters, XmippProtConsensusPicking, XmippProtMonoRes,
     XmippProtRotSpectra, XmippProtReconstructHighRes, XmippProtExtractUnit,
-    XmippProtReconstructHeterogeneous, XmippMetaProtDiscreteHeterogeneityScheduler)
+    XmippProtReconstructHeterogeneous, XmippMetaProtDiscreteHeterogeneityScheduler,
+    XmippMetaProtGoldenHighRes)
 
 
 #===============================================================================
@@ -195,7 +196,8 @@ class XmippParticleMaskRadiusWizard(ParticleMaskRadiusWizard):
                 (XmippProtPreprocessParticles, ['backRadius']),
                 (XmippProtReconstructHighRes, ['particleRadius']),
                 (XmippProtReconstructHeterogeneous, ['particleRadius']),
-                (XmippMetaProtDiscreteHeterogeneityScheduler, ['particleRadius'])]
+                (XmippMetaProtDiscreteHeterogeneityScheduler, ['particleRadius']),
+                (XmippMetaProtGoldenHighRes, ['particleRadius'])]
 
     def _getParameters(self, protocol):
 
@@ -497,6 +499,7 @@ class XmippGaussianVolumesWizard(GaussianVolumesWizard):
         _value = params['value']
         _label = params['label']
         GaussianVolumesWizard.show(self, form, _value, _label, UNIT_PIXEL_FOURIER)
+
 
 
 

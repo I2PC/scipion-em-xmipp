@@ -87,10 +87,13 @@ class XmippMetaprotocolGoldenHighResViewer(ProtocolViewer):
         a = xplotter.createSubPlot("FSC", "Frequency (1/A)", "FSC")
         legends = []
         i=0
-        for line in fnFSCs:
+        for i, line in enumerate(fnFSCs):
             fnFSC = line[:-2]
             if exists(fnFSC):
-                legends.append('Group %s' % chr(65+i))
+                if i<10:
+                    legends.append('Group %s' % chr(65+i))
+                else:
+                    legends.append('Local %d'%(i-9))
                 self._plotFSC(a, fnFSC)
                 xplotter.showLegend(legends)
             i=i+1
@@ -117,4 +120,5 @@ class XmippMetaprotocolGoldenHighResViewer(ProtocolViewer):
         if value:
             inv = 1/value
         return "1/%0.2f" % inv
+
 

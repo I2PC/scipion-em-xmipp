@@ -156,6 +156,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
     #--------------------------- STEPS functions -------------------------------
 
     def _processMovie(self, movie):
+
         movieFolder = self._getOutputMovieFolder(movie)
 
         x, y, n = movie.getDim()
