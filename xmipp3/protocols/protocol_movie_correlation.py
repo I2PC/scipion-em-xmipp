@@ -239,7 +239,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
             self.runJob('xmipp_movie_alignment_correlation', args, numberOfMpi=1)
 
         if self.doComputePSD:
-            self.computePSDs(movie, fnInitial, fnAvg)
+            self.computePSDImages(movie, fnInitial, fnAvg)
             # If the micrograph was only saved for computing the PSD
             # we can remove it
             pwutils.cleanPath(fnInitial)

@@ -151,8 +151,7 @@ class TestGpuCorrSemiStreaming(BaseTest):
         if protImportAvgs.isFailed():
             self.assertTrue(False)
         protImportMics = self.importMicrographs()
-        if protImportMics.isFailed():
-            self.assertTrue(False)
+        self.assertFalse(protImportMics.isFailed(), 'ImportMics has failed.')
 
         protImportMicsStr = self.importMicrographsStr\
             (protImportMics.outputMicrographs)
@@ -163,8 +162,9 @@ class TestGpuCorrSemiStreaming(BaseTest):
             if counter > 100:
                 break
             counter += 1
-        if protImportMicsStr.isFailed():
-            self.assertTrue(False)
+        self.assertFalse(protImportMicsStr.isFailed(), 'Create stream data has failed.')
+        self.assertTrue(protImportMicsStr.hasAttribute('outputMicrographs'),
+                        'Create stream data has no outputMicrographs in more than 3min.')
 
         protInvContr = self.invertContrast(protImportMicsStr.outputMicrographs)
         counter = 1
@@ -174,7 +174,9 @@ class TestGpuCorrSemiStreaming(BaseTest):
             if counter > 100:
                 break
             counter += 1
-        self.assertFalse(protInvContr.isFailed())
+        self.assertFalse(protInvContr.isFailed(), 'protInvContr has failed.')
+        self.assertTrue(protInvContr.hasAttribute('outputMicrographs'),
+                        'protInvContr has no outputMicrographs in more than 3min.')
 
         protCtf = self.calculateCtf(protInvContr.outputMicrographs)
         counter = 1
@@ -184,8 +186,9 @@ class TestGpuCorrSemiStreaming(BaseTest):
             if counter > 100:
                 break
             counter += 1
-        if protCtf.isFailed():
-            self.assertTrue(False)
+        self.assertFalse(protCtf.isFailed(), 'CTFfind4 has failed.')
+        self.assertTrue(protCtf.hasAttribute('outputCTF'),
+                        'CTFfind4 has no outputCTF in more than 3min.')
 
         protPicking = self.runPicking(protInvContr.outputMicrographs)
         counter = 1
@@ -195,8 +198,9 @@ class TestGpuCorrSemiStreaming(BaseTest):
             if counter > 100:
                 break
             counter += 1
-        if protPicking.isFailed():
-            self.assertTrue(False)
+        self.assertFalse(protPicking.isFailed(), 'Eman Sparx has failed.')
+        self.assertTrue(protPicking.hasAttribute('outputCoordinates'),
+                        'Eman Sparx has no outputCoordinates in more than 3min.')
 
         protExtract = self.runExtractParticles(protPicking.outputCoordinates,
                                                protCtf.outputCTF)
@@ -207,18 +211,27 @@ class TestGpuCorrSemiStreaming(BaseTest):
             if counter > 100:
                 break
             counter += 1
-        if protExtract.isFailed():
-            self.assertTrue(False)
+        self.assertFalse(protExtract.isFailed(), 'Extract particles has failed.')
+        self.assertTrue(protExtract.hasAttribute('outputParticles'),
+                        'Extract particles has no outputParticles in more than 3min.')
 
         protClassify = self.runClassify(protExtract.outputParticles,
                                         protImportAvgs.outputAverages)
+        counter = 1
         while protClassify.getStatus()!=STATUS_FINISHED:
+            time.sleep(2)
             protClassify = self._updateProtocol(protClassify)
-            if protClassify.isFailed():
-                self.assertTrue(False)
-                break
-        if not protClassify.hasAttribute('outputClasses'):
-            self.assertTrue(False)
-        if protClassify.outputClasses.getSize() != \
-                protImportAvgs.outputAverages.getSize():
-            self.assertTrue(False)
+            self.assertFalse(protClassify.isFailed(), 'GL2D-static has failed.')
+            if counter > 100:
+                self.assertTrue(protClassify.hasAttribute('outputClasses'),
+                                'GL2D-static has no outputClasses in more than 3min.')
+                self.assertEqual(protClassify.outputClasses.getSize(),
+                                 protImportAvgs.outputAverages.getSize(),
+                                 'GL2D-static returned a wrong number of classes.')
+            counter += 1
+
+        self.assertTrue(protClassify.hasAttribute('outputClasses'),
+                        'GL2D-static has no outputClasses at the end')
+        self.assertEqual(protClassify.outputClasses.getSize(),
+                         protImportAvgs.outputAverages.getSize(),
+                         'GL2D-static returned a wrong number of classes at the end.')

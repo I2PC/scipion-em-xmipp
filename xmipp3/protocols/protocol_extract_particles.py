@@ -445,7 +445,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         """
         samplingPicking = self.getCoordSampling()
         samplingExtract = self.getMicSampling()
-        f = samplingPicking / samplingExtract
+        f = float(samplingPicking) / samplingExtract
         return f / self.downFactor.get() if self._doDownsample() else f
 
     def getBoxSize(self):

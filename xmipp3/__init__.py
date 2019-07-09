@@ -123,7 +123,16 @@ class Plugin(pyworkflow.em.Plugin):
         scons = tryAddPipModule(env, 'scons', '3.0.4')
         joblib = tryAddPipModule(env, 'joblib', '0.11', target='joblib*')
 
-        xmippDeps = ['hdf5', scons, joblib]
+        # scikit
+        scipy = tryAddPipModule(env, 'scipy', '0.14.0', default=True,
+                                deps=['lapack', 'matplotlib'])
+        cython = tryAddPipModule(env, 'cython', '0.22', target='Cython-0.22*',
+                                 default=True)
+        scikit_learn = tryAddPipModule(env, 'scikit-learn', '0.19.1',
+                                       target='scikit_learn*',
+                                       default=True, deps=[scipy, cython])
+
+        xmippDeps = ['hdf5', scons, joblib, scikit_learn]
         ## XMIPP SOFTWARE ##
         lastCompiled = "lib/libXmippJNI.so"
         targets = [cls.getHome('bin', 'xmipp_reconstruct_significant'),
@@ -195,15 +204,17 @@ def tryAddPipModule(env, moduleName, *args, **kwargs):
 def installDeepLearningToolkit(plugin, env):
     deepLearningTools = []
 
-    # scikit
-    scipy = tryAddPipModule(env, 'scipy', '0.14.0', default=False,
-                            deps=['lapack', 'matplotlib'])
-    cython = tryAddPipModule(env, 'cython', '0.22', target='Cython-0.22*',
-                             default=False)
-    scikit_learn = tryAddPipModule(env, 'scikit-learn', '0.19.1',
-                                   target='scikit_learn*',
-                                   default=False, deps=[scipy, cython])
-    deepLearningTools.append(scikit_learn)
+    # pandas
+    pandas = tryAddPipModule(env, 'pandas', '0.20.1',
+                                   target='pandas*',
+                                   default=False, deps=['scipy'])
+    deepLearningTools.append(pandas)
+
+    # scikit-image
+    skikit_image = tryAddPipModule(env, 'scikit-image', '0.14.2',
+                                   target='scikit_image*',
+                                   default=False, deps=['scipy'])
+    deepLearningTools.append(skikit_image)
 
     # Keras deps
     unittest2 = tryAddPipModule(env, 'unittest2', '0.5.1', target='unittest2*',
@@ -248,7 +259,7 @@ def installDeepLearningToolkit(plugin, env):
                                         % (pipCmdScipion, tensorFlowTarget))
         deepLearningTools.append(tensor)
 
-        keras = tryAddPipModule(env, 'keras', '2.1.5', target='keras*',
+        keras = tryAddPipModule(env, 'keras', '2.2.2', target='keras*',
                                 default=False, deps=[cv2, h5py])
         deepLearningTools.append(keras)
         cudnnInstallCmd = ("cudnnenv install %s ; "
