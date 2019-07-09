@@ -121,6 +121,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
 
         deps = []
         deps2 = []
+
         self.lastIter = 0
         self.batchSize = 128  # 1024
         self.imgsFn = self._getExtraPath('input_imgs.xmd')
@@ -131,6 +132,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
 
         # Trainig steps
         firstStepId = self._insertFunctionStep("prepareImagesForTraining", prerequisites=[firstStepId])
+
 
         #myStr = self.gpuList.get()
         #import os
@@ -370,6 +372,7 @@ _noiseCoord   '0'
         self.runJob("xmipp_phantom_project",
                     "-i %s -o %s --method fourier 1 0.5 "
                     "--params %s" % (fnVol, fnProjs, fnParams), numberOfMpi=self.numberOfMpi.get())
+
         cleanPattern(self._getExtraPath('uniformProjections'))
 
     def generateExpImagesStep(self, Nimgs, nameProj, nameExp, label, boolNoise):
@@ -508,6 +511,16 @@ _noiseCoord   '0'
         mdNumCones = xmippLib.MetaData(self._getExtraPath("coneCenters.doc"))
         self.numCones = mdNumCones.size()
 
+        #CAMBIAR DESPUES PARA QUE FUNCIONE TAMBIEN CON STEPS PARALLEL
+        myStr = os.environ["CUDA_VISIBLE_DEVICES"]
+        numGPU = myStr.split(',')
+        numGPU = numGPU[0]
+        print("Predict", myStr, numGPU)
+        sys.stdout.flush()
+
+        mdNumCones = xmippLib.MetaData(self._getExtraPath("coneCenters.doc"))
+        self.numCones = mdNumCones.size()
+
         imgsOutStk = self._getExtraPath('images_out_filtered.stk')
         imgsOutXmd = self._getExtraPath('images_out_filtered.xmd')
         self.runJob("xmipp_transform_filter", " -i %s -o %s "
@@ -537,7 +550,6 @@ _noiseCoord   '0'
             mdConeList.append(xmippLib.MetaData())
         mdIn = xmippLib.MetaData(self.imgsFn)
         #allInFns = mdIn.getColumnValues(xmippLib.MDL_IMAGE)
-
 
         for i in range(self.numCones):
 
@@ -571,7 +583,6 @@ _noiseCoord   '0'
 
                 fnProjCone = self._getExtraPath('projectionsCudaCorr%d.xmd' % (i + 1))
                 fnOutCone = 'outCone%d.xmd' % (i + 1)
-
 
                 if not exists(self._getExtraPath(fnOutCone)):
                     # Correlation step - calling cuda program
@@ -687,7 +698,6 @@ _noiseCoord   '0'
                     row.readFromMd(mdCones[coneMax - 1], objId)
                     row.addToMd(mdFinal)
             mdFinal.write(fnFinal)
-
 
     def createOutputStep(self):
 

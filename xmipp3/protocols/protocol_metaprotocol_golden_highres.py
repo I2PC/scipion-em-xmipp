@@ -268,8 +268,18 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                         #self = self._updateProtocol(self)
 
         #Local iterations
-        numLocalIters = 3
+        numLocalIters = 10
         for i in range(numLocalIters):
+
+            if i>1:
+                print("Checking the change in the target resolution", minPrevRes, maxPrevRes, prevTargetResolution, targetResolution)
+                minPrevRes = prevTargetResolution-(prevTargetResolution*0.1)
+                maxPrevRes = prevTargetResolution+(prevTargetResolution*0.1)
+                if targetResolution>minPrevRes and targetResolution<maxPrevRes:
+                    print("TARGET RESOLUTION IS STUCK", minPrevRes, maxPrevRes, targetResolution)
+                    break
+
+            prevTargetResolution = targetResolution
 
             print("Target resolution - INPUT local %d: %f " % ((i+1), float(targetResolution)))
             sys.stdout.flush()
@@ -500,8 +510,10 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 p1 = clf2.weights_[1]/(clf2.weights_[0]+clf2.weights_[1])
                 mu0=clf2.means_[0,0]
                 mu1=clf2.means_[1,0]
-                std0 = clf2.covars_[0,0]
-                std1 = clf2.covars_[1,0]
+                var0 = clf2.covars_[0,0]
+                var1 = clf2.covars_[1,0]
+                std0 = math.sqrt(var0)
+                std1 = math.sqrt(var1)
                 termR = math.log(p0)-math.log(p1)-math.log(std0/std1)
                 for row in iterRows(mdParticles):
                     objId = row.getObjId()
@@ -509,14 +521,16 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                         z = row.getValue(xmippLib.MDL_MAXCC)
                     else:
                         z = row.getValue(xmippLib.MDL_COST)
-                    termL = (((z-mu1)**2)/(2*(std1**2))) + (((z-mu0)**2)/(2*(std0**2)))
+                    termL = (((z-mu1)**2)/(2*(var1))) + (((z-mu0)**2)/(2*(var0)))
                     if termL<termR:
+                        print("Descartamos particula:", termL, termR, z)
                         mdParticles.setValue(xmippLib.MDL_ENABLED, 0, objId)
                 mdParticles.write(fnOutParticles)
 
 
-            #AJ cleaning with shift (removing particles with shift values higher than +-3sigma)
+            #AJ cleaning with shift (removing particles with shift values higher than +-4sigma)
             #also cleaning with negative correlations
+            #mdParticles = xmippLib.MetaData(fnOutParticles) # AJ Creo que esto no hace falta
             shiftXList = mdParticles.getColumnValues(xmippLib.MDL_SHIFT_X)
             shiftYList = mdParticles.getColumnValues(xmippLib.MDL_SHIFT_Y)
             stdShiftX = np.std(np.asanyarray(shiftXList))
@@ -529,7 +543,7 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                     cc = row.getValue(xmippLib.MDL_MAXCC)
                 else:
                     cc = 1.0
-                if x>4*stdShiftX or x<-4*stdShiftX or y>4*stdShiftY or y<-4*stdShiftY or cc<0: #poner 4 stds y 0 en cc
+                if x>4*stdShiftX or x<-4*stdShiftX or y>4*stdShiftY or y<-4*stdShiftY or cc<0.0: #poner 4 stds y 0 en cc
                     print("Shift or negative CC condition", objId)
                     sys.stdout.flush()
                     mdParticles.setValue(xmippLib.MDL_ENABLED, 0, objId)
