@@ -69,9 +69,13 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         form.addParam('optimizeGray', BooleanParam, default=False,
                       label='Optimize gray scale')
         form.addParam('ignoreCTF', BooleanParam, default=True,
-                      label='Ignore CTF')
+                      label='Ignore CTF',
+                      help='By ignoring the CTF you will create projections more similar to what a person expects, '
+                           'while by using the CTF you will create projections more similar to what the microscope sees')
         form.addParam('evaluateResiduals', BooleanParam, default=False, expertLevel=LEVEL_ADVANCED,
-                      label='Evaluate residuals')
+                      label='Evaluate residuals',
+                      help='If this option is chosen, then the residual covariance matrix is calculated and characterized. '
+                           'But this option takes time and disk space')
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group', 
                       help='See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
