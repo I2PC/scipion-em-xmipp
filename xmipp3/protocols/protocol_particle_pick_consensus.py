@@ -94,8 +94,8 @@ class XmippProtConsensusPicking(ProtParticlePicking):
 #--------------------------- INSERT steps functions ---------------------------
     def _insertAllSteps(self):
         self.inputMics = 0
-        self.check = 0
-        self.mics = []
+        self.processedMics = []
+        self.checkedMics = set()
         self.setOfCoords = []
         self.inputs = self.inputCoordinates[0].get()#min([coor.get() for coor in ])
         coorSteps = self.insertNewCoorsSteps([])
@@ -130,56 +130,37 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         self._checkNewInput()
         self._checkNewOutput()
 
-    def getLastMicId(self, coordSet):
-        """ Returns the last picked micrograph. """
-        ids = []
-        for coord in coordSet.get().iterItems(
-                orderBy='id', direction='DESC'):
-            ids.append(coord.getMicId())
-        print("%s: %s" % (coordSet.getObjLabel(), ids))
-        sys.stdout.flush()
-        return ids[0]
-
     def _checkNewInput(self):
         streamClosed = []
-        lastMics = []
+        first = True
         for idx, coordSet in enumerate(self.inputCoordinates):
             coorSet = SetOfCoordinates(filename=coordSet.get().getFileName())
             coorSet._xmippMd = String()
             coorSet.loadAllProperties()
             streamClosed.append(coorSet.isStreamClosed())
             coorSet.close()
-            lastMics.append(self.getLastMicId(coordSet))
+            currentPickMics = {micAgg["_micId"] for micAgg in
+                               coordSet.aggregate(["MAX"], "_micId", ["_micId"])}
+            if first:  # to initialize
+                pickedMics = currentPickMics
+                allMics = currentPickMics
+                first = False
+            else:  # available mics are those ready for all pickers
+                pickedMics.intersection_update(currentPickMics)
+                allMics.union(currentPickMics)
 
         self.streamClosed = all(streamClosed)
-        lastMic = min(lastMics)
-        if lastMic <= self.check:
-            return
-        print("lastMics: %s" % lastMics)
-        sys.stdout.flush()
-        inMics = self.inputCoordinates[0].get().getMicrographs()
         if self.streamClosed:
-            if self.check == 0:
-                # Non streaming case
-                newMics = [mic.clone() for mic in inMics]
-            else:
-                # Last streaming iteration
-                pendingMics = [x for x in range(max(lastMics))
-                               if x not in self.mics]
-                pendingStr = (' OR id IN ( %s )' % ', '.join([pendingMics])
-                              if pendingMics else '')
-                newMics = [mic.clone() for mic in
-                           inMics.iterItems(orderBy='id',
-                                            where='id BETWEEN %d AND %d%s'
-                                            % (self.check, lastMic + 1,
-                                               pendingStr))]
-        else:
-            newMics = [mic.clone() for mic in
-                       inMics.iterItems(orderBy='id',
-                                        where='id BETWEEN %d AND %d'
-                                              % (self.check, lastMic+1))]
-        print("newMics: %s" % [x.getObjLabel for x in newMics])
-        self.check = lastMic
+            # for non streaming and the last iteration of streaming (do all or the rest)
+            newMicIds = allMics.difference(self.checkedMics)
+        else:  # for streaming processing only go for the ready mics in all pickers
+            newMicIds = pickedMics.difference(self.checkedMics)
+        self.checkedMics.update(newMicIds)
+
+        newMics = []
+        inMics = self.inputCoordinates[0].get().getMicrographs()
+        for micId in newMicIds:
+            newMics.append(inMics[micId].clone())
 
         if len(newMics) > 0:
             fDeps = self.insertNewCoorsSteps(newMics)
@@ -193,7 +174,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         if getattr(self, 'finished', False):
             return
         self.finished = self.streamClosed and \
-                        (self.inputMics == len(self.mics))
+                        (self.inputMics == len(self.processedMics))
         streamMode = Set.STREAM_CLOSED if getattr(self, 'finished', False) \
                      else Set.STREAM_OPEN
         if len(self.setOfCoords) > 0:
@@ -320,7 +301,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                     aux.setMicrograph(micrograph)
                     aux.setPosition(coord[0], coord[1])
                     self.setOfCoords.append(aux)
-        self.mics.append(micrograph.getObjId())
+        self.processedMics.append(micrograph.getObjId())
 
     def _summary(self):
         message = []
