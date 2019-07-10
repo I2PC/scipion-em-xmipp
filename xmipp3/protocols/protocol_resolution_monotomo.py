@@ -88,9 +88,8 @@ class XmippProtMonoTomo(ProtAnalysis3D):
 
         group = form.addGroup('Extra parameters')
         line = group.addLine('Resolution Range (Å)',
-                            help="Resolution range (and step) to evaluate "
-                                 "the local resolution. If step is missing, "
-                                 "0.25 is used.")
+                            help="Resolution range (and step in expert mode) "
+                                 "to evaluate the local resolution.")
         
         group.addParam('significance', FloatParam, default=0.95, 
                        expertLevel=LEVEL_ADVANCED,

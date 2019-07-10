@@ -226,7 +226,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
         fnRoot = "extra/"
         scriptFile = self.protocol._getPath('Chimera_resolution.cmd')
         fhCmd = open(scriptFile, 'w')
- 	imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
+        imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
         if not os.path.exists(imageFile):
             imageFile = replaceExt(imageFile, 'vol')
         
@@ -272,7 +272,6 @@ class XmippMonoResViewer(LocalResolutionViewer):
             linePrefix = "scolor #0 volume #1 perPixel false cmap "
 
         else:
-
             tmpFileName = os.path.abspath(self.protocol._getTmpPath("axis.bild"))
             Chimera.createCoordinateAxisFile(dim,
                                              bildFileName=tmpFileName,
@@ -298,7 +297,6 @@ class XmippMonoResViewer(LocalResolutionViewer):
                         % (imageFileSmprt, x_output, y_output, z_output))
 
             #### Check if the coordinate system works for a set of volumes
-
             fhCmd.write("volume #2 hide\n")
 
             linePrefix = "scolor #1 volume #2 perPixel false cmap "
