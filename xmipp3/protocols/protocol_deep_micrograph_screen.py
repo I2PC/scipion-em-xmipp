@@ -281,7 +281,16 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(STATUS_NEW)
 
-
+    def _getScale(self):
+      if self.micsSource==SAME_AS_PICKING or self.useOtherScale.get()==1:
+        boxSize= self.getBoxSize()
+        micSetPtr = self.getInputMicrographs()
+        scale= 1
+      else:
+        boxSize= self.inputCoordinates.get().getBoxSize()
+        micSetPtr = self.inputCoordinates.get().getMicrographs()
+        scale=(1./self.getBoxScale())
+      return scale
     def _updateOutputCoordSet(self, micList, streamMode):
 
         # Do no proceed if there is not micrograph ready
@@ -300,12 +309,9 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
             if self.micsSource==SAME_AS_PICKING or self.useOtherScale.get()==1:
               boxSize= self.getBoxSize()
               micSetPtr = self.getInputMicrographs()
-              scale= 1
-              print("AQUI", boxSize)
             else:
               boxSize= self.inputCoordinates.get().getBoxSize()
               micSetPtr = self.inputCoordinates.get().getMicrographs()
-              scale=(1./self.getBoxScale())
             outputCoords = self._createSetOfCoordinates(micSetPtr,
                                                         suffix=self.getAutoSuffix())
             outputCoords.copyInfo(self.inputCoordinates.get())
@@ -313,7 +319,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         else:
             outputCoords.enableAppend()
         self.info("Reading coordinates from mics: %s" % ','.join([mic.strId() for mic in micList]))
-        readSetOfCoordinates(outputDir, micList, outputCoords, scale=scale)
+        readSetOfCoordinates(outputDir, micList, outputCoords, scale= self._getScale())
         self.debug(" _updateOutputCoordSet Stream Mode: %s " % streamMode)
         self._updateOutputSet(self.getOutputName(), outputCoords, streamMode)
 
