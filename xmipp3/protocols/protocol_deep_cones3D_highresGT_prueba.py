@@ -138,7 +138,11 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         #import os
         #print('os.environ["CUDA_VISIBLE_DEVICES"]',os.environ["CUDA_VISIBLE_DEVICES"])
         #myStr = " "
-        myStr = os.environ["CUDA_VISIBLE_DEVICES"]
+        try:
+            myStr = os.environ["CUDA_VISIBLE_DEVICES"]
+        except Exception as e:
+	    myStr = self.gpuList.get()
+
 	print("AAAAA", myStr)
         numGPU = myStr.split(',')
         print("GPUUUUU", myStr, numGPU)
@@ -195,7 +199,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
                         (self.imgsFn,
                          self._getExtraPath('scaled_particles.stk'),
                          self._getExtraPath('scaled_particles.xmd'),
-                         self.newXdim))
+                         self.newXdim), numberOfMpi=self.numberOfMpi.get())
             moveFile(self._getExtraPath('scaled_particles.xmd'), self.imgsFn)
 
         from pyworkflow.em.convert import ImageHandler
@@ -218,7 +222,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
                         (self.trainImgsFn,
                          self._getExtraPath('scaled_train_particles.stk'),
                          self._getExtraPath('scaled_train_particles.xmd'),
-                         self.newXdim))
+                         self.newXdim), numberOfMpi=self.numberOfMpi.get())
             moveFile(self._getExtraPath('scaled_train_particles.xmd'),
                      self.trainImgsFn)
 
@@ -339,7 +343,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         if self.modelPretrain.get() is False:
             fnToFilter = self._getExtraPath('projectionsExp%d.xmd' % (lastLabel))
             self.runJob("xmipp_transform_filter", " -i %s --fourier low_pass %f" %
-                        (fnToFilter, 0.15), numberOfMpi=self.numberOfMpi.get())
+                        (fnToFilter, 0.15), numberOfMpi=1)
 
     def projectStep(self, numProj, iniRot, endRot, iniTilt, endTilt, fn, idx):
 
@@ -496,7 +500,8 @@ _noiseCoord   '0'
                         expSet, fnLabels, self._getExtraPath(),
                         modelFn, self.numEpochs, newXdim, 2, self.batchSize)
                         #args += " %(GPU)s"
-                        args += " %s " % (gpuId)
+                        #args += " %s " % (gpuId)
+			args += " %s " %(int(idx % totalGpu))
 			print("2 ARGS", args)
                         self.runJob("xmipp_cone_deepalign", args, numberOfMpi=1)
                     except Exception as e:
@@ -511,36 +516,38 @@ _noiseCoord   '0'
         mdNumCones = xmippLib.MetaData(self._getExtraPath("coneCenters.doc"))
         self.numCones = mdNumCones.size()
 
-        #CAMBIAR DESPUES PARA QUE FUNCIONE TAMBIEN CON STEPS PARALLEL
-        myStr = os.environ["CUDA_VISIBLE_DEVICES"]
-        numGPU = myStr.split(',')
-        numGPU = numGPU[0]
-        print("Predict", myStr, numGPU)
-        sys.stdout.flush()
+        if not exits(self._getExtraPath('conePrediction.txt')):
+            myStr = os.environ["CUDA_VISIBLE_DEVICES"]
+            numGPU = myStr.split(',')
+            numGPU = numGPU[0]
+            print("Predict", myStr, numGPU)
+            sys.stdout.flush()
 
-        mdNumCones = xmippLib.MetaData(self._getExtraPath("coneCenters.doc"))
-        self.numCones = mdNumCones.size()
+            mdNumCones = xmippLib.MetaData(self._getExtraPath("coneCenters.doc"))
+            self.numCones = mdNumCones.size()
 
-        imgsOutStk = self._getExtraPath('images_out_filtered.stk')
-        imgsOutXmd = self._getExtraPath('images_out_filtered.xmd')
-        self.runJob("xmipp_transform_filter", " -i %s -o %s "
+            imgsOutStk = self._getExtraPath('images_out_filtered.stk')
+            imgsOutXmd = self._getExtraPath('images_out_filtered.xmd')
+            self.runJob("xmipp_transform_filter", " -i %s -o %s "
                                               "--save_metadata_stack %s "
                                               "--keep_input_columns "
                                               "--fourier low_pass %f " %
-                    (self.imgsFn, imgsOutStk, imgsOutXmd, 0.15), numberOfMpi=self.numberOfMpi.get())
+                    (self.imgsFn, imgsOutStk, imgsOutXmd, 0.15), numberOfMpi=1)
 
-        numMax = int(self.numConesSelected)
-        newXdim = readInfoField(self._getExtraPath(), "size",
+            numMax = int(self.numConesSelected)
+            newXdim = readInfoField(self._getExtraPath(), "size",
                                 xmippLib.MDL_XSIZE)
-        args = "%s %s %d %d %d " % (
-        imgsOutXmd, self._getExtraPath(), newXdim, self.numCones, numMax)
-        args += " %(GPU)s"
-	#AJ dejar que se envie el trabajo de prediccion a todas las GPUs disponibles??
-	#args += " %s "%(gpuId)
-        self.runJob("xmipp_cone_deepalign_predict", args, numberOfMpi=1)
+            args = "%s %s %d %d %d " % (imgsOutXmd, self._getExtraPath(), newXdim, self.numCones, numMax)
+            args += " %(GPU)s"
+	    #AJ dejar que se envie el trabajo de prediccion a todas las GPUs disponibles??
+	    #args += " %s "%(gpuId)
+            self.runJob("xmipp_cone_deepalign_predict", args, numberOfMpi=1)
 
 
     def correlationCudaStep(self, thIdx, gpuId, totalGpu):
+
+        mdNumCones = xmippLib.MetaData(self._getExtraPath("coneCenters.doc"))
+        self.numCones = mdNumCones.size()
 
         # Cuda Correlation step - creating the metadata
         predCones = np.loadtxt(self._getExtraPath('conePrediction.txt'))
@@ -589,13 +596,16 @@ _noiseCoord   '0'
                     params = ' -i_ref %s -i_exp %s -o %s --odir %s --keep_best 1 ' \
                                  '--maxShift 10 ' % (fnProjCone, fnExpCone, fnOutCone,
                                  self._getExtraPath())
-                    params += ' --device %(GPU)s'
-		    #params += ' --device %d' %(int(gpuId))
+                    #params += ' --device %(GPU)s'
+		    params += ' --device %d' %(int(idx % totalGpu))
                     self.runJob("xmipp_cuda_correlation", params, numberOfMpi=1)
 
 
 
     def correlationSignificantStep(self):
+
+        mdNumCones = xmippLib.MetaData(self._getExtraPath("coneCenters.doc"))
+        self.numCones = mdNumCones.size()
 
         # Cuda Correlation step - creating the metadata
         predCones = np.loadtxt(self._getExtraPath('conePrediction.txt'))
@@ -645,6 +655,12 @@ _noiseCoord   '0'
 
     def createOutputMetadataStep(self):
 
+        mdNumCones = xmippLib.MetaData(self._getExtraPath("coneCenters.doc"))
+        self.numCones = mdNumCones.size()
+	numMax = int(self.numConesSelected)
+        mdIn = xmippLib.MetaData(self.imgsFn)
+        allInFns = mdIn.getColumnValues(xmippLib.MDL_IMAGE)
+
         coneFns = []
         coneCCs = []
         mdCones = []
@@ -653,7 +669,7 @@ _noiseCoord   '0'
 
 	    fnOutCone = 'outCone%d.xmd' % (i + 1)
 
-            if exists(fnOutCone):             
+            if exists(self._getExtraPath(fnOutCone)):             
 
                 if numMax == 1:
                     if not exists(fnFinal):
