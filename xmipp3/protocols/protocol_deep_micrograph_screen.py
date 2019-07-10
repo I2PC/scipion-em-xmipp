@@ -217,7 +217,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
             if self.useQueueForSteps() or self.useQueue():
                 args += ' -g all '
             else:
-                args += ' -g %(GPU)s'
+                args += ' -g %s'%(",".join([str(elem) for elem in self.getGpuList()]))
         else:
             args += ' -g -1'
             
@@ -283,12 +283,8 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
     def _getScale(self):
       if self.micsSource==SAME_AS_PICKING or self.useOtherScale.get()==1:
-        boxSize = self.getBoxSize()
-        micSetPtr = self.getInputMicrographs()
         scale= 1
       else:
-        boxSize= self.inputCoordinates.get().getBoxSize()
-        micSetPtr = self.inputCoordinates.get().getMicrographs()
         scale=(1./self.getBoxScale())
       return scale
 
