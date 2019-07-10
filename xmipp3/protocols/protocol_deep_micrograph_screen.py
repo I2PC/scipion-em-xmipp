@@ -283,7 +283,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
     def _getScale(self):
       if self.micsSource==SAME_AS_PICKING or self.useOtherScale.get()==1:
-        boxSize= self.getBoxSize()
+        boxSize = self.getBoxSize()
         micSetPtr = self.getInputMicrographs()
         scale= 1
       else:
@@ -291,6 +291,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         micSetPtr = self.inputCoordinates.get().getMicrographs()
         scale=(1./self.getBoxScale())
       return scale
+
     def _updateOutputCoordSet(self, micList, streamMode):
 
         # Do no proceed if there is not micrograph ready
@@ -307,11 +308,12 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
         if firstTime:
             if self.micsSource==SAME_AS_PICKING or self.useOtherScale.get()==1:
-              boxSize= self.getBoxSize()
+              boxSize = self.getBoxSize()
               micSetPtr = self.getInputMicrographs()
             else:
-              boxSize= self.inputCoordinates.get().getBoxSize()
+              boxSize = self.inputCoordinates.get().getBoxSize()
               micSetPtr = self.inputCoordinates.get().getMicrographs()
+              
             outputCoords = self._createSetOfCoordinates(micSetPtr,
                                                         suffix=self.getAutoSuffix())
             outputCoords.copyInfo(self.inputCoordinates.get())
