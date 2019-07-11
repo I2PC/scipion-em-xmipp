@@ -388,7 +388,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                             'keepBest': self.keepBest.get(),
                             'maxshift': self.maximumShift,
                             'outputClassesFile': filename,
-                            'device': self.gpuList.get(),
+                            'device': int(self.gpuList.get()),
                             }
         else:
             filename = 'general_level%03d' % level + '_classes.xmd'
