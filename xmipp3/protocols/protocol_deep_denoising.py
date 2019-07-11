@@ -89,12 +89,12 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                             '*Predict*: The particles are denoised with a '
                             'pretrained model')
 
-        form.addParam('continueTraining', params.BooleanParam, default = True,
+        form.addParam('continueTraining', params.BooleanParam, default = False,
                       condition='modelTrainPredMode==%d'%ITER_TRAIN,
                       label='Continue training? (or train from scratch)', help='Setting "yes" '
                       'you can continue training from pretrained model '
                       ' or your previous executions. If you choose'
-                      '"no" the model will be trained from scratch')
+                      '"no" the model will be trained from scratch. yes option is experimental')
 
         form.addParam('customModelOverPretrain', params.BooleanParam, default = False,
                       condition='modelTrainPredMode==%d or continueTraining'%ITER_PREDICT,
