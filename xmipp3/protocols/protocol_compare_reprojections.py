@@ -68,6 +68,14 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                       label='Use input angular assignment (if available)')
         form.addParam('optimizeGray', BooleanParam, default=False,
                       label='Optimize gray scale')
+        form.addParam('ignoreCTF', BooleanParam, default=True,
+                      label='Ignore CTF',
+                      help='By ignoring the CTF you will create projections more similar to what a person expects, '
+                           'while by using the CTF you will create projections more similar to what the microscope sees')
+        form.addParam('evaluateResiduals', BooleanParam, default=False, expertLevel=LEVEL_ADVANCED,
+                      label='Evaluate residuals',
+                      help='If this option is chosen, then the residual covariance matrix is calculated and characterized. '
+                           'But this option takes time and disk space')
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group', 
                       help='See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
@@ -92,8 +100,10 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                                      anglesFn, self.inputVolume.get().getDim()[0])
         else:
             anglesFn=self.imgsFn
+
         self._insertFunctionStep("produceResiduals", vol.getFileName(), anglesFn, vol.getSamplingRate())
-        self._insertFunctionStep("evaluateResiduals")
+        if self.evaluateResiduals.get():
+            self._insertFunctionStep("evaluateResiduals")
         self._insertFunctionStep("createOutputStep")
 
     #--------------------------- STEPS functions ---------------------------------------------------
@@ -115,11 +125,15 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
     def produceResiduals(self, fnVol, fnAngles, Ts):
         fnVol = self._getTmpPath("volume.vol")
         anglesOutFn=self._getExtraPath("anglesCont.stk")
-        residualsOutFn=self._getExtraPath("residuals.stk")
+
         projectionsOutFn=self._getExtraPath("projections.stk")
         xdim=self._getDimensions()
-        args="-i %s -o %s --ref %s --optimizeAngles --optimizeShift --max_shift %d --oresiduals %s --oprojections %s --sampling %f"%\
-                    (fnAngles,anglesOutFn,fnVol,floor(xdim*0.05),residualsOutFn,projectionsOutFn,Ts)
+        args="-i %s -o %s --ref %s --optimizeAngles --optimizeShift --max_shift %d --oprojections %s --sampling %f"%\
+                    (fnAngles,anglesOutFn,fnVol,floor(xdim*0.05),projectionsOutFn,Ts)
+        if self.evaluateResiduals:
+            args+=" --oresiduals %s"%self._getExtraPath("residuals.stk")
+        if self.ignoreCTF:
+            args+=" --ignoreCTF"
         if self.optimizeGray:
             args+="--optimizeGray --max_gray_scale 0.95 "
         self.runJob("xmipp_angular_continuous_assign2", args)
@@ -159,21 +173,38 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             outputSet.copyInfo(imgSet)
             if not self.newAssignmentPerformed:
                 outputSet.setAlignmentProj()
+        self.iterMd = md.iterRows(imgFn, md.MDL_ITEM_ID)
+        self.lastRow = next(self.iterMd) 
         outputSet.copyItems(imgSet,
-                            updateItemCallback=self._processRow,
-                            itemDataIterator=md.iterRows(imgFn, sortByLabel=md.MDL_ITEM_ID))
+                            updateItemCallback=self._processRow)
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(self.inputSet, outputSet)
 
     def _processRow(self, particle, row):
+        count = 0
+        
+        while self.lastRow and particle.getObjId() == self.lastRow.getValue(md.MDL_ITEM_ID):
+            count += 1
+            if count:
+                self._createItemMatrix(particle, self.lastRow)
+            try:
+                self.lastRow = next(self.iterMd)
+            except StopIteration:
+                self.lastRow = None
+                    
+        particle._appendItem = count > 0
+
+    def _createItemMatrix(self, particle, row):
         setXmippAttributes(particle, row,
-                           xmippLib.MDL_ZSCORE_RESVAR, xmippLib.MDL_ZSCORE_RESMEAN,
-                           xmippLib.MDL_ZSCORE_RESCOV, xmippLib.MDL_IMAGE_ORIGINAL,
                            xmippLib.MDL_COST, xmippLib.MDL_CONTINUOUS_GRAY_A,
                            xmippLib.MDL_CONTINUOUS_GRAY_B, xmippLib.MDL_CONTINUOUS_X,
                            xmippLib.MDL_CONTINUOUS_Y,
                            xmippLib.MDL_CORRELATION_IDX, xmippLib.MDL_CORRELATION_MASK,
                            xmippLib.MDL_CORRELATION_WEIGHT, xmippLib.MDL_IMED)
+        if self.evaluateResiduals:
+            setXmippAttributes(particle, row,
+                               xmippLib.MDL_ZSCORE_RESVAR, xmippLib.MDL_ZSCORE_RESMEAN,
+                               xmippLib.MDL_ZSCORE_RESCOV)
         def __setXmippImage(label):
             attr = '_xmipp_' + xmippLib.label2Str(label)
             if not hasattr(particle, attr):
@@ -186,8 +217,9 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         
         __setXmippImage(xmippLib.MDL_IMAGE)
         __setXmippImage(xmippLib.MDL_IMAGE_REF)
-        __setXmippImage(xmippLib.MDL_IMAGE_RESIDUAL)
-        __setXmippImage(xmippLib.MDL_IMAGE_COVARIANCE)
+        if self.evaluateResiduals:
+            __setXmippImage(xmippLib.MDL_IMAGE_RESIDUAL)
+            __setXmippImage(xmippLib.MDL_IMAGE_COVARIANCE)
 
     #--------------------------- INFO functions --------------------------------------------
     def _summary(self):
