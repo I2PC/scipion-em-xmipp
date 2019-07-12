@@ -29,7 +29,8 @@ import random
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
                                         IntParam, StringParam, LEVEL_ADVANCED,
-                                        EnumParam, NumericListParam, GPU_LIST)
+                                        EnumParam, NumericListParam, GPU_LIST,
+                                        USE_GPU)
 from pyworkflow.em.protocol import ProtMonitor
 from pyworkflow.project import Manager
 from pyworkflow.em.data import Volume
@@ -78,13 +79,14 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
 
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
+        form.addHidden(USE_GPU, BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
         form.addHidden(GPU_LIST, StringParam, default='0',
                        expertLevel=LEVEL_ADVANCED,
                        label="Choose GPU IDs",
-                       help="GPU may have several cores. Set it to zero"
-                            " if you do not know what we are talking about."
-                            " First core index is 0, second 1 and so on."
-                            " In this protocol is not possible to use several GPUs.")
+                       help="Add a list of GPU devices that can be used")
         form.addSection(label='Input')
         form.addParam('inputParticles', PointerParam, label="Full-size Images",
                       important=True,
@@ -105,9 +107,6 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                       label="Initial resolution", default="15",
                       help="In Angstroms. The minimum resolution to be used in the first step of the protocol. "
                            "Then, the resolution will be automatically adjusted.")
-        form.addParam('maximumTargetResolution', NumericListParam,
-                      label="Final resolution", default="3",
-                      help="In Angstroms. Approximately, the desired maximum resolution.")
 
         form.addSection(label='Angular assignment')
         form.addParam('maxShift', FloatParam, label="Max. shift (%)", default=10, expertLevel=LEVEL_ADVANCED,
@@ -173,7 +172,6 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
     # --------------------------- STEPS functions ----------------------------
     def monitorStep(self):
 
-        GPUs = self.gpuList.get()
         self._runPrerequisites = []
         manager = Manager()
         project = manager.loadProject(self.getProject().getName())
@@ -227,7 +225,9 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 postSoftNeg = self.postSoftNeg.get(),
                 postSoftNegK = self.postSoftNegK.get(),
                 postDifference = self.postDifference.get(),
-                numberOfMpi=self.numberOfMpi.get()
+                numberOfMpi=self.numberOfMpi.get(),
+                useGpu=self.useGpu().get(),
+                gpuList = self.gpuList.get()
             )
 
             previousProtPart = self
@@ -282,16 +282,10 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
         for i in range(numLocalIters):
 
             if i>2:
-                print("Checking the change in the target resolution", minPrevRes, maxPrevRes, prevTargetResolution, targetResolution)
+                print("Checking the change in the target resolution", minPrevRes, prevTargetResolution, targetResolution)
                 minPrevRes = prevTargetResolution-(prevTargetResolution*0.1)
-                maxPrevRes = prevTargetResolution+(prevTargetResolution*0.1)
-                if targetResolution>minPrevRes and targetResolution<maxPrevRes:
-                    print("TARGET RESOLUTION IS STUCK", minPrevRes, maxPrevRes, targetResolution)
-                    break
-
-                if targetResolution<self.maximumTargetResolution.get():
-                    print("TARGET RESOLUTION WAS ACHIEVED", self.maximumTargetResolution.get(),
-                          targetResolution)
+                if targetResolution<minPrevRes:
+                    print("TARGET RESOLUTION IS STUCK")
                     break
 
             prevTargetResolution = targetResolution
@@ -331,7 +325,9 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 postSoftNeg=self.postSoftNeg.get(),
                 postSoftNegK=self.postSoftNegK.get(),
                 postDifference=self.postDifference.get(),
-                numberOfMpi=self.numberOfMpi.get()
+                numberOfMpi=self.numberOfMpi.get(),
+                useGpu=self.useGpu().get(),
+                gpuList=self.gpuList.get()
             )
             newHighRes.inputParticles.set(self)
             namePreviousParticles = 'outputParticlesLocal%d' % (i+1)

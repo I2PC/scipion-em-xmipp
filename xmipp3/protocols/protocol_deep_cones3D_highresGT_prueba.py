@@ -113,8 +113,10 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
                       help="Number of selected cones per image.")
         form.addParam('gpuAlign', BooleanParam, label="Use GPU alignment", default=True,
                       help='Use GPU alignment algorithm to determine the final 3D alignment parameters')
+        form.addParam('myMPI', IntParam, label="MPIs", default=8,
+                      help='Number of MPI to run the Xmipp protocols.')
 
-        form.addParallelSection(threads=1, mpi=8)
+        form.addParallelSection(threads=8, mpi=0)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -138,9 +140,9 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         #import os
         #print('os.environ["CUDA_VISIBLE_DEVICES"]',os.environ["CUDA_VISIBLE_DEVICES"])
         #myStr = " "
-        try:
+        if self.useQueueForSteps() or self.useQueue():
             myStr = os.environ["CUDA_VISIBLE_DEVICES"]
-        except Exception as e:
+        else:
             myStr = self.gpuList.get()
 
         print("AAAAA", myStr)
@@ -199,7 +201,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
                         (self.imgsFn,
                          self._getExtraPath('scaled_particles.stk'),
                          self._getExtraPath('scaled_particles.xmd'),
-                         self.newXdim), numberOfMpi=self.numberOfMpi.get())
+                         self.newXdim), numberOfMpi=8)
             moveFile(self._getExtraPath('scaled_particles.xmd'), self.imgsFn)
 
         from pyworkflow.em.convert import ImageHandler
@@ -210,7 +212,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         if Xdim != self.newXdim:
             self.runJob("xmipp_image_resize",
                         "-i %s --fourier %d" % (fnVol, self.newXdim),
-                        numberOfMpi=self.numberOfMpi.get())
+                        numberOfMpi=8)
 
         #if self.modelPretrain.get() is False:
         inputTrain = self.inputTrainSet.get()
@@ -222,7 +224,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
                         (self.trainImgsFn,
                          self._getExtraPath('scaled_train_particles.stk'),
                          self._getExtraPath('scaled_train_particles.xmd'),
-                         self.newXdim), numberOfMpi=self.numberOfMpi.get())
+                         self.newXdim), numberOfMpi=8)
             moveFile(self._getExtraPath('scaled_train_particles.xmd'),
                      self.trainImgsFn)
 
@@ -343,7 +345,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         if self.modelPretrain.get() is False:
             fnToFilter = self._getExtraPath('projectionsExp%d.xmd' % (lastLabel))
             self.runJob("xmipp_transform_filter", " -i %s --fourier low_pass %f" %
-                        (fnToFilter, 0.15), numberOfMpi=1)
+                        (fnToFilter, 0.15), numberOfMpi=self.numberOfMpi.get())
 
     def projectStep(self, numProj, iniRot, endRot, iniTilt, endTilt, fn, idx):
 
@@ -375,7 +377,7 @@ _noiseCoord   '0'
         fnProjs = self._getExtraPath(fn + "%d.stk" % idx)
         self.runJob("xmipp_phantom_project",
                     "-i %s -o %s --method fourier 1 0.5 "
-                    "--params %s" % (fnVol, fnProjs, fnParams), numberOfMpi=self.numberOfMpi.get())
+                    "--params %s" % (fnVol, fnProjs, fnParams), numberOfMpi=1)
 
         cleanPattern(self._getExtraPath('uniformProjections'))
 
@@ -532,7 +534,7 @@ _noiseCoord   '0'
                                               "--save_metadata_stack %s "
                                               "--keep_input_columns "
                                               "--fourier low_pass %f " %
-                    (self.imgsFn, imgsOutStk, imgsOutXmd, 0.15), numberOfMpi=1)
+                    (self.imgsFn, imgsOutStk, imgsOutXmd, 0.15), numberOfMpi=self.numberOfMpi.get())
 
             numMax = int(self.numConesSelected)
             newXdim = readInfoField(self._getExtraPath(), "size",
