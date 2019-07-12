@@ -141,9 +141,9 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         try:
             myStr = os.environ["CUDA_VISIBLE_DEVICES"]
         except Exception as e:
-	    myStr = self.gpuList.get()
+            myStr = self.gpuList.get()
 
-	print("AAAAA", myStr)
+        print("AAAAA", myStr)
         numGPU = myStr.split(',')
         print("GPUUUUU", myStr, numGPU)
         for idx, gpuId in enumerate(numGPU):
@@ -156,15 +156,15 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         predictStepId = self._insertFunctionStep("predictStep", numGPU[0], prerequisites=deps)
 
         # Correlation step
-	if self.gpuAlign:
+        if self.gpuAlign:
             for idx, gpuId in enumerate(numGPU):
                 stepId = self._insertFunctionStep("correlationCudaStep", idx, gpuId, len(numGPU), prerequisites=[predictStepId])
                 deps2.append(stepId)
-	else:
+        else:
             stepId = self._insertFunctionStep("correlationSignificantStep", prerequisites=[predictStepId])
             deps2.append(stepId)
 
-	stepId = self._insertFunctionStep("createOutputMetadataStep", prerequisites=deps2)
+        stepId = self._insertFunctionStep("createOutputMetadataStep", prerequisites=deps2)
 
         self._insertFunctionStep("createOutputStep", prerequisites=[stepId])
 
@@ -460,7 +460,7 @@ _noiseCoord   '0'
                 continue
 
             print("TRAINING GPU:", thIdx, gpuId, idx, totalGpu)
-	    sys.stdout.flush()
+            sys.stdout.flush()
 
             modelFn = 'modelCone%d' % idx
             if self.modelPretrain.get() is True:
@@ -501,8 +501,8 @@ _noiseCoord   '0'
                         modelFn, self.numEpochs, newXdim, 2, self.batchSize)
                         #args += " %(GPU)s"
                         #args += " %s " % (gpuId)
-			args += " %s " %(int(idx % totalGpu))
-			print("2 ARGS", args)
+                        args += " %s " %(int(idx % totalGpu))
+                        print("2 ARGS", args)
                         self.runJob("xmipp_cone_deepalign", args, numberOfMpi=1)
                     except Exception as e:
                         raise Exception(
@@ -516,7 +516,7 @@ _noiseCoord   '0'
         mdNumCones = xmippLib.MetaData(self._getExtraPath("coneCenters.doc"))
         self.numCones = mdNumCones.size()
 
-        if not exits(self._getExtraPath('conePrediction.txt')):
+        if not exists(self._getExtraPath('conePrediction.txt')):
             myStr = os.environ["CUDA_VISIBLE_DEVICES"]
             numGPU = myStr.split(',')
             numGPU = numGPU[0]
@@ -539,8 +539,8 @@ _noiseCoord   '0'
                                 xmippLib.MDL_XSIZE)
             args = "%s %s %d %d %d " % (imgsOutXmd, self._getExtraPath(), newXdim, self.numCones, numMax)
             args += " %(GPU)s"
-	    #AJ dejar que se envie el trabajo de prediccion a todas las GPUs disponibles??
-	    #args += " %s "%(gpuId)
+            #AJ dejar que se envie el trabajo de prediccion a todas las GPUs disponibles??
+            #args += " %s "%(gpuId)
             self.runJob("xmipp_cone_deepalign_predict", args, numberOfMpi=1)
 
 
@@ -566,7 +566,7 @@ _noiseCoord   '0'
                 continue
 
             print("CORRELATION GPU:", thIdx, gpuId, idx, totalGpu)
-	    sys.stdout.flush()
+            sys.stdout.flush()
 
             print("Classifying cone ", i + 1)
             positions = []
@@ -597,7 +597,7 @@ _noiseCoord   '0'
                                  '--maxShift 10 ' % (fnProjCone, fnExpCone, fnOutCone,
                                  self._getExtraPath())
                     #params += ' --device %(GPU)s'
-		    params += ' --device %d' %(int(idx % totalGpu))
+                    params += ' --device %d' %(int(idx % totalGpu))
                     self.runJob("xmipp_cuda_correlation", params, numberOfMpi=1)
 
 
@@ -657,7 +657,7 @@ _noiseCoord   '0'
 
         mdNumCones = xmippLib.MetaData(self._getExtraPath("coneCenters.doc"))
         self.numCones = mdNumCones.size()
-	numMax = int(self.numConesSelected)
+        numMax = int(self.numConesSelected)
         mdIn = xmippLib.MetaData(self.imgsFn)
         allInFns = mdIn.getColumnValues(xmippLib.MDL_IMAGE)
 
@@ -667,7 +667,7 @@ _noiseCoord   '0'
         fnFinal = self._getExtraPath('outConesParticles.xmd')
         for i in range(self.numCones):
 
-	    fnOutCone = 'outCone%d.xmd' % (i + 1)
+            fnOutCone = 'outCone%d.xmd' % (i + 1)
 
             if exists(self._getExtraPath(fnOutCone)):             
 

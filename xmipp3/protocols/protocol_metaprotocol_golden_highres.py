@@ -29,7 +29,7 @@ import random
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
                                         IntParam, StringParam, LEVEL_ADVANCED,
-                                        EnumParam, NumericListParam)
+                                        EnumParam, NumericListParam, GPU_LIST)
 from pyworkflow.em.protocol import ProtMonitor
 from pyworkflow.project import Manager
 from pyworkflow.em.data import Volume
@@ -78,8 +78,14 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
 
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       expertLevel=LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="GPU may have several cores. Set it to zero"
+                            " if you do not know what we are talking about."
+                            " First core index is 0, second 1 and so on."
+                            " In this protocol is not possible to use several GPUs.")
         form.addSection(label='Input')
-
         form.addParam('inputParticles', PointerParam, label="Full-size Images",
                       important=True,
                       pointerClass='SetOfParticles', allowsNull=True,
@@ -95,10 +101,13 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                       label='Symmetry group',
                       help='See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
                            'If no symmetry is present, give c1')
-        form.addParam('maximumTargetResolution', NumericListParam,
+        form.addParam('minimumTargetResolution', NumericListParam,
                       label="Initial resolution", default="15",
-                      help="In Angstroms. The maximum resolution to be used in the first step of the protocol. "
+                      help="In Angstroms. The minimum resolution to be used in the first step of the protocol. "
                            "Then, the resolution will be automatically adjusted.")
+        form.addParam('maximumTargetResolution', NumericListParam,
+                      label="Final resolution", default="3",
+                      help="In Angstroms. Approximately, the desired maximum resolution.")
 
         form.addSection(label='Angular assignment')
         form.addParam('maxShift', FloatParam, label="Max. shift (%)", default=10, expertLevel=LEVEL_ADVANCED,
@@ -164,6 +173,7 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
     # --------------------------- STEPS functions ----------------------------
     def monitorStep(self):
 
+        GPUs = self.gpuList.get()
         self._runPrerequisites = []
         manager = Manager()
         project = manager.loadProject(self.getProject().getName())
@@ -171,7 +181,7 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
         percentage = [1.14, 2.29, 3.44, 5.74, 9.19, 14.94, 24.13, 39.08]
         numGlobalIters = len(percentage)+2
 
-        targetResolution = self.maximumTargetResolution.get()
+        targetResolution = self.minimumTargetResolution.get()
 
         #Global iterations
         for i in range(numGlobalIters):
@@ -271,12 +281,17 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
         numLocalIters = 10
         for i in range(numLocalIters):
 
-            if i>1:
+            if i>2:
                 print("Checking the change in the target resolution", minPrevRes, maxPrevRes, prevTargetResolution, targetResolution)
                 minPrevRes = prevTargetResolution-(prevTargetResolution*0.1)
                 maxPrevRes = prevTargetResolution+(prevTargetResolution*0.1)
                 if targetResolution>minPrevRes and targetResolution<maxPrevRes:
                     print("TARGET RESOLUTION IS STUCK", minPrevRes, maxPrevRes, targetResolution)
+                    break
+
+                if targetResolution<self.maximumTargetResolution.get():
+                    print("TARGET RESOLUTION WAS ACHIEVED", self.maximumTargetResolution.get(),
+                          targetResolution)
                     break
 
             prevTargetResolution = targetResolution
@@ -353,6 +368,17 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
             self.runJob("xmipp_metadata_utilities", params, numberOfMpi=1)
             fnFinal = self._getExtraPath('inputLocalHighRes%d.xmd'%(i+2))
             copy(fnOutParticles, fnFinal)
+
+            if i>1:
+                #AJ incluir numero de particulas como criterio de parada, si estamos eliminando muchas, parar
+                mdFinal = xmippLib.MetaData(fnFinal)
+                Nfinal = mdFinal.size()
+                Ninit = self.inputParticles.get().getSize()
+                if Nfinal<Ninit*0.3:
+                    print("IMAGE SET SIZE TOO SMALL", Nfinal, Ninit)
+                    break
+
+
             outputinputSetOfParticles = self._createSetOfParticles()
             outputinputSetOfParticles.copyInfo(self.inputParticles.get())
             readSetOfParticles(fnFinal, outputinputSetOfParticles)
@@ -506,22 +532,29 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 # mdParticles.write(fnOutParticles)
 
                 #test de hipotesis ????????
-                p0 = clf2.weights_[0]/(clf2.weights_[0]+clf2.weights_[1])
-                p1 = clf2.weights_[1]/(clf2.weights_[0]+clf2.weights_[1])
-                mu0=clf2.means_[0,0]
-                mu1=clf2.means_[1,0]
-                var0 = clf2.covars_[0,0]
-                var1 = clf2.covars_[1,0]
+                if clf2.means_[0,0]<clf2.means_[1,0]:
+                    idx0 = 0
+                    idx1 = 1
+                else:
+                    idx0 = 1
+                    idx1 = 0
+                p0 = clf2.weights_[idx0]/(clf2.weights_[idx0]+clf2.weights_[idx1])
+                p1 = clf2.weights_[idx1]/(clf2.weights_[idx0]+clf2.weights_[idx1])
+                mu0=clf2.means_[idx0,0]
+                mu1=clf2.means_[idx1,0]
+                var0 = clf2.covars_[idx0,0]
+                var1 = clf2.covars_[idx1,0]
                 std0 = math.sqrt(var0)
                 std1 = math.sqrt(var1)
                 termR = math.log(p0)-math.log(p1)-math.log(std0/std1)
+                print("TH for hypothesis test:", termR)
                 for row in iterRows(mdParticles):
                     objId = row.getObjId()
                     if flagLocal is False:
                         z = row.getValue(xmippLib.MDL_MAXCC)
                     else:
                         z = row.getValue(xmippLib.MDL_COST)
-                    termL = (((z-mu1)**2)/(2*(var1))) + (((z-mu0)**2)/(2*(var0)))
+                    termL = (-((z-mu1)**2)/(2*(var1))) + (((z-mu0)**2)/(2*(var0)))
                     if termL<termR:
                         print("Descartamos particula:", termL, termR, z)
                         mdParticles.setValue(xmippLib.MDL_ENABLED, 0, objId)

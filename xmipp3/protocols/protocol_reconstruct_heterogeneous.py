@@ -391,6 +391,10 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
                         fnAnglesSignificant = join(fnDirCurrent,
                                                    "angles_iter001_00.xmd")
+
+                        #TODO
+                        #AJ: valdria con poner aqui una condicion para que no hiciera este paso (significant) en caso de local alignment???
+
                         if not self.useGpu:
                             args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d --dontApplyFisher' % \
                                    (fnGroup, fnGalleryGroupMd, maxShift,
@@ -422,8 +426,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                                 listVolumesToProcess[i - 1] = False
                                 self._saveVolumesToProcess(listVolumesToProcess)
                                 # raise Exception("There is no angular assignment for this volume")
-                                print(
-                                "Exception: There is no angular assignment for this volume")
+                                print("Exception: There is no angular assignment for this volume")
                             continue
                     if exists(fnAnglesGroup):
                         if not exists(fnAngles) and exists(fnAnglesGroup):
@@ -490,6 +493,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                                 '-i %s --operate modify_values "weight=weightContinuous2"' % fnAnglesCont,
                                 numberOfMpi=1)
 
+
     def classifyParticles(self, iteration):
         fnDirCurrent = self._getExtraPath("Iter%03d" % iteration)
 
@@ -515,7 +519,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         mdVolumes.write(fnVols)
 
         # Classify the images
-        # AJ busca el maximo de correlacion entre todos los volumenes a los que se ha asigando cada particula??
+        # AJ busca el maximo de correlacion entre todos los volumenes
         fnImgsId = self._getExtraPath("imagesId.xmd")
         fnOut = join(fnDirCurrent, "classes.xmd")
         print("A correr",
