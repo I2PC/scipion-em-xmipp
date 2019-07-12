@@ -410,10 +410,8 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                                                    "angles_iter001_00.xmd")
                         if not self.useGpu.get():
 
-                        #TODO
-                        #AJ: valdria con poner aqui una condicion para que no hiciera este paso (significant) en caso de local alignment???
-
-                        if not self.useGpu:
+                            #TODO
+                            #AJ: valdria con poner aqui una condicion para que no hiciera este paso (significant) en caso de local alignment???
                             args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d --dontApplyFisher' % \
                                    (fnGroup, fnGalleryGroupMd, maxShift,
                                     fnDirCurrent,
