@@ -188,4 +188,4 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
         return summary
 
     def _citations(self):
-return ['']
+	return ['']
