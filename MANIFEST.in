@@ -1,25 +1,9 @@
-**`changes.txt`**:
+# Include the README
+include *.md
 
-## devel
+# Include the license file
+include LICENSE
 
-- Highres can now take a global alignment performed by any other method
-
-
-
-
-**`MANIFEST.in`**:
-
-include *.txt
-
-
-
-**`.gitignore`**:
-
-### Python binaries
-*.pyc
-*.pyo
-
-# Other
-dist/
-/*.egg-info
-venv
+# Include conf file
+include xmipp3/protocols.conf
+include xmipp3/xmipp_logo.png

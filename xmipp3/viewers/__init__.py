@@ -30,6 +30,8 @@ from .plotter import XmippPlotter
 from .viewer_cl2d import XmippCL2DViewer
 from .viewer_cltomo import XmippCLTomoViewer
 from .viewer_ctf_consensus import XmippCTFConsensusViewer
+from .viewer_deep_consensus import XmippDeepConsensusViewer
+from .viewer_deep_micrograph_cleaner import XmippDeepMicrographViewer
 from .viewer_ml2d import XmippML2DViewer
 from .viewer_mltomo import XmippMLTomoViewer
 from .viewer_movie_alignment import XmippMovieAlignViewer
@@ -37,6 +39,7 @@ from .viewer_normalize_strain import XmippNormalizeStrainViewer
 from .viewer_resolution3d import XmippResolution3DViewer
 from .viewer_resolution_directional import XmippMonoDirViewer
 from .viewer_resolution_monogenic_signal import XmippMonoResViewer
+from .viewer_resolution_deepres import XmippResDeepResViewer
 from .viewer_resolution_monotomo import XmippMonoTomoViewer
 from .viewer_validate_nontilt import XmippValidateNonTiltViewer
 from .viewer_split_volume import XmippViewerSplitVolume

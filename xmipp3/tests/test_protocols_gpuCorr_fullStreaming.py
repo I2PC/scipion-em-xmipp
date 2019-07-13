@@ -30,6 +30,7 @@ from pyworkflow.em.protocol.protocol_create_stream_data import \
     SET_OF_MICROGRAPHS
 from pyworkflow.protocol import getProtocolFromDb
 
+from xmipp3.protocols import XmippProtPreprocessMicrographs
 from xmipp3.protocols.protocol_extract_particles import *
 from xmipp3.protocols.protocol_classification_gpuCorr_full import *
 
@@ -74,6 +75,13 @@ class TestGpuCorrFullStreaming(BaseTest):
 
         return protStream
 
+    def invertContrast(self, inputMics):
+        protInvCont = XmippProtPreprocessMicrographs(doInvert=True)
+        protInvCont.inputMicrographs.set(inputMics)
+        self.proj.launchProtocol(protInvCont, wait=False)
+
+        return protInvCont
+
     def calculateCtf(self, inputMics):
         protCTF = ProtCTFFind(useCftfind4=True)
         protCTF.inputMicrographs.set(inputMics)
@@ -87,7 +95,7 @@ class TestGpuCorrFullStreaming(BaseTest):
 
     def runPicking(self, inputMicrographs):
         """ Run a particle picking. """
-        protPicking = SparxGaussianProtPicking(boxSize=64)
+        protPicking = SparxGaussianProtPicking(boxSize=64, lowerThreshold=0.01)
         protPicking.inputMicrographs.set(inputMicrographs)
         self.proj.launchProtocol(protPicking, wait=False)
 
@@ -96,7 +104,7 @@ class TestGpuCorrFullStreaming(BaseTest):
     def runExtractParticles(self, inputCoord, setCtfs):
         protExtract = self.newProtocol(XmippProtExtractParticles,
                                        boxSize=64,
-                                       doInvert = True,
+                                       doInvert = False,
                                        doFlip = False)
 
         protExtract.inputCoordinates.set(inputCoord)
@@ -129,8 +137,7 @@ class TestGpuCorrFullStreaming(BaseTest):
     def test_pattern(self):
 
         protImportMics = self.importMicrographs()
-        if protImportMics.isFailed():
-            self.assertTrue(False)
+        self.assertFalse(protImportMics.isFailed(), 'ImportMics has failed.')
 
         protImportMicsStr = self.importMicrographsStr\
             (protImportMics.outputMicrographs)
@@ -141,10 +148,23 @@ class TestGpuCorrFullStreaming(BaseTest):
             if counter > 100:
                 break
             counter += 1
-        if protImportMicsStr.isFailed():
-            self.assertTrue(False)
+        self.assertFalse(protImportMicsStr.isFailed(), 'Create stream data has failed.')
+        self.assertTrue(protImportMicsStr.hasAttribute('outputMicrographs'),
+                        'Create stream data has no outputMicrographs in more than 3min.')
 
-        protCtf = self.calculateCtf(protImportMicsStr.outputMicrographs)
+        protInvContr = self.invertContrast(protImportMicsStr.outputMicrographs)
+        counter = 1
+        while not protInvContr.hasAttribute('outputMicrographs'):
+            time.sleep(2)
+            protInvContr = self._updateProtocol(protInvContr)
+            if counter > 100:
+                break
+            counter += 1
+        self.assertFalse(protInvContr.isFailed(), 'protInvContr has failed.')
+        self.assertTrue(protInvContr.hasAttribute('outputMicrographs'),
+                        'protInvContr has no outputMicrographs in more than 3min.')
+
+        protCtf = self.calculateCtf(protInvContr.outputMicrographs)
         counter = 1
         while not protCtf.hasAttribute('outputCTF'):
             time.sleep(2)
@@ -152,10 +172,11 @@ class TestGpuCorrFullStreaming(BaseTest):
             if counter > 100:
                 break
             counter += 1
-        if protCtf.isFailed():
-            self.assertTrue(False)
+        self.assertFalse(protCtf.isFailed(), 'CTFfind4 has failed.')
+        self.assertTrue(protCtf.hasAttribute('outputCTF'),
+                        'CTFfind4 has no outputCTF in more than 3min.')
 
-        protPicking = self.runPicking(protImportMicsStr.outputMicrographs)
+        protPicking = self.runPicking(protInvContr.outputMicrographs)
         counter = 1
         while not protPicking.hasAttribute('outputCoordinates'):
             time.sleep(2)
@@ -163,8 +184,9 @@ class TestGpuCorrFullStreaming(BaseTest):
             if counter > 100:
                 break
             counter += 1
-        if protPicking.isFailed():
-            self.assertTrue(False)
+        self.assertFalse(protPicking.isFailed(), 'Eman Sparx has failed.')
+        self.assertTrue(protPicking.hasAttribute('outputCoordinates'),
+                        'Eman Sparx has no outputCoordinates in more than 3min.')
 
         protExtract = self.runExtractParticles(protPicking.outputCoordinates,
                                                protCtf.outputCTF)
@@ -175,15 +197,23 @@ class TestGpuCorrFullStreaming(BaseTest):
             if counter > 100:
                 break
             counter += 1
-        if protExtract.isFailed():
-            self.assertTrue(False)
+        self.assertFalse(protExtract.isFailed(), 'Extract particles has failed.')
+        self.assertTrue(protExtract.hasAttribute('outputParticles'),
+                        'Extract particles has no outputParticles in more than 3min.')
 
         protClassify = self.runClassify(protExtract.outputParticles)
-        while protClassify.getStatus()!=STATUS_FINISHED:
+        counter = 1
+        while protClassify.getStatus() != STATUS_FINISHED:
+            time.sleep(2)
             protClassify = self._updateProtocol(protClassify)
-            if protClassify.isFailed():
-                self.assertTrue(False)
-                break
-        if not protClassify.hasAttribute('outputClasses'):
-            self.assertTrue(False)
+            self.assertFalse(protClassify.isFailed(), 'GL2D-streaming has failed.')
+            if counter > 100:
+                self.assertTrue(protClassify.hasAttribute('outputAverages'),
+                                'GL2D-streaming has no outputAverages in more than 3min.')
+            counter += 1
+
+        self.assertTrue(protClassify.hasAttribute('outputAverages'),
+                        'GL2D-streaming has no outputAverages at the end.')
+        self.assertTrue(protClassify.hasAttribute('outputClasses'),
+                        'GL2D-streaming has no outputClasses at the end.')
 

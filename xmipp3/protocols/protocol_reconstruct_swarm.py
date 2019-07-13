@@ -32,7 +32,8 @@ from os.path import join, exists
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam, IntParam, EnumParam, NumericListParam
+from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam, IntParam, EnumParam, \
+    NumericListParam, USE_GPU, GPU_LIST
 from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile, createLink
 from pyworkflow.em.protocol import ProtRefine3D
 from pyworkflow.em.data import SetOfVolumes, Volume
@@ -63,6 +64,16 @@ class XmippProtReconstructSwarm(ProtRefine3D):
     
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
+        form.addHidden(USE_GPU, BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       expertLevel=LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+
         form.addSection(label='Input')
         
         form.addParam('inputParticles', PointerParam, label="Full-size Images", important=True, 
@@ -354,8 +365,13 @@ class XmippProtReconstructSwarm(ProtRefine3D):
             # Reconstruct
             if exists(fnAngles):
                 # Significant may decide not to write it if no image is significant
-                args="-i %s -o %s --sym %s --weight --thr %d"%(fnAngles,fnVol,self.symmetryGroup,self.numberOfThreads.get())
-                self.runJob("xmipp_reconstruct_fourier",args,numberOfMpi=self.numberOfMpi.get())
+                args="-i %s -o %s --sym %s --weight --fast" % (fnAngles,fnVol,self.symmetryGroup)
+                if self.useGpu.get():
+                    args += " --thr %s" % self.numberOfThreads.get()
+                    args += " --device %(GPU)s"
+                    self.runJob("xmipp_cuda_reconstruct_fourier",args,numberOfMpi=1)
+                else:
+                    self.runJob('xmipp_reconstruct_fourier_accel', args)
                 args="-i %s --mask circular %f"%(fnVol,-R)
                 self.runJob("xmipp_transform_mask",args,numberOfMpi=1)
                 args="-i %s --select below 0 --substitute value 0"%fnVol

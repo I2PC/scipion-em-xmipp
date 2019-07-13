@@ -46,175 +46,179 @@ import xmippLib
 from xmipp3.base import XmippMdRow, getLabelPythonType, RowMetaData
 from xmipp3.utils import iterMdRows
 
+if not getattr(xmippLib, "GHOST_ACTIVATED", False):
+    """ Some of MDL may not exist when Ghost is activated
+    """
+    # This dictionary will be used to map
+    # between CTFModel properties and Xmipp labels
+    ACQUISITION_DICT = OrderedDict([
+           ("_amplitudeContrast", xmippLib.MDL_CTF_Q0),
+           ("_sphericalAberration", xmippLib.MDL_CTF_CS),
+           ("_voltage", xmippLib.MDL_CTF_VOLTAGE)
+           ])
 
-# This dictionary will be used to map
-# between CTFModel properties and Xmipp labels
-ACQUISITION_DICT = OrderedDict([
-       ("_amplitudeContrast", xmippLib.MDL_CTF_Q0),
-       ("_sphericalAberration", xmippLib.MDL_CTF_CS),
-       ("_voltage", xmippLib.MDL_CTF_VOLTAGE)
-       ])
+    COOR_DICT = OrderedDict([
+                 ("_x", xmippLib.MDL_XCOOR),
+                 ("_y", xmippLib.MDL_YCOOR)
+                 ])
 
-COOR_DICT = OrderedDict([
-             ("_x", xmippLib.MDL_XCOOR),
-             ("_y", xmippLib.MDL_YCOOR)
-             ])
+    COOR_EXTRA_LABELS = [
+        # Additional autopicking-related metadata
+        md.RLN_PARTICLE_AUTOPICK_FOM,
+        md.RLN_PARTICLE_CLASS,
+        md.RLN_ORIENT_PSI,
+        xmippLib.MDL_GOOD_REGION_SCORE
+        ]
 
-COOR_EXTRA_LABELS = [
-    # Additional autopicking-related metadata
-    md.RLN_PARTICLE_AUTOPICK_FOM,
-    md.RLN_PARTICLE_CLASS,
-    md.RLN_ORIENT_PSI
-    ]
+    CTF_DICT = OrderedDict([
+           ("_defocusU", xmippLib.MDL_CTF_DEFOCUSU),
+           ("_defocusV", xmippLib.MDL_CTF_DEFOCUSV),
+           ("_defocusAngle", xmippLib.MDL_CTF_DEFOCUS_ANGLE),
+           ("_resolution", xmippLib.MDL_CTF_CRIT_MAXFREQ),
+           ("_fitQuality", xmippLib.MDL_CTF_CRIT_FITTINGSCORE)
+           ])
 
-CTF_DICT = OrderedDict([
-       ("_defocusU", xmippLib.MDL_CTF_DEFOCUSU),
-       ("_defocusV", xmippLib.MDL_CTF_DEFOCUSV),
-       ("_defocusAngle", xmippLib.MDL_CTF_DEFOCUS_ANGLE),
-       ("_resolution", xmippLib.MDL_CTF_CRIT_MAXFREQ),
-       ("_fitQuality", xmippLib.MDL_CTF_CRIT_FITTINGSCORE)
-       ])
+    # TODO: remove next dictionary when all
+    # cTFmodel has resolution and fitQuality
+    CTF_DICT_NORESOLUTION = OrderedDict([
+            ("_defocusU", xmippLib.MDL_CTF_DEFOCUSU),
+            ("_defocusV", xmippLib.MDL_CTF_DEFOCUSV),
+            ("_defocusAngle", xmippLib.MDL_CTF_DEFOCUS_ANGLE)
+            ])
 
-# TODO: remove next dictionary when all
-# cTFmodel has resolution and fitQuality
-CTF_DICT_NORESOLUTION = OrderedDict([
-        ("_defocusU", xmippLib.MDL_CTF_DEFOCUSU),
-        ("_defocusV", xmippLib.MDL_CTF_DEFOCUSV),
-        ("_defocusAngle", xmippLib.MDL_CTF_DEFOCUS_ANGLE)
-        ])
+    CTF_PSD_DICT = OrderedDict([
+           ("_psdFile", xmippLib.MDL_PSD),
+           ("_xmipp_enhanced_psd", xmippLib.MDL_PSD_ENHANCED),
+           ("_xmipp_ctfmodel_quadrant", xmippLib.MDL_IMAGE1),
+           ("_xmipp_ctfmodel_halfplane", xmippLib.MDL_IMAGE1)
+           ])
 
-CTF_PSD_DICT = OrderedDict([
-       ("_psdFile", xmippLib.MDL_PSD),
-       ("_xmipp_enhanced_psd", xmippLib.MDL_PSD_ENHANCED),
-       ("_xmipp_ctfmodel_quadrant", xmippLib.MDL_IMAGE1),
-       ("_xmipp_ctfmodel_halfplane", xmippLib.MDL_IMAGE1)
-       ])
+    CTF_EXTRA_LABELS = [
+        xmippLib.MDL_CTF_CA,
+        xmippLib.MDL_CTF_ENERGY_LOSS,
+        xmippLib.MDL_CTF_LENS_STABILITY,
+        xmippLib.MDL_CTF_CONVERGENCE_CONE,
+        xmippLib.MDL_CTF_LONGITUDINAL_DISPLACEMENT,
+        xmippLib.MDL_CTF_TRANSVERSAL_DISPLACEMENT,
+        xmippLib.MDL_CTF_K,
+        xmippLib.MDL_CTF_BG_GAUSSIAN_K,
+        xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAU,
+        xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAV,
+        xmippLib.MDL_CTF_BG_GAUSSIAN_CU,
+        xmippLib.MDL_CTF_BG_GAUSSIAN_CV,
+        xmippLib.MDL_CTF_BG_SQRT_K,
+        xmippLib.MDL_CTF_BG_SQRT_U,
+        xmippLib.MDL_CTF_BG_SQRT_V,
+        xmippLib.MDL_CTF_BG_SQRT_ANGLE,
+        xmippLib.MDL_CTF_BG_BASELINE,
+        xmippLib.MDL_CTF_BG_GAUSSIAN2_K,
+        xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAU,
+        xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAV,
+        xmippLib.MDL_CTF_BG_GAUSSIAN2_CU,
+        xmippLib.MDL_CTF_BG_GAUSSIAN2_CV,
+        xmippLib.MDL_CTF_BG_GAUSSIAN2_ANGLE,
+        xmippLib.MDL_CTF_CRIT_FITTINGCORR13,
+        xmippLib.MDL_CTF_CRIT_ICENESS,
+        xmippLib.MDL_CTF_VPP_RADIUS,
+        xmippLib.MDL_CTF_DOWNSAMPLE_PERFORMED,
+        xmippLib.MDL_CTF_CRIT_PSDVARIANCE,
+        xmippLib.MDL_CTF_CRIT_PSDPCA1VARIANCE,
+        xmippLib.MDL_CTF_CRIT_PSDPCARUNSTEST,
+        xmippLib.MDL_CTF_CRIT_FIRSTZEROAVG,
+        xmippLib.MDL_CTF_CRIT_DAMPING,
+        xmippLib.MDL_CTF_CRIT_FIRSTZERORATIO,
+        xmippLib.MDL_CTF_CRIT_PSDCORRELATION90,
+        xmippLib.MDL_CTF_CRIT_PSDRADIALINTEGRAL,
+        xmippLib.MDL_CTF_CRIT_NORMALITY,
+        # In xmipp the ctf also contains acquisition information
+        xmippLib.MDL_CTF_Q0,
+        xmippLib.MDL_CTF_CS,
+        xmippLib.MDL_CTF_VOLTAGE,
+        xmippLib.MDL_CTF_SAMPLING_RATE
+        ]
 
-CTF_EXTRA_LABELS = [
-    xmippLib.MDL_CTF_CA,
-    xmippLib.MDL_CTF_ENERGY_LOSS,
-    xmippLib.MDL_CTF_LENS_STABILITY,
-    xmippLib.MDL_CTF_CONVERGENCE_CONE,
-    xmippLib.MDL_CTF_LONGITUDINAL_DISPLACEMENT,
-    xmippLib.MDL_CTF_TRANSVERSAL_DISPLACEMENT,
-    xmippLib.MDL_CTF_K,
-    xmippLib.MDL_CTF_BG_GAUSSIAN_K,
-    xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAU,
-    xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAV,
-    xmippLib.MDL_CTF_BG_GAUSSIAN_CU,
-    xmippLib.MDL_CTF_BG_GAUSSIAN_CV,
-    xmippLib.MDL_CTF_BG_SQRT_K,
-    xmippLib.MDL_CTF_BG_SQRT_U,
-    xmippLib.MDL_CTF_BG_SQRT_V,
-    xmippLib.MDL_CTF_BG_SQRT_ANGLE,
-    xmippLib.MDL_CTF_BG_BASELINE,
-    xmippLib.MDL_CTF_BG_GAUSSIAN2_K,
-    xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAU,
-    xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAV,
-    xmippLib.MDL_CTF_BG_GAUSSIAN2_CU,
-    xmippLib.MDL_CTF_BG_GAUSSIAN2_CV,
-    xmippLib.MDL_CTF_BG_GAUSSIAN2_ANGLE,
-    xmippLib.MDL_CTF_CRIT_FITTINGCORR13,
-    xmippLib.MDL_CTF_CRIT_ICENESS,
-    xmippLib.MDL_CTF_VPP_RADIUS,
-    xmippLib.MDL_CTF_DOWNSAMPLE_PERFORMED,
-    xmippLib.MDL_CTF_CRIT_PSDVARIANCE,
-    xmippLib.MDL_CTF_CRIT_PSDPCA1VARIANCE,
-    xmippLib.MDL_CTF_CRIT_PSDPCARUNSTEST,
-    xmippLib.MDL_CTF_CRIT_FIRSTZEROAVG,
-    xmippLib.MDL_CTF_CRIT_DAMPING,
-    xmippLib.MDL_CTF_CRIT_FIRSTZERORATIO,
-    xmippLib.MDL_CTF_CRIT_PSDCORRELATION90,
-    xmippLib.MDL_CTF_CRIT_PSDRADIALINTEGRAL,
-    xmippLib.MDL_CTF_CRIT_NORMALITY,
-    # In xmipp the ctf also contains acquisition information
-    xmippLib.MDL_CTF_Q0,
-    xmippLib.MDL_CTF_CS,
-    xmippLib.MDL_CTF_VOLTAGE,
-    xmippLib.MDL_CTF_SAMPLING_RATE
-    ]
+    # TODO: remove next dictionary when all
+    # cTFmodel has resolution and fitquality
+    CTF_EXTRA_LABELS_PLUS_RESOLUTION = [
+        xmippLib.MDL_CTF_CA,
+        xmippLib.MDL_CTF_ENERGY_LOSS,
+        xmippLib.MDL_CTF_LENS_STABILITY,
+        xmippLib.MDL_CTF_CONVERGENCE_CONE,
+        xmippLib.MDL_CTF_LONGITUDINAL_DISPLACEMENT,
+        xmippLib.MDL_CTF_TRANSVERSAL_DISPLACEMENT,
+        xmippLib.MDL_CTF_K,
+        xmippLib.MDL_CTF_BG_GAUSSIAN_K,
+        xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAU,
+        xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAV,
+        xmippLib.MDL_CTF_BG_GAUSSIAN_CU,
+        xmippLib.MDL_CTF_BG_GAUSSIAN_CV,
+        xmippLib.MDL_CTF_BG_SQRT_K,
+        xmippLib.MDL_CTF_BG_SQRT_U,
+        xmippLib.MDL_CTF_BG_SQRT_V,
+        xmippLib.MDL_CTF_BG_SQRT_ANGLE,
+        xmippLib.MDL_CTF_BG_BASELINE,
+        xmippLib.MDL_CTF_BG_GAUSSIAN2_K,
+        xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAU,
+        xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAV,
+        xmippLib.MDL_CTF_BG_GAUSSIAN2_CU,
+        xmippLib.MDL_CTF_BG_GAUSSIAN2_CV,
+        xmippLib.MDL_CTF_BG_GAUSSIAN2_ANGLE,
+        xmippLib.MDL_CTF_CRIT_MAXFREQ,  # ###
+        xmippLib.MDL_CTF_CRIT_FITTINGSCORE,  # ###
+        xmippLib.MDL_CTF_CRIT_FITTINGCORR13,
+        xmippLib.MDL_CTF_CRIT_ICENESS,
+        xmippLib.MDL_CTF_DOWNSAMPLE_PERFORMED,
+        xmippLib.MDL_CTF_CRIT_PSDVARIANCE,
+        xmippLib.MDL_CTF_CRIT_PSDPCA1VARIANCE,
+        xmippLib.MDL_CTF_CRIT_PSDPCARUNSTEST,
+        xmippLib.MDL_CTF_CRIT_FIRSTZEROAVG,
+        xmippLib.MDL_CTF_CRIT_DAMPING,
+        xmippLib.MDL_CTF_CRIT_FIRSTZERORATIO,
+        xmippLib.MDL_CTF_CRIT_PSDCORRELATION90,
+        xmippLib.MDL_CTF_CRIT_PSDRADIALINTEGRAL,
+        xmippLib.MDL_CTF_CRIT_NORMALITY,
+        # In xmipp the ctf also contains acquisition information
+        xmippLib.MDL_CTF_Q0,
+        xmippLib.MDL_CTF_CS,
+        xmippLib.MDL_CTF_VOLTAGE,
+        xmippLib.MDL_CTF_SAMPLING_RATE,
+        xmippLib.MDL_CTF_VPP_RADIUS,
+        ]
 
-# TODO: remove next dictionary when all
-# cTFmodel has resolution and fitquality
-CTF_EXTRA_LABELS_PLUS_RESOLUTION = [
-    xmippLib.MDL_CTF_CA,
-    xmippLib.MDL_CTF_ENERGY_LOSS,
-    xmippLib.MDL_CTF_LENS_STABILITY,
-    xmippLib.MDL_CTF_CONVERGENCE_CONE,
-    xmippLib.MDL_CTF_LONGITUDINAL_DISPLACEMENT,
-    xmippLib.MDL_CTF_TRANSVERSAL_DISPLACEMENT,
-    xmippLib.MDL_CTF_K,
-    xmippLib.MDL_CTF_BG_GAUSSIAN_K,
-    xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAU,
-    xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAV,
-    xmippLib.MDL_CTF_BG_GAUSSIAN_CU,
-    xmippLib.MDL_CTF_BG_GAUSSIAN_CV,
-    xmippLib.MDL_CTF_BG_SQRT_K,
-    xmippLib.MDL_CTF_BG_SQRT_U,
-    xmippLib.MDL_CTF_BG_SQRT_V,
-    xmippLib.MDL_CTF_BG_SQRT_ANGLE,
-    xmippLib.MDL_CTF_BG_BASELINE,
-    xmippLib.MDL_CTF_BG_GAUSSIAN2_K,
-    xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAU,
-    xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAV,
-    xmippLib.MDL_CTF_BG_GAUSSIAN2_CU,
-    xmippLib.MDL_CTF_BG_GAUSSIAN2_CV,
-    xmippLib.MDL_CTF_BG_GAUSSIAN2_ANGLE,
-    xmippLib.MDL_CTF_CRIT_MAXFREQ,  # ###
-    xmippLib.MDL_CTF_CRIT_FITTINGSCORE,  # ###
-    xmippLib.MDL_CTF_CRIT_FITTINGCORR13,
-    xmippLib.MDL_CTF_CRIT_ICENESS,
-    xmippLib.MDL_CTF_DOWNSAMPLE_PERFORMED,
-    xmippLib.MDL_CTF_CRIT_PSDVARIANCE,
-    xmippLib.MDL_CTF_CRIT_PSDPCA1VARIANCE,
-    xmippLib.MDL_CTF_CRIT_PSDPCARUNSTEST,
-    xmippLib.MDL_CTF_CRIT_FIRSTZEROAVG,
-    xmippLib.MDL_CTF_CRIT_DAMPING,
-    xmippLib.MDL_CTF_CRIT_FIRSTZERORATIO,
-    xmippLib.MDL_CTF_CRIT_PSDCORRELATION90,
-    xmippLib.MDL_CTF_CRIT_PSDRADIALINTEGRAL,
-    xmippLib.MDL_CTF_CRIT_NORMALITY,
-    # In xmipp the ctf also contains acquisition information
-    xmippLib.MDL_CTF_Q0,
-    xmippLib.MDL_CTF_CS,
-    xmippLib.MDL_CTF_VOLTAGE,
-    xmippLib.MDL_CTF_SAMPLING_RATE,
-    xmippLib.MDL_CTF_VPP_RADIUS,
-    ]
+    # Some extra labels to take into account the zscore
+    IMAGE_EXTRA_LABELS = [
+        xmippLib.MDL_ZSCORE,
+        xmippLib.MDL_ZSCORE_HISTOGRAM,
+        xmippLib.MDL_ZSCORE_RESMEAN,
+        xmippLib.MDL_ZSCORE_RESVAR,
+        xmippLib.MDL_ZSCORE_RESCOV,
+        xmippLib.MDL_ZSCORE_SHAPE1,
+        xmippLib.MDL_ZSCORE_SHAPE2,
+        xmippLib.MDL_ZSCORE_SNR1,
+        xmippLib.MDL_ZSCORE_SNR2,
+        xmippLib.MDL_CUMULATIVE_SSNR,
+        xmippLib.MDL_PARTICLE_ID,
+        xmippLib.MDL_FRAME_ID,
+        xmippLib.MDL_SCORE_BY_VAR,
+        xmippLib.MDL_SCORE_BY_GINI,
+        xmippLib.MDL_ZSCORE_DEEPLEARNING1
+        ]
 
-# Some extra labels to take into account the zscore
-IMAGE_EXTRA_LABELS = [
-    xmippLib.MDL_ZSCORE,
-    xmippLib.MDL_ZSCORE_HISTOGRAM,
-    xmippLib.MDL_ZSCORE_RESMEAN,
-    xmippLib.MDL_ZSCORE_RESVAR,
-    xmippLib.MDL_ZSCORE_RESCOV,
-    xmippLib.MDL_ZSCORE_SHAPE1,
-    xmippLib.MDL_ZSCORE_SHAPE2,
-    xmippLib.MDL_ZSCORE_SNR1,
-    xmippLib.MDL_ZSCORE_SNR2,
-    xmippLib.MDL_CUMULATIVE_SSNR,
-    xmippLib.MDL_PARTICLE_ID,
-    xmippLib.MDL_FRAME_ID,
-    xmippLib.MDL_SCORE_BY_VAR,
-    xmippLib.MDL_SCORE_BY_GINI,
-    ]
+    ANGLES_DICT = OrderedDict([
+           ("_angleY", xmippLib.MDL_ANGLE_Y),
+           ("_angleY2", xmippLib.MDL_ANGLE_Y2),
+           ("_angleTilt", xmippLib.MDL_ANGLE_TILT)
+           ])
 
-ANGLES_DICT = OrderedDict([
-       ("_angleY", xmippLib.MDL_ANGLE_Y),
-       ("_angleY2", xmippLib.MDL_ANGLE_Y2),
-       ("_angleTilt", xmippLib.MDL_ANGLE_TILT)
-       ])
-
-ALIGNMENT_DICT = OrderedDict([
-       ("_xmipp_shiftX", xmippLib.MDL_SHIFT_X),
-       ("_xmipp_shiftY", xmippLib.MDL_SHIFT_Y),
-       ("_xmipp_shiftZ", xmippLib.MDL_SHIFT_Z),
-       ("_xmipp_flip", xmippLib.MDL_FLIP),
-       ("_xmipp_anglePsi", xmippLib.MDL_ANGLE_PSI),
-       ("_xmipp_angleRot", xmippLib.MDL_ANGLE_ROT),
-       ("_xmipp_angleTilt", xmippLib.MDL_ANGLE_TILT),
-       ])
+    ALIGNMENT_DICT = OrderedDict([
+           ("_xmipp_shiftX", xmippLib.MDL_SHIFT_X),
+           ("_xmipp_shiftY", xmippLib.MDL_SHIFT_Y),
+           ("_xmipp_shiftZ", xmippLib.MDL_SHIFT_Z),
+           ("_xmipp_flip", xmippLib.MDL_FLIP),
+           ("_xmipp_anglePsi", xmippLib.MDL_ANGLE_PSI),
+           ("_xmipp_angleRot", xmippLib.MDL_ANGLE_ROT),
+           ("_xmipp_angleTilt", xmippLib.MDL_ANGLE_TILT),
+           ])
 
 
 def objectToRow(obj, row, attrDict, extraLabels=[]):
@@ -290,11 +294,18 @@ def setXmippAttributes(obj, objRow, *labels):
     and the datatype will be set correctly.
     """
     for label in labels:
-        setXmippAttribute(obj, label, objRow.getValueAsObject(label))
+        value = objRow.getValueAsObject(label)
+        # To avoid empty values
+
+        if objRow.containsLabel(label):
+            setXmippAttribute(obj, label, value)
 
 def setXmippAttribute(obj, label, value):
     """ Sets an attribute of an object prefixing it with xmipp"""
     setattr(obj, prefixAttribute(xmippLib.label2Str(label)), value)
+
+def getXmippAttribute(obj, label, default=None):
+    return getattr(obj, prefixAttribute(xmippLib.label2Str(label)), default)
 
 def prefixAttribute(attribute):
     return '_xmipp_%s' % attribute
@@ -853,13 +864,13 @@ def writeMicCoordinates(mic, coordList, outputFn, isManual=True,
 
     for coord in coordList:
         x, y = getPosFunc(coord)
-        f.write(" %06d   1   %d  %d  %d   %06d\n"
+        f.write(" %06d   1   %d  %d  %d   %06d \n"
                 % (coord.getObjId(), x, y, 1, mic.getObjId()))
     
     f.close()
     
 
-def readSetOfCoordinates(outputDir, micSet, coordSet, readDiscarded=False):
+def readSetOfCoordinates(outputDir, micSet, coordSet, readDiscarded=False, scale=1):
     """ Read from Xmipp .pos files.
     Params:
         outputDir: the directory where the .pos files are.
@@ -869,6 +880,7 @@ def readSetOfCoordinates(outputDir, micSet, coordSet, readDiscarded=False):
             name should be the same of the micrographs.
         coordSet: the SetOfCoordinates that will be populated.
         readDiscarded: read only the coordinates with the MDL_ENABLE set at -1
+        scale: Factor to scale ONLY x,y coordinates, you are supposed to use an appropiate boxsize (you created the set)
     """
     # Read the boxSize from the config.xmd metadata
     configfile = join(outputDir, 'config.xmd')
@@ -876,15 +888,15 @@ def readSetOfCoordinates(outputDir, micSet, coordSet, readDiscarded=False):
         md = xmippLib.MetaData('properties@' + join(outputDir, 'config.xmd'))
         boxSize = md.getValue(xmippLib.MDL_PICKING_PARTICLE_SIZE,
                               md.firstObject())
-        coordSet.setBoxSize(boxSize)
+        coordSet.setBoxSize(int(boxSize)) #Only coordinates x,y are scaled, you are supposed to use an appropiate boxsize
     for mic in micSet:
         posFile = join(outputDir, replaceBaseExt(mic.getFileName(), 'pos'))
-        readCoordinates(mic, posFile, coordSet, outputDir, readDiscarded)
+        readCoordinates(mic, posFile, coordSet, outputDir, readDiscarded, scale=scale)
 
     coordSet._xmippMd = String(outputDir)
 
 
-def readCoordinates(mic, fileName, coordsSet, outputDir, readDiscarded=False):
+def readCoordinates(mic, fileName, coordsSet, outputDir, readDiscarded=False, scale=1):
         posMd = readPosCoordinates(fileName, readDiscarded)
         # TODO: CHECK IF THIS LABEL IS STILL NECESSARY
         posMd.addLabel(md.MDL_ITEM_ID)
@@ -899,8 +911,8 @@ def readCoordinates(mic, fileName, coordsSet, outputDir, readDiscarded=False):
 
             coord = rowToCoordinate(rowFromMd(posMd, objId))
             coord.setMicrograph(mic)
-            coord.setX(coord.getX())
-            coord.setY(coord.getY())
+            coord.setX(int(coord.getX()*scale))
+            coord.setY(int(coord.getY()*scale))
             coordsSet.append(coord)
             posMd.setValue(md.MDL_ITEM_ID, long(coord.getObjId()), objId)
 

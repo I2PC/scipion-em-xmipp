@@ -99,6 +99,7 @@ class XmippProtLocSharp(ProtAnalysis3D):
     
 
     def _insertAllSteps(self):
+        self.iteration = 0
         self._createFilenameTemplates() 
         self._insertFunctionStep('convertInputStep')
         self._insertFunctionStep('checkBackgroundStep')
@@ -224,13 +225,13 @@ class XmippProtLocSharp(ProtAnalysis3D):
         last_Niters = -1
         last_lambda_sharpening = 1e38
         nextIter = True
-        iteration = 0
+
         while nextIter is True:
-            iteration = iteration + 1
+            self.iteration = self.iteration + 1
             #print iteration
             print ('\n====================\n'
-                'Iteration  %s'  % (iteration))
-            self.sharpenStep(iteration)           
+                'Iteration  %s'  % (self.iteration))
+            self.sharpenStep(self.iteration)           
             mtd = md.MetaData()
             mtd.read(self._getFileName('METADATA_PARAMS_SHARPENING'))
             
@@ -248,7 +249,7 @@ class XmippProtLocSharp(ProtAnalysis3D):
             last_Niters = Niters
             last_lambda_sharpening = lambda_sharpening
             
-            self.MonoResStep(iteration)
+            self.MonoResStep(self.iteration)
             
             imageFile = self._getFileName('OUTPUT_RESOLUTION_FILE')
 
@@ -262,9 +263,11 @@ class XmippProtLocSharp(ProtAnalysis3D):
             if (max_res-min_res<0.75):
                 nextIter = False
                 break
-                
-        os.system('cp '  +self._getExtraPath('sharpenedMap_'+str(iteration)+'.mrc')+
+
+        # TODO: please copy the file using python not the operating system
+        os.system('cp '  +self._getExtraPath('sharpenedMap_'+str(self.iteration)+'.mrc')+
                    ' '  +self._getExtraPath('sharpenedMap_last.mrc'))
+
         
         resFile = self.resolutionVolume.get().getFileName()        
         pathres=dirname(resFile)
@@ -278,13 +281,24 @@ class XmippProtLocSharp(ProtAnalysis3D):
   
              
     def createOutputStep(self):
+
         volume=Volume()
         volume.setFileName(self._getExtraPath('sharpenedMap_last.mrc'))
         volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
+        volume.setOrigin(self.inputVolume.get().getOrigin(True))
 
-        self._defineOutputs(sharpened_map=volume)
-        self._defineSourceRelation(self.inputVolume, volume)          
+
+        volumesSet = self._createSetOfVolumes()
+        volumesSet.setSamplingRate(self.inputVolume.get().getSamplingRate()) 
+        for i in range(self.iteration):
+            vol = Volume()       
+            vol.setLocation(i, self._getExtraPath('sharpenedMap_%d.mrc' % (i+1)))
+            vol.setObjComment("Sharpened Map, \n Epoch %d"%(i+1))
+            volumesSet.append(vol)  
             
+        self._defineOutputs(outputVolumes=volumesSet)
+        self._defineSourceRelation(self.inputVolume, volumesSet)            
+                     
     # --------------------------- INFO functions ------------------------------
 
     def _methods(self):

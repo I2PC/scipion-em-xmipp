@@ -95,7 +95,7 @@ class TestMonoRes(TestMonoResBase):
                                    filterInput=False,
                                    )
         self.launchProtocol(MonoRes)
-        self.assertTrue(exists(MonoRes._getExtraPath('mgresolution.vol')),
+        self.assertTrue(exists(MonoRes._getExtraPath('mgresolution.mrc')),
                         "MonoRes (no split, no premasked) has failed")
  
     def testMonoRes2(self):
@@ -114,7 +114,7 @@ class TestMonoRes(TestMonoResBase):
                                    filterInput=False,
                                    )
         self.launchProtocol(MonoRes)
-        self.assertTrue(exists(MonoRes._getExtraPath('mgresolution.vol')),
+        self.assertTrue(exists(MonoRes._getExtraPath('mgresolution.mrc')),
                         "MonoRes (split, pre-masked, no filter) has failed")
  
     def testMonoRes3(self):
@@ -131,5 +131,5 @@ class TestMonoRes(TestMonoResBase):
                                    filterInput=True,
                                    )
         self.launchProtocol(MonoRes)
-        self.assertTrue(exists(MonoRes._getExtraPath('mgresolution.vol')),
+        self.assertTrue(exists(MonoRes._getExtraPath('mgresolution.mrc')),
                         "MonoRes filter has failed")

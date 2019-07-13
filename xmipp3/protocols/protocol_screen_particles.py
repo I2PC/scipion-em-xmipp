@@ -33,6 +33,8 @@ from datetime import datetime
 import pyworkflow.em as em
 import pyworkflow.protocol.constants as cons
 
+from pyworkflow.em.metadata import getSize, isEmpty
+from pyworkflow.utils import cleanPath
 from pyworkflow.em.data import SetOfParticles
 from pyworkflow.em.protocol import ProtProcessParticles
 from pyworkflow.object import Set, Float
@@ -45,8 +47,14 @@ from xmipp3.convert import readSetOfParticles, writeSetOfParticles
 
 
 class XmippProtScreenParticles(ProtProcessParticles):
-    """ Classify particles according their similarity to the others in order
-    to detect outliers. """
+    """ Attach different merit values to every particle in order to
+        prune the set.
+        zScore evaluates the similarity of a particles with an average
+        (lower zScore -> high similarity).
+        SSNR evaluates the signal/noise ration in the Fourier space.
+        Variance evaluates the varaince on the micrographs context where
+        the particle was picked.
+    """
 
     _label = 'screen particles'
 
@@ -62,68 +70,66 @@ class XmippProtScreenParticles(ProtProcessParticles):
     REJ_VARGINI = 2
 
     # --------------------------- DEFINE param functions ---------------------
-
     def _defineProcessParams(self, form):
-
+        # --- zScore rejection ---
         form.addParam('autoParRejection', EnumParam,
                       choices=self.ZSCORE_CHOICES,
-                      label="Automatic particle rejection based on Zscore",
+                      label="Automatic rejection by Zscore",
                       default=self.REJ_NONE,
                       display=EnumParam.DISPLAY_COMBO,
-                      expertLevel=LEVEL_ADVANCED,
-                      help='How to automatically reject particles. It can be:\n'
+                      help='zScore evaluates the similarity of a particles '
+                           'with an average. The rejection can be:\n'
                            '  None (no rejection)\n'
-                           '  MaxZscore (reject a particle if its Zscore [a '
-                           'similarity index] is larger than this value).\n '
-                           '  Percentage (reject a given percentage in each '
-                           'one of the screening criteria).')
-        form.addParam('maxZscore', FloatParam, default=3,
-                      condition='autoParRejection==1',
-                      label='Maximum Zscore', expertLevel=LEVEL_ADVANCED,
-                      help='Maximum Zscore.', validators=[Positive])
-        form.addParam('percentage', IntParam, default=5,
+                           '  MaxZscore (reject a particle if its zScore '
+                           'is larger than this value).\n '
+                           '  Percentage (reject a given percentage for '
+                           'this criteria).')
+        form.addParam('maxZscore', FloatParam, default=3, validators=[Positive],
+                      condition='autoParRejection==1', label='zScore threshold',
+                      help='Maximum Zscore.')
+        form.addParam('percentage', IntParam, default=5, label='Percentage (%)',
                       condition='autoParRejection==2',
-                      label='Percentage (%)', expertLevel=LEVEL_ADVANCED,
                       help='The worse percentage of particles according to '
                            'metadata labels: ZScoreShape1, ZScoreShape2, '
                            'ZScoreSNR1, ZScoreSNR2, ZScoreHistogram are '
-                           'automatically disabled. Therefore, the total '
-                           'number of disabled particles belongs to ['
-                           'percetage, 5*percentage]',
+                           'automatically disabled.',
                       validators=[Range(0, 100, error="Percentage must be "
                                                       "between 0 and 100.")])
+        # --- SSNR rejection ---
         form.addParam('autoParRejectionSSNR', EnumParam,
                       choices=self.SSNR_CHOICES,
-                      label="Automatic particle rejection based on SSNR",
+                      label="Automatic rejection by SSNR",
                       default=self.REJ_NONE, display=EnumParam.DISPLAY_COMBO,
-                      expertLevel=LEVEL_ADVANCED,
-                      help='How to automatically reject particles based on '
-                           'SSNR. It can be:\n'
+                      help='SSNR evaluates the signal/noise ration in the '
+                           'Fourier space. The rejection can be:\n'
                            '  None (no rejection)\n'
-                           'Percentage (reject a given percentage of the '
+                           '  Percentage (reject a given percentage of the '
                            'lowest SSNRs).')
         form.addParam('percentageSSNR', IntParam, default=5,
                       condition='autoParRejectionSSNR==1',
-                      label='Percentage (%)', expertLevel=LEVEL_ADVANCED,
+                      label='Percentage (%)',
                       help='The worse percentage of particles according to '
                            'SSNR are automatically disabled.',
                       validators=[Range(0, 100, error="Percentage must be "
                                                       "between 0 and 100.")])
+        # --- Variance rejection ---
         form.addParam('autoParRejectionVar', EnumParam, default=self.REJ_NONE,
                       choices=self.VAR_CHOICES,
-                      label='Automatic particle rejection based on Variance',
-                      expertLevel=LEVEL_ADVANCED,
-                      help='How to automatically reject particles based on '
-                           'Variance. It can be:\n'
+                      label='Automatic rejection by Variance',
+                      help='Variance evaluates the varaince on the micrographs '
+                           'context where the particle was picked. '
+                           'The rejection can be:\n'
                            '  None (no rejection)\n'
                            '  Variance (taking into account only the variance)\n'
-                           '  Var. and Gini (taking into account also the Gini coeff.)')
+                           '  Var. and Gini (taking into account also the Gini '
+                           'coeff.)')
+        # --- Add features ---
         form.addParam('addFeatures', BooleanParam, default=False,
                       label='Add features', expertLevel=LEVEL_ADVANCED,
                       help='Add features used for the ranking to each one '
                            'of the input particles')
-        form.addParallelSection(threads=0, mpi=0)
 
+        form.addParallelSection(threads=0, mpi=0)
 
     def _getDefaultParallel(self):
         """This protocol doesn't have mpi version"""
@@ -133,14 +139,22 @@ class XmippProtScreenParticles(ProtProcessParticles):
     def _insertAllSteps(self):
         self._initializeZscores()
         self.outputSize = 0
+        self.inputSize = 0
         self.check = None
-        self.streamClosed = self.inputParticles.get().isStreamClosed()
+        self.fnInputMd = self._getExtraPath("input.xmd")
+        self.fnInputOldMd = self._getExtraPath("inputOld.xmd")
+        self.fnOutputMd = self._getExtraPath("output.xmd")
+
+        self.inputSize, self.streamClosed = self._loadInput()
         partsSteps = self._insertNewPartsSteps()
         self._insertFunctionStep('createOutputStep',
                                  prerequisites=partsSteps, wait=True)
 
-    def createOutputStep(self):
-        pass
+    def _getFirstJoinStep(self):
+        for s in self._steps:
+            if s.funcName == self._getFirstJoinStepName():
+                return s
+        return None
 
     def _getFirstJoinStepName(self):
         # This function will be used for streaming, to check which is
@@ -149,19 +163,12 @@ class XmippProtScreenParticles(ProtProcessParticles):
         # (e.g., in Xmipp 'sortPSDStep')
         return 'createOutputStep'
 
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
+    def createOutputStep(self):
+        pass
 
     def _insertNewPartsSteps(self):
         deps = []
-        stepId = self._insertFunctionStep('sortImages',
-                                          self._getExtraPath("input.xmd"),
-                                          self._getExtraPath("inputOld.xmd"),
-                                          self._getExtraPath("output.xmd"),
-                                          prerequisites=[])
+        stepId = self._insertFunctionStep('sortImagesStep', prerequisites=[])
         deps.append(stepId)
         return deps
 
@@ -182,23 +189,77 @@ class XmippProtScreenParticles(ProtProcessParticles):
         if self.lastCheck > mTime:
             return None
         self.lastCheck = now
-        outputStep = self._getFirstJoinStep()
-        fDeps = self._insertNewPartsSteps()
-        if outputStep is not None:
-            outputStep.addPrerequisites(*fDeps)
-        self.updateSteps()
+
+        self.inputSize, self.streamClosed = self._loadInput()
+        if not isEmpty(self.fnInputMd):
+            fDeps = self._insertNewPartsSteps()
+            outputStep = self._getFirstJoinStep()
+            if outputStep is not None:
+                outputStep.addPrerequisites(*fDeps)
+            self.updateSteps()
+
+    def _loadInput(self):
+        partsFile = self.inputParticles.get().getFileName()
+        inPartsSet = SetOfParticles(filename=partsFile)
+        inPartsSet.loadAllProperties()
+
+        if self.check == None:
+            writeSetOfParticles(inPartsSet, self.fnInputMd,
+                                alignType=em.ALIGN_NONE, orderBy='creation')
+        else:
+            writeSetOfParticles(inPartsSet, self.fnInputMd,
+                                alignType=em.ALIGN_NONE, orderBy='creation',
+                                where='creation>"' + str(self.check) + '"')
+            writeSetOfParticles(inPartsSet, self.fnInputOldMd,
+                                alignType=em.ALIGN_NONE, orderBy='creation',
+                                where='creation<"' + str(self.check) + '"')
+        for p in inPartsSet.iterItems(orderBy='creation',
+                                      direction='DESC'):
+            self.check = p.getObjCreation()
+            break
+
+        streamClosed = inPartsSet.isStreamClosed()
+        inputSize = inPartsSet.getSize()
+
+        inPartsSet.close()
+
+        return inputSize, streamClosed
 
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
         self.finished = self.streamClosed and \
-                        self.outputSize == len(self.outputParticles)
+                        self.outputSize == self.inputSize
+
+        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+
+        newData = os.path.exists(self.fnOutputMd)
+        lastToClose = self.finished and hasattr(self, 'outputParticles')
+        if newData or lastToClose:
+
+            outSet = self._loadOutputSet(SetOfParticles, 'outputParticles.sqlite')
+
+            if newData:
+                partsSet = self._createSetOfParticles()
+                readSetOfParticles(self.fnOutputMd, partsSet)
+                outSet.copyItems(partsSet)
+                for item in partsSet:
+                    self._calculateSummaryValues(item)
+                self._store()
+
+                writeSetOfParticles(outSet.iterItems(orderBy='_xmipp_zScore'),
+                                    self._getPath("images.xmd"),
+                                    alignType=em.ALIGN_NONE)
+                cleanPath(self.fnOutputMd)
+
+            self._updateOutputSet('outputParticles', outSet, streamMode)
+
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(cons.STATUS_NEW)
 
-    def _loadOutputSet(self, SetClass, baseName, fnMd):
+    def _loadOutputSet(self, SetClass, baseName):
         setFile = self._getPath(baseName)
         if os.path.exists(setFile):
             outputSet = SetClass(filename=setFile)
@@ -210,73 +271,28 @@ class XmippProtScreenParticles(ProtProcessParticles):
             self._store(outputSet)
             self._defineTransformRelation(self.inputParticles, outputSet)
 
-        inputs = self.inputParticles.get()
-        outputSet.copyInfo(inputs)
-        partsSet = self._createSetOfParticles()
-        readSetOfParticles(fnMd, partsSet)
-        os.remove(fnMd)
-        self.outputSize = self.outputSize + len(partsSet)
-        outputSet.copyItems(partsSet)
-        for item in partsSet:
-            self._calculateSummaryValues(item)
-        self._store()   # Persist zScore values for summary and testing
-        writeSetOfParticles(outputSet.iterItems(orderBy='_xmipp_zScore'),
-                            self._getPath("images.xmd"),
-                            alignType=em.ALIGN_NONE)
+        outputSet.copyInfo(self.inputParticles.get())
+
         return outputSet
 
+    #--------------------------- STEP functions -----------------------------
+    def sortImagesStep(self):
+        args = "-i Particles@%s -o %s --addToInput " % (self.fnInputMd,
+                                                        self.fnOutputMd)
+        if os.path.exists(self.fnInputOldMd):
+            args += "-t Particles@%s " % self.fnInputOldMd
 
-    def _updateOutputSet(self, outputName, outputSet, state=Set.STREAM_OPEN):
-        outputSet.setStreamState(state)
-        if self.hasAttribute(outputName):
-            outputSet.write()  # Write to commit changes
-            outputAttr = getattr(self, outputName)
-            # Copy the properties to the object contained in the protocol
-            outputAttr.copy(outputSet, copyId=False)
-            # Persist changes
-            self._store(outputAttr)
-        else:
-            self._defineOutputs(**{outputName: outputSet})
-            self._store(outputSet)
-
-        # Close set databaset to avoid locking it
-        outputSet.close()
-
-    #--------------------------- STEPS functions -----------------------------
-    def sortImages(self, fnInputMd, fnInputOldMd, fnOutputMd):
-        partsFile = self.inputParticles.get().getFileName()
-        self.outputParticles = SetOfParticles(filename=partsFile)
-        self.outputParticles.loadAllProperties()
-        self.streamClosed = self.outputParticles.isStreamClosed()
-        if self.check == None:
-            writeSetOfParticles(self.outputParticles, fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation')
-        else:
-            writeSetOfParticles(self.outputParticles, fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation',
-                                where='creation>"' + str(self.check) + '"')
-            writeSetOfParticles(self.outputParticles, fnInputOldMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation',
-                                where='creation<"' + str(self.check) + '"')
-        if (self.outputSize >= len(self.outputParticles)):
-            return
-        args = "-i Particles@%s -o %s --addToInput " % (fnInputMd, fnOutputMd)
-        if self.check != None:
-            args += "-t Particles@%s " % fnInputOldMd
-        for p in self.outputParticles.iterItems(orderBy='creation',
-                                                direction='DESC'):
-            self.check = p.getObjCreation()
-            break
-        self.outputParticles.close()
         if self.autoParRejection == self.REJ_MAXZSCORE:
             args += "--zcut " + str(self.maxZscore.get())
         elif self.autoParRejection == self.REJ_PERCENTAGE:
             args += "--percent " + str(self.percentage.get())
+
         if self.addFeatures:
             args += "--addFeatures "
+
         self.runJob("xmipp_image_sort_by_statistics", args)
 
-        args = "-i Particles@%s -o %s" % (fnInputMd, fnOutputMd)
+        args = "-i Particles@%s -o %s" % (self.fnInputMd, self.fnOutputMd)
         if self.autoParRejectionSSNR == self.REJ_PERCENTAGE_SSNR:
             args += " --ssnrpercent " + str(self.percentageSSNR.get())
         self.runJob("xmipp_image_ssnr", args)
@@ -287,7 +303,7 @@ class XmippProtScreenParticles(ProtProcessParticles):
                 varList = []
                 giniList = []
                 print('  - Reading metadata')
-                mdata = xmippLib.MetaData(fnInputMd)
+                mdata = xmippLib.MetaData(self.fnInputMd)
                 for objId in mdata:
                     varList.append(mdata.getValue(xmippLib.MDL_SCORE_BY_VAR, objId))
                     giniList.append(mdata.getValue(xmippLib.MDL_SCORE_BY_GINI, objId))
@@ -302,17 +318,13 @@ class XmippProtScreenParticles(ProtProcessParticles):
                 self.varThreshold.set(histThresholding(valuesList))
                 print('  - Variance threshold: %f' % self.varThreshold)
 
-            rejectByVariance(fnInputMd, fnOutputMd, self.varThreshold,
+            rejectByVariance(self.fnInputMd, self.fnOutputMd, self.varThreshold,
                              self.autoParRejectionVar)
 
-        streamMode = Set.STREAM_CLOSED \
-            if getattr(self, 'finished', False) else Set.STREAM_OPEN
-        outSet = self._loadOutputSet(SetOfParticles, 'outputParticles.sqlite',
-                                     fnOutputMd)
-        self._updateOutputSet('outputParticles', outSet, streamMode)
+        # update the processed particles
+        self.outputSize += getSize(self.fnInputMd)
 
     def _initializeZscores(self):
-
         # Store the set for later access , ;-(
         self.minZScore = Float()
         self.maxZScore = Float()
@@ -321,7 +333,6 @@ class XmippProtScreenParticles(ProtProcessParticles):
         self._store()
 
     def _calculateSummaryValues(self, particle):
-
         zScore = particle._xmipp_zScore.get()
 
         self.minZScore.set(min(zScore, self.minZScore.get(1000)))
@@ -416,7 +427,7 @@ class XmippProtScreenParticles(ProtProcessParticles):
         return methods
 
 
-# -------------------------- UTILS functions ------------------------------
+# -------------------------- EXTERNAL functions ------------------------------
 def histThresholding(valuesList, nBins=256, portion=4):
     """ returns the threshold to reject those values above a portionth of 
         the peak. i.e: if portion is 4, the threshold correponds to the

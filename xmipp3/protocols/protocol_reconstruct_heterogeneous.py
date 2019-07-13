@@ -32,7 +32,7 @@ from os.path import join, exists
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, \
-    BooleanParam, IntParam
+    BooleanParam, IntParam, GE, USE_GPU, GPU_LIST
 from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile
 from pyworkflow.em.protocol import ProtClassify3D
 from pyworkflow.em.metadata.utils import getFirstRow, getSize
@@ -56,6 +56,16 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
+        form.addHidden(USE_GPU, BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       expertLevel=LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+
         form.addSection(label='Input')
         form.addParam('inputParticles', PointerParam, label="Full-size Images",
                       important=True,
@@ -78,7 +88,6 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                       help='Target resolution to solve for the heterogeneity')
         form.addParam('computeDiff', BooleanParam, default=False,
                       label="Compute the difference volumes")
-        form.addParam('useGpu', BooleanParam, default=False, label="Use GPU")
 
         form.addSection(label='Angular assignment')
         form.addParam('numberOfIterations', IntParam, default=3,
@@ -113,6 +122,14 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         form.addParam("stochasticN", IntParam, label="Subset size", default=200,
                       condition="stochastic", expertLevel=LEVEL_ADVANCED,
                       help="Number of images in the random subset")
+        form.addParam("approx", BooleanParam, label="Approximative reconstruction", default=True,
+                      expertLevel=LEVEL_ADVANCED,
+                      help="If on, an approximation of the Fourier reconstruction algorithm will be used. " \
+                           "This will result in faster processing times, but (slightly) less precise result")
+        form.addParam('fr_gpu_mpi', IntParam,
+                      label="Reconstruction GPU MPI", default=1, validators=[GE(1,'Error must be greater than 1')],
+                      expertLevel=LEVEL_ADVANCED,
+                      help="Number of MPI processes used for the GPU version of the Fourier Reconstruction")
 
         form.addParallelSection(threads=1, mpi=8)
 
@@ -391,7 +408,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
                         fnAnglesSignificant = join(fnDirCurrent,
                                                    "angles_iter001_00.xmd")
-                        if not self.useGpu:
+                        if not self.useGpu.get():
                             args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d --dontApplyFisher' % \
                                    (fnGroup, fnGalleryGroupMd, maxShift,
                                     fnDirCurrent,
@@ -580,17 +597,21 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                     deletePattern = fnCorrectedImagesRoot + ".*"
 
                 fnOutVol = "%s_%06d_half%d.vol" % (fnRootVol, i, half)
-                if not self.useGpu:
+                if self.useGpu.get():
                     args = "-i %s -o %s --sym %s --weight --thr %d" % (
-                    fnAnglesToUse, fnOutVol, self.symList[i - 1],
-                    self.numberOfThreads.get())
-                    self.runJob("xmipp_reconstruct_fourier", args,
-                                numberOfMpi=self.numberOfMpi.get())
+                        fnAnglesToUse, fnOutVol, self.symList[i - 1],
+                        self.numberOfThreads.get())
+                    args += " --device %(GPU)s"
+                    if self.approx:
+                        args += " --fast"
+                    self.runJob("xmipp_cuda_reconstruct_fourier", args,
+                                numberOfMpi=self.fr_gpu_mpi.get())
                 else:
                     args = "-i %s -o %s --sym %s --weight" % (
-                    fnAnglesToUse, fnOutVol, self.symList[i - 1])
-                    self.runJob('xmipp_cuda_reconstruct_fourier', args,
-                                numberOfMpi=1)
+                        fnAnglesToUse, fnOutVol, self.symList[i - 1])
+                    if self.approx:
+                        args += " --fast"
+                    self.runJob('xmipp_reconstruct_fourier_accel', args)
 
                 cleanPath(fnAnglesToUse)
                 if deleteStack:
