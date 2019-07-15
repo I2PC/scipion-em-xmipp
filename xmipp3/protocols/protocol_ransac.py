@@ -34,7 +34,7 @@ from pyworkflow.em.protocol import ProtInitialVolume
 from pyworkflow.em.data import SetOfClasses2D
 from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
                                         IntParam, StringParam, 
-                                        STEPS_PARALLEL, LEVEL_ADVANCED)
+                                        STEPS_PARALLEL, LEVEL_ADVANCED, USE_GPU, GPU_LIST)
 import xmippLib
 from xmipp3.convert import writeSetOfClasses2D, readSetOfVolumes, writeSetOfParticles
 from xmipp3.utils import isMdEmpty
@@ -61,6 +61,16 @@ class XmippProtRansac(ProtInitialVolume):
 
     #--------------------------- DEFINE param functions --------------------------------------------        
     def _defineParams(self, form):
+        form.addHidden(USE_GPU, BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       expertLevel=LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+
         form.addSection(label='Input')
          
         form.addParam('inputSet', PointerParam, label="Input averages", important=True, 
@@ -251,7 +261,15 @@ class XmippProtRansac(ProtInitialVolume):
         if os.path.exists(fnRoot+".xmd"):
             Nimages=getSize(fnRoot+".xmd")
             if Nimages>0:
-                self.runJob("xmipp_reconstruct_fourier","-i %s.xmd -o %s.vol --sym %s " %(fnRoot,fnRoot,self.symmetryGroup.get()))
+                if self.useGpu.get():
+                    # protocol will run several reconstructions at once, so execute each reconstruction separately
+                    args = "-i %s.xmd -o %s.vol --sym %s --thr 1 --fast"\
+                           % (fnRoot, fnRoot, self.symmetryGroup.get())
+                    args += " --device %(GPU)s"
+                    self.runJob("xmipp_cuda_reconstruct_fourier", args , numberOfMpi=1, numberOfThreads=1)
+                else:
+                    self.runJob("xmipp_reconstruct_fourier_accel","-i %s.xmd -o %s.vol --sym %s "
+                                %(fnRoot,fnRoot,self.symmetryGroup.get()))
                 self.runJob("xmipp_transform_mask","-i %s.vol --mask circular -%d "%(fnRoot,self.Xdim2/2))
         else:
             print fnRoot+".xmd is empty. The corresponding volume is not generated." 

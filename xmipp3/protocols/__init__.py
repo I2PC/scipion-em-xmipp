@@ -69,6 +69,7 @@ from .protocol_movie_average import XmippProtMovieAverage
 from .protocol_movie_correlation import XmippProtMovieCorr
 from .protocol_movie_opticalflow import XmippProtOFAlignment, ProtMovieAlignment
 from .protocol_movie_max_shift import XmippProtMovieMaxShift
+from .protocol_movie_split_frames import XmippProtSplitFrames
 from .protocol_multiple_fscs import XmippProtMultipleFSCs
 from .protocol_multireference_alignability import XmippProtMultiRefAlignability
 from .protocol_normalize_strain import XmippProtNormalizeStrain
@@ -97,6 +98,7 @@ from .protocol_rotational_spectra import XmippProtRotSpectra
 from .protocol_rotational_symmetry import XmippProtRotationalSymmetry
 from .protocol_screen_particles import XmippProtScreenParticles
 from .protocol_screen_deepConsensus import XmippProtScreenDeepConsensus, XmippProtDeepConsSubSet
+from .protocol_deep_micrograph_screen import  XmippProtDeepMicrographScreen
 from .protocol_screen_deeplearning import XmippProtScreenDeepLearning
 from .protocol_solid_angles import XmippProtSolidAngles
 from .protocol_split_volume import XmippProtSplitvolume
