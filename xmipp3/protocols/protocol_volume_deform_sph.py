@@ -31,13 +31,13 @@ from pyworkflow.em.protocol import ProtAnalysis3D
 import pyworkflow.protocol.params as params
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.em.data import Volume
-from pyworkflow import VERSION_1_2
+from pyworkflow import VERSION_2_0
 
 
 class XmippProtVolumeDeformSPH(ProtAnalysis3D):
     """ Protocol for volume deformation based on spherical harmonics. """
     _label = 'sph volume deform'
-    _lastUpdateVersion = VERSION_1_2
+    _lastUpdateVersion = VERSION_2_0
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):

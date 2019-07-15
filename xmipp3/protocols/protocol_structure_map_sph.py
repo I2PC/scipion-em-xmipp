@@ -31,7 +31,7 @@ from pyworkflow.em.protocol import ProtAnalysis3D
 import pyworkflow.protocol.params as params
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.em.data import SetOfVolumes, Volume
-from pyworkflow import VERSION_1_2
+from pyworkflow import VERSION_2_0
 import numpy as np
 
 
@@ -62,7 +62,7 @@ def mds(d, dimensions=2):
 class XmippProtStructureMapSPH(ProtAnalysis3D):
     """ Protocol for structure mapping based on spherical harmonics. """
     _label = 'sph struct map'
-    _lastUpdateVersion = VERSION_1_2
+    _lastUpdateVersion = VERSION_2_0
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):

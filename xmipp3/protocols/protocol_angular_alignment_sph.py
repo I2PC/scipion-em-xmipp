@@ -39,13 +39,13 @@ from pyworkflow.utils.path import moveFile
 import numpy as np
 from sklearn.manifold import TSNE
 
-from pyworkflow import VERSION_1_2
+from pyworkflow import VERSION_2_0
 
 
 class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
     """ Protocol for flexible angular alignment based on spherical harmonics. """
     _label = 'sph angular align'
-    _lastUpdateVersion = VERSION_1_2
+    _lastUpdateVersion = VERSION_2_0
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
