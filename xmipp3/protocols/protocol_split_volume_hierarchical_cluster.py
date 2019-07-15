@@ -256,7 +256,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         if self.maxCLimgs>0 and blockSize>self.maxCLimgs:
             fnToUSe = self._getTmpPath("coneImages.xmd")
             self.runJob("xmipp_metadata_utilities","-i %s -o %s --operate random_subset %d"\
-                        %(projMdBlock,fnToUSe,self.maxCLimgs))
+                        %(projMdBlock,fnToUSe,self.maxCLimgs),numberOfMpi=1)
         Nclasses = self.directionalClasses.get()
         Nlevels = int(math.ceil(math.log(Nclasses) / math.log(2)))
 
