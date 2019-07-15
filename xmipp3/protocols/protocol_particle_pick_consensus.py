@@ -97,7 +97,8 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         self.processedMics = []
         self.checkedMics = set()
         self.setOfCoords = []
-        self.inputs = self.inputCoordinates[0].get()#min([coor.get() for coor in ])
+        self.mainInput = self.inputCoordinates[0].get()
+        self.sampligRates = []
         coorSteps = self.insertNewCoorsSteps([])
         self._insertFunctionStep('createOutputStep',
                                  prerequisites=coorSteps, wait=True)
@@ -132,35 +133,32 @@ class XmippProtConsensusPicking(ProtParticlePicking):
 
     def _checkNewInput(self):
         streamClosed = []
-        first = True
-        for idx, coordSet in enumerate(self.inputCoordinates):
+        readyMics = None
+        allMics = set()
+        for coordSet in self.inputCoordinates:
             coorSet = SetOfCoordinates(filename=coordSet.get().getFileName())
             coorSet._xmippMd = String()
             coorSet.loadAllProperties()
             streamClosed.append(coorSet.isStreamClosed())
             coorSet.close()
             currentPickMics = {micAgg["_micId"] for micAgg in
-                               coordSet.aggregate(["MAX"], "_micId", ["_micId"])}
-            if first:  # to initialize
-                pickedMics = currentPickMics
-                allMics = currentPickMics
-                first = False
+                               coordSet.get().aggregate(["MAX"], "_micId", ["_micId"])}
+            if not readyMics:  # first time
+                readyMics = currentPickMics
             else:  # available mics are those ready for all pickers
-                pickedMics.intersection_update(currentPickMics)
-                allMics.union(currentPickMics)
+                readyMics.intersection_update(currentPickMics)
+            allMics = allMics.union(currentPickMics)
 
         self.streamClosed = all(streamClosed)
         if self.streamClosed:
-            # for non streaming and the last iteration of streaming (do all or the rest)
+            # for non streaming and the last iteration of streaming, do all or the rest
             newMicIds = allMics.difference(self.checkedMics)
-        else:  # for streaming processing only go for the ready mics in all pickers
-            newMicIds = pickedMics.difference(self.checkedMics)
+        else:  # for streaming processing, only go for the ready mics in all pickers
+            newMicIds = readyMics.difference(self.checkedMics)
         self.checkedMics.update(newMicIds)
 
-        newMics = []
-        inMics = self.inputCoordinates[0].get().getMicrographs()
-        for micId in newMicIds:
-            newMics.append(inMics[micId].clone())
+        inMics = self.mainInput.getMicrographs()
+        newMics = [inMics[micId].clone() for micId in newMicIds]
 
         if len(newMics) > 0:
             fDeps = self.insertNewCoorsSteps(newMics)
@@ -207,20 +205,24 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             self.firstTime = True
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
-            outputSet.setBoxSize(self.inputs.getBoxSize())
+            outputSet.setBoxSize(self.mainInput.getBoxSize())
 
         inMicsPointer = Pointer(self.getMapper().getParent(
-                                                  self.inputs.getMicrographs()),
-                                extended='outputMicrographs')
+                                            self.mainInput.getMicrographs()),
+                                            extended='outputMicrographs')
         outputSet.setMicrographs(inMicsPointer)
 
         return outputSet
 
     def calculateConsensusStep(self, micrograph):
-        # Take the sampling rates
-        Tm = []
-        for coordinates in self.inputCoordinates:
-            Tm.append(coordinates.get().getMicrographs().getSamplingRate())
+        print("Consensus calculation for micrograph %d: '%s'"
+              % (micrograph.getObjId(), micrograph.getMicName()))
+
+        # Take the sampling rates just once
+        if not self.sampligRates:
+            for coordinates in self.inputCoordinates:
+                micrograph = coordinates.get().getMicrographs()
+                self.sampligRates.append(micrograph.getSamplingRate())
 
         # Get all coordinates for this micrograph
         coords = []
@@ -230,7 +232,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             coordArray = np.asarray([x.getPosition() for x in
                                      coordinates.get().iterCoordinates(
                                          micrograph.getObjId())], dtype=float)
-            coordArray *= float(Tm[n]) / float(Tm[0])
+            coordArray *= float(self.sampligRates[n]) / float(self.sampligRates[0])
             coords.append(np.asarray(coordArray, dtype=int))
             Ncoords += coordArray.shape[0]
             n += 1
@@ -243,6 +245,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         inAllMicrographs = (self.consensus <= 0 or
                             self.consensus >= len(self.inputCoordinates))
         if N0 == 0 and inAllMicrographs:
+            self.processedMics.append(micrograph.getObjId())
             return
         elif N0 > 0:
             allCoords[0:N0, :] = coords[0]
