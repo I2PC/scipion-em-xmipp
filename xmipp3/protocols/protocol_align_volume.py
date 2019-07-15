@@ -43,8 +43,7 @@ class XmippProtAlignVolume(em.ProtAlignVolume):
     """ 
     Aligns a set of volumes using cross correlation 
     or a Fast Fourier method. 
-    
-    *Note:* Fast Fourier requires compilation of Xmipp with --cltomo flag
+
      """
     _label = 'align volume'
     nVols = 0
@@ -190,7 +189,6 @@ class XmippProtAlignVolume(em.ProtAlignVolume):
         for vol in self._iterInputVolumes():
             outVol = em.Volume()
             outVol.setLocation(vol.outputName)
-            outVol.setObjLabel(vol.getObjLabel())
             outVol.setObjComment(vol.getObjComment())
             #set transformation matrix             
             volId = vol.getObjId()
