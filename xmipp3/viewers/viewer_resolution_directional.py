@@ -31,8 +31,7 @@ from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 from pyworkflow.em.viewers import ChimeraView, DataView
 from xmipp3.protocols.protocol_resolution_directional import XmippProtMonoDir
 from pyworkflow.em.metadata import MetaData
-from xmippLib import (MDL_X, MDL_COUNT, MDL_RESOLUTION_FREQ, MDL_RESOLUTION_FREQ2, MDL_COST, MDL_RESOLUTION_SSNR,
-                      MDL_VOLUME_SCORE1, MDL_VOLUME_SCORE2, MDL_VOLUME_SCORE3, MDL_VOLUME_SCORE4, MDL_AVG, MDL_IDX, MDL_WEIGHT) 
+from xmippLib import *
 from pyworkflow.em import ImageHandler
 import numpy as np
 import matplotlib.pyplot as plt
