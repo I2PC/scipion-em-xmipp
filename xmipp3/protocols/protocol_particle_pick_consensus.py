@@ -94,8 +94,8 @@ class XmippProtConsensusPicking(ProtParticlePicking):
 
 #--------------------------- INSERT steps functions ---------------------------
     def _insertAllSteps(self):
-        self.checkedMics = set()  # those mics ready to be processed (micId)
-        self.processedMics = []   # those mics already processed (micId)
+        self.checkedMics = set()   # those mics ready to be processed (micId)
+        self.processedMics = set() # those mics already processed (micId)
         self.mainInput = self.inputCoordinates[0].get()
         self.sampligRates = []
         coorSteps = self.insertNewCoorsSteps([])
@@ -137,7 +137,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                 fn = removeBaseExt(fn)
                 if fn.startswith(FN_PREFIX):
                     self.checkedMics.update([getMicId(fn)])
-                    self.processedMics.append(getMicId(fn))
+                    self.processedMics.update([getMicId(fn)])
 
         streamClosed = []
         readyMics = None
@@ -178,8 +178,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
-        self.finished = (self.streamClosed and
-                         len(self.checkedMics) == len(self.processedMics))
+        self.finished = self.streamClosed and not self.checkedMics.difference(self.processedMics)
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
         newFiles = getFiles(self._getTmpPath())
@@ -189,7 +188,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             for fnTmp in newFiles:
                 coords = np.loadtxt(fnTmp)
                 moveFile(fnTmp, self._getExtraPath())
-                if coords.size == 2:  # special case with only one coordinate in consensus
+                if coords.size == 2:  # special case with only one coordinate
                     coords = [coords]
                 for coord in coords:
                     newCoord = Coordinate()
@@ -255,7 +254,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                         self._getTmpPath('%s%s.txt' % (FN_PREFIX, micId)),
                         self._getExtraPath('jaccard.txt'))
 
-        self.processedMics.append(micId)
+        self.processedMics.update([micId])
 
     def _summary(self):
         message = []
