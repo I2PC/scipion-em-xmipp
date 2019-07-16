@@ -90,7 +90,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
 
         # FIXME: It's not using more than one since
         #         self.stepsExecutionMode = STEPS_SERIAL
-        # form.addParallelSection(threads=4, mpi=1)
+        # form.addParallelSection(threads=4, mpi=0)
 
 #--------------------------- INSERT steps functions ---------------------------
     def _insertAllSteps(self):
