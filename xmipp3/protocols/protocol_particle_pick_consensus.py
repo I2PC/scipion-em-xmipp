@@ -178,7 +178,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
-        self.finished = self.streamClosed and not self.checkedMics.difference(self.processedMics)
+        self.finished = self.streamClosed and self.checkedMics == self.processedMics
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
         newFiles = getFiles(self._getTmpPath())
