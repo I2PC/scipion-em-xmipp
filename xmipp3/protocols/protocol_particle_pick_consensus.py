@@ -334,7 +334,8 @@ def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn):
         with open(jaccFn, "a") as fhJaccard:
             fhJaccard.write("%d %f\n" % (getMicId(posFn), jaccardIdx))
     except:
-        pass
+        print("Some error occurred during Jaccard index calculation or "
+              "writing it's file. Maybe a concurrence issue")
     # Write the consensus file only if there
     # are some coordinates (size > 0)
     if consensusCoords.size:
