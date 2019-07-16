@@ -198,9 +198,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                     outSet.append(newCoord)
 
             outputName = 'consensusCoordinates'
-            firstTime = True
-            if self.hasAttribute(outputName):
-                firstTime = False
+            firstTime = not self.hasAttribute(outputName)
             self._updateOutputSet(outputName, outSet, streamMode)
             if firstTime:
                 for inCorrds in self.inputCoordinates:
