@@ -1,7 +1,7 @@
 # **************************************************************************
 # *
-# * Authors:     Carlos Oscar Sanchez Sorzano
-# *              Estrella Fernandez Gimenez
+# * Authors:     Estrella Fernandez Gimenez
+# *              Carlos Oscar Sanchez Sorzano
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -89,8 +89,8 @@ class XmippAnalyzeLocalCTFViewer(ProtocolViewer):
                 legends = ['Avg. defocus','Adjusted defocus']
                 xplotter.showLegend(legends, loc=1)
                 views.append(xplotter)
-            except:
-                pass
+            except Exception as e:
+                print(e)
         return views
 
     def _viewR2(self, paramName=None):
