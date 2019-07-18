@@ -24,6 +24,7 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import json
 
 import sys, os
 import numpy as np
@@ -40,8 +41,7 @@ from xmipp3.convert import writeSetOfParticles, setXmippAttributes, xmippToLocat
 from xmipp3.utils import getMdSize
 import xmipp3
 from shutil import copyfile
-from deepDenoisingWorkers.deepDenoising import getModelClass
-       
+
 EXEC_MODES= ['Train & Predict','Predict'] 
 ITER_TRAIN = 0
 ITER_PREDICT = 1
@@ -60,6 +60,8 @@ TRAINING_LOSS = [ "MSE", "PerceptualLoss", "Both"]
 TRAINING_LOSS_MSE = 0
 TRAINING_LOSS_PERCEPTUAL = 1
 TRAINING_LOSS_BOTH = 2
+
+PRED_BATCH_SIZE=2000
 
 class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
@@ -237,7 +239,6 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
       
     def getStackOrResize(self, setOfParticles, mdFnameIn, stackFnameOut):
 
-
         if self._getResizedSize()== self.inputParticles.get().getDimensions()[0]:
             mdFname= re.sub(r"\.stk$", r".xmd", stackFnameOut)
             writeSetOfParticles(setOfParticles, mdFname )
@@ -267,31 +268,34 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
     def trainModel(self):
 
         modelFname = self._getPath('ModelTrained.h5')
-        ModelClass= getModelClass( MODEL_TYPES[self.modelType.get()], self.gpuList.get())
-         
-        builder_args= {"boxSize":self._getResizedSize(), "saveModelFname":modelFname, 
+        builder_args= {"modelType":MODEL_TYPES[self.modelType.get()], "boxSize":self._getResizedSize(),
+                       "saveModelFname":modelFname,
                        "modelDepth": self.modelDepth.get(), "gpuList":self.gpuList.get(),
                        "generatorLoss": TRAINING_LOSS[self.trainingLoss.get()],
                        "trainingDataMode": TRAINING_DATA_MODE[self.trainingSetType.get()],
                        "regularizationStrength": self.regularizationStrength.get() }
         if self.modelType.get() == MODEL_TYPE_GAN:
-
           builder_args["training_DG_ratio"]= self.numberOfDiscVsGenUpdates.get()
           builder_args["loss_logWeight"]= self.loss_logWeight.get()
-          
-        model = ModelClass( **builder_args )
         
         dataPathParticles= self._getExtraPath('resizedParticles.xmd')
         dataPathProjections= self._getExtraPath('resizedProjections.xmd')
         dataPathEmpty= self._getExtraPath('resizedProjections.xmd')
-        if not os.path.isfile(dataPathEmpty):
-          dataPathEmpty= None
-        model.train( self.learningRate.get(), self.nEpochs.get(), dataPathParticles,
-                     dataPathProjections, dataPathEmpty )
-        model.clean()
-        del model
-#        raise ValueError("training ended")
-        
+
+        argsDict={}
+        argsDict["builder"]=builder_args
+        argsDict["running"]={"lr":self.learningRate.get(), "nEpochs":self.nEpochs.get()}
+
+        jsonFname= self._getExtraPath("training_conf.json")
+        with open(jsonFname, "w") as f:
+          json.dump(argsDict, f)
+
+        args= " --mode training -i %s -p %s -c %s "%(dataPathParticles, dataPathProjections, jsonFname)
+        if os.path.isfile(dataPathEmpty):
+          args+=" --empty_particles %s"%dataPathEmpty
+
+        self.runJob("xmipp_deep_denoising", args, numberOfMpi=1)
+
 
     def _getModelFname(self):
         if self.modelTrainPredMode.get() == ITER_PREDICT:
@@ -307,70 +311,31 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
             else:
               modelFnameInit = xmipp3.Plugin.getModel('deepDenoising', 'ModelTrained.h5')
 
-            copyfile(xmipp3.Plugin.getModel('deepDenoising', 'ModelTrained.h5'), modelFname)
+            copyfile(modelFnameInit, modelFname)
         return modelFname
 
     def predictModel(self):
-        from scipy.stats import pearsonr
 
-        modelFname = self._getModelFname()     
-        ModelClass= getModelClass( MODEL_TYPES[self.modelType.get()], self.gpuList.get())
+      builder_args = {"boxSize": self._getResizedSize(), "saveModelFname": self._getModelFname(),
+                      "modelDepth": -1, "gpuList": self.gpuList.get(),"modelType":MODEL_TYPES[self.modelType.get()],
+                      "generatorLoss": TRAINING_LOSS[self.trainingLoss.get()], "batchSize": PRED_BATCH_SIZE}
+      argsDict={}
+      argsDict["builder"] = builder_args
 
-        builder_args= {"boxSize":self._getResizedSize(), "saveModelFname":modelFname, 
-                       "modelDepth": -1, "gpuList":self.gpuList.get(),
-                       "generatorLoss": TRAINING_LOSS[self.trainingLoss.get()], "batchSize": 2000}
-                       
-        model = ModelClass( **builder_args)
-        
-        inputParticlesMdName= self._getExtraPath('resizedParticles.xmd' )
-        inputParticlesStackName= self._getExtraPath('resizedParticles.stk' )
-        outputParticlesStackName= self._getExtraPath('particlesDenoised.stk' )
-        outputParticlesMdName= self._getExtraPath('particlesDenoised.xmd' )
-        inputProjectionsStackName= self._getExtraPath('resizedProjections.stk' )
-           
-        metadataParticles = xmippLib.MetaData(inputParticlesMdName )
-        useProjections= False
-        if os.path.isfile(inputProjectionsStackName):
-          useProjections=True
+      jsonFname = self._getExtraPath("predict_conf.json")
+      with open(jsonFname, "w") as f:
+        json.dump(argsDict, f)
 
-        if useProjections:
-          metadataProjections = xmippLib.MetaData(inputProjectionsStackName )
+      inputParticlesMdName = self._getExtraPath('resizedParticles.xmd')
+      dataPathProjections = self._getExtraPath('resizedProjections.xmd')
+      outputParticlesMdName = self._getExtraPath('particlesDenoised.xmd')
 
-        dimMetadata = getMdSize(inputParticlesMdName )
-        xmippLib.createEmptyFile(outputParticlesStackName, self._getResizedSize(),
-                                  self._getResizedSize(),1, dimMetadata)
+      args = " --mode denoising -i %s -c %s -o %s"% (inputParticlesMdName, jsonFname, outputParticlesMdName)
 
-        mdNewParticles = md.MetaData()
-        
-        I = xmippLib.Image()
-        i=1 #TODO. Is this the correct way? Should we use particle ids instead?
-        
-        for preds, particles, projections in model.yieldPredictions(inputParticlesMdName, metadataProjections 
-                                                                          if useProjections else None ):
-          newRow = md.Row()
-          for pred, particle, projection in zip(preds, particles, projections):
-              outputImgpath = ('%06d@' %(i ,)) + outputParticlesStackName
-              I.setData(np.squeeze(pred))
-              I.write(outputImgpath)
+      if os.path.isfile(dataPathProjections):
+        args += " -p %s" % dataPathProjections
 
-              pathNoise = ('%06d@' %(i,)) + inputParticlesStackName
-
-              newRow.setValue(md.MDL_IMAGE, outputImgpath)
-              newRow.setValue(md.MDL_IMAGE_ORIGINAL, pathNoise)
-
-              correlations_input_vs_denoised, _ = pearsonr(pred.ravel(), particle.ravel())
-              newRow.setValue(md.MDL_CORR_DENOISED_NOISY, correlations_input_vs_denoised)
-
-              if useProjections:
-                  pathProj = ('%06d@' %(i ,)) + inputProjectionsStackName
-                  newRow.setValue(md.MDL_IMAGE_REF, pathProj)
-                  correlations_proj_vs_denoised, _ = pearsonr(pred.ravel(), projection.ravel())
-                  newRow.setValue(md.MDL_CORR_DENOISED_PROJECTION, correlations_proj_vs_denoised)
-
-              newRow.addToMd(mdNewParticles)
-              i+=1
-
-        mdNewParticles.write('particles@' + outputParticlesMdName, xmippLib.MD_APPEND)
+      self.runJob("xmipp_deep_denoising", args, numberOfMpi=1)
 
     def createOutputStep(self):
         imgSet = self.inputParticles.get()
@@ -400,8 +365,6 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
             mdToAdd= (md.MDL_IMAGE_ORIGINAL, md.MDL_CORR_DENOISED_NOISY )
         
         setXmippAttributes(particle, row, *mdToAdd)
-
-
 
     # --------------------------- INFO functions --------------------------------------------
     def _summary(self):

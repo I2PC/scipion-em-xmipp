@@ -68,7 +68,10 @@ class XmippPlotter(EmPlotter):
             if nbins is in args then and histogram over y data is made
         """
         xx, yy= self._prepareDataForPlot( md, mdLabelX, mdLabelY)
-        self.plotScatter(xx, yy, color, **args)
+        try:
+            self.plotScatter(xx, yy, color, **args)
+        except AttributeError:
+            return
 
     def plotMd(self, md, mdLabelX, mdLabelY, color='g', **args):
         """ plot metadata columns mdLabelX and mdLabelY
