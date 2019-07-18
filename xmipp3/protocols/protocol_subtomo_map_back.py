@@ -30,12 +30,13 @@
 import numpy as np
 
 from pyworkflow.em.protocol import EMProtocol
-from pyworkflow.protocol.params import PointerParam, EnumParam
+from pyworkflow.protocol.params import PointerParam, EnumParam, BooleanParam, FloatParam
 from pyworkflow.em.convert import ImageHandler
 import xmippLib
 
 class XmippProtSubtomoMapBack(EMProtocol):
-    """ This protocol maps the subtomogram reference back into the original tomogram volume """
+    """ This protocol takes a tomogram, a reference subtomogram and a metadata with geometrical parameters
+   (x,y,z) and places the reference subtomogram on the tomogram at the designated locations (map back) """
 
     _label = 'subtomogram map back'
 
@@ -57,10 +58,18 @@ class XmippProtSubtomoMapBack(EMProtocol):
                       default=0, important=True,
                       display=EnumParam.DISPLAY_HLIST,
                       label='Painting mode',
-                      help="""*Subtomograms*: The subtomograms will appear without background
-                      *Highlight*: The subtomograms will appear highlighted on the original tomogram
-                      *Binarize*: The subtomograms will appear binarized on the original tomogram
-                      *Remove*: The subtomograms will appear removed on the original tomogram'""")
+                      help="""The program has several 'painting' options:
+                      *Copy*: Copying the reference onto the tomogram
+                      *Average*: Setting the region occupied by the reference in the tomogram to the average value of that region
+                      *Highlight*: Add the reference multiplied by a constant to the location specified
+                      *Binarize*: Copy a binarized version of the reference onto the tomogram'""")
+        form.addParam('removeBackground', BooleanParam, default=False, label='Remove background',
+                      help= "Set tomogram to 0", condition="paintingType == 0 or paintingType == 3")
+        form.addParam('threshold', FloatParam, default=0.5, label='Threshold',
+                      help= "threshold applied to tomogram", condition="paintingType == 1 or paintingType == 3")
+        form.addParam('constant', FloatParam, default=2, label='Constant',
+                      help="constant to multiply the reference",
+                      condition="paintingType == 2")
 
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -77,26 +86,31 @@ class XmippProtSubtomoMapBack(EMProtocol):
         fnRef = self._getExtraPath('reference.mrc')
         img.convert(self.inputReference.get(), fnRef)
         if self.paintingType.get() == 0 or self.paintingType.get() == 3:
-            self.runJob("xmipp_image_operate"," -i %s  --mult 0"%fnTomo)
+            if self.removeBackground.get() == True:
+                self.runJob("xmipp_image_operate"," -i %s  --mult 0"%fnTomo)
 
     def runMapBack(self):
+        TsSubtomo = self.inputSubtomograms.get().getSamplingRate()
+        TsTomo = self.inputTomogram.get().getSamplingRate()
+        scaleFactor = TsSubtomo/TsTomo
+
         mdGeometry = xmippLib.MetaData()
         for subtomo in self.inputSubtomograms.get():
             objId = mdGeometry.addObject()
-            mdGeometry.setValue(xmippLib.MDL_XCOOR,subtomo.getCoordinate3D().getX(),objId)
-            mdGeometry.setValue(xmippLib.MDL_YCOOR,subtomo.getCoordinate3D().getY(),objId)
-            mdGeometry.setValue(xmippLib.MDL_ZCOOR,subtomo.getCoordinate3D().getZ(),objId)
+            mdGeometry.setValue(xmippLib.MDL_XCOOR,int(subtomo.getCoordinate3D().getX()*scaleFactor),objId)
+            mdGeometry.setValue(xmippLib.MDL_YCOOR,int(subtomo.getCoordinate3D().getY()*scaleFactor),objId)
+            mdGeometry.setValue(xmippLib.MDL_ZCOOR,int(subtomo.getCoordinate3D().getZ()*scaleFactor),objId)
         fnGeometry = self._getExtraPath("geometry.xmd")
         mdGeometry.write(fnGeometry)
 
         if self.paintingType.get() == 0:
             painting = 'copy'
         elif self.paintingType.get() == 1:
-            painting = 'avg 0.5'
+            painting = 'avg %d' % self.threshold.get()
         elif self.paintingType.get() == 2:
-            painting = 'highlight 2'
+            painting = 'highlight %d' % self.constant.get()
         elif self.paintingType.get() == 3:
-            painting = 'copy_binary 0.5'
+            painting = 'copy_binary %d' % self.threshold.get()
 
        # coordinates = self.inputSubtomograms.getCoordinates3D() # original ones?
         self.runJob("xmipp_tomo_map_back"," -i %s -o %s --geom %s --ref %s --method %s" % (self._getExtraPath("tomogram.mrc"),
@@ -107,3 +121,13 @@ class XmippProtSubtomoMapBack(EMProtocol):
 
     def createOutput(self):
         pass
+
+    #--------------------------- INFO functions --------------------------------
+    def _summary(self):
+        summary = []
+        return summary
+
+    def _methods(self):
+        methods = []
+        methods.append(" ")
+        return methods
