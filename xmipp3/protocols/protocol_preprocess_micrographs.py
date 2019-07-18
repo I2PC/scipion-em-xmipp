@@ -262,14 +262,32 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
 
         outSet = self._loadOutputSet(SetOfMicrographs, 'micrographs.sqlite')
 
+        def tryToAppend(outSet, micOut, tries=1):
+            """ When micrograph is very big, sometimes it's not ready to be read
+            Then we will wait for it up to a minute in 6 time-growing tries. """
+            try:
+                outSet.append(micOut)
+            except Exception as ex:
+                micFn = micOut.getFileName()  # Runs/..../extra/filename.mrc
+                errorStr = ('Image Extension: File %s has wrong size.' % micFn)
+                print("Output micrographs not ready, yet. Try: %d/6 (next in %fs)"
+                      % (tries, tries*3))
+                if errorStr in str(ex) and tries < 7:
+                    from time import sleep
+                    sleep(tries*3)
+                    tryToAppend(outSet, micOut, tries+1)
+                else:
+                    raise ex
+
         for mic in newDone:
             micOut = em.data.Micrograph()
             if self.doDownsample:
-                micOut.setSamplingRate(self.inputMicrographs.get().getSamplingRate() * self.downFactor.get())
+                micOut.setSamplingRate(self.inputMicrographs.get().getSamplingRate()
+                                       * self.downFactor.get())
             micOut.setObjId(mic.getObjId())
             micOut.setFileName(self._getOutputMicrograph(mic))
             micOut.setMicName(mic.getMicName())
-            outSet.append(micOut)
+            tryToAppend(outSet, micOut)
 
         self._updateOutputSet('outputMicrographs', outSet, streamMode)
         
@@ -295,7 +313,8 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
         inputs = self.inputMicrographs.get()
         outputSet.copyInfo(inputs)
         if self.doDownsample:
-            outputSet.setSamplingRate(self.inputMicrographs.get().getSamplingRate() * self.downFactor.get())
+            outputSet.setSamplingRate(self.inputMicrographs.get().getSamplingRate()
+                                      * self.downFactor.get())
         return outputSet
 
 

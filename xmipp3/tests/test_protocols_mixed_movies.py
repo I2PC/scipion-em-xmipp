@@ -168,7 +168,7 @@ class TestMixedMovies(BaseTest):
         self.launchProtocol(of2)
 
         # manual diff statistics:
-        # diff.mrc min=-25.685791 max= 22.173828 avg= -0.000401 stddev=  1.294610
-        # diff.mrc min=-26.154785 max= 21.237061 avg=  0.000086 stddev=  1.025272
-        # diff.mrc min=-28.482422 max= 24.023926 avg= -0.000625 stddev=  0.956591
-        self._compareMovies(of1.outputMicrographs, of2.outputMicrographs, 28.5)
+        # diff.mrc min=-32.708740 max= 26.830322 avg= -0.000668 stddev=  1.217658
+        # diff.mrc min=-29.979980 max= 33.432617 avg=  0.001421 stddev=  1.705474
+        # diff.mrc min=-33.229248 max= 27.793701 avg= -0.000442 stddev=  1.347268
+        self._compareMovies(of1.outputMicrographs, of2.outputMicrographs, 33.44)

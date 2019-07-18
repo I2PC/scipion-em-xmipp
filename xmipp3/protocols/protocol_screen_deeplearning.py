@@ -34,7 +34,7 @@ from pyworkflow.em.protocol import ProtProcessParticles
 import pyworkflow.em.metadata as md
 
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes
-
+from xmipp3.utils import validateDLtoolkit
 
 N_MAX_NEG_SETS= 5
 
@@ -160,6 +160,9 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
                       label="Set of negative test particles", expertLevel=params.LEVEL_ADVANCED,
                       pointerClass='SetOfParticles', condition='doTesting',
                       help='Select the set of ground false positive particles.')
+
+    def _validate(self):
+        return validateDLtoolkit()
 
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):

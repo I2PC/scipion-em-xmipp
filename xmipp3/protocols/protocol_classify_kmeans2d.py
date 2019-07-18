@@ -29,6 +29,7 @@ import pyworkflow.em as em
 import pyworkflow.em.metadata as md
 import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as param
+from pyworkflow import VERSION_2_0
 from pyworkflow.em.protocol import ProtClassify2D, SetOfClasses2D
 from pyworkflow.em.data import SetOfParticles
 from pyworkflow.object import Set
@@ -42,6 +43,7 @@ class XmippProtKmeansClassif2D(ProtClassify2D):
     the original dataset into a given number of classes. """
 
     _label = '2D kmeans clustering'
+    _lastUpdateVersion = VERSION_2_0
 
     def __init__(self, **args):
         ProtClassify2D.__init__(self, **args)

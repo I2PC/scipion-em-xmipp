@@ -26,6 +26,8 @@
 # **************************************************************************
 
 import os
+
+from pyworkflow import VERSION_2_0
 from pyworkflow.object import Pointer
 
 from pyworkflow.protocol.constants import (STEPS_PARALLEL, STEPS_SERIAL, LEVEL_ADVANCED)
@@ -42,6 +44,7 @@ OUT_COORDS_POS_DIR_BASENAME= "pickNoiseOutPosCoordinates"
 class XmippProtPickNoise(ProtParticlePicking, XmippProtocol):
     """Protocol to pick noise particles"""
     _label = 'pick noise'
+    _lastUpdateVersion = VERSION_2_0
     
     def __init__(self, **args):
         ProtParticlePicking.__init__(self, **args)

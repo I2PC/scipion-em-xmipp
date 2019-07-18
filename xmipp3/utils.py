@@ -28,12 +28,15 @@
 This module contains utils functions to operate over xmipp metadata files.
 """
 
+from os.path import exists
+import subprocess
+
+import xmipp3
 import xmippLib
 from .base import XmippMdRow
 
-
 def validateXmippGpuBins():
-    exist()
+    pass
 
 def getMdFirstRow(filename):
     """ Create a MetaData but only read the first row.
@@ -74,3 +77,61 @@ def iterMdRows(md):
     for objId in md:
         row.readFromMd(md, objId)
         yield row
+
+
+def validateDLtoolkit(errors=None, **kwargs):
+    """ Validates if the deepLearningToolkit is installed.
+        Additionally, it assert if a certain models is present when
+        kwargs are present, following:
+          - assertModel: if models should be evaluated or not (default: True).
+          - errorMsg: a custom message error (default: '').
+          - model: a certain model name/route/list (default: no model assert)
+            + model='myModel': asserts if myModel exists
+            + model=('myModel', 'myFile.h5'): asserts is myModel/myFile.h5 exists
+            + model=['myModel1', 'myModel2', ('myModel3', 'myFile3.h5')]: a combination
+
+        usage (3 examples):
+          errors = validateDLtoolkit(errors, doAssert=self.useModel.get(),
+                                     model="myModel")
+
+          errors = validateDLtoolkit(model=("myModel2", "myFile.h5"))
+
+          errors = validateDLtoolkit(doAssert=self.mode.get()==PREDICT,
+                                     model=("myModel3", "subFolder", "model.h5"),
+                                     errorMsg="myModel3 is required for the "
+                                              "prediction mode")
+    """
+    # initialize errors if needed
+    errors = errors if errors is not None else []
+
+    # Trying to import keras to assert if DeepLearningToolkit works fine.
+    kerasError = False
+    try:
+        subprocess.check_output('python -c "import keras"', shell=True)
+    except subprocess.CalledProcessError:
+        errors.append("*Keras/Tensorflow not found*. Required to run this protocol.")
+        kerasError=True
+
+    # Asserting if the model exists only if the software is well installed
+    modelError = False
+    models = kwargs.get('model', '')
+    if not kerasError and kwargs.get('assertModel', True) and models != '':
+        models = models if isinstance(models, list) else [models]
+        for model in models:
+            if isinstance(model, str):
+                if not exists(xmipp3.Plugin.getModel(model, doRaise=False)):
+                    modelError = True
+            elif isinstance(model, tuple):
+                if not exists(xmipp3.Plugin.getModel(*model, doRaise=False)):
+                    modelError = True
+        if modelError:
+            errors.append("*Pre-trained model not found*. %s"
+                          % kwargs.get('errorMsg', ''))
+
+    # Hint to install the deepLearningToolkit
+    if kerasError or modelError:
+        errors.append("Please, *run* 'scipion installb deepLearningToolkit' "
+                      "or install the scipion-em-xmipp/deepLearningToolkit "
+                      "package using the *plugin manager*.")
+
+    return errors

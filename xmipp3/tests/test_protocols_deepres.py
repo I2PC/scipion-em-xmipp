@@ -1,6 +1,6 @@
 # **************************************************************************
 # *
-# * Authors:    Jose Luis Vilas Prieto (jlvilas@cnb.csic.es)
+# * Authors:    Erney Ramirez-Aportela (eramirez@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -30,16 +30,15 @@ from pyworkflow.em import exists
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 from pyworkflow.em.protocol import ProtImportVolumes
 
-from xmipp3.protocols import XmippProtMonoTomo, XmippProtCropResizeVolumes
+from xmipp3.protocols import XmippProtDeepRes, XmippProtCreateMask3D
 
 
-class TestMonoTomoBase(BaseTest):
+class TestDeepResBase(BaseTest):
     @classmethod
     def setData(cls, dataProject='resmap'):
         cls.dataset = DataSet.getDataSet(dataProject)
         cls.map3D = cls.dataset.getFile('betagal')
-        cls.half1 = cls.dataset.getFile('betagal_half1')
-        cls.half2 = cls.dataset.getFile('betagal_half2')
+        cls.mask = cls.dataset.getFile('betagal_mask')
 
     @classmethod
     def runImportVolumes(cls, pattern, samplingRate):
@@ -49,34 +48,44 @@ class TestMonoTomoBase(BaseTest):
                                          samplingRate=samplingRate
                                          )
         cls.launchProtocol(cls.protImport)
-	cls.protResize = cls.newProtocol(XmippProtCropResizeVolumes,
-                                        inputVolumes = cls.protImport.outputVolume,
-					doResize = True,
-					resizeOption = 2,
-					resizeFactor = 5)
-	cls.launchProtocol(cls.protResize)
-        return cls.protResize
+        return cls.protImport
 
-class TestMonoTomo(TestMonoTomoBase):
+    @classmethod
+    def runCreateMask(cls, pattern, thr):
+        """ Create a volume mask. """
+        cls.msk = cls.newProtocol(XmippProtCreateMask3D,
+                                  inputVolume=pattern,
+                                  volumeOperation=0,  # OPERATION_THRESHOLD,
+                                  threshold=thr,
+                                  doSmall=False,
+                                  smallSize=False,
+                                  doBig=False,
+                                  doSymmetrize=False,
+                                  doMorphological=False,
+                                  doInvert=False,
+                                  doSmooth=False,
+                                  sigmaConvolution=2
+                                  )
+        cls.launchProtocol(cls.msk)
+        return cls.msk
+
+
+class TestDeepRes(TestDeepResBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
-        TestMonoTomoBase.setData()
-        cls.protImportHalf1 = cls.runImportVolumes(cls.half1, 3.54)
-        cls.protImportHalf2 = cls.runImportVolumes(cls.half2, 3.54)
+        TestDeepResBase.setData()
+        cls.protImportVol = cls.runImportVolumes(cls.map3D, 3.54)
+        cls.protCreateMask = cls.runCreateMask(cls.protImportVol.outputVolume, 0.02)
 
-
-    def testMonoTomo(self):
-        MonoTomo = self.newProtocol(XmippProtMonoTomo,
-                                   objLabel='two halves monores',
-                                   inputVolume=self.protImportHalf1.outputVol,
-                                   inputVolume2=self.protImportHalf2.outputVol,
-                                   provideMaskInHalves=True,
-                                   useMask=False,
-                                   minRes=1,
-                                   maxRes=25,
+    def testDeepRes1(self):
+        DeepRes = self.newProtocol(XmippProtDeepRes,
+                                   inputVolume=self.protImportVol.outputVolume,
+                                   Mask=self.protCreateMask.outputMask,
+                                   range=0,
                                    )
-        self.launchProtocol(MonoTomo)
-        self.assertTrue(exists(MonoTomo._getExtraPath('mgresolution.mrc')),
-                        "MonoTomo has failed")
+        self.launchProtocol(DeepRes)
+        self.assertTrue(exists(DeepRes._getExtraPath('deepRes_resolution.vol')),
+                        "DeepRes has failed")
  
+

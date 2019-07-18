@@ -644,7 +644,8 @@ class TestMaxShift(BaseTest):
                   'sphericalAberration': 2.7,
                   'magnification': 50000,
                   'scannedPixelSize': None,
-                  'filesPattern': pattern
+                  'filesPattern': pattern,
+                  'dosePerFrame': 123
                   }
         if 'samplingRate' not in kwargs:
             del params['samplingRate']
@@ -663,6 +664,7 @@ class TestMaxShift(BaseTest):
         protAlign = cls.newProtocol(XmippProtMovieCorr,
                                     alignFrame0=3, alignFrameN=5,
                                     cropOffsetX=10, cropOffsetY=16,
+                                    doLocalAlignment=False, useGpu=False,
                                     objLabel='Movie alignment (NO save mic)',
                                     doSaveAveMic=False)
         protAlign.inputMovies.set(cls.protImport.outputMovies)
@@ -670,15 +672,25 @@ class TestMaxShift(BaseTest):
         return protAlign.outputMovies
 
     @classmethod
-    def runAlignMovMics(cls):  # do SAVE averaged mics
+    def runAlignMovMics(cls):  # do SAVE averaged mics and dose weighted mics
         protAlign = cls.newProtocol(XmippProtMovieCorr,
                                     alignFrame0=3, alignFrameN=5,
                                     cropOffsetX=10, cropOffsetY=16,
+                                    doLocalAlignment=False, useGpu=False,
                                     objLabel='Movie alignment (SAVE mic)',
                                     doSaveAveMic=True)
         protAlign.inputMovies.set(cls.protImport.outputMovies)
         cls.launchProtocol(protAlign)
-        return protAlign.outputMovies
+
+        protAlign2 = cls.newProtocol(XmippProtOFAlignment,
+                                    doApplyDoseFilter=True,
+                                    alignFrame0=3, alignFrameN=5,
+                                    objLabel='Optical alignment (DW mic)',
+                                    doSaveMovie=True)
+        protAlign2.inputMovies.set(protAlign.outputMovies)
+        cls.launchProtocol(protAlign2)
+
+        return protAlign.outputMovies, protAlign2.outputMovies
 
     @classmethod
     def setUpClass(cls):
@@ -687,9 +699,9 @@ class TestMaxShift(BaseTest):
         fn = 'Falcon_2012_06_12-*0_movie.mrcs'
         cls.protImport = cls.runImportMovies(cls.ds.getFile(fn))
         cls.alignedMovies = cls.runAlignMovies()
-        cls.alignedMovMics = cls.runAlignMovMics()
+        cls.alignedMovMics, cls.alignedMovDwMics = cls.runAlignMovMics()
 
-    def _checkMaxShiftFiltering(self, protocol, label, hasMic, rejOrPass=0):
+    def _checkMaxShiftFiltering(self, protocol, label, hasMic, hasDw=False, rejOrPass=0):
         """ Check if outputSets are right.
               If hasMic=True then it's checked that micrographs are generated.
               If rejOrPass = 1: both movies should pass
@@ -698,36 +710,43 @@ class TestMaxShift(BaseTest):
         """
 
         def assertOutput(outputName, ids=[1, 2]):
-            """ Check if outputName exist and if so, if it's right. (for each id)
+            """ Check if outputName exists and if so, if it's right. (for each id)
             """
             if 'Micrographs' in outputName:
-                # The alignment prot crops the micrographs
-                inputDim = (1940, 1934, 1)
+                # The Mics has n=1
+                if hasDw:
+                    inputDim = (1950, 1950, 1)
+                else:
+                    # The corr. align. prot. crops the micrographs
+                    inputDim = (1940, 1934, 1)
             else:
                 inputDim = protocol.inputMovies.get().getDim()
 
+            DWstr = ' (DoseWeighted)' if hasDw else ''
             for itemId in ids:
                 output = getattr(protocol, outputName, None)
                 self.assertIsNotNone(output, "%s (accepted) were not created. "
-                                             "Bad filtering in %s test."
-                                     % (outputName, label))
+                                             "Bad filtering in %s test%s."
+                                     % (outputName, label, DWstr))
                 self.assertIsNotNone(output[itemId], "%s (accepted) were not "
-                                            "created. Bad filtering in %s test."
-                                     % (outputName, label))
+                                            "created. Bad filtering in %s test%s."
+                                     % (outputName, label, DWstr))
                 self.assertEqual(output[itemId].getDim(), inputDim,
-                                 "The size of the movies/mics has change "
-                                 "for %s test." % label)
+                                 "The size of the movies/mics has changed "
+                                 "for %s test%s." % (label, DWstr))
                 self.assertEqual(output[itemId].getSamplingRate(),
                              protocol.inputMovies.get().getSamplingRate(),
-                             "The samplig rate of the movies has change for "
-                             "%s test." % label)
+                             "The samplig rate of the movies has changed for "
+                             "%s test%s." % (label, DWstr))
 
         if rejOrPass == 1:
-            #  Checking if only the accepted set is crated and
+            #  Checking if only the accepted set is created and
             #    its items have the good size and sampling rate
             assertOutput('outputMovies')
             if hasMic:
                 assertOutput('outputMicrographs')
+            if hasDw:
+                assertOutput('outputMicrographsDoseWeighted')
 
             #  Checking if the Movies/MicsDiscarded set are not created
             self.assertIsNone(getattr(protocol, 'outputMoviesDiscarded', None),
@@ -743,6 +762,9 @@ class TestMaxShift(BaseTest):
             assertOutput('outputMoviesDiscarded')
             if hasMic:
                 assertOutput('outputMicrographsDiscarded')
+            if hasDw:
+                assertOutput('outputMicrographsDoseWeightedDiscarded')
+
             #  Checking if the Movie (accepted) set is not created
             self.assertIsNone(getattr(protocol, 'outputMovies', None),
                               "outputMovies (accepted)t were created. "
@@ -767,7 +789,7 @@ class TestMaxShift(BaseTest):
                                         maxFrameShift=mxFm,
                                         maxMovieShift=mxMo,
                                         rejType=rejType,
-                                         objLabel=label)
+                                        objLabel=label)
         self.launchProtocol(protMaxShift)
         return protMaxShift
 
@@ -779,10 +801,14 @@ class TestMaxShift(BaseTest):
         rejType = XmippProtMovieMaxShift.REJ_FRAME
 
         protNoMic = self.doFilter(self.alignedMovies, rejType, label)
-        self._checkMaxShiftFiltering(protNoMic, label, hasMic=0)
+        self._checkMaxShiftFiltering(protNoMic, label, hasMic=False)
 
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label)
-        self._checkMaxShiftFiltering(protDoMic, label, hasMic=1)
+        self._checkMaxShiftFiltering(protDoMic, label, hasMic=True)
+
+        protDoMic = self.doFilter(self.alignedMovDwMics, rejType, label)
+        self._checkMaxShiftFiltering(protDoMic, label, hasMic=True,
+                                     hasDw=True, rejOrPass=1)
 
     def testFilterMovie(self): 
         """ This must discard the second movie for a Global shift.
@@ -796,6 +822,10 @@ class TestMaxShift(BaseTest):
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label)
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True)
 
+        protDoMic = self.doFilter(self.alignedMovDwMics, rejType, label)
+        self._checkMaxShiftFiltering(protDoMic, label, hasMic=True,
+                                     hasDw=True, rejOrPass=1)
+
     def testFilterAnd(self): 
         """ This must discard the second movie for AND.
         """
@@ -807,6 +837,10 @@ class TestMaxShift(BaseTest):
 
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label)
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True)
+
+        protDoMic = self.doFilter(self.alignedMovDwMics, rejType, label)
+        self._checkMaxShiftFiltering(protDoMic, label, hasMic=True,
+                                     hasDw=True, rejOrPass=1)
 
     def testFilterOrFrame(self): 
         """ This must discard the second movie for OR (Frame).
@@ -820,6 +854,10 @@ class TestMaxShift(BaseTest):
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label)
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True)
 
+        protDoMic = self.doFilter(self.alignedMovDwMics, rejType, label)
+        self._checkMaxShiftFiltering(protDoMic, label, hasMic=True,
+                                     hasDw=True, rejOrPass=1)
+
     def testFilterOrMovie(self): 
         """ This must discard the second movie for OR (Movie).
         """
@@ -832,6 +870,10 @@ class TestMaxShift(BaseTest):
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label)
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True)
 
+        protDoMic = self.doFilter(self.alignedMovDwMics, rejType, label)
+        self._checkMaxShiftFiltering(protDoMic, label, hasMic=True,
+                                     hasDw=True, rejOrPass=1)
+
     def testFilterOrBoth(self): 
         """ This must discard the second movie for OR (both).
         """
@@ -843,6 +885,10 @@ class TestMaxShift(BaseTest):
 
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label)
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True)
+
+        protDoMic = self.doFilter(self.alignedMovDwMics, rejType, label)
+        self._checkMaxShiftFiltering(protDoMic, label, hasMic=True,
+                                     hasDw=True, rejOrPass=1)
 
     def testFilterRejectBoth(self):
         """ This must discard both movies.
