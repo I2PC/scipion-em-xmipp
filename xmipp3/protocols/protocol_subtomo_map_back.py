@@ -32,6 +32,8 @@ import numpy as np
 from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.protocol.params import PointerParam, EnumParam, BooleanParam, FloatParam
 from pyworkflow.em.convert import ImageHandler
+from pyworkflow.em.data import Volume
+
 import xmippLib
 
 class XmippProtSubtomoMapBack(EMProtocol):
@@ -119,15 +121,14 @@ class XmippProtSubtomoMapBack(EMProtocol):
                                                                          self._getExtraPath("reference.mrc"),painting))
 
     def createOutput(self):
-        pass
-        # img = ImageHandler()
-        # outputTomo = self._createSetOfVolumes()
-        # fnOut = self._getExtraPath("tomogram_mapped_back.mrc")
-        # img.convert(fnOut,outputTomo)
-        # self._defineOutputs(outputTomogram=outputTomo)
-        # self._defineSourceRelation(self.inputTomogram, outputTomo)
-        # self._defineSourceRelation(self.inputSubtomograms, outputTomo)
-        # self._defineSourceRelation(self.inputReference, outputTomo)
+        outputTomo = Volume()
+        outputTomo.setLocation(self._getExtraPath("tomogram_mapped_back.mrc"))
+        outputTomo.setSamplingRate(self.inputTomogram.get().getSamplingRate())
+
+        self._defineOutputs(outputTomogram=outputTomo)
+        self._defineSourceRelation(self.inputTomogram, outputTomo)
+        self._defineSourceRelation(self.inputSubtomograms, outputTomo)
+        self._defineSourceRelation(self.inputReference, outputTomo)
 
     #--------------------------- INFO functions --------------------------------
     def _summary(self):
