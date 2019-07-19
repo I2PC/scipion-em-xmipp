@@ -117,14 +117,22 @@ class XmippProtSubtomoMapBack(EMProtocol):
                                                                          self._getExtraPath("tomogram_mapped_back.mrc"),
                                                                          self._getExtraPath("geometry.xmd"),
                                                                          self._getExtraPath("reference.mrc"),painting))
-        aaaaa
 
     def createOutput(self):
         pass
+        # img = ImageHandler()
+        # outputTomo = self._createSetOfVolumes()
+        # fnOut = self._getExtraPath("tomogram_mapped_back.mrc")
+        # img.convert(fnOut,outputTomo)
+        # self._defineOutputs(outputTomogram=outputTomo)
+        # self._defineSourceRelation(self.inputTomogram, outputTomo)
+        # self._defineSourceRelation(self.inputSubtomograms, outputTomo)
+        # self._defineSourceRelation(self.inputReference, outputTomo)
 
     #--------------------------- INFO functions --------------------------------
     def _summary(self):
         summary = []
+        summary.append(" ")
         return summary
 
     def _methods(self):
