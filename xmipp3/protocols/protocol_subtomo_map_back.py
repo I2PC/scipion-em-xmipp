@@ -38,7 +38,8 @@ import xmippLib
 
 class XmippProtSubtomoMapBack(EMProtocol):
     """ This protocol takes a tomogram, a reference subtomogram and a metadata with geometrical parameters
-   (x,y,z) and places the reference subtomogram on the tomogram at the designated locations (map back) """
+   (x,y,z) and places the reference subtomogram on the tomogram at the designated locations (map back).
+   It has different representation options."""
 
     _label = 'subtomogram map back'
 
@@ -114,7 +115,6 @@ class XmippProtSubtomoMapBack(EMProtocol):
         elif self.paintingType.get() == 3:
             painting = 'copy_binary %d' % self.threshold.get()
 
-       # coordinates = self.inputSubtomograms.getCoordinates3D() # original ones?
         self.runJob("xmipp_tomo_map_back"," -i %s -o %s --geom %s --ref %s --method %s" % (self._getExtraPath("tomogram.mrc"),
                                                                          self._getExtraPath("tomogram_mapped_back.mrc"),
                                                                          self._getExtraPath("geometry.xmd"),
@@ -133,10 +133,13 @@ class XmippProtSubtomoMapBack(EMProtocol):
     #--------------------------- INFO functions --------------------------------
     def _summary(self):
         summary = []
-        summary.append(" ")
+        summary.append("Subtomogram reference %s mapped back %d times to original tomogram %s in the locations of subtomograms %s" %
+                       (self.getObjectTag('inputReference'),len(self.inputSubtomograms.get()),
+                        self.getObjectTag('inputTomogram'),self.getObjectTag('inputSubtomograms')))
         return summary
 
     def _methods(self):
         methods = []
-        methods.append(" ")
+        methods.append("Subtomogram reference %s mapped back to tomogram %s" % (self.getObjectTag('inputReference'),
+                                                                                self.getObjectTag('inputTomogram')))
         return methods
