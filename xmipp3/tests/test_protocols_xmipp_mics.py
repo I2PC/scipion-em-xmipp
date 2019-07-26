@@ -843,8 +843,9 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
 
         protConsOr = self.newProtocol(XmippProtConsensusPicking,
                                       consensus=1)
-        protConsOr.inputCoordinates.set([self.protFaPi.outputCoordinates,
-                                        protAutomaticPP.outputCoordinates])
+        protConsOr.inputCoordinates.set(
+            [Pointer(self.protFaPi, extended="outputCoordinates"),
+             Pointer(protAutomaticPP, "outputCoordinates")])
         self.launchProtocol(protConsOr)
 
         self.assertTrue(protConsOr.isFinished(), "Consensus failed")
@@ -875,8 +876,9 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
             protAutoPP = self._updateProtocol(protAutoPP)
 
         protCons2 = self.newProtocol(XmippProtConsensusPicking)
-        protCons2.inputCoordinates.set([self.protFaPi.outputCoordinates,
-                                        protAutoPP.outputCoordinates])
+        protCons2.inputCoordinates.set(
+            [Pointer(self.protFaPi, extended="outputCoordinates"),
+             Pointer(protAutoPP, extended="outputCoordinates")])
         self.launchProtocol(protCons2)
         self.assertTrue(protCons2.isFinished(), "Consensus failed")
         self.assertTrue(protCons2.consensusCoordinates.getSize() == 390,
