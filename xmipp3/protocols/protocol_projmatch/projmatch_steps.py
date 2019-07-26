@@ -520,7 +520,7 @@ def insertReconstructionStep(self, iterN, refN, suffix='', **kwargs):
         program = 'xmipp_cuda_reconstruct_fourier' if self.useGpu.get() else 'xmipp_reconstruct_fourier_accel'
         args += ' --weight --padding %(pad)s %(pad)s'
         if self.useGpu.get():
-            args += " --thr " % self.numberOfThreads.get()
+            args += " --thr %d" % self.numberOfThreads.get()
             args += " --device %(GPU)s"
         params['pad'] = self.paddingFactor.get()
         
