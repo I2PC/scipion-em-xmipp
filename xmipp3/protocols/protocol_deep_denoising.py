@@ -30,6 +30,8 @@ import sys, os
 import numpy as np
 import re
 from pyworkflow import VERSION_2_0
+from xmipp3.protocols import XmippProtCompareReprojections
+
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
@@ -123,15 +125,16 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                       pointerClass='SetOfParticles', important=False,
                       label='Input projections to train (mandatory)/compare (optional)',
                       help='use the protocol generate reprojections to generate the '
-                      'reprojections views')
-
+                      'projections. If compare reprojections protocol output is used as '
+                      '"Input noisy particles", this field is ignored')
 
         form.addParam('inputParticles', params.PointerParam,
                       pointerClass='SetOfParticles', important=True,
                       label='Input noisy particles to denoise', help='Input noisy '
                       'particles from the protocol generate reprojections if '
                       'you are training or from any other protocol if you are '
-                      'predicting')
+                      'predicting. If compare reprojections protocol output is used as '
+                      '"Input noisy particles", "Input projections to train" is ignored')
 
         form.addParam('emptyParticles', params.PointerParam, expertLevel=cons.LEVEL_ADVANCED,
                       pointerClass='SetOfParticles',  allowsNull=True,
@@ -221,21 +224,21 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
     def _validate(self):
         errorMsg = []
-        if self.modelTrainPredMode.get()==ITER_TRAIN and self.inputProjections.get() is None:
+        if not self.checkIfInputIsCompareReprojection()  and self.modelTrainPredMode.get()==ITER_TRAIN and self.inputProjections.get() is None:
           errorMsg.append("Error, in training mode, both particles and projections must be provided")
         if self.imageSize.get() is None and self.modelTrainPredMode.get()==ITER_TRAIN:
           errorMsg.append("Error, in training mode, image size must be provdided")
         return errorMsg
             
     def _getResizedSize(self):
-      resizedSize= self.imageSize.get()
-      if self.modelTrainPredMode.get()==ITER_PREDICT:
-        if self.customModelOverPretrain.get()== True:
-          resizedSize= self.ownModel.get()._getResizedSize()
-        else:
-          resizedSize= 128
-      resizedSize= resizedSize if resizedSize>0 else 128
-      return resizedSize
+        resizedSize= self.imageSize.get()
+        if self.modelTrainPredMode.get()==ITER_PREDICT:
+          if self.customModelOverPretrain.get()== True:
+            resizedSize= self.ownModel.get()._getResizedSize()
+          else:
+            resizedSize= 128
+        resizedSize= resizedSize if resizedSize>0 else 128
+        return resizedSize
       
     def getStackOrResize(self, setOfParticles, mdFnameIn, stackFnameOut):
 
@@ -247,17 +250,36 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
             writeSetOfParticles(setOfParticles, mdFnameIn)
             self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (mdFnameIn, stackFnameOut,
                                                                             self._getResizedSize()))
+    def copyStackAndResize(self, stackIn, stackOut):
+        copyfile(stackIn, stackOut + ".tmp")
+        if self._getResizedSize() != self.inputParticles.get().getDimensions()[0]:
+          self.runJob("xmipp_image_resize",
+                      "-i %s -o %s --fourier %d" % (stackOut + ".tmp", stackOut, self._getResizedSize()))
+          os.remove(stackOut + ".tmp")
+
+    def checkIfInputIsCompareReprojection(self):
+        return isinstance( self.inputParticles.getObjValue(), XmippProtCompareReprojections)
 
     def preprocessData(self):
-          
+
         particlesFname = self._getExtraPath('noisyParticles.xmd')
         fnNewParticles = self._getExtraPath('resizedParticles.stk')
-        self.getStackOrResize(self.inputParticles.get(), particlesFname, fnNewParticles)
+        projectionsFname = self._getExtraPath('projections.xmd')
+        fnNewProjections = self._getExtraPath('resizedProjections.stk')
 
-        if not self.inputProjections.get() is None:
-            projectionsFname = self._getExtraPath('projections.xmd')
-            fnNewProjections = self._getExtraPath('resizedProjections.stk')
-            self.getStackOrResize(self.inputProjections.get(), projectionsFname, fnNewProjections)
+        if self.checkIfInputIsCompareReprojection():
+          for part in self.inputParticles.get():
+            projections_stk, particles_stk= part._xmipp_imageRef._filename.get(), part._xmipp_image._filename.get()
+            print(projections_stk, particles_stk)
+            break
+          self.copyStackAndResize(particles_stk, fnNewParticles)
+          self.copyStackAndResize(projections_stk, fnNewProjections)
+        else:
+          self.getStackOrResize(self.inputParticles.get(), particlesFname, fnNewParticles)
+
+          if not self.inputProjections.get() is None:
+
+              self.getStackOrResize(self.inputProjections.get(), projectionsFname, fnNewProjections)
 
         if not self.emptyParticles.get() is None:
             emptyPartsFname = self._getExtraPath('emptyParts.xmd')
@@ -344,9 +366,10 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         Ts = imgSet.getSamplingRate()
         xdim = imgSet.getDimensions()[0]
         outputSet.setSamplingRate((Ts*xdim)/self._getResizedSize())
-        imgFn = self._getExtraPath('particlesDenoised.xmd')
+        writeSetOfParticles(self.inputParticles.get(), self._getExtraPath('inputParticles.xmd'))
+        imgFname = self._getExtraPath('particlesDenoised.xmd')
         outputSet.copyItems(imgSet, updateItemCallback=self._processRow,
-                            itemDataIterator=md.iterRows(imgFn, sortByLabel=md.MDL_ITEM_ID) )
+                            itemDataIterator=md.iterRows(imgFname, sortByLabel=md.MDL_ITEM_ID) )
 
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(self.inputParticles, outputSet)
