@@ -59,43 +59,36 @@ class XmippProtNMA(XmippProtNMABase):
         XmippProtNMABase._defineParamsCommon(self,form)
         form.addParam('rtbBlockSize', IntParam, default=10,
                       expertLevel=LEVEL_ADVANCED,
-                      label='Number of residues per RTB block',
-                      help='This is the RTB block size for the RTB NMA method. \n'
-                           'When calculating the normal modes, aminoacids are '
-                           'grouped\n'
-                           'into blocks of this size that are moved '
-                           'translationally\n'
-                           'and rotationally together.') 
-        form.addParam('rtbForceConstant', FloatParam, default=10,
-                      expertLevel=LEVEL_ADVANCED,
-                      label='Interaction force constant',
-                      help='This is the RTB block size for the RTB NMA method. \n'
-                           'When calculating the normal modes, aminoacids are '
-                           'grouped\n'
-                           'into blocks of this size that are moved '
-                           'translationally\n'
-                           'and rotationally together.')
+                      label='Number of residues per RTB block (for atomic structures)',
+                      help='Used only with atoms. Normal modes of atomic structures are computed with the RTB method. \n'
+			   'This is the RTB block size. In the RTB method, aminoacids are grouped into blocks of this size '
+			   'that are moved ranslationally and rotationally together.') 
               
         form.addSection(label='Animation')        
         form.addParam('amplitude', FloatParam, default=50,
-                      label="Amplitude") 
+                      label='Amplitude',
+		      help='Used only for animations of computed normal modes. '
+			   'This is the amplitude with which atoms or pseudoatoms are moved '
+			   'along normal modes in the animations. \n'
+			   'Normal-mode amplitudes corresponding to given images are computed by image analysis.') 
         form.addParam('nframes', IntParam, default=10,
                       expertLevel=LEVEL_ADVANCED,
-                      label='Number of frames')
+                      label='Number of frames',
+		      help='Number of frames used in animations.')
         form.addParam('downsample', FloatParam, default=1,
                       expertLevel=LEVEL_ADVANCED,
                       # condition=isEm
-                      label='Downsample pseudoatomic structure',
-                      help='Downsample factor 2 means removing one half of the '
-                           'atoms or pseudoatoms.')
+                      label='Downsample pseudoatoms (for visualization)',
+                      help='Used only with pseudoatoms and only for visualization purposes. \n'
+			   'A downsample factor of 2 means removing one half of the pseudoatoms.')
         form.addParam('pseudoAtomThreshold', FloatParam, default=0,
                       expertLevel=LEVEL_ADVANCED,
-                      # cond
-                      label='Pseudoatom mass threshold',
-                      help='Remove pseudoatoms whose mass is below this '
-                           'threshold. '
-                           'This value should be between 0 and 1.\n'
-                           'A threshold of 0 implies no atom removal.')
+                      # condition=isEm
+                      label='Pseudoatom mass threshold (for visualization)',
+                      help='Used only with pseudoatoms and only for visualization purposes. \n '
+			   'Pseudoatoms whose mass is below this threshold are removed. \n'
+                           'The threshold value should be between 0 and 1. '
+                           'A threshold of 0 implies no pseudoatom removal.')
 
                                    
     def _insertAllSteps(self):
@@ -118,23 +111,26 @@ class XmippProtNMA(XmippProtNMABase):
 
         # Compute modes
         self.pseudoAtomRadius=1
-        if self.cutoffMode == NMA_CUTOFF_REL:
-            params = '-i %s --operation distance_histogram %s' \
-                     % (localFn, self._getExtraPath('atoms_distance.hist'))
-            self._insertRunJobStep("xmipp_pdb_analysis", params)
         if self.structureEM:
             with open(inputFn, 'r') as fh:
                 first_line = fh.readline()
                 second_line = fh.readline()
                 self.pseudoAtomRadius = float(second_line.split()[2])
+	    if self.cutoffMode == NMA_CUTOFF_REL:
+                params = '-i %s --operation distance_histogram %s' \
+                     % (localFn, self._getExtraPath('pseudoatoms_distance.hist'))
+                self._insertRunJobStep("xmipp_pdb_analysis", params)
             self._insertFunctionStep('computeModesStep', localFn, n, cutoffStr)
             self._insertFunctionStep('reformatOutputStep',"pseudoatoms.pdb")
         else:
+	    if self.cutoffMode == NMA_CUTOFF_REL:
+                params = '-i %s --operation distance_histogram %s' \
+                     % (localFn, self._getExtraPath('atoms_distance.hist'))
+                self._insertRunJobStep("xmipp_pdb_analysis", params)
             self._insertFunctionStep('computePdbModesStep', n,
                                      self.rtbBlockSize.get(),
-                                     self.rtbForceConstant.get(), cutoffStr)
+                                     cutoffStr)
             self._insertFunctionStep('reformatPdbOutputStep', n)
-            self.PseudoAtomThreshold=0.0
         
         self._insertFunctionStep('qualifyModesStep', n,
                                  self.collectivityThreshold.get(),
@@ -160,13 +156,14 @@ class XmippProtNMA(XmippProtNMABase):
         if not os.path.exists(fnOut):
             createLink(localFn, fnOut)
         
-    def computePdbModesStep(self, numberOfModes, RTBblockSize, RTBForceConstant,
-                            cutoffStr):
+    def computePdbModesStep(self, numberOfModes, RTBblockSize, cutoffStr):
         rc = self._getRc(self._getExtraPath('atoms_distance.hist'))
                 
         self._enterWorkingDir()
+	# For atoms, the interaction force constant was set to 10 as ElNemo RTB code may ask for its value \
+	# (the RTBForceConstant entry was removed from gui as the value does not change the ENM computed normal modes).
         self.runJob('nma_record_info_PDB.py', "%d %d atoms.pdb %f %f"
-                    % (numberOfModes, RTBblockSize, rc, RTBForceConstant),
+                    % (numberOfModes, RTBblockSize, rc, 10.0),
                     env=getNMAEnviron())
         self.runJob("nma_elnemo_pdbmat","",env=getNMAEnviron())
         self.runJob("nma_diagrtb","",env=getNMAEnviron())
