@@ -29,6 +29,7 @@ This module contains utils functions for Xmipp protocols
 """
 
 from os.path import exists, join
+import subprocess
 
 import xmipp3
 import xmippLib
@@ -115,8 +116,8 @@ def validateDLtoolkit(errors=None, **kwargs):
     # Trying to import keras to assert if DeepLearningToolkit works fine.
     kerasError = False
     try:
-        import keras
-    except:
+        subprocess.check_output('python -c "import keras"', shell=True)
+    except subprocess.CalledProcessError:
         errors.append("*Keras/Tensorflow not found*. Required to run this protocol.")
         kerasError=True
 
