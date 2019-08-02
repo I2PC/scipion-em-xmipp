@@ -25,10 +25,10 @@
 # *
 # **************************************************************************
 """
-This module contains utils functions to operate over xmipp metadata files.
+This module contains utils functions for Xmipp protocols
 """
 
-from os.path import exists
+from os.path import exists, join
 import subprocess
 
 import xmipp3
@@ -78,7 +78,16 @@ def iterMdRows(md):
         row.readFromMd(md, objId)
         yield row
 
+def readInfoField(fnDir,block,label):
+    mdInfo = xmippLib.MetaData("%s@%s"%(block,join(fnDir,"iterInfo.xmd")))
+    return mdInfo.getValue(label,mdInfo.firstObject())
 
+def writeInfoField(fnDir,block,label, value):
+    mdInfo = xmippLib.MetaData()
+    objId=mdInfo.addObject()
+    mdInfo.setValue(label,value,objId)
+    mdInfo.write("%s@%s"%(block,join(fnDir,"iterInfo.xmd")),xmippLib.MD_APPEND)
+    
 def validateDLtoolkit(errors=None, **kwargs):
     """ Validates if the deepLearningToolkit is installed.
         Additionally, it assert if a certain models is present when
@@ -135,3 +144,4 @@ def validateDLtoolkit(errors=None, **kwargs):
                       "package using the *plugin manager*.")
 
     return errors
+
