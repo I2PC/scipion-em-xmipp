@@ -78,12 +78,12 @@ class XmippDimredNMAViewer(ProtocolViewer):
         form.addParam('displayClustering', LabelParam,
                       label='Open clustering tool?',
                       help='Open a GUI to visualize the images as points '
-                           'and select some of them to create new clusters.')
+                           'and select some of them to create clusters, and compute the 3D reconstructions from the clusters.')
          
         form.addParam('displayTrajectories', LabelParam,
                       label='Open trajectories tool?',
-                      help='Open a GUI to visualize the images as points '
-                           'to draw and ajust trajectories.')       
+                      help='Open a GUI to visualize the images as points, '
+                           'draw and ajust trajectories, and animate them.')       
         
     def _getVisualizeDict(self):
         return {'displayRawDeformation': self._viewRawDeformation,

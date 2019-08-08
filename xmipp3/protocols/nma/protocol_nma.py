@@ -62,7 +62,7 @@ class XmippProtNMA(XmippProtNMABase):
                       label='Number of residues per RTB block (for atomic structures)',
                       help='Used only with atoms. Normal modes of atomic structures are computed with the RTB method. \n'
 			   'This is the RTB block size. In the RTB method, aminoacids are grouped into blocks of this size '
-			   'that are moved ranslationally and rotationally together.') 
+			   'that are moved translationally and rotationally together.') 
               
         form.addSection(label='Animation')        
         form.addParam('amplitude', FloatParam, default=50,
