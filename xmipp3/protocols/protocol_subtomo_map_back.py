@@ -27,8 +27,6 @@
 # *
 # **************************************************************************
 
-import numpy as np
-
 from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.protocol.params import PointerParam, EnumParam, BooleanParam, FloatParam
 from pyworkflow.em.convert import ImageHandler
@@ -41,7 +39,7 @@ class XmippProtSubtomoMapBack(EMProtocol):
    (x,y,z) and places the reference subtomogram on the tomogram at the designated locations (map back).
    It has different representation options."""
 
-    _label = 'subtomogram map back'
+    _label = 'map back subtomogram'
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
@@ -50,10 +48,8 @@ class XmippProtSubtomoMapBack(EMProtocol):
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='Input subtomograms')
-        form.addParam('inputSubtomograms', PointerParam, pointerClass="SetOfSubTomograms",
+        form.addParam('inputSubtomograms', PointerParam, pointerClass="SetOfClassesSubTomograms",
                       label='Set of subtomograms', help="Set of subtomograms to be represented")
-        form.addParam('inputReference', PointerParam, pointerClass="SubTomogram",
-                      label='Reference', help="Reference (subtomogram average)")
         form.addParam('inputTomogram', PointerParam, pointerClass="Tomogram",
                       label='Original tomogram', help="Original tomogram from which the subtomograms were extracted")
         form.addParam('paintingType', EnumParam,
@@ -76,18 +72,17 @@ class XmippProtSubtomoMapBack(EMProtocol):
 
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        self._insertFunctionStep('convertInput',self.inputSubtomograms.getObjId(),self.inputReference.getObjId(),
-                                 self.inputTomogram.getObjId())
+        self._insertFunctionStep('convertInput',self.inputSubtomograms.getObjId(), self.inputTomogram.getObjId())
         self._insertFunctionStep('runMapBack')
         self._insertFunctionStep('createOutput')
 
     #--------------------------- STEPS functions -------------------------------
-    def convertInput(self,objIdSubtomograms,objIdRef, objIdTomo):
+    def convertInput(self,objIdSubtomograms, objIdTomo):
         img = ImageHandler()
         fnTomo = self._getExtraPath('tomogram.mrc')
         img.convert(self.inputTomogram.get(), fnTomo)
         fnRef = self._getExtraPath('reference.mrc')
-        img.convert(self.inputReference.get(), fnRef)
+        img.convert(self.inputSubtomograms.get().getRepresentative().getFileName(), fnRef)
         if self.paintingType.get() == 0 or self.paintingType.get() == 3:
             if self.removeBackground.get() == True:
                 self.runJob("xmipp_image_operate"," -i %s  --mult 0"%fnTomo)
@@ -128,18 +123,16 @@ class XmippProtSubtomoMapBack(EMProtocol):
         self._defineOutputs(outputTomogram=outputTomo)
         self._defineSourceRelation(self.inputTomogram, outputTomo)
         self._defineSourceRelation(self.inputSubtomograms, outputTomo)
-        self._defineSourceRelation(self.inputReference, outputTomo)
 
     #--------------------------- INFO functions --------------------------------
     def _summary(self):
         summary = []
-        summary.append("Subtomogram reference %s mapped back %d times to original tomogram %s in the locations of subtomograms %s" %
-                       (self.getObjectTag('inputReference'),len(self.inputSubtomograms.get()),
-                        self.getObjectTag('inputTomogram'),self.getObjectTag('inputSubtomograms')))
+        summary.append("Subtomogram average mapped back %d times to original tomogram %s in the locations of subtomograms %s" %
+                       (len(self.inputSubtomograms.get()),self.getObjectTag('inputTomogram'),
+                        self.getObjectTag('inputSubtomograms')))
         return summary
 
     def _methods(self):
         methods = []
-        methods.append("Subtomogram reference %s mapped back to tomogram %s" % (self.getObjectTag('inputReference'),
-                                                                                self.getObjectTag('inputTomogram')))
+        methods.append("Subtomogram average mapped back to tomogram %s" % (self.getObjectTag('inputTomogram')))
         return methods
