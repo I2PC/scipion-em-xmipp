@@ -102,6 +102,7 @@ class XmippAnalyzeLocalCTFViewer(ProtocolViewer):
             views.append(ObjectView(self._project, obj.strId(), fn,
                                           viewParams={showj.ORDER: labels,
                                                       showj.VISIBLE: labels,
+                                                      showj.RENDER: None,
                                                       showj.MODE: showj.MODE_MD}))
         return views
 

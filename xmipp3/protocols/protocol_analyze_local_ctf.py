@@ -149,5 +149,6 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
     
     def _methods(self):
         methods = []
-        methods.append("The results obtained when local CTF is calculated are analyzed here. The adjust coefficients, residues and R2 are calculated for each micrograph.")
+        methods.append("The results obtained when local CTF is calculated are analyzed here. The adjust coefficients, "
+                       "residues and R2 are calculated for each micrograph.")
         return methods
