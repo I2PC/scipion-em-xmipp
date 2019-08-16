@@ -48,8 +48,10 @@ class XmippProtSubtomoMapBack(EMProtocol):
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='Input subtomograms')
-        form.addParam('inputSubtomograms', PointerParam, pointerClass="SetOfClassesSubTomograms",
+        form.addParam('inputSubtomograms', PointerParam, pointerClass="SetOfSubTomograms",
                       label='Set of subtomograms', help="Set of subtomograms to be represented")
+        form.addParam('inputClasses', PointerParam, pointerClass="SetOfClassesSubTomograms",
+                      label='Set of classes', help="Set of classes subtomogram")
         form.addParam('inputTomogram', PointerParam, pointerClass="Tomogram",
                       label='Original tomogram', help="Original tomogram from which the subtomograms were extracted")
         form.addParam('paintingType', EnumParam,
@@ -81,14 +83,17 @@ class XmippProtSubtomoMapBack(EMProtocol):
         img = ImageHandler()
         fnTomo = self._getExtraPath('tomogram.mrc')
         img.convert(self.inputTomogram.get(), fnTomo)
-        fnRef = self._getExtraPath('reference.mrc')
-        img.convert(self.inputSubtomograms.get().getRepresentative().getFileName(), fnRef)
+        for classSubt in self.inputClasses.get().iterItems():
+            cId = classSubt.getFirstItem().getClassId()
+            fnRef = self._getExtraPath('reference.mrc') # _%s.mrc' % cId) # more than one class??
+            img.convert(classSubt.getRepresentative(), fnRef)
+
         if self.paintingType.get() == 0 or self.paintingType.get() == 3:
             if self.removeBackground.get() == True:
                 self.runJob("xmipp_image_operate"," -i %s  --mult 0"%fnTomo)
 
     def runMapBack(self):
-        TsSubtomo = self.inputSubtomograms.get().getSamplingRate()
+        TsSubtomo =self.inputSubtomograms.get().getSamplingRate()
         TsTomo = self.inputTomogram.get().getSamplingRate()
         scaleFactor = TsSubtomo/TsTomo
 

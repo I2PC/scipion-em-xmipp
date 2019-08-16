@@ -57,7 +57,7 @@ class XmippProtApplyTransformSubtomo(EMProtocol):
 
     def convertInputStep(self, outputFn):
         """ Create a metadata with the images and geometrical information. """
-        writeSetOfVolumes(self.inputSubtomograms.get(), outputFn)
+        writeSetOfVolumes(self.inputSubtomograms.get(), outputFn, alignType=em.ALIGN_3D)
 
         return [outputFn]
 
@@ -112,7 +112,7 @@ class XmippProtApplyTransformSubtomo(EMProtocol):
         if not hasattr(self, 'outputSubtomograms'):
             summary.append("Output subtomograms not ready yet.")
         else:
-            summary.append("Applied alignment to %s subtomograms." % self.inputSubtomograms.get().getSize())
+            summary.append("Alignment applied to %s subtomograms." % self.inputSubtomograms.get().getSize())
         return summary
 
     def _methods(self):
