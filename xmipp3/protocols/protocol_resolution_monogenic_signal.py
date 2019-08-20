@@ -28,8 +28,7 @@
 import numpy as np
 
 from pyworkflow import VERSION_1_1
-from pyworkflow.protocol.params import (PointerParam, StringParam, 
-                                        BooleanParam, FloatParam,
+from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
                                         LEVEL_ADVANCED)
 from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
 from pyworkflow.object import Float

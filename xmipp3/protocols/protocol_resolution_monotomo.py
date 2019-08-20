@@ -28,8 +28,7 @@
 import numpy as np
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.protocol.params import (PointerParam, StringParam, 
-                                        BooleanParam, FloatParam,
+from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
                                         LEVEL_ADVANCED)
 from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
 from pyworkflow.object import Float
@@ -38,13 +37,9 @@ from pyworkflow.utils import getExt
 from pyworkflow.em.data import Volume
 import pyworkflow.em.metadata as md
 
-
-# CHIMERA_RESOLUTION_VOL = 'MG_Chimera_resolution.vol'
 MONORES_METHOD_URL = 'http://github.com/I2PC/scipion/wiki/XmippProtMonoRes'
 OUTPUT_RESOLUTION_FILE = 'resolutionMap'
 FN_FILTERED_MAP = 'filteredMap'
-# OUTPUT_RESOLUTION_FILE_CHIMERA = 'outputChimera'
-# OUTPUT_MASK_FILE = 'outputmask'
 FN_MEAN_VOL = 'meanvol'
 FN_MASK_WEDGE = 'maskwedge'
 METADATA_MASK_FILE = 'metadataresolutions'
@@ -91,17 +86,10 @@ class XmippProtMonoTomo(ProtAnalysis3D):
                       help='The mask determines which points are specimen'
                       ' and which are not')
 
-        #form.addParam('wedge', BooleanParam, default=False,
-        #              label="Weight resolution by wedge?", 
-        #              help='A second local resolution map is provided,'
-	#		'by filtering the local resolution map by the missing'
-	#		'wedge.')
-
         group = form.addGroup('Extra parameters')
-
         line = group.addLine('Resolution Range (Å)',
-                            help="If the user knows the range of resolutions or"
-                                " only a range of frequencies needs to be analysed.")
+                            help="Resolution range (and step in expert mode) "
+                                 "to evaluate the local resolution.")
         
         group.addParam('significance', FloatParam, default=0.95, 
                        expertLevel=LEVEL_ADVANCED,
@@ -111,7 +99,7 @@ class XmippProtMonoTomo(ProtAnalysis3D):
         
         line.addParam('minRes', FloatParam, default=0, label='High')
         line.addParam('maxRes', FloatParam, allowsNull=True, label='Low')
-        line.addParam('stepSize', FloatParam, allowsNull=True,
+        line.addParam('stepSize', FloatParam, allowsNull=True, default=0.25,
                       expertLevel=LEVEL_ADVANCED, label='Step')
 
         
@@ -137,9 +125,7 @@ class XmippProtMonoTomo(ProtAnalysis3D):
             # Convert input into xmipp Metadata format
         self._createFilenameTemplates() 
         self._insertFunctionStep('convertInputStep')
-	#if self.wedge.get():
-	#    self._insertFunctionStep('detectMissingWedgeStep')
-	self._insertFunctionStep('resolutionMonoTomoStep')
+        self._insertFunctionStep('resolutionMonoTomoStep')
         self._insertFunctionStep('createOutputStep')
         self._insertFunctionStep("createHistrogram")
 
@@ -156,7 +142,7 @@ class XmippProtMonoTomo(ProtAnalysis3D):
         if (extVol2 == '.mrc') or (extVol2 == '.map'):
             self.vol2Fn = self.vol2Fn + ':mrc'
         
-        if self.useMask.get() is True:
+        if self.useMask.get():
             if (not self.Mask.hasValue()):
                 self.ifNomask(self.vol1Fn)
             else:
@@ -204,12 +190,6 @@ class XmippProtMonoTomo(ProtAnalysis3D):
         xdim = xdim*0.5
 
         return xdim
-    
-
-    def detectMissingWedgeStep(self):
-	params = ' -i %s' % self.vol1Fn
-	params += ' --saveMask %s' % self._getFileName(FN_MASK_WEDGE)
-	self.runJob('xmipp_tomo_detect_missing_wedge', params)
 	
     def resolutionMonoTomoStep(self):
         # Number of frequencies
@@ -225,12 +205,8 @@ class XmippProtMonoTomo(ProtAnalysis3D):
         params = ' --vol %s' % self.vol1Fn
         params += ' --vol2 %s' % self.vol2Fn
         params += ' --meanVol %s' % self._getFileName(FN_MEAN_VOL)
-
-	#if self.wedge.get():
-	#    params += ' --filteredMap %s' % self._getFileName(FN_FILTERED_MAP)
-	#    params += ' --maskWedge %s' % self._getFileName(FN_MASK_WEDGE)
         
-        if self.useMask.get() is True:
+        if self.useMask.get():
             params += ' --mask %s' % self._getFileName(BINARY_MASK)
         
         params += ' --sampling_rate %f' % self.inputVolume.get().getSamplingRate()
@@ -246,23 +222,22 @@ class XmippProtMonoTomo(ProtAnalysis3D):
 
     def createHistrogram(self):
 
-        if self.stepSize.hasValue():
-            freq_step = self.stepSize.get()
-        else:
-            freq_step = 10
+        freq_step = self.stepSize.get() if self.stepSize.hasValue() else 10
             
         M = float(self.max_res_init)
         m = float(self.min_res_init)
         range_res = round((M - m)/freq_step)
 
         params = ' -i %s' % self._getFileName(OUTPUT_RESOLUTION_FILE)
-	if self.useMask.get() is True:
-	    params += ' --mask binary_file %s' % self._getFileName(BINARY_MASK)
-        params += ' --steps %f' % (range_res)
-        params += ' --range %f %f' % (self.min_res_init, ( float(self.max_res_init) - float(freq_step) ) )
-        params += ' -o %s' % self._getFileName(FN_METADATA_HISTOGRAM)
 
-        self.runJob('xmipp_image_histogram', params)
+        if self.useMask.get():
+            params += ' --mask binary_file %s' % self._getFileName(BINARY_MASK)
+            params += ' --steps %f' % range_res
+            params += ' --range %f %f' % (self.min_res_init.get(),
+                                          (float(self.max_res_init.get())-float(freq_step)))
+            params += ' -o %s' % self._getFileName(FN_METADATA_HISTOGRAM)
+
+            self.runJob('xmipp_image_histogram', params)
         
         
     def readMetaDataOutput(self):

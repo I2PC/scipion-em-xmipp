@@ -61,20 +61,23 @@ class XmippProt3DBionotes(ProtAnalysis3D):
         
     #--------------------------- STEPS functions -------------------------------
     def bionotesWrapper(self):
-#         img = ImageHandler()
-#         fnVol = self._getExtraPath('volume.mrc')
-#         vol = self.inputVol.get()
-#         img.convert(vol,fnVol)
-#
-#         ccp4header = Ccp4Header(fnVol, readHeader= True)
-#         ccp4header.setOffset(vol.getOrigin(force=True).getShifts())
-#         ccp4header.setSampling(vol.getSamplingRate())
-#         ccp4header.writeHeader()
+        #img = ImageHandler()
+        #fnVol = self._getExtraPath('volume.mrc')
+        #vol = self.inputVol.get()
+        #img.convert(vol,fnVol)
+
+        #ccp4header = Ccp4Header(fnVol, readHeader= True)
+        #ccp4header.setOrigin(vol.getOrigin(force=True).getShifts)
+        #ccp4header.setOffset(vol.getOrigin(force=True).getShifts())
+        #ccp4header.setSampling(vol.getSamplingRate())
+        #ccp4header.writeHeader()
         data = {'title':'PDB structure'}
         files = {'structure_file': open(self.inputPDB.get().getFileName(), 'rb')}
 
         response = requests.post('http://3dbionotes.cnb.csic.es/programmatic/upload',data=data, files=files)
         json_data = json.loads(response.text)
+        url="http://3dbionotes.cnb.csic.es/programmatic/get/"+json_data['id']
+        webbrowser.open_new(url)
         self.url=String('http://3dbionotes.cnb.csic.es/programmatic/get/'+json_data['id'])
         self._store()
         #webbrowser.open_new(url)
@@ -89,11 +92,11 @@ class XmippProt3DBionotes(ProtAnalysis3D):
             return ["Visit: %s" % self.url.get()]
         else:
             return []
-                
-        
-    
-    
-    
-    
-    
-            
+
+
+
+
+
+
+
+
