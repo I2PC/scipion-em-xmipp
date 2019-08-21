@@ -288,7 +288,7 @@ class TestXmippCTFEstimation(TestXmippBase):
         ctfModel = protCTF.outputCTF.getFirstItem()
         self.assertAlmostEquals(ctfModel.getDefocusU(),23928.4, delta=500)
         self.assertAlmostEquals(ctfModel.getDefocusV(),23535.2, delta=500)
-        self.assertAlmostEquals(ctfModel.getDefocusAngle(), 53.217, delta=5)
+        self.assertAlmostEquals(ctfModel.getDefocusAngle(), 60.0, delta=20)
         sampling = ctfModel.getMicrograph().getSamplingRate()
         self.assertAlmostEquals(sampling, 2.474, delta=0.001)
 
