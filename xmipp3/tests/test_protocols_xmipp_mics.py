@@ -967,7 +967,7 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
                                       consensus=1)
         protConsOr.inputCoordinates.set(
             [Pointer(self.protFaPi, extended="outputCoordinates"),
-             Pointer(protAutomaticPP, "outputCoordinates")])
+             Pointer(protAutomaticPP, extended="outputCoordinates")])
         self.launchProtocol(protConsOr)
 
         self.assertTrue(protConsOr.isFinished(), "Consensus failed")
