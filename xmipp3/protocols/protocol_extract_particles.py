@@ -486,28 +486,30 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                 coordDict[pos] = coord
 
             added = set() # Keep track of added coords to avoid duplicates
-            for row in md.iterRows(self._getMicXmd(mic)):
-                pos = (row.getValue(md.MDL_XCOOR), row.getValue(md.MDL_YCOOR))
-                coord = coordDict.get(pos, None)
-                if coord is not None and coord.getObjId() not in added:
-                    # scale the coordinates according to particles dimension.
-                    coord.scale(self.getBoxScale())
-                    p.copyObjId(coord)
-                    p.setLocation(xmippToLocation(row.getValue(md.MDL_IMAGE)))
-                    p.setCoordinate(coord)
-                    p.setMicId(mic.getObjId())
-                    p.setCTF(mic.getCTF())
-                    # adding the variance and Gini coeff. value of the mic zone
-                    setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
-                    setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
-                    if row.containsLabel(md.MDL_ZSCORE_DEEPLEARNING1):
-                        setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
+            fnMicXmd = self._getMicXmd(mic)
+            if exists(fnMicXmd):
+                for row in md.iterRows(fnMicXmd):
+                    pos = (row.getValue(md.MDL_XCOOR), row.getValue(md.MDL_YCOOR))
+                    coord = coordDict.get(pos, None)
+                    if coord is not None and coord.getObjId() not in added:
+                        # scale the coordinates according to particles dimension.
+                        coord.scale(self.getBoxScale())
+                        p.copyObjId(coord)
+                        p.setLocation(xmippToLocation(row.getValue(md.MDL_IMAGE)))
+                        p.setCoordinate(coord)
+                        p.setMicId(mic.getObjId())
+                        p.setCTF(mic.getCTF())
+                        # adding the variance and Gini coeff. value of the mic zone
+                        setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
+                        setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
+                        if row.containsLabel(md.MDL_ZSCORE_DEEPLEARNING1):
+                            setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
 
-                    # disabled particles (in metadata) should not add to the
-                    # final set
-                    if row.getValue(md.MDL_ENABLED) > 0:
-                        outputParts.append(p)
-                        added.add(coord.getObjId())
+                        # disabled particles (in metadata) should not add to the
+                        # final set
+                        if row.getValue(md.MDL_ENABLED) > 0:
+                            outputParts.append(p)
+                            added.add(coord.getObjId())
 
             # Release the list of coordinates for this micrograph since it
             # will not be longer needed
