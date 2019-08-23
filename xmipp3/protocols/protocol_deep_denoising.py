@@ -302,7 +302,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         
         dataPathParticles= self._getExtraPath('resizedParticles.xmd')
         dataPathProjections= self._getExtraPath('resizedProjections.xmd')
-        dataPathEmpty= self._getExtraPath('emptyParts.xmd')
+        dataPathEmpty= self._getExtraPath('resizedEmptyParts.xmd')
 
         argsDict={}
         argsDict["builder"]=builder_args
