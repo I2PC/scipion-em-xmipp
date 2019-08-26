@@ -379,6 +379,8 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         cleanPath(self._getExtraPath('projections.xmd'))
         if os.path.exists(self._getExtraPath('resizedProjections.xmd')):
             cleanPath(self._getExtraPath('resizedProjections.xmd'))
+        if os.path.exists(self._getExtraPath('resizedEmptyParts.xmd')):
+            cleanPath(self._getExtraPath('resizedEmptyParts.xmd'))
 
     def _processRow(self, particle, row):
         particle.setLocation(xmippToLocation(row.getValue(xmippLib.MDL_IMAGE)))
