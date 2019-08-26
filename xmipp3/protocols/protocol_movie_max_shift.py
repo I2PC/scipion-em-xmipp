@@ -214,34 +214,34 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             micsDwSet = self._loadOutputSet(SetOfMicrographs,
                                   'micrographs_dose-weighted%s.sqlite' % suffix)
 
-            def tryToAppend(outSet, micOut, tries=1):
+            def tryToAppend(outSet, micOut, tries=1, label='movie'):
                 """ When micrograph is very big, sometimes it's not ready to be read
                 Then we will wait for it up to a minute in 6 time-growing tries. 
                 Returns True if fails! """
                 try:
+                    micOut.setEnabled(enable)
                     outSet.append(micOut)
                 except Exception as ex:
-                    micFn = micOut.getFileName()  # Runs/..../extra/filename.mrc
-                    errorStr = ('Image Extension: File %s has wrong size.' % micFn)
-                    if errorStr in str(ex) and tries < 7:
+                    if tries < 10:
                         from time import sleep
                         sleep(tries*3)
                         tryToAppend(outSet, micOut, tries+1)
                     else:
-                        print("The movie seems corrupted. Skkiping it...\n%s" % ex)
+                        self.warning("The %s seems corrupted. Skkiping it...\n "
+                                     " > %s" % (label, ex))
                         return True
 
             for movie in newDoneList:
-                movie.setEnabled(enable)
-                tryToAppend(movieSet, movie)
+                tryToAppend(movieSet, movie,
+                            label='movie (%s)' % movie.getMicName())
                 if self.inputMics is not None:
                     mic = self.getMicFromMovie(movie, isDoseWeighted=False)
-                    mic.setEnabled(enable)
-                    tryToAppend(micsSet, mic)
+                    tryToAppend(micsSet, mic,
+                                label='micrograph (%s)' % mic.getMicName())
                 if self.inputDwMics is not None:
                     micDw = self.getMicFromMovie(movie, isDoseWeighted=True)
-                    micDw.setEnabled(enable)
-                    tryToAppend(micsDwSet, micDw)
+                    tryToAppend(micsDwSet, micDw,
+                                label='micDW (%s)' % micDw.getMicName())
             
             if movieSet.getSize() > 0:
                 self._updateOutputSet('outputMovies%s' % suffix, movieSet,
