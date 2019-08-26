@@ -92,11 +92,3 @@ class XmippProt3DBionotes(ProtAnalysis3D):
             return ["Visit: %s" % self.url.get()]
         else:
             return []
-
-
-
-
-
-
-
-
