@@ -72,7 +72,7 @@ class XmippMovieMaxShiftViewer(ProtocolViewer):
      CTF estimations would be ``equivalent'', defining ``equivalent'' as having
       a wave aberration function shift smaller than 90 degrees
     """
-    _label = 'viewer CTF Consensus'
+    _label = 'viewer Movie Max Shift'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
     _targets = [XmippProtMovieMaxShift]
     _memory = False
@@ -102,8 +102,9 @@ class XmippMovieMaxShiftViewer(ProtocolViewer):
             views.append(MicrographsView(self.getProject(),
                                          self.protocol.outputMicrographs))
         else:
-            self.infoMessage('%s do not have outputMicrographs, yet.'
-                             % self.protocol.getObjLabel(),
+            appendStr = ', yet.' if self.protocol.isActive() else '.'
+            self.infoMessage('%s does not have outputMicrographs%s'
+                             % (self.protocol.getObjLabel(), appendStr),
                              title='Info message').show()
         return views
 
@@ -114,7 +115,7 @@ class XmippMovieMaxShiftViewer(ProtocolViewer):
             views.append(MicrographsView(self.getProject(),
                                          self.protocol.outputMicrographsDiscarded))
         else:
-            self.infoMessage('%s do not have outputMicrographsDiscarded.'
+            self.infoMessage('%s has not discarded micrographs.'
                              % self.protocol.getObjLabel(),
                              title='Info message').show()
         return views

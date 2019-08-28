@@ -67,11 +67,12 @@ class XmippCTFConsensusViewer(ProtocolViewer):
                         label="Visualize discarded micrographs",
                         help="Visualize those micrographs associated with "
                              "the discarded CTFs.")
-        form.addParam('justSpace', LabelParam, label="")
-        form.addParam('visualizeHistogram', IntParam, default=10,
-                      label="Visualize Histogram (Bin size)",
-                      help="Histogram of the resolution at which two methods"
-                           " are equivalent")
+        if self.protocol.calculateConsensus.get():
+            form.addParam('justSpace', LabelParam, label="")
+            form.addParam('visualizeHistogram', IntParam, default=10,
+                          label="Visualize Histogram (Bin size)",
+                          help="Histogram of the resolution at which two methods"
+                               " are equivalent")
 
     def _getVisualizeDict(self):
         return {
@@ -95,8 +96,9 @@ class XmippCTFConsensusViewer(ProtocolViewer):
                 self.protocol.outputCTF.getFileName(),
                 viewParams={MODE: MODE_MD, ORDER: labels, VISIBLE: labels}))
         else:
-            self.infoMessage('%s do not have outputCTF, yet.'
-                             % self.protocol.getObjLabel(),
+            appendStr = ', yet.' if self.protocol.isActive() else '.'
+            self.infoMessage('%s does not have outputCTF%s'
+                             % (self.protocol.getObjLabel(), appendStr),
                              title='Info message').show()
         return views
 
@@ -107,8 +109,9 @@ class XmippCTFConsensusViewer(ProtocolViewer):
             views.append(MicrographsView(self.getProject(),
                                          self.protocol.outputMicrographs))
         else:
-            self.infoMessage('%s do not have outputMicrographs, yet.'
-                             % self.protocol.getObjLabel(),
+            appendStr = ', yet.' if self.protocol.isActive() else '.'
+            self.infoMessage('%s does not have outputMicrographs%s'
+                             % (self.protocol.getObjLabel(), appendStr),
                              title='Info message').show()
         return views
 
@@ -138,7 +141,7 @@ class XmippCTFConsensusViewer(ProtocolViewer):
             views.append(MicrographsView(self.getProject(),
                                          self.protocol.outputMicrographsDiscarded))
         else:
-            self.infoMessage('%s do not have outputMicrographsDiscarded.'
+            self.infoMessage('%s does not have outputMicrographsDiscarded.'
                              % self.protocol.getObjLabel(),
                              title='Info message').show()
         return views

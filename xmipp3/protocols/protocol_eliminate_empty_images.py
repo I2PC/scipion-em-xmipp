@@ -77,6 +77,8 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
     def _insertAllSteps(self):
         self.outputSize = 0
         self.check = None
+        self.stepCount = 0
+        self.fnInputMd = self._getExtraPath("input%d.xmd")
         self.fnOutputMd = self._getExtraPath("output.xmd")
         self.fnElimMd = self._getExtraPath("eliminated.xmd")
         self.fnOutMdTmp = self._getExtraPath("outTemp.xmd")
@@ -87,13 +89,14 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
 
     def _insertNewPartsSteps(self):
         deps = []
+        self.stepCount += 1
         stepId = self._insertFunctionStep('eliminationStep',
-                                          self._getExtraPath("input.xmd"),
+                                          self.stepCount,
                                           prerequisites=[])
         deps.append(stepId)
         return deps
 
-    def eliminationStep(self, fnInputMd):
+    def eliminationStep(self, stepId):
         """ To be implemented by childs. (Main task) """
         pass
 
@@ -127,8 +130,7 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         if getattr(self, 'finished', False):
             return
 
-        self.finished = self.streamClosed and \
-                        self.outputSize == self.lenPartsSet
+        self.finished = self.streamClosed and self.outputSize == self.lenPartsSet
 
         self.createOutputs()
 
@@ -234,7 +236,8 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
             outputStep.addPrerequisites(*fDeps)
         self.updateSteps()
 
-    def eliminationStep(self, fnInputMd):
+    def eliminationStep(self, stepId):
+        fnInputMd = self.fnInputMd % stepId
         self.inputImages = self.inputParticles.get()
 
         partsFile = self.inputImages.getFileName()
@@ -254,16 +257,13 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
         self.partsSet.close()
         self.lenPartsSet = len(self.partsSet)
 
-        print("os.path.exists(fnInputMd)): %s" % os.path.exists(fnInputMd))
-
-        args = "-i %s -o %s -e %s -t %f" % (
-            fnInputMd, self.fnOutputMd, self.fnElimMd, self.threshold.get())
+        args = "-i %s -o %s -e %s -t %f" % (fnInputMd, self.fnOutputMd,
+                                            self.fnElimMd, self.threshold.get())
         if self.addFeatures:
             args += " --addFeatures"
         if self.useDenoising:
             args += " --useDenoising -d %f" % self.denoising.get()
         self.runJob("xmipp_image_eliminate_empty_particles", args)
-        cleanPath(fnInputMd)
 
     def createOutputs(self):
         streamMode = Set.STREAM_CLOSED if getattr(self, 'finished', False) \
@@ -272,10 +272,10 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
         def updateOutputs(mdFn, suffix):
             newData = os.path.exists(mdFn)
             lastToClose = getattr(self, 'finished', False) and \
-                          hasattr(self, '%sParticles'%suffix)
+                          hasattr(self, '%sParticles' % suffix)
             if newData or lastToClose:
                 outSet = self._loadOutputSet(em.SetOfParticles,
-                                             '%sParticles.sqlite'%suffix)
+                                             '%sParticles.sqlite' % suffix)
                 if newData:
                     partsSet = self._createSetOfParticles("AUX")
                     readSetOfParticles(mdFn, partsSet)
@@ -324,16 +324,18 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                            'eliminated. Set to -1 for no elimination, even so '
                            'the "xmipp_scoreEmptiness" value will be attached to '
                            'every paricle for a posterior inspection.')
-        form.addParam('usePopulation', param.BooleanParam, default=True,
-                      label='Use class population',
-                      help="Use class population to reject a class.")
-        form.addParam('minPopulation', param.FloatParam, default=0.2,
-                      label='Min. population below the mean',
-                      condition="usePopulation",
-                      expertLevel=param.LEVEL_ADVANCED,
-                      help="Minimum of the population to accept a class.\n"
-                           "Classes with less population than the mean population "
-                           "times this value will be rejected.")
+        self.usePopulation = em.Boolean(False)
+        self.minPopulation = em.Float(0.2)
+        # form.addParam('usePopulation', param.BooleanParam, default=True,
+        #               label='Use class population',
+        #               help="Use class population to reject a class.")
+        # form.addParam('minPopulation', param.FloatParam, default=0.2,
+        #               label='Min. population below the mean',
+        #               condition="usePopulation",
+        #               expertLevel=param.LEVEL_ADVANCED,
+        #               help="Minimum of the population to accept a class.\n"
+        #                    "Classes with less population than the mean population "
+        #                    "times this value will be rejected.")
 
         self.addAdvancedParams(form)
 
@@ -354,11 +356,13 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
             outputStep.addPrerequisites(*fDeps)
         self.updateSteps()
 
-    def eliminationStep(self, fnInputMd):
+    def eliminationStep(self, stepId):
+        fnInputMd = self.fnInputMd % stepId
         self.preparePartsSet()
 
         self.inputImages.loadAllProperties()
         self.streamClosed = self.inputImages.isStreamClosed()
+        print("self.inputImages.isStreamClosed(): %s" % self.inputImages.isStreamClosed())
         if self.check == None:
             writeSetOfParticles(self.inputImages, fnInputMd,
                                 alignType=em.ALIGN_NONE, orderBy='creation')
@@ -375,20 +379,19 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
 
         self.rejectByPopulation(idsToCheck)
 
-        args = "-i %s -o %s -e %s -t %f" % (
-            fnInputMd, self.fnOutputMd, self.fnElimMd, self.threshold.get())
+        args = "-i %s -o %s -e %s -t %f" % (fnInputMd, self.fnOutputMd,
+                                            self.fnElimMd, self.threshold.get())
         if self.addFeatures:
             args += " --addFeatures"
         if self.useDenoising:
             args += " --useDenoising -d %f" % self.denoising.get()
         self.runJob("xmipp_image_eliminate_empty_particles", args)
-        os.remove(fnInputMd)
 
     def createOutputs(self):
-        streamMode = Set.STREAM_CLOSED if getattr(self, 'finished', False) \
-            else Set.STREAM_OPEN
-
         def updateOutputs(mdFn, suffix, newData):
+            streamMode = Set.STREAM_CLOSED if getattr(self, 'finished', False) \
+                else (Set.STREAM_CLOSED if self.streamClosed else Set.STREAM_OPEN)
+
             lastToClose = getattr(self, 'finished', False) and \
                           hasattr(self, '%sClasses' % suffix)
             if newData or lastToClose:
@@ -423,12 +426,12 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
 
                 self.createOutputClasses(suffix, streamMode, newData)
 
-        newAccData = os.path.exists(self.fnOutMdTmp) \
-                         or ACCEPTED in self.enableCls.values()
+        newAccData = os.path.exists(self.fnOutMdTmp)
+                         # or ACCEPTED in self.enableCls.values()
         updateOutputs(self.fnOutMdTmp, 'output', newAccData)
 
-        newDisData = os.path.exists(self.fnElimMdTmp) \
-                         or DISCARDED in self.enableCls.values()
+        newDisData = os.path.exists(self.fnElimMdTmp)
+                         # or DISCARDED in self.enableCls.values()
         updateOutputs(self.fnElimMdTmp, 'eliminated', newDisData)
 
         # self.createOutputClasses('output', streamMode, newAccData)
