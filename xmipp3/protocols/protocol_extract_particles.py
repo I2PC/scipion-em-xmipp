@@ -37,12 +37,13 @@ from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
                                            STATUS_FINISHED)
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtExtractParticles
-from pyworkflow.em.data import Particle
+from pyworkflow.em.data import Particle, SetOfCoordinates
 from pyworkflow.em.constants import RELATION_CTF
 
+import xmippLib
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
-                            xmippToLocation, setXmippAttributes)
+                            xmippToLocation, setXmippAttributes, readSetOfCoordinates)
 from xmipp3.constants import SAME_AS_PICKING, OTHER
 
 
@@ -191,7 +192,11 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
             args  =  '--pos %s' % fnPosFile
             args += ' --mic %s' % fnLast
             args += ' --patchSize %d' % patchSize
-            self.runJob('xmipp_coordinates_noisy_zones_filter', args)
+            try:
+                self.runJob('xmipp_coordinates_noisy_zones_filter', args)
+            except:
+                print("'xmipp_coordinates_noisy_zones_filter' have failed for "
+                      "%s micrograph. We continue..." % mic.getMicName())
 
             def getMicTmp(suffix):
                 return self._getTmpPath(baseMicName + suffix)
@@ -494,10 +499,9 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                     p.setMicId(mic.getObjId())
                     p.setCTF(mic.getCTF())
                     # adding the variance and Gini coeff. value of the mic zone
-                    setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
-                    setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
-                    if row.containsLabel(md.MDL_ZSCORE_DEEPLEARNING1):
-                        setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
+                    setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR,
+                                       md.MDL_SCORE_BY_GINI, default=[0, 1])
+                    setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
 
                     # disabled particles (in metadata) should not add to the
                     # final set
