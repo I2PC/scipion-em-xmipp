@@ -228,7 +228,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                 fnCTF = None
 
             args = " -i %s --pos %s" % (fnLast, particlesMd)
-            args += " -o %s --Xdim %d" % (outputRoot, boxSize)
+            args += " -o %s.mrc --Xdim %d" % (outputRoot, boxSize)
 
             if doInvert:
                 args += " --invert"
@@ -244,7 +244,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
             # Normalize
             if normalizeArgs:
                 self.runJob('xmipp_transform_normalize',
-                            '-i %s.stk %s' % (outputRoot, normalizeArgs))
+                            '-i %s.mrc %s' % (outputRoot, normalizeArgs))
         else:
             self.warning("The micrograph %s hasn't coordinate file! "
                          % baseMicName)
