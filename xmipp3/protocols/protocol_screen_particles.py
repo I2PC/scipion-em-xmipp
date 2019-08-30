@@ -215,10 +215,7 @@ class XmippProtScreenParticles(ProtProcessParticles):
             writeSetOfParticles(inPartsSet, self.fnInputOldMd,
                                 alignType=em.ALIGN_NONE, orderBy='creation',
                                 where='creation<"' + str(self.check) + '"')
-        for p in inPartsSet.iterItems(orderBy='creation',
-                                      direction='DESC'):
-            self.check = p.getObjCreation()
-            break
+        self.check = check
 
         streamClosed = inPartsSet.isStreamClosed()
         inputSize = inPartsSet.getSize()
@@ -430,7 +427,7 @@ class XmippProtScreenParticles(ProtProcessParticles):
 
 
 # -------------------------- EXTERNAL functions ------------------------------
-def histThresholding(valuesList, nBins=256, portion=4):
+def histThresholding(valuesList, nBins=256, portion=4, takeNegatives=False):
     """ returns the threshold to reject those values above a portionth of 
         the peak. i.e: if portion is 4, the threshold correponds to the
         4th of the peak (in the right part).
