@@ -181,14 +181,11 @@ class XmippProtScreenParticles(ProtProcessParticles):
     def _checkNewInput(self):
         # Check if there are new particles to process from the input set
         partsFile = self.inputParticles.get().getFileName()
-        now = datetime.now()
-        self.lastCheck = getattr(self, 'lastCheck', now)
         mTime = datetime.fromtimestamp(os.path.getmtime(partsFile))
         # If the input movies.sqlite have not changed since our last check,
         # it does not make sense to check for new input data
         if self.lastCheck > mTime:
             return None
-        self.lastCheck = now
 
         self.inputSize, self.streamClosed = self._loadInput()
         if not isEmpty(self.fnInputMd):
@@ -199,11 +196,16 @@ class XmippProtScreenParticles(ProtProcessParticles):
             self.updateSteps()
 
     def _loadInput(self):
+        self.lastCheck = datetime.now()
         partsFile = self.inputParticles.get().getFileName()
         inPartsSet = SetOfParticles(filename=partsFile)
         inPartsSet.loadAllProperties()
 
-        if self.check == None:
+        check = None
+        for p in inPartsSet.iterItems(orderBy='creation', direction='DESC'):
+            check = p.getObjCreation()
+            break
+        if self.check is None:
             writeSetOfParticles(inPartsSet, self.fnInputMd,
                                 alignType=em.ALIGN_NONE, orderBy='creation')
         else:
@@ -433,6 +435,10 @@ def histThresholding(valuesList, nBins=256, portion=4):
         the peak. i.e: if portion is 4, the threshold correponds to the
         4th of the peak (in the right part).
     """
+    if not takeNegatives:
+        # take only the positive values, negative are considered corrupted
+        valuesList = [x for x in valuesList if not x < 0]
+
     import numpy as np
     while len(valuesList)*1.0/nBins < 5:
         nBins = nBins/2
@@ -445,7 +451,7 @@ def histThresholding(valuesList, nBins=256, portion=4):
     histRight[0:hist.argmax()] = 0
 
     idx = (np.abs(histRight-hist.max()/portion)).argmin()
-    return bin_edges[idx] 
+    return bin_edges[idx]
 
 def rejectByVariance(inputMdFn, outputMdFn, threshold, mode):
     """ Sets MDL_ENABLED to -1 to those items with a higher value

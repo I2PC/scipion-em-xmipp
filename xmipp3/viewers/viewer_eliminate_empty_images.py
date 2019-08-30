@@ -114,24 +114,63 @@ class XmippEliminateEmptyViewer(ProtocolViewer):
             badScores += [part._xmipp_scoreEmptiness.get() for part in
                           self.protocol.eliminatedParticles]
 
-        if goodScores or badScores:
+        plotter = EmPlotter()
+        plotter.createSubPlot("Emptiness Score", "Emptiness Score (a.u.)",
+                              "# of Particles")
+
+        values = [goodScores, badScores]
+        labels = ["Passed particles", "Discarded particles"]
+        colors = ['green', 'red']
+
+        plotMultiHistogram(values, colors, labels, numberOfBins, plotter, views)
+
+        return views
+
+
+def plotMultiHistogram(valuesList, colors=None, legend=None, numOfBins=100,
+                       plotter=None, views=None, includeEmpties=False):
+    """ Values list must be a n-list of list,
+        where n is the number of the subhistograms to plot.
+        Multiple histograms will be plot in the same chart
+        If no views is passed, a new list-views will be returned with the hist.
+        If no plotter is passed, a new generic one will be created.
+    """
+
+    if not all([isinstance(x, list) for x in valuesList]):
+        print("Not all items in values list are lists. Returning...")
+        return
+
+    if colors is None:
+        from matplotlib import colors
+        from random import shuffle
+        colors = colors.cnames.keys()
+        shuffle(colors)
+
+
+    if any([len(x) for x in valuesList]):
+        if plotter is None:
             plotter = EmPlotter()
-            plotter.createSubPlot("Emptiness Score", "Emptiness Score (a.u.)",
-                                  "# of Particles")
+            plotter.createSubPlot("Histogram", "Score", "# of Items")
 
-            if goodScores:
-                w1 = (max(goodScores) - min(goodScores)) / numberOfBins
-                plotter.plotHist(goodScores, nbins=numberOfBins, color='green')
+        w1 = None
+        finalLegend = []
+        for idx, values in enumerate(valuesList):
+            if values or includeEmpties:
+                if w1 is None:
+                    w1 = (max(values) - min(values)) / numOfBins
+                else:
+                    numOfBins = int((max(values) - min(values)) / w1)
 
-            if badScores:
-                numberOfBins = (numberOfBins if not goodScores else
-                                int((max(badScores) - min(badScores)) / w1))
-                plotter.plotHist(badScores, nbins=numberOfBins, color='red')
+                plotter.plotHist(values, nbins=numOfBins, color=colors[idx])
+                if legend:
+                    finalLegend.append(legend[idx])
 
-            if goodScores and badScores:
-                plotter.legend(labels=["Passed particles",
-                                       "Discarded particles"])
+        if finalLegend:
+            plotter.legend(labels=finalLegend)
 
+        if views is None:
+            views = [plotter]
+        else:
             views.append(plotter)
 
         return views

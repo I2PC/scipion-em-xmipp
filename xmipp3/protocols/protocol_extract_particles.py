@@ -500,7 +500,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                     p.setCTF(mic.getCTF())
                     # adding the variance and Gini coeff. value of the mic zone
                     setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR,
-                                       md.MDL_SCORE_BY_GINI, default=[0, 1])
+                                       md.MDL_SCORE_BY_GINI, default=-1.0)
                     setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
 
                     # disabled particles (in metadata) should not add to the
