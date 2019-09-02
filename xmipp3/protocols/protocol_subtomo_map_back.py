@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 # **************************************************************************
 # *
-# * Authors:     Carlos Oscar Sanchez Sorzano
-# *              Estrella Fernandez Gimenez
+# * Authors:     Estrella Fernandez Gimenez
+# *              Carlos Oscar Sanchez Sorzano
 # *
 # *  BCU, Centro Nacional de Biotecnologia, CSIC
 # *
@@ -27,11 +27,13 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.protocol import EMProtocol
-from pyworkflow.protocol.params import PointerParam, EnumParam, BooleanParam, FloatParam
+from pyworkflow.em import ALIGN_3D
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.em.data import Volume
-
+import pyworkflow.em.metadata as md
+from pyworkflow.em.protocol import EMProtocol
+from pyworkflow.protocol.params import PointerParam, EnumParam, BooleanParam, FloatParam
+from xmipp3.convert import alignmentToRow
 import xmippLib
 
 class XmippProtSubtomoMapBack(EMProtocol):
@@ -75,7 +77,8 @@ class XmippProtSubtomoMapBack(EMProtocol):
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self._insertFunctionStep('convertInput',self.inputSubtomograms.getObjId(), self.inputTomogram.getObjId())
-        self._insertFunctionStep('runMapBack')
+        for subtomoClass in self.inputClasses.get():
+            self._insertFunctionStep('runMapBack', subtomoClass.getObjId())
         self._insertFunctionStep('createOutput')
 
     #--------------------------- STEPS functions -------------------------------
@@ -85,27 +88,28 @@ class XmippProtSubtomoMapBack(EMProtocol):
         img.convert(self.inputTomogram.get(), fnTomo)
         for classSubt in self.inputClasses.get().iterItems():
             cId = classSubt.getFirstItem().getClassId()
-            fnRef = self._getExtraPath('reference.mrc') # _%s.mrc' % cId) # more than one class??
+            fnRef = self._getExtraPath('reference%d.mrc' % cId)
             img.convert(classSubt.getRepresentative(), fnRef)
-
         if self.paintingType.get() == 0 or self.paintingType.get() == 3:
             if self.removeBackground.get() == True:
-                self.runJob("xmipp_image_operate"," -i %s  --mult 0"%fnTomo)
+                self.runJob("xmipp_image_operate"," -i %s  --mult 0" % fnTomo)
 
-    def runMapBack(self):
+    def runMapBack(self, classId):
         TsSubtomo =self.inputSubtomograms.get().getSamplingRate()
         TsTomo = self.inputTomogram.get().getSamplingRate()
         scaleFactor = TsSubtomo/TsTomo
-
         mdGeometry = xmippLib.MetaData()
         for subtomo in self.inputSubtomograms.get():
-            objId = mdGeometry.addObject()
-            mdGeometry.setValue(xmippLib.MDL_XCOOR,int(subtomo.getCoordinate3D().getX()*scaleFactor),objId)
-            mdGeometry.setValue(xmippLib.MDL_YCOOR,int(subtomo.getCoordinate3D().getY()*scaleFactor),objId)
-            mdGeometry.setValue(xmippLib.MDL_ZCOOR,int(subtomo.getCoordinate3D().getZ()*scaleFactor),objId)
-        fnGeometry = self._getExtraPath("geometry.xmd")
+            nRow = md.Row()
+            nRow.setValue(xmippLib.MDL_ITEM_ID,long(subtomo.getObjId()))
+            nRow.setValue(xmippLib.MDL_XCOOR,int(subtomo.getCoordinate3D().getX()*scaleFactor))
+            nRow.setValue(xmippLib.MDL_YCOOR,int(subtomo.getCoordinate3D().getY()*scaleFactor))
+            nRow.setValue(xmippLib.MDL_ZCOOR,int(subtomo.getCoordinate3D().getZ()*scaleFactor))
+            # Convert transform matrix to Euler Angles (rot, tilt, psi)
+            alignmentToRow(subtomo.getTransform(),nRow,ALIGN_3D)
+            nRow.addToMd(mdGeometry)
+        fnGeometry = self._getExtraPath("geometry%d.xmd" % classId)
         mdGeometry.write(fnGeometry)
-
         if self.paintingType.get() == 0:
             painting = 'copy'
         elif self.paintingType.get() == 1:
@@ -114,17 +118,17 @@ class XmippProtSubtomoMapBack(EMProtocol):
             painting = 'highlight %d' % self.constant.get()
         elif self.paintingType.get() == 3:
             painting = 'copy_binary %d' % self.threshold.get()
-
-        self.runJob("xmipp_tomo_map_back"," -i %s -o %s --geom %s --ref %s --method %s" % (self._getExtraPath("tomogram.mrc"),
-                                                                         self._getExtraPath("tomogram_mapped_back.mrc"),
-                                                                         self._getExtraPath("geometry.xmd"),
-                                                                         self._getExtraPath("reference.mrc"),painting))
+        args = " -i %s -o %s --geom %s --ref %s --method %s" % (self._getExtraPath("tomogram.mrc"),
+                                                                self._getExtraPath("tomogram.mrc"),
+                                                                self._getExtraPath("geometry%d.xmd" % classId),
+                                                                self._getExtraPath("reference%d.mrc" % classId),
+                                                                painting)
+        self.runJob("xmipp_tomo_map_back",args)
 
     def createOutput(self):
         outputTomo = Volume()
-        outputTomo.setLocation(self._getExtraPath("tomogram_mapped_back.mrc"))
-        outputTomo.setSamplingRate(self.inputTomogram.get().getSamplingRate())
-
+        outputTomo.copyInfo(self.inputTomogram.get())
+        outputTomo.setLocation(self._getExtraPath("tomogram.mrc"))
         self._defineOutputs(outputTomogram=outputTomo)
         self._defineSourceRelation(self.inputTomogram, outputTomo)
         self._defineSourceRelation(self.inputSubtomograms, outputTomo)
@@ -132,12 +136,12 @@ class XmippProtSubtomoMapBack(EMProtocol):
     #--------------------------- INFO functions --------------------------------
     def _summary(self):
         summary = []
-        summary.append("Subtomogram average mapped back %d times to original tomogram %s in the locations of subtomograms %s" %
-                       (len(self.inputSubtomograms.get()),self.getObjectTag('inputTomogram'),
-                        self.getObjectTag('inputSubtomograms')))
+        summary.append("%d subtomogram references mapped back %d times to original tomogram" %
+                       (len(self.inputClasses.get()),len(self.inputSubtomograms.get())))
         return summary
 
     def _methods(self):
         methods = []
-        methods.append("Subtomogram average mapped back to tomogram %s" % (self.getObjectTag('inputTomogram')))
+        methods.append("References from %d subtomogram classes mapped back %d times to original tomogram %s" %
+                       (len(self.inputClasses.get()),len(self.inputSubtomograms.get()),self.getObjectTag('inputTomogram')))
         return methods

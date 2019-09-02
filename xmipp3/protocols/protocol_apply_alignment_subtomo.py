@@ -53,12 +53,10 @@ class XmippProtApplyTransformSubtomo(EMProtocol):
         self._insertFunctionStep('applyAlignmentStep', subtomosFn)
         self._insertFunctionStep('createOutputStep')
 
-        # --------------------------- STEPS functions --------------------------------------------
-
+    # --------------------------- STEPS functions --------------------------------------------
     def convertInputStep(self, outputFn):
         """ Create a metadata with the images and geometrical information. """
         writeSetOfVolumes(self.inputSubtomograms.get(), outputFn, alignType=em.ALIGN_3D)
-
         return [outputFn]
 
     def applyAlignmentStep(self, inputFn):
@@ -66,43 +64,30 @@ class XmippProtApplyTransformSubtomo(EMProtocol):
         outputStk = self._getPath('aligned_subtomograms.stk')
         args = '-i %(inputFn)s -o %(outputStk)s --apply_transform ' % locals()
         self.runJob('xmipp_transform_geometry', args)
-
         return [outputStk]
 
     def createOutputStep(self):
         subtomograms = self.inputSubtomograms.get()
-
-        # Generate the SetOfAligned subtomograms
         alignedSet = self._createSetOfVolumes()
         alignedSet.copyInfo(subtomograms)
-
         inputMd = self._getPath('aligned_subtomograms.xmd')
         alignedSet.copyItems(subtomograms,
                              updateItemCallback=self._updateItem,
                              itemDataIterator=md.iterRows(inputMd, sortByLabel=md.MDL_ITEM_ID))
-        # Remove alignment
         alignedSet.setAlignment(em.ALIGN_NONE)
-
-        # Define the output average
         avgFile = self._getExtraPath("average.xmp")
-
         imgh = ImageHandler()
         avgImage = imgh.computeAverage(alignedSet)
-
         avgImage.write(avgFile)
-
         avg = em.Volume()
         avg.setLocation(1, avgFile)
         avg.copyInfo(alignedSet)
-
         self._defineOutputs(outputAverage=avg)
         self._defineSourceRelation(self.inputSubtomograms, avg)
-
         self._defineOutputs(outputSubtomograms=alignedSet)
         self._defineSourceRelation(self.inputSubtomograms, alignedSet)
 
-        # --------------------------- INFO functions --------------------------------------------
-
+    # --------------------------- INFO functions --------------------------------------------
     def _validate(self):
         errors = []
         return errors
@@ -134,6 +119,5 @@ class XmippProtApplyTransformSubtomo(EMProtocol):
         newFn = row.getValue(md.MDL_IMAGE)
         newLoc = xmippToLocation(newFn)
         item.setLocation(newLoc)
-        # Also remove alignment info
         item.setTransform(None)
 
