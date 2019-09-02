@@ -113,10 +113,10 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
                       help="Number of selected cones per image.")
         form.addParam('gpuAlign', BooleanParam, label="Use GPU alignment", default=True,
                       help='Use GPU alignment algorithm to determine the final 3D alignment parameters')
-        form.addParam('myMPI', IntParam, label="MPIs", default=8,
+        form.addParam('myMPI', IntParam, label="XMipp MPIs", default=8,
                       help='Number of MPI to run the Xmipp protocols.')
 
-        form.addParallelSection(threads=8, mpi=0)
+        form.addParallelSection(threads=8, mpi=1)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -201,7 +201,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
                         (self.imgsFn,
                          self._getExtraPath('scaled_particles.stk'),
                          self._getExtraPath('scaled_particles.xmd'),
-                         self.newXdim), numberOfMpi=8)
+                         self.newXdim), numberOfMpi=self.myMPI.get())
             moveFile(self._getExtraPath('scaled_particles.xmd'), self.imgsFn)
 
         from pyworkflow.em.convert import ImageHandler
@@ -212,7 +212,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         if Xdim != self.newXdim:
             self.runJob("xmipp_image_resize",
                         "-i %s --fourier %d" % (fnVol, self.newXdim),
-                        numberOfMpi=8)
+                        numberOfMpi=self.myMPI.get())
 
         #if self.modelPretrain.get() is False:
         inputTrain = self.inputTrainSet.get()
@@ -224,7 +224,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
                         (self.trainImgsFn,
                          self._getExtraPath('scaled_train_particles.stk'),
                          self._getExtraPath('scaled_train_particles.xmd'),
-                         self.newXdim), numberOfMpi=8)
+                         self.newXdim), numberOfMpi=self.myMPI.get())
             moveFile(self._getExtraPath('scaled_train_particles.xmd'),
                      self.trainImgsFn)
 
@@ -232,10 +232,15 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         fnVol = self._getTmpPath("volume.vol")
         fnCenters = self._getExtraPath(fn + ".stk")
         fnCentersMd = self._getExtraPath(fn + ".doc")
+        # if self.spanConesTilt.get()>30:
+        #     sampling_rate = 30
+        # else:
+        #     sampling_rate = self.spanConesTilt.get()
+
         self.runJob("xmipp_angular_project_library",
                     "-i %s -o %s --sym c1 --sampling_rate %d"
                     % (fnVol, fnCenters, self.spanConesTilt.get()),
-                    numberOfMpi=self.numberOfMpi.get())
+                    numberOfMpi=self.myMPI.get())
         mdExp = xmippLib.MetaData(fnCentersMd)
         return mdExp.size()
 
@@ -345,7 +350,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         if self.modelPretrain.get() is False:
             fnToFilter = self._getExtraPath('projectionsExp%d.xmd' % (lastLabel))
             self.runJob("xmipp_transform_filter", " -i %s --fourier low_pass %f" %
-                        (fnToFilter, 0.15), numberOfMpi=self.numberOfMpi.get())
+                        (fnToFilter, 0.15), numberOfMpi=self.myMPI.get())
 
     def projectStep(self, numProj, iniRot, endRot, iniTilt, endTilt, fn, idx):
 
@@ -519,11 +524,14 @@ _noiseCoord   '0'
         self.numCones = mdNumCones.size()
 
         if not exists(self._getExtraPath('conePrediction.txt')):
-            myStr = os.environ["CUDA_VISIBLE_DEVICES"]
-            numGPU = myStr.split(',')
-            numGPU = numGPU[0]
-            print("Predict", myStr, numGPU)
-            sys.stdout.flush()
+            # if self.useQueueForSteps() or self.useQueue():
+            #     myStr = os.environ["CUDA_VISIBLE_DEVICES"]
+            # else:
+            #     myStr = self.gpuList.get()
+            # numGPU = myStr.split(',')
+            # numGPU = numGPU[0]
+            # print("Predict", myStr, numGPU)
+            # sys.stdout.flush()
 
             mdNumCones = xmippLib.MetaData(self._getExtraPath("coneCenters.doc"))
             self.numCones = mdNumCones.size()
@@ -534,7 +542,7 @@ _noiseCoord   '0'
                                               "--save_metadata_stack %s "
                                               "--keep_input_columns "
                                               "--fourier low_pass %f " %
-                    (self.imgsFn, imgsOutStk, imgsOutXmd, 0.15), numberOfMpi=self.numberOfMpi.get())
+                    (self.imgsFn, imgsOutStk, imgsOutXmd, 0.15), numberOfMpi=self.myMPI.get())
 
             numMax = int(self.numConesSelected)
             newXdim = readInfoField(self._getExtraPath(), "size",
@@ -648,11 +656,10 @@ _noiseCoord   '0'
                     args = '-i %s --initgallery %s --odir %s --dontReconstruct --useForValidation %d ' % \
                                (fnExpCone, fnProjCone, self._getExtraPath(), 1)
                     self.runJob('xmipp_reconstruct_significant', args,
-                                    numberOfMpi=self.numberOfMpi.get())
+                                    numberOfMpi=self.myMPI.get())
                     copy(self._getExtraPath('images_significant_iter001_00.xmd'), self._getExtraPath(fnOutCone))
                     remove(self._getExtraPath('angles_iter001_00.xmd'))
                     remove(self._getExtraPath('images_significant_iter001_00.xmd'))
-
 
 
     def createOutputMetadataStep(self):
@@ -795,5 +802,12 @@ _noiseCoord   '0'
                 % (self.inputSet.get().getSize(), self.getObjectTag('inputSet'),
                    self.getObjectTag('inputVolume')))
         return methods
+
+    def _validate(self):
+        errors = []
+        if self.numberOfMpi>1:
+            errors.append("You must select Threads to make the parallelization in Scipion level. "
+                          "To parallelize the Xmipp program use MPIs in the form.")
+        return errors
 
 
