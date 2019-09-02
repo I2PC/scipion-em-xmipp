@@ -107,6 +107,8 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                       label="Initial resolution", default="15",
                       help="In Angstroms. The minimum resolution to be used in the first step of the protocol. "
                            "Then, the resolution will be automatically adjusted.")
+        form.addParam('discardParticles', BooleanParam, label="Discard particles?", default=False,
+                      help="Discard particles when two distributions are estimated?")
 
         form.addSection(label='Angular assignment')
         form.addParam('maxShift', FloatParam, label="Max. shift (%)", default=10, expertLevel=LEVEL_ADVANCED,
@@ -178,6 +180,8 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
 
         percentage = [1.14, 2.29, 3.44, 5.74, 9.19, 14.94, 24.13, 39.08]
         numGlobalIters = len(percentage)+2
+        self.consecutiveBimodal=2
+        self.listConsecutiveBimodal=[]
 
         targetResolution = self.minimumTargetResolution.get()
 
@@ -226,7 +230,7 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 postSoftNegK = self.postSoftNegK.get(),
                 postDifference = self.postDifference.get(),
                 numberOfMpi=self.numberOfMpi.get(),
-                useGpu=self.useGpu().get(),
+                useGpu=self.useGpu.get(),
                 gpuList = self.gpuList.get()
             )
 
@@ -282,9 +286,9 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
         for i in range(numLocalIters):
 
             if i>2:
+                minPrevRes = prevTargetResolution #+ (prevTargetResolution * 0.1)
                 print("Checking the change in the target resolution", minPrevRes, prevTargetResolution, targetResolution)
-                minPrevRes = prevTargetResolution-(prevTargetResolution*0.1)
-                if targetResolution<minPrevRes:
+                if targetResolution>minPrevRes:
                     print("TARGET RESOLUTION IS STUCK")
                     break
 
@@ -326,7 +330,7 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 postSoftNegK=self.postSoftNegK.get(),
                 postDifference=self.postDifference.get(),
                 numberOfMpi=self.numberOfMpi.get(),
-                useGpu=self.useGpu().get(),
+                useGpu=self.useGpu.get(),
                 gpuList=self.gpuList.get()
             )
             newHighRes.inputParticles.set(self)
@@ -467,11 +471,35 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
             self._defineOutputs(**result)
             self._store(self.subsets[i])
 
+    def otsu(self, ccList):
+        cc_number = len(ccList)
+        mean_weigth = 1.0 / cc_number
+        his, bins = np.histogram(ccList, int((max(ccList)-min(ccList))/0.01))
+        final_thresh = -1
+        final_value = -1
+        cc_arr = np.arange(min(ccList),max(ccList),0.01)
+        for t, j in enumerate(bins[1:-1]):
+            idx = t+1
+            pcb = np.sum(his[:idx])
+            pcf = np.sum(his[idx:])
+            Wb = pcb * mean_weigth
+            Wf = pcf * mean_weigth
 
+            mub = np.sum(cc_arr[:idx] * his[:idx]) / float(pcb)
+            muf = np.sum(cc_arr[idx:] * his[idx:]) / float(pcf)
+            # print mub, muf
+            value = Wb * Wf * (mub - muf) ** 2
+
+            if value > final_value:
+                final_thresh = bins[idx]
+                final_value = value
+
+        print("Otsu final threshold:", final_thresh, final_value)
+        return final_thresh
 
     def checkOutputsStep(self, newHighRes, iter, flagLocal):
 
-        if iter>6:
+        if iter>6 and self.discardParticles.get() is True:
             print("Checking the cc and shift conditions for the output particles")
             sys.stdout.flush()
             from pyworkflow.em.metadata.utils import iterRows
@@ -484,6 +512,7 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 ccList = mdParticles.getColumnValues(xmippLib.MDL_MAXCC)
             else:
                 ccList = mdParticles.getColumnValues(xmippLib.MDL_COST)
+            minCC = min(ccList)
             ccArray = np.asanyarray(ccList)
             ccArray = ccArray.reshape(-1, 1)
 
@@ -518,7 +547,21 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
             if aic2<aic1 and bic2<bic1:
                 print("TENEMOS DOS POBLACIONES")
                 sys.stdout.flush()
-                # labels2 del fit_predict
+
+                #Otsu thresholding??
+                thOtsu=self.otsu(ccList)
+                print("thOtsu=", thOtsu)
+                # for row in iterRows(mdParticles):
+                #     objId = row.getObjId()
+                #     if flagLocal is False:
+                #         z = row.getValue(xmippLib.MDL_MAXCC)
+                #     else:
+                #         z = row.getValue(xmippLib.MDL_COST)
+                #     if z<thOtsu:
+                #         mdParticles.setValue(xmippLib.MDL_ENABLED, 0, objId)
+                # mdParticles.write(fnOutParticles)
+
+                # #labels2 del fit_predict NO PARECE BUENA IDEA PORQUE LAS MEDIAS DE LAS DISTRIBUCIONES NO SON NADA PRECISAS
                 # i=0
                 # for row in iterRows(mdParticles):
                 #     objId = row.getObjId()
@@ -528,6 +571,15 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 # mdParticles.write(fnOutParticles)
 
                 #test de hipotesis ????????
+                #emplear costes adaptativos?
+                self.listConsecutiveBimodal.append(True)
+                if len(self.listConsecutiveBimodal)>1:
+                    if self.listConsecutiveBimodal[-1] is True and self.listConsecutiveBimodal[-2] is True:
+                        self.consecutiveBimodal = self.consecutiveBimodal+1
+                    else:
+                        self.consecutiveBimodal = self.consecutiveBimodal-1
+                if self.consecutiveBimodal<2:
+                    self.consecutiveBimodal=2
                 if clf2.means_[0,0]<clf2.means_[1,0]:
                     idx0 = 0
                     idx1 = 1
@@ -543,6 +595,11 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 std0 = math.sqrt(var0)
                 std1 = math.sqrt(var1)
                 termR = math.log(p0)-math.log(p1)-math.log(std0/std1)
+                # Desplazamos el umbral hacia valores mas positivos, mas facil que se descarten particulas
+                #fijo
+                termR = termR + (2*(mu1-minCC))
+                #adaptativo????
+                #termR = termR +(self.consecutiveBimodal*(mu1-minCC))
                 print("TH for hypothesis test:", termR)
                 for row in iterRows(mdParticles):
                     objId = row.getObjId()
@@ -555,6 +612,9 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                         print("Descartamos particula:", termL, termR, z)
                         mdParticles.setValue(xmippLib.MDL_ENABLED, 0, objId)
                 mdParticles.write(fnOutParticles)
+
+            else:
+                self.listConsecutiveBimodal.append(False)
 
 
             #AJ cleaning with shift (removing particles with shift values higher than +-4sigma)
