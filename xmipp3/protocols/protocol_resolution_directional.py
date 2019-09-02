@@ -73,7 +73,7 @@ class XmippProtMonoDir(ProtAnalysis3D):
     """    
     Given a map the protocol assigns local resolutions to each voxel of the map.
     """
-    _label = 'directional ResDir'
+    _label = 'directional resolution MonoDir'
     _lastUpdateVersion = VERSION_2_0
     
     def __init__(self, **args):

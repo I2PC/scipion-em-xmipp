@@ -288,7 +288,7 @@ class TestXmippCTFEstimation(TestXmippBase):
         ctfModel = protCTF.outputCTF.getFirstItem()
         self.assertAlmostEquals(ctfModel.getDefocusU(),23928.4, delta=500)
         self.assertAlmostEquals(ctfModel.getDefocusV(),23535.2, delta=500)
-        self.assertAlmostEquals(ctfModel.getDefocusAngle(), 53.217, delta=5)
+        self.assertAlmostEquals(ctfModel.getDefocusAngle(), 60.0, delta=20)
         sampling = ctfModel.getMicrograph().getSamplingRate()
         self.assertAlmostEquals(sampling, 2.474, delta=0.001)
 
@@ -965,8 +965,9 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
 
         protConsOr = self.newProtocol(XmippProtConsensusPicking,
                                       consensus=1)
-        protConsOr.inputCoordinates.set([self.protFaPi.outputCoordinates,
-                                        protAutomaticPP.outputCoordinates])
+        protConsOr.inputCoordinates.set(
+            [Pointer(self.protFaPi, extended="outputCoordinates"),
+             Pointer(protAutomaticPP, extended="outputCoordinates")])
         self.launchProtocol(protConsOr)
 
         self.assertTrue(protConsOr.isFinished(), "Consensus failed")
@@ -997,8 +998,9 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
             protAutoPP = self._updateProtocol(protAutoPP)
 
         protCons2 = self.newProtocol(XmippProtConsensusPicking)
-        protCons2.inputCoordinates.set([self.protFaPi.outputCoordinates,
-                                        protAutoPP.outputCoordinates])
+        protCons2.inputCoordinates.set(
+            [Pointer(self.protFaPi, extended="outputCoordinates"),
+             Pointer(protAutoPP, extended="outputCoordinates")])
         self.launchProtocol(protCons2)
         self.assertTrue(protCons2.isFinished(), "Consensus failed")
         self.assertTrue(protCons2.consensusCoordinates.getSize() == 390,

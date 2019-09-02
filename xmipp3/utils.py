@@ -25,10 +25,11 @@
 # *
 # **************************************************************************
 """
-This module contains utils functions to operate over xmipp metadata files.
+This module contains utils functions for Xmipp protocols
 """
 
 from os.path import exists, join
+import subprocess
 
 import xmipp3
 import xmippLib
@@ -87,7 +88,6 @@ def writeInfoField(fnDir,block,label, value):
     mdInfo.setValue(label,value,objId)
     mdInfo.write("%s@%s"%(block,join(fnDir,"iterInfo.xmd")),xmippLib.MD_APPEND)
 
-
 def validateDLtoolkit(errors=None, **kwargs):
     """ Validates if the deepLearningToolkit is installed.
         Additionally, it assert if a certain models is present when
@@ -116,8 +116,8 @@ def validateDLtoolkit(errors=None, **kwargs):
     # Trying to import keras to assert if DeepLearningToolkit works fine.
     kerasError = False
     try:
-        import keras
-    except:
+        subprocess.check_output('python -c "import keras"', shell=True)
+    except subprocess.CalledProcessError:
         errors.append("*Keras/Tensorflow not found*. Required to run this protocol.")
         kerasError=True
 
@@ -144,3 +144,4 @@ def validateDLtoolkit(errors=None, **kwargs):
                       "package using the *plugin manager*.")
 
     return errors
+
