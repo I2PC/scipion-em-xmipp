@@ -56,6 +56,9 @@ class XmippProtSubtomoMapBack(EMProtocol):
                       label='Set of classes', help="Set of classes subtomogram")
         form.addParam('inputTomogram', PointerParam, pointerClass="Tomogram",
                       label='Original tomogram', help="Original tomogram from which the subtomograms were extracted")
+        form.addParam('invertContrast', BooleanParam, default=False, label='Invert reference contrast',
+                      help= "Invert the contrast if the reference is black over a white background.  Xmipp, Spider, "
+                            "Relion and Eman require white particles over a black background. ")
         form.addParam('paintingType', EnumParam,
                       choices=['Copy','Average','Highlight','Binarize'],
                       default=0, important=True,
@@ -90,6 +93,8 @@ class XmippProtSubtomoMapBack(EMProtocol):
             cId = classSubt.getFirstItem().getClassId()
             fnRef = self._getExtraPath('reference%d.mrc' % cId)
             img.convert(classSubt.getRepresentative(), fnRef)
+            if self.invertContrast.get() == True:
+                self.runJob("xmipp_image_operate", " -i %s  --mult -1" % fnRef)
         if self.paintingType.get() == 0 or self.paintingType.get() == 3:
             if self.removeBackground.get() == True:
                 self.runJob("xmipp_image_operate"," -i %s  --mult 0" % fnTomo)
@@ -110,6 +115,13 @@ class XmippProtSubtomoMapBack(EMProtocol):
             nRow.addToMd(mdGeometry)
         fnGeometry = self._getExtraPath("geometry%d.xmd" % classId)
         mdGeometry.write(fnGeometry)
+
+        if self.inputClasses.get().getSamplingRate() != self.inputTomogram.get().getSamplingRate():
+            factor = self.inputClasses.get().getSamplingRate()/self.inputTomogram.get().getSamplingRate()
+            args = "-i %s -o %s --scale %d" % (self._getExtraPath("reference%d.mrc" % classId),
+                                               self._getExtraPath("reference%d.mrc" % classId), factor)
+            self.runJob('xmipp_transform_geometry',args)
+
         if self.paintingType.get() == 0:
             painting = 'copy'
         elif self.paintingType.get() == 1:
