@@ -259,7 +259,7 @@ class XmippProtNMABase(EMProtocol):
         for prog in nma_programs:
             if not exists(join(nmaBin, prog)):
                 errors.append("Some NMA programs are missing in the NMA folder.")
-                errors.append("Check that Scipion was installed with NMA: 'scipion install nma'")
+                errors.append("Check that Scipion was installed with NMA: 'scipion installb nma'")
                 break
         from pyworkflow.utils.which import which
         if which("csh") == "":
