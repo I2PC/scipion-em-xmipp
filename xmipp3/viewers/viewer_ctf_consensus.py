@@ -40,10 +40,6 @@ class XmippCTFConsensusViewer(ProtocolViewer):
     _label = 'viewer CTF Consensus'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
     _targets = [XmippProtCTFConsensus]
-    _memory = False
-    resolutionThresholdOLD = -1
-    # temporary metadata file with ctf that has some resolution greathan than X
-    tmpMetadataFile = 'viewersTmp.sqlite'
 
     def _defineParams(self, form):
         form.addSection(label='Visualization')
