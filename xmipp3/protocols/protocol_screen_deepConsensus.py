@@ -716,13 +716,13 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         micsFnameSet = {}
         preprocMicsPath= self._getTmpPath(self.PRE_PROC_MICs_PATH)
         for micFname in os.listdir(preprocMicsPath):
-          micFnameBase= os.path.splitext(micFname)[0]
+          micFnameBase= pwutils.removeExt(micFname)
           micFname= os.path.join(preprocMicsPath, micFname)
           micsFnameSet[micFnameBase]= micFname
         extractCoordsContent="#mics coords\n"
         posDir= self._getExtraPath( self.CONSENSUS_COOR_PATH_TEMPLATE%mode )
         for posFname in os.listdir(posDir):
-          posNameBase=  os.path.splitext(posFname)[0]
+          posNameBase=  pwutils.removeExt(posFname)
           posFname= os.path.join(posDir, posFname)
           if posNameBase in micsFnameSet:
             extractCoordsContent+= "%s particles@%s\n"%(micsFnameSet[posNameBase], posFname)

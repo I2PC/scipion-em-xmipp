@@ -58,3 +58,9 @@ from .viewer_pseudoatoms import XmippPseudoAtomsViewer
 #from .viewer_combine_pdb import XmippProtCombinePdbViewer
 
 from .viewer_projmatch import XmippProjMatchViewer
+
+#AJ
+from .viewer_structure_map_sph import XmippProtStructureMapSphViewer
+from .viewer_volume_deform_sph import XmippVolumeDeformSphViewer
+from .viewer_angular_alignment_sph import XmippAngularAlignmentSphViewer
+
