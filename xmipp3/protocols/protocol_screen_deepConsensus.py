@@ -522,8 +522,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           makePath(tmpPosDir)
           writeSetOfCoordinates(tmpPosDir, coordinatesP.get(), scale=float(Tm[coord_num])/float(Tm[0]))
           for posFname in os.listdir(tmpPosDir):
-              baseName, extension= os.path.basename(posFname).split(".")
-              if extension=="pos":
+              baseName = pwutils.removeBaseExt(posFname)
+              extension = pwutils.getExt(posFname)
+              if extension==".pos":
                 if baseName not in inputCoordsFnames:
                     inputCoordsFnames[baseName]=["None"]*nCoordsSets
                 inputCoordsFnames[baseName][coord_num]= os.path.join(tmpPosDir, posFname)
@@ -716,13 +717,13 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         micsFnameSet = {}
         preprocMicsPath= self._getTmpPath(self.PRE_PROC_MICs_PATH)
         for micFname in os.listdir(preprocMicsPath):
-          micFnameBase= micFname.split(".")[0]
+          micFnameBase= pwutils.removeExt(micFname)
           micFname= os.path.join(preprocMicsPath, micFname)
           micsFnameSet[micFnameBase]= micFname
         extractCoordsContent="#mics coords\n"
         posDir= self._getExtraPath( self.CONSENSUS_COOR_PATH_TEMPLATE%mode )
         for posFname in os.listdir(posDir):
-          posNameBase=  posFname.split(".")[0]
+          posNameBase=  pwutils.removeExt(posFname)
           posFname= os.path.join(posDir, posFname)
           if posNameBase in micsFnameSet:
             extractCoordsContent+= "%s particles@%s\n"%(micsFnameSet[posNameBase], posFname)
