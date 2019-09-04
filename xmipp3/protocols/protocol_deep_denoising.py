@@ -356,6 +356,8 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
       if os.path.isfile(dataPathProjections):
         args += " -p %s" % dataPathProjections
+      elif self.checkIfInputIsCompareReprojection():
+        args += " -p %s" % self._getExtraPath('resizedProjections.stk')
 
       self.runJob("xmipp_deep_denoising", args, numberOfMpi=1)
 
