@@ -82,7 +82,7 @@ class XmippEliminateEmptyViewer(ProtocolViewer):
                 views.append(ObjectView(self._project, ouputId, ouputFn,
                                         viewParams={ORDER: labels,
                                         VISIBLE: labels,
-                                        SORT_BY: '_xmipp_scoreEmptiness asc',
+                                        SORT_BY: '_xmipp_scoreEmptiness desc',
                                         MODE: MODE_MD,
                                         RENDER: '_filename'}))
         else:
