@@ -69,8 +69,8 @@ class XmippEliminateEmptyViewer(ProtocolViewer):
         views = []
         prot = self.protocol
         if hasattr(prot, outputName):
-            ouputFn = prot.outputParticles.getFileName()
-            ouputId = prot.outputParticles.strId()
+            ouputFn = getattr(prot, outputName).getFileName()
+            ouputId = getattr(prot, outputName).strId()
             labels = ('id enabled _index _filename _xmipp_scoreEmptiness '
                       '_xmipp_scoreByVariance _xmipp_zScore '
                       '_xmipp_cumulativeSSNR _sampling '
