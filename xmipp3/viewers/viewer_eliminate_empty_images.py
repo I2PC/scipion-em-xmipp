@@ -78,15 +78,13 @@ class XmippEliminateEmptyViewer(ProtocolViewer):
                       '_ctfModel._defocusAngle _transform._matrix')
             if 'Classes' in outputName:
                 views.append(ClassesView(self._project, ouputId, ouputFn))
-            elif 'Particles' in outputName:
+            else:
                 views.append(ObjectView(self._project, ouputId, ouputFn,
                                         viewParams={ORDER: labels,
                                         VISIBLE: labels,
                                         SORT_BY: '_xmipp_scoreEmptiness asc',
                                         MODE: MODE_MD,
                                         RENDER: '_filename'}))
-            else:
-                print("Some error occurred, %s not implemented" % outputName)
         else:
             appendStr = ', yet.' if prot.isActive() else '.'
             self.infoMessage('%s does not have %s%s'
