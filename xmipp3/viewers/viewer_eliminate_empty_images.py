@@ -45,7 +45,7 @@ class XmippEliminateEmptyViewer(ProtocolViewer):
 
     def _defineParams(self, form):
         isClassType = isinstance(self.protocol, XmippProtEliminateEmptyClasses)
-        self.imagesType = ('Classes' if isClassType else 'Particles')
+        self.imagesType = ('Averages' if isClassType else 'Particles')
         form.addSection(label='Visualization')
         form.addParam('visualizeIms', LabelParam,
                        label="Visualize passed %s" % self.imagesType)
