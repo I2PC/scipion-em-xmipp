@@ -528,12 +528,14 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                 if baseName not in inputCoordsFnames:
                     inputCoordsFnames[baseName]=["None"]*nCoordsSets
                 inputCoordsFnames[baseName][coord_num]= os.path.join(tmpPosDir, posFname)
-      inputFileStr="#pos_i\n"
+      inputFileHeader="#pos_i\n"
+      inputFileStr=inputFileHeader
       for baseName in inputCoordsFnames:
          fnames= inputCoordsFnames[baseName]
          inputFileStr+=" ".join(fnames)+"\n"
              
-      assert len(inputFileStr)>8, "Error, no consensus can be computed as there are mismatch in coordinate sets filenames"
+      assert len(inputFileStr)>len(inputFileHeader), "Error, no consensus can be computed as there " \
+                                                     "are mismatch in coordinate sets filenames"
       consensus = -1 if mode=="AND" else 1
       configFname= self._getTmpPath("consensus_%s_inputs.txt"%(mode) )
       with open(configFname, "w") as f:
