@@ -153,7 +153,7 @@ class XmippViewer(DataViewer):
                                                   '_xmipp_corrDenoisedProjection '
                                                   '_xmipp_corrDenoisedNoisy '
                                                   '_xmipp_imageOriginal _xmipp_imageRef',
-					                              RENDER: '_filename _xmipp_imageOriginal _xmipp_imageRef',
+					                                        RENDER: '_filename _xmipp_imageOriginal _xmipp_imageRef',
                                                   SORT_BY: 'id',
                                                   MODE: MODE_MD}))
 

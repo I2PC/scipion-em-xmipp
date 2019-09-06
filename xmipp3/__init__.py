@@ -204,19 +204,9 @@ def tryAddPipModule(env, moduleName, *args, **kwargs):
 def installDeepLearningToolkit(plugin, env):
     deepLearningTools = []
 
-    # scikit
-    scipy = tryAddPipModule(env, 'scipy', '0.14.0', default=False,
-                            deps=['lapack', 'matplotlib'])
-    cython = tryAddPipModule(env, 'cython', '0.22', target='Cython-0.22*',
-                             default=False)
-    scikit_learn = tryAddPipModule(env, 'scikit-learn', '0.19.1',
-                                   target='scikit_learn*',
-                                   default=False, deps=[scipy, cython])
-
     scikit_image = tryAddPipModule(env, 'scikit-image', '0.14.2',
                                    target='scikit_image*',
-                                   default=False, deps=[scipy, cython, scikit_learn])
-    deepLearningTools.append(scikit_learn)
+                                   default=False, deps=['scipy', 'scikit_learn'])
     deepLearningTools.append(scikit_image)
 
     # pandas
