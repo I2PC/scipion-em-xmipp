@@ -44,13 +44,7 @@ from xmipp3.convert import setXmippAttributes, xmippToLocation, rowToAlignment
 
         
 class XmippProtGenerateReprojections(ProtAnalysis3D):
-    """Compares a set of classes or averages with the corresponding projections of a reference volume.
-    The set of images must have a 3D angular assignment and the protocol computes the residues
-    (the difference between the experimental images and the reprojections). The zscore of the mean
-    and variance of the residues are computed. Large values of these scores may indicate outliers.
-    The protocol also analyze the covariance matrix of the residual and computes the logarithm of
-    its determinant [Cherian2013]. The extremes of this score (called zScoreResCov), that is
-    values particularly low or high, may indicate outliers."""
+    """From a set of particles, this protocol generates the corresponding projections from a reference volume."""
     _label = 'generate reprojections'
     _lastUpdateVersion = VERSION_2_0
     

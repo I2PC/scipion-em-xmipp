@@ -166,6 +166,7 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
             partTransformMat = inMat.getMatrix()
             partTransformMatrix = np.matrix(partTransformMat)
             newTransformMatrix = np.matmul(transformationMat, partTransformMatrix)
+            newTransformMatrix[2, 3] = 0.0
             resultMat.setMatrix(newTransformMatrix)
             rowOut = md.Row()
             rowOut.copyFromRow(row)

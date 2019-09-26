@@ -243,7 +243,7 @@ class XmippProtMovieResize(ProtProcessMovies):
                               'only downsampling is allowed.')
         if self.resizeOption == RESIZE_DIMENSIONS:
             if self.resizeDim.get() > dim:
-                errors.append('Please provide a resizeDim higher than the '
+                errors.append('Please provide a resizeDim lower than the '
                               'size of the input set, only downsampling is '
                               'allowed.')
         if self.resizeOption == RESIZE_SAMPLINGRATE:
