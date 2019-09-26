@@ -64,8 +64,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
                        label="Choose GPU IDs",
                        help="GPU may have several cores. Set it to zero"
                             " if you do not know what we are talking about."
-                            " First core index is 0, second 1 and so on."
-                            " In this protocol is not possible to use several GPUs.")
+                            " First core index is 0, second 1 and so on.")
         form.addSection(label='Input')
         form.addParam('inputSet', PointerParam, label="Input images",
                       pointerClass='SetOfParticles')
@@ -104,7 +103,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
                       condition='modelPretrain==False')
         form.addParam('spanConesTilt', FloatParam,
                       label="Distance between cone centers",
-                      default=45,
+                      default=30,
                       help="Distance in degrees between cone centers.",
                       condition='modelPretrain==False')
         form.addParam('numConesSelected', IntParam,
@@ -384,7 +383,7 @@ _noiseCoord   '0'
                     "-i %s -o %s --method fourier 1 0.5 "
                     "--params %s" % (fnVol, fnProjs, fnParams), numberOfMpi=1)
 
-        cleanPattern(self._getExtraPath('uniformProjections'))
+        cleanPattern(self._getExtraPath('uniformProjections*'))
 
     def generateExpImagesStep(self, Nimgs, nameProj, nameExp, label, boolNoise):
 
@@ -726,7 +725,9 @@ _noiseCoord   '0'
 
     def createOutputStep(self):
 
-        cleanPattern(self._getExtraPath('metadataCone'))
+        cleanPattern(self._getExtraPath('metadataCone*'))
+        #AJ new (to check)
+        cleanPattern(self._getExtraPath('projectionCudaCorr*'))
 
         inputParticles = self.inputSet.get()
         fnOutputParticles = self._getExtraPath('outConesParticles.xmd')

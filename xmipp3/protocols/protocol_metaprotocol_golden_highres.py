@@ -51,14 +51,15 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
     _label = 'metaprotocol golden highres'
     _lastUpdateVersion = VERSION_2_0
 
+    SPLIT_HT = 0
+    SPLIT_OTSU = 1
+
     def __init__(self, **kwargs):
         ProtMonitor.__init__(self, **kwargs)
         self._runIds = pwobj.CsvList(pType=int)
         self.childs=[]
 
     def setAborted(self):
-        #print("en el setaborted")
-        #sys.out.flush()
         for child in self.childs:
             if child.isRunning() or child.isScheduled():
                 #child.setAborted()
@@ -68,8 +69,6 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
 
 
     def setFailed(self, errorMsg):
-        #print("en el setfailed")
-        #sys.out.flush()
         for child in self.childs:
             if child.isRunning() or child.isScheduled():
                 #child.setFailed(errorMsg)
@@ -103,12 +102,18 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                       label='Symmetry group',
                       help='See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
                            'If no symmetry is present, give c1')
-        form.addParam('minimumTargetResolution', NumericListParam,
-                      label="Initial resolution", default="15",
+        form.addParam('minimumTargetResolution', FloatParam,
+                      label="Initial resolution", default=15,
                       help="In Angstroms. The minimum resolution to be used in the first step of the protocol. "
                            "Then, the resolution will be automatically adjusted.")
+        form.addParam('maximumTargetResolution', FloatParam,
+                      label = "Maximum resolution", default = -1,
+                      help = "In Angstroms. The maximum resolution to be used along the protocol. Set it to -1 for automatic adjustment.")
         form.addParam('discardParticles', BooleanParam, label="Discard particles?", default=False,
                       help="Discard particles when two distributions are estimated?")
+        form.addParam('splitMethod', EnumParam, label='Split method', choices=['Hypothesis test','Otsu'], default=self.SPLIT_HT,
+                      expertLevel=LEVEL_ADVANCED, help='When discard particles is allowed, choose the method between '
+                      'hypothesis testing or Otsu thresholding', condition='discardParticles')
 
         form.addSection(label='Angular assignment')
         form.addParam('maxShift', FloatParam, label="Max. shift (%)", default=10, expertLevel=LEVEL_ADVANCED,
@@ -241,7 +246,8 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
             newHighRes.inputVolumes.set(previousProtVol)
             newHighRes.inputVolumes.setExtended(namePreviousVol)
 
-            project.scheduleProtocol(newHighRes, self._runPrerequisites)
+            project.launchProtocol(newHighRes)
+
             # Next schedule will be after this one
             self._runPrerequisites.append(newHighRes.getObjId())
             self.childs.append(newHighRes)
@@ -260,6 +266,8 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
             fnFSCs.write(join(fnDir,"fsc.xmd") + " \n")
             fnFSCs.close()
             targetResolution = self.checkOutputsStep(newHighRes, i, False)
+            targetResolution = max(targetResolution, self.maximumTargetResolution.get())
+
 
             if i>=7: #We are in the last three iterations
                 #Check the output particles and remove all the disabled ones
@@ -279,17 +287,16 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                         readSetOfParticles(fnFinal, outputinputSetOfParticles)
                         self._defineOutputs(outputParticlesLocal1=outputinputSetOfParticles)
                         self._store(outputinputSetOfParticles)
-                        #self = self._updateProtocol(self)
 
         #Local iterations
-        numLocalIters = 10
+        numLocalIters = 5
         for i in range(numLocalIters):
 
             if i>2:
-                minPrevRes = prevTargetResolution #+ (prevTargetResolution * 0.1)
-                print("Checking the change in the target resolution", minPrevRes, prevTargetResolution, targetResolution)
+                minPrevRes = prevTargetResolution
                 if targetResolution>minPrevRes:
-                    print("TARGET RESOLUTION IS STUCK")
+                    print("Target resolution is stuck")
+                    sys.stdout.flush()
                     break
 
             prevTargetResolution = targetResolution
@@ -298,7 +305,7 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
             sys.stdout.flush()
             previousProtVol = newHighRes
             namePreviousVol = 'outputVolume'
-            #call highres local with the new input set
+            #calling highres local with the new input set
             newHighRes = project.newProtocol(
                 XmippProtReconstructHighRes,
                 objLabel='HighRes - local %d' % (i+1),
@@ -358,9 +365,7 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
             fnFSCs.write(join(fnDir,"fsc.xmd") + " \n")
             fnFSCs.close()
             targetResolution = self.checkOutputsStep(newHighRes, numGlobalIters+i, True)
-            # newHighRes = self._updateProtocol(newHighRes)
-            # print("Target resolution - OUT local 1: %f " % (float(targetResolution)))
-            # sys.stdout.flush()
+            targetResolution = max(targetResolution, self.maximumTargetResolution.get())
 
             #Check the output particles and remove all the disabled ones
             fnOutParticles = newHighRes._getPath('angles.xmd')
@@ -370,12 +375,13 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
             copy(fnOutParticles, fnFinal)
 
             if i>1:
-                #AJ incluir numero de particulas como criterio de parada, si estamos eliminando muchas, parar
+                #including the number of particles as stoppping criteria
                 mdFinal = xmippLib.MetaData(fnFinal)
                 Nfinal = mdFinal.size()
                 Ninit = self.inputParticles.get().getSize()
                 if Nfinal<Ninit*0.3:
-                    print("IMAGE SET SIZE TOO SMALL", Nfinal, Ninit)
+                    print("Image set size too small", Nfinal, Ninit)
+                    sys.stdout.flush()
                     break
 
 
@@ -401,7 +407,6 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                                   protocol.getObjId())
 
         # Close DB connections
-        #prot2.getProject().closeMapper()
         prot2.closeMappers()
         return prot2
 
@@ -414,7 +419,7 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
             self._defineOutputs(outputVolumesInit=outputVolumes)
             self._store(outputVolumes)
 
-        #AJ to divide the input particles following Fibonacci percentages
+        #to divide the input particles following Fibonacci percentages
         inputFullSet = self.inputParticles.get()
         if i==0:
             self.subsets = []
@@ -427,12 +432,9 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 self.pp.append(int((p/100.)*float(self.origLenInput)))
 
         if i<len(percentage):
-            #p=percentage[i]
             p=self.pp[i]
-            print("AQUIII", len(self.input), p, self.pp)
             self.subsets.append(self._createSetOfParticles(str(i)))
             self.subsets[i].copyInfo(inputFullSet)
-            #chosen = random.sample(xrange(len(self.input)), int((p/100.)*float(self.origLenInput)))
             chosen = random.sample(xrange(len(self.input)), p)
             for j in chosen:
                 id = self.input[j]
@@ -442,7 +444,6 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
             self._store(self.subsets[i])
             self.input = [i for j, i in enumerate(self.input) if j not in chosen]
 
-        # percentage = [1.15, 2.3, 3.45, 5.75, 9.2, 15, 24.14, 39.1]
         if i == len(percentage):
             self.subsets.append(self._createSetOfParticles(str(i)))
             self.subsets[i].copyInfo(inputFullSet)
@@ -478,6 +479,8 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
         final_thresh = -1
         final_value = -1
         cc_arr = np.arange(min(ccList),max(ccList),0.01)
+        if len(cc_arr)==(len(his)+1):
+            cc_arr=cc_arr[:-1]
         for t, j in enumerate(bins[1:-1]):
             idx = t+1
             pcb = np.sum(his[:idx])
@@ -487,27 +490,23 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
 
             mub = np.sum(cc_arr[:idx] * his[:idx]) / float(pcb)
             muf = np.sum(cc_arr[idx:] * his[idx:]) / float(pcf)
-            # print mub, muf
             value = Wb * Wf * (mub - muf) ** 2
 
             if value > final_value:
                 final_thresh = bins[idx]
                 final_value = value
 
-        print("Otsu final threshold:", final_thresh, final_value)
         return final_thresh
 
     def checkOutputsStep(self, newHighRes, iter, flagLocal):
 
         if iter>6 and self.discardParticles.get() is True:
-            print("Checking the cc and shift conditions for the output particles")
-            sys.stdout.flush()
             from pyworkflow.em.metadata.utils import iterRows
 
             fnOutParticles = newHighRes._getPath('angles.xmd')
             mdParticles = xmippLib.MetaData(fnOutParticles)
 
-            #AJ cleaning with maxcc (distinguish if there are several sample populations)
+            #cleaning with maxcc (to distinguish if there are several sample populations)
             if flagLocal is False:
                 ccList = mdParticles.getColumnValues(xmippLib.MDL_MAXCC)
             else:
@@ -520,98 +519,84 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
             from sklearn import mixture
             clf1 = mixture.GMM(n_components=1)
             clf1.fit(ccArray)
-            labels1 = clf1.fit_predict(ccArray)
             aic1 = clf1.aic(ccArray)
             bic1 = clf1.bic(ccArray)
 
             clf2 = mixture.GMM(n_components=2)
             clf2.fit(ccArray)
-            labels2 = clf2.fit_predict(ccArray)
             aic2 = clf2.aic(ccArray)
             bic2 = clf2.bic(ccArray)
 
-            print("Obtained results for gaussian mixture models:")
-            print("aic1 = ", aic1)
-            print("bic1 = ", bic1)
-            print("mean1 = ", clf1.means_)
-            print("cov1 = ", clf1.covars_)
-            print(" ")
-            print("aic2 = ", aic2)
-            print("bic2 = ", bic2)
-            print("mean2 = ", clf2.means_)
-            print("cov2 = ", clf2.covars_)
-            print("weights2 = ", clf2.weights_)
-            print("labels2 = ", labels2)
-            sys.stdout.flush()
+            # print("Obtained results for gaussian mixture models:")
+            # print("aic1 = ", aic1)
+            # print("bic1 = ", bic1)
+            # print("mean1 = ", clf1.means_)
+            # print("cov1 = ", clf1.covars_)
+            # print(" ")
+            # print("aic2 = ", aic2)
+            # print("bic2 = ", bic2)
+            # print("mean2 = ", clf2.means_)
+            # print("cov2 = ", clf2.covars_)
+            # print("weights2 = ", clf2.weights_)
+            # sys.stdout.flush()
 
             if aic2<aic1 and bic2<bic1:
-                print("TENEMOS DOS POBLACIONES")
-                sys.stdout.flush()
 
-                #Otsu thresholding??
-                thOtsu=self.otsu(ccList)
-                print("thOtsu=", thOtsu)
-                # for row in iterRows(mdParticles):
-                #     objId = row.getObjId()
-                #     if flagLocal is False:
-                #         z = row.getValue(xmippLib.MDL_MAXCC)
-                #     else:
-                #         z = row.getValue(xmippLib.MDL_COST)
-                #     if z<thOtsu:
-                #         mdParticles.setValue(xmippLib.MDL_ENABLED, 0, objId)
-                # mdParticles.write(fnOutParticles)
+                if self.splitMethod == self.SPLIT_OTSU:
+                    #Otsu thresholding
+                    thOtsu=self.otsu(ccList)
+                    for row in iterRows(mdParticles):
+                        objId = row.getObjId()
+                        if flagLocal is False:
+                            z = row.getValue(xmippLib.MDL_MAXCC)
+                        else:
+                            z = row.getValue(xmippLib.MDL_COST)
+                        if z<thOtsu:
+                            mdParticles.setValue(xmippLib.MDL_ENABLED, 0, objId)
+                    mdParticles.write(fnOutParticles)
 
-                # #labels2 del fit_predict NO PARECE BUENA IDEA PORQUE LAS MEDIAS DE LAS DISTRIBUCIONES NO SON NADA PRECISAS
-                # i=0
-                # for row in iterRows(mdParticles):
-                #     objId = row.getObjId()
-                #     if labels2[i] is 1:
-                #         mdParticles.setValue(xmippLib.MDL_ENABLED, 0, objId)
-                #     i=i+1
-                # mdParticles.write(fnOutParticles)
+                if self.splitMethod == self.SPLIT_HT:
+                    #Hypothesis testing
+                    self.listConsecutiveBimodal.append(True)
+                    if len(self.listConsecutiveBimodal)>1:
+                        if self.listConsecutiveBimodal[-1] is True and self.listConsecutiveBimodal[-2] is True:
+                            self.consecutiveBimodal = self.consecutiveBimodal+1
+                        else:
+                            self.consecutiveBimodal = self.consecutiveBimodal-1
+                    if self.consecutiveBimodal<2:
+                        self.consecutiveBimodal=2
 
-                #test de hipotesis ????????
-                #emplear costes adaptativos?
-                self.listConsecutiveBimodal.append(True)
-                if len(self.listConsecutiveBimodal)>1:
-                    if self.listConsecutiveBimodal[-1] is True and self.listConsecutiveBimodal[-2] is True:
-                        self.consecutiveBimodal = self.consecutiveBimodal+1
+
+                    if clf2.means_[0,0]<clf2.means_[1,0]:
+                        idx0 = 0
+                        idx1 = 1
                     else:
-                        self.consecutiveBimodal = self.consecutiveBimodal-1
-                if self.consecutiveBimodal<2:
-                    self.consecutiveBimodal=2
-                if clf2.means_[0,0]<clf2.means_[1,0]:
-                    idx0 = 0
-                    idx1 = 1
-                else:
-                    idx0 = 1
-                    idx1 = 0
-                p0 = clf2.weights_[idx0]/(clf2.weights_[idx0]+clf2.weights_[idx1])
-                p1 = clf2.weights_[idx1]/(clf2.weights_[idx0]+clf2.weights_[idx1])
-                mu0=clf2.means_[idx0,0]
-                mu1=clf2.means_[idx1,0]
-                var0 = clf2.covars_[idx0,0]
-                var1 = clf2.covars_[idx1,0]
-                std0 = math.sqrt(var0)
-                std1 = math.sqrt(var1)
-                termR = math.log(p0)-math.log(p1)-math.log(std0/std1)
-                # Desplazamos el umbral hacia valores mas positivos, mas facil que se descarten particulas
-                #fijo
-                termR = termR + (2*(mu1-minCC))
-                #adaptativo????
-                #termR = termR +(self.consecutiveBimodal*(mu1-minCC))
-                print("TH for hypothesis test:", termR)
-                for row in iterRows(mdParticles):
-                    objId = row.getObjId()
-                    if flagLocal is False:
-                        z = row.getValue(xmippLib.MDL_MAXCC)
-                    else:
-                        z = row.getValue(xmippLib.MDL_COST)
-                    termL = (-((z-mu1)**2)/(2*(var1))) + (((z-mu0)**2)/(2*(var0)))
-                    if termL<termR:
-                        print("Descartamos particula:", termL, termR, z)
-                        mdParticles.setValue(xmippLib.MDL_ENABLED, 0, objId)
-                mdParticles.write(fnOutParticles)
+                        idx0 = 1
+                        idx1 = 0
+                    p0 = clf2.weights_[idx0]/(clf2.weights_[idx0]+clf2.weights_[idx1])
+                    p1 = clf2.weights_[idx1]/(clf2.weights_[idx0]+clf2.weights_[idx1])
+                    mu0=clf2.means_[idx0,0]
+                    mu1=clf2.means_[idx1,0]
+                    var0 = clf2.covars_[idx0,0]
+                    var1 = clf2.covars_[idx1,0]
+                    std0 = math.sqrt(var0)
+                    std1 = math.sqrt(var1)
+                    termR = math.log(p0)-math.log(p1)-math.log(std0/std1)
+                    # Moving the threshold to higher values, easier to discard particles
+                    #fix term
+                    termR = termR + (2*(mu1-minCC))
+                    #adaptive term
+                    #termR = termR +(self.consecutiveBimodal*(mu1-minCC))
+                    for row in iterRows(mdParticles):
+                        objId = row.getObjId()
+                        if flagLocal is False:
+                            z = row.getValue(xmippLib.MDL_MAXCC)
+                        else:
+                            z = row.getValue(xmippLib.MDL_COST)
+                        termL = (-((z-mu1)**2)/(2*(var1))) + (((z-mu0)**2)/(2*(var0)))
+                        if termL<termR:
+                            mdParticles.setValue(xmippLib.MDL_ENABLED, 0, objId)
+                    mdParticles.write(fnOutParticles)
 
             else:
                 self.listConsecutiveBimodal.append(False)
@@ -619,7 +604,6 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
 
             #AJ cleaning with shift (removing particles with shift values higher than +-4sigma)
             #also cleaning with negative correlations
-            #mdParticles = xmippLib.MetaData(fnOutParticles) # AJ Creo que esto no hace falta
             shiftXList = mdParticles.getColumnValues(xmippLib.MDL_SHIFT_X)
             shiftYList = mdParticles.getColumnValues(xmippLib.MDL_SHIFT_Y)
             stdShiftX = np.std(np.asanyarray(shiftXList))
@@ -632,9 +616,7 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                     cc = row.getValue(xmippLib.MDL_MAXCC)
                 else:
                     cc = 1.0
-                if x>4*stdShiftX or x<-4*stdShiftX or y>4*stdShiftY or y<-4*stdShiftY or cc<0.0: #poner 4 stds y 0 en cc
-                    print("Shift or negative CC condition", objId)
-                    sys.stdout.flush()
+                if x>4*stdShiftX or x<-4*stdShiftX or y>4*stdShiftY or y<-4*stdShiftY or cc<0.0:
                     mdParticles.setValue(xmippLib.MDL_ENABLED, 0, objId)
             mdParticles.write(fnOutParticles)
 
@@ -648,27 +630,7 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
 
 
     def createOutputStep(self, project):
-
         pass
-        # fnOutFile = self._getExtraPath('auxOutputFile.txt')
-        # outFile = open(fnOutFile, 'a')
-        # classListProtocolsEx = []
-        # for i, item in enumerate(self.classListProtocols):
-        #     if item not in classListProtocolsEx:
-        #         classListProtocolsEx.append(item)
-        #     outFile.write(str(item._objLabel) + "\n")
-        #     outFile.write(str(self.classListIds[i]) + "\n")
-        #     outFile.write(str(self.classListSizes[i]) + "\n")
-        # outFile.close()
-        #
-        # outputMetaProt = project.newProtocol(
-        #     XmippMetaProtCreateOutput,
-        #     inputMetaProt=self,
-        #     inputSignifProts=classListProtocolsEx)
-        # project.scheduleProtocol(outputMetaProt, self._runPrerequisites)
-        # # Next schedule will be after this one
-        # self._runPrerequisites.append(outputMetaProt.getObjId())
-        # return outputMetaProt
 
 
 
