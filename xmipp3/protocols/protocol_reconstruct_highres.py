@@ -110,9 +110,12 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         form.addParam('inputParticles', PointerParam, label="Full-size Images", important=True, 
                       pointerClass='SetOfParticles', allowsNull=True,
                       help='Select a set of images at full resolution')
-        form.addParam('inputVolumes', PointerParam, label="Initial volumes", important=True,
+        form.addParam('inputVolumes', PointerParam, label="Initial volumes", allowsNull=True,
                       condition='not doContinue', pointerClass='Volume, SetOfVolumes',
-                      help='Select a set of volumes with 2 volumes or a single volume')
+                      help='Select a set of volumes with 2 volumes or a single volume. '
+                           'If the input particles have an angular assignment, then you may '
+                           'leave empty this field and a 3D reconstruction of the input images is '
+                           'performed using reconstruct_fourier.')
         form.addParam('particleRadius', IntParam, default=-1, 
                      condition='not doContinue', label='Radius of particle (px)',
                      help='This is the radius (in pixels) of the spherical mask covering the particle in the input images')       
@@ -292,7 +295,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             self._insertFunctionStep('convertInputStep', self.inputParticles.getObjId())
             if self.weightSSNR:
                 self._insertFunctionStep('doWeightSSNR')
-            self._insertFunctionStep('doIteration000', self.inputVolumes.getObjId())
+            self._insertFunctionStep('doIteration000')
             self.firstIteration=1
         self.TsOrig=self.inputParticles.get().getSamplingRate()
         numberOfIterations = self.numberOfIterations.get() if self.alignmentMethod.get()!=self.AUTOMATIC_ALIGNMENT else 5
@@ -341,8 +344,9 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             volume.setHalfMaps([halfMap1, halfMap2])
             self._defineOutputs(outputVolume=volume)
             self._defineSourceRelation(self.inputParticles.get(),volume)
-            #self._defineSourceRelation(self.inputVolumes.get(),volume)
-            
+            if not self.doContinue and self.inputVolumes.get() is not None:
+                self._defineSourceRelation(self.inputVolumes.get(),volume)
+
         fnLastAngles=join(fnLastDir,"angles.xmd")
         if exists(fnLastAngles):
             fnAngles=self._getPath("angles.xmd")
@@ -445,7 +449,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         self.runJob('xmipp_metadata_utilities','-i %s -o %s --operate keep_column "particleId weightSSNR" '%\
                     (self.imgsFn,self._getExtraPath("ssnrWeights.xmd")),numberOfMpi=1)
         
-    def doIteration000(self, inputVolumesId):
+    def doIteration000(self):
         fnDirCurrent=self._getExtraPath('Iter000')
         makePath(fnDirCurrent)
         
@@ -456,7 +460,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 moveFile("%s/images%06d.xmd"%(fnDirCurrent,i),"%s/images%02d.xmd"%(fnDirCurrent,i))
         
         # Get volume sampling rate
-        TsCurrent=self.inputVolumes.get().getSamplingRate()
+        if self.inputVolumes.get() is None:
+            TsCurrent=self.inputParticles.get().getSamplingRate()
+        else:
+            TsCurrent=self.inputVolumes.get().getSamplingRate()
         self.writeInfoField(fnDirCurrent,"sampling",xmippLib.MDL_SAMPLINGRATE,TsCurrent)
 
         # Copy reference volumes and window if necessary
@@ -476,9 +483,15 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         else:
             fnVol1=join(fnDirCurrent,"volume%02d.vol"%1)
             fnVol2=join(fnDirCurrent,"volume%02d.vol"%2)
-            vol=self.inputVolumes.get()
-            img.convert(vol, fnVol1)
-            if newXdim!=vol.getDim()[0]:
+            if self.inputVolumes.get() is None:
+                self.runJob('xmipp_reconstruct_fourier',"-i %s -o %s --max_resolution 0.3 --sampling %f --sym %s"%\
+                            (self.imgsFn,fnVol1,TsCurrent,self.symmetryGroup.get()))
+                volXdim = Xdim
+            else:
+                vol=self.inputVolumes.get()
+                img.convert(vol, fnVol1)
+                volXdim = vol.getDim()[0]
+            if newXdim!=volXdim:
                 self.runJob('xmipp_transform_window',"-i %s --size %d"%(fnVol1,newXdim),numberOfMpi=1)
             self.runJob('xmipp_transform_randomize_phases',"-i %s -o %s --freq discrete 0.25"%(fnVol1,fnVol2),numberOfMpi=1)
         
@@ -540,6 +553,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             if fsc<self.nextResolutionCriterion.get():
                 resolution=mdFSC.getValue(xmippLib.MDL_RESOLUTION_FREQREAL,objId)
                 break
+        if iteration==0:
+            resolution = TsCurrent*4
         self.writeInfoField(fnDirCurrent,"resolution",xmippLib.MDL_RESOLUTION_FREQREAL,resolution)
         
         # Produce a filtered volume
@@ -1538,7 +1553,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if hasattr(self, 'outputVolume') or True:
             strline += 'We processed %d particles from %s ' % (self.inputParticles.get().getSize(), 
                                                                 self.getObjectTag('inputParticles'))
-            strline += 'using %s as reference and Xmipp highres procedure. ' % (self.getObjectTag('inputVolumes'))
+            if self.inputVolumes.get() is not None:
+                strline += 'using %s as reference and Xmipp highres procedure. ' % (self.getObjectTag('inputVolumes'))
             if self.symmetryGroup!="c1":
                 strline+="We imposed %s symmetry. "%self.symmetryGroup
             strline += "We performed %d iterations of "%self.numberOfIterations.get()
