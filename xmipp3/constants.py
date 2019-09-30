@@ -99,7 +99,7 @@ SYM_URL = "[[http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry][Symmetry]]"
 
 # symmetry dictionary
 #FIXME: This should not be imported here and exposed as this module constants
-from pyworkflow.em.constants import (
+from pwem.constants import (
     SYM_CYCLIC, SYM_DIHEDRAL, SYM_TETRAHEDRAL, SYM_OCTAHEDRAL, SYM_I222,
     SYM_I222r, SYM_In25, SYM_In25r)
 

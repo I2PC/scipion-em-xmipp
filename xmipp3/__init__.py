@@ -29,7 +29,8 @@
 import subprocess
 from datetime import datetime
 
-import pyworkflow.em
+import pyworkflow.plugin
+
 import pyworkflow.utils as pwutils
 
 from .base import *
@@ -40,7 +41,8 @@ _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
 _currentVersion = '3.19.04'
 
-class Plugin(pyworkflow.em.Plugin):
+
+class Plugin(pyworkflow.plugin.Plugin):
     _homeVar = XMIPP_HOME
     _pathVars = [XMIPP_HOME]
     _supportedVersions = []
@@ -81,7 +83,7 @@ class Plugin(pyworkflow.em.Plugin):
         """ Return an Environment prepared for launching Matlab
         scripts using the Xmipp binding.
         """
-        env = pwutils.getEnviron()
+        env = pyworkflow.plugin.Plugin.getEnviron()
         env.set('PATH', os.environ.get('MATLAB_BINDIR', ''), pwutils.Environ.BEGIN)
         env.set('LD_LIBRARY_PATH', os.environ.get('MATLAB_LIBDIR', ''),
                 pwutils.Environ.BEGIN)
@@ -318,4 +320,6 @@ def installDeepLearningToolkit(plugin, env):
                               target)],
                    deps=deepLearningTools, tar='deepLearningToolkit.tgz')
 
-pyworkflow.em.Domain.registerPlugin(__name__)
+
+pyworkflow.plugin.Domain.registerPlugin(__name__)
+
