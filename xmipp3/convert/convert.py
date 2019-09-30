@@ -33,18 +33,26 @@ This module contains converter functions that will serve to:
 import os
 from os.path import join, exists
 from collections import OrderedDict
-from itertools import izip
-import numpy
+try:
+    from itertools import izip
+except ImportError:
+    izip = zip
+import numpy as np
 
-from pyworkflow.em import Angles
 from pyworkflow.utils import replaceBaseExt
-from pyworkflow.em.data import *
-from pyworkflow.em.convert import ImageHandler
-import pyworkflow.em.metadata as md
+from pyworkflow.object import ObjectWrap, String
+from pwem.constants import (NO_INDEX, ALIGN_NONE, ALIGN_PROJ, ALIGN_2D,
+                            ALIGN_3D)
+from pwem.objects import (Angles, Coordinate, Micrograph, Volume, Particle,
+                          MovieParticle, CTFModel, Acquisition, SetOfParticles,
+                          Class3D, SetOfVolumes, Transform)
+from pwem.convert import ImageHandler
+import pwem.metadata as md
+
+from xmipp3.base import XmippMdRow, getLabelPythonType
+from xmipp3.utils import iterMdRows
 
 import xmippLib
-from xmipp3.base import XmippMdRow, getLabelPythonType, RowMetaData
-from xmipp3.utils import iterMdRows
 
 if not getattr(xmippLib, "GHOST_ACTIVATED", False):
     """ Some of MDL may not exist when Ghost is activated
@@ -244,12 +252,12 @@ def objectToRow(obj, row, attrDict, extraLabels=[]):
             try:
                 row.setValue(label, valueType(value))
             except Exception as e:
-                print e
-                print "Problems found converting metadata: "
-                print "Label id = %s" % label
-                print "Attribute = %s" % attr
-                print "Value = %s" % value
-                print "Value type = %s" % valueType
+                print(e)
+                print("Problems found converting metadata: ")
+                print("Label id = %s" % label)
+                print("Attribute = %s" % attr)
+                print("Value = %s" % value)
+                print("Value type = %s" % valueType)
                 raise e
             row.setValue(label, valueType(getattr(obj, attr).get()))
             
@@ -274,7 +282,7 @@ def rowToObject(row, obj, attrDict, extraLabels=[]):
     """
     obj.setEnabled(row.getValue(xmippLib.MDL_ENABLED, 1) > 0)
 
-    for attr, label in attrDict.iteritems():
+    for attr, label in attrDict.items():
         value = row.getValue(label)
         if not hasattr(obj, attr):
             setattr(obj, attr, ObjectWrap(value))
@@ -391,7 +399,7 @@ def setObjId(obj, mdRow, label=xmippLib.MDL_ITEM_ID):
 
 
 def setRowId(mdRow, obj, label=xmippLib.MDL_ITEM_ID):
-    mdRow.setValue(label, long(obj.getObjId()))
+    mdRow.setValue(label, int(obj.getObjId()))
 
 
 def micrographToCTFParam(mic, ctfparam):
@@ -595,7 +603,7 @@ def particleToRow(part, partRow, **kwargs):
     if coord is not None:
         coordinateToRow(coord, partRow, copyId=False)
     if part.hasMicId():
-        partRow.setValue(xmippLib.MDL_MICROGRAPH_ID, long(part.getMicId()))
+        partRow.setValue(xmippLib.MDL_MICROGRAPH_ID, int(part.getMicId()))
         partRow.setValue(xmippLib.MDL_MICROGRAPH, str(part.getMicId()))
 
 
@@ -625,10 +633,10 @@ def class2DToRow(class2D, classRow):
         index, filename = class2D.getRepresentative().getLocation()
         fn = locationToXmipp(index, filename)
         classRow.setValue(xmippLib.MDL_IMAGE, fn)
-    n = long(len(class2D))
+    n = int(len(class2D))
     classRow.setValue(xmippLib.MDL_CLASS_COUNT, n)
     classRow.setValue(xmippLib.MDL_REF, int(class2D.getObjId()))
-    classRow.setValue(xmippLib.MDL_ITEM_ID, long(class2D.getObjId()))
+    classRow.setValue(xmippLib.MDL_ITEM_ID, int(class2D.getObjId()))
 
 
 def ctfModelToRow(ctfModel, ctfRow):
@@ -914,7 +922,7 @@ def readCoordinates(mic, fileName, coordsSet, outputDir, readDiscarded=False, sc
             coord.setX(int(coord.getX()*scale))
             coord.setY(int(coord.getY()*scale))
             coordsSet.append(coord)
-            posMd.setValue(md.MDL_ITEM_ID, long(coord.getObjId()), objId)
+            posMd.setValue(md.MDL_ITEM_ID, int(coord.getObjId()), objId)
 
 
 def readPosCoordinates(posFile, readDiscarded=False):
@@ -1162,7 +1170,7 @@ def writeSetOfMicrographsPairs(uSet, tSet, filename):
     for micU, micT in izip(uSet, tSet):
         objId = md.addObject()
         pairRow = XmippMdRow()
-        pairRow.setValue(xmippLib.MDL_ITEM_ID, long(micU.getObjId()))
+        pairRow.setValue(xmippLib.MDL_ITEM_ID, int(micU.getObjId()))
         pairRow.setValue(xmippLib.MDL_MICROGRAPH, micU.getFileName())
         pairRow.setValue(xmippLib.MDL_MICROGRAPH_TILTED, micT.getFileName())
         pairRow.writeToMd(md, objId)
@@ -1249,7 +1257,7 @@ def writeSetOfClassesVol(classesVolSet, filename, classesBlock='classes'):
     for classVol in classesVolSet:
         classVolToRow(classVol, classRow)
         classRow.writeToMd(classMd, classMd.addObject())
-        ref = class3D.getObjId()
+        ref = Class3D.getObjId()
         imagesFn = 'class%06d_images@%s' % (ref, filename)
         imagesMd = xmippLib.MetaData()
         imgRow = XmippMdRow()
@@ -1293,14 +1301,14 @@ def writeSetOfMovies(moviesSet, filename, moviesBlock='movies'):
         micrographsMd.write(micrographsFn, xmippLib.MD_APPEND)
 
 def geometryFromMatrix(matrix, inverseTransform):
-    from pyworkflow.em.convert.transformations import  \
-        translation_from_matrix, euler_from_matrix
+    from pwem.convert.transformations import (translation_from_matrix,
+                                              euler_from_matrix)
     if inverseTransform:
-        matrix = numpy.linalg.inv(matrix)
+        matrix = np.linalg.inv(matrix)
         shifts = -translation_from_matrix(matrix)
     else:
         shifts = translation_from_matrix(matrix)
-    angles = -numpy.rad2deg(euler_from_matrix(matrix, axes='szyz'))
+    angles = -np.rad2deg(euler_from_matrix(matrix, axes='szyz'))
     return shifts, angles
 
 
@@ -1308,13 +1316,13 @@ def matrixFromGeometry(shifts, angles, inverseTransform):
     """ Create the transformation matrix from a given
     2D shifts in X and Y...and the 3 euler angles.
     """
-    from pyworkflow.em.convert.transformations import  euler_matrix
-    radAngles = -numpy.deg2rad(angles)
+    from pwem.convert import euler_matrix
+    radAngles = -np.deg2rad(angles)
 
     M = euler_matrix(radAngles[0], radAngles[1], radAngles[2], 'szyz')
     if inverseTransform:
         M[:3, 3] = -shifts[:3]
-        M = numpy.linalg.inv(M)
+        M = np.linalg.inv(M)
     else:
         M[:3, 3] = shifts[:3]
 
@@ -1332,8 +1340,8 @@ def rowToAlignment(alignmentRow, alignType):
 
     if _containsAny(alignmentRow, ALIGNMENT_DICT):
         alignment = Transform()
-        angles = numpy.zeros(3)
-        shifts = numpy.zeros(3)
+        angles = np.zeros(3)
+        shifts = np.zeros(3)
         flip = alignmentRow.getValue(xmippLib.MDL_FLIP)
 
         shifts[0] = alignmentRow.getValue(xmippLib.MDL_SHIFT_X, 0.)
@@ -1351,7 +1359,7 @@ def rowToAlignment(alignmentRow, alignType):
             psi = alignmentRow.getValue(xmippLib.MDL_ANGLE_PSI, 0.)
             rot = alignmentRow.getValue(xmippLib.MDL_ANGLE_ROT, 0.)
             if rot != 0. and psi != 0:
-                print "HORROR rot and psi are different from zero in 2D case"
+                print("HORROR rot and psi are different from zero in 2D case")
             angles[0] = \
                 alignmentRow.getValue(xmippLib.MDL_ANGLE_PSI, 0.)\
                 + alignmentRow.getValue(xmippLib.MDL_ANGLE_ROT, 0.)
@@ -1403,7 +1411,7 @@ def alignmentToRow(alignment, alignmentRow, alignType):
     matrix = alignment.getMatrix()
     if alignType == ALIGN_2D:
         # get 2x2 matrix and check if negative
-        flip = bool(numpy.linalg.det(matrix[0:2, 0:2]) < 0)
+        flip = bool(np.linalg.det(matrix[0:2, 0:2]) < 0)
         if flip:
             matrix[0, :2] *= -1.  # invert only the first two columns keep x
             matrix[2, 2] = 1.  # set 3D rot
@@ -1411,7 +1419,7 @@ def alignmentToRow(alignment, alignmentRow, alignType):
             pass
 
     elif alignType == ALIGN_3D:
-        flip = bool(numpy.linalg.det(matrix[0:3, 0:3]) < 0)
+        flip = bool(np.linalg.det(matrix[0:3, 0:3]) < 0)
         if flip:
             matrix[0, :4] *= -1.  # now, invert first line including x
             matrix[3, 3] = 1.  # set 3D rot
@@ -1419,7 +1427,7 @@ def alignmentToRow(alignment, alignmentRow, alignType):
             pass
 
     else:
-        flip = bool(numpy.linalg.det(matrix[0:3, 0:3]) < 0)
+        flip = bool(np.linalg.det(matrix[0:3, 0:3]) < 0)
         if flip:
             raise Exception("the det of the transformation matrix is "
                             "negative. This is not a valid transformation "

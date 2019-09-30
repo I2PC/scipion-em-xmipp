@@ -24,12 +24,10 @@
 # *
 # **************************************************************************
 
-from os.path import join, basename, dirname, exists
-from collections import OrderedDict
+from os.path import  basename, dirname
 
-from pyworkflow.utils.path import findRootFrom, copyTree, createLink, replaceExt
-from pyworkflow.em.data import Micrograph
-import pyworkflow.em.metadata as md
+from pyworkflow.utils.path import (findRootFrom, copyTree, createLink,
+                                   replaceExt)
 
 from .convert import *
 
@@ -61,8 +59,8 @@ class XmippImport():
         # Read the micrographs from the 'self._mdFile' metadata
         # but fixing the filenames with new ones (linked or copy to extraDir)
         readSetOfMicrographs(self._mdFile, micSet,
-                           preprocessImageRow=self._preprocessMicrographRow,
-                           readAcquisition=False)
+                             preprocessImageRow=self._preprocessMicrographRow,
+                             readAcquisition=False)
         self.protocol._defineOutputs(outputMicrographs=micSet)
 
         # Also create a SetOfCTF if the present
@@ -145,7 +143,7 @@ class XmippImport():
             self._ctfPath = findRootFrom(self._mdFile,
                                          row.getValue(md.MDL_CTF_MODEL))
         else:
-            self._ctfPath = None # means no CTF info from micrographs metadata
+            self._ctfPath = None  # means no CTF info from micrographs metadata
 
         if row.containsLabel(md.MDL_REF):
             self._classFunc = self.protocol._createSetOfClasses2D
@@ -170,7 +168,7 @@ class XmippImport():
         errors = []
         try:
             self._findPathAndCtf(label, warnings=False)
-        except Exception, ex:
+        except Exception as ex:
             errors.append(str(ex))
 
         return errors
@@ -256,7 +254,7 @@ class XmippImport():
                 self.micDict[micKey] = mic
 
             # Update the row to set a MDL_MICROGRAPH_ID
-            imgRow.setValue(md.MDL_MICROGRAPH_ID, long(mic.getObjId()))
+            imgRow.setValue(md.MDL_MICROGRAPH_ID, int(mic.getObjId()))
 
         # JMRT: This means that the metadata contains MDL_CTF_MODEL
         # and the files path were found from some root
