@@ -34,11 +34,10 @@ import json
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.utils.path import makePath, cleanPattern, cleanPath, copyTree, createLink
-from pyworkflow.protocol.constants import *
-from pyworkflow.em.constants import RELATION_CTF, ALIGN_NONE
-from pyworkflow.em.convert import ImageHandler
-from pyworkflow.em.data import SetOfCoordinates, Coordinate, SetOfParticles
-from pyworkflow.em.protocol import ProtParticlePicking, ProtUserSubSet
+from pwem.constants import RELATION_CTF, ALIGN_NONE
+from pwem.convert import ImageHandler
+from pwem.objects import SetOfCoordinates, Coordinate, SetOfParticles
+from pwem.protocols import ProtParticlePicking, ProtUserSubSet
 
 import pyworkflow.utils as pwutils
 import pyworkflow.protocol.params as params

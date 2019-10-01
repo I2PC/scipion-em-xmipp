@@ -24,14 +24,14 @@
 # *
 # **************************************************************************
 
-import os, sys
+import os
 import re
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.utils.path import copyTree
 import pyworkflow.protocol.params as params
-from pyworkflow.em.protocol import ProtProcessParticles
-import pyworkflow.em.metadata as md
+from pwem.protocols import ProtProcessParticles
+import pwem.metadata as md
 
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes
 from xmipp3.utils import validateDLtoolkit

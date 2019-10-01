@@ -156,7 +156,7 @@ class XmippMdRow():
             
     def writeToMd(self, md, objId):
         """ Set back row values to a metadata row. """
-        for label, value in self._labelDict.iteritems():
+        for label, value in self._labelDict.items():
             # TODO: Check how to handle correctly unicode type
             # in Xmipp and Scipion
             t = type(value)

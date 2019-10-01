@@ -663,7 +663,7 @@ def setPsdFiles(ctfModel, ctfRow):
     to this ctfModel. The values will be read from
     the ctfRow if present.
     """
-    for attr, label in CTF_PSD_DICT.iteritems():
+    for attr, label in CTF_PSD_DICT.items():
         if ctfRow.containsLabel(label):
             setattr(ctfModel, attr, String(ctfRow.getValue(label)))
 
@@ -1255,6 +1255,7 @@ def writeSetOfClassesVol(classesVolSet, filename, classesBlock='classes'):
     # errors
     classRow = XmippMdRow()
     for classVol in classesVolSet:
+        # FIXME Where does this method come from
         classVolToRow(classVol, classRow)
         classRow.writeToMd(classMd, classMd.addObject())
         ref = Class3D.getObjId()

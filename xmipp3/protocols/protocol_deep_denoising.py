@@ -29,11 +29,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from pyworkflow import VERSION_2_0
-from .protocol_generate_reprojections import XmippProtGenerateReprojections
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
-import pyworkflow.em.metadata as md
 from pyworkflow.utils.path import cleanPath
+
+import pwem.metadata as md
+
+from .protocol_generate_reprojections import XmippProtGenerateReprojections
+
 
 import xmippLib
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes, xmippToLocation
@@ -347,7 +350,7 @@ class GAN(XmippProtDeepDenoising):
                         Imresize)
                 Image.append(Imnormalize)
         except:
-            print "ALL IMAGES HAVE BEEN READ"
+            print("ALL IMAGES HAVE BEEN READ")
 
         Image = np.array(Image).astype('float')
         Image = Image.reshape(len(Image), Image.shape[1],Image.shape[2], 1)
@@ -569,7 +572,7 @@ class GAN(XmippProtDeepDenoising):
                 epoch, d_loss[0], 100 * d_loss[1], g_loss))
 
             evaluate = self.generator.evaluate(self.noise, self.true)
-            print "Validation =", evaluate
+            print("Validation =", evaluate)
 
             if epoch > 500 and evaluate <= np.min(self.validation):
                 self.generatorNoParallel.save(self.dir2)
@@ -580,7 +583,7 @@ class GAN(XmippProtDeepDenoising):
             lossEpoch.append(d_loss[0])
             # If at save interval => save generated image samples
             if epoch % save_interval == 0:
-                print "MeanLoss = ", np.mean(lossEpoch)
+                print("MeanLoss = ", np.mean(lossEpoch))
                 self.save_imgs(epoch)
                 lossEpoch = []
 

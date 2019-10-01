@@ -26,8 +26,12 @@
 
 import numpy as np
 import pyworkflow.protocol.params as params
-import pyworkflow.em as em
-from ..convert import getImageLocation
+from pyworkflow.protocol import STEPS_PARALLEL
+
+from pwem.protocols import ProtAlignVolume
+from pwem.objects import Volume, Transform, SetOfVolumes
+
+from xmipp3.convert import getImageLocation
 
 
 ALIGN_MASK_CIRCULAR = 0
@@ -39,7 +43,7 @@ ALIGN_ALGORITHM_EXHAUSTIVE_LOCAL = 2
 ALIGN_ALGORITHM_FAST_FOURIER = 3
 
 
-class XmippProtAlignVolume(em.ProtAlignVolume):
+class XmippProtAlignVolume(ProtAlignVolume):
     """ 
     Aligns a set of volumes using cross correlation 
     or a Fast Fourier method. 
@@ -49,8 +53,8 @@ class XmippProtAlignVolume(em.ProtAlignVolume):
     nVols = 0
     
     def __init__(self, **args):
-        em.ProtAlignVolume.__init__(self, **args)
-        self.stepsExecutionMode = em.STEPS_PARALLEL
+        ProtAlignVolume.__init__(self, **args)
+        self.stepsExecutionMode = STEPS_PARALLEL
     
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
@@ -187,7 +191,7 @@ class XmippProtAlignVolume(em.ProtAlignVolume):
     def createOutputStep(self):        
         vols = []
         for vol in self._iterInputVolumes():
-            outVol = em.Volume()
+            outVol = Volume()
             outVol.setLocation(vol.outputName)
             outVol.setObjComment(vol.getObjComment())
             #set transformation matrix             
@@ -195,7 +199,7 @@ class XmippProtAlignVolume(em.ProtAlignVolume):
             fhInputTranMat = self._getExtraPath('transformation-matrix_vol%06d.txt'%volId)
             transMatFromFile = np.loadtxt(fhInputTranMat)
             transformationMat = np.reshape(transMatFromFile,(4,4))
-            transform = em.Transform()
+            transform = Transform()
             transform.setMatrix(transformationMat)
             outVol.setTransform(transform)            
             vols.append(outVol)
@@ -271,7 +275,7 @@ class XmippProtAlignVolume(em.ProtAlignVolume):
             if item is None:
                 break
             itemId = item.getObjId()
-            if isinstance(item, em.Volume):
+            if isinstance(item, Volume):
                 item.outputName = self._getExtraPath('output_vol%06d.vol' % itemId)
                 # If item is a Volume and label is empty
                 if not item.getObjLabel():
@@ -281,7 +285,7 @@ class XmippProtAlignVolume(em.ProtAlignVolume):
                     else:
                         item.setObjLabel('%s.%s' % (self.getMapper().getParent(item).getRunName(), item.getClassName()))
                 yield item
-            elif isinstance(item, em.SetOfVolumes):
+            elif isinstance(item, SetOfVolumes):
                 for vol in item:
                     vol.outputName = self._getExtraPath('output_vol%06d_%03d.vol' % (itemId, vol.getObjId()))
                     # If set item label is empty

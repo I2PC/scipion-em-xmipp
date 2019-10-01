@@ -99,7 +99,7 @@ PRINT_FILES  = True
 
 
 def runXmippProgram(cmd):
-    print ">>>", cmd
+    print(">>>", cmd)
     p = subprocess.Popen(cmd, shell=True, env=xmipp3.Plugin.getEnviron())
     return p.wait()
 
@@ -123,10 +123,10 @@ class TestConvertBase(BaseTest):
             mList: the matrix list of transformations 
                 (should be the same length of the stack of images)
         """
-        print "\n"
-        print "*" * 80
-        print "* Launching test: ", fileKey
-        print "*" * 80
+        print("\n")
+        print("*" * 80)
+        print("* Launching test: ", fileKey)
+        print("*" * 80)
         
         is2D = alignType == ALIGN_2D
 
@@ -143,12 +143,12 @@ class TestConvertBase(BaseTest):
             goldFn = self.dataset.getFile(fileKey + 'Gold')
 
         if PRINT_FILES:
-            print "BINARY DATA: ", stackFn
-            print "SET1:        ", partFn1
-            print "  MD:        ", mdFn
-            print "SET2:        ", partFn2
-            print "OUTPUT:      ", outputFn
-            print "GOLD:        ", goldFn
+            print("BINARY DATA: ", stackFn)
+            print("SET1:        ", partFn1)
+            print("  MD:        ", mdFn)
+            print("SET2:        ", partFn2)
+            print("OUTPUT:      ", outputFn)
+            print("GOLD:        ", goldFn)
 
         if alignType == ALIGN_2D or alignType == ALIGN_PROJ:
             partSet = SetOfParticles(filename=partFn1)
@@ -169,7 +169,7 @@ class TestConvertBase(BaseTest):
             p.setTransform(Transform(a))
             partSet.append(p)
         # Write out the .sqlite file and check that are correctly aligned
-        print "Parset", partFn1
+        print("Parset", partFn1)
         partSet.printAll()
         partSet.write()
         # Convert to a Xmipp metadata and also check that the images are
@@ -194,8 +194,8 @@ class TestConvertBase(BaseTest):
             for i, img in enumerate(partSet2):
                 m1 = aList[i]
                 m2 = img.getTransform().getMatrix()
-                print 'm1:\n', m1
-                print 'm2:\n', m2
+                print('m1:\n', m1)
+                print('m2:\n', m2)
                 
                 # # if Det|m1| <1, it means matrix has flip.
                 # if bool(numpy.linalg.det(m1[0:3, 0:3]) < 0):
@@ -213,7 +213,7 @@ class TestConvertBase(BaseTest):
             self.assertTrue(ImageHandler().compareData(goldFn, outputFn, tolerance=0.001), 
                             "Different data files:\n>%s\n<%s" % (goldFn, outputFn))
         else:
-            print colorText.RED + colorText.BOLD + "WARNING: Gold file '%s' missing!!!" % goldFn + colorText.END
+            print(colorText.RED + colorText.BOLD + "WARNING: Gold file '%s' missing!!!" % goldFn + colorText.END)
 
         if CLEAN_IMAGES:
             pw.utils.cleanPath(outputFn)
@@ -359,8 +359,8 @@ class TestAlignment(TestConvertBase):
                                   sphericalAberration=2,
                                   amplitudeContrast=0.1,
                                   magnification=60000))
-        print "input Filename", stackFn
-        print "input Filename", partFn1
+        print("input Filename", stackFn)
+        print("input Filename", partFn1)
         # Populate the SetOfParticles with  images
         # taken from images.mrc file
         # and setting the previous alignment parameters
@@ -392,10 +392,10 @@ class TestAlignment(TestConvertBase):
             for i, img in enumerate(partSet2):
                 m1 = aList[i]
                 m2 = img.getTransform().getMatrix()
-                print "-"*5
-                print img.getFileName(), img.getIndex()
-                print  >> sys.stderr, 'm1:\n', m1
-                print  >> sys.stderr, 'm2:\n', m2
+                print("-"*5)
+                print(img.getFileName(), img.getIndex())
+                sys.stderr.write('m1:\n', m1)
+                sys.stderr.write('m2:\n', m2)
                 self.assertTrue(np.allclose(m1, m2, rtol=1e-2))
 
 #        self.launchTest('alignShiftRotExp', mList, alignType=ALIGN_2D)
@@ -808,7 +808,7 @@ class TestSetConvert(BaseTest):
         the particle picking. 
         """
         fn = self.dataset.getFile('images10')
-        print "Input metadata: ", fn
+        print("Input metadata: ", fn)
         partSet = SetOfParticles(filename=self.getOutputPath('particles_coord.sqlite'))
         readSetOfParticles(fn, partSet)
         
@@ -856,7 +856,7 @@ class TestSetConvert(BaseTest):
             micSet.append(p)
             id = mdXmipp.addObject()
             mdXmipp.setValue(xmippLib.MDL_ENABLED, 1, id)
-            mdXmipp.setValue(xmippLib.MDL_ITEM_ID, long(i+1), id)
+            mdXmipp.setValue(xmippLib.MDL_ITEM_ID, int(i+1), id)
             mdXmipp.setValue(xmippLib.MDL_MICROGRAPH, file, id)
             # set CTFModel params
             mdXmipp.setValue(xmippLib.MDL_CTF_DEFOCUSU, ctf.getDefocusU(), id)
@@ -878,8 +878,8 @@ class TestSetConvert(BaseTest):
 
         mdFile = self.dataset.getFile('gold/xmipp_ml2d_images.xmd')
         sqliteFile = self.getOutputPath("particles_aligned.sqlite")
-        print "Input metadata: ", mdFile
-        print "Output sqlite: ", sqliteFile
+        print("Input metadata: ", mdFile)
+        print("Output sqlite: ", sqliteFile)
         
         partSet = SetOfParticles(filename=sqliteFile)        
         readSetOfParticles(mdFile, partSet)
@@ -909,7 +909,7 @@ class TestSetConvert(BaseTest):
     def test_alignedParticlesToMd(self):
         """ Test the conversion of a SetOfParticles to Xmipp metadata. """
         fn = self.dataset.getFile('aligned_particles')
-        print "Input sqlite: %s" % fn
+        print("Input sqlite: %s" % fn)
         partSet = SetOfParticles(filename=fn) 
         partSet.setAcquisition(Acquisition(magnification=60000,
                                           voltage=300,
@@ -948,7 +948,7 @@ class TestSetConvert(BaseTest):
             imgSet.append(p)
             id = mdXmipp.addObject()
             mdXmipp.setValue(xmippLib.MDL_ENABLED, 1, id)
-            mdXmipp.setValue(xmippLib.MDL_ITEM_ID, long(i+1), id)
+            mdXmipp.setValue(xmippLib.MDL_ITEM_ID, int(i+1), id)
             mdXmipp.setValue(xmippLib.MDL_IMAGE, locationToXmipp(i+1, fn), id)
             # set CTFModel params
             mdXmipp.setValue(xmippLib.MDL_CTF_DEFOCUSU, ctf.getDefocusU(), id)

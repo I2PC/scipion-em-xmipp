@@ -23,12 +23,15 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import os
 
-from pyworkflow.em import *  
+import pyworkflow.protocol.params as params
+from pyworkflow.protocol import LEVEL_ADVANCED
+from pyworkflow.utils import Environ
 
-from xmippLib import MetaData
+from pwem.protocols import ProtClassify3D
+
 from xmipp3 import Plugin
-from xmipp3.constants import *
 from xmipp3.convert import writeSetOfVolumes, readSetOfClassesVol, readSetOfVolumes
 
 
@@ -39,47 +42,47 @@ class XmippProtCLTomo(ProtClassify3D):
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='General parameters')
-        form.addParam('inputVolumes', PointerParam, pointerClass="SetOfVolumes", label='Set of volumes',
+        form.addParam('inputVolumes', params.PointerParam, pointerClass="SetOfVolumes", label='Set of volumes',
                       help="Set of volumes to align")
-        form.addParam('numberOfReferences',IntParam,label='Number of references', default=3,
+        form.addParam('numberOfReferences', params.IntParam,label='Number of references', default=3,
                       help="How many references are computed at the end of the process")
-        form.addParam('numberOfIterations',IntParam,label='Number of iterations', default=15,
+        form.addParam('numberOfIterations',params.IntParam,label='Number of iterations', default=15,
                       expertLevel=LEVEL_ADVANCED,help="How many iterations at each of the Clustering levels")
-        form.addParam('generateAligned',BooleanParam,default=True,label='Generate aligned subvolumes',
+        form.addParam('generateAligned',params.BooleanParam,default=True,label='Generate aligned subvolumes',
                       help="If set to true, it will be created a new set of volumes with all of them aligned")
-        form.addParam('align',BooleanParam,default=True,label="Align",
+        form.addParam('align',params.BooleanParam,default=True,label="Align",
                       help="Do not align if volumes are already aligned, only classify")
         
         form.addSection(label='Initial references')
-        form.addParam('doGenerateInitial',BooleanParam,default=True,label='Generate initial volume',
+        form.addParam('doGenerateInitial',params.BooleanParam,default=True,label='Generate initial volume',
                       help="Let CLTomo to automatically generate the initial references")
-        form.addParam('numberOfReferences0',IntParam,label='Number of initial references', default=1, condition="doGenerateInitial",
+        form.addParam('numberOfReferences0',params.IntParam,label='Number of initial references', default=1, condition="doGenerateInitial",
                       help="How many initial volumes. If set to 1, all subvolumes are aligned to a single reference, "\
                            "and then they are classified")
-        form.addParam('randomizeOrientation',BooleanParam,default=False,label='Randomize orientation', condition="doGenerateInitial",
+        form.addParam('randomizeOrientation',params.BooleanParam,default=False,label='Randomize orientation', condition="doGenerateInitial",
                       help="Use this option if all the input volumes have the same missing wedge or if they have not been previously aligned.")
-        form.addParam('referenceList', PointerParam, pointerClass="SetOfVolumes", label='Set of initial volumes',
+        form.addParam('referenceList', params.PointerParam, pointerClass="SetOfVolumes", label='Set of initial volumes',
                       condition="not doGenerateInitial", help="Set of initial volumes")
         
         form.addSection(label='Constraints')
-        form.addParam('symmetry',StringParam,default='c1',label='Symmetry group',
+        form.addParam('symmetry',params.StringParam,default='c1',label='Symmetry group',
                       help="See http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format."
                            "If no symmetry is present, give c1")
-        form.addParam('inputMask', PointerParam, pointerClass="VolumeMask", label="Spatial mask", allowsNull=True)
-        form.addParam('maximumResolution',FloatParam,default=0.25,label='Maximum resolution (pixels^-1)',
+        form.addParam('inputMask', params.PointerParam, pointerClass="VolumeMask", label="Spatial mask", allowsNull=True)
+        form.addParam('maximumResolution',params.FloatParam,default=0.25,label='Maximum resolution (pixels^-1)',
                       help="The maximum (Nyquist) resolution is 0.5. Use smaller values, e.g. 0.45, to prevent high-resolution artifacts.")
-        form.addParam('sparsity',FloatParam,default=90,label='Sparsity in Fourier space',
+        form.addParam('sparsity',params.FloatParam,default=90,label='Sparsity in Fourier space',
                       help="A value of 90 drops 90% of the smallest Fourier coefficients")
-        form.addParam('dwtSparsity',FloatParam,default=90,label='Sparsity in wavelet space',
+        form.addParam('dwtSparsity',params.FloatParam,default=90,label='Sparsity in wavelet space',
                       help="A value of 95 drops 95% of the smallest wavelet coefficients")
 
         form.addSection(label='Search limits')
-        form.addParam('maxRot',FloatParam,default=360,label='Maximum rotational angle',help="In degrees")
-        form.addParam('maxTilt',FloatParam,default=360,label='Maximum tilt angle',help="In degrees")
-        form.addParam('maxPsi',FloatParam,default=360,label='Maximum in-plane angle',help="In degrees")
-        form.addParam('maxShiftX',FloatParam,default=10,label='Maximum shift X',help="In voxels")
-        form.addParam('maxShiftY',FloatParam,default=10,label='Maximum shift Y',help="In voxels")
-        form.addParam('maxShiftZ',FloatParam,default=10,label='Maximum shift Z',help="In voxels")
+        form.addParam('maxRot',params.FloatParam,default=360,label='Maximum rotational angle',help="In degrees")
+        form.addParam('maxTilt',params.FloatParam,default=360,label='Maximum tilt angle',help="In degrees")
+        form.addParam('maxPsi',params.FloatParam,default=360,label='Maximum in-plane angle',help="In degrees")
+        form.addParam('maxShiftX',params.FloatParam,default=10,label='Maximum shift X',help="In voxels")
+        form.addParam('maxShiftY',params.FloatParam,default=10,label='Maximum shift Y',help="In voxels")
+        form.addParam('maxShiftZ',params.FloatParam,default=10,label='Maximum shift Z',help="In voxels")
         form.addParallelSection(threads=0, mpi=4)
 
     #--------------------------- INSERT steps functions --------------------------------------------

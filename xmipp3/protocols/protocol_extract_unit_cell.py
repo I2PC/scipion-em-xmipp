@@ -25,15 +25,16 @@
 
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.em import Volume
-from pyworkflow.em.constants import (SYM_I222, SYM_I222r, SYM_In25, SYM_In25r,
-                                     SYM_CYCLIC, SYM_DIHEDRAL, SYM_TETRAHEDRAL,
-                                     SYM_OCTAHEDRAL, SCIPION_SYM_NAME)
-from pyworkflow.em.data import Transform
-from pyworkflow.em.convert import Ccp4Header
-from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         EnumParam, IntParam)
+
+from pwem.objects import Volume, Transform
+from pwem.constants import (SYM_I222, SYM_I222r, SYM_In25, SYM_In25r,
+                                     SYM_CYCLIC, SYM_DIHEDRAL, SYM_TETRAHEDRAL,
+                                     SYM_OCTAHEDRAL, SCIPION_SYM_NAME)
+from pwem.convert import Ccp4Header
+from pwem.protocols import EMProtocol
+
 
 from xmipp3.constants import XMIPP_SYM_NAME
 

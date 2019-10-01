@@ -24,29 +24,27 @@
 # *
 # **************************************************************************
 
-from glob import glob
+from functools import reduce
 import math
 import random
-from itertools import izip
+try:
+    from itertools import izip
+except ImportError:
+    izip = zip
 from os.path import join, exists
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam, IntParam, EnumParam, \
-    NumericListParam, USE_GPU, GPU_LIST
-from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile, createLink
-from pyworkflow.em.protocol import ProtRefine3D
-from pyworkflow.em.data import SetOfVolumes, Volume
-from pyworkflow.em.metadata.utils import getFirstRow, getSize
-from pyworkflow.utils.utils import getFloatListFromValues
-from pyworkflow.em.convert import ImageHandler
-import pyworkflow.em.metadata as md
-import pyworkflow.em as em
+from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
+                                        BooleanParam, IntParam,
+                                        USE_GPU, GPU_LIST)
+from pyworkflow.utils.path import cleanPath, copyFile, moveFile
+from pwem.protocols import ProtRefine3D
+from pwem.objects import Volume
+from pwem.convert import ImageHandler
 
 import xmippLib
-from xmipp3.base import HelicalFinder
-from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
-                            setXmippAttributes, getImageLocation)
+from xmipp3.convert import (writeSetOfParticles, getImageLocation)
 
 
 class XmippProtReconstructSwarm(ProtRefine3D):
@@ -143,11 +141,11 @@ class XmippProtReconstructSwarm(ProtRefine3D):
         TsOrig=self.inputParticles.get().getSamplingRate()
         TsCurrent=max(TsOrig,self.targetResolution.get()/3)
         Xdim=self.inputParticles.get().getDimensions()[0]
-        newXdim=long(round(Xdim*TsOrig/TsCurrent))
+        newXdim=int(round(Xdim*TsOrig/TsCurrent))
         if newXdim<40:
-            newXdim=long(40)
+            newXdim=int(40)
             TsCurrent=Xdim*(TsOrig/newXdim)
-        print "Preparing images to sampling rate=",TsCurrent
+        print("Preparing images to sampling rate=",TsCurrent)
         self.writeInfoField(fnDir,"size",xmippLib.MDL_XSIZE,newXdim)
         self.writeInfoField(fnDir,"sampling",xmippLib.MDL_SAMPLINGRATE,TsCurrent)
         
@@ -247,7 +245,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
                 avgWeight = reduce(lambda x, y: x + y, weight) / len(weight)
                 print("Average weight for "+fnVol+" = "+str(avgWeight))
                 objId = md.addObject()
-                md.setValue(xmippLib.MDL_IDX,long(i),objId)
+                md.setValue(xmippLib.MDL_IDX,int(i),objId)
                 md.setValue(xmippLib.MDL_IMAGE,fnVol,objId)
                 md.setValue(xmippLib.MDL_WEIGHT,avgWeight,objId)
                 md.setValue(xmippLib.MDL_ITER,iteration,objId)
@@ -289,7 +287,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
             md.clear()
             for i in range(self.inputVolumes.get().getSize()):
                 objId = md.addObject()
-                md.setValue(xmippLib.MDL_IDX,long(i),objId)
+                md.setValue(xmippLib.MDL_IDX,int(i),objId)
                 md.setValue(xmippLib.MDL_IMAGE,self._getExtraPath("volume%03d_best.vol"%i),objId)
                 md.setValue(xmippLib.MDL_WEIGHT,bestWeightVol[i],objId)
                 md.setValue(xmippLib.MDL_ITER,bestIterVol[i],objId)

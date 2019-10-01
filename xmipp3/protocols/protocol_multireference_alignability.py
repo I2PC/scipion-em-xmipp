@@ -28,16 +28,17 @@ from os.path import join, isfile
 from shutil import copyfile
 
 from pyworkflow.object import Float, String
-from pyworkflow.protocol.params import (PointerParam, FloatParam, STEPS_PARALLEL,
-                                        StringParam, BooleanParam, IntParam, LEVEL_ADVANCED)
-from pyworkflow.em.data import Volume
-from pyworkflow.em import Viewer
-import pyworkflow.em.metadata as md
-from pyworkflow.em.protocol import ProtAnalysis3D
+from pyworkflow.protocol.params import (PointerParam, FloatParam, StringParam,
+                                        BooleanParam, IntParam, LEVEL_ADVANCED)
 from pyworkflow.utils.path import moveFile, makePath
 from pyworkflow.gui.plotter import Plotter
 
-from xmipp3.convert import writeSetOfParticles, writeSetOfVolumes, getImageLocation
+from pwem.objects import Volume
+import pwem.metadata as md
+from pwem.protocols import ProtAnalysis3D
+
+
+from xmipp3.convert import writeSetOfParticles, getImageLocation
 
 
 class XmippProtMultiRefAlignability(ProtAnalysis3D):
@@ -201,7 +202,7 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
         
         self.runJob('xmipp_image_resize',params)
         
-        from pyworkflow.em.convert import ImageHandler
+        from pwem.convert import ImageHandler
         img = ImageHandler()
         img.convert(self.inputVolumes.get(), self._getExtraPath("volume.vol"))
         Xdim = self.inputVolumes.get().getDim()[0]

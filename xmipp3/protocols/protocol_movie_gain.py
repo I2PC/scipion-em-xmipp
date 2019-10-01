@@ -30,15 +30,16 @@ import os
 import math
 
 from pyworkflow import VERSION_1_1
-from pyworkflow.em.data import SetOfMovies, Movie
-from pyworkflow.em.protocol import EMProtocol, ProtProcessMovies
 from pyworkflow.object import Set
+from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow.protocol.params import (PointerParam, IntParam,
                                         BooleanParam, LEVEL_ADVANCED)
 from pyworkflow.utils.properties import Message
 from pyworkflow.utils.path import cleanPath
 import pyworkflow.protocol.constants as cons
-import pyworkflow.em as em
+
+from pwem.objects import SetOfMovies, Movie, SetOfImages, Image
+from pwem.protocols import EMProtocol, ProtProcessMovies
 
 import xmippLib
 
@@ -52,7 +53,7 @@ class XmippProtMovieGain(ProtProcessMovies):
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
-        self.stepsExecutionMode = em.STEPS_PARALLEL
+        self.stepsExecutionMode = STEPS_PARALLEL
 
     # -------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -187,11 +188,11 @@ class XmippProtMovieGain(ProtProcessMovies):
             return
         if isinstance(self.inputMovies.get(), Movie):
             saveMovie = self.getAttributeValue('doSaveMovie', False)
-            imageSet = self._loadOutputSet(em.data.SetOfImages,
+            imageSet = self._loadOutputSet(SetOfImages,
                                            'movies.sqlite',
                                            fixSampling=saveMovie)
             movie = self.inputMovies.get()
-            imgOut = em.data.Image()
+            imgOut = Image()
             imgOut.setObjId(movie.getObjId())
             imgOut.setSamplingRate(movie.getSamplingRate())
             imgOut.setFileName(self._getPath("movie_%06d_gain.xmp" %
@@ -231,12 +232,12 @@ class XmippProtMovieGain(ProtProcessMovies):
                 return
 
             saveMovie = self.getAttributeValue('doSaveMovie', False)
-            imageSet = self._loadOutputSet(em.data.SetOfImages,
+            imageSet = self._loadOutputSet(SetOfImages,
                                            'movies.sqlite',
                                            fixSampling=saveMovie)
 
             for movie in newDone:
-                imgOut = em.data.Image()
+                imgOut = Image()
                 imgOut.setObjId(movie.getObjId())
                 imgOut.setSamplingRate(movie.getSamplingRate())
                 imgOut.setFileName(self._getPath("movie_%06d_gain.xmp"

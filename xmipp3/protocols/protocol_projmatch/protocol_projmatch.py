@@ -27,9 +27,9 @@
 # **************************************************************************
 
 from pyworkflow.object import Integer
-from pyworkflow.utils.path import makePath, copyFile
-from pyworkflow.utils import getFloatListFromValues, getBoolListFromValues, getStringListFromValues
-from pyworkflow.em import ProtRefine3D, ProtClassify3D
+from pyworkflow.utils import (getFloatListFromValues, getBoolListFromValues,
+                              getStringListFromValues)
+from pwem.protocols import ProtRefine3D, ProtClassify3D
 
 import xmippLib
 from .projmatch_initialize import *

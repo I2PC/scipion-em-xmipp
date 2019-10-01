@@ -66,7 +66,7 @@ def createFilenameTemplates(self):
                     'ctfGroupSubsetFileName': "ctf_images.sel",
                     }
     # Also setup as protocol attributes
-    for k, v in self._params.iteritems():
+    for k, v in self._params.items():
         setattr(self, k, v)
                           
     Iter = 'iter_%(iter)03d'

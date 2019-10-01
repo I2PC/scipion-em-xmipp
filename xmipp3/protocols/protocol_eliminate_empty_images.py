@@ -28,19 +28,21 @@
 import os
 from datetime import datetime
 
-import pyworkflow.em as em
-import pyworkflow.em.metadata as md
+import pwem.metadata as md
 import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as param
 from pyworkflow import VERSION_2_0
-from pyworkflow.em.protocol import ProtClassify2D
-from pyworkflow.em.data import SetOfParticles
 from pyworkflow.object import Set
 from pyworkflow.utils import cleanPath
 from pyworkflow.utils.properties import Message
 
-from xmipp3.convert import writeSetOfParticles, \
-    readSetOfParticles, setXmippAttributes
+from pwem import ALIGN_NONE
+from pwem.protocols import ProtClassify2D
+from pwem.objects import SetOfParticles, SetOfAverages, SetOfClasses2D, Class2D
+
+
+from xmipp3.convert import (writeSetOfParticles, readSetOfParticles,
+                            setXmippAttributes)
 
 
 class XmippProtEliminateEmptyBase(ProtClassify2D):
@@ -53,7 +55,7 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
 
     def __init__(self, **args):
         ProtClassify2D.__init__(self, **args)
-        self.stepsExecutionMode = em.STEPS_PARALLEL
+        self.stepsExecutionMode = cons.STEPS_PARALLEL
 
     def addAdvancedParams(self, form):
         form.addParam('addFeatures', param.BooleanParam, default=False,
@@ -243,10 +245,10 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
         self.streamClosed = self.partsSet.isStreamClosed()
         if self.check == None:
             writeSetOfParticles(self.partsSet, fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation')
+                                alignType=ALIGN_NONE, orderBy='creation')
         else:
             writeSetOfParticles(self.partsSet, fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation',
+                                alignType=ALIGN_NONE, orderBy='creation',
                                 where='creation>"' + str(self.check) + '"')
         for p in self.partsSet.iterItems(orderBy='creation', direction='DESC'):
             self.check = p.getObjCreation()
@@ -274,7 +276,7 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
             lastToClose = getattr(self, 'finished', False) and \
                           hasattr(self, '%sParticles'%suffix)
             if newData or lastToClose:
-                outSet = self._loadOutputSet(em.SetOfParticles,
+                outSet = self._loadOutputSet(SetOfParticles,
                                              '%sParticles.sqlite'%suffix)
                 if newData:
                     partsSet = self._createSetOfParticles("AUX")
@@ -361,10 +363,10 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
         self.streamClosed = self.inputImages.isStreamClosed()
         if self.check == None:
             writeSetOfParticles(self.inputImages, fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation')
+                                alignType=ALIGN_NONE, orderBy='creation')
         else:
             writeSetOfParticles(self.inputImages, fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation',
+                                alignType=ALIGN_NONE, orderBy='creation',
                                 where='creation>"' + str(self.check) + '"')
         idsToCheck = []
         for p in self.inputImages.iterItems(orderBy='creation', direction='ASC'):
@@ -392,7 +394,7 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
             lastToClose = getattr(self, 'finished', False) and \
                           hasattr(self, '%sClasses' % suffix)
             if newData or lastToClose:
-                outSet = self._loadOutputSet(em.SetOfAverages,
+                outSet = self._loadOutputSet(SetOfAverages,
                                              '%sAverages.sqlite' % suffix)
                 if newData:
                     # if new data, we read it
@@ -455,13 +457,13 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
     def rejectByPopulation(self, ids):
         if self.usePopulation.get():
             sizeDict = {}
-            for key, value in self.sizeDict.iteritems():
+            for key, value in self.sizeDict.items():
                 if key in ids:
                     sizeDict[key] = value
 
             meanPop = sum(sizeDict.values())/len(sizeDict)
 
-            for clsId, size in sizeDict.iteritems():
+            for clsId, size in sizeDict.items():
                 decision = int(size > meanPop * self.minPopulation.get())
                 self.enableCls[clsId] = ACCEPTED if decision else DISCARDED
         else:
@@ -471,11 +473,11 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
         baseName = '%sClasses.sqlite' % suffix
         setFile = self._getPath(baseName)
         if os.path.exists(setFile):
-            outputSet = em.SetOfClasses2D(filename=setFile)
+            outputSet = SetOfClasses2D(filename=setFile)
             outputSet.loadAllProperties()
             outputSet.enableAppend()
         else:
-            outputSet = em.SetOfClasses2D(filename=setFile)
+            outputSet = SetOfClasses2D(filename=setFile)
             outputSet.setStreamState(streamingState)
 
         outputSet.copyInfo(self.inputClasses.get())  # if fails, delete
@@ -484,7 +486,7 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
             # FIXME: Review this !!!
             decision = ACCEPTED if suffix == 'output' else DISCARDED
             print("in createOutput... %s" % ('ACCEPTED' if suffix == 'output' else 'DISCARDED'))
-            desiredIds = [ids for ids, enable in self.enableCls.iteritems()
+            desiredIds = [ids for ids, enable in self.enableCls.items()
                           if enable == decision]
             print("self.enableCls: %s" % self.enableCls)
             print("desiredIds: %s" % desiredIds)
@@ -493,7 +495,7 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                 repId = cls.getObjId()
                 if repId in desiredIds:
                     representative = cls.getRepresentative()
-                    newClass = em.Class2D(objId=repId)
+                    newClass = Class2D(objId=repId)
                     newClass.setAlignment2D()
                     newClass.copyInfo(self.inputImages)
                     newClass.setAcquisition(self.inputImages.getAcquisition())

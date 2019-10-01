@@ -24,9 +24,9 @@
 # *
 # **************************************************************************
 
-import pyworkflow.em.metadata as md
+import pwem.metadata as md
 import pyworkflow.protocol.params as params
-from pyworkflow.em.protocol import ProtProcessParticles
+from pwem.protocols import ProtProcessParticles
 
 from xmipp3.convert import writeSetOfParticles, xmippToLocation
 
@@ -90,7 +90,7 @@ class XmippProtCTFCorrectWiener2D(ProtProcessParticles):
         if (self.correctEnvelope):
             params +=  '  --correct_envelope '
 
-        print params 
+        print(params)
         nproc = self.numberOfMpi.get()
         nT=self.numberOfThreads.get() 
 

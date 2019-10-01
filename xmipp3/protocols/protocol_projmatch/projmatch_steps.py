@@ -31,11 +31,10 @@ form definition, we have separated in this sub-module.
 """
 
 import math
-from os.path import exists, join
+from os.path import exists
 
-from pyworkflow.object import Float
-from pyworkflow.em.data import Volume, SetOfClasses3D
-from pyworkflow.utils import getMemoryAvailable, replaceExt, removeExt, cleanPath, makePath, copyFile
+from pwem.objects import Volume, SetOfClasses3D
+from pyworkflow.utils import getMemoryAvailable, removeExt, cleanPath, makePath, copyFile
 
 import xmippLib
 from xmipp3.convert import createClassesFromImages
@@ -164,7 +163,7 @@ def runTransformMaskStep(self, program, args, **kwargs):
 
 
 def runVolumeConvertStep(self, reconstructedFilteredVolume, maskedFileName):
-    from pyworkflow.em.convert import ImageHandler
+    from pwem.convert import ImageHandler
     img = ImageHandler()
     img.convert(reconstructedFilteredVolume, maskedFileName)
 
@@ -321,7 +320,7 @@ def runProjectionMatching(self, iterN, refN, args, **kwargs):
         cleanPath(neighbFile)
         neighbFileb = baseTxtFile + '_group' + str(ctfN).zfill(self.FILENAMENUMBERLENGTH) + '_sampling.xmd'
         copyFile(neighbFileb, neighbFile)
-        print "copied file ", neighbFileb, "to", neighbFile
+        print("copied file ", neighbFileb, "to", neighbFile)
         
         threads = self.numberOfThreads.get()
         trhArgs = ' --mem %(mem)s --thr %(thr)s'
@@ -351,7 +350,7 @@ def runAssignImagesToReferences(self, iterN, **kwargs):
     mdout = xmippLib.MetaData()
     mdout.setComment("Metadata with images, the winner reference as well as the ctf group")
     
-    mycounter = 1L
+    mycounter = 1
     for ctfN in self.allCtfGroups():
         ctfFilePrefix = self._getBlockFileName(ctfBlockName, ctfN, '')
         for refN in self.allRefs():
@@ -407,12 +406,12 @@ def runAssignImagesToReferences(self, iterN, **kwargs):
     md1_size = md1.size()
     numberOfReferences = self.numberOfReferences
     if md1_size != numberOfReferences:
-        print >> sys.stderr,"********************************************"
-        print >> sys.stderr, md1
-        print >> sys.stderr,"ERROR: Some 3D references do not have assigned any projection assigned to them"
-        print >> sys.stderr,"Consider reducing the number of 3D references"
-        print >> sys.stderr,"Number of References:" ,numberOfReferences
-        print >> sys.stderr,"Number of Empty references", numberOfReferences - md1_size
+        sys.stderr.write("********************************************")
+        sys.stderr.write(md1)
+        sys.stderr.write("ERROR: Some 3D references do not have assigned any projection assigned to them")
+        sys.stderr.write("Consider reducing the number of 3D references")
+        sys.stderr.write("Number of References:" ,numberOfReferences)
+        sys.stderr.write("Number of Empty references", numberOfReferences - md1_size)
         raise Exception('runAssignImagesToReferences failed')
  
  
@@ -664,7 +663,7 @@ def runFilterVolumeStep(self, iterN, refN, constantToAddToFiltration):
     if self.useFscForFilter:
         if self._fourierMaxFrequencyOfInterest[iterN+1] == -1:
             fourierMaxFrequencyOfInterest = self.resolSam / self._getFourierMaxFrequencyOfInterest(iterN, refN)
-            print "el valor de la resolucion es :", self._getFourierMaxFrequencyOfInterest(iterN, refN)
+            print("el valor de la resolucion es :", self._getFourierMaxFrequencyOfInterest(iterN, refN))
             filterInPxAt = fourierMaxFrequencyOfInterest + constantToAddToFiltration
         else:
             filterInPxAt = constantToAddToFiltration

@@ -28,17 +28,16 @@
 # *
 # **************************************************************************
 
-import os, ftplib, gzip
-import sys
-
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as const
-import pyworkflow.em as em
-from pyworkflow.em.convert.atom_struct import cifToPdb
 from pyworkflow.utils import replaceBaseExt, removeExt, getExt
 
+from pwem.convert import cifToPdb, downloadPdb
+from pwem.objects import Volume
+from pwem.protocols import ProtInitialVolume
 
-class XmippProtConvertPdb(em.ProtInitialVolume):
+
+class XmippProtConvertPdb(ProtInitialVolume):
     """ Convert a PDB file into a volume.  """
     _label = 'convert a PDB'
     IMPORT_FROM_ID = 0
@@ -89,7 +88,7 @@ class XmippProtConvertPdb(em.ProtInitialVolume):
     #--------------------------- STEPS functions --------------------------------------------
     def pdbDownloadStep(self):
         """Download all pdb files in file_list and unzip them."""
-        em.downloadPdb(self.pdbId.get(), self._getPdbFileName(), self._log)
+        downloadPdb(self.pdbId.get(), self._getPdbFileName(), self._log)
         
     def convertPdbStep(self):
         """ Although is not mandatory, usually is used by the protocol to
@@ -120,7 +119,7 @@ class XmippProtConvertPdb(em.ProtInitialVolume):
         self.runJob(program, args)
 
     def createOutput(self):
-        volume = em.Volume()
+        volume = Volume()
         volume.setSamplingRate(self.sampling.get())
         volume.setFileName(self._getVolName())
         self._defineOutputs(outputVolume=volume)
@@ -153,7 +152,7 @@ class XmippProtConvertPdb(em.ProtInitialVolume):
         errors = []
         if self.inputPdbData == self.IMPORT_FROM_ID:
             lenStr = len(self.pdbId.get())
-            if lenStr <> 4:
+            if lenStr != 4:
                 errors = ["Pdb id is composed only by four alphanumeric characters"]
         
         return errors

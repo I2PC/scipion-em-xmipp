@@ -30,12 +30,11 @@ import math
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_1
 from pyworkflow.utils import makePath, cleanPattern, moveFile
-from pyworkflow.em.convert import ImageHandler
-from pyworkflow.em.constants import ALIGN_PROJ
-from pyworkflow.em.data import Image, Volume
-from pyworkflow.em.protocol import ProtAnalysis3D
-import pyworkflow.em.metadata as md
-import pyworkflow.em as em
+from pwem.convert import ImageHandler
+from pwem.constants import ALIGN_PROJ
+from pwem.objects import Image, Volume
+from pwem.protocols import ProtAnalysis3D
+import pwem.metadata as md
 
 import xmippLib
 from xmipp3.base import findRow
@@ -196,7 +195,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
             # Scale particles
             newTs = self.targetResolution.get() * 0.4
             newTs = max(Ts, newTs)
-            newXdim = long(Xdim * Ts / newTs)
+            newXdim = int(Xdim * Ts / newTs)
             self.runJob("xmipp_image_resize",
                         "-i %s -o %s --save_metadata_stack %s --fourier %d" %
                         (self._getExpParticlesFn(),
@@ -212,7 +211,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
             Xdim=newXdim
             Ts=newTs
         self.writeInfoField(self._getExtraPath(),"sampling",xmippLib.MDL_SAMPLINGRATE,Ts)
-        self.writeInfoField(self._getExtraPath(),"size",xmippLib.MDL_XSIZE,long(Xdim))
+        self.writeInfoField(self._getExtraPath(),"size",xmippLib.MDL_XSIZE,int(Xdim))
 
     def constructGroupsStep(self, particlesId, angularSampling,
                             angularDistance, symmetryGroup):
@@ -377,7 +376,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
             if exists(fnDir):
                 mdDirection = xmippLib.MetaData("class000001_images@"+fnDir)
                 mdRandom.randomize(mdDirection)
-                mdSubset.selectPart(mdRandom,0L,min(mdRandom.size(),minClass))
+                mdSubset.selectPart(mdRandom,0,min(mdRandom.size(),minClass))
                 mdAll.unionAll(mdSubset)
         mdAll.removeDuplicates(md.MDL_ITEM_ID)
         mdAll.sort(md.MDL_ITEM_ID)
@@ -502,7 +501,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         while self.lastRow and particle.getObjId() == self.lastRow.getValue(md.MDL_PARTICLE_ID):
             count += 1
             if count:
-                createItemMatrix(particle, self.lastRow, align=em.ALIGN_PROJ)
+                createItemMatrix(particle, self.lastRow, align=ALIGN_PROJ)
             try:
                 self.lastRow = next(self.iterMd)
             except StopIteration:

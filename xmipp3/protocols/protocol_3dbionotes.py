@@ -24,15 +24,16 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
+import json
 import requests
 import webbrowser
 
 # FIXME: Avoid this crazy import * statements
+
 from pyworkflow import VERSION_2_0
-from pyworkflow.em import *
-from pyworkflow.em.convert import ImageHandler, Ccp4Header
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
+from pyworkflow.protocol.params import PointerParam
+
+from pwem.protocols import ProtAnalysis3D
 
 
 class XmippProt3DBionotes(ProtAnalysis3D):

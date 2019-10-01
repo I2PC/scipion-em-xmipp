@@ -34,6 +34,8 @@ from pyworkflow.protocol.params import IntParam, FloatParam, EnumParam
 from pyworkflow.utils import *
 from pyworkflow.utils.path import makePath, cleanPath, moveFile
 
+from pwem.protocols import EMProtocol
+
 from xmipp3 import Plugin
 from xmipp3.constants import NMA_HOME
 from .convert import getNMAEnviron
@@ -88,7 +90,7 @@ class XmippProtNMABase(EMProtocol):
         the function should be called inside the working dir."""
         fWarn = open("warnings.xmd", 'wa')
         for l in lines:
-            print >> fWarn, l
+            fWarn.write(l)
         fWarn.close()
 
     def computeModesStep(self, fnPseudoatoms, numberOfModes, cutoffStr):
@@ -181,14 +183,14 @@ class XmippProtNMABase(EMProtocol):
             msg += "However, the protocol allows only up to 200 modes as 20-100 modes are usually enough. If the number of"
             msg += "modes is below the minimum between these two numbers, consider increasing cut-off distance."
             self._printWarnings(redStr(msg % (len(fnVec), numberOfModes)))
-            print redStr('Warning: There are only %d modes instead of %d.' % (len(fnVec), numberOfModes))
-            print redStr("Check the number of modes you asked to compute and/or consider increasing cut-off distance.")
-            print redStr("The maximum number of modes allowed by the method for atomic normal mode analysis is 6 times")
-            print redStr(
-                "the number of RTB blocks and for pseudoatomic normal mode analysis 3 times the number of pseudoatoms.")
-            print redStr(
-                "However, the protocol allows only up to 200 modes as 20-100 modes are usually enough. If the number of")
-            print redStr("modes is below the minimum between these two numbers, consider increasing cut-off distance.")
+            print(redStr('Warning: There are only %d modes instead of %d.' % (len(fnVec), numberOfModes)))
+            print(redStr("Check the number of modes you asked to compute and/or consider increasing cut-off distance."))
+            print(redStr("The maximum number of modes allowed by the method for atomic normal mode analysis is 6 times"))
+            print(redStr(
+                "the number of RTB blocks and for pseudoatomic normal mode analysis 3 times the number of pseudoatoms."))
+            print(redStr(
+                "However, the protocol allows only up to 200 modes as 20-100 modes are usually enough. If the number of"))
+            print(redStr("modes is below the minimum between these two numbers, consider increasing cut-off distance."))
 
         fnDiag = "diagrtb.eigenfacs"
 
@@ -211,7 +213,7 @@ class XmippProtNMABase(EMProtocol):
             objId = mdOut.addObject()
             modefile = self._getPath("modes", "vec.%d" % (n + 1))
             mdOut.setValue(xmippLib.MDL_NMA_MODEFILE, modefile, objId)
-            mdOut.setValue(xmippLib.MDL_ORDER, long(n + 1), objId)
+            mdOut.setValue(xmippLib.MDL_ORDER, int(n + 1), objId)
 
             if n >= 6:
                 mdOut.setValue(xmippLib.MDL_ENABLED, 1, objId)

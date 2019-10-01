@@ -27,15 +27,17 @@
 # *
 # **************************************************************************
 
-from os.path import basename, join, abspath
+from os.path import basename, abspath
 import os
 
 from pyworkflow.object import String
 from pyworkflow.utils import cleanPattern, moveFile
 from pyworkflow.protocol.params import EnumParam, PointerParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.em.protocol import Prot3D
-from pyworkflow.em.viewers.viewer_chimera import Chimera
+
+from pwem.protocols import Prot3D
+from pwem.viewers import Chimera
+
 from xmipp3.convert import getImageLocation
 
 

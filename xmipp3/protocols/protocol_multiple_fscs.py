@@ -23,17 +23,18 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
+from pwem.convert import ImageHandler
+from pwem.objects import FSC
+from pwem.protocols import ProtAnalysis3D
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.constants import STEPS_PARALLEL
 import pyworkflow.protocol.params as params
-import pyworkflow.em as em
-import pyworkflow.em.metadata as md
+import pwem.metadata as md
 
 from xmipp3.convert import locationToXmipp
 
 
-class XmippProtMultipleFSCs(em.ProtAnalysis3D):
+class XmippProtMultipleFSCs(ProtAnalysis3D):
     """
     Compute the FSCs between a reference volume and a set of input volumes.
     A mask can be provided and the volumes are aligned by default.
@@ -42,7 +43,7 @@ class XmippProtMultipleFSCs(em.ProtAnalysis3D):
     _lastUpdateVersion = VERSION_1_1
 
     def __init__(self, **args):
-        em.ProtAnalysis3D.__init__(self, **args)
+        ProtAnalysis3D.__init__(self, **args)
         self.stepsExecutionMode = STEPS_PARALLEL
 
     def _defineParams(self, form):
@@ -85,7 +86,7 @@ class XmippProtMultipleFSCs(em.ProtAnalysis3D):
     def _resizeVolume(self, volFn):
         """ Resize input volume if not of the same size of referenceVol """
         refDim = self.referenceVolume.get().getXDim()
-        volDim = em.ImageHandler().getDimensions(volFn)
+        volDim = ImageHandler().getDimensions(volFn)
         if refDim != volDim:
             self.runJob('xmipp_image_resize',
                         "-i %s --dim %d" % (volFn, refDim))
@@ -98,7 +99,7 @@ class XmippProtMultipleFSCs(em.ProtAnalysis3D):
     def prepareReferenceStep(self,volId):
         inputMask = self.mask.get()
 
-        ih = em.ImageHandler()
+        ih = ImageHandler()
         fnRef = self._getExtraPath("reference.vol")
         ih.convert(self.referenceVolume.get(), fnRef)
 
@@ -138,7 +139,7 @@ class XmippProtMultipleFSCs(em.ProtAnalysis3D):
             fnFsc = self._getExtraPath("volume_%02d_fsc.xmd" % index)
             mdFsc = md.MetaData(fnFsc)
             fscLabel = vol.get().getObjLabel() or 'FSC %d' % index
-            fsc = em.FSC(objLabel=fscLabel)
+            fsc = FSC(objLabel=fscLabel)
             fsc.loadFromMd(mdFsc, md.MDL_RESOLUTION_FREQ, md.MDL_RESOLUTION_FRC)
             fscSet.append(fsc)
 

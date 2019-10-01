@@ -144,7 +144,7 @@ def createProgramsDb(dbName=None):
                 stderrdata = ps.communicate()[1]
                 if stderrdata != '':
                     raise Exception(stderrdata)
-                for prefix, category in categoryDict.iteritems():
+                for prefix, category in categoryDict.items():
                     if prefix in p:
                         db.updateProgramCategory(p, category)
                         break
@@ -193,7 +193,7 @@ class ProgramKeywordsRank():
             return 1 
         rank = 0
         for k in self.keywords:
-            for wkey, wvalue in self.weights.iteritems():
+            for wkey, wvalue in self.weights.items():
                 if program[wkey].find(k) != -1:
                     rank += wvalue
         return rank

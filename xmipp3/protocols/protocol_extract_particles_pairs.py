@@ -27,18 +27,21 @@
 # *
 # **************************************************************************
 
-from itertools import izip
+try:
+    from itertools import izip
+except ImportError:
+    izip = zip
+
 from os.path import exists
 
-import pyworkflow.em.metadata as md
+import pwem.metadata as md
 import pyworkflow.utils as pwutils
 from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
                                            STATUS_FINISHED)
 from pyworkflow.protocol.params import (PointerParam, EnumParam, FloatParam,
                                         IntParam, BooleanParam, Positive, GE)
-from pyworkflow.em.protocol import ProtExtractParticlesPair
-from pyworkflow.em.data_tiltpairs import ParticlesTiltPair, TiltPair
-from pyworkflow.em.data import SetOfMicrographs, SetOfParticles
+from pwem.protocols import ProtExtractParticlesPair
+from pwem.objects import ParticlesTiltPair, TiltPair, SetOfParticles
 
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import (writeSetOfCoordinates, readSetOfParticles,
@@ -302,7 +305,7 @@ class XmippProtExtractParticlesPairs(ProtExtractParticlesPair, XmippProtocol):
         particlesMd = 'particles@%s' % fnPosFile
         boxSize = self.boxSize.get()
         boxScale = self.getBoxScale()
-        print "boxScale: ", boxScale
+        print("boxScale: ", boxScale)
 
         if exists(fnPosFile):
             # Apply first all operations required for the micrograph

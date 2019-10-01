@@ -28,15 +28,20 @@ import re
 from os.path import join, dirname, exists
 from glob import glob
 
-import pyworkflow.em as em
-import pyworkflow.em.metadata as md
+
 import pyworkflow.protocol.params as param
 import pyworkflow.protocol.constants as const
-from pyworkflow.em.protocol import ProtClassify2D, SetOfClasses2D
 from pyworkflow.utils.path import cleanPath, makePath
 
-from xmipp3.convert import (writeSetOfParticles, createItemMatrix, writeSetOfClasses2D,
-                       xmippToLocation, rowToAlignment)
+import pwem.metadata as md
+from pwem.protocols import ProtClassify2D
+from pwem.objects import SetOfClasses2D
+from pwem.constants import ALIGN_NONE, ALIGN_2D
+
+
+from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
+                            writeSetOfClasses2D, xmippToLocation,
+                            rowToAlignment)
 
 
 # Comparison methods enum
@@ -254,7 +259,7 @@ class XmippProtCL2D(ProtClassify2D):
     def convertInputStep(self, particlesId, classesId):
         writeSetOfParticles(self.inputParticles.get(),
                             self._getFileName('input_particles'),
-                            alignType=em.ALIGN_NONE)
+                            alignType=ALIGN_NONE)
         
         if not self.randomInitialization:
             
@@ -279,7 +284,7 @@ class XmippProtCL2D(ProtClassify2D):
             
             for objId in mdOut:
                 mdOut.setValue(md.MDL_ITEM_ID,
-                               long(mdOut.getValue(md.MDL_REF,objId)),objId)
+                               int(mdOut.getValue(md.MDL_REF,objId)),objId)
             mdOut.write("classes_sorted@" + mdFn, md.MD_APPEND)
 
     def evaluateClassesStep(self, subset=''):
@@ -469,11 +474,11 @@ class XmippProtCL2D(ProtClassify2D):
         return levelMdFiles
     
     def _createItemMatrix(self, item, row):
-        createItemMatrix(item, row, align=em.ALIGN_2D)
+        createItemMatrix(item, row, align=ALIGN_2D)
 
     def _updateParticle(self, item, row):
         item.setClassId(row.getValue(md.MDL_REF))
-        item.setTransform(rowToAlignment(row, em.ALIGN_2D))
+        item.setTransform(rowToAlignment(row, ALIGN_2D))
 
     def _updateClass(self, item):
         classId = item.getObjId()
@@ -565,7 +570,7 @@ class XmippProtCL2D(ProtClassify2D):
             cleanPath(dataClasses)
         
         if not exists(dataClasses):
-            clsSet = em.SetOfClasses2D(filename=dataClasses)
+            clsSet = SetOfClasses2D(filename=dataClasses)
             clsSet.setImages(self.inputParticles.get())
             self._fillClassesFromLevel(clsSet, level=lev, subset=suffix)
             clsSet.write()

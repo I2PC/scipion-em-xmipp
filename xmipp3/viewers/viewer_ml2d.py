@@ -149,7 +149,7 @@ def createPlots(protML, selectedPlots):
     n = len(selectedPlots)
     if n == 0:
         #showWarning("ML2D plots", "Nothing to plot", protML.master)
-        print "No plots"
+        print("No plots")
         return 
     elif n == 1:
         gridsize = [1, 1]

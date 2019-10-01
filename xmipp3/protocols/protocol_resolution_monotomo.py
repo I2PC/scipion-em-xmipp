@@ -30,11 +30,11 @@ import numpy as np
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
                                         LEVEL_ADVANCED)
-from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
+from pwem.protocols import ProtAnalysis3D
 from pyworkflow.object import Float
-from pyworkflow.em import ImageHandler
+from pwem.convert import ImageHandler
 from pyworkflow.utils import getExt
-from pyworkflow.em.data import Volume
+from pwem.objects import Volume
 import pyworkflow.em.metadata as md
 
 MONORES_METHOD_URL = 'http://github.com/I2PC/scipion/wiki/XmippProtMonoRes'

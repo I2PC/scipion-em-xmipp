@@ -30,14 +30,15 @@
 import os
 
 import pyworkflow.em.metadata as md
-from pyworkflow.em import SetOfCoordinates
+from pwem.objects import SetOfCoordinates
 
-from pyworkflow.em.convert import ImageHandler
-from pyworkflow.em.protocol import ProtExtractMovieParticles, ProtProcessMovies
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 from pyworkflow.protocol.params import (PointerParam, IntParam, BooleanParam,
                                         Positive, FloatParam, EnumParam)
 from pyworkflow.utils.path import cleanPath
+
+from pwem.convert import ImageHandler
+from pwem.protocols import ProtExtractMovieParticles, ProtProcessMovies
 
 from xmipp3.base import XmippMdRow
 from xmipp3.convert import coordinateToRow
@@ -266,9 +267,9 @@ class XmippProtExtractMovieParticles(ProtExtractMovieParticles):
                     # to final particles folder
                     newImageName = '%d@%s' % newLocation
                     frameRow.setValue(md.MDL_IMAGE, newImageName)
-                    frameRow.setValue(md.MDL_MICROGRAPH_ID, long(movId))
+                    frameRow.setValue(md.MDL_MICROGRAPH_ID, int(movId))
                     frameRow.setValue(md.MDL_MICROGRAPH, str(movId))
-                    frameRow.setValue(md.MDL_FRAME_ID, long(frame))
+                    frameRow.setValue(md.MDL_FRAME_ID, int(frame))
                     frameRow.setValue(md.MDL_PARTICLE_ID,
                                       frameRow.getValue(md.MDL_ITEM_ID))
                     frameRow.writeToMd(movieMd, movieMd.addObject())
@@ -418,8 +419,8 @@ class XmippProtExtractMovieParticles(ProtExtractMovieParticles):
         coordRow = XmippMdRow()
 
         for coord in coordSet.iterCoordinates(movie.getObjId()):
-            coord.shiftX( int(round(float(shiftX))))
-            coord.shiftY( int(round(float(shiftY))))
+            coord.shiftX(int(round(float(shiftX))))
+            coord.shiftY(int(round(float(shiftY))))
             coordinateToRow(coord, coordRow)
             coordRow.writeToMd(mData, mData.addObject())
 

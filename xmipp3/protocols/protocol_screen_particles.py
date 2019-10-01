@@ -30,17 +30,18 @@
 import os
 from datetime import datetime
 
-import pyworkflow.em as em
 import pyworkflow.protocol.constants as cons
-
-from pyworkflow.em.metadata import getSize, isEmpty
 from pyworkflow.utils import cleanPath
-from pyworkflow.em.data import SetOfParticles
-from pyworkflow.em.protocol import ProtProcessParticles
 from pyworkflow.object import Set, Float
 from pyworkflow.protocol.params import (EnumParam, IntParam, Positive,
                                         Range, LEVEL_ADVANCED, FloatParam,
                                         BooleanParam)
+
+from pwem.constants import ALIGN_NONE
+from pwem.metadata import getSize, isEmpty
+from pwem.objects import SetOfParticles
+from pwem.protocols import ProtProcessParticles
+
 
 import xmippLib
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
@@ -205,13 +206,13 @@ class XmippProtScreenParticles(ProtProcessParticles):
 
         if self.check == None:
             writeSetOfParticles(inPartsSet, self.fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation')
+                                alignType=ALIGN_NONE, orderBy='creation')
         else:
             writeSetOfParticles(inPartsSet, self.fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation',
+                                alignType=ALIGN_NONE, orderBy='creation',
                                 where='creation>"' + str(self.check) + '"')
             writeSetOfParticles(inPartsSet, self.fnInputOldMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation',
+                                alignType=ALIGN_NONE, orderBy='creation',
                                 where='creation<"' + str(self.check) + '"')
         for p in inPartsSet.iterItems(orderBy='creation',
                                       direction='DESC'):
@@ -249,7 +250,7 @@ class XmippProtScreenParticles(ProtProcessParticles):
 
                 writeSetOfParticles(outSet.iterItems(orderBy='_xmipp_zScore'),
                                     self._getPath("images.xmd"),
-                                    alignType=em.ALIGN_NONE)
+                                    alignType=ALIGN_NONE)
                 cleanPath(self.fnOutputMd)
 
             self._updateOutputSet('outputParticles', outSet, streamMode)

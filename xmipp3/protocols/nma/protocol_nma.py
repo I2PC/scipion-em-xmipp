@@ -31,12 +31,13 @@ import os
 import math
 from os.path import basename, exists, join
 
-from pyworkflow.em.convert.atom_struct import cifToPdb
 from pyworkflow.utils import redStr, replaceBaseExt
-from pyworkflow.utils.path import copyFile, createLink, makePath, cleanPath, moveFile
+from pyworkflow.utils.path import createLink, makePath, cleanPath, moveFile
 from pyworkflow.protocol.params import (PointerParam, IntParam, FloatParam, 
                                         LEVEL_ADVANCED)
-from pyworkflow.em.data import SetOfNormalModes
+
+from pwem.convert import cifToPdb
+from pwem.objects import SetOfNormalModes
 
 import xmippLib
 from xmipp3.base import XmippMdRow
@@ -97,7 +98,6 @@ class XmippProtNMA(XmippProtNMABase):
                            'This value should be between 0 and 1.\n'
                            'A threshold of 0 implies no atom removal.')
 
-                                   
     def _insertAllSteps(self):
         # Some steps will differ if the input is a volume or a pdb file
         self.structureEM = self.inputStructure.get().getPseudoAtoms()
@@ -200,17 +200,17 @@ class XmippProtNMA(XmippProtNMABase):
             # Skip two lines
             fhIn.readline()
             fhIn.readline()
-            fhOut=open('modes/vec.%d'%(n+1),'w')
+            fhOut=open('modes/vec.%d' % (n+1), 'w')
             for i in range(Natoms):
                 line=fhIn.readline()
                 fhOut.write(line)
-                fhAni.write(line.rstrip().lstrip()+" ")
+                fhAni.write(line.rstrip().lstrip() + " ")
             fhOut.close()
             if n!=(numberOfModes-1):
                 fhAni.write("\n")
         fhIn.close()
         fhAni.close()
-        self.runJob("nma_prepare_for_animate.py","",env=getNMAEnviron())
+        self.runJob("nma_prepare_for_animate.py", "", env=getNMAEnviron())
         cleanPath("vec_ani.txt")
         moveFile('vec_ani.pkl', 'extra/vec_ani.pkl')
 
@@ -233,7 +233,8 @@ class XmippProtNMA(XmippProtNMABase):
             self.runJob("nma_animate_atoms.py","%s extra/vec_ani.pkl 7 %d %f "
                                                "extra/animations/animated_mode "
                                                "%d"%\
-                      (fn,numberOfModes,amplitude,nFrames),env=getNMAEnviron())
+                        (fn, numberOfModes, amplitude, nFrames),
+                        env=getNMAEnviron())
         
         for mode in range(7,numberOfModes+1):
             fnAnimation = join("extra", "animations", "animated_mode_%03d"
@@ -253,15 +254,15 @@ class XmippProtNMA(XmippProtNMABase):
                             "2.600000 0\n")
             fhCmd.write("animate speed 0.5\n")
             fhCmd.write("animate forward\n")
-            fhCmd.close();
+            fhCmd.close()
         
         self._leaveWorkingDir()
   
     def computeAtomShiftsStep(self, numberOfModes):
         fnOutDir = self._getExtraPath("distanceProfiles")
         makePath(fnOutDir)
-        maxShift=[]
-        maxShiftMode=[]
+        maxShift = []
+        maxShiftMode = []
         
         for n in range(7, numberOfModes+1):
             fnVec = self._getPath("modes", "vec.%d" % n)
@@ -272,23 +273,23 @@ class XmippProtNMA(XmippProtNMABase):
                 for line in fhIn:
                     x, y, z = map(float, line.split())
                     d = math.sqrt(x*x+y*y+z*z)
-                    if n==7:
+                    if n == 7:
                         maxShift.append(d)
                         maxShiftMode.append(7)
                     else:
                         if d>maxShift[atomCounter]:
                             maxShift[atomCounter]=d
                             maxShiftMode[atomCounter]=n
-                    atomCounter+=1
-                    md.setValue(xmippLib.MDL_NMA_ATOMSHIFT,d,md.addObject())
-                md.write(join(fnOutDir,"vec%d.xmd" % n))
+                    atomCounter += 1
+                    md.setValue(xmippLib.MDL_NMA_ATOMSHIFT, d, md.addObject())
+                md.write(join(fnOutDir, "vec%d.xmd" % n))
                 fhIn.close()
         md = xmippLib.MetaData()
         for i, _ in enumerate(maxShift):
             fnVec = self._getPath("modes", "vec.%d" % (maxShiftMode[i]+1))
             if exists(fnVec):
                 objId = md.addObject()
-                md.setValue(xmippLib.MDL_NMA_ATOMSHIFT, maxShift[i],objId)
+                md.setValue(xmippLib.MDL_NMA_ATOMSHIFT, maxShift[i], objId)
                 md.setValue(xmippLib.MDL_NMA_MODEFILE, fnVec, objId)
         md.write(self._getExtraPath('maxAtomShifts.xmd'))
                                                       

@@ -23,14 +23,19 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+from pyworkflow.protocol import (PointerParam, BooleanParam, IntParam,
+                                 LEVEL_ADVANCED, StringParam)
 
-from os.path import join, dirname, exists
-from glob import glob
+from pwem.convert import ImageHandler
+from pwem.objects import Particle
+from pwem.protocols import ProtClassify2D
 
-from pyworkflow.em import *
+
 import xmippLib
 
-from xmipp3.convert import writeSetOfParticles, readSetOfClasses2D, xmippToLocation
+
+from xmipp3.convert import (writeSetOfParticles, readSetOfClasses2D,
+                            xmippToLocation)
 
 
 class KendersomBaseClassify(ProtClassify2D):

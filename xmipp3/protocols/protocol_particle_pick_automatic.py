@@ -24,9 +24,12 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+from os.path import exists, basename, join
 
-from pyworkflow.em import *  
-from pyworkflow.utils.path import *  
+from pyworkflow.protocol.params import STEPS_PARALLEL, PointerParam, EnumParam
+from pyworkflow.utils.path import *
+
+from pwem.protocols import ProtParticlePickingAuto
 
 import xmippLib
 from xmipp3.base import XmippProtocol

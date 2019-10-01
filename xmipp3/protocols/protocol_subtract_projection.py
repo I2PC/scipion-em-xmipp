@@ -29,9 +29,9 @@
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.params import PointerParam, EnumParam, BooleanParam
 
-from pyworkflow.em.protocol import ProtOperateParticles
+from pwem.protocols import ProtOperateParticles
 from pyworkflow.protocol.constants import STEPS_PARALLEL
-from pyworkflow.em import ImageHandler
+from pwem.convert import ImageHandler
 
 import xmippLib
 from xmipp3.convert import (XmippMdRow, particleToRow,
@@ -108,8 +108,8 @@ class XmippProtSubtractProjection(ProtOperateParticles):
 
         depsOutPut=[]
         for thread in range(0, numberOfThreads):
-            start = long(thread * groupSize+1)
-            end = long(thread * groupSize+groupSize)
+            start = int(thread * groupSize+1)
+            end = int(thread * groupSize+groupSize)
             if thread == (numberOfThreads-1):
                 end += groupRemainder
             idStep = self._insertFunctionStep('projectStep', start, end,

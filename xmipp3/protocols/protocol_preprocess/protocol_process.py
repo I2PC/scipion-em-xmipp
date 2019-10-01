@@ -24,10 +24,10 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.constants import ALIGN_NONE
-from pyworkflow.em.protocol import ProtProcessParticles, ProtPreprocessVolumes
-from pyworkflow.em.data import Volume
-import pyworkflow.em.metadata as md
+from pwem.constants import ALIGN_NONE
+from pwem.protocols import ProtProcessParticles, ProtPreprocessVolumes
+from pwem.objects import Volume
+import pwem.metadata as md
 
 from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
                             writeSetOfVolumes, getImageLocation)

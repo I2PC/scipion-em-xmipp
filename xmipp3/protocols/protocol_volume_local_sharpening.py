@@ -26,19 +26,18 @@
 # *
 # **************************************************************************
 from pyworkflow import VERSION_1_1
-from pyworkflow.protocol.params import (PointerParam, StringParam, 
-                                        BooleanParam, FloatParam, IntParam, LEVEL_ADVANCED)
-from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
-from pyworkflow.object import Float
-from pyworkflow.em import ImageHandler
+from pyworkflow.protocol.params import (PointerParam, FloatParam,
+                                        LEVEL_ADVANCED)
+from pwem.protocols import ProtAnalysis3D
+from pwem.convert import ImageHandler
 from pyworkflow.utils import getExt
-from pyworkflow.em.data import Volume
+from pwem.objects import Volume
 import numpy as np
 import os
-import pyworkflow.em.metadata as md
-from pyworkflow.em.metadata.constants import (MDL_COST, MDL_ITER, MDL_SCALE)
+import pwem.metadata as md
+from pwem.metadata.constants import (MDL_COST, MDL_ITER, MDL_SCALE)
 from ntpath import dirname
-from os.path import exists, lexists
+from os.path import exists
 
 LOCALDEBLUR_METHOD_URL='http://github.com/I2PC/scipion/wiki/XmippProtLocSharp' 
 

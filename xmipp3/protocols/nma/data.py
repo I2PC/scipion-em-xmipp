@@ -29,7 +29,7 @@ Define some classes to store Data points for clustering.
 """
 
 
-class Point():
+class Point:
     """ Return x, y 2d coordinates and some other properties
     such as weight and state.
     """
@@ -85,19 +85,19 @@ class Point():
         self.setState(Point.SELECTED)
         
     def isSelected(self):
-        return self.getState()==Point.SELECTED    
+        return self.getState() == Point.SELECTED
     
     def setDiscarded(self):
         self.setState(Point.DISCARDED)
            
     def isDiscarded(self):
-        return self.getState()==Point.DISCARDED
+        return self.getState() == Point.DISCARDED
     
     def getData(self):
         return self._data 
 
     
-class Data():
+class Data:
     """ Store data points. """
     def __init__(self, **kwargs):
         # Indexes of data

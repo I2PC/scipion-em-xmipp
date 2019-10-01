@@ -28,18 +28,17 @@ from math import floor
 import os
 
 from pyworkflow import VERSION_1_1
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.em.constants import ALIGN_PROJ
+from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
+                                        BooleanParam)
 from pyworkflow.utils.path import cleanPath
-from pyworkflow.em.protocol import ProtAnalysis3D
-from pyworkflow.em.data import SetOfClasses2D, Image, SetOfAverages, SetOfParticles, Class2D
-import pyworkflow.em.metadata as md
+from pwem.protocols import ProtAnalysis3D
+from pwem.objects import (SetOfClasses2D, Image, SetOfAverages, SetOfParticles)
+import pwem.metadata as md
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
 import xmippLib
 from xmipp3.base import ProjMatcher
-from xmipp3.convert import setXmippAttributes, xmippToLocation, rowToAlignment
+from xmipp3.convert import setXmippAttributes, xmippToLocation
 
         
 class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
@@ -114,7 +113,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             writeSetOfClasses2D(imgSet, self.imgsFn, writeParticles=True)
         else:
             writeSetOfParticles(imgSet, self.imgsFn)
-        from pyworkflow.em.convert import ImageHandler
+        from pwem.convert import ImageHandler
         img = ImageHandler()
         fnVol = self._getTmpPath("volume.vol")
         img.convert(self.inputVolume.get(), fnVol)

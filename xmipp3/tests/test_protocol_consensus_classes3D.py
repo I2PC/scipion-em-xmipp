@@ -42,7 +42,7 @@ class TestConsensusClasses3D(BaseTest):
     def setUpClass(cls):
         """Prepare the data that we will use later on."""
 
-        print "\n", greenStr(" Set Up - Collect data ".center(75, '-'))
+        print("\n", greenStr(" Set Up - Collect data ".center(75, '-')))
 
         setupTestProject(cls)  # defined in BaseTest, creates cls.proj
 
@@ -129,7 +129,7 @@ class TestConsensusClasses3D(BaseTest):
     # The tests themselves.
     #
     def testConsensus(self):
-        print "\n", greenStr(" Test Consensus ".center(75, '-'))
+        print("\n", greenStr(" Test Consensus ".center(75, '-')))
 
         # preparing and launching the protocol
         pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
@@ -152,7 +152,7 @@ class TestConsensusClasses3D(BaseTest):
         self.checkIntersections(setOfIntersections, 20,[66, 67, 55])
 
     def testConsensus2(self):
-        print "\n", greenStr(" Test Consensus with different set sizes".center(75, '-'))
+        print("\n", greenStr(" Test Consensus with different set sizes".center(75, '-')))
 
         # preparing and launching the protocol
         pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
@@ -175,7 +175,7 @@ class TestConsensusClasses3D(BaseTest):
         self.checkIntersections(setOfIntersections, 20,[48, 67])
 
     def testConsensus3(self):
-        print "\n", greenStr(" Test Consensus with different set sizes 2".center(75, '-'))
+        print("\n", greenStr(" Test Consensus with different set sizes 2".center(75, '-')))
 
         # preparing and launching the protocol
         pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
@@ -198,7 +198,7 @@ class TestConsensusClasses3D(BaseTest):
         self.checkIntersections(setOfIntersections, 20,[46])
 
     def testConsensus4(self):
-        print "\n", greenStr(" Test Consensus with different class sizes".center(75, '-'))
+        print("\n", greenStr(" Test Consensus with different class sizes".center(75, '-')))
 
         # preparing and launching the protocol
         pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
@@ -221,7 +221,7 @@ class TestConsensusClasses3D(BaseTest):
         self.checkIntersections(setOfIntersections, 20,[56, 33, 49])
 
     def testConsensus5(self):
-        print "\n", greenStr(" Test Consensus with two sets".center(75, '-'))
+        print("\n", greenStr(" Test Consensus with two sets".center(75, '-')))
 
         # preparing and launching the protocol
         pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
@@ -243,7 +243,7 @@ class TestConsensusClasses3D(BaseTest):
         self.checkIntersections(setOfIntersections, 20,[36, 5])
 
     def testConsensus6(self):
-        print "\n", greenStr(" Test Consensus with four sets".center(75, '-'))
+        print("\n", greenStr(" Test Consensus with four sets".center(75, '-')))
 
         # preparing and launching the protocol
         pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,

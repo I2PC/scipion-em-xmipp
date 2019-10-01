@@ -26,13 +26,18 @@
 # **************************************************************************
 
 import math
+import os
+from glob import glob
 from shutil import copy
 
-from pyworkflow.utils import Timer
-from pyworkflow.utils.path import cleanPattern, cleanPath
-from pyworkflow.em import *
-import pyworkflow.em.metadata as metadata
+from pyworkflow.utils import Timer, join
+from pyworkflow.utils.path import cleanPattern, cleanPath, makePath, moveFile
 from pyworkflow.protocol.params import *
+
+import pwem.metadata as metadata
+from pwem.protocols import ProtInitialVolume
+from pwem.constants import ALIGN_NONE
+from pwem.objects import SetOfClasses2D, Volume
 
 import xmippLib
 from xmipp3.base import XmippMdRow
@@ -288,8 +293,8 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
         reconsArgs += ' -o %s' % volFn
         reconsArgs += ' --weight -v 0  --sym %s ' % self.symmetryGroup
 
-        print "Number of images for reconstruction: ", metadata.getSize(
-            anglesFn)
+        print("Number of images for reconstruction: ", metadata.getSize(
+            anglesFn))
         t.tic()
         if self.useGpu.get():
             cudaReconArgs = reconsArgs + ' --thr %s' %  self.numberOfThreads.get()
@@ -348,9 +353,9 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
             self.TsCurrent = max([TsOrig, self.maxResolution.get(), TsRefVol])
             self.TsCurrent = self.TsCurrent / 3
             Xdim = self.inputSet.get().getDimensions()[0]
-            self.newXdim = long(round(Xdim * TsOrig / self.TsCurrent))
+            self.newXdim = int(round(Xdim * TsOrig / self.TsCurrent))
             if self.newXdim < 40:
-                self.newXdim = long(40)
+                self.newXdim = int(40)
                 self.TsCurrent = float(TsOrig) * (
                         float(Xdim) / float(self.newXdim))
             if self.newXdim != Xdim:

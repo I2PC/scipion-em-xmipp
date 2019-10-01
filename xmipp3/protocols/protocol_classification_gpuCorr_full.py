@@ -32,15 +32,15 @@ from os.path import join
 from random import randint
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.em import SetOfParticles, ALIGN_2D, ALIGN_NONE
-from pyworkflow.em.protocol import ProtAlign2D
-import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
-from pyworkflow.em.metadata.utils import iterRows, getSize
 from pyworkflow.utils import prettyTime, cleanPath
-from pyworkflow.object import Set
 from pyworkflow.protocol.constants import STATUS_NEW
 import pyworkflow.protocol.constants as const
+
+from pwem.objects import SetOfParticles,  Set
+from pwem.protocols import ProtAlign2D
+from pwem.constants import ALIGN_2D, ALIGN_NONE
+import pwem.metadata as md
 
 import xmippLib
 from xmippLib import Image, MD_APPEND, DT_DOUBLE
@@ -322,7 +322,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
         while i <self.numberOfSplitIterations:
             outImgs,classesOut = self.iterationStep(classesOut,expImgMd,i,True)
             i+=1
-            length = getSize(classesOut)
+            length = md.getSize(classesOut)
             if length == 1:
                 i = 0
 
@@ -352,8 +352,6 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
         if flag_split:
             self.splitStep(inputImgs)
 
-
-
     def generateMdForClassification(self, classesOut):
 
         listNameImgs = self.listNameImgs
@@ -369,7 +367,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
                 numRef = int(name[0:6])
 
                 mdClass = md.MetaData("classes@" + fn)
-                for row in iterRows(mdClass):
+                for row in md.iterRows(mdClass):
                     if mdClass.getValue(md.MDL_REF, row.getObjId()) == numRef:
                         row.setValue(md.MDL_REF, count)
                         row.addToMd(mdNewClasses)
@@ -377,7 +375,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
 
         # Add the two new classes to the list of renumerated classes
         mdClass = md.MetaData("classes@" + classesOut)
-        rows = iterRows(mdClass)
+        rows = md.iterRows(mdClass)
         for row in rows:
             row.setValue(md.MDL_REF, count)
             row.addToMd(mdNewClasses)
@@ -567,7 +565,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
             self._params = {'imgsRef': refSet,
                             'imgsExp': imgsExp,
                             'maxshift': self.maximumShift,
-                            'Nrefs': getSize(refSet),
+                            'Nrefs': md.getSize(refSet),
                             'outDir': self._getExtraPath(),
                             'rootFn': classesOut.split('/')[-1].replace(
                                 '.xmd','')
@@ -804,7 +802,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
         """ Create the SetOfAverages from a given metadata """
         myFileClasses = "classes@" + self._getExtraPath('last_classes.xmd')
         repSet = md.MetaData(myFileClasses)
-        for rep in iterRows(repSet):
+        for rep in md.iterRows(repSet):
             particle = rowToParticle(rep)
             repId = rep.getValue(md.MDL_REF) #rep.getObjId()
             particle.setObjId(repId)

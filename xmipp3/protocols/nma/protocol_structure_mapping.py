@@ -29,19 +29,17 @@ import os
 # from glob import glob
 import numpy as np
 
-import pyworkflow.em.metadata as md
-import pyworkflow.em as em
-from pyworkflow.em.protocol import EMProtocol
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
-from pyworkflow.utils.path import cleanPattern, createLink, moveFile, copyFile, makePath, cleanPath
-# from pyworkflow.object import String
-# from pyworkflow.em.data import SetOfNormalModes
+from pyworkflow.utils.path import cleanPattern, copyFile, makePath
+
+import pwem.metadata as md
+from pwem.objects import Volume, SetOfVolumes
+from pwem.protocols import EMProtocol
 
 import xmippLib
 from xmipp3.convert import getImageLocation
-# from xmipp3.base import XmippMdRow
 from ..pdb.protocol_pseudoatoms_base import XmippProtConvertToPseudoAtomsBase
 from .protocol_nma_base import XmippProtNMABase, NMA_CUTOFF_REL
 
@@ -310,10 +308,10 @@ class XmippProtStructureMapping(XmippProtConvertToPseudoAtomsBase,
             if item is None:
                 break
             itemId = item.getObjId()
-            if isinstance(item, em.Volume):
+            if isinstance(item, Volume):
                 item.outputName = self._getExtraPath('output_vol%06d.vol' % itemId)
                 yield item
-            elif isinstance(item, em.SetOfVolumes):
+            elif isinstance(item, SetOfVolumes):
                 for vol in item:
                     vol.outputName = self._getExtraPath('output_vol%06d_%03d.vol' %
                                                          (itemId, vol.getObjId()))

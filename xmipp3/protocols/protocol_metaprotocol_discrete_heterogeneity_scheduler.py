@@ -29,11 +29,12 @@ import sys, time
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
                                         IntParam, StringParam, LEVEL_ADVANCED)
-from pyworkflow.em.protocol import ProtMonitor
 from pyworkflow.project import Manager
-from pyworkflow.em.data import Volume
 from pyworkflow.protocol import getProtocolFromDb
 import pyworkflow.object as pwobj
+
+from pwem.protocols import ProtMonitor
+from pwem.objects import Volume
 
 from xmipp3.protocols import XmippProtSplitVolumeHierarchical
 from xmipp3.protocols import XmippProtReconstructHeterogeneous

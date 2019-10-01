@@ -26,11 +26,10 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em import *
-
 import xmippLib
-from xmipp3.convert import getImageLocation
-from xmipp3.constants import *
+from pwem.objects import Mask
+from pwem.protocols import ProtCreateMask2D
+
 from .geometrical_mask import *
 
 

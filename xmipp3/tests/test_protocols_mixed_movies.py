@@ -79,7 +79,7 @@ class TestMixedMovies(BaseTest):
         return protMovieImport
 
     def _compareMovies(self, micSet1, micSet2, tolerance=20):
-        print "Comparing micrographs (binary images) from results. "
+        print("Comparing micrographs (binary images) from results. ")
 
         ih = ImageHandler()
         img1 = ih.createImage()
