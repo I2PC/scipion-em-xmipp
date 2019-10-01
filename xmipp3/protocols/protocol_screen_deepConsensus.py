@@ -528,12 +528,14 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                 if baseName not in inputCoordsFnames:
                     inputCoordsFnames[baseName]=["None"]*nCoordsSets
                 inputCoordsFnames[baseName][coord_num]= os.path.join(tmpPosDir, posFname)
-      inputFileStr="#pos_i"
+      inputFileHeader="#pos_i\n"
+      inputFileStr=inputFileHeader
       for baseName in inputCoordsFnames:
          fnames= inputCoordsFnames[baseName]
          inputFileStr+=" ".join(fnames)+"\n"
              
-      assert len(inputFileStr)>0, "Error, no consensus can be computed as there are mismatch in coordinate sets filenames"
+      assert len(inputFileStr)>len(inputFileHeader), "Error, no consensus can be computed as there " \
+                                                     "are mismatch in coordinate sets filenames"
       consensus = -1 if mode=="AND" else 1
       configFname= self._getTmpPath("consensus_%s_inputs.txt"%(mode) )
       with open(configFname, "w") as f:
@@ -545,8 +547,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         
     def loadCoords(self, posCoorsPath, mode):
-        boxSize = self._getBoxSize()
-        inputMics = self._getInputMicrographs()
+
         sqliteName= self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE%mode)+".sqlite"
         if os.path.isfile(self._getExtraPath(sqliteName)):
             cleanPath(self._getExtraPath(sqliteName))
@@ -712,8 +713,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
     def extractParticles(self, mode):
 
-        downFactor = self._getDownFactor()
-        mics_ = self._getInputMicrographs()
         micsFnameSet = {}
         preprocMicsPath= self._getTmpPath(self.PRE_PROC_MICs_PATH)
         for micFname in os.listdir(preprocMicsPath):
@@ -758,9 +757,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           else:
             self.warning("The coord file %s wasn't used for extraction! "
                          % os.path.basename(posFn))
-            self.warning("Maybe you are extracting over a subset of micrographs")
         imgsXmd.write(fnImages)
-        
+
     def __dataDict_toStrs(self, dataDict):
         fnamesStr=[]
         weightsStr=[]
