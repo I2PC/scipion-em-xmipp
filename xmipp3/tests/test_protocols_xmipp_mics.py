@@ -24,16 +24,13 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
-import unittest, sys
-from os.path import join, basename
-
-from pyworkflow.em import *
+from pwem.objects import SetOfMicrographs
+from pwem.protocols import ProtImportMicrographs, ProtCreateStreamData, \
+    ProtImportCoordinates, ProtImportCTF
+from pyworkflow.object import Pointer
 from pyworkflow.tests import *
 from pyworkflow.protocol import getProtocolFromDb
-import pyworkflow.utils as pwutils
 
-from xmipp3.base import *
 from xmipp3.convert import *
 from xmipp3.constants import *
 from xmipp3.protocols import *
@@ -279,7 +276,7 @@ class TestXmippCTFEstimation(TestXmippBase):
 
     def testCTF(self):
         # Estimate CTF on the downsampled micrographs
-        print "Performing CTF..."
+        print("Performing CTF...")
         protCTF = XmippProtCTFMicrographs()
         protCTF.inputMicrographs.set(self.protImport.outputMicrographs)
         protCTF.ctfDownFactor.set(2)

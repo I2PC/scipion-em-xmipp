@@ -21,12 +21,14 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # ***************************************************************************/
 
-import os
-from itertools import izip
+try:
+    from itertools import izip
+except ImportError:
+    izip = zip
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
-from pyworkflow.em import ImageHandler
-from pyworkflow.em.protocol import ProtImportMovies
+from pwem.convert import ImageHandler
+from pwem.protocols import ProtImportMovies
 
 from xmipp3.protocols import (XmippProtMovieCorr, XmippProtOFAlignment,
                               XmippProtMovieAverage)

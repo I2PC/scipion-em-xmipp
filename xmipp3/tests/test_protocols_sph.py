@@ -27,11 +27,11 @@
 
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 
-from pyworkflow.em.protocol import ProtImportVolumes, ProtImportParticles
-from pyworkflow.em.protocol.protocol_sets import ProtSubSet
+from pwem.protocols import ProtImportVolumes, ProtImportParticles, ProtSubSet
 
-from xmipp3.protocols import XmippProtAngularAlignmentSPH, XmippProtVolumeDeformSPH, XmippProtStructureMapSPH
-from xmipp3.protocols.protocol_preprocess.protocol_crop_resize import XmippProtCropResizeParticles
+from xmipp3.protocols import (XmippProtAngularAlignmentSPH,
+                              XmippProtVolumeDeformSPH,
+                              XmippProtStructureMapSPH)
 
 class TestSPHBase(BaseTest):
     @classmethod

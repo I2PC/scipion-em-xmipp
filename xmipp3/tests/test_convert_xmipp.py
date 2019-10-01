@@ -28,8 +28,7 @@
 
 import subprocess
 
-import pyworkflow as pw
-from pyworkflow.em.data import SetOfVolumes
+from pwem.objects import SetOfMicrographs
 from pyworkflow.tests import *
 from pyworkflow.utils.properties import colorText
 
@@ -38,7 +37,6 @@ import xmippLib
 import xmipp3
 from xmipp3.base import *
 from xmipp3.convert import *
-from xmipp3.constants import *
 
 
 class TestBasic(BaseTest):
@@ -1057,6 +1055,6 @@ class TestSetConvert(BaseTest):
         writeSetOfDefocusGroups(setOfDefocus, fnXmipp)
         mdAux = xmippLib.MetaData(fnXmipp)
         md.write(fnScipion)
-        print "Comparing metadatas: \n%s\n%s" % (fnXmipp, fnScipion)
+        print("Comparing metadatas: \n%s\n%s" % (fnXmipp, fnScipion))
         self.assertEqual(md, mdAux, "test writeSetOfDefocusGroups fails")
        

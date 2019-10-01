@@ -25,7 +25,7 @@
 # **************************************************************************
 
 from pyworkflow.tests import *
-from pyworkflow.em.protocol import ProtImportVolumes
+from pwem.protocols import ProtImportVolumes
 
 from xmipp3.protocols import XmippProtMLTomo
 

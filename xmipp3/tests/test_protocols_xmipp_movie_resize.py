@@ -28,8 +28,8 @@
 from pyworkflow.tests import *
 from pyworkflow.protocol import getProtocolFromDb
 from pyworkflow.protocol.constants import STATUS_FINISHED
-from pyworkflow.em.protocol import ProtCreateStreamData, ProtImportMovies
-from pyworkflow.em.protocol.protocol_create_stream_data import SET_OF_MOVIES
+from pwem.protocols import ProtCreateStreamData, ProtImportMovies
+from pwem.protocols.protocol_create_stream_data import SET_OF_MOVIES
 
 from xmipp3.protocols import XmippProtMovieResize
 

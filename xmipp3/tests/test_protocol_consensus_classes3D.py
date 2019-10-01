@@ -30,8 +30,8 @@ import random
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pyworkflow.utils import redStr, greenStr, magentaStr
-from pyworkflow.em.data import Class3D
-from pyworkflow.em.protocol.protocol_import import ProtImportParticles
+from pwem.objects import Class3D
+from pwem.protocols import ProtImportParticles
 
 from xmipp3.protocols import XmippProtConsensusClasses3D
 

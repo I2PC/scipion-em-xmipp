@@ -29,9 +29,10 @@
 from __future__ import print_function
 
 from pyworkflow.tests.test_utils import wait
-from pyworkflow.utils import greenStr, magentaStr, importFromPlugin
+from pyworkflow.utils import greenStr, magentaStr
+from pyworkflow.plugin import Domain
 from pyworkflow.tests import *
-from pyworkflow.em.protocol import *
+import pwem.protocol as emprot
 
 import xmipp3
 from xmipp3.base import *
@@ -60,7 +61,7 @@ class TestXmippBase(BaseTest):
     def runImportParticles(cls, pattern, samplingRate, checkStack=False,
                            phaseFlip=False):
         """ Run an Import particles protocol. """
-        cls.protImport = cls.newProtocol(ProtImportParticles, 
+        cls.protImport = cls.newProtocol(emprot.ProtImportParticles,
                                          filesPath=pattern,
                                          samplingRate=samplingRate,
                                          checkStack=checkStack,
@@ -75,7 +76,7 @@ class TestXmippBase(BaseTest):
     @classmethod
     def runImportAverages(cls, pattern, samplingRate, checkStack=False):
         """ Run an Import particles protocol. """
-        cls.protImportAvg = cls.newProtocol(ProtImportAverages,
+        cls.protImportAvg = cls.newProtocol(emprot.ProtImportAverages,
                                             filesPath=pattern,
                                             samplingRate=samplingRate,
                                             checkStack=checkStack)
@@ -89,7 +90,7 @@ class TestXmippBase(BaseTest):
     @classmethod
     def runImportVolume(cls, pattern, samplingRate, checkStack=False):
         """ Run an Import particles protocol. """
-        cls.protImport = cls.newProtocol(ProtImportVolumes, 
+        cls.protImport = cls.newProtocol(emprot.ProtImportVolumes,
                                          filesPath=pattern,
                                          samplingRate=samplingRate,
                                          checkStack=checkStack)
@@ -327,7 +328,11 @@ class TestXmippScreenParticles(TestXmippBase):
         return prot2
 
     def test_screenPart(self):
-        from itertools import izip
+        try:
+            from itertools import izip
+        except ImportError:
+            izip = zip
+
         print('Running Screen particles test')
         xpsp = XmippProtScreenParticles  # short notation
         # First test for check I/O. Input and Output SetOfParticles must
@@ -409,7 +414,7 @@ class TestXmippScreenParticles(TestXmippBase):
         '\t --> Particles rejected using maxZScore(2.5) method and percentage(5%) one are the same')
 
         print("Start Streaming Particles")
-        protStream = self.newProtocol(ProtCreateStreamData, setof=3,
+        protStream = self.newProtocol(emprot.ProtCreateStreamData, setof=3,
                                       creationInterval=5, nDim=76,
                                       groups=10)
         protStream.inputParticles.set(self.protImport.outputParticles)
@@ -482,7 +487,7 @@ class TestXmippTriggerParticles(TestXmippBase):
 
     def test_triggerPart(self):
         print("Start Streaming Particles")
-        protStream = self.newProtocol(ProtCreateStreamData, setof=3,
+        protStream = self.newProtocol(emprot.ProtCreateStreamData, setof=3,
                                       creationInterval=8, nDim=76, groups=10)
         protStream.inputParticles.set(self.protImport.outputParticles)
         self.proj.launchProtocol(protStream, wait=False)
@@ -636,9 +641,9 @@ class TestXmippCropResizeWAngles(TestXmippBase):
 
     def test_CropResizeWAngles(self):
         print("Import Set of particles with angles")
-        prot1 = self.newProtocol(ProtImportParticles,
+        prot1 = self.newProtocol(emprot.ProtImportParticles,
                                  objLabel='from scipion (to-reconstruct)',
-                                 importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
+                                 importFrom=emprot.ProtImportParticles.IMPORT_FROM_SCIPION,
                                  sqliteFile=self.dataset.getFile('import/case2/particles.sqlite'),
                                  magnification=10000,
                                  samplingRate=7.08
@@ -872,9 +877,9 @@ class TestXmippDenoiseParticles(TestXmippBase):
     """Check protocol Denoise Particles"""
     @classmethod
     def setUpClass(cls):
-        ProtRelionClassify2D = importFromPlugin('relion.protocols', 'ProtRelionClassify2D', doRaise=True)
-        ProtRelionPreprocessParticles = importFromPlugin('relion.protocols', 'ProtRelionPreprocessParticles', doRaise=True)
-        isVersion2 = importFromPlugin('relion', 'Plugin', doRaise=True).isVersion2Active()
+        ProtRelionClassify2D = Domain.importFromPlugin('relion.protocols', 'ProtRelionClassify2D', doRaise=True)
+        ProtRelionPreprocessParticles = Domain.importFromPlugin('relion.protocols', 'ProtRelionPreprocessParticles', doRaise=True)
+        isVersion2 = Domain.importFromPlugin('relion', 'Plugin', doRaise=True).isVersion2Active()
         # To denoise particles we need to import the particles and the
         # classes, and particles must be aligned with classes. As this
         # is the usual situation after a CL2D, we just run that protocol.
@@ -954,7 +959,7 @@ class TestAlignmentAssign(TestXmippBase):
         cls.align2D = cls.runCL2DAlign(cls.protImport.outputParticles)
 
     def test_alignment_assign_samesize(self):
-        protAssign = self.newProtocol(ProtAlignmentAssign)
+        protAssign = self.newProtocol(emprot.ProtAlignmentAssign)
         protAssign.setObjLabel("Assign alignment of same size")
         protAssign.inputParticles.set(self.protImport.outputParticles)
         protAssign.inputAlignment.set(self.align2D.outputParticles)
@@ -971,7 +976,7 @@ class TestAlignmentAssign(TestXmippBase):
                                       resizeDim=50)
         protResize.inputParticles.set(self.protImport.outputParticles)
         self.launchProtocol(protResize)
-        protAssign = self.newProtocol(ProtAlignmentAssign)
+        protAssign = self.newProtocol(emprot.ProtAlignmentAssign)
         protAssign.setObjLabel("Assign alignment of different size")
         protAssign.inputParticles.set(protResize.outputParticles)
         protAssign.inputAlignment.set(self.align2D.outputParticles)
@@ -1140,7 +1145,7 @@ class TestXmippBreakSym(TestXmippBase):
         partSet.write()
 
         print("import particles")
-        protImport = self.newProtocol(ProtImportParticles, 
+        protImport = self.newProtocol(emprot.ProtImportParticles,
                                          sqliteFile=fileTmp.name, samplingRate=1, importFrom=4,
                                          checkStack=False, haveDataBeenPhaseFlipped=False)
         self.launchProtocol(protImport)
@@ -1169,8 +1174,8 @@ class TestXmippCorrectWiener2D(TestXmippBase):
         TestXmippBase.setData()
     
     def test_CorrectWiener(self):
-        prot1 = self.newProtocol(ProtImportParticles,
-                                 importFrom=ProtImportParticles.IMPORT_FROM_XMIPP3,
+        prot1 = self.newProtocol(emprot.ProtImportParticles,
+                                 importFrom=emprot.IMPORT_FROM_XMIPP3,
                                  mdFile=self.dataset.getFile('particles/sphere_128.xmd'),
                                  magnification=10000,
                                  samplingRate=1,
@@ -1191,9 +1196,9 @@ class TestXmippSubtractProjection(TestXmippBase):
         cls.dsRelion = DataSet.getDataSet('relion_tutorial')
     
     def test_subtract(self):
-        protParts = self.newProtocol(ProtImportParticles,
+        protParts = self.newProtocol(emprot.ProtImportParticles,
                                      objLabel='from relion auto-refine',
-                                     importFrom=ProtImportParticles.IMPORT_FROM_RELION,
+                                     importFrom=emprot.ProtImportParticles.IMPORT_FROM_RELION,
                                      starFile=self.dsRelion.getFile('import/refine3d/extra/relion_it001_data.star'),
                                      magnification=10000,
                                      samplingRate=7.08,
@@ -1202,7 +1207,7 @@ class TestXmippSubtractProjection(TestXmippBase):
         self.launchProtocol(protParts)
         self.assertEqual(60, protParts.outputParticles.getXDim())
         
-        protVol = self.newProtocol(ProtImportVolumes,
+        protVol = self.newProtocol(emprot.ProtImportVolumes,
                                    filesPath=self.dsRelion.getFile('volumes/reference.mrc'),
                                    samplingRate=7.08)
         self.launchProtocol(protVol)

@@ -31,14 +31,13 @@ import math
 import os
 from tempfile import mkstemp
 
-from pyworkflow.em.convert import ImageHandler
-from pyworkflow.em.data import Transform
-from pyworkflow.em.convert import Ccp4Header
-from pyworkflow.em.protocol import ProtImportVolumes
-from pyworkflow.em.convert.symmetry import Icosahedron
 from pyworkflow.tests import BaseTest, setupTestProject
 from pyworkflow.utils import runJob
-from pyworkflow.em.constants import (SYM_I222r, SYM_I222, SCIPION_SYM_NAME,
+
+from pwem.convert import ImageHandler, Ccp4Header, Icosahedron
+from pwem.objects import Transform
+from pwem.protocols import ProtImportVolumes
+from pwem.constants import (SYM_I222r, SYM_I222, SCIPION_SYM_NAME,
                                      SYM_In25, SYM_In25r, SYM_CYCLIC,
                                      SYM_DIHEDRAL, SYM_TETRAHEDRAL,
                                      SYM_OCTAHEDRAL)
