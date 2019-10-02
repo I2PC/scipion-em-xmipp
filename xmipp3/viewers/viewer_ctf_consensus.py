@@ -25,8 +25,8 @@
 # **************************************************************************
 
 from xmipp3.protocols.protocol_ctf_consensus import XmippProtCTFConsensus
-from pyworkflow.em.viewers import EmPlotter, ObjectView
-from pyworkflow.em.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE
+from pwem.viewers import EmPlotter, ObjectView
+from pwem.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE
 from pyworkflow.protocol.params import IntParam, LabelParam
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 

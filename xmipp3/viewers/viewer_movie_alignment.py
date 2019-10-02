@@ -25,7 +25,7 @@
 # **************************************************************************
 
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
-import pyworkflow.em.viewers.showj as showj
+import pwem.viewers.showj as showj
 
 from xmipp3.protocols.protocol_movie_opticalflow import (XmippProtOFAlignment,
                                                  OBJCMD_MOVIE_ALIGNCARTESIAN)

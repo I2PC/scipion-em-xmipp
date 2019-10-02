@@ -30,10 +30,9 @@ visualization program.
 
 import glob
 
-from pyworkflow.em import *
+from pwem.viewers import DataView
 from pyworkflow.gui.text import *
-from pyworkflow.protocol.params import LabelParam
-from pyworkflow.gui.dialog import showError, showWarning
+from pyworkflow.protocol.params import LabelParam, StringParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 
 from xmipp3.protocols.protocol_cltomo import XmippProtCLTomo
@@ -73,7 +72,7 @@ class XmippCLTomoViewer(ProtocolViewer):
                     listOfLevels = []
                     try:
                         listOfLevels = self._getListFromRangeString(self.showSeveralLevels.get())
-                    except Exception, ex:
+                    except Exception as ex:
                         errors.append('Invalid levels range.')
                         
                     #lastLevel = int(re.search('level_(\d\d)',lastLevelFile).group(1))

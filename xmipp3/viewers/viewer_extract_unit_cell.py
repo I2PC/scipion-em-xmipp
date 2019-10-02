@@ -31,11 +31,11 @@ from os.path import exists
 
 import pyworkflow.em as em
 import pyworkflow.protocol.params as params
-from pyworkflow.em.constants import SYM_I222
-from pyworkflow.em.convert import ImageHandler
-from pyworkflow.em.data import (SetOfVolumes)
+from pwem.constants import SYM_I222
+from pwem.convert import ImageHandler
+from pwem.objects import (SetOfVolumes)
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-from pyworkflow.em.viewers.viewer_chimera import Chimera, ChimeraView
+from pwem.viewers import Chimera, ChimeraView
 from xmipp3.protocols.protocol_extract_unit_cell import XmippProtExtractUnit
 
 

@@ -26,13 +26,12 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
-from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-import pyworkflow.em.viewers.showj as showj
+from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
+from pwem.viewers import showj, DataView
 
 import xmippLib
 from xmipp3.protocols.protocol_reconstruct_swarm import XmippProtReconstructSwarm
-from .viewer import XmippViewer, ObjectView, DataView
+from .viewer import XmippViewer, ObjectView
 
 
 class XmippReconstructSwarmViewer(XmippViewer):

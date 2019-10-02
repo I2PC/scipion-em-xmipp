@@ -33,18 +33,20 @@ from pyworkflow.utils import getExt, removeExt
 from os.path import abspath
 
 from pyworkflow.gui.plotter import Plotter
-from pyworkflow.em.viewers import LocalResolutionViewer
-from pyworkflow.em.constants import COLOR_JET, COLOR_OTHER, COLOR_CHOICES, AX_Z
 from pyworkflow.protocol.params import (LabelParam, StringParam, EnumParam,
                                         IntParam, LEVEL_ADVANCED)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
-from pyworkflow.em.viewers import ChimeraView, DataView
-from pyworkflow.em.metadata import MetaData, MDL_X, MDL_COUNT
-from pyworkflow.em import ImageHandler
+from pwem.viewers import ChimeraView, DataView
+from pwem.metadata import MetaData, MDL_X, MDL_COUNT
+from pwem.convert import ImageHandler
+from pwem.viewers import LocalResolutionViewer
+from pwem.constants import COLOR_JET, COLOR_OTHER, COLOR_CHOICES, AX_Z
 
 from .plotter import XmippPlotter
-from xmipp3.protocols.protocol_resolution_monotomo import \
-        XmippProtMonoTomo, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM, FN_FILTERED_MAP
+from xmipp3.protocols.protocol_resolution_monotomo import (XmippProtMonoTomo,
+                                                           OUTPUT_RESOLUTION_FILE,
+                                                           FN_METADATA_HISTOGRAM,
+                                                           FN_FILTERED_MAP)
 
 
 binaryCondition = ('(colorMap == %d) ' % (COLOR_OTHER))
@@ -158,7 +160,7 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
 
         #The slices to be shown are close to the center. Volume size is divided in 
         # 9 segments, the fouth central ones are selected i.e. 3,4,5,6
-        for i in xrange(3,7): 
+        for i in range(3, 7):
             sliceNumber = self.getSlice(i, imgData)
             a = xplotter.createSubPlot("Slice %s" % (sliceNumber+1), '', '')
             matrix = self.getSliceImage(imgData, sliceNumber, self._getAxis())
@@ -181,7 +183,7 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
 
         #The slices to be shown are close to the center. Volume size is divided in 
         # 9 segments, the fouth central ones are selected i.e. 3,4,5,6
-        for i in xrange(3,7): 
+        for i in range(3, 7):
             sliceNumber = self.getSlice(i, imgData)
             a = xplotter.createSubPlot("Slice %s" % (sliceNumber+1), '', '')
             matrix = self.getSliceImage(imgData, sliceNumber, self._getAxis())

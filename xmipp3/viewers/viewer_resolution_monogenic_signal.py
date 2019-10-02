@@ -24,28 +24,32 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import os
 
 import matplotlib.pyplot as plt
 from matplotlib import cm
 import matplotlib.colors as mcolors
 from pyworkflow.utils import getExt, removeExt, replaceExt
 from os.path import abspath
+import numpy as np
 
-from pyworkflow.em.viewers import LocalResolutionViewer, EmPlotter
 from pyworkflow.protocol.params import (LabelParam, StringParam, EnumParam,
                                         IntParam, LEVEL_ADVANCED)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
-from pyworkflow.em.viewers import ChimeraView, DataView
-from pyworkflow.em.metadata import MetaData, MDL_X, MDL_COUNT
 
+from xmipp3.viewers.viewer_resolution_directional import (COLOR_OTHER,
+                                                          COLOR_CHOICES,
+                                                          COLOR_JET, AX_Z)
+
+from pwem.convert import Ccp4Header, ImageHandler
+from pwem.viewers import (LocalResolutionViewer, EmPlotter, ChimeraView,
+                          DataView, Chimera)
+from pwem.metadata import MetaData, MDL_X, MDL_COUNT
+
+from xmipp3.protocols.protocol_resolution_monogenic_signal import (
+        XmippProtMonoRes, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM,
+        OUTPUT_RESOLUTION_FILE_CHIMERA, CHIMERA_RESOLUTION_VOL)
 from .plotter import XmippPlotter
-from xmipp3.protocols.protocol_resolution_monogenic_signal import \
-        XmippProtMonoRes, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM, \
-        OUTPUT_RESOLUTION_FILE_CHIMERA, CHIMERA_RESOLUTION_VOL
-
-from pyworkflow.em.data import *
-from pyworkflow.em.convert import Ccp4Header
-from pyworkflow.em.viewers.viewer_chimera import Chimera
 
 
 binaryCondition = ('(colorMap == %d) ' % (COLOR_OTHER))
@@ -150,7 +154,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
                                                      %self._getAxis())
         #The slices to be shown are close to the center. Volume size is divided in 
         # 9 segments, the fouth central ones are selected i.e. 3,4,5,6
-        for i in xrange(3,7): 
+        for i in range(3, 7):
             sliceNumber = self.getSlice(i, imgData)
             a = xplotter.createSubPlot("Slice %s" % (sliceNumber+1), '', '')
             matrix = self.getSliceImage(imgData, sliceNumber, self._getAxis())

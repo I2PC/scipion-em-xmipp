@@ -32,9 +32,8 @@ import os
 
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import LabelParam
-import pyworkflow.em as em
 from pyworkflow.protocol.params import EnumParam, StringParam
-from pyworkflow.em.viewers import ClassesView
+from pwem.viewers import ClassesView
 from xmipp3.protocols.protocol_ml2d import XmippProtML2D
 
 

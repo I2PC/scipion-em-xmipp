@@ -26,8 +26,8 @@
 
 import os
 
-from pyworkflow.em.viewers import ObjectView
-from pyworkflow.em.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER, SORT_BY
+from pwem.viewers import ObjectView
+from pwem.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER, SORT_BY
 from pyworkflow.protocol.params import IntParam, LabelParam
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 

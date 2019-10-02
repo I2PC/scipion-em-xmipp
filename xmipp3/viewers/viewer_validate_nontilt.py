@@ -25,10 +25,11 @@
 # **************************************************************************
 
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.em.viewers.showj import RENDER, ORDER, VISIBLE, MODE, MODE_MD
-from pyworkflow.em.viewers import DataView
 from pyworkflow.protocol.params import LabelParam, StringParam
-import pyworkflow.em.metadata as md
+
+from pwem.viewers.showj import RENDER, ORDER, VISIBLE, MODE, MODE_MD
+from pwem.viewers import DataView
+import pwem.metadata as md
 
 from .plotter import XmippPlotter
 from xmipp3.protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
