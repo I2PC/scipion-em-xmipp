@@ -258,7 +258,7 @@ Examples:
         view=None
         if exists(fnAngles):
             fnAnglesSqLite = join(fnDir,"angles.sqlite")
-            from pyworkflow.em.metadata.utils import getSize
+            from pwem.metadata import getSize
             self.createAngDistributionSqlite(fnAnglesSqLite, getSize(fnAngles), itemDataIterator=self._iterAngles(fnAngles))
             view = ChimeraClientView(join(fnDir,"volumeAvg.mrc"), showProjection=True, angularDistFile=fnAnglesSqLite, spheresDistance=self.spheresScale.get())
         return view
@@ -269,9 +269,9 @@ Examples:
         view=None
         if exists(fnAngles):
             fnAnglesSqLite = join(fnDir,"angles.sqlite")
-            from pyworkflow.em.viewers import EmPlotter
+            from pwem.viewers import EmPlotter
             if not exists(fnAnglesSqLite):
-                from pyworkflow.em.metadata.utils import getSize
+                from pwem.metadata import getSize
                 self.createAngDistributionSqlite(fnAnglesSqLite, getSize(fnAngles), itemDataIterator=self._iterAngles(fnAngles))
             view = EmPlotter(x=1, y=1, mainTitle="Iteration %d" % it, windowTitle="Angular distribution")
             view.plotAngularDistributionFromMd(fnAnglesSqLite, 'iter %d' % it)

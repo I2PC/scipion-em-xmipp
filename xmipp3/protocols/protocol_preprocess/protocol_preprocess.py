@@ -336,8 +336,7 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
 
 class XmippProtPreprocessVolumes(XmippProcessVolumes):
     """ Protocol for Xmipp-based preprocess for volumes """
-    import pyworkflow.em.metadata as md
-    
+
     _label = 'preprocess volumes'
     
     # Aggregation constants

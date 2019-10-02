@@ -29,7 +29,6 @@
 
 
 import xmippLib
-from pyworkflow.em import *
 from pyworkflow.protocol.params import IntParam, FloatParam, EnumParam
 from pyworkflow.utils import *
 from pyworkflow.utils.path import makePath, cleanPath, moveFile

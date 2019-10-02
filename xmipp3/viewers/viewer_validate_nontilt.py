@@ -61,7 +61,6 @@ class XmippValidateNonTiltViewer(ProtocolViewer):
                 }        
         
     def _viewVolume(self, e=None):
-        import pyworkflow.em.metadata as md 
         viewLabels = 'id enabled _index _filename _xmipp_weight'
         cm = DataView(self.protocol.outputVolumes.getFileName(), viewParams={MODE : MODE_MD,
                                                                              ORDER : viewLabels,

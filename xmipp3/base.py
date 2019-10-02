@@ -103,7 +103,7 @@ class XmippProtocol:
         return getattr(self, inputName + 'Xmipp', getattr(self, inputName))
         
 
-class XmippMdRow():
+class XmippMdRow:
     """ Support Xmipp class to store label and value pairs 
     corresponding to a Metadata row. 
     """

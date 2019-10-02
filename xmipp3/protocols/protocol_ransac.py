@@ -259,7 +259,7 @@ class XmippProtRansac(ProtInitialVolume):
         cleanPath(self._getTmpPath(fnBase+'.xmd'))
     
     def reconstructStep(self, fnRoot):
-        from pyworkflow.em.metadata.utils import getSize
+        from pwem.metadata import getSize
         if os.path.exists(fnRoot+".xmd"):
             Nimages=getSize(fnRoot+".xmd")
             if Nimages>0:

@@ -35,7 +35,7 @@ from pyworkflow.object import Float
 from pwem.convert import ImageHandler
 from pyworkflow.utils import getExt
 from pwem.objects import Volume
-import pyworkflow.em.metadata as md
+import pwem.metadata as md
 
 MONORES_METHOD_URL = 'http://github.com/I2PC/scipion/wiki/XmippProtMonoRes'
 OUTPUT_RESOLUTION_FILE = 'resolutionMap'

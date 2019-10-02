@@ -29,7 +29,6 @@ import os
 from distutils.spawn import find_executable
 from os.path import exists
 
-import pyworkflow.em as em
 import pyworkflow.protocol.params as params
 from pwem.constants import SYM_I222
 from pwem.convert import ImageHandler

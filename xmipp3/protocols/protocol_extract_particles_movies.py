@@ -29,7 +29,6 @@
 
 import os
 
-import pyworkflow.em.metadata as md
 from pwem.objects import SetOfCoordinates
 
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
@@ -37,6 +36,7 @@ from pyworkflow.protocol.params import (PointerParam, IntParam, BooleanParam,
                                         Positive, FloatParam, EnumParam)
 from pyworkflow.utils.path import cleanPath
 
+import pwem.metadata as md
 from pwem.convert import ImageHandler
 from pwem.protocols import ProtExtractMovieParticles, ProtProcessMovies
 

@@ -1124,7 +1124,7 @@ class TestXmippBreakSym(TestXmippBase):
     
     def test_AngBreakSymmetry(self):
         from tempfile import NamedTemporaryFile
-        import pyworkflow.em.metadata as md
+        import pwem.metadata as md
         
         fileTmp = NamedTemporaryFile(delete=False, suffix='.sqlite')
         partSet = SetOfParticles(filename=fileTmp.name)
