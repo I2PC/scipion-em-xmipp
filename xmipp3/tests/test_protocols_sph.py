@@ -24,7 +24,6 @@
 # *
 # **************************************************************************
 
-
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 
 from pwem.protocols import ProtImportVolumes, ProtImportParticles, ProtSubSet

@@ -36,7 +36,7 @@ import pwem.metadata as md
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes
 from xmipp3.utils import validateDLtoolkit
 
-N_MAX_NEG_SETS= 5
+N_MAX_NEG_SETS = 5
 
 class XmippProtScreenDeepLearning(ProtProcessParticles):
     """ Protocol for screening particles using deep learning. """

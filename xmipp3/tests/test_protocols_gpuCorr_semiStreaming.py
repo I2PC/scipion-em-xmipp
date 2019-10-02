@@ -26,7 +26,7 @@ import time
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pyworkflow.plugin import Domain
 from pwem.protocols import (ProtImportAverages, ProtImportMicrographs,
-                                    ProtCreateStreamData)
+                            ProtCreateStreamData)
 from pwem.protocols.protocol_create_stream_data import SET_OF_MICROGRAPHS
 from pyworkflow.protocol import getProtocolFromDb
 

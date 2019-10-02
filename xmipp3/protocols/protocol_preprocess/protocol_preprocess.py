@@ -37,7 +37,7 @@ from xmipp3.convert import writeSetOfParticles
 from .protocol_process import XmippProcessParticles, XmippProcessVolumes
 
 
-class XmippPreprocessHelper():
+class XmippPreprocessHelper:
     """ 
     Helper class that contains some Protocol utilities methods
     used by both  XmippProtPreprocessParticles and XmippProtPreprocessVolumes.

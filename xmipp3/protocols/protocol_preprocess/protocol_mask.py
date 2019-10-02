@@ -34,7 +34,8 @@ from xmipp3.constants import *
 from .geometrical_mask import XmippGeometricalMask3D, XmippGeometricalMask2D
 from .protocol_process import XmippProcessParticles, XmippProcessVolumes
 
-class XmippProtMask():
+
+class XmippProtMask:
     """ This class implement the common features for applying a mask with Xmipp either SetOfParticles, Volume or SetOfVolumes objects.
     """
     

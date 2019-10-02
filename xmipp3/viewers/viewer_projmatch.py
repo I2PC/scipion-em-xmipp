@@ -30,8 +30,6 @@ This module implement the wrappers aroung Xmipp ML2D protocol
 visualization program.
 """
 
-import numpy as np
-
 from pyworkflow.protocol.executor import StepExecutor
 from pyworkflow.viewer import  ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pwem.viewers import (DataView, EmPlotter, showj, ChimeraClientView,

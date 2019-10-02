@@ -37,7 +37,8 @@ from pyworkflow import VERSION_1_1
 from pyworkflow.gui.project import ProjectWindow
 
 import pwem.metadata as md
-from pwem.protocols import ProtAlignMovies, createAlignmentPlot
+from pwem.protocols.protocol_align_movies import (ProtAlignMovies,
+                                                  createAlignmentPlot)
 
 from xmipp3.convert import writeMovieMd
 from xmipp3 import Plugin

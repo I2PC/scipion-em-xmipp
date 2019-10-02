@@ -42,7 +42,7 @@ from pwem.protocols import ProtCTFMicrographs
 import pwem.metadata as md
 
 from xmipp3.utils import isMdEmpty
-from xmipp3.convert import mdToCTFModel, readCTFModel
+from xmipp3.convert import readCTFModel
 
 from xmippLib import Image
 

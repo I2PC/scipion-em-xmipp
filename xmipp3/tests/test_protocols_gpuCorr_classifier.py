@@ -22,16 +22,16 @@
 # ***************************************************************************/
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
-from pyworkflow.plugin import Plugin
+from pyworkflow.plugin import Domain
 from pwem.protocols import ProtImportAverages, ProtImportMicrographs, ProtSubSet
 
 from xmipp3.protocols import XmippProtPreprocessMicrographs
 from xmipp3.protocols.protocol_extract_particles import *
 from xmipp3.protocols.protocol_classification_gpuCorr import *
 
-ProtCTFFind = Plugin.importFromPlugin('grigoriefflab.protocols', 'ProtCTFFind',
+ProtCTFFind = Domain.importFromPlugin('grigoriefflab.protocols', 'ProtCTFFind',
                                       doRaise=True)
-SparxGaussianProtPicking = Plugin.importFromPlugin('eman2.protocols',
+SparxGaussianProtPicking = Domain.importFromPlugin('eman2.protocols',
                                                    'SparxGaussianProtPicking',
                                                    doRaise=True)
 

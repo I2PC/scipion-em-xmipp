@@ -32,7 +32,7 @@ from pyworkflow.tests.test_utils import wait
 from pyworkflow.utils import greenStr, magentaStr
 from pyworkflow.plugin import Domain
 from pyworkflow.tests import *
-import pwem.protocol as emprot
+import pwem.protocols as emprot
 
 import xmipp3
 from xmipp3.base import *

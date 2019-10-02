@@ -24,7 +24,6 @@
 # *
 # ******************************************************************************
 
-import re
 from os.path import join, dirname, exists
 from glob import glob
 

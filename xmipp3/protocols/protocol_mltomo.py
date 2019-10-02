@@ -41,7 +41,7 @@ import pwem.metadata as md
 
 from xmipp3 import Plugin
 from xmipp3.convert import (readSetOfClassesVol, getImageLocation,
-                       writeSetOfVolumes, rowToAlignment)
+                            writeSetOfVolumes, rowToAlignment)
 
 
 MISSING_WEDGE_Y = 0

@@ -24,7 +24,7 @@
 # *
 # ******************************************************************************
 
-from shutil import copy, copytree
+from shutil import copy
 from os.path import exists, getmtime
 from datetime import datetime
 from os import system, popen, mkdir, listdir
@@ -232,8 +232,6 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
             outputStep.addPrerequisites(*deps)
         self.updateSteps()
 
-
-
     def _checkNewOutput(self):
         """ Check for already done files and update the output set. """
 
@@ -259,7 +257,6 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(STATUS_NEW)
-
 
     def classifyStep(self, expImgMd, flag_split, reclassification):
 
@@ -302,7 +299,6 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
 
         self.checkSplit()
 
-
         self.lastDate = self.particlesToProcess[lastIm].getObjCreation()
         self._saveCreationTimeFile(self.lastDate)
 
@@ -310,9 +306,6 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
             self.particlesToProcess.pop(0)
 
         self._savingCheckPoint()
-
-
-
 
     # --------------------------- UTILS functions ------------------------------
 
@@ -327,8 +320,6 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
                 i = 0
 
         self.generateMdForClassification(classesOut)
-
-
 
     def generateInput(self, inputImgs, flag_split, reclassification,
                       particlesToProcess):
@@ -957,9 +948,6 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
             for fn in listFolder:
                 copy(self._getExtraPath(join('checkpoint',fn)),
                      self._getExtraPath(fn))
-
-
-
 
     # --------------------------- INFO functions -------------------------------
     def _validate(self):

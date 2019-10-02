@@ -37,8 +37,8 @@ import pyworkflow.protocol.params as params
 from pwem.protocols import ProtAnalysis3D
 
 from pyworkflow.protocol.params import NumericRangeParam
-import pwem as em
 import pwem.metadata as md
+from pwem.constants import ALIGN_PROJ
 
 from xmipp3.base import XmippMdRow
 from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
@@ -260,4 +260,4 @@ class XmippProtAlignmentNMA(ProtAnalysis3D):
         setXmippAttributes(item, row, md.MDL_ANGLE_ROT, md.MDL_ANGLE_TILT,
                            md.MDL_ANGLE_PSI, md.MDL_SHIFT_X,
                            md.MDL_SHIFT_Y, md.MDL_FLIP, md.MDL_NMA, md.MDL_COST)
-        createItemMatrix(item, row, align=em.ALIGN_PROJ)
+        createItemMatrix(item, row, align=ALIGN_PROJ)

@@ -32,7 +32,7 @@ from pyworkflow.utils.path import (findRootFrom, copyTree, createLink,
 from .convert import *
 
 
-class XmippImport():
+class XmippImport:
     """ Class used to import different kind of objects
     from Xmipp projects into Scipion.
     """

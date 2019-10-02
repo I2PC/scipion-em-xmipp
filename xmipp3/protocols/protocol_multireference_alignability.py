@@ -24,10 +24,10 @@
 # *
 # **************************************************************************
 
-from os.path import join, isfile
+from os.path import join
 from shutil import copyfile
 
-from pyworkflow.object import Float, String
+from pyworkflow.object import Float
 from pyworkflow.protocol.params import (PointerParam, FloatParam, StringParam,
                                         BooleanParam, IntParam, LEVEL_ADVANCED)
 from pyworkflow.utils.path import moveFile, makePath

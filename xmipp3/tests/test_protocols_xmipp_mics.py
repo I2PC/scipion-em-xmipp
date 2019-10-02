@@ -25,8 +25,8 @@
 # *
 # **************************************************************************
 from pwem.objects import SetOfMicrographs
-from pwem.protocols import ProtImportMicrographs, ProtCreateStreamData, \
-    ProtImportCoordinates, ProtImportCTF
+from pwem.protocols import (ProtImportMicrographs, ProtCreateStreamData,
+                            ProtImportCoordinates, ProtImportCTF)
 from pyworkflow.object import Pointer
 from pyworkflow.tests import *
 from pyworkflow.protocol import getProtocolFromDb

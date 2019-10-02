@@ -24,8 +24,6 @@
 # *
 # **************************************************************************
 
-import unittest, sys
-
 from pwem.protocols import ProtImportVolumes, exists
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 

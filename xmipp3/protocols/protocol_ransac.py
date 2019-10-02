@@ -38,7 +38,8 @@ from pwem.protocols import ProtInitialVolume
 from pwem.objects import SetOfClasses2D
 
 import xmippLib
-from xmipp3.convert import writeSetOfClasses2D, readSetOfVolumes, writeSetOfParticles
+from xmipp3.convert import (writeSetOfClasses2D, readSetOfVolumes,
+                            writeSetOfParticles)
 from xmipp3.utils import isMdEmpty
 
 

@@ -24,7 +24,7 @@
 # *
 # **************************************************************************
 
-import sys, time
+import time
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,

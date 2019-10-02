@@ -35,7 +35,7 @@ from pwem.convert import ImageHandler
 
 import xmippLib
 from xmipp3.convert import (XmippMdRow, particleToRow,
-                       getImageLocation, geometryFromMatrix)
+                            getImageLocation, geometryFromMatrix)
 
 
 class XmippProtSubtractProjection(ProtOperateParticles):

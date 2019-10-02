@@ -62,8 +62,6 @@ class HashTableDict:
         if not idx in self.dict[idxDict]:
             self.dict[idxDict][idx]=1
 
-
-
 class XmippProtStrGpuCrrSimple(ProtAlign2D):
     """ 2D alignment in semi streaming using Xmipp GPU Correlation.
     A previous set of classes must be provided to include the new images in the

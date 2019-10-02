@@ -27,7 +27,7 @@
 # *
 # **************************************************************************
 
-from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
+from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
 from pwem.viewers import ChimeraView
 
 from .viewer import XmippViewer

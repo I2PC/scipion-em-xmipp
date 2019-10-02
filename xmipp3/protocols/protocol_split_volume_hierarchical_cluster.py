@@ -700,7 +700,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
                 md.MDL_PARTICLE_ID):
             count += 1
             if count:
-                createItemMatrix(particle, self.lastRow, align=em.ALIGN_PROJ)
+                createItemMatrix(particle, self.lastRow, align=ALIGN_PROJ)
             try:
                 self.lastRow = next(self.iterMd)
             except StopIteration:

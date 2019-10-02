@@ -33,10 +33,11 @@ import six
 import json
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.utils.path import makePath, cleanPattern, cleanPath, copyTree, createLink
+from pyworkflow.utils.path import (makePath, cleanPattern, cleanPath, copyTree,
+                                   createLink)
 from pwem.constants import RELATION_CTF, ALIGN_NONE
 from pwem.convert import ImageHandler
-from pwem.objects import SetOfCoordinates, Coordinate, SetOfParticles
+from pwem.objects import SetOfParticles
 from pwem.protocols import ProtParticlePicking, ProtUserSubSet
 
 import pyworkflow.utils as pwutils
@@ -47,8 +48,9 @@ import xmippLib as xmipp
 import xmipp3
 from xmipp3 import XmippProtocol
 from xmipp3.protocols.protocol_pick_noise import pickNoise_prepareInput
-from xmipp3.convert import readSetOfParticles, setXmippAttributes, micrographToCTFParam,\
-                           writeSetOfParticles, writeSetOfCoordinates, readSetOfCoordsFromPosFnames
+from xmipp3.convert import (readSetOfParticles, setXmippAttributes,
+                            micrographToCTFParam, writeSetOfParticles,
+                            writeSetOfCoordinates, readSetOfCoordsFromPosFnames)
 from xmipp3.utils import validateDLtoolkit
 
 MIN_NUM_CONSENSUS_COORDS = 256

@@ -25,8 +25,6 @@
 # *
 # **************************************************************************
 
-import numpy as np
-
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
                                         LEVEL_ADVANCED)

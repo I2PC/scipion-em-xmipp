@@ -33,6 +33,7 @@ from pwem.viewers import showj, ObjectView
 from xmipp3.viewers import XmippViewer
 from xmipp3.protocols.protocol_ransac import XmippProtRansac
 
+
 class XmippViewerRansac(XmippViewer):
     """ Wrapper to visualize Ransac results """
     _label = 'viewer ransac'

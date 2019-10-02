@@ -131,7 +131,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
         """ Even if the full set of parameters is available, this function provides
         summary information about an specific run.
         """ 
-        summary = [ ] 
+        summary = []
         # Add some lines of summary information
         if not hasattr(self, 'outputVolume'):
             summary.append("outputVolume not ready yet.")

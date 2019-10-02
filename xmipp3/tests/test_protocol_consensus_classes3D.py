@@ -29,7 +29,7 @@
 import random
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
-from pyworkflow.utils import redStr, greenStr, magentaStr
+from pyworkflow.utils import greenStr
 from pwem.objects import Class3D
 from pwem.protocols import ProtImportParticles
 

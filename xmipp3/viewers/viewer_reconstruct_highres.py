@@ -27,7 +27,6 @@
 # *
 # **************************************************************************
 
-from glob import glob
 from os.path import exists, join
 
 from pyworkflow.protocol.params import (EnumParam, NumericRangeParam,

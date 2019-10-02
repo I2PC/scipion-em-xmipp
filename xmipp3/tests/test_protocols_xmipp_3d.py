@@ -25,11 +25,9 @@
 # *
 # **************************************************************************
 
-import sys
-import unittest
-
-from pwem.protocols import ProtImportVolumes, ProtImportMask, \
-    ProtImportParticles, ProtImportAverages, ProtImportPdb, ProtSubSet
+from pwem.protocols import (ProtImportVolumes, ProtImportMask,
+                            ProtImportParticles, ProtImportAverages,
+                            ProtImportPdb, ProtSubSet)
 
 try:
     from itertools import izip
