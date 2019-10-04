@@ -290,4 +290,4 @@ class XmippProtMonoTomo(ProtAnalysis3D):
         return summary
 
     def _citations(self):
-	return ['Vilas2018']
+        return ['Vilas2018']

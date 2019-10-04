@@ -262,10 +262,10 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         args += "--ref0 %s --iter %d --nref %d " % (projRef, self.cl2dIterations, Nclasses)
         args += "--distance correlation --classicalMultiref "
         args += "--maxShift %f " % self.maxShift
-	try:
-            self.runJob("xmipp_classify_CL2D", args)
-	except:
-	    return 
+        try:
+                self.runJob("xmipp_classify_CL2D", args)
+        except:
+            return
 
         # After CL2D the stk and xmd files should be produced
         classesXmd = join(fnDir, "level_%02d/class_classes.xmd" % Nlevels)

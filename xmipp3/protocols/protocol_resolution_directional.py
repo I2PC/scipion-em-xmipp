@@ -312,4 +312,4 @@ class XmippProtMonoDir(ProtAnalysis3D):
         return summary
 
     def _citations(self):
-	return ['Not yet']
+        return ['Not yet']
