@@ -50,10 +50,9 @@ class XmippProtSubtomoMapBack(EMProtocol):
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='Input subtomograms')
-        form.addParam('inputSubtomograms', PointerParam, pointerClass="SetOfSubTomograms",
-                      label='Set of subtomograms', help="Set of subtomograms to be represented")
-        form.addParam('inputClasses', PointerParam, pointerClass="SetOfClassesSubTomograms",
-                      label='Set of classes', help="Set of classes subtomogram")
+        form.addParam('inputClasses', PointerParam, pointerClass="SetOfClassesSubTomograms", label='Class',
+                      help="Subtomogram class from which the coordinates of the subtomograms and the reference will be "
+                           "used. It should be a SetOfClassesSubTomograms with just 1 item.")
         form.addParam('inputTomogram', PointerParam, pointerClass="Tomogram",
                       label='Original tomogram', help="Original tomogram from which the subtomograms were extracted")
         form.addParam('invertContrast', BooleanParam, default=False, label='Invert reference contrast',
@@ -73,19 +72,19 @@ class XmippProtSubtomoMapBack(EMProtocol):
                       help= "Set tomogram to 0", condition="paintingType == 0 or paintingType == 3")
         form.addParam('threshold', FloatParam, default=0.5, label='Threshold',
                       help= "threshold applied to tomogram", condition="paintingType == 1 or paintingType == 3")
-        form.addParam('constant', FloatParam, default=2, label='Constant',
+        form.addParam('constant', FloatParam, default=2, label='Multiplier',
                       help="constant to multiply the reference",
                       condition="paintingType == 2")
 
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        self._insertFunctionStep('convertInput',self.inputSubtomograms.getObjId(), self.inputTomogram.getObjId())
+        self._insertFunctionStep('convertInput',self.inputClasses.get().getFirstItem().getObjId(), self.inputTomogram.getObjId())
         for subtomoClass in self.inputClasses.get():
             self._insertFunctionStep('runMapBack', subtomoClass.getObjId())
         self._insertFunctionStep('createOutput')
 
     #--------------------------- STEPS functions -------------------------------
-    def convertInput(self,objIdSubtomograms, objIdTomo):
+    def convertInput(self, objIdSubtomograms, objIdTomo):
         img = ImageHandler()
         fnTomo = self._getExtraPath('tomogram.mrc')
         img.convert(self.inputTomogram.get(), fnTomo)
@@ -100,11 +99,11 @@ class XmippProtSubtomoMapBack(EMProtocol):
                 self.runJob("xmipp_image_operate"," -i %s  --mult 0" % fnTomo)
 
     def runMapBack(self, classId):
-        TsSubtomo =self.inputSubtomograms.get().getSamplingRate()
+        TsSubtomo = self.inputClasses.get().getSamplingRate()
         TsTomo = self.inputTomogram.get().getSamplingRate()
         scaleFactor = TsSubtomo/TsTomo
         mdGeometry = xmippLib.MetaData()
-        for subtomo in self.inputSubtomograms.get():
+        for subtomo in self.inputClasses.get().getFirstItem().iterItems():
             nRow = md.Row()
             nRow.setValue(xmippLib.MDL_ITEM_ID,long(subtomo.getObjId()))
             nRow.setValue(xmippLib.MDL_XCOOR,int(subtomo.getCoordinate3D().getX()*scaleFactor))
@@ -133,8 +132,7 @@ class XmippProtSubtomoMapBack(EMProtocol):
         args = " -i %s -o %s --geom %s --ref %s --method %s" % (self._getExtraPath("tomogram.mrc"),
                                                                 self._getExtraPath("tomogram.mrc"),
                                                                 self._getExtraPath("geometry%d.xmd" % classId),
-                                                                self._getExtraPath("reference%d.mrc" % classId),
-                                                                painting)
+                                                                self._getExtraPath("reference%d.mrc" % classId), painting)
         self.runJob("xmipp_tomo_map_back",args)
 
     def createOutput(self):
@@ -143,17 +141,17 @@ class XmippProtSubtomoMapBack(EMProtocol):
         outputTomo.setLocation(self._getExtraPath("tomogram.mrc"))
         self._defineOutputs(outputTomogram=outputTomo)
         self._defineSourceRelation(self.inputTomogram, outputTomo)
-        self._defineSourceRelation(self.inputSubtomograms, outputTomo)
+        self._defineSourceRelation(self.inputClasses, outputTomo)
 
     #--------------------------- INFO functions --------------------------------
     def _summary(self):
         summary = []
         summary.append("%d subtomogram references mapped back %d times to original tomogram" %
-                       (len(self.inputClasses.get()),len(self.inputSubtomograms.get())))
+                       (len(self.inputClasses.get()),len(self.inputClasses.get().getFirstItem())))
         return summary
 
     def _methods(self):
         methods = []
         methods.append("References from %d subtomogram classes mapped back %d times to original tomogram %s" %
-                       (len(self.inputClasses.get()),len(self.inputSubtomograms.get()),self.getObjectTag('inputTomogram')))
+                       (len(self.inputClasses.get()),len(self.inputClasses.get().getFirstItem()),self.getObjectTag('inputTomogram')))
         return methods
