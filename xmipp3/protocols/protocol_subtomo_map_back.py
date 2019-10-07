@@ -144,6 +144,14 @@ class XmippProtSubtomoMapBack(EMProtocol):
         self._defineSourceRelation(self.inputClasses, outputTomo)
 
     #--------------------------- INFO functions --------------------------------
+    def _validate(self):
+        validateMsgs = []
+        for subtomo in  self.inputClasses.get().getFirstItem().iterItems():
+            if not subtomo.hasCoordinate3D():
+                validateMsgs.append('Please provide a class which contains subtomograms with 3D coordinates.')
+                break
+        return validateMsgs
+
     def _summary(self):
         summary = []
         summary.append("%d subtomogram references mapped back %d times to original tomogram" %
