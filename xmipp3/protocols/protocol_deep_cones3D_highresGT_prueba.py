@@ -685,7 +685,7 @@ _noiseCoord   '0'
 
                 if not exists(self._getExtraPath(fnOutCone)):
                     # Correlation step - calling significant program
-                    args = '-i %s --initgallery %s --odir %s --dontReconstruct --useForValidation %d --dontCheckMirrors ' % \
+                    args = '-i %s --initgallery %s --odir %s --dontReconstruct --useForValidation %d ' % \
                                (fnExpCone, fnProjCone, self._getExtraPath(), 1)
                     self.runJob('xmipp_reconstruct_significant', args,
                                     numberOfMpi=self.myMPI.get())
