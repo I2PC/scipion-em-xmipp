@@ -109,9 +109,18 @@ class XmippProtUndoAlignSubtomo(EMProtocol):
 
     # --------------------------- INFO functions --------------------------------------------
     def _validate(self):
-        # check input subtomos has identity matrix as transformation and the other has a real transf matrix
-        errors = []
-        return errors
+        validateMsgs = []
+        for subtomo in  self.matrixSubtomograms.get().iterItems():
+            if not subtomo.hasTransform():
+                validateMsgs.append('Please provide subtomograms which have transformation matrix as "subtomograms with'
+                                    ' transformation".')
+                break
+        for subtomo in self.alignedSubtomograms.get().iterItems():
+            if subtomo.hasTransform():
+                validateMsgs.append('Please provide subtomograms which have been previously aligned as '
+                                    '"aligned subtomograms"')
+                break
+        return validateMsgs
 
     def _summary(self):
         summary = []
