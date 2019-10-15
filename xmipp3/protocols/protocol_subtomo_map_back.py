@@ -29,10 +29,10 @@
 
 from pyworkflow.em import ALIGN_3D
 from pyworkflow.em.convert import ImageHandler
-from pyworkflow.em.data import Volume
 import pyworkflow.em.metadata as md
 from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.protocol.params import PointerParam, EnumParam, BooleanParam, FloatParam
+from tomo.objects import Tomogram
 from xmipp3.convert import alignmentToRow
 import xmippLib
 
@@ -41,7 +41,7 @@ class XmippProtSubtomoMapBack(EMProtocol):
    (x,y,z) and places the reference subtomogram on the tomogram at the designated locations (map back).
    It has different representation options."""
 
-    _label = 'map back subtomogram'
+    _label = 'map back subtomos'
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
@@ -55,6 +55,8 @@ class XmippProtSubtomoMapBack(EMProtocol):
                            "used. It should be a SetOfClassesSubTomograms with just 1 item.")
         form.addParam('inputTomogram', PointerParam, pointerClass="Tomogram",
                       label='Original tomogram', help="Original tomogram from which the subtomograms were extracted")
+        # form.addParam('inputCoordinates', PointerParam, label="Input Coordinates", allowsNull=True,
+        #               pointerClass='SetOfCoordinates3D', help='Select the SetOfCoordinates3D.')
         form.addParam('invertContrast', BooleanParam, default=False, label='Invert reference contrast',
                       help= "Invert the contrast if the reference is black over a white background.  Xmipp, Spider, "
                             "Relion and Eman require white particles over a black background. ")
@@ -103,6 +105,17 @@ class XmippProtSubtomoMapBack(EMProtocol):
         TsTomo = self.inputTomogram.get().getSamplingRate()
         scaleFactor = TsSubtomo/TsTomo
         mdGeometry = xmippLib.MetaData()
+        # if self.inputCoordinates is not None: # Assuming subtomos and coords keep the same order... (which is assume to much...)
+        #     for subtomo, coor in zip(self.inputClasses.get().getFirstItem().iterItems(), self.inputCoordinates.get().iterItems()):
+        #         nRow = md.Row()
+        #         nRow.setValue(xmippLib.MDL_ITEM_ID,long(subtomo.getObjId()))
+        #         nRow.setValue(xmippLib.MDL_XCOOR,int(coor.getCoordinate3D().getX()*scaleFactor))
+        #         nRow.setValue(xmippLib.MDL_YCOOR,int(coor.getCoordinate3D().getY()*scaleFactor))
+        #         nRow.setValue(xmippLib.MDL_ZCOOR,int(coor.getCoordinate3D().getZ()*scaleFactor))
+        #         # Convert transform matrix to Euler Angles (rot, tilt, psi)
+        #         alignmentToRow(subtomo.getTransform(),nRow,ALIGN_3D)
+        #         nRow.addToMd(mdGeometry)
+        # else:
         for subtomo in self.inputClasses.get().getFirstItem().iterItems():
             nRow = md.Row()
             nRow.setValue(xmippLib.MDL_ITEM_ID,long(subtomo.getObjId()))
@@ -136,7 +149,7 @@ class XmippProtSubtomoMapBack(EMProtocol):
         self.runJob("xmipp_tomo_map_back",args)
 
     def createOutput(self):
-        outputTomo = Volume()
+        outputTomo = Tomogram()
         outputTomo.copyInfo(self.inputTomogram.get())
         outputTomo.setLocation(self._getExtraPath("tomogram.mrc"))
         self._defineOutputs(outputTomogram=outputTomo)
@@ -146,6 +159,7 @@ class XmippProtSubtomoMapBack(EMProtocol):
     #--------------------------- INFO functions --------------------------------
     def _validate(self):
         validateMsgs = []
+        # if self.inputCoordinates is None:
         for subtomo in  self.inputClasses.get().getFirstItem().iterItems():
             if not subtomo.hasCoordinate3D():
                 validateMsgs.append('Please provide a class which contains subtomograms with 3D coordinates.')

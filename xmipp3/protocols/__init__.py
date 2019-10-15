@@ -118,6 +118,13 @@ from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
 from .protocol_local_ctf import XmippProtLocalCTF
 from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
 from .protocol_compare_local_ctf import XmippProtCompareLocalCTF
-from .protocol_subtomo_map_back import XmippProtSubtomoMapBack
-from .protocol_apply_alignment_subtomo import XmippProtApplyTransformSubtomo
 
+try:
+    from .protocol_subtomo_map_back import XmippProtSubtomoMapBack
+    from .protocol_apply_alignment_subtomo import XmippProtApplyTransformSubtomo
+    from .protocol_extract_subtomo_with_orientation import XmippProtExtractSubtomoOrient
+    from .protocol_undo_alignment_subtomo import XmippProtUndoAlignSubtomo
+except ImportError:
+    raise ImportError(
+        'To use a Tomography protocol scipion-em-tomo plugin is required.'
+        ' See https://github.com/scipion-em/scipion-em-tomo for further details')

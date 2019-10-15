@@ -25,41 +25,45 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+
+import numpy as np
 import pyworkflow.em as em
-from pyworkflow.em.convert import ImageHandler
+from pyworkflow.em.data import Transform
 import pyworkflow.em.metadata as md
 from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.protocol.params import PointerParam
-from tomo.objects import SetOfSubTomograms, AverageSubTomogram
 from xmipp3.convert import xmippToLocation, writeSetOfVolumes, alignmentToRow
 import xmippLib
 
-class XmippProtApplyTransformSubtomo(EMProtocol):
-    """ Apply alignment matrix and produce a new set of subtomograms, with each subtomogram aligned to its reference. """
+class XmippProtUndoAlignSubtomo(EMProtocol):
+    """ Apply inverse alignment matrix from one set of subtomograms to an equivalent one, which have been previously
+    aligned, in order to undo the aligment. Note that the ids of the subtomograms should match."""
 
-    _label = 'apply alignment subtomo'
+    _label = 'undo alignment subtomo'
 
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='Input subtomograms')
-        form.addParam('inputSubtomograms', PointerParam, pointerClass="SetOfSubTomograms",
-                      label='Set of subtomograms', help="Set of subtomograms to be alignment")
+        form.addParam('alignedSubtomograms', PointerParam, pointerClass="SetOfSubTomograms",
+                      label='Aligned subtomograms', help="Set of aligned subtomograms")
+        form.addParam('matrixSubtomograms', PointerParam, pointerClass="SetOfSubTomograms",
+                      label='Subtomograms with transformation', help="Set of subtomograms with transformation matrix")
         form.addParallelSection(threads=0, mpi=8)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        subtomosFn = self._getPath('input_subtomos.xmd')
+        subtomosFn = self._getExtraPath('aligned_input_subtomos.xmd')
         self._insertFunctionStep('convertInputStep', subtomosFn)
         self._insertFunctionStep('applyAlignmentStep', subtomosFn)
         self._insertFunctionStep('createOutputStep')
 
     # --------------------------- STEPS functions --------------------------------------------
     def convertInputStep(self, outputFn):
-        writeSetOfVolumes(self.inputSubtomograms.get(), outputFn, alignType=em.ALIGN_3D)
+        writeSetOfVolumes(self.alignedSubtomograms.get(), outputFn, alignType=em.ALIGN_3D)
         return [outputFn]
 
     def applyAlignmentStep(self, inputFn):
-        inputSt = self.inputSubtomograms.get()
+        inputSt = self.alignedSubtomograms.get()
         # Window subtomograms twice their size
         windowedStk = self._getExtraPath('windowed_subtomograms.stk')
         self.runJob('xmipp_transform_window', '-i %s -o %s --size %d --save_metadata_stack' %
@@ -73,43 +77,39 @@ class XmippProtApplyTransformSubtomo(EMProtocol):
             id = row.getValue(xmippLib.MDL_IMAGE)
             id = id.split('@')[0]
             id = id.strip('0')
-            alignmentToRow(self.inputSubtomograms.get().__getitem__(id).getTransform(), rowOut, em.ALIGN_3D)
+            inverseMatrix = np.linalg.inv(self.matrixSubtomograms.get().__getitem__(id).getTransform().getMatrix())
+            transform = Transform()
+            transform.setMatrix(inverseMatrix)
+            alignmentToRow(transform, rowOut, em.ALIGN_3D)
             rowOut.addToMd(mdWindowTransform)
         mdWindowTransform.write(self._getExtraPath("window_with_original_geometry.xmd"))
         # Align subtomograms
+        unalignStk = self._getExtraPath('unaligned_subtomograms.stk')
         self.runJob('xmipp_transform_geometry', '-i %s -o %s --apply_transform' %
-                    (self._getExtraPath("window_with_original_geometry.xmd"), self._getExtraPath('aligned_subtomograms.stk')))
+                    (self._getExtraPath("window_with_original_geometry.xmd"), unalignStk))
         # Window subtomograms to their original size
-        alignStk = self._getExtraPath('aligned_subtomograms.stk')
-        outputStk = self._getPath('output_subtomograms.stk')
-        self.runJob('xmipp_transform_window', '-i %s -o %s --size %d ' %
-                    (alignStk, outputStk, self.inputSubtomograms.get().getFirstItem().getDim()[0]),
+        outputStk = self._getExtraPath('output_subtomograms.stk')
+        self.runJob('xmipp_transform_window', '-i %s -o %s --size %d  --save_metadata_stack' %
+                    (unalignStk, outputStk, self.alignedSubtomograms.get().getFirstItem().getDim()[0]),
                     numberOfMpi=1)
         return [outputStk]
 
     def createOutputStep(self):
-        subtomograms = self.inputSubtomograms.get()
-        alignedSet = self._createSetOfSubTomograms()
-        alignedSet.copyInfo(subtomograms)
-        inputMd = self._getPath('output_subtomograms.stk')
-        alignedSet.copyItems(subtomograms,
+        matrixSubtomos = self.matrixSubtomograms.get()
+        unAlignedSet = self._createSetOfSubTomograms()
+        unAlignedSet.copyInfo(matrixSubtomos)
+        outputMd = self._getExtraPath('output_subtomograms.xmd')
+        unAlignedSet.copyItems(matrixSubtomos,
                              updateItemCallback=self._updateItem,
-                             itemDataIterator=md.iterRows(inputMd, sortByLabel=md.MDL_ITEM_ID))
-        alignedSet.setAlignment(em.ALIGN_NONE)
-        avgFile = self._getExtraPath("average.xmp")
-        imgh = ImageHandler()
-        avgImage = imgh.computeAverage(alignedSet)
-        avgImage.write(avgFile)
-        avg = AverageSubTomogram()
-        avg.setLocation(1, avgFile)
-        avg.copyInfo(alignedSet)
-        self._defineOutputs(outputAverage=avg)
-        self._defineSourceRelation(self.inputSubtomograms, avg)
-        self._defineOutputs(outputSubtomograms=alignedSet)
-        self._defineSourceRelation(self.inputSubtomograms, alignedSet)
+                             itemDataIterator=md.iterRows(outputMd, sortByLabel=md.MDL_ITEM_ID))
+        self._defineOutputs(outputSubtomograms=unAlignedSet)
+        self._defineSourceRelation(self.alignedSubtomograms, unAlignedSet)
+        self._defineOutputs(outputSubtomograms=unAlignedSet)
+        self._defineSourceRelation(self.matrixSubtomograms, unAlignedSet)
 
     # --------------------------- INFO functions --------------------------------------------
     def _validate(self):
+        # check input subtomos has identity matrix as transformation and the other has a real transf matrix
         errors = []
         return errors
 
@@ -118,21 +118,19 @@ class XmippProtApplyTransformSubtomo(EMProtocol):
         if not hasattr(self, 'outputSubtomograms'):
             summary.append("Output subtomograms not ready yet.")
         else:
-            summary.append("Alignment applied to %s subtomograms." % self.inputSubtomograms.get().getSize())
+            summary.append("Alignment undone to %s subtomograms." % self.alignedSubtomograms.get().getSize())
         return summary
 
     def _methods(self):
         if not hasattr(self, 'outputSubtomograms'):
             return ["Output subtomograms not ready yet."]
         else:
-            return ["We applied alignment to %s subtomograms %s and the output produced is %s."
-                    % (self.inputSubtomograms.get().getSize(), self.getObjectTag('inputSubtomograms'),
+            return ["We undo alignment to %s subtomograms %s and the output produced is %s."
+                    % (self.alignedSubtomograms.get().getSize(), self.getObjectTag('alignedSubtomograms'),
                        self.getObjectTag('outputSubtomograms'))]
 
     # --------------------------- UTILS functions --------------------------------------------
     def _updateItem(self, item, row):
-        # By default update the item location (index, filename) with the new binary data location
         newFn = row.getValue(md.MDL_IMAGE)
         newLoc = xmippToLocation(newFn)
         item.setLocation(newLoc)
-        item.setTransform(None)
