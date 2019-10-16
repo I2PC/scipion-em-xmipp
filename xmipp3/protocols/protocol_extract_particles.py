@@ -453,7 +453,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         return f / self.downFactor.get() if self._doDownsample() else f
 
     def getEven(self, boxSize):
-        return Integer(int(boxSize.get()/2+0.75)*2)
+        return Integer(int(int(boxSize)/2+0.75)*2)
 
     def getBoxSize(self):
         # This function is needed by the wizard and for auto-boxSize selection
