@@ -36,7 +36,7 @@ from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
                                            STATUS_FINISHED)
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtExtractParticles
-from pyworkflow.em.data import Particle
+from pyworkflow.em.data import Particle, Integer
 
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
@@ -453,7 +453,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         return f / self.downFactor.get() if self._doDownsample() else f
 
     def getEven(self, boxSize):
-        return int(boxSize/2+0.75)*2
+        return Integer(int(boxSize.get()/2+0.75)*2)
 
     def getBoxSize(self):
         # This function is needed by the wizard and for auto-boxSize selection
