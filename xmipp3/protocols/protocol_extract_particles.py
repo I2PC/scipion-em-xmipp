@@ -279,6 +279,8 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
 
         if self.boxSize <= 0:
             errors.append('Box size must be positive.')
+        else:
+            self.boxSize.set(self.getEven(self.boxSize))
 
         if self.doNormalize:
             if self.backRadius > int(self.boxSize.get() / 2):
@@ -450,9 +452,12 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         f = float(samplingPicking) / samplingExtract
         return f / self.downFactor.get() if self._doDownsample() else f
 
+    def getEven(self, boxSize):
+        return int(boxSize/2+0.75)*2
+
     def getBoxSize(self):
-        # This function is needed by the wizard
-        return int(self.getCoords().getBoxSize() * self.getBoxScale())
+        # This function is needed by the wizard and for auto-boxSize selection
+        return self.getEven(self.getCoords().getBoxSize() * self.getBoxScale())
 
     def _getOutputImgMd(self):
         return self._getPath('images.xmd')
