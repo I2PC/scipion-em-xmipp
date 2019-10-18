@@ -23,18 +23,17 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import random
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.protocol.params import PointerParam
+from pyworkflow.protocol.params import PointerParam, IntParam, LEVEL_ADVANCED
 from pyworkflow.em import ProtMicrographs
 from pyworkflow.object import Integer
 
 from xmipp3.convert import writeSetOfMicrographs
 import xmipp3
-from xmipp3.utils import validateDLtoolkit
 
-
-class XmippProtParticleBoxsize(ProtMicrographs):
+class XmippProtParticleBoxsize(ProtMicrographs, xmipp3.XmippProtocol):
     """ Given a set of micrographs, the protocol estimate the particle box size.
     """
     _label = 'particle boxsize'
@@ -51,6 +50,13 @@ class XmippProtParticleBoxsize(ProtMicrographs):
                       label="Input Micrographs", pointerClass='SetOfMicrographs',
                       help='Select a set of micrographs for determining the '
                            'particle boxsize.')
+
+        form.addParam('nMicsToAnalize', IntParam,
+                      label="Number of mics to use for estimation",
+                      default=10, expertLevel=LEVEL_ADVANCED,
+                      help='The boxsize estimation is the median of the boxsize estimations on different micrographs.'
+                           'This number selects a random subset of input micrographs to perform analysis. Use -1 to '
+                           'consider all micrographs')
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
@@ -75,12 +81,17 @@ class XmippProtParticleBoxsize(ProtMicrographs):
         params += ' --output %s' % particleBoxSizeFn
 
         fileNames = [mic.getFileName() + '\n' for mic in self.inputMicrographs.get()]
+
+        nMicsToAnalize= self.nMicsToAnalize.get()
+        if nMicsToAnalize!=-1:
+            random.shuffle(fileNames)
+            fileNames= fileNames[:min(len(fileNames, nMicsToAnalize))]
         # TODO: output name is hardcoded
         micNamesPath = self._getTmpPath('mic_names.csv')
         with open(micNamesPath, 'wb') as csvFile:
             csvFile.writelines(fileNames)
         params += ' --micrographs %s' % micNamesPath
-        self.runJob('xmipp_particle_boxsize', params)
+        self.runCondaJob('xmipp_particle_boxsize', params)
         
         with open(particleBoxSizeFn, 'r') as fp:
             self.particleBoxsize = int(fp.read().rstrip('\n'))
@@ -115,5 +126,5 @@ class XmippProtParticleBoxsize(ProtMicrographs):
         return ['']
 
     def _validate(self):
-        return validateDLtoolkit(model=[('boxsize', 'weights.hdf5'),
+        return self.validateDLtoolkit(model=[('boxsize', 'weights.hdf5'),
                                         ('boxsize', 'feature_scaler.pkl')])
