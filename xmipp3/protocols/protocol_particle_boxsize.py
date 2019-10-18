@@ -85,7 +85,7 @@ class XmippProtParticleBoxsize(ProtMicrographs, xmipp3.XmippProtocol):
         nMicsToAnalize= self.nMicsToAnalize.get()
         if nMicsToAnalize!=-1:
             random.shuffle(fileNames)
-            fileNames= fileNames[:min(len(fileNames, nMicsToAnalize))]
+            fileNames= fileNames[:min( len(fileNames), nMicsToAnalize )]
         # TODO: output name is hardcoded
         micNamesPath = self._getTmpPath('mic_names.csv')
         with open(micNamesPath, 'wb') as csvFile:
