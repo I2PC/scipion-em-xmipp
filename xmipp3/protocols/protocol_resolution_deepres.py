@@ -37,7 +37,6 @@ from pyworkflow.utils import getExt
 from pyworkflow.em.data import Volume
 import pyworkflow.em.metadata as md
 import xmipp3
-from xmipp3.utils import validateDLtoolkit
 
 def updateEnviron(gpuNum):
     """ Create the needed environment for TensorFlow programs. """
@@ -334,7 +333,7 @@ class XmippProtDeepRes(ProtAnalysis3D):
         and there are not errors. If some errors are found, a list with
         the error messages will be returned.
         """
-        error=validateDLtoolkit(model="deepRes")
+        error=self.validateDLtoolkit(model="deepRes")
         return error
     
     def _citations(self):

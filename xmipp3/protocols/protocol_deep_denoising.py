@@ -37,7 +37,7 @@ from pyworkflow.utils.path import cleanPath
 
 import xmippLib
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes, xmippToLocation
-from xmipp3.utils import getMdSize, validateDLtoolkit
+from xmipp3.utils import getMdSize
 import xmipp3
 
 
@@ -267,7 +267,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
     def _validate(self):
 
         assertModel = self.model.get()==ITER_PREDICT and not self.modelPretrain
-        errors = validateDLtoolkit(assertModel=assertModel,
+        errors = self.validateDLtoolkit(assertModel=assertModel,
                                    model=('deepDenoising', 'PretrainModel.h5'),
                                    errorMsg="Required with 'Predict' mode when "
                                             "no custom model is provided.")
