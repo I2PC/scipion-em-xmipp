@@ -21,8 +21,8 @@ DICT_OF_CONDA_ENVIRONS = {
   },
 
   "micrograph_cleaner_em": {
-    "pythonVersion": "2.7",
-    "dependencies": ["micrograph-cleaner-em"],
+    "pythonVersion": "3.6",
+    "dependencies": ["numpy=1.16.4", "micrograph-cleaner-em"],
     "channels": ["rsanchez1369", "anaconda", "conda-forge"],
     "pipPackages": [],
     "defaultInstallOptions": {},

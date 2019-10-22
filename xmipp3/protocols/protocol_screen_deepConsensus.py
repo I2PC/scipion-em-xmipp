@@ -542,7 +542,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           
       args="-i %s -s %d -c %d -d %f -o %s -t %d"%(configFname, self._getBoxSize(), consensus, self.consensusRadius.get(),
                                                  outCoordsDataPath, self.numberOfThreads.get())
-      self.runJob('xmipp_coordinates_consensus', args, numberOfMpi=1)
+      self.runCondaJob('xmipp_coordinates_consensus', args, numberOfMpi=1)
 
         
     def loadCoords(self, posCoorsPath, mode):
@@ -844,7 +844,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           args+= " -g %s"%(gpuToUse)
         if not numberOfThreads is None:
           args+= " -t %s"%(numberOfThreads)
-        self.runJob('xmipp_deep_consensus', args, numberOfMpi=1)
+        self.runCondaJob('xmipp_deep_consensus', args, numberOfMpi=1)
         
     def predictCNN(self):
 
@@ -884,7 +884,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           args+= " -g %s"%(gpuToUse)
         if not numberOfThreads is None:
           args+= " -t %s"%(numberOfThreads)
-        self.runJob('xmipp_deep_consensus', args, numberOfMpi=1)
+        self.runCondaJob('xmipp_deep_consensus', args, numberOfMpi=1)
                 
     def createOutputStep(self):
         # PARTICLES

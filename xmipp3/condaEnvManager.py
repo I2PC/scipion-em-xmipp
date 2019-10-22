@@ -10,9 +10,10 @@ class CondaEnvManager(object):
   def getCoondaRoot(env):
     '''
     Tries to find the conda root path given an environment
+    :param: env. An environ obtaining using Plugin.getEnviron()
     :return: None if conda not found or CONDA_ROOT_PATH (could be defined into config file??)
     '''
-    if "CONDA_HOME" in env:  # TODO. Allow this to be in config file
+    if "CONDA_HOME" in env:  # TODO. Allow CONDA_HOME to be in config file
       condaRoot = "CONDA_HOME"
     if "CONDA_ACTIVATION_CMD" in env:
       condaRoot = os.path.split(os.path.split(os.path.split(env["CONDA_ACTIVATION_CMD"])[0])[0])[0]
@@ -35,7 +36,13 @@ class CondaEnvManager(object):
     return condaRoot
 
   @staticmethod
-  def getCondaPathInEnv(condaRoot, condaEnv, condaSubDir):
+  def getCondaPathInEnv(condaRoot, condaEnv, condaSubDir=""):
+    '''
+    :param condaRoot: The path where conda is installed. E.g.  ~/tools/miniconda3
+    :param condaEnv: The name (prefix) of the conda environment that will be used
+    :param condaSubDir: The path of the subdirectory within conda env. E.g. condaSubDir="bin -> path/to/env/bin
+    :return: the path to a subdirectory within condaEnv
+    '''
     return os.path.join(condaRoot, "envs", condaEnv, condaSubDir)
 
   @staticmethod
@@ -61,7 +68,6 @@ class CondaEnvManager(object):
     elif condaActivationCmd[-2] != "&&":
       condaActivationCmd += " && "
     return condaActivationCmd
-
 
   @staticmethod
   def yieldInstallAllCmds( useGpu):

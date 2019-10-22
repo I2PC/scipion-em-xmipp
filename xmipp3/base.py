@@ -27,6 +27,8 @@
 
 from __future__ import print_function
 import os
+import subprocess
+
 import sys
 import platform
 from collections import OrderedDict
@@ -65,6 +67,24 @@ def getLabelPythonType(label):
     labelType = xmippLib.labelType(label)
     return LABEL_TYPES.get(labelType, str)
 
+def prepareRunConda(program, arguments, condaEnvName, **kwargs):
+
+    if "env" not in kwargs:
+        kwargs['env'] = xmipp3.Plugin.getEnviron()
+    kwargs['env'] = CondaEnvManager.modifyEnvToUseConda(kwargs['env'], condaEnvName)
+
+    usePython = False
+    programName = os.path.join(getXmippPath('bin'), program)
+    try:
+        with open(programName) as f:
+            if "python" in f.read(32):
+                usePython = True
+    except (OSError, IOError):
+        pass
+    if usePython:
+        return ("python", programName + " " + arguments, kwargs)
+    else:
+        return (program, arguments, kwargs)
 
 class XmippProtocol():
     """ This class groups some common functionalities that
@@ -170,29 +190,13 @@ class XmippProtocol():
         return errors
 
     def runCondaJob(self, program, arguments, **kwargs):
-
         if (hasattr(self, "_conda_env") ):
             condaEnvName= self._conda_env
         else:
             condaEnvName= CONDA_DEFAULT_ENVIRON
             # raise Exception("Error, protocols using runCondaJob must define the variable _conda_env")
-
-        if "env" not in kwargs:
-            kwargs['env'] = xmipp3.Plugin.getEnviron()
-        kwargs['env'] = CondaEnvManager.modifyEnvToUseConda(kwargs['env'], condaEnvName)
-
-        usePython=False
-        programName= os.path.join(getXmippPath('bin'), program)
-        try:
-            with open(programName) as f:
-                if "python" in f.read(32):
-                    usePython=True
-        except OSError:
-            pass
-        if usePython:
-            super(type(self), self).runJob("python", programName+" "+arguments, **kwargs)
-        else:
-            super( type(self), self).runJob(program, arguments, **kwargs)
+        program, arguments, kwargs= prepareRunConda(program, arguments, condaEnvName, **kwargs)
+        super( type(self), self).runJob(program, arguments, **kwargs)
 
 class XmippMdRow():
     """ Support Xmipp class to store label and value pairs 
@@ -628,7 +632,29 @@ class XmippScript():
         except Exception:
             import traceback
             traceback.print_exc(file=sys.stderr)
-            
+            raise
+    @classmethod
+    def runCondaCmd(cls, program, arguments, **kwargs):
+        '''
+        This class method is used to run programs that are independent of xmipp but employ conda. The class should
+        possess a _conda_env attribute to be used. Otherwise  CONDA_DEFAULT_ENVIRON will be used
+        :param program:str. A program/pythonScript to execute (included in environment bin or full path)
+        :param arguments: str. The arguments for the program
+        :param kwargs:
+        :return:
+        '''
+        if (hasattr(cls, "_conda_env") ):
+            condaEnvName= cls._conda_env
+        else:
+            condaEnvName= CONDA_DEFAULT_ENVIRON
+            # raise Exception("Error, protocols using runCondaJob must define the variable _conda_env")
+        program, arguments, kwargs= prepareRunConda(program, arguments, condaEnvName, **kwargs)
+        print( program+" "+arguments)
+        try:
+            subprocess.check_call(program+" "+arguments, shell=True, **kwargs)
+        except subprocess.CalledProcessError as e:
+            subprocess.check_call(program+" "+arguments, shell=True, **kwargs)
+
         
 class ScriptIJBase(XmippScript):
     def __init__(self, name):

@@ -219,7 +219,8 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
           else:
               args += ' -g -1'
 
-          self.runCondaJob('xmipp_deep_micrograph_cleaner', args)
+          # self.runCondaJob('xmipp_deep_micrograph_cleaner', args)
+          self.runJob('xmipp_deep_micrograph_cleaner', args)
 
 
 
@@ -329,14 +330,19 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     #--------------------------- INFO functions --------------------------------
 
     def _getStreamingBatchSize(self):
+      self.firstBatch=True
       if self.streamingBatchSize.get()==-1:
         if not hasattr(self, "actualBatchSize"):
           if self.isInStreaming():
             self.actualBatchSize= 16
           else:
-            nPickMics = self._getNumPickedMics()
-            self.actualBatchSize= min(50, nPickMics)
-        batchSize= self.actualBatchSize
+            if self.firstBatch:
+              self.firstBatch=False
+              batchSize= 4
+            else:
+              nPickMics = self._getNumPickedMics()
+              self.actualBatchSize= min(50, nPickMics)
+              batchSize= self.actualBatchSize
       else:
         batchSize= self.streamingBatchSize.get()
       return batchSize
