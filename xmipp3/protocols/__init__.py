@@ -122,8 +122,8 @@ from .protocol_compare_local_ctf import XmippProtCompareLocalCTF
 try:
     from .protocol_subtomo_map_back import XmippProtSubtomoMapBack
     from .protocol_apply_alignment_subtomo import XmippProtApplyTransformSubtomo
-    from .protocol_extract_subtomo_with_orientation import XmippProtExtractSubtomoOrient
     from .protocol_undo_alignment_subtomo import XmippProtUndoAlignSubtomo
+    from .protocol_connected_components import XmippProtConnectedComponents
 except ImportError:
     raise ImportError(
         'To use a Tomography protocol scipion-em-tomo plugin is required.'
