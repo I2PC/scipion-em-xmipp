@@ -36,14 +36,12 @@ from collections import OrderedDict
 from pyworkflow.object import ObjectWrap
 
 import xmippLib
-from xmippLib import (MetaData, MetaDataInfo, MDL_IMAGE, MDL_IMAGE1, MDL_IMAGE_REF,
-    MDL_ANGLE_ROT, MDL_ANGLE_TILT, MDL_ANGLE_PSI, MDL_REF, MDL_SHIFT_X,
-    MDL_SHIFT_Y, MDL_FLIP, MD_APPEND, MDL_MAXCC, MDL_ENABLED, MDL_CTF_MODEL,
-    MDL_SAMPLINGRATE, DT_DOUBLE, MDL_ANGLE_ROT, MDL_SHIFT_Z,
-    Euler_angles2matrix, Image, FileName, getBlocksInMetaDataFile, label2Str)
+from xmippLib import (MetaData, DT_DOUBLE, MDL_ANGLE_ROT, MDL_SHIFT_Z,
+                      Euler_angles2matrix, Image, label2Str)
+
 from .constants import *
 import xmipp3
-from .condaEnvManager import CondaEnvManager
+from xmipp3.condaEnvManager import CondaEnvManager
 
 LABEL_TYPES = { 
                xmippLib.LABEL_SIZET: long,
@@ -67,11 +65,20 @@ def getLabelPythonType(label):
     labelType = xmippLib.labelType(label)
     return LABEL_TYPES.get(labelType, str)
 
+
 def prepareRunConda(program, arguments, condaEnvName, **kwargs):
+    '''
+    Used to get the arguments for the methods runCondaJob or runCondaCmd
+    :param program: string
+    :param arguments: string
+    :param condaEnvName: string
+    :param kwargs:
+    :return: (program, arguments, kwargs). Updated values
+    '''
 
     if "env" not in kwargs:
         kwargs['env'] = xmipp3.Plugin.getEnviron()
-    kwargs['env'] = CondaEnvManager.modifyEnvToUseConda(kwargs['env'], condaEnvName)
+    kwargs['env'] = xmipp3.CondaEnvManager.modifyEnvToUseConda(kwargs['env'], condaEnvName)
 
     usePython = False
     programName = os.path.join(getXmippPath('bin'), program)
@@ -90,11 +97,11 @@ class XmippProtocol():
     """ This class groups some common functionalities that
     share some Xmipp protocols, like converting steps.
     """
-           
+
     def _insertConvertStep(self, inputName, xmippClass, resultFn):
         """ Insert the convertInputToXmipp if the inputName attribute
         is not an instance of xmippClass.
-        It will return the result filename, if the 
+        It will return the result filename, if the
         conversion is needed, this will be input resultFn.
         If not, it will be inputAttr.getFileName()
         """
@@ -103,7 +110,7 @@ class XmippProtocol():
             self._insertFunctionStep('convertInputToXmipp', inputName, xmippClass, resultFn)
             return resultFn
         return inputAttr.getFileName()
-         
+
     def convertInputToXmipp(self, inputName, xmippClass, resultFn):
         """ This step can be used whenever a conversion is needed.
         It will receive the inputName and get this attribute from self,
@@ -112,14 +119,14 @@ class XmippProtocol():
         """
         inputAttr = getattr(self, inputName)
         inputXmipp = xmippClass.convert(inputAttr, resultFn)
-         
+
         if inputXmipp is not inputAttr:
             self._insertChild(inputName + 'Xmipp', inputXmipp)
             return [resultFn] # validate resultFn was produced if converted
-         
+
     def getConvertedInput(self, inputName):
         """ Retrieve the converted input, it can be the case that
-        it is the same as input, when not conversion was done. 
+        it is the same as input, when not conversion was done.
         """
         return getattr(self, inputName + 'Xmipp', getattr(self, inputName))
 
@@ -190,6 +197,14 @@ class XmippProtocol():
         return errors
 
     def runCondaJob(self, program, arguments, **kwargs):
+        '''
+        Performs the same operation as self.runJob but preparing the environment to use conda instead.
+        It will use the CONDA_DEFAULT_ENVIRON except when the class have defined the _conda_env argument
+        :param program: string
+        :param arguments: string
+        :param kwargs: options
+        :return:
+        '''
         if (hasattr(self, "_conda_env") ):
             condaEnvName= self._conda_env
         else:
@@ -624,6 +639,7 @@ class XmippScript():
         ''' This function should be overwrited by subclasses and
         it the main body of the script'''
         try:
+            print("WARNING: This is xmipp3.base implementation for script")
             self.defineParams()
             doRun = self._prog.read(sys.argv)
             if doRun:
@@ -637,10 +653,11 @@ class XmippScript():
     def runCondaCmd(cls, program, arguments, **kwargs):
         '''
         This class method is used to run programs that are independent of xmipp but employ conda. The class should
-        possess a _conda_env attribute to be used. Otherwise  CONDA_DEFAULT_ENVIRON will be used
+        possess a _conda_env attribute to be used. Otherwise  CONDA_DEFAULT_ENVIRON is used. To use xmipp dependent
+        programs, runCondaJob within a XmippProtocol is preferred.
         :param program:str. A program/pythonScript to execute (included in environment bin or full path)
         :param arguments: str. The arguments for the program
-        :param kwargs:
+        :param kwargs: options
         :return:
         '''
         if (hasattr(cls, "_conda_env") ):

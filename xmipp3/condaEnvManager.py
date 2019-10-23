@@ -1,18 +1,21 @@
 import os
 import re
 import subprocess
+
 from .condaEnvsDef import DICT_OF_CONDA_ENVIRONS
 
 class CondaEnvManager(object):
   DICT_OF_CONDA_ENVIRONS= DICT_OF_CONDA_ENVIRONS
 
   @staticmethod
-  def getCoondaRoot(env):
+  def getCoondaRoot(env=None):
     '''
     Tries to find the conda root path given an environment
     :param: env. An environ obtaining using Plugin.getEnviron()
     :return: None if conda not found or CONDA_ROOT_PATH (could be defined into config file??)
     '''
+    if env==None:
+      env=[]
     if "CONDA_HOME" in env:  # TODO. Allow CONDA_HOME to be in config file
       condaRoot = "CONDA_HOME"
     if "CONDA_ACTIVATION_CMD" in env:
@@ -24,7 +27,7 @@ class CondaEnvManager(object):
         success = True
       else:
         try:
-          condaRoot = subprocess.check_output("which conda")
+          condaRoot = subprocess.check_output(["which", "conda"])
           success = True
         except subprocess.CalledProcessError:
           success = False
@@ -61,12 +64,15 @@ class CondaEnvManager(object):
   def getCondaActivationCmd():
     condaActivationCmd = os.environ.get('CONDA_ACTIVATION_CMD', "")
     if not condaActivationCmd:
-      print("WARNING!!: CONDA_ACTIVATION_CMD variable not defined. "
-            "Relying on conda being in the PATH")
-    elif condaActivationCmd[-1] == ";":
+      condaRoot= CondaEnvManager.getCoondaRoot()
+      condaActivationCmd= ". "+os.path.join(condaRoot, "etc/profile.d/conda.sh")
+    if condaActivationCmd[-1] == ";":
       condaActivationCmd= condaActivationCmd[:-1]+" &&  "
     elif condaActivationCmd[-2] != "&&":
       condaActivationCmd += " && "
+    else:
+      condaActivationCmd+= " && "
+
     return condaActivationCmd
 
   @staticmethod
@@ -100,6 +106,8 @@ class CondaEnvManager(object):
       except KeyError:
         pass
     cmd += " && " + CondaEnvManager.getCondaActivationCmd() + " conda activate " + environName
+    # cmd += " && export PATH="+ os.path.join(CondaEnvManager.getCoondaRoot(), "bin")+":$PATH &&  conda activate "+environName
+
     if len(pipPackages)>0:
       cmd += " && pip install  "
       cmd += " " + " ".join([dep for dep in pipPackages])
