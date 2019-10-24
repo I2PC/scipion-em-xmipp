@@ -735,7 +735,9 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
                               "estimated using the _Xmipp - CTF estimation_ "
                               "protocol.")
         if self.useCritXmipp.get() and self.calculateConsensus.get():
-            if self.usingXmipp(self.inputCTF2.get().getFirstItem()):
+            if self.usingXmipp(self.inputCTF.get().getFirstItem()):
+                self.xmippCTF = self.inputCTF.get()
+            elif self.usingXmipp(self.inputCTF2.get().getFirstItem()):
                 self.xmippCTF = self.inputCTF2.get()
             else:
                 errors.append("One of the CTF inputs ( _Input CTF_ or "
@@ -744,7 +746,7 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
         return errors
 
     def usingXmipp(self, ctf):
-        return ctf.hasAttribute('_xmipp_ctfCritfirstZeroRatio')
+        return ctf.hasAttribute('_xmipp_ctfCritFirstZero')
 
     def _getCtfResol(self, ctf):
         resolution = ctf.getResolution()

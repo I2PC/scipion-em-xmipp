@@ -69,6 +69,7 @@ from .protocol_movie_average import XmippProtMovieAverage
 from .protocol_movie_correlation import XmippProtMovieCorr
 from .protocol_movie_opticalflow import XmippProtOFAlignment, ProtMovieAlignment
 from .protocol_movie_max_shift import XmippProtMovieMaxShift
+from .protocol_movie_split_frames import XmippProtSplitFrames
 from .protocol_multiple_fscs import XmippProtMultipleFSCs
 from .protocol_multireference_alignability import XmippProtMultiRefAlignability
 from .protocol_normalize_strain import XmippProtNormalizeStrain
@@ -90,12 +91,14 @@ from .protocol_reconstruct_swarm import XmippProtReconstructSwarm
 from .protocol_resolution3d import XmippProtResolution3D
 from .protocol_resolution_directional import XmippProtMonoDir
 from .protocol_resolution_monogenic_signal import XmippProtMonoRes
+from .protocol_resolution_deepres import XmippProtDeepRes
 from .protocol_volume_local_sharpening import XmippProtLocSharp
 from .protocol_resolution_monotomo import XmippProtMonoTomo
 from .protocol_rotational_spectra import XmippProtRotSpectra
 from .protocol_rotational_symmetry import XmippProtRotationalSymmetry
 from .protocol_screen_particles import XmippProtScreenParticles
 from .protocol_screen_deepConsensus import XmippProtScreenDeepConsensus, XmippProtDeepConsSubSet
+from .protocol_deep_micrograph_screen import  XmippProtDeepMicrographScreen
 from .protocol_screen_deeplearning import XmippProtScreenDeepLearning
 from .protocol_solid_angles import XmippProtSolidAngles
 from .protocol_split_volume import XmippProtSplitvolume
@@ -113,11 +116,10 @@ from .protocol_reconstruct_heterogeneous import XmippProtReconstructHeterogeneou
 from .protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
 from .protocol_metaprotocol_create_output import XmippMetaProtCreateOutput
 from .protocol_metaprotocol_discrete_heterogeneity_scheduler import XmippMetaProtDiscreteHeterogeneityScheduler # keep this after XmippMetaProtCreateSubset and XmippMetaProtCreateOutput
-
+from .protocol_angular_alignment_sph import XmippProtAngularAlignmentSPH
+from .protocol_volume_deform_sph import XmippProtVolumeDeformSPH
+from .protocol_structure_map_sph import XmippProtStructureMapSPH
 from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
-from .protocol_local_ctf import XmippProtLocalCTF
-from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
-from .protocol_compare_local_ctf import XmippProtCompareLocalCTF
 
 try:
     from .protocol_subtomo_map_back import XmippProtSubtomoMapBack
@@ -127,3 +129,4 @@ except ImportError:
     raise ImportError(
         'To use a Tomography protocol scipion-em-tomo plugin is required.'
         ' See https://github.com/scipion-em/scipion-em-tomo for further details')
+

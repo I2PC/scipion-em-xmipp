@@ -47,7 +47,7 @@ class XmippProtParticleBoxsize(ProtMicrographs):
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('micrographs', PointerParam, important=True,
+        form.addParam('inputMicrographs', PointerParam, important=True,
                       label="Input Micrographs", pointerClass='SetOfMicrographs',
                       help='Select a set of micrographs for determining the '
                            'particle boxsize.')
@@ -60,7 +60,7 @@ class XmippProtParticleBoxsize(ProtMicrographs):
         self._insertFunctionStep('createOutputStep')
 
     def convertInputStep(self):
-        writeSetOfMicrographs(self.micrographs.get(),
+        writeSetOfMicrographs(self.inputMicrographs.get(),
                               self._getExtraPath('input_micrographs.xmd'))
 
     def boxsizeStep(self):
@@ -74,7 +74,7 @@ class XmippProtParticleBoxsize(ProtMicrographs):
         params += ' --feature_scaler %s' % featureScaler
         params += ' --output %s' % particleBoxSizeFn
 
-        fileNames = [mic.getFileName() + '\n' for mic in self.micrographs.get()]
+        fileNames = [mic.getFileName() + '\n' for mic in self.inputMicrographs.get()]
         # TODO: output name is hardcoded
         micNamesPath = self._getTmpPath('mic_names.csv')
         with open(micNamesPath, 'wb') as csvFile:
@@ -85,15 +85,16 @@ class XmippProtParticleBoxsize(ProtMicrographs):
         with open(particleBoxSizeFn, 'r') as fp:
             self.particleBoxsize = int(fp.read().rstrip('\n'))
 
-        print(self.particleBoxsize)
+        print("\n > Estimated box size: %d \n" % self.particleBoxsize)
 
     def createOutputStep(self):
         """ The output is just an Integer. Other protocols can use it in those
             IntParam if it has set allowsPointer=True
         """
+        micSet = self.inputMicrographs.get()
         boxSize = Integer(self.particleBoxsize)
         self._defineOutputs(boxsize=boxSize)
-        self._defineSourceRelation(self.micrographs.get(), boxSize)
+        self._defineSourceRelation(micSet, boxSize)
 
     # --------------------------- INFO functions ------------------------------
     def _methods(self):
@@ -106,10 +107,13 @@ class XmippProtParticleBoxsize(ProtMicrographs):
         messages = []
         if hasattr(self, 'boxsize'):
             messages.append('Estimated box size: %s pixels' % self.boxsize)
+            messages.append("Open 'Analyze results' to see it in context. "
+                            "(The displayed coordinate is just to show the size)")
         return messages
 
     def _citations(self):
         return ['']
 
     def _validate(self):
-        return validateDLtoolkit(model=('boxsize', 'weights.hdf5'))
+        return validateDLtoolkit(model=[('boxsize', 'weights.hdf5'),
+                                        ('boxsize', 'feature_scaler.pkl')])

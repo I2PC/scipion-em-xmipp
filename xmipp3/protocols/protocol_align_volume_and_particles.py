@@ -27,6 +27,7 @@
 import numpy as np
 import pyworkflow.protocol.params as params
 import pyworkflow.em as em
+from pyworkflow import VERSION_2_0
 from pyworkflow.em.convert import ImageHandler
 import pyworkflow.em.metadata as md
 from pyworkflow.em.data import Transform
@@ -46,6 +47,7 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
      (inputParticles) that generated the input volume.
      """
     _label = 'align volume and particles'
+    _lastUpdateVersion = VERSION_2_0
     nVols = 0
     
     def __init__(self, **args):
