@@ -288,9 +288,33 @@ class TestXmippCTFEstimation(TestXmippBase):
         ctfModel = protCTF.outputCTF.getFirstItem()
         self.assertAlmostEquals(ctfModel.getDefocusU(),23928.4, delta=500)
         self.assertAlmostEquals(ctfModel.getDefocusV(),23535.2, delta=500)
-        self.assertAlmostEquals(ctfModel.getDefocusAngle(), 53.217, delta=5)
+        self.assertAlmostEquals(ctfModel.getDefocusAngle(), 60.0, delta=20)
         sampling = ctfModel.getMicrograph().getSamplingRate()
         self.assertAlmostEquals(sampling, 2.474, delta=0.001)
+
+class TestXmippBoxsize(TestXmippBase):
+    """This class check if the protocol to determine the BoxSize in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        TestXmippBase.setData()
+        fileName = DataSet.getDataSet('relion_tutorial').getFile('allMics')
+        cls.protImport = cls.runImportMicrograph(fileName,
+                                                 samplingRate=3.54,
+                                                 voltage=300,
+                                                 sphericalAberration=2,
+                                                 scannedPixelSize=None,
+                                                 magnification=56000)
+    def test1(self):
+        #TODO: CHECK IF THE PREDICTIONS ON MIC MATCH THE PREDICTIONS ON DOWNSAMPLED MICS
+        # Estimate CTF on the downsampled micrographs
+        print "Estimating boxsize..."
+        protCTF = XmippProtParticleBoxsize()
+        protCTF.inputMicrographs.set(self.protImport.outputMicrographs)
+        self.proj.launchProtocol(protCTF, wait=True)
+        self.assertIsNotNone(protCTF.boxsize, "Boxsize has not been produced.")
+        self.assertAlmostEquals(protCTF.boxsize.get(), 50, delta=20,
+                                msg='Wrong estimated boxsize.')
 
 
 class TestXmippAutomaticPicking(TestXmippBase):
@@ -324,6 +348,128 @@ class TestXmippAutomaticPicking(TestXmippBase):
                              "There was a problem with the automatic particle picking")
 
 
+
+class TestXmippDeepMicrographsCleaner(BaseTest):
+    """This class check if the protocol to extract particles
+    in Xmipp works properly.
+    """
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+
+        cls.dataset = DataSet(name='relion13_tutorial',
+                              folder='relion13_tutorial',
+                              files={'mics': 'betagal/Micrographs/*mrc',
+                                     'coords': 'betagal/PrecalculatedResults/Micrographs/*autopick.star'})
+        micsFn = cls.dataset.getFile('mics')
+        coordsDir = cls.dataset.getFile('coords')
+
+
+        # cls.DOWNSAMPLING = 5.0
+        cls.protImportMics = cls.newProtocol(ProtImportMicrographs,
+                                         samplingRateMode=0,
+                                         filesPath=micsFn,
+                                         samplingRate=3.54,
+                                         magnification=5000,
+                                         voltage=300,
+                                         sphericalAberration=2.7)
+        cls.launchProtocol(cls.protImportMics)
+
+        cls.protImportCoords = cls.newProtocol(ProtImportCoordinates,
+                                               filesPath=coordsDir,
+                                               boxSize=74)
+        cls.protImportCoords.inputMicrographs.set(cls.protImportMics)
+        cls.protImportCoords.inputMicrographs.setExtended('outputMicrographs')
+        cls.launchProtocol(cls.protImportCoords)
+
+        cls.protDown = XmippProtPreprocessMicrographs(doDownsample=True,
+                                                      downFactor=2,
+                                                      numberOfThreads=4)
+        cls.protDown.inputMicrographs.set(cls.protImportMics.outputMicrographs)
+        cls.proj.launchProtocol(cls.protDown, wait=True)
+
+        cls.fnameMaskGroundTruth_toMeanVal = {"%s/Falcon_2012_06_12-14_33_35_0.mrc": 0.03221564,
+                                              "%s/Falcon_2012_06_12-17_26_54_0.mrc": 0.00686,
+                                              "%s/Falcon_2012_06_12-17_23_32_0.mrc": 0.029,
+                                              }
+
+    def _checkLabel(self, coord ):
+        """ Check if label added
+        """
+        self.assertTrue(coord.hasAttribute('_xmipp_goodRegionScore'),
+                        'Coordinate has not goodRegionScore attribute.')
+
+    def _compareMaskAndGroundTruth(self, fnameMaskComputed, expectedVal):
+
+      from xmippLib import Image # comparar media
+      import numpy as np
+      imgHandler = Image()
+      imgHandler.read(fnameMaskComputed)
+      obtainedMask = imgHandler.getData()
+      self.assertAlmostEqual(expectedVal, np.mean(obtainedMask), delta=0.001)
+
+    def _compareCoorSetsBoxSizes(self, coordSet1, coordSet2, scale=1):
+      self.assertEqual(coordSet1.getBoxSize(), coordSet2.getBoxSize()*scale)
+
+    def test_noThreshold(self):
+        print ("Run cleanMics no thr")
+        protCleaner = self.newProtocol(XmippProtDeepMicrographScreen,
+                                       micsSource=0,  # same as picking
+                                       saveMasks=True)
+        protCleaner.inputCoordinates.set(self.protImportCoords.outputCoordinates)
+        self.launchProtocol(protCleaner)
+
+
+        self.assertIsNotNone(protCleaner.outputCoordinates_Full, 'Output is None')
+
+        self.assertEquals(protCleaner.outputCoordinates_Full.getSize(),
+                          self.protImportCoords.outputCoordinates.getSize(), "mismatch input output coordinates size")
+
+        predMasksPath= protCleaner._getExtraPath("predictedMasks")
+        for fname in self.fnameMaskGroundTruth_toMeanVal:
+          self._compareMaskAndGroundTruth( fname%predMasksPath, self.fnameMaskGroundTruth_toMeanVal[fname])
+        self._compareCoorSetsBoxSizes(self.protImportCoords.outputCoordinates, protCleaner.outputCoordinates_Full, )
+
+    def test_threshold(self):
+        print ("Run cleanMics with thr")
+        protCleaner = self.newProtocol(XmippProtDeepMicrographScreen,
+                                       micsSource=0,  # same as picking
+                                       saveMasks=True,
+                                       threshold=0.9)
+        protCleaner.inputCoordinates.set(self.protImportCoords.outputCoordinates)
+        self.launchProtocol(protCleaner)
+
+        self.assertIsNotNone(protCleaner.outputCoordinates_Auto_090, 'Output is None')
+
+
+        self.assertAlmostEqual(protCleaner.outputCoordinates_Auto_090.getSize(),
+                               9458, delta=5, msg="mismatch input output coordinates size")
+        self._compareCoorSetsBoxSizes(self.protImportCoords.outputCoordinates, protCleaner.outputCoordinates_Auto_090)
+
+    def test_fromDownsampled(self):
+        print ("Run cleanMics from downsampled")
+
+        protCleaner = self.newProtocol(XmippProtDeepMicrographScreen,
+                                       micsSource=1,  # other -> downsampled mics
+                                       useOtherScale=1,
+                                       saveMasks=True)
+        protCleaner.inputCoordinates.set(self.protImportCoords.outputCoordinates)
+        protCleaner.inputMicrographs.set( self.protDown.outputMicrographs)
+        self.launchProtocol(protCleaner)
+
+
+        self.assertIsNotNone(protCleaner.outputCoordinates_Full, 'Output is None')
+
+        self.assertEquals(protCleaner.outputCoordinates_Full.getSize(),
+                          self.protImportCoords.outputCoordinates.getSize(), "mismatch input output coordinates size")
+
+        predMasksPath= protCleaner._getExtraPath("predictedMasks")
+        for fname in self.fnameMaskGroundTruth_toMeanVal:
+          self._compareMaskAndGroundTruth( fname%predMasksPath, self.fnameMaskGroundTruth_toMeanVal[fname])
+
+        self._compareCoorSetsBoxSizes(self.protImportCoords.outputCoordinates, protCleaner.outputCoordinates_Full, 2)
+
 class TestXmippExtractParticles(TestXmippBase):
     """This class check if the protocol to extract particles
     in Xmipp works properly.
@@ -336,7 +482,6 @@ class TestXmippExtractParticles(TestXmippBase):
         cls.protImport = cls.runImportMicrographBPV(cls.micsFn)
         cls.protDown = cls.runDownsamplingMicrographs(cls.protImport.outputMicrographs,
                                                       cls.DOWNSAMPLING)
-
         cls.protCTF = cls.newProtocol(ProtImportCTF,
                                       importFrom=ProtImportCTF.IMPORT_FROM_XMIPP3,
                                       filesPath=cls.dataset.getFile('ctfsDir'),
@@ -818,6 +963,17 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         self.assertTrue(protCons1.consensusCoordinates.getSize() == 390,
                         "Output coordinates size does not is wrong.")
 
+        protConsOr = self.newProtocol(XmippProtConsensusPicking,
+                                      consensus=1)
+        protConsOr.inputCoordinates.set(
+            [Pointer(self.protFaPi, extended="outputCoordinates"),
+             Pointer(protAutomaticPP, extended="outputCoordinates")])
+        self.launchProtocol(protConsOr)
+
+        self.assertTrue(protConsOr.isFinished(), "Consensus failed")
+        self.assertTrue(protConsOr.consensusCoordinates.getSize() == 422,
+                        "Output coordinates size does not is wrong.")
+
         kwargs = {'nDim': 3,  # 3 objects
                   'creationInterval': 20,  # wait 1 sec. after creation
                   'setof': 1,  # create SetOfMicrographs
@@ -842,8 +998,9 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
             protAutoPP = self._updateProtocol(protAutoPP)
 
         protCons2 = self.newProtocol(XmippProtConsensusPicking)
-        protCons2.inputCoordinates.set([self.protFaPi.outputCoordinates,
-                                        protAutoPP.outputCoordinates])
+        protCons2.inputCoordinates.set(
+            [Pointer(self.protFaPi, extended="outputCoordinates"),
+             Pointer(protAutoPP, extended="outputCoordinates")])
         self.launchProtocol(protCons2)
         self.assertTrue(protCons2.isFinished(), "Consensus failed")
         self.assertTrue(protCons2.consensusCoordinates.getSize() == 390,

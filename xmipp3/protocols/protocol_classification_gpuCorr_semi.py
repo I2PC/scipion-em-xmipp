@@ -29,7 +29,7 @@ from os.path import getmtime
 from datetime import datetime
 from os.path import exists
 
-from pyworkflow import VERSION_1_2
+from pyworkflow import VERSION_2_0
 from pyworkflow.em import SetOfParticles, SetOfClasses2D, ALIGN_2D, ALIGN_NONE
 from pyworkflow.em.protocol import ProtAlign2D
 import pyworkflow.em.metadata as md
@@ -69,11 +69,18 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
     A previous set of classes must be provided to include the new images in the
     corresponding class although the representatives will be maintained."""
     _label = 'gl2d static'
-    _lastUpdateVersion = VERSION_1_2
+    _lastUpdateVersion = VERSION_2_0
 
 
     # --------------------------- DEFINE param functions -----------------------
     def _defineAlignParams(self, form):
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
+                       expertLevel=const.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="GPU may have several cores. Set it to zero"
+                            " if you do not know what we are talking about."
+                            " First core index is 0, second 1 and so on."
+                            " In this protocol is not possible to use several GPUs.")
         form.addParam('inputRefs', params.PointerParam,
                       pointerClass='SetOfClasses2D, SetOfAverages',
                       important=True,
@@ -90,7 +97,7 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
                       label='Number of best images:',
                       help='Number of the best images to keep for every class',
                       expertLevel=const.LEVEL_ADVANCED)
-        form.addParallelSection(threads=0, mpi=0)
+        form.addParallelSection(threads=0, mpi=8)
 
 
     # --------------------------- INSERT steps functions -----------------------
@@ -155,11 +162,12 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
                         'keepBest': self.keepBest.get(),
                         'maxshift': self.maximumShift,
                         'outputClassesFile': clasesOut,
+                        'device': int(self.gpuList.get()),
                         }
 
         args = ('-i_ref %(imgsRef)s -i_exp %(imgsExp)s -o %(outputFile)s '
                 '--keep_best %(keepBest)d --maxShift %(maxshift)d '
-                '--simplifiedMd --classify %(outputClassesFile)s')
+                '--simplifiedMd --classify %(outputClassesFile)s --device %(device)d ')
         self.runJob("xmipp_cuda_correlation", args % self._params)
 
 
@@ -237,6 +245,8 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
         if x1 != x2 or y1 != y2 or z1 != z2:
             errors.append('The input images and the reference images '
                           'have different sizes')
+        if len(self.gpuList.get())>1:
+            errors.append("The GPU list only can have one value for this protocol.")
         return errors
 
     def _summary(self):

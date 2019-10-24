@@ -28,6 +28,7 @@
 # **************************************************************************
 
 import os
+from math import ceil
 
 import pyworkflow.utils as pwutils
 import pyworkflow.object as pwobj
@@ -238,7 +239,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
             self.runJob('xmipp_movie_alignment_correlation', args, numberOfMpi=1)
 
         if self.doComputePSD:
-            self.computePSDs(movie, fnInitial, fnAvg)
+            self.computePSDImages(movie, fnInitial, fnAvg)
             # If the micrograph was only saved for computing the PSD
             # we can remove it
             pwutils.cleanPath(fnInitial)
@@ -251,11 +252,18 @@ class XmippProtMovieCorr(ProtAlignMovies):
     def _getShiftsFile(self, movie):
         return self._getExtraPath(self._getMovieRoot(movie) + '_shifts.xmd')
 
+    def _stepsCheck(self):
+        # Input movie set can be loaded or None when checked for new inputs
+        # If None, we load it
+        self._checkNewInput()
+        self._checkNewOutput()
+        self.inputMovies.get().close()
+
     def _setControlPoints(self):
-            _,_,frames = self.inputMovies.get().getDimensions()
+            _,_,frames = self.inputMovies.get().getDim()
             self.controlPointX.set( int(self.patchX) / 3 + 2)
             self.controlPointY.set(int(self.patchY) / 3 + 2)
-            self.controlPointT.set(int(frames) / 3 + 2)
+            self.controlPointT.set(ceil(frames/7.) + 2)
 
     def _getMovieShifts(self, movie):
         from ..convert import readShiftsMovieAlignment
@@ -328,8 +336,26 @@ class XmippProtMovieCorr(ProtAlignMovies):
         if self.autoControlPoints.get():
             self._setControlPoints() # make sure we work with proper values
         errors = ProtAlignMovies._validate(self)
-        if self.doLocalAlignment.get() and not self.useGpu.get():
-            errors.append("GPU is needed to do local alignment.")
+        getXmippHome = self.getClassPackage().Plugin.getHome
+        if self.doLocalAlignment.get():
+            cudaBinaryFn = getXmippHome('bin', 'xmipp_cuda_movie_alignment_correlation')
+            if not os.path.isfile(cudaBinaryFn):
+                errors.append('GPU version not found, make sure that Xmipp is '
+                              'compiled with GPU\n'
+                              '( *CUDA=True* in _scipion.conf_ + '
+                              '_run_: $ *scipion installb xmippSrc* ).')
+                return errors
+            elif not self.useGpu.get():
+                errors.append("GPU is needed to do local alignment.")
+                return errors
+            if self.numberOfMpi.get() * self.numberOfThreads.get() > 1:
+                errors.append("Multiple threads and/or mpi is incompatible with"
+                              " useGPU.")
+        else:
+            cpuBinaryFn = getXmippHome('bin', 'xmipp_movie_alignment_correlation')
+            if not os.path.isfile(cpuBinaryFn):
+                errors.append('CPU version not found for some reason, try to GPU=True.')
+                return errors
         if (self.controlPointX < 3):
             errors.append("You have to use at least 3 control points in X dim")
             return errors # to avoid possible division by zero later
@@ -339,7 +365,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
         if (self.controlPointT < 3):
             errors.append("You have to use at least 3 control points in T dim")
             return errors # to avoid possible division by zero later
-        _,_,frames = self.inputMovies.get().getDimensions()
+        _,_,frames = self.inputMovies.get().getDim()
         tPointsRatio = frames / (int(self.controlPointT) - 2)
         yPointsRatio = int(self.patchY) / (int(self.controlPointY) - 2)
         xPointsRatio = int(self.patchX) / (int(self.controlPointX) - 2)

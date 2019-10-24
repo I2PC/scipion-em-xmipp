@@ -37,7 +37,7 @@ from pyworkflow.em.protocol import ProtReconstruct3D
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         NumericListParam, IntParam,
                                         StringParam, BooleanParam,
-                                        LEVEL_ADVANCED)
+                                        LEVEL_ADVANCED, GPU_LIST, USE_GPU)
 import xmippLib
 from xmipp3.convert import writeSetOfParticles
 
@@ -65,6 +65,16 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
     # --------------------------- DEFINE param functions --------------------------------------------
 
     def _defineParams(self, form):
+        form.addHidden(USE_GPU, BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       expertLevel=LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+
         form.addSection(label='Input')
 
         form.addParam('inputParticles', PointerParam,
@@ -98,8 +108,6 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                       help="See [[Xmipp Symmetry][http://www2.mrc-lmb.cam.ac.uk/Xmipp/index.php/Conventions_%26_File_formats#Symmetry]] page"
                            "for a description of the symmetry format"
                            "accepted by Xmipp")
-        form.addParam('useGpu', BooleanParam, default=False,
-                      label='Use GPU?')
         form.addParam('numberOfParticles', NumericListParam,
                       default="10 20 50 100 200 500 1000 1500 2000 3000 5000",
                       expertLevel=LEVEL_ADVANCED,
@@ -124,7 +132,7 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                       expertLevel=LEVEL_ADVANCED,
                       label="Angular sampling rate")
 
-        form.addParallelSection(threads=0, mpi=4)
+        form.addParallelSection(threads=1, mpi=4)
 
     # --------------------------- INSERT steps functions --------------------------------------------
 
@@ -240,15 +248,15 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
             params += ' --sym %s' % self.symmetryGroup.get()
             params += ' --max_resolution %0.3f' % self.maxRes
             params += ' --padding 2'
-            params += ' --thr 1'
-            # params += ' --thr %d' % self.numberOfThreads.get()
+            params += ' --fast'
             params += ' --sampling %f' % Ts
 
-            if not self.useGpu.get():
-                self.runJob('xmipp_reconstruct_fourier', params)
-            else:
-                params += ' --fftOnGPU '
+            if self.useGpu.get():
+                params += ' --thr %d' % self.numberOfThreads.get()
+                params += ' --device %(GPU)s'
                 self.runJob('xmipp_cuda_reconstruct_fourier', params, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_reconstruct_fourier_accel', params)
 
             # for noise
             if self.doNoise.get():

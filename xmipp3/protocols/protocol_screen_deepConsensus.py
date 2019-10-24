@@ -522,17 +522,20 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           makePath(tmpPosDir)
           writeSetOfCoordinates(tmpPosDir, coordinatesP.get(), scale=float(Tm[coord_num])/float(Tm[0]))
           for posFname in os.listdir(tmpPosDir):
-              baseName, extension= os.path.basename(posFname).split(".")
-              if extension=="pos":
+              baseName = pwutils.removeBaseExt(posFname)
+              extension = pwutils.getExt(posFname)
+              if extension==".pos":
                 if baseName not in inputCoordsFnames:
                     inputCoordsFnames[baseName]=["None"]*nCoordsSets
                 inputCoordsFnames[baseName][coord_num]= os.path.join(tmpPosDir, posFname)
-      inputFileStr="#pos_i"
+      inputFileHeader="#pos_i\n"
+      inputFileStr=inputFileHeader
       for baseName in inputCoordsFnames:
          fnames= inputCoordsFnames[baseName]
          inputFileStr+=" ".join(fnames)+"\n"
              
-      assert len(inputFileStr)>0, "Error, no consensus can be computed as there are mismatch in coordinate sets filenames"
+      assert len(inputFileStr)>len(inputFileHeader), "Error, no consensus can be computed as there " \
+                                                     "are mismatch in coordinate sets filenames"
       consensus = -1 if mode=="AND" else 1
       configFname= self._getTmpPath("consensus_%s_inputs.txt"%(mode) )
       with open(configFname, "w") as f:
@@ -544,8 +547,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         
     def loadCoords(self, posCoorsPath, mode):
-        boxSize = self._getBoxSize()
-        inputMics = self._getInputMicrographs()
+
         sqliteName= self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE%mode)+".sqlite"
         if os.path.isfile(self._getExtraPath(sqliteName)):
             cleanPath(self._getExtraPath(sqliteName))
@@ -711,18 +713,16 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
     def extractParticles(self, mode):
 
-        downFactor = self._getDownFactor()
-        mics_ = self._getInputMicrographs()
         micsFnameSet = {}
         preprocMicsPath= self._getTmpPath(self.PRE_PROC_MICs_PATH)
         for micFname in os.listdir(preprocMicsPath):
-          micFnameBase= micFname.split(".")[0]
+          micFnameBase= pwutils.removeExt(micFname)
           micFname= os.path.join(preprocMicsPath, micFname)
           micsFnameSet[micFnameBase]= micFname
         extractCoordsContent="#mics coords\n"
         posDir= self._getExtraPath( self.CONSENSUS_COOR_PATH_TEMPLATE%mode )
         for posFname in os.listdir(posDir):
-          posNameBase=  posFname.split(".")[0]
+          posNameBase=  pwutils.removeExt(posFname)
           posFname= os.path.join(posDir, posFname)
           if posNameBase in micsFnameSet:
             extractCoordsContent+= "%s particles@%s\n"%(micsFnameSet[posNameBase], posFname)
@@ -757,9 +757,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           else:
             self.warning("The coord file %s wasn't used for extraction! "
                          % os.path.basename(posFn))
-            self.warning("Maybe you are extracting over a subset of micrographs")
         imgsXmd.write(fnImages)
-        
+
     def __dataDict_toStrs(self, dataDict):
         fnamesStr=[]
         weightsStr=[]

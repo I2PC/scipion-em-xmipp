@@ -158,59 +158,49 @@ class TestGpuCorrClassifier(BaseTest):
     def test_pattern(self):
 
         protImportMics = self.importMicrographs()
-        if protImportMics.isFailed():
-            self.assertTrue(False)
+        self.assertFalse(protImportMics.isFailed(), 'ImportMics has failed.')
 
         protImportAvgs = self.importAverages()
-        if protImportAvgs.isFailed():
-            self.assertTrue(False)
+        self.assertFalse(protImportAvgs.isFailed(), 'ImportAverages has failed.')
 
         if NUM_MICS<20:
             protSubsetMics = self.subsetMics(protImportMics.outputMicrographs)
-            if protSubsetMics.isFailed():
-                self.assertTrue(False)
+            self.assertFalse(protSubsetMics.isFailed(), 'protSubsetMics has failed.')
             outMics = protSubsetMics.outputMicrographs
 
         protInvContr = self.invertContrast(outMics)
-        self.assertFalse(protInvContr.isFailed())
+        self.assertFalse(protInvContr.isFailed(), 'protInvContr has failed.')
         outMics = protInvContr.outputMicrographs
 
         protCtf = self.calculateCtf(outMics)
-        if protCtf.isFailed():
-            self.assertTrue(False)
+        self.assertFalse(protCtf.isFailed(), 'CTFfind4 has failed.')
 
         protPicking = self.runPicking(outMics)
-        if protPicking.isFailed():
-            self.assertTrue(False)
+        self.assertFalse(protPicking.isFailed(), 'Eamn Sparx has failed.')
 
         protExtract = self.runExtractParticles(protPicking.outputCoordinates,
                                                protCtf.outputCTF)
-        if protExtract.isFailed():
-            self.assertTrue(False)
+        self.assertFalse(protExtract.isFailed(), 'Extract particles has failed.')
 
         protClassify, numClasses = self.runClassify(protExtract.outputParticles)
-        if protClassify.isFailed():
-            self.assertTrue(False)
-        if not protClassify.hasAttribute('outputClasses'):
-            self.assertTrue(False)
-        if protClassify.outputClasses.getSize() != numClasses:
-            self.assertTrue(False)
+        self.assertFalse(protClassify.isFailed(), 'GL2D (1) has failed.')
+        self.assertTrue(protClassify.hasAttribute('outputClasses'),
+                        'GL2D (1) has no outputClasses.')
+        self.assertEqual(protClassify.outputClasses.getSize(), numClasses,
+                         'GL2D (1) returned a wrong number of classes.')
 
         protClassify2, numClasses2 = self.runClassify2(
             protExtract.outputParticles, protImportAvgs.outputAverages)
-        if protClassify2.isFailed():
-            self.assertTrue(False)
-        if not protClassify2.hasAttribute('outputClasses'):
-            self.assertTrue(False)
-        if protClassify2.outputClasses.getSize() != numClasses2:
-            self.assertTrue(False)
+        self.assertFalse(protClassify2.isFailed(), 'GL2D (2) has failed.')
+        self.assertTrue(protClassify2.hasAttribute('outputClasses'),
+                        'GL2D (2) has no outputClasses.')
+        self.assertEqual(protClassify2.outputClasses.getSize(), numClasses2,
+                         'GL2D (2) returned a wrong number of classes.')
 
         protClassify3, numClasses3 = self.runClassify3(
             protExtract.outputParticles, protImportAvgs.outputAverages)
-        if protClassify3.isFailed():
-            self.assertTrue(False)
-        if not protClassify3.hasAttribute('outputClasses'):
-            self.assertTrue(False)
-        if protClassify3.outputClasses.getSize() != numClasses3:
-            self.assertTrue(False)
-
+        self.assertFalse(protClassify3.isFailed(), 'GL2D (3) has failed.')
+        self.assertTrue(protClassify3.hasAttribute('outputClasses'),
+                        'GL2D (3) has no outputClasses.')
+        self.assertEqual(protClassify3.outputClasses.getSize(), numClasses3,
+                         'GL2D (3) returned a wrong number of classes.')
