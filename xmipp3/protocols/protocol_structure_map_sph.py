@@ -29,11 +29,11 @@
 
 from pyworkflow.em.protocol import ProtAnalysis3D
 import pyworkflow.protocol.params as params
-import pyworkflow.em as em
 from pyworkflow.em.convert import ImageHandler
 from pyworkflow.em.data import SetOfVolumes, Volume
 from pyworkflow import VERSION_2_0
 import numpy as np
+
 
 def mds(d, dimensions=2):
     """
@@ -64,10 +64,6 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
     _label = 'sph struct map'
     _lastUpdateVersion = VERSION_2_0
 
-    def __init__(self, **args):
-        ProtAnalysis3D.__init__(self, **args)
-        self.stepsExecutionMode = em.STEPS_PARALLEL
-
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
@@ -84,7 +80,6 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                       label='Harmonical depth',
                       expertLevel=params.LEVEL_ADVANCED,
                       help='Harmonical depth of the deformation=1,2,3,...')
-        form.addParallelSection(threads=1, mpi=1)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -94,26 +89,21 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
         nVoli = 1
         for voli in volList:
-            deps = []
-            convert = self._insertFunctionStep('convertStep', volList[nVoli - 1],
+            self._insertFunctionStep('convertStep', volList[nVoli - 1],
                                      dimList[nVoli - 1], srList[nVoli - 1],
-                                     min(dimList), max(srList), prerequisites=[])
+                                     min(dimList), max(srList))
             nVolj = 1
             for volj in volList:
                 if nVolj != nVoli:
-                    stepID = self._insertFunctionStep('deformStep', volList[nVoli - 1],
+                    self._insertFunctionStep('deformStep', volList[nVoli - 1],
                                              volList[nVolj - 1], nVoli - 1,
-                                             nVolj - 1, prerequisites=[convert])
-                    deps.append(stepID)
-
+                                             nVolj - 1)
                 else:
-                    stepID = self._insertFunctionStep("extraStep", nVoli, nVolj)
-                    # self.distanceMatrix[nVoli - 1][nVolj - 1] = 0.0
-                    deps.append(stepID)
+                    self.distanceMatrix[nVoli - 1][nVolj - 1] = 0.0
                 nVolj += 1
             nVoli += 1
 
-        self._insertFunctionStep('gatherResultsStep', volList, prerequisites=deps)
+        self._insertFunctionStep('gatherResultsStep', volList)
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self, volFn, volDim, volSr, minDim, maxSr):
@@ -137,7 +127,6 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
         params = ' --i1 %s --i2 %s --apply %s --least_squares --local ' % \
                  (refVolFn, inputVolFn, fnOut)
-
         self.runJob("xmipp_volume_align", params)
 
         params = ' -i %s -r %s -o %s --depth %d ' %\
@@ -146,9 +135,6 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         self.runJob("xmipp_volume_deform_sph", params)
         distanceValue = np.loadtxt('./deformation.txt')
         self.distanceMatrix[i][j] = distanceValue
-
-    def extraStep(self, nVoli, nVolj):
-        self.distanceMatrix[nVoli - 1][nVolj - 1] = 0.0
 
 
     def gatherResultsStep(self, volList):
