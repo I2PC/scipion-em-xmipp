@@ -183,68 +183,72 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         particlesMd = 'particles@%s' % fnPosFile
         # If it has coordinates extract the particles
         if exists(fnPosFile):
-            # Create a list with micrographs operations (programs in xmipp) and
-            # the required command line parameters (except input/ouput files)
-            micOps = []
+            try:
+                # Create a list with micrographs operations (programs in xmipp) and
+                # the required command line parameters (except input/ouput files)
+                micOps = []
 
-            # Compute the variance and Gini coeff. of the part. and mic., resp.
-            args  =  '--pos %s' % fnPosFile
-            args += ' --mic %s' % fnLast
-            args += ' --patchSize %d' % patchSize
-            self.runJob('xmipp_coordinates_noisy_zones_filter', args)
+                # Compute the variance and Gini coeff. of the part. and mic., resp.
+                args  =  '--pos %s' % fnPosFile
+                args += ' --mic %s' % fnLast
+                args += ' --patchSize %d' % patchSize
+                self.runJob('xmipp_coordinates_noisy_zones_filter', args)
 
-            def getMicTmp(suffix):
-                return self._getTmpPath(baseMicName + suffix)
+                def getMicTmp(suffix):
+                    return self._getTmpPath(baseMicName + suffix)
 
-            # Check if it is required to downsample our micrographs
-            if self.notOne(downFactor):
-                fnDownsampled = getMicTmp("_downsampled.xmp")
-                args = "-i %s -o %s --step %f --method fourier"
-                self.runJob('xmipp_transform_downsample',
-                            args % (fnLast, fnDownsampled, downFactor))
-                fnLast = fnDownsampled
+                # Check if it is required to downsample our micrographs
+                if self.notOne(downFactor):
+                    fnDownsampled = getMicTmp("_downsampled.xmp")
+                    args = "-i %s -o %s --step %f --method fourier"
+                    self.runJob('xmipp_transform_downsample',
+                                args % (fnLast, fnDownsampled, downFactor))
+                    fnLast = fnDownsampled
 
-            if self.doRemoveDust:
-                fnNoDust = getMicTmp("_noDust.xmp")
-                args = " -i %s -o %s --bad_pixels outliers %f"
-                self.runJob('xmipp_transform_filter',
-                            args % (fnLast, fnNoDust, self.thresholdDust))
-                fnLast = fnNoDust
+                if self.doRemoveDust:
+                    fnNoDust = getMicTmp("_noDust.xmp")
+                    args = " -i %s -o %s --bad_pixels outliers %f"
+                    self.runJob('xmipp_transform_filter',
+                                args % (fnLast, fnNoDust, self.thresholdDust))
+                    fnLast = fnNoDust
 
-            if self._useCTF():
-                # We need to write a Xmipp ctfparam file
-                # to perform the phase flip on the micrograph
-                fnCTF = self._getTmpPath("%s.ctfParam" % baseMicName)
-                micrographToCTFParam(mic, fnCTF)
-                # Insert step to flip micrograph
-                if self.doFlip:
-                    fnFlipped = getMicTmp('_flipped.xmp')
-                    args = " -i %s -o %s --ctf %s --sampling %f"
-                    self.runJob('xmipp_ctf_phase_flip',
-                                args % (fnLast, fnFlipped, fnCTF,
-                                        self._getNewSampling()))
-                    fnLast = fnFlipped
-            else:
-                fnCTF = None
+                if self._useCTF():
+                    # We need to write a Xmipp ctfparam file
+                    # to perform the phase flip on the micrograph
+                    fnCTF = self._getTmpPath("%s.ctfParam" % baseMicName)
+                    micrographToCTFParam(mic, fnCTF)
+                    # Insert step to flip micrograph
+                    if self.doFlip:
+                        fnFlipped = getMicTmp('_flipped.xmp')
+                        args = " -i %s -o %s --ctf %s --sampling %f"
+                        self.runJob('xmipp_ctf_phase_flip',
+                                    args % (fnLast, fnFlipped, fnCTF,
+                                            self._getNewSampling()))
+                        fnLast = fnFlipped
+                else:
+                    fnCTF = None
 
-            args = " -i %s --pos %s" % (fnLast, particlesMd)
-            args += " -o %s --Xdim %d" % (outputRoot, boxSize)
+                args = " -i %s --pos %s" % (fnLast, particlesMd)
+                args += " -o %s --Xdim %d" % (outputRoot, boxSize)
 
-            if doInvert:
-                args += " --invert"
+                if doInvert:
+                    args += " --invert"
 
-            if fnCTF:
-                args += " --ctfparam " + fnCTF
-            
-            if doBorders:
-                args += " --fillBorders"
+                if fnCTF:
+                    args += " --ctfparam " + fnCTF
 
-            self.runJob("xmipp_micrograph_scissor", args)
+                if doBorders:
+                    args += " --fillBorders"
 
-            # Normalize
-            if normalizeArgs:
-                self.runJob('xmipp_transform_normalize',
-                            '-i %s.stk %s' % (outputRoot, normalizeArgs))
+                self.runJob("xmipp_micrograph_scissor", args)
+
+                # Normalize
+                if normalizeArgs:
+                    self.runJob('xmipp_transform_normalize',
+                                '-i %s.stk %s' % (outputRoot, normalizeArgs))
+            except Exception as e:
+                print("There is a problem with micrograph %s"%baseMicName)
+                print(e)
         else:
             self.warning("The micrograph %s hasn't coordinate file! "
                          % baseMicName)
@@ -482,28 +486,30 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                 coordDict[pos] = coord
 
             added = set() # Keep track of added coords to avoid duplicates
-            for row in md.iterRows(self._getMicXmd(mic)):
-                pos = (row.getValue(md.MDL_XCOOR), row.getValue(md.MDL_YCOOR))
-                coord = coordDict.get(pos, None)
-                if coord is not None and coord.getObjId() not in added:
-                    # scale the coordinates according to particles dimension.
-                    coord.scale(self.getBoxScale())
-                    p.copyObjId(coord)
-                    p.setLocation(xmippToLocation(row.getValue(md.MDL_IMAGE)))
-                    p.setCoordinate(coord)
-                    p.setMicId(mic.getObjId())
-                    p.setCTF(mic.getCTF())
-                    # adding the variance and Gini coeff. value of the mic zone
-                    setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
-                    setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
-                    if row.containsLabel(md.MDL_ZSCORE_DEEPLEARNING1):
-                        setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
+            fnMicXmd = self._getMicXmd(mic)
+            if exists(fnMicXmd):
+                for row in md.iterRows(fnMicXmd):
+                    pos = (row.getValue(md.MDL_XCOOR), row.getValue(md.MDL_YCOOR))
+                    coord = coordDict.get(pos, None)
+                    if coord is not None and coord.getObjId() not in added:
+                        # scale the coordinates according to particles dimension.
+                        coord.scale(self.getBoxScale())
+                        p.copyObjId(coord)
+                        p.setLocation(xmippToLocation(row.getValue(md.MDL_IMAGE)))
+                        p.setCoordinate(coord)
+                        p.setMicId(mic.getObjId())
+                        p.setCTF(mic.getCTF())
+                        # adding the variance and Gini coeff. value of the mic zone
+                        setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
+                        setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
+                        if row.containsLabel(md.MDL_ZSCORE_DEEPLEARNING1):
+                            setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
 
-                    # disabled particles (in metadata) should not add to the
-                    # final set
-                    if row.getValue(md.MDL_ENABLED) > 0:
-                        outputParts.append(p)
-                        added.add(coord.getObjId())
+                        # disabled particles (in metadata) should not add to the
+                        # final set
+                        if row.getValue(md.MDL_ENABLED) > 0:
+                            outputParts.append(p)
+                            added.add(coord.getObjId())
 
             # Release the list of coordinates for this micrograph since it
             # will not be longer needed
