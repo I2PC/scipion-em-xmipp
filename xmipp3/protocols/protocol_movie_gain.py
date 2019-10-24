@@ -241,7 +241,7 @@ class XmippProtMovieGain(ProtProcessMovies):
             #normalize array to mean 1
             ori_array = ori_array / np.mean(ori_array)
             #invert best oriented experimental gain
-            #ori_array = invert_array(ori_array)
+            ori_array = invert_array(ori_array)
 
             ori_gain.setData(ori_array)
             ori_gain.write(self._getPath("bestGain.xmp"))
