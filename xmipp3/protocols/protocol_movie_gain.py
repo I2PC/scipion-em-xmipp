@@ -56,10 +56,8 @@ def copy_image(imag):
 
 
 def cv2_applyTransform(imag, M, shape):
-    # Apply a transformation to a np array
-    # imag: np.array
-    # M: rotation matrix
-    # shape: output shape
+    ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
+    '''
     (hdst, wdst) = shape
     transformed = cv2.warpAffine(imag, M[:2][:], (wdst, hdst),
                                  borderMode=cv2.BORDER_CONSTANT, borderValue=1.0)
@@ -67,11 +65,11 @@ def cv2_applyTransform(imag, M, shape):
 
 
 def cv2_rotation(imag, angle, shape, P):
-    #Rotate a np.array and return also the transformation matrix
+    '''Rotate a np.array and return also the transformation matrix
     #imag: np.array
     #angle: angle in degrees
     #shape: output shape
-    #P: transform matrix (further transformation in addition to the rotation)
+    #P: transform matrix (further transformation in addition to the rotation)'''
     (hsrc, wsrc) = imag.shape
 
     # M = cv2.getRotationMatrix2D((h/2,w/2), angle, 1.0)
@@ -84,7 +82,7 @@ def cv2_rotation(imag, angle, shape, P):
 
 
 def matmul_serie(mat_list, size=4):
-    # Return the matmul of several numpy arrays
+    '''Return the matmul of several numpy arrays'''
     #Return the identity matrix if te list is empty
     if len(mat_list) > 0:
         res = np.identity(len(mat_list[0]))
@@ -96,13 +94,15 @@ def matmul_serie(mat_list, size=4):
     return res
 
 def normalize_array(ar):
-    #Normalize values in an array with mean 0 and std deviation 1
+    '''Normalize values in an array with mean 0 and std deviation 1
+    '''
     ar -= np.mean(ar)
     ar /= np.std(ar)
     return ar
 
 def arrays_correlation_FT(ar1,ar2_ft_conj,normalize=True):
-    #Return the correlation matrix of an array and the FT_conjugate of a second array using the fourier transform
+    '''Return the correlation matrix of an array and the FT_conjugate of a second array using the fourier transform
+    '''
     if normalize:
         ar1=normalize_array(ar1)
         #ar2=normalize_array(ar2)
@@ -115,7 +115,8 @@ def arrays_correlation_FT(ar1,ar2_ft_conj,normalize=True):
     return correlationFunction
 
 def translation_correction(Loc,shape):
-    #Return translation corrections given the max/min Location and the image shape
+    '''Return translation corrections given the max/min Location and the image shape
+    '''
     correcs=[]
     for i in range(2):
         if Loc[i]>shape[i]/2:
@@ -124,10 +125,37 @@ def translation_correction(Loc,shape):
             correcs+=[Loc[i]]
     return correcs
 
-def invert_array(gain,ifzero=1.0):
+def invert_array2(gain,ifzero=1.0):
     gain = np.where(np.abs(gain) > 1e-2, 1.0 / gain, ifzero)
     return gain
 
+def invert_array(gain,thres=0.01,depth=1):
+    '''Return the inverted array by first converting the values under the threshold to the median of the surrounding'''
+    gain=array_zeros_to_median(gain, thres, depth)
+    gain=1/gain
+    return gain
+
+def surrounding_values(a,ii,jj,depth=1):
+    '''Return a list with the surrounding elements, given the indexs of the center, from an 2D numpy array
+    '''
+    values=[]
+    for i in range(ii-depth,ii+depth+1):
+        for j in range(jj-depth,jj+depth+1):
+            if i>=0 and j>=0 and i<a.shape[0] and j<a.shape[1]:
+                if i!=ii or j!=jj:
+                    values+=[a[i][j]]
+    return values
+
+def array_zeros_to_median(a, thres=0.01, depth=1):
+    '''Return an array, replacing the zeros (values under a threshold) with the median of
+    its surrounding values (with a depth)'''
+    idxs = np.where(np.abs(a) < thres)[0]
+    idys = np.where(np.abs(a) < thres)[1]
+
+    for i in range(len(idxs)):
+        sur_values = surrounding_values(a, idxs[i], idys[i], depth)
+        a[idxs[i]][idys[i]] = np.median(sur_values)
+    return a
 
 class XmippProtMovieGain(ProtProcessMovies):
     """
@@ -165,8 +193,8 @@ class XmippProtMovieGain(ProtProcessMovies):
                       label="Estimate gain orientation",
                       help='Estimate the relative orientation between the estimated '
                            'and the existing gain')
-        form.addParam('normalizeGain', BooleanParam, default=True, expertLevel=LEVEL_ADVANCED,
-                      label="Normalize existing gain",
+        form.addParam('normalizeGain', BooleanParam, default=True,
+                      label="Normalize existing gain", expertLevel=LEVEL_ADVANCED,
                       help='Normalize the input gain so that it has a mean of 1')
         form.addParam('useExistingGainImage', BooleanParam, default=True,
                       label="Estimate residual gain",
@@ -198,7 +226,6 @@ class XmippProtMovieGain(ProtProcessMovies):
                 insertedDict[movie.getObjId()] = stepId
         else:
             # For each movie insert the step to process it
-            # TODO: Use inputMovies instead of self.inputMovies.get()
             for idx, movie in enumerate(self.inputMovies.get()):
                 if idx % self.movieStep.get() != 0:
                     continue
@@ -241,13 +268,11 @@ class XmippProtMovieGain(ProtProcessMovies):
             ori_array=ori_gain.getData()
             #normalize array to mean 1
             ori_array = ori_array / np.mean(ori_array)
-            #invert best oriented experimental gain
-            ori_array = invert_array(ori_array)
 
             ori_gain.setData(ori_array)
             ori_gain.write(self._getPath("bestGain.xmp"))
 
-        args += " --sigma 0"  # Esto solo para que vaya rapido, hay que quitarlo
+        #args += " --sigma 0"  # Esto solo para que vaya rapido, hay que quitarlo
         if self.useExistingGainImage.get() and gain is not None:
             if self.estimateOrientation.get() or self.normalizeGain.get():
                 args += " --gainImage %s"%self._getPath("bestGain.xmp")
@@ -380,19 +405,16 @@ class XmippProtMovieGain(ProtProcessMovies):
 
 
             inMovie = self.inputMovies.get()
-            # TODO: replace to movies.sqlite
             moviesSet = self._loadOutputSet(em.data.SetOfMovies,
-                                            'moviesGainCorrected.sqlite',
+                                            'movies.sqlite',
                                             fixSampling=saveMovie,
                                             fixGain=True)
 
             for movie in newDone:
                 moviesSet.append(movie)
 
-            # TODO: Replace to outputMovies
-            self._updateOutputSet('outputMoviesGainCorrected', moviesSet, streamMode)
+            self._updateOutputSet('outputMovies', moviesSet, streamMode)
 
-            # TODO: Replace to outputGains or outputResiduals (OJO con el Analyze Results)
             self._updateOutputSet('outputGains', imageSet, streamMode)
 
             if self.finished:  # Unlock createOutputStep if finished all jobs
@@ -419,8 +441,9 @@ class XmippProtMovieGain(ProtProcessMovies):
         outputSet.close()
 
     def match_orientation(self, exp_gain, est_gain):
-        # input: two xmipp images
-        # Calculates the correct orientation of the experimental gain image with respect to the estimated
+        ''' Calculates the correct orientation of the experimental gain image with respect to the estimated
+        Input: 2 Xmipp Images
+        '''
         print('Estimating best orientation')
         sys.stdout.flush()
         best_cor = 0
@@ -431,10 +454,8 @@ class XmippProtMovieGain(ProtProcessMovies):
 
         # Iterating for mirrors
         for imir in range(2):
-            #print('Mirror: %i'%imir)
             # Iterating for 90 rotations
             for irot in range(4):
-                #print('Rotation: %i'%(irot*90))
                 imag_array = np.asarray(exp_gain.getData(), dtype=np.float64)
                 if imir == 1:
                     # Matrix for MirrorX
@@ -449,7 +470,6 @@ class XmippProtMovieGain(ProtProcessMovies):
                 correlationFunction = arrays_correlation_FT(imag_array,est_gain_array_FT_conj)
 
                 minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(correlationFunction)
-                #print('correlation: %i,%i' % (imir, irot), minVal, maxVal, minLoc, maxLoc)
                 if abs(minVal) > abs(best_cor):
                     # minloc o minloc-h
                     corLoc=translation_correction(minLoc,est_gain_array.shape)
@@ -458,18 +478,16 @@ class XmippProtMovieGain(ProtProcessMovies):
                     #Multiply by inverse of translation matrix
                     best_M = np.matmul(np.linalg.inv(T), R)
                 if abs(maxVal) > abs(best_cor):
-                    # T o T-1
                     corLoc = translation_correction(maxLoc, est_gain_array.shape)
                     T = np.asarray([[1, 0, corLoc[0]], [0, 1, corLoc[1]], [0, 0, 1]])
                     best_cor = maxVal
                     #Multiply by inverse of translation matrix
                     best_M = np.matmul(np.linalg.inv(T),R)
 
-        #print('bestM',best_M)
         best_gain_array = cv2_applyTransform(np.asarray(exp_gain.getData(), dtype=np.float64), best_M, est_gain_array.shape)
 
         print('Best correlation: ',best_cor)
-        if best_cor < 0:
+        if best_cor > 0:
             best_gain_array = invert_array(best_gain_array)
 
         best_gain = xmippLib.Image()
