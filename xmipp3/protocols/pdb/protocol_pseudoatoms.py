@@ -44,7 +44,8 @@ class XmippProtConvertToPseudoAtoms(XmippProtConvertToPseudoAtomsBase):
         form.addParam('inputStructure', PointerParam, label="Input structure", important=True, 
                       pointerClass='Volume')
         XmippProtConvertToPseudoAtomsBase._defineParams(self,form)
-        form.addParallelSection(threads=4, mpi=1)    
+        #volume-to-pseudoatom conversion was not MPI-parallelized (mpi was set to 0 to not appear in the gui)
+        form.addParallelSection(threads=4, mpi=0)      
              
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
