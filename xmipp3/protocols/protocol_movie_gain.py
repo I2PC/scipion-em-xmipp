@@ -128,6 +128,7 @@ def invert_array(gain,ifzero=1.0):
     gain = np.where(np.abs(gain) > 1e-2, 1.0 / gain, ifzero)
     return gain
 
+
 class XmippProtMovieGain(ProtProcessMovies):
     """
     Estimate the gain image of a camera, directly analyzing one of its movies.
@@ -161,14 +162,14 @@ class XmippProtMovieGain(ProtProcessMovies):
                            'this parameter to 2, 3, ..., then only every 2nd, '
                            '3rd, ... movie will be used.')
         form.addParam('estimateOrientation', BooleanParam, default=True,
-                      label="Estimate orientation",
+                      label="Estimate gain orientation",
                       help='Estimate the relative orientation between the estimated '
                            'and the existing gain')
-        form.addParam('normalizeGain', BooleanParam, default=True,
+        form.addParam('normalizeGain', BooleanParam, default=True, expertLevel=LEVEL_ADVANCED,
                       label="Normalize existing gain",
                       help='Normalize the input gain so that it has a mean of 1')
         form.addParam('useExistingGainImage', BooleanParam, default=True,
-                      label="Use existing gain image",
+                      label="Estimate residual gain",
                       help='If there is a gain image associated with input '
                            'movies, you can decide to use it instead of '
                            'estimating raw/residual gain image. Location of '
@@ -332,7 +333,7 @@ class XmippProtMovieGain(ProtProcessMovies):
             imageSet.setSamplingRate(movie.getSamplingRate())
             imageSet.append(imgOut)
 
-            self._updateOutputSet('outputMovies', imageSet, Set.STREAM_CLOSED)
+            self._updateOutputSet('outputGains', imageSet, Set.STREAM_CLOSED)
             outputStep = self._getFirstJoinStep()
             outputStep.setStatus(cons.STATUS_NEW)
             self.finished = True
@@ -364,10 +365,8 @@ class XmippProtMovieGain(ProtProcessMovies):
                 return
 
             saveMovie = self.getAttributeValue('doSaveMovie', False)
-
-            # TODO: Replace to residuals.sqlite or gains.sqlite
             imageSet = self._loadOutputSet(em.data.SetOfImages,
-                                           'movies.sqlite',
+                                           'gains.sqlite',
                                            fixSampling=saveMovie)
 
             for movie in newDone:
@@ -394,7 +393,7 @@ class XmippProtMovieGain(ProtProcessMovies):
             self._updateOutputSet('outputMoviesGainCorrected', moviesSet, streamMode)
 
             # TODO: Replace to outputGains or outputResiduals (OJO con el Analyze Results)
-            self._updateOutputSet('outputMovies', imageSet, streamMode)
+            self._updateOutputSet('outputGains', imageSet, streamMode)
 
             if self.finished:  # Unlock createOutputStep if finished all jobs
                 outputStep = self._getFirstJoinStep()
