@@ -110,7 +110,7 @@ class XmippProtUndoAlignSubtomo(EMProtocol):
     # --------------------------- INFO functions --------------------------------------------
     def _validate(self):
         validateMsgs = []
-        for subtomo in  self.matrixSubtomograms.get().iterItems():
+        for subtomo in self.matrixSubtomograms.get().iterItems():
             if not subtomo.hasTransform():
                 validateMsgs.append('Please provide subtomograms which have transformation matrix as "subtomograms with'
                                     ' transformation".')
