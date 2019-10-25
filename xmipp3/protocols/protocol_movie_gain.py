@@ -47,14 +47,6 @@ from xmippLib import *
 from xmipp_base import *
 from xmipp3.utils import *
 
-
-def copy_image(imag):
-    # Return a copy of a xmipp_image
-    new_imag = xmippLib.Image()
-    new_imag.setData(imag.getData())
-    return new_imag
-
-
 def cv2_applyTransform(imag, M, shape):
     ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
     '''
@@ -62,7 +54,6 @@ def cv2_applyTransform(imag, M, shape):
     transformed = cv2.warpAffine(imag, M[:2][:], (wdst, hdst),
                                  borderMode=cv2.BORDER_CONSTANT, borderValue=1.0)
     return transformed
-
 
 def cv2_rotation(imag, angle, shape, P):
     '''Rotate a np.array and return also the transformation matrix
@@ -72,42 +63,18 @@ def cv2_rotation(imag, angle, shape, P):
     #P: transform matrix (further transformation in addition to the rotation)'''
     (hsrc, wsrc) = imag.shape
 
-    # M = cv2.getRotationMatrix2D((h/2,w/2), angle, 1.0)
     angle *= math.pi / 180
     T = np.asarray([[1, 0, -wsrc / 2], [0, 1, -hsrc / 2], [0, 0, 1]])
     R = np.asarray([[math.cos(angle), math.sin(angle), 0], [-math.sin(angle), math.cos(angle), 0], [0, 0, 1]])
     M = np.matmul(np.matmul(np.linalg.inv(T), np.matmul(R, T)), P)
-    #print(M)
     return cv2_applyTransform(imag, M, shape), M
-
-
-def matmul_serie(mat_list, size=4):
-    '''Return the matmul of several numpy arrays'''
-    #Return the identity matrix if te list is empty
-    if len(mat_list) > 0:
-        res = np.identity(len(mat_list[0]))
-        for i in range(len(mat_list)):
-            res = np.matmul(res, mat_list[i])
-    else:
-        res = np.identity(size)
-
-    return res
-
-def normalize_array(ar):
-    '''Normalize values in an array with mean 0 and std deviation 1
-    '''
-    ar -= np.mean(ar)
-    ar /= np.std(ar)
-    return ar
 
 def arrays_correlation_FT(ar1,ar2_ft_conj,normalize=True):
     '''Return the correlation matrix of an array and the FT_conjugate of a second array using the fourier transform
     '''
     if normalize:
         ar1=normalize_array(ar1)
-        #ar2=normalize_array(ar2)
 
-    #ar2_ft_conj = np.conj(np.fft.fft2(ar2))
     ar1_FT = np.fft.fft2(ar1)
     corr2FT = np.multiply(ar1_FT, ar2_ft_conj)
     correlationFunction = np.real(np.fft.ifft2(corr2FT)) / ar1_FT.size
@@ -125,26 +92,10 @@ def translation_correction(Loc,shape):
             correcs+=[Loc[i]]
     return correcs
 
-def invert_array2(gain,ifzero=1.0):
-    gain = np.where(np.abs(gain) > 1e-2, 1.0 / gain, ifzero)
-    return gain
-
 def invert_array(gain,thres=0.01,depth=1):
     '''Return the inverted array by first converting the values under the threshold to the median of the surrounding'''
     gain=array_zeros_to_median(gain, thres, depth)
-    gain=1/gain
-    return gain
-
-def surrounding_values(a,ii,jj,depth=1):
-    '''Return a list with the surrounding elements, given the indexs of the center, from an 2D numpy array
-    '''
-    values=[]
-    for i in range(ii-depth,ii+depth+1):
-        for j in range(jj-depth,jj+depth+1):
-            if i>=0 and j>=0 and i<a.shape[0] and j<a.shape[1]:
-                if i!=ii or j!=jj:
-                    values+=[a[i][j]]
-    return values
+    return 1.0/gain
 
 def array_zeros_to_median(a, thres=0.01, depth=1):
     '''Return an array, replacing the zeros (values under a threshold) with the median of
@@ -272,7 +223,6 @@ class XmippProtMovieGain(ProtProcessMovies):
             ori_gain.setData(ori_array)
             ori_gain.write(self._getPath("bestGain.xmp"))
 
-        #args += " --sigma 0"  # Esto solo para que vaya rapido, hay que quitarlo
         if self.useExistingGainImage.get() and gain is not None:
             if self.estimateOrientation.get() or self.normalizeGain.get():
                 args += " --gainImage %s"%self._getPath("bestGain.xmp")
