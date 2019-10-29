@@ -34,7 +34,6 @@ import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as param
 from pyworkflow import VERSION_2_0
 from pyworkflow.em.protocol import ProtClassify2D
-from pyworkflow.em.data import SetOfParticles
 from pyworkflow.object import Set
 from pyworkflow.utils import cleanPath
 from pyworkflow.utils.properties import Message
@@ -97,7 +96,30 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         return deps
 
     def eliminationStep(self, stepId):
-        """ To be implemented by childs. (Main task) """
+        fnInputMd = self.fnInputMd % stepId
+        partsSet = self.prepareImages()
+
+        if self.check == None:
+            writeSetOfParticles(partsSet, fnInputMd,
+                                alignType=em.ALIGN_NONE, orderBy='creation')
+        else:
+            writeSetOfParticles(partsSet, fnInputMd,
+                                alignType=em.ALIGN_NONE, orderBy='creation',
+                                where='creation>"' + str(self.check) + '"')
+
+        self.specialBehavoir(partsSet)
+
+        self.lenPartsSet = len(partsSet)
+
+        args = "-i %s -o %s -e %s -t %f" % (fnInputMd, self.fnOutputMd,
+                                            self.fnElimMd, self.threshold.get())
+        if self.addFeatures:
+            args += " --addFeatures"
+        if self.useDenoising:
+            args += " --useDenoising -d %f" % self.denoising.get()
+        self.runJob("xmipp_image_eliminate_empty_particles", args)
+
+    def specialBehavoir(self, inSet):
         pass
 
     def _getFirstJoinStep(self):
@@ -123,7 +145,26 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         self._checkNewOutput()
 
     def _checkNewInput(self):
-        """ To be implemented by childs. """
+        # Check if there are new particles to process from the input set
+        partsFile = self.getInput().getFileName()
+        self.lastCheck = getattr(self, 'lastCheck', datetime.now())
+        mTime = datetime.fromtimestamp(os.path.getmtime(partsFile))
+        # If the input movies.sqlite have not changed since our last check,
+        # it does not make sense to check for new input data
+        if self.lastCheck > mTime:
+            return None
+        self.lastCheck = datetime.now()
+
+        outputStep = self._getFirstJoinStep()
+
+        self.prepareImages()
+
+        fDeps = self._insertNewPartsSteps()
+        if outputStep is not None:
+            outputStep.addPrerequisites(*fDeps)
+        self.updateSteps()
+
+    def prepareImages(self):
         pass
 
     def _checkNewOutput(self):
@@ -219,51 +260,11 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
         self.addAdvancedParams(form)
 
     # --------------------------- INSERT steps functions ----------------------
-    def _checkNewInput(self):
-        # Check if there are new particles to process from the input set
-        partsFile = self.inputParticles.get().getFileName()
-        self.lastCheck = getattr(self, 'lastCheck', datetime.now())
-        mTime = datetime.fromtimestamp(os.path.getmtime(partsFile))
-        # If the input movies.sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastCheck > mTime:
-            return None
-        self.lastCheck = datetime.now()
-
-        outputStep = self._getFirstJoinStep()
-        fDeps = self._insertNewPartsSteps()
-        if outputStep is not None:
-            outputStep.addPrerequisites(*fDeps)
-        self.updateSteps()
-
-    def eliminationStep(self, stepId):
-        fnInputMd = self.fnInputMd % stepId
-        self.inputImages = self.inputParticles.get()
-
-        partsFile = self.inputImages.getFileName()
-        self.partsSet = SetOfParticles(filename=partsFile)
-        self.partsSet.loadAllProperties()
-        self.streamClosed = self.partsSet.isStreamClosed()
-        if self.check == None:
-            writeSetOfParticles(self.partsSet, fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation')
-        else:
-            writeSetOfParticles(self.partsSet, fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation',
-                                where='creation>"' + str(self.check) + '"')
-        for p in self.partsSet.iterItems(orderBy='creation', direction='DESC'):
+    def specialBehavoir(self, partsSet):
+        for p in partsSet.iterItems(orderBy='creation', direction='DESC'):
             self.check = p.getObjCreation()
             break
-        self.partsSet.close()
-        self.lenPartsSet = len(self.partsSet)
-
-        args = "-i %s -o %s -e %s -t %f" % (fnInputMd, self.fnOutputMd,
-                                            self.fnElimMd, self.threshold.get())
-        if self.addFeatures:
-            args += " --addFeatures"
-        if self.useDenoising:
-            args += " --useDenoising -d %f" % self.denoising.get()
-        self.runJob("xmipp_image_eliminate_empty_particles", args)
+        partsSet.close()
 
     def createOutputs(self):
         streamMode = Set.STREAM_CLOSED if getattr(self, 'finished', False) \
@@ -293,16 +294,28 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
     def getInput(self):
         return self.inputParticles.get()
 
+    def prepareImages(self):
+        self.inputImages = self.getInput()
+        partsSet = self.inputImages
+        # partsFile = self.inputImages.getFileName()
+        # partsSet = SetOfParticles(filename=partsFile)
+        partsSet.loadAllProperties()
+        self.streamClosed = partsSet.isStreamClosed()
+
+        return partsSet
+
 
 DISCARDED = 0
 ACCEPTED = 1
 ATTACHED = 2
 
 class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
-    """ Takes a set of classes and using statistical methods
-    (variance of variances of sub-parts of input image) eliminates those samples,
+    """ Takes a set of classes (or averages) and using statistical methods
+    (variances of sub-parts of input image) eliminates those samples,
     where there is no object/particle (only noise is presented there).
-    Threshold parameter can be used for fine-tuning the algorithm for type of data.
+    Threshold parameter can be used for fine-tuning the algorithm for
+    type of data. Also discards classes with less population than a given
+    persentage.
     """
 
     _label = 'eliminate empty classes'
@@ -316,7 +329,8 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
         form.addSection(label=Message.LABEL_INPUT)
         # - - - F O R   C L A S S E S - - -
         form.addParam('inputClasses', param.PointerParam, important=True,
-                      label="Input classes", pointerClass='SetOfClasses',
+                      pointerClass='SetOfClasses, SetOfAverages',
+                      label="Input classes",
                       help='Select the input averages to be classified.')
         form.addParam('threshold', param.FloatParam, default=8.0,
                       label='Threshold used in elimination',
@@ -324,76 +338,45 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                            'eliminated. Set to -1 for no elimination, even so '
                            'the "xmipp_scoreEmptiness" value will be attached to '
                            'every paricle for a posterior inspection.')
-        self.usePopulation = em.Boolean(False)
-        self.minPopulation = em.Float(0.2)
-        # form.addParam('usePopulation', param.BooleanParam, default=True,
-        #               label='Use class population',
-        #               help="Use class population to reject a class.")
-        # form.addParam('minPopulation', param.FloatParam, default=0.2,
-        #               label='Min. population below the mean',
-        #               condition="usePopulation",
-        #               expertLevel=param.LEVEL_ADVANCED,
-        #               help="Minimum of the population to accept a class.\n"
-        #                    "Classes with less population than the mean population "
-        #                    "times this value will be rejected.")
+        form.addParam('usePopulation', param.BooleanParam, default=True,
+                      label='Use class population',
+                      help="Use class population to reject a class.")
+        form.addParam('minPopulation', param.FloatParam, default=20,
+                      label='Min. population (%)',
+                      condition="usePopulation",
+                      expertLevel=param.LEVEL_ADVANCED,
+                      help="Minimum population to accept a class.\n"
+                           "Classes with less population than the mean population "
+                           "times this value will be rejected.")
 
         self.addAdvancedParams(form)
 
     # --------------------------- INSERT steps functions ----------------------
-    def _checkNewInput(self):
-        # Check if there are new particles to process from the input set
-        partsFile = self.inputClasses.get().getFileName()
-        self.lastCheck = getattr(self, 'lastCheck', datetime.now())
-        mTime = datetime.fromtimestamp(os.path.getmtime(partsFile))
-        # If the input movies.sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastCheck > mTime:
-            return None
-        outputStep = self._getFirstJoinStep()
-        self.preparePartsSet()
-        fDeps = self._insertNewPartsSteps()
-        if outputStep is not None:
-            outputStep.addPrerequisites(*fDeps)
-        self.updateSteps()
+    def _validate(self):
+        errors=[]
+        if isinstance(self.getInput(), em.SetOfImages) and self.usePopulation.get:
+            errors.append("Using population to reject classes is not possible "
+                          "with Averages as input.\nPlease, introduce a "
+                          "setOfClasses to analyse or disable the _use class "
+                          "population_ option.")
 
-    def eliminationStep(self, stepId):
-        fnInputMd = self.fnInputMd % stepId
-        self.preparePartsSet()
-
-        self.inputImages.loadAllProperties()
-        self.streamClosed = self.inputImages.isStreamClosed()
-        print("self.inputImages.isStreamClosed(): %s" % self.inputImages.isStreamClosed())
-        if self.check == None:
-            writeSetOfParticles(self.inputImages, fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation')
-        else:
-            writeSetOfParticles(self.inputImages, fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation',
-                                where='creation>"' + str(self.check) + '"')
+    def specialBehavoir(self, partSet):
         idsToCheck = []
-        for p in self.inputImages.iterItems(orderBy='creation', direction='ASC'):
+        for p in partSet.iterItems(orderBy='creation', direction='ASC'):
             self.check = p.getObjCreation()
             idsToCheck.append(p.getObjId())
-        self.inputImages.close()
-        self.lenPartsSet = len(self.inputImages)
+        partSet.close()
 
         self.rejectByPopulation(idsToCheck)
 
-        args = "-i %s -o %s -e %s -t %f" % (fnInputMd, self.fnOutputMd,
-                                            self.fnElimMd, self.threshold.get())
-        if self.addFeatures:
-            args += " --addFeatures"
-        if self.useDenoising:
-            args += " --useDenoising -d %f" % self.denoising.get()
-        self.runJob("xmipp_image_eliminate_empty_particles", args)
-
     def createOutputs(self):
-        def updateOutputs(mdFn, suffix, newData):
-            streamMode = Set.STREAM_CLOSED if getattr(self, 'finished', False) \
-                else (Set.STREAM_CLOSED if self.streamClosed else Set.STREAM_OPEN)
+        streamMode = Set.STREAM_CLOSED if getattr(self, 'finished', False) \
+            else (Set.STREAM_CLOSED if self.streamClosed else Set.STREAM_OPEN)
 
+        def updateOutputs(mdFn, suffix, newData):
             lastToClose = getattr(self, 'finished', False) and \
                           hasattr(self, '%sClasses' % suffix)
+            enableOut = {}
             if newData or lastToClose:
                 outSet = self._loadOutputSet(em.SetOfAverages,
                                              '%sAverages.sqlite' % suffix)
@@ -402,7 +385,7 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                     partsSet = self._createSetOfParticles("AUX")
                     readSetOfParticles(mdFn, partsSet)
                     # updating the enableCls dictionary
-                    print(" - %s:" % ("ACCEPTED" if suffix == 'output' else "DISCARTDED"))
+                    print(" - %s Averages:" % ("ACCEPTED" if suffix == 'output' else "DISCARTDED"))
                     for part in partsSet:
                         partId = part.getObjId()
                         if partId not in self.enableCls:
@@ -412,8 +395,8 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                         # - discard if we are in the discarted scope and any
                         currentStatus = self.enableCls[partId]
                         decision = suffix == 'output' and currentStatus == ACCEPTED
-                        self.enableCls[partId] = ACCEPTED if decision \
-                                                   else DISCARDED
+                        enableOut[partId] = ACCEPTED if decision else DISCARDED
+                        print("%d: %s -> %s" % (partId, currentStatus, decision))
                     # updating the Averages set
                     outSet.copyItems(partsSet,
                                      updateItemCallback=self._updateParticle,
@@ -424,53 +407,63 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                 self._updateOutputSet('%sAverages' % suffix, outSet, streamMode)
                 cleanPath(mdFn)
 
-                self.createOutputClasses(suffix, streamMode, newData)
+            return enableOut
 
-        newAccData = os.path.exists(self.fnOutMdTmp)
-                         # or ACCEPTED in self.enableCls.values()
-        updateOutputs(self.fnOutMdTmp, 'output', newAccData)
+        accOut = updateOutputs(self.fnOutMdTmp, 'output',
+                               os.path.exists(self.fnOutMdTmp))
 
-        newDisData = os.path.exists(self.fnElimMdTmp)
-                         # or DISCARDED in self.enableCls.values()
-        updateOutputs(self.fnElimMdTmp, 'eliminated', newDisData)
-
-        # self.createOutputClasses('output', streamMode, newAccData)
-        # self.createOutputClasses('eliminated', streamMode, newDisData)
+        discOut = updateOutputs(self.fnElimMdTmp, 'eliminated',
+                                os.path.exists(self.fnElimMdTmp))
+        print(type(accOut))
+        self.createOutputClasses('output', streamMode, accOut)
+        self.createOutputClasses('eliminated', streamMode, discOut)
 
     # ------------- UTILS Fuctions ------------------------------------
-    def preparePartsSet(self):
-        inClasses = self.inputClasses.get()
-        firstRep = inClasses.getFirstItem().getFirstItem()
+    def prepareImages(self):
+        inSet = self.getInput()
 
-        self.sizeDict = {cls.getObjId(): cls.getSize() for cls in inClasses}
+        if isinstance(inSet, em.SetOfImages):
+            firstRep = inSet.getFirstItem()
+            getImage = lambda item: item.clone()
+            self.classesDict = None
+        else:  # SetOfClasses
+            firstRep = inSet.getFirstItem().getFirstItem()
+            getImage = lambda item: item.getRepresentative().clone()
+            self.classesDict = {cls.getObjId(): cls.getSize() for cls in inSet}
 
         self.inputImages = self._createSetOfAverages("AUX")
         self.inputImages.enableAppend()
         self.inputImages.copyAttributes(firstRep, '_samplingRate')
-        self.inputImages.copyAttributes(inClasses, '_streamState')
+        self.inputImages.copyAttributes(inSet, '_streamState')
+        self.streamClosed = self.inputImages.isStreamClosed()
 
-        for cls in inClasses:
-            self.inputImages.append(cls.getRepresentative().clone())
+        for item in inSet:
+            self.inputImages.append(getImage(item))
 
         self.inputImages.write()
         self._store(self.inputImages)
 
+        return self.inputImages
+
     def rejectByPopulation(self, ids):
-        if self.usePopulation.get():
-            sizeDict = {}
-            for key, value in self.sizeDict.iteritems():
-                if key in ids:
-                    sizeDict[key] = value
+        if self.usePopulation.get() and self.classesDict is not None:
+            sizeDict = {clsId: size for clsId, size
+                        in self.classesDict.iteritems()
+                        if clsId in ids}
 
             meanPop = sum(sizeDict.values())/len(sizeDict)
 
             for clsId, size in sizeDict.iteritems():
-                decision = int(size > meanPop * self.minPopulation.get())
+                decision = int(size*100 > meanPop * self.minPopulation.get())
                 self.enableCls[clsId] = ACCEPTED if decision else DISCARDED
         else:
             self.enableCls = {clsId: ACCEPTED for clsId in ids}
 
-    def createOutputClasses(self, suffix, streamingState, fillCls):
+    def createOutputClasses(self, suffix, streamingState, enableDict):
+        if not self.classesDict:
+            # If there are no classes, nothing to do
+            return
+
         baseName = '%sClasses.sqlite' % suffix
         setFile = self._getPath(baseName)
         if os.path.exists(setFile):
@@ -481,38 +474,29 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
             outputSet = em.SetOfClasses2D(filename=setFile)
             outputSet.setStreamState(streamingState)
 
-        outputSet.copyInfo(self.inputClasses.get())  # if fails, delete
+        outputSet.copyInfo(self.getInput())  # if fails, delete
 
-        if fillCls:
+        if enableDict:
             # FIXME: Review this !!!
             decision = ACCEPTED if suffix == 'output' else DISCARDED
-            print("in createOutput... %s" % ('ACCEPTED' if suffix == 'output' else 'DISCARDED'))
-            desiredIds = [ids for ids, enable in self.enableCls.iteritems()
+            print("in createOutputClasses... %s" % ('ACCEPTED' if suffix == 'output' else 'DISCARDED'))
+            desiredIds = [ids for ids, enable in enableDict.iteritems()
                           if enable == decision]
-            print("self.enableCls: %s" % self.enableCls)
+            print("self.enableCls: %s" % enableDict)
             print("desiredIds: %s" % desiredIds)
 
-            for cls in self.inputClasses.get():
+            for cls in self.getInput():
                 repId = cls.getObjId()
                 if repId in desiredIds:
-                    representative = cls.getRepresentative()
-                    newClass = em.Class2D(objId=repId)
-                    newClass.setAlignment2D()
-                    newClass.copyInfo(self.inputImages)
-                    newClass.setAcquisition(self.inputImages.getAcquisition())
-                    newClass.setRepresentative(representative)
-                    newClass.setStreamState(streamingState)
+                    newClass = cls.clone()
 
                     outputSet.append(newClass)
 
-            for cls in self.inputClasses.get():
+            for cls in outputSet:
                 repId = cls.getObjId()
-                if repId in desiredIds:
-                    newClass = outputSet[repId]
-                    for img in cls:
-                        newClass.append(img)
+                cls.copyItems(self.getInput()[repId])
 
-                outputSet.update(newClass)
+                outputSet.update(cls)
 
             self.enableCls.update({idItem: ATTACHED for idItem in desiredIds})
 
@@ -526,9 +510,8 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
             # Persist changes
             self._store(outputAttr)
         else:
-            # FIXME: no outputClasses are generated because they are corrupted.
-            # self._defineOutputs(**{outputName: outputSet})
-            # self._defineSourceRelation(self.inputClasses, outputSet)
+            self._defineOutputs(**{outputName: outputSet})
+            self._defineSourceRelation(self.inputClasses, outputSet)
             self._store(outputSet)
 
         # Close set databaset to avoid locking it
