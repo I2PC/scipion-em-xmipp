@@ -153,11 +153,11 @@ class XmippProtMovieGain(ProtProcessMovies):
     def _processMovie(self, movie):
         movieId = movie.getObjId()
         fnMovie = movie.getFileName()
-        gain = self.inputMovies.get().getGain()
-        args = "-i %s --oroot %s --iter 1 --singleRef --frameStep %d " \
-               "--gainImage %s" % \
-               (fnMovie, self._getPath("movie_%06d" % movieId),
-                self.frameStep, gain)
+        fnGain = self.inputMovies.get().getGain()
+        args = "-i %s --oroot %s --iter 1 --singleRef --frameStep %d " % \
+               (fnMovie, self._getPath("movie_%06d" % movieId), self.frameStep)
+        if fnGain is not None:
+            args += " --gainImage %s"%fnGain
         if self.useExistingGainImage.get():
             args += " --applyGain"
 
