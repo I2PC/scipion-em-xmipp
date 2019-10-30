@@ -318,9 +318,6 @@ class XmippProtMovieGain(ProtProcessMovies):
                 summary.append(line.rstrip())
             fhSummary.close()
         return summary
-<<<<<<< Updated upstream
-=======
-
 
 def cv2_applyTransform(imag, M, shape):
     ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
@@ -387,4 +384,4 @@ def array_zeros_to_median(a, thres=0.01, depth=1):
         sur_values = surrounding_values(a, idxs[i], idys[i], depth)
         a[idxs[i]][idys[i]] = np.median(sur_values)
     return a
->>>>>>> Stashed changes
+
