@@ -158,8 +158,8 @@ class XmippProtMovieGain(ProtProcessMovies):
                (fnMovie, self._getPath("movie_%06d" % movieId), self.frameStep)
         if fnGain is not None:
             args += " --gainImage %s"%fnGain
-        if self.useExistingGainImage.get():
-            args += " --applyGain"
+            if self.useExistingGainImage.get():
+                args += " --applyGain"
 
         self.runJob("xmipp_movie_estimate_gain", args, numberOfMpi=1)
         cleanPath(self._getPath("movie_%06d_correction.xmp" % movieId))
