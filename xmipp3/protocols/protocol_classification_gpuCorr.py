@@ -49,6 +49,13 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
 
     # --------------------------- DEFINE param functions -----------------------
     def _defineAlignParams(self, form):
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
+                       expertLevel=const.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="GPU may have several cores. Set it to zero"
+                            " if you do not know what we are talking about."
+                            " First core index is 0, second 1 and so on."
+                            " In this protocol is not possible to use several GPUs.")
         form.addParam('useReferenceImages', params.BooleanParam, default=False,
                       label='Use a Set of Reference Images ?',
                       help='If you set to *Yes*, you should provide a '
@@ -92,7 +99,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                            'If *No*, all the generated classes will be '
                            'balanced',
                       expertLevel=const.LEVEL_ADVANCED,)
-        form.addParallelSection(threads=0, mpi=4)
+        form.addParallelSection(threads=0, mpi=8)
 
 
     # --------------------------- INSERT steps functions -----------------------
@@ -381,6 +388,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                             'keepBest': self.keepBest.get(),
                             'maxshift': self.maximumShift,
                             'outputClassesFile': filename,
+                            'device': int(self.gpuList.get()),
                             }
         else:
             filename = 'general_level%03d' % level + '_classes.xmd'
@@ -393,13 +401,14 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                             'keepBest': self.keepBest.get(),
                             'maxshift': self.maximumShift,
                             'outputClassesFile': filename,
+                            'device': int(self.gpuList.get()),
                             }
         Nrefs = getSize(refSet)
         if Nrefs>2:
             args = '-i_ref %(imgsRef)s -i_exp %(imgsExp)s -o %(outputFile)s '\
                    '--odir %(tmpDir)s --keep_best %(keepBest)d '\
                    '--maxShift %(maxshift)d --classify %(outputClassesFile)s '\
-                   '--simplifiedMd'
+                   '--simplifiedMd --device %(device)d '
             self.runJob("xmipp_cuda_correlation", args % self._params,
                         numberOfMpi=1)
         else:
@@ -413,8 +422,8 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                     self._params['Nrefs']=Nrefs
                     self._params['cl2dDir'] = self._getExtraPath(
                                               join('level%03d' % level))
-                    self.runJob("xmipp_mpi_classify_CL2D",
-                                args % self._params)
+                    self.runJob("xmipp_classify_CL2D",
+                                args % self._params, numberOfMpi=self.numberOfMpi.get())
                 except Exception as ex:
                     flag_error = True
 
@@ -764,6 +773,8 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                                   'have different sizes')
             else:
                 errors.append("Please, enter the reference images")
+        if len(self.gpuList.get())>1:
+            errors.append("The GPU list only can have one value for this protocol.")
         return errors
 
     def _summary(self):

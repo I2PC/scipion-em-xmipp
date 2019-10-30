@@ -28,6 +28,8 @@
 import numpy as np
 import os
 import math
+import cv2
+import sys
 
 from pyworkflow import VERSION_1_1
 from pyworkflow.em.data import SetOfMovies, Movie
@@ -36,16 +38,18 @@ from pyworkflow.object import Set
 from pyworkflow.protocol.params import (PointerParam, IntParam,
                                         BooleanParam, LEVEL_ADVANCED)
 from pyworkflow.utils.properties import Message
-from pyworkflow.utils.path import cleanPath
+from pyworkflow.utils.path import moveFile
 import pyworkflow.protocol.constants as cons
 import pyworkflow.em as em
 
 import xmippLib
+from xmippLib import *
+from xmipp_base import *
+from xmipp3.utils import *
 
 
 class XmippProtMovieGain(ProtProcessMovies):
-    """
-    Estimate the gain image of a camera, directly analyzing one of its movies.
+    """ Estimate the gain image of a camera, directly analyzing one of its movies.
     """
     _label = 'movie gain'
     _lastUpdateVersion = VERSION_1_1
@@ -57,7 +61,7 @@ class XmippProtMovieGain(ProtProcessMovies):
     # -------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label=Message.LABEL_INPUT)
- 
+
         form.addParam('inputMovies', PointerParam, pointerClass='SetOfMovies, '
                                                                 'Movie',
                       label=Message.LABEL_INPUT_MOVS,
@@ -75,17 +79,26 @@ class XmippProtMovieGain(ProtProcessMovies):
                            'compute the movie gain. If you set '
                            'this parameter to 2, 3, ..., then only every 2nd, '
                            '3rd, ... movie will be used.')
-        form.addParam('useExistingGainImage', BooleanParam, default=None,
-                      label="Use existing gain image",
+        form.addParam('estimateOrientation', BooleanParam, default=True,
+                      label="Estimate gain orientation",
+                      help='Estimate the relative orientation between the estimated '
+                           'and the existing gain')
+        form.addParam('normalizeGain', BooleanParam, default=True,
+                      label="Normalize existing gain", expertLevel=LEVEL_ADVANCED,
+                      help='Normalize the input gain so that it has a mean of 1')
+        form.addParam('useExistingGainImage', BooleanParam, default=True,
+                      label="Estimate residual gain",
                       help='If there is a gain image associated with input '
                            'movies, you can decide to use it instead of '
                            'estimating raw/residual gain image. Location of '
                            'this gain image needs to be indicated in import '
                            'movies protocol.')
-        form.addParallelSection(threads=1, mpi=1)
+
+        # It should be in parallel (>2) in order to be able of attaching
+        #  new movies to the output while estimating residual gain
+        form.addParallelSection(threads=4, mpi=1)
 
     # -------------------------- STEPS functions ------------------------------
-
     def createOutputStep(self):
         pass
 
@@ -103,10 +116,26 @@ class XmippProtMovieGain(ProtProcessMovies):
                 deps.append(stepId)
                 insertedDict[movie.getObjId()] = stepId
         else:
+            if (len(insertedDict) == 0 and self.estimateOrientation.get()
+                and self.inputMovies.get().getGain() is not None):
+                # Adding a first step to orientate the input gain
+                firstMovie = self.inputMovies.get().getFirstItem()
+                movieDict = firstMovie.getObjDict(includeBasic=True)
+                orientStepId = self._insertFunctionStep('estimateOrientationStep',
+                                                        movieDict,
+                                                        prerequisites=self.convertCIStep)
+                # adding orientStep as dependency for all other steps
+                self.convertCIStep.append(orientStepId)
+
+            if len(insertedDict) == 0 and self.normalizeGain.get():
+                # Adding a step to normalize the gain (only one)
+                normStepId = self._insertFunctionStep('normalizeGainStep',
+                                                      prerequisites=self.convertCIStep)
+                # adding normStep as dependency for all other steps
+                self.convertCIStep.append(normStepId)
+
             # For each movie insert the step to process it
-            for idx, movie in enumerate(self.inputMovies.get()):
-                if idx % self.movieStep.get() != 0:
-                    continue
+            for movie in inputMovies:
                 if movie.getObjId() not in insertedDict:
                     stepId = self._insertMovieStep(movie)
                     deps.append(stepId)
@@ -152,17 +181,25 @@ class XmippProtMovieGain(ProtProcessMovies):
 
     def _processMovie(self, movie):
         movieId = movie.getObjId()
+        if not self.doGainProcess(movieId):
+            return
         fnMovie = movie.getFileName()
-        fnGain = self.inputMovies.get().getGain()
-        args = "-i %s --oroot %s --iter 1 --singleRef --frameStep %d " % \
-               (fnMovie, self._getPath("movie_%06d" % movieId), self.frameStep)
-        if fnGain is not None:
-            args += " --gainImage %s"%fnGain
-            if self.useExistingGainImage.get():
-                args += " --applyGain"
+        gain = self.getInputGain()
+        args = self.getArgs(fnMovie, movieId)
+        fnGain = self.getCurrentGain(movieId)
+
+        if self.useExistingGainImage.get() and gain is not None:
+            if self.estimateOrientation.get() or self.normalizeGain.get():
+                args += " --gainImage %s" % self.getBestGain()
+            else:
+                args += " --gainImage %s" % gain
 
         self.runJob("xmipp_movie_estimate_gain", args, numberOfMpi=1)
-        cleanPath(self._getPath("movie_%06d_correction.xmp" % movieId))
+
+        # We take the inverse of the estimated gain computed by xmipp,
+        #  stored in correction file
+        moveFile(self._getExtraPath("movie_%06d_correction.xmp" % movieId),
+                 self.getCurrentGain(movieId))
 
         fnSummary = self._getPath("summary.txt")
         fnMonitorSummary = self._getPath("summaryForMonitor.txt")
@@ -172,7 +209,7 @@ class XmippProtMovieGain(ProtProcessMovies):
         else:
             fhSummary = open(fnSummary, "a")
             fnMonitorSummary = open(fnMonitorSummary, "a")
-        fnGain = self._getPath("movie_%06d_gain.xmp" % movieId)
+
         if os.path.exists(fnGain):
             G = xmippLib.Image()
             G.read(fnGain)
@@ -189,7 +226,7 @@ class XmippProtMovieGain(ProtProcessMovies):
                                    (movieId, dev, p[0], p[4], max))
             fnMonitorSummary.close()
 
-    def _loadOutputSet(self, SetClass, baseName, fixSampling=True):
+    def _loadOutputSet(self, SetClass, baseName, fixGain=False):
         """
         Load the output set if it exists or create a new one.
         fixSampling: correct the output sampling rate if binning was used,
@@ -209,9 +246,8 @@ class XmippProtMovieGain(ProtProcessMovies):
             inputMovies = self.inputMovies.get()
             outputSet.copyInfo(inputMovies)
 
-        if fixSampling:
-            newSampling = inputMovies.getSamplingRate() * self._getBinFactor()
-            outputSet.setSamplingRate(newSampling)
+        if fixGain and os.path.isfile(self.getBestGain()):
+            outputSet.setGain(self.getBestGain())
 
         return outputSet
 
@@ -225,18 +261,16 @@ class XmippProtMovieGain(ProtProcessMovies):
         if isinstance(self.inputMovies.get(), Movie):
             saveMovie = self.getAttributeValue('doSaveMovie', False)
             imageSet = self._loadOutputSet(em.data.SetOfImages,
-                                           'movies.sqlite',
-                                           fixSampling=saveMovie)
+                                           'movies.sqlite')
             movie = self.inputMovies.get()
             imgOut = em.data.Image()
             imgOut.setObjId(movie.getObjId())
             imgOut.setSamplingRate(movie.getSamplingRate())
-            imgOut.setFileName(self._getPath("movie_%06d_gain.xmp" %
-                                             movie.getObjId()))
+            imgOut.setFileName(self.getCurrentGain(movie.getObjId()))
             imageSet.setSamplingRate(movie.getSamplingRate())
             imageSet.append(imgOut)
 
-            self._updateOutputSet('outputMovies', imageSet, Set.STREAM_CLOSED)
+            self._updateOutputSet('outputGains', imageSet, Set.STREAM_CLOSED)
             outputStep = self._getFirstJoinStep()
             outputStep.setStatus(cons.STATUS_NEW)
             self.finished = True
@@ -252,12 +286,10 @@ class XmippProtMovieGain(ProtProcessMovies):
             # We have finished when there is not more input movies
             # (stream closed) and the number of processed movies is
             # equal to the number of inputs
-            self.finished = self.streamClosed and \
-                            allDone == int(math.ceil(
-                                len(self.listOfMovies) /
-                                float(self.movieStep.get())))
-            streamMode = Set.STREAM_CLOSED if self.finished \
-                else Set.STREAM_OPEN
+            self.finished = (self.streamClosed and
+                             allDone == len(self.listOfMovies))
+            streamMode = (Set.STREAM_CLOSED if self.finished
+                          else Set.STREAM_OPEN)
 
             if newDone:
                 self._writeDoneList(newDone)
@@ -267,21 +299,30 @@ class XmippProtMovieGain(ProtProcessMovies):
                 # so we exit from the function here
                 return
 
-            saveMovie = self.getAttributeValue('doSaveMovie', False)
-            imageSet = self._loadOutputSet(em.data.SetOfImages,
-                                           'movies.sqlite',
-                                           fixSampling=saveMovie)
+            if any([self.doGainProcess(i.getObjId()) for i in newDone]):
+                # update outputGains if any residualGain is processed in newDone
+                imageSet = self._loadOutputSet(em.data.SetOfImages,
+                                               'gains.sqlite')
+                for movie in newDone:
+                    movieId = movie.getObjId()
+                    if not self.doGainProcess(movieId):
+                        continue
+                    imgOut = em.data.Image()
+                    imgOut.setObjId(movieId)
+                    imgOut.setSamplingRate(movie.getSamplingRate())
+                    imgOut.setFileName(self.getCurrentGain(movieId))
+                    imageSet.setSamplingRate(movie.getSamplingRate())
+                    imageSet.append(imgOut)
 
+                self._updateOutputSet('outputGains', imageSet, streamMode)
+
+            moviesSet = self._loadOutputSet(em.data.SetOfMovies,
+                                            'movies.sqlite',
+                                            fixGain=True)
             for movie in newDone:
-                imgOut = em.data.Image()
-                imgOut.setObjId(movie.getObjId())
-                imgOut.setSamplingRate(movie.getSamplingRate())
-                imgOut.setFileName(self._getPath("movie_%06d_gain.xmp"
-                                                 % movie.getObjId()))
-                imageSet.setSamplingRate(movie.getSamplingRate())
-                imageSet.append(imgOut)
+                moviesSet.append(movie)
 
-            self._updateOutputSet('outputMovies', imageSet, streamMode)
+            self._updateOutputSet('outputMovies', moviesSet, streamMode)
 
             if self.finished:  # Unlock createOutputStep if finished all jobs
                 outputStep = self._getFirstJoinStep()
@@ -306,13 +347,88 @@ class XmippProtMovieGain(ProtProcessMovies):
         # Close set databaset to avoid locking it
         outputSet.close()
 
+    def match_orientation(self, exp_gain, est_gain):
+        ''' Calculates the correct orientation of the experimental gain image
+            with respect to the estimated
+            Input: 2 Xmipp Images
+        '''
+        print('Estimating best orientation')
+        sys.stdout.flush()
+        best_cor = 0
+        #Building conjugate of FT of estimated gain for correlations
+        est_gain_array = est_gain.getData()
+        est_gain_array = normalize_array(est_gain_array)
+        est_gain_array_FT_conj = np.conj(np.fft.fft2(est_gain_array))
+
+        # Iterating for mirrors
+        for imir in range(2):
+            # Iterating for 90 rotations
+            for irot in range(4):
+                imag_array = np.asarray(exp_gain.getData(), dtype=np.float64)
+                if imir == 1:
+                    # Matrix for MirrorX
+                    M = np.asarray([[-1, 0, imag_array.shape[1]], [0, 1, 0], [0, 0, 1]])
+                else:
+                    M = np.identity(3)
+                angle = irot * 90
+                #Transformating the imag array (mirror + rotation)
+                imag_array, R = cv2_rotation(imag_array, angle, est_gain_array.shape, M)
+
+                # calculating correlation
+                correlationFunction = arrays_correlation_FT(imag_array,est_gain_array_FT_conj)
+
+                minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(correlationFunction)
+                if abs(minVal) > abs(best_cor):
+                    # minloc o minloc-h
+                    corLoc=translation_correction(minLoc,est_gain_array.shape)
+                    T = np.asarray([[1, 0, corLoc[0]], [0, 1, corLoc[1]], [0, 0, 1]])
+                    best_cor = minVal
+                    #Multiply by inverse of translation matrix
+                    best_M = np.matmul(np.linalg.inv(T), R)
+                if abs(maxVal) > abs(best_cor):
+                    corLoc = translation_correction(maxLoc, est_gain_array.shape)
+                    T = np.asarray([[1, 0, corLoc[0]], [0, 1, corLoc[1]], [0, 0, 1]])
+                    best_cor = maxVal
+                    #Multiply by inverse of translation matrix
+                    best_M = np.matmul(np.linalg.inv(T),R)
+
+        best_gain_array = cv2_applyTransform(np.asarray(exp_gain.getData(),
+                                                        dtype=np.float64),
+                                             best_M, est_gain_array.shape)
+
+        print('Best correlation: ',best_cor)
+        if best_cor > 0:
+            best_gain_array = invert_array(best_gain_array)
+
+        best_gain = xmippLib.Image()
+        best_gain.setData(best_gain_array)
+        best_gain.write(self.getBestGain())
+
+    # ------------------------- UTILS functions --------------------------------
+    def getCurrentGain(self, movieId):
+        return self._getExtraPath("movie_%06d_gain.xmp" % movieId)
+
+    def getBestGain(self):
+        return self._getExtraPath("bestGain.mrc")
+
+    def getInputGain(self):
+        return self.inputMovies.get().getGain()
+
+    def getArgs(self, movieFn, movieId, extraArgs=''):
+        return ("-i %s --oroot %s --iter 1 --singleRef --frameStep %d %s"
+                % (movieFn, self._getExtraPath("movie_%06d" % movieId),
+                self.frameStep, extraArgs))
+
+    def doGainProcess(self, movieId):
+        return movieId == 1 or movieId % self.movieStep.get() == 0
+
     # --------------------------- INFO functions -------------------------------
     def _summary(self):
         fnSummary = self._getPath("summary.txt")
         if not os.path.exists(fnSummary):
             summary = ["No summary information yet."]
         else:
-            fhSummary = open(fnSummary,"r")
+            fhSummary = open(fnSummary, "r")
             summary = []
             for line in fhSummary.readlines():
                 summary.append(line.rstrip())

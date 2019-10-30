@@ -1,7 +1,6 @@
 # **************************************************************************
 # *
-# * Authors:     Mohsen Kazemi  (mkazemi@cnb.csic.es)
-# *              C.O.S. Sorzano (coss@cnb.csic.es)
+# * Authors:     Amaya Jimenez Moreno (ajimenez@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -27,25 +26,25 @@
 
 import os
 import numpy as np
-from mpl_toolkits.mplot3d import Axes3D
-from pylab import figure
+from mpl_toolkits.mplot3d import proj3d
 
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pyworkflow.gui.plotter import plt
 import pyworkflow.protocol.params as params
 
-from xmipp3.protocols import XmippProtStructureMapping
+from xmipp3.protocols.protocol_structure_map_sph import XmippProtStructureMapSPH
 
 
-class XmippProtStructureMappingViewer(ProtocolViewer):
+class XmippProtStructureMapSphViewer(ProtocolViewer):
     """ Wrapper to visualize different type of data objects
     with the Xmipp program xmipp_showj
     """
     
-    _label = 'viewer validate_overfitting'
+    _label = 'viewer structure map sph'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
-    _targets = [XmippProtStructureMapping]
-        
+    _targets = [XmippProtStructureMapSPH]
+
+
     def _defineParams(self, form):
         form.addSection(label='Show StructMap')
         form.addParam('numberOfDimensions', params.IntParam, default=2,
@@ -70,13 +69,10 @@ class XmippProtStructureMappingViewer(ProtocolViewer):
         # Create labels        
         count = 0
         labels = []
-        for voli in self.protocol._iterInputVolumes():
-            if not voli.getObjLabel():
-                count+=1
-                labels.append("vol_%02d"%count)                            
-            else:
-                labels.append("%s"%voli.getObjLabel())
-                count += 1              
+        volList, _, _ = self.protocol._iterInputVolumes()
+        for voli in volList:
+            count+=1
+            labels.append("vol_%02d"%count)
          
         val = 0
         if nDim == 1:
@@ -107,23 +103,40 @@ class XmippProtStructureMappingViewer(ProtocolViewer):
             plt.grid(True)
             plt.show()
                 
-        else:         
-            fig = figure()
-	    ax = Axes3D(fig)
-
+        else: 
+                         
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection = '3d')
+            
+            ax.scatter(coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], marker = 'o', c='g')
+            ax.set_xlabel('Dimension 1', fontsize=11)
+            ax.set_ylabel('Dimension 2', fontsize=11)
+            ax.set_zlabel('Dimension 3', fontsize=11)
+            ax.text2D(0.05, 0.95, "StructMap", transform=ax.transAxes)
+                         
+            x2, y2, _ = proj3d.proj_transform(coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], ax.get_proj())
+            Labels = []
             for i in range(len(coordinates[:, 0])):
-		ax.scatter(coordinates[i, 0], coordinates[i, 1], coordinates[i, 2], marker = 'o', s=50, c='g')
-		ax.text(coordinates[i,0],coordinates[i,1],coordinates[i,2], '  %s' % (labels[i]), size=15, zorder=1, color='k')
-
- 	    ax.set_xlabel('Dimension 1', fontsize=15)
-            ax.set_ylabel('Dimension 2', fontsize=15)
-            ax.set_zlabel('Dimension 3', fontsize=15)
-	    ax.xaxis.labelpad = 10
-	    ax.yaxis.labelpad = 10
-	    ax.zaxis.labelpad = 10
-            ax.text2D(0.05, 0.95, "StructMap", transform=ax.transAxes, fontsize=15)
-
-	    plt.show() 
+                text = labels[i]
+                label = ax.annotate(text,
+                                    xycoords='data',
+                                    xy = (x2[i], y2[i]), xytext = (x2[i]+val, y2[i]+val),
+                                    textcoords = 'data', ha = 'right',
+                                     va = 'bottom', fontsize=9,
+                                    bbox = dict(boxstyle = 'round,pad=0.3',
+                                                 fc = 'yellow', alpha = 0.3))
+                                     
+                Labels.append(label)
+                
+            def update_position(e):
+                x2, y2, _ = proj3d.proj_transform(coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], ax.get_proj())
+                for i in range(len(coordinates[:, 0])):
+                    label = Labels[i]
+                    label.xytext = (x2[i],y2[i])
+                    label.update_positions(fig.canvas.get_renderer())
+                fig.canvas.draw()
+            fig.canvas.mpl_connect('button_release_event', update_position)
+            plt.show()
         
         return plot
         
