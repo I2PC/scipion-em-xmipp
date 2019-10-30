@@ -159,15 +159,16 @@ class XmippViewer(DataViewer):
 
 
         elif issubclass(cls, XmippProtMovieGain):
-            self._visualize(obj.outputMovies)
-            movieGainMonitor = MonitorMovieGain(obj,
-                                                workingDir=obj.workingDir.get(),
-                                                samplingInterval=60,
-                                                monitorTime=300,
-                                                stddevValue=0.04,
-                                                ratio1Value=1.15,
-                                                ratio2Value=4.5)
-            self._views.append(MovieGainMonitorPlotter(movieGainMonitor))
+            if obj.hasAttribute('outputGains'):
+                self._visualize(obj.outputGains)
+            # movieGainMonitor = MonitorMovieGain(obj,
+            #                                     workingDir=obj.workingDir.get(),
+            #                                     samplingInterval=60,
+            #                                     monitorTime=300,
+            #                                     stddevValue=0.04,
+            #                                     ratio1Value=1.15,
+            #                                     ratio2Value=4.5)
+            # self._views.append(MovieGainMonitorPlotter(movieGainMonitor))
 
         elif issubclass(cls, XmippProtRotSpectra):
             self._visualize(obj.outputClasses,
