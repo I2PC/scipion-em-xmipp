@@ -113,6 +113,43 @@ class XmippProtMovieGain(ProtProcessMovies):
                     insertedDict[movie.getObjId()] = stepId
         return deps
 
+    def estimateOrientationStep(self, movieDict):
+        movie = Movie()
+        movie.setAttributesFromDict(movieDict, setBasic=True,
+                                    ignoreMissing=True)
+        movieId = movie.getObjId()
+        movieFn = movie.getFileName()
+        self.runJob("xmipp_movie_estimate_gain",
+                    self.getArgs(movieFn, movieId, "--sigma 0"),
+                    numberOfMpi=1)
+        fnGain = self.getCurrentGain(movieId)
+
+        if os.path.exists(fnGain):
+            G = xmippLib.Image()
+            G.read(fnGain)
+            exp_gain = xmippLib.Image()
+            exp_gain.read(self.getInputGain())
+            self.match_orientation(exp_gain, G)
+
+    def normalizeGainStep(self):
+            fnBest = self.getBestGain()
+            if os.path.exists(fnBest):
+                # If the best orientatin has been calculated, take it
+                fnGain = fnBest
+            else:
+                fnGain = self.getInputGain()
+
+            if fnGain is not None:
+                oriGain = xmippLib.Image()
+                oriGain.read(fnGain)
+                oriArray = oriGain.getData()
+
+                # normalize array to mean 1
+                oriArray = oriArray / np.mean(oriArray)
+
+                oriGain.setData(oriArray)
+                oriGain.write(self.getBestGain())
+
     def _processMovie(self, movie):
         movieId = movie.getObjId()
         fnMovie = movie.getFileName()
@@ -281,3 +318,73 @@ class XmippProtMovieGain(ProtProcessMovies):
                 summary.append(line.rstrip())
             fhSummary.close()
         return summary
+<<<<<<< Updated upstream
+=======
+
+
+def cv2_applyTransform(imag, M, shape):
+    ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
+    '''
+    (hdst, wdst) = shape
+    transformed = cv2.warpAffine(imag, M[:2][:], (wdst, hdst),
+                                 borderMode=cv2.BORDER_CONSTANT, borderValue=1.0)
+    return transformed
+
+
+def cv2_rotation(imag, angle, shape, P):
+    '''Rotate a np.array and return also the transformation matrix
+    #imag: np.array
+    #angle: angle in degrees
+    #shape: output shape
+    #P: transform matrix (further transformation in addition to the rotation)'''
+    (hsrc, wsrc) = imag.shape
+
+    angle *= math.pi / 180
+    T = np.asarray([[1, 0, -wsrc / 2], [0, 1, -hsrc / 2], [0, 0, 1]])
+    R = np.asarray([[math.cos(angle), math.sin(angle), 0], [-math.sin(angle), math.cos(angle), 0], [0, 0, 1]])
+    M = np.matmul(np.matmul(np.linalg.inv(T), np.matmul(R, T)), P)
+    return cv2_applyTransform(imag, M, shape), M
+
+
+def arrays_correlation_FT(ar1,ar2_ft_conj,normalize=True):
+    '''Return the correlation matrix of an array and the FT_conjugate of a second array using the fourier transform
+    '''
+    if normalize:
+        ar1=normalize_array(ar1)
+
+    ar1_FT = np.fft.fft2(ar1)
+    corr2FT = np.multiply(ar1_FT, ar2_ft_conj)
+    correlationFunction = np.real(np.fft.ifft2(corr2FT)) / ar1_FT.size
+
+    return correlationFunction
+
+
+def translation_correction(Loc,shape):
+    '''Return translation corrections given the max/min Location and the image shape
+    '''
+    correcs=[]
+    for i in range(2):
+        if Loc[i]>shape[i]/2:
+            correcs+=[Loc[i]-shape[i]]
+        else:
+            correcs+=[Loc[i]]
+    return correcs
+
+
+def invert_array(gain,thres=0.01,depth=1):
+    '''Return the inverted array by first converting the values under the threshold to the median of the surrounding'''
+    gain=array_zeros_to_median(gain, thres, depth)
+    return 1.0/gain
+
+
+def array_zeros_to_median(a, thres=0.01, depth=1):
+    '''Return an array, replacing the zeros (values under a threshold) with the median of
+    its surrounding values (with a depth)'''
+    idxs = np.where(np.abs(a) < thres)[0]
+    idys = np.where(np.abs(a) < thres)[1]
+
+    for i in range(len(idxs)):
+        sur_values = surrounding_values(a, idxs[i], idys[i], depth)
+        a[idxs[i]][idys[i]] = np.median(sur_values)
+    return a
+>>>>>>> Stashed changes
