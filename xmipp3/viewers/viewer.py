@@ -159,7 +159,7 @@ class XmippViewer(DataViewer):
 
 
         elif issubclass(cls, XmippProtMovieGain):
-            self._visualize(obj.outputMovies)
+            self._visualize(obj.outputGains)
             movieGainMonitor = MonitorMovieGain(obj,
                                                 workingDir=obj.workingDir.get(),
                                                 samplingInterval=60,
