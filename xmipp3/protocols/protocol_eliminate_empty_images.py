@@ -272,8 +272,8 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
 
         def updateOutputs(mdFn, suffix):
             newData = os.path.exists(mdFn)
-            lastToClose = getattr(self, 'finished', False) and \
-                          hasattr(self, '%sParticles' % suffix)
+            lastToClose = (getattr(self, 'finished', False) and
+                           hasattr(self, '%sParticles' % suffix))
             if newData or lastToClose:
                 outSet = self._loadOutputSet(em.SetOfParticles,
                                              '%sParticles.sqlite' % suffix)
