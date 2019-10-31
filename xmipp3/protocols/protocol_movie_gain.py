@@ -168,15 +168,16 @@ class XmippProtMovieGain(ProtProcessMovies):
             else:
                 fnGain = self.getInputGain()
 
-            oriGain = xmippLib.Image()
-            oriGain.read(fnGain)
-            oriArray = oriGain.getData()
+            if fnGain is not None:
+                oriGain = xmippLib.Image()
+                oriGain.read(fnGain)
+                oriArray = oriGain.getData()
 
-            # normalize array to mean 1
-            oriArray = oriArray / np.mean(oriArray)
+                # normalize array to mean 1
+                oriArray = oriArray / np.mean(oriArray)
 
-            oriGain.setData(oriArray)
-            oriGain.write(self.getBestGain())
+                oriGain.setData(oriArray)
+                oriGain.write(self.getBestGain())
 
     def _processMovie(self, movie):
         movieId = movie.getObjId()
@@ -434,7 +435,6 @@ class XmippProtMovieGain(ProtProcessMovies):
             fhSummary.close()
         return summary
 
-
 def cv2_applyTransform(imag, M, shape):
     ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
     '''
@@ -500,3 +500,4 @@ def array_zeros_to_median(a, thres=0.01, depth=1):
         sur_values = surrounding_values(a, idxs[i], idys[i], depth)
         a[idxs[i]][idys[i]] = np.median(sur_values)
     return a
+
