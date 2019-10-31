@@ -28,8 +28,7 @@
 # *
 # **************************************************************************
 
-from glob import glob
-from os.path import exists, basename
+from os.path import exists
 
 import pyworkflow.em.metadata as md
 import pyworkflow.utils as pwutils
@@ -37,8 +36,7 @@ from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
                                            STATUS_FINISHED)
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtExtractParticles
-from pyworkflow.em.data import Particle
-from pyworkflow.em.constants import RELATION_CTF
+from pyworkflow.em.data import Particle, Integer
 
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
@@ -183,72 +181,72 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         particlesMd = 'particles@%s' % fnPosFile
         # If it has coordinates extract the particles
         if exists(fnPosFile):
-            try:
-                # Create a list with micrographs operations (programs in xmipp) and
-                # the required command line parameters (except input/ouput files)
-                micOps = []
+            # Create a list with micrographs operations (programs in xmipp) and
+            # the required command line parameters (except input/ouput files)
+            micOps = []
 
+            try:
                 # Compute the variance and Gini coeff. of the part. and mic., resp.
                 args  =  '--pos %s' % fnPosFile
                 args += ' --mic %s' % fnLast
                 args += ' --patchSize %d' % patchSize
                 self.runJob('xmipp_coordinates_noisy_zones_filter', args)
+            except:
+                print("'xmipp_coordinates_noisy_zones_filter' have failed for "
+                      "%s micrograph. We continue..." % mic.getMicName())
 
-                def getMicTmp(suffix):
-                    return self._getTmpPath(baseMicName + suffix)
+            def getMicTmp(suffix):
+                return self._getTmpPath(baseMicName + suffix)
 
-                # Check if it is required to downsample our micrographs
-                if self.notOne(downFactor):
-                    fnDownsampled = getMicTmp("_downsampled.xmp")
-                    args = "-i %s -o %s --step %f --method fourier"
-                    self.runJob('xmipp_transform_downsample',
-                                args % (fnLast, fnDownsampled, downFactor))
-                    fnLast = fnDownsampled
+            # Check if it is required to downsample our micrographs
+            if self.notOne(downFactor):
+                fnDownsampled = getMicTmp("_downsampled.xmp")
+                args = "-i %s -o %s --step %f --method fourier"
+                self.runJob('xmipp_transform_downsample',
+                            args % (fnLast, fnDownsampled, downFactor))
+                fnLast = fnDownsampled
 
-                if self.doRemoveDust:
-                    fnNoDust = getMicTmp("_noDust.xmp")
-                    args = " -i %s -o %s --bad_pixels outliers %f"
-                    self.runJob('xmipp_transform_filter',
-                                args % (fnLast, fnNoDust, self.thresholdDust))
-                    fnLast = fnNoDust
+            if self.doRemoveDust:
+                fnNoDust = getMicTmp("_noDust.xmp")
+                args = " -i %s -o %s --bad_pixels outliers %f"
+                self.runJob('xmipp_transform_filter',
+                            args % (fnLast, fnNoDust, self.thresholdDust))
+                fnLast = fnNoDust
 
-                if self._useCTF():
-                    # We need to write a Xmipp ctfparam file
-                    # to perform the phase flip on the micrograph
-                    fnCTF = self._getTmpPath("%s.ctfParam" % baseMicName)
-                    micrographToCTFParam(mic, fnCTF)
-                    # Insert step to flip micrograph
-                    if self.doFlip:
-                        fnFlipped = getMicTmp('_flipped.xmp')
-                        args = " -i %s -o %s --ctf %s --sampling %f"
-                        self.runJob('xmipp_ctf_phase_flip',
-                                    args % (fnLast, fnFlipped, fnCTF,
-                                            self._getNewSampling()))
-                        fnLast = fnFlipped
-                else:
-                    fnCTF = None
+            if self._useCTF():
+                # We need to write a Xmipp ctfparam file
+                # to perform the phase flip on the micrograph
+                fnCTF = self._getTmpPath("%s.ctfParam" % baseMicName)
+                micrographToCTFParam(mic, fnCTF)
+                # Insert step to flip micrograph
+                if self.doFlip:
+                    fnFlipped = getMicTmp('_flipped.xmp')
+                    args = " -i %s -o %s --ctf %s --sampling %f"
+                    self.runJob('xmipp_ctf_phase_flip',
+                                args % (fnLast, fnFlipped, fnCTF,
+                                        self._getNewSampling()))
+                    fnLast = fnFlipped
+            else:
+                fnCTF = None
 
-                args = " -i %s --pos %s" % (fnLast, particlesMd)
-                args += " -o %s --Xdim %d" % (outputRoot, boxSize)
+            args = " -i %s --pos %s" % (fnLast, particlesMd)
+            args += " -o %s --Xdim %d" % (outputRoot, boxSize)
 
-                if doInvert:
-                    args += " --invert"
+            if doInvert:
+                args += " --invert"
 
-                if fnCTF:
-                    args += " --ctfparam " + fnCTF
+            if fnCTF:
+                args += " --ctfparam " + fnCTF
+            
+            if doBorders:
+                args += " --fillBorders"
 
-                if doBorders:
-                    args += " --fillBorders"
+            self.runJob("xmipp_micrograph_scissor", args)
 
-                self.runJob("xmipp_micrograph_scissor", args)
-
-                # Normalize
-                if normalizeArgs:
-                    self.runJob('xmipp_transform_normalize',
-                                '-i %s.stk %s' % (outputRoot, normalizeArgs))
-            except Exception as e:
-                print("There is a problem with micrograph %s"%baseMicName)
-                print(e)
+            # Normalize
+            if normalizeArgs:
+                self.runJob('xmipp_transform_normalize',
+                            '-i %s.stk %s' % (outputRoot, normalizeArgs))
         else:
             self.warning("The micrograph %s hasn't coordinate file! "
                          % baseMicName)
@@ -281,6 +279,8 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
 
         if self.boxSize <= 0:
             errors.append('Box size must be positive.')
+        else:
+            self.boxSize.set(self.getEven(self.boxSize))
 
         if self.doNormalize:
             if self.backRadius > int(self.boxSize.get() / 2):
@@ -452,9 +452,12 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         f = float(samplingPicking) / samplingExtract
         return f / self.downFactor.get() if self._doDownsample() else f
 
+    def getEven(self, boxSize):
+        return Integer(int(int(boxSize)/2+0.75)*2)
+
     def getBoxSize(self):
-        # This function is needed by the wizard
-        return int(self.getCoords().getBoxSize() * self.getBoxScale())
+        # This function is needed by the wizard and for auto-boxSize selection
+        return self.getEven(self.getCoords().getBoxSize() * self.getBoxScale())
 
     def _getOutputImgMd(self):
         return self._getPath('images.xmd')
