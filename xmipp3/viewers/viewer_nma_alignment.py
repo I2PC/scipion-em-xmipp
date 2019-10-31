@@ -59,11 +59,11 @@ class XmippAlignmentNMAViewer(ProtocolViewer):
     def _defineParams(self, form):
         form.addSection(label='Visualization')
         form.addParam('displayRawDeformation', StringParam, default='7',
-                      label='Display raw deformation',
-                      help='Type 7 to see the histogram of raw deformation along mode 7; \n'
-                           'type 8 to see the histogram of raw deformation along mode 8, etc.\n'
-                           'Type 7 8 to see the 2D plot of raw deformations along modes 7 vs 8.\n'
-                           'Type 7 8 9 to see the 3D plot of raw deformations along modes 7, 8 and 9; etc.'
+                      label='Display the computed normal-mode amplitudes',
+                      help='Type 7 to see the histogram of amplitudes along mode 7; \n'
+                           'type 8 to see the histogram of amplitudes along mode 8, etc.\n'
+                           'Type 7 8 to see the 2D plot of amplitudes along modes 7 and 8.\n'
+                           'Type 7 8 9 to see the 3D plot of amplitudes along modes 7, 8 and 9; etc.'
                            )
     
     def _getVisualizeDict(self):
@@ -111,17 +111,17 @@ class XmippAlignmentNMAViewer(ProtocolViewer):
             plotter = XmippNmaPlotter(data=self.getData())
             baseList = [basename(n) for n in modeNameList]
             
+	    self.getData().XIND = modeList[0]
             if dim == 1:
-                self.getData().XIND = modeList[0]
-                plotter.plotArray1D("Histogram for %s" % baseList[0], 
-                                    "Deformation value", "Number of images")
+                plotter.plotArray1D("Histogram of normal-mode amplitudes: %s" % baseList[0], 
+                                    "Amplitude", "Number of images")
             else:
                 self.getData().YIND = modeList[1]
                 if dim == 2:
-                    plotter.plotArray2D("%s vs %s" % tuple(baseList), *baseList)
+                    plotter.plotArray2D("Normal-mode amplitudes: %s vs %s" % tuple(baseList), *baseList)
                 elif dim == 3:
                     self.getData().ZIND = modeList[2]
-                    plotter.plotArray3D("%s %s %s" % tuple(baseList), *baseList)
+                    plotter.plotArray3D("Normal-mode amplitudes: %s %s %s" % tuple(baseList), *baseList)
             views.append(plotter)
             
         return views
