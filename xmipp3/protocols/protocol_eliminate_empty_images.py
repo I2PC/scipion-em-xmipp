@@ -340,7 +340,7 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
                            'every paricle for a posterior inspection.')
         form.addParam('usePopulation', param.BooleanParam, default=True,
                       label='Use class population',
-                      help="Use class population to reject a class.")
+                      help="Consider class population to reject a class.")
         form.addParam('minPopulation', param.FloatParam, default=20,
                       label='Min. population (%)',
                       condition="usePopulation",
@@ -353,12 +353,14 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
 
     # --------------------------- INSERT steps functions ----------------------
     def _validate(self):
-        errors=[]
-        if isinstance(self.getInput(), em.SetOfImages) and self.usePopulation.get:
+        errors = []
+        if (not isinstance(self.getInput(), em.SetOfClasses)
+                and self.usePopulation.get()):
             errors.append("Using population to reject classes is not possible "
                           "with Averages as input.\nPlease, introduce a "
                           "setOfClasses to analyse or disable the _use class "
                           "population_ option.")
+        return errors
 
     def specialBehavoir(self, partSet):
         idsToCheck = []
