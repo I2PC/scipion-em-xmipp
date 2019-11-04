@@ -58,8 +58,10 @@ class XmippProtMask():
                       condition='source==%d' % SOURCE_MASK,
                       label="Input mask")
         
+        isFeatureFile = 'source==%d' % SOURCE_FEATURE_FILE
         self.GEOMETRY_BASECLASS.defineParams(self, form, 
                                              isGeometry='source==%d' % SOURCE_GEOMETRY,
+                                             isFeatureFile=isFeatureFile,
                                              addSize=False)
         
         form.addParam('fillType', EnumParam, 
