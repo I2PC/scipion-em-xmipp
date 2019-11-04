@@ -33,7 +33,7 @@ from xmipp3.constants import *
 class XmippGeometricalMask3D:
     """ Basic class for protocols using geometrical masks 3D"""
     
-    def defineParams(self, form, isGeometry, addSize, isFeature=False):
+    def defineParams(self, form, isGeometry, addSize, isFeature='False'):
         # For geometrical sources
         if addSize:
             form.addParam('size', IntParam, condition=isGeometry, 
@@ -53,7 +53,7 @@ class XmippGeometricalMask3D:
                       help="Mask radius, if -1, the radius will be MaskSize/2")
         
         form.addParam('shiftCenter', BooleanParam, default=False,
-                      label='Shift center of the mask?', condition=isFeature)
+                      label='Shift center of the mask?', condition="%s"%isFeature)
         
         line = form.addLine('Shift Center (px) :', condition='shiftCenter',
                             help='Shift Mask Center to a new origin.')
