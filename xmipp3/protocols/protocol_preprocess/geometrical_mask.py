@@ -33,7 +33,7 @@ from xmipp3.constants import *
 class XmippGeometricalMask3D:
     """ Basic class for protocols using geometrical masks 3D"""
     
-    def defineParams(self, form, isGeometry, addSize, isFeature):
+    def defineParams(self, form, isGeometry, addSize, isFeature=False):
         # For geometrical sources
         if addSize:
             form.addParam('size', IntParam, condition=isGeometry, 
