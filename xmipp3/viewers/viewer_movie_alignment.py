@@ -108,8 +108,8 @@ def getViewParams():
                   'plotCart._filename plotGlobal._filename')
     labels = plotLabels + ' _filename '
     viewParams = {showj.MODE: showj.MODE_MD,
-                  showj.ORDER: labels,
-                  showj.VISIBLE: labels,
+                  showj.ORDER: 'id ' + labels,
+                  showj.VISIBLE: 'id ' + labels,
                   showj.RENDER: plotLabels,
                   showj.ZOOM: 30,
                   showj.OBJCMDS: "'%s'" % OBJCMD_MOVIE_ALIGNCARTESIAN
