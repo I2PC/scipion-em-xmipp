@@ -24,7 +24,7 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.viewers import EmPlotter, ObjectView, MicrographsView
+from pyworkflow.em.viewers import EmPlotter, ObjectView, MicrographsView, CtfView
 from pyworkflow.em.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER, ZOOM
 from pyworkflow.protocol.params import IntParam, LabelParam
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
@@ -44,17 +44,17 @@ class XmippCTFConsensusViewer(ProtocolViewer):
     def _defineParams(self, form):
         form.addSection(label='Visualization')
         group = form.addGroup('Valid CTFs')
-        group.addParam('visualizePairs', LabelParam,
+        group.addParam('visualizeCtfAccepted', LabelParam,
                        label="Visualize CTFs + max resolution",
                        help="Reference CTF plus a new column with "
                             "resolution up to which reference CTF and target "
                             "reference are similar.")
-        group.addParam('visualizeMics', LabelParam,
+        group.addParam('visualizeMicsAccepted', LabelParam,
                        label="Visualize passed micrographs",
                        help="Visualize those micrographs associated with "
                             "the considered valid CTFs.")
         group2 = form.addGroup('Discarded CTFs')
-        group2.addParam('visualizePairsDiscarded', LabelParam,
+        group2.addParam('visualizeCtfDiscarded', LabelParam,
                         label="Visualize discarded CTFs",
                         help="Reference CTF plus a new column with "
                              "resolution up to which reference CTF and target "
@@ -72,75 +72,56 @@ class XmippCTFConsensusViewer(ProtocolViewer):
 
     def _getVisualizeDict(self):
         return {
-                 'visualizePairs': self._visualizePairs,
-                 'visualizeMics': self._visualizeMics,
-                 'visualizePairsDiscarded': self._visualizePairsDiscarded,
+                 'visualizeCtfAccepted': self._visualizeCtfAccepted,
+                 'visualizeMicsAccepted': self._visualizeMicsAccepted,
+                 'visualizeCtfDiscarded': self._visualizeCtfDiscarded,
                  'visualizeMicsDiscarded': self._visualizeMicsDiscarded,
                  'visualizeHistogram': self._visualizeHistogram
                 }
 
-    def _visualizePairs(self, e=None):
+    def _visualizeCtfs(self, objName):
         views = []
 
         # display metadata with selected variables
-        labels = 'id enabled _psdFile _micObj_filename _resolution ' \
+        labels = 'id enabled %s _micObj_filename _resolution ' \
                  '_xmipp_consensus_resolution _xmipp_discrepancy_astigmatism' \
-                 ' _defocusU _defocusV _defocusAngle'
-        if hasattr(self.protocol, "outputCTF"):
+                 ' _defocusU _defocusV _defocusAngle' % ' '.join(CtfView.PSD_LABELS)
+        if self.protocol.hasAttribute(objName):
             views.append(ObjectView(
                 self._project, self.protocol.strId(),
-                self.protocol.outputCTF.getFileName(),
+                getattr(self.protocol, objName).getFileName(),
                 viewParams={MODE: MODE_MD, ORDER: labels, VISIBLE: labels}))
         else:
             appendStr = ', yet.' if self.protocol.isActive() else '.'
-            self.infoMessage('%s does not have outputCTF%s'
-                             % (self.protocol.getObjLabel(), appendStr),
+            self.infoMessage('%s does not have %s%s'
+                             % (self.protocol.getObjLabel(), objName, appendStr),
                              title='Info message').show()
         return views
 
-    def _visualizeMics(self, e=None):
+    def _visualizeMics(self, objName):
         views = []
 
-        if hasattr(self.protocol, "outputMicrographs"):
+        if self.protocol.hasAttribute(objName):
             views.append(MicrographsView(self.getProject(),
-                                         self.protocol.outputMicrographs))
+                                         getattr(self.protocol, objName)))
         else:
             appendStr = ', yet.' if self.protocol.isActive() else '.'
-            self.infoMessage('%s does not have outputMicrographs%s'
-                             % (self.protocol.getObjLabel(), appendStr),
+            self.infoMessage('%s does not have %s%s'
+                             % (self.protocol.getObjLabel(), objName, appendStr),
                              title='Info message').show()
         return views
 
-    def _visualizePairsDiscarded(self, e=None):
-        views = []
+    def _visualizeCtfAccepted(self, e=None):
+        return self._visualizeCtfs("outputCTF")
 
-        # display metadata with selected variables
-        labels = 'id enabled _psdFile _micObj_filename _resolution ' \
-                 '_xmipp_consensus_resolution _xmipp_discrepancy_astigmatism' \
-                 ' _defocusU _defocusV _defocusAngle'
+    def _visualizeCtfDiscarded(self, e=None):
+        return self._visualizeCtfs("outputCTFDiscarded")
 
-        if hasattr(self.protocol, "outputCTFDiscarded"):
-            views.append(ObjectView(
-                self._project, self.protocol.strId(),
-                self.protocol.outputCTFDiscarded.getFileName(),
-                viewParams={MODE: MODE_MD, ORDER: labels, VISIBLE: labels}))
-        else:
-            self.infoMessage('%s has not discarded CTFs'
-                             % self.protocol.getObjLabel(),
-                             title='Info message').show()
-        return views
+    def _visualizeMicsAccepted(self, e=None):
+        return self._visualizeMics("outputMicrographs")
 
     def _visualizeMicsDiscarded(self, e=None):
-        views = []
-
-        if hasattr(self.protocol, "outputMicrographsDiscarded"):
-            views.append(MicrographsView(self.getProject(),
-                                         self.protocol.outputMicrographsDiscarded))
-        else:
-            self.infoMessage('%s does not have outputMicrographsDiscarded.'
-                             % self.protocol.getObjLabel(),
-                             title='Info message').show()
-        return views
+        return self._visualizeMics("outputMicrographsDiscarded")
 
     def _visualizeHistogram(self, e=None):
         views = []
