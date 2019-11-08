@@ -207,7 +207,8 @@ class XmippProtMovieGain(ProtProcessMovies):
                 exp_gain.read(gain)
                 self.match_orientation(exp_gain, G)
 
-        if self.normalizeGain.get():
+        if self.normalizeGain.get() and (gain is not None or os.path.exists(
+                self._getPath("bestGain.xmp"))):
             fnBest=self._getPath("bestGain.xmp")
             if os.path.exists(fnBest):
                 #If the best orientatin has been calculated, take it
@@ -233,6 +234,17 @@ class XmippProtMovieGain(ProtProcessMovies):
         #We take the inverse of the estimated gain computed by xmipp, stored in correction file
         os.rename(self._getPath("movie_%06d_correction.xmp" % movieId),
                                 self._getPath("movie_%06d_gain.xmp" % movieId))
+
+        #If the gain hasn't been oriented or normalized, we still need bestGain
+        if not os.path.exists(self._getPath("bestGain.xmp")):
+            #No previous gain: bestGain is the estimated
+            if gain is None:
+                os.system("cp %s %s" % (self._getPath("movie_%06d_gain.xmp" % movieId),self._getPath("bestGain.xmp")))
+            #Previous gain: bestGain is the original
+            else:
+                G = xmippLib.Image()
+                G.read(gain)
+                G.write(self._getPath("bestGain.xmp"))
 
         fnSummary = self._getPath("summary.txt")
         fnMonitorSummary = self._getPath("summaryForMonitor.txt")
