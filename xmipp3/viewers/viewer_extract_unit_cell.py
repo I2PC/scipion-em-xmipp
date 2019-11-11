@@ -37,7 +37,9 @@ from pyworkflow.em.data import (SetOfVolumes)
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pyworkflow.em.viewers.viewer_chimera import Chimera, ChimeraView
 from xmipp3.protocols.protocol_extract_unit_cell import XmippProtExtractUnit
-
+from xmipp3.constants import (XMIPP_SYM_NAME, XMIPP_TO_SCIPION, XMIPP_CYCLIC,
+                              XMIPP_DIHEDRAL_X, XMIPP_TETRAHEDRAL, XMIPP_OCTAHEDRAL,
+                              XMIPP_I222, XMIPP_I222r, XMIPP_In25, XMIPP_In25r)
 
 VOLUME_SLICES = 1
 VOLUME_CHIMERA = 0
@@ -139,9 +141,9 @@ class viewerXmippProtExtractUnit(ProtocolViewer):
         d = {}
         d['outerRadius'] = self.protocol.outerRadius.get() * sampling
         d['innerRadius'] = self.protocol.innerRadius.get() * sampling
-        d['symmetry'] = Chimera.getSymmetry(self.protocol.symmetryGroup.get())
+        d['symmetry'] = Chimera.getSymmetry(XMIPP_TO_SCIPION[self.protocol.symmetryGroup.get()])
 
-        if self.protocol.symmetryGroup >= SYM_I222:
+        if self.protocol.symmetryGroup >= XMIPP_I222:
             f.write("shape icosahedron mesh true radius %(outerRadius)d "
                     "orientation %(symmetry)s\n" % d)
         step = (d['outerRadius'] - d['innerRadius']) / float(len(cMap) - 1)
