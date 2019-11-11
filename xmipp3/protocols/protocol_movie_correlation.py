@@ -31,6 +31,7 @@ import os
 from math import ceil
 
 import pyworkflow.utils as pwutils
+from pyworkflow.utils import yellowStr, redStr, importFromPlugin
 import pyworkflow.object as pwobj
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
@@ -154,8 +155,14 @@ class XmippProtMovieCorr(ProtAlignMovies):
         form.addParallelSection(threads=1, mpi=1)
 
     #--------------------------- STEPS functions -------------------------------
-
     def _processMovie(self, movie):
+        try:
+            self.tryProcessMovie(movie)
+        except Exception as ex:
+            print(yellowStr("We cannot process %s" % movie.getFileName()))
+            print(ex)
+
+    def tryProcessMovie(self, movie):
         movieFolder = self._getOutputMovieFolder(movie)
 
         x, y, n = movie.getDim()
@@ -239,7 +246,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
             self.runJob('xmipp_movie_alignment_correlation', args, numberOfMpi=1)
 
         if self.doComputePSD:
-            self.computePSDs(movie, fnInitial, fnAvg)
+            self.computePSDImages(movie, fnInitial, fnAvg)
             # If the micrograph was only saved for computing the PSD
             # we can remove it
             pwutils.cleanPath(fnInitial)
