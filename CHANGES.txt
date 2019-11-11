@@ -1,6 +1,32 @@
 ## devel
 
-- Highres can now take a global alignment performed by any other method
 - Randomize phases also available for images
 
 
+## Release 3.19.04 -
+
+- Highres can now take a global alignment performed by any other method
+- New protocol: 3D bionotes
+- New protocol: Align volume and particles
+- New protocol: Center particles
+- New protocols: GL2D, GL2D streaming and GL2D static
+- New protocol: 2D kmeans clustering
+- New protocol: compare angles
+- New protocol: consensus 3D classes
+- New protocol: CTF consensus
+- New protocol: deep denoising
+- New protocols: Eliminate empty particles and eliminate empty classes
+- New protocol: Extract unit cell
+- New protocol: Generate reprojections
+- New protocol: metaprotocol heterogenety output, metaprotocol heterogeneity subset and metaprotocol heterogeneity
+- New protocol: Movie Max Shift
+- New protocol: particle boxsize
+- New protocol: pick noise
+- New protocol: significant heterogeneity
+- New protocol: swarm consensus intial volumes
+- New protocol: directional ResDir
+- New protocol: local monoTomo
+- New protocol: deep consensus picking
+- New protocol: screen deep learning
+- New protocol: split volume hierarchical
+- New protocol: trigger data

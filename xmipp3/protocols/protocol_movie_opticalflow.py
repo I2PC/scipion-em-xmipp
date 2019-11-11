@@ -124,10 +124,9 @@ class XmippProtOFAlignment(ProtAlignMovies):
         
         if self.doApplyDoseFilter:
             outMicFn = self._getExtraPath(self._getOutputMicWtName(movie))
-            outMovieFn = self._getExtraPath(self._getOutputMovieWtName(movie))
         else:
             outMicFn = self._getExtraPath(self._getOutputMicName(movie))
-            outMovieFn = self._getExtraPath(self._getOutputMovieName(movie))
+        outMovieFn = self._getExtraPath(self._getOutputMovieName(movie))
         
         aveMic = self._getFnInMovieFolder(movie, "uncorrected_mic.mrc")
         dark = inputMovies.getDark()
@@ -194,7 +193,7 @@ class XmippProtOFAlignment(ProtAlignMovies):
             
             if self.doSaveUnweightedMic:
                 outUnwtMicFn = self._getExtraPath(self._getOutputMicName(movie))
-                outUnwtMovieFn = self._getExtraPath(self._getOutputMovieName(movie))            
+                outUnwtMovieFn = self._getExtraPath(self._getOutputMovieUnWtName(movie))
                 args += ' --oUnc %s %s' % (outUnwtMicFn, outUnwtMovieFn)
                 toDelete.append(outUnwtMovieFn)
             
@@ -212,7 +211,7 @@ class XmippProtOFAlignment(ProtAlignMovies):
                                     % (outMovieFn, program))
 
             if self.doComputePSD:
-                self.computePSDs(movie, aveMic, outMicFn,
+                self.computePSDImages(movie, aveMic, outMicFn,
                                  outputFnCorrected=outMicFn+'psd.png')
                 # If the micrograph was only saved for computing the PSD
                 # we can remove it
@@ -256,9 +255,10 @@ class XmippProtOFAlignment(ProtAlignMovies):
         ofGpu = Plugin.getHome("bin", "xmipp_movie_optical_alignment_gpu")
         if not (exists(ofGpu) or exists(ofCpu)):
             errors.append("It seems that Xmipp Optical Alignment is not installed. "
-                          "OpenCV should be installed in the system to compile it.\n"
-                          "Please, install OpenCV in your system and, then, "
-                          "re-install Xmipp by running 'scipion installb xmippSrc'.")
+                          "Please make sure that _scipion/config/scipion.config_ "
+                          "contains *OPENCV=True* and OpenCV is in your system.\n"
+                          "Then, re-install Xmipp by running "
+                          "'scipion installb xmippSrc'.")
         else:
             if self.useGpu and not exists(ofGpu):
                 errors.append("It seems that Xmipp Optical Alignment has not been "
@@ -296,7 +296,7 @@ class XmippProtOFAlignment(ProtAlignMovies):
             summary.append("Frames from *%d* to *%d* were aligned" % (a0, aN))
         
         if self.doSaveMovie and self.doApplyDoseFilter:
-            summary.append("Warning!!! Your saved movies are dose weighted.")
+            summary.append("Warning!!! *Your saved movies are dose weighted*.")
         return summary
     
     #--------------------------- UTILS functions -------------------------------
@@ -326,6 +326,12 @@ class XmippProtOFAlignment(ProtAlignMovies):
         alignedMovie = ProtAlignMovies._createOutputMovie(self, movie)
         self._setAlignmentInfo(movie, alignedMovie)
         return alignedMovie
+
+    def _getOutputMovieName(self, movie):
+        """ Overrided to take into account that DW is append in the filename
+        """
+        DWstr = '_DW' if self.doApplyDoseFilter.get() else ''
+        return self._getMovieRoot(movie) + '_aligned_movie' + DWstr +'.mrcs'
 
     def _getNameExt(self, movie, postFix, ext, extra=False):
         fn = self._getMovieRoot(movie) + postFix + '.' + ext
@@ -383,11 +389,11 @@ class XmippProtOFAlignment(ProtAlignMovies):
     def _createOutputWeightedMicrographs(self):
         return (self.doSaveAveMic and self.doApplyDoseFilter)
     
-    def _getOutputMovieWtName(self, movie):
+    def _getOutputMovieUnWtName(self, movie):
         """ Returns the name of the output dose-weighted movie.
         (relative to micFolder)
         """
-        return self._getMovieRoot(movie) + '_aligned_movie_DW.mrcs'
+        return self._getMovieRoot(movie) + '_aligned_movie.mrcs'
 
 
 

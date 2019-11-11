@@ -32,7 +32,6 @@ from pyworkflow.em.data import SetOfParticles, Volume
 from xmipp3.convert import writeSetOfParticles
 
 
-
 class BatchProtNMACluster(BatchProtocol):
     """ Protocol executed when a cluster is created
     from NMA images and theirs deformations.
@@ -50,7 +49,7 @@ class BatchProtNMACluster(BatchProtocol):
         outputVol = self._getExtraPath('reconstruction.vol')
         
         self._insertFunctionStep('convertInputStep', imagesMd)
-        params = '-i %(imagesMd)s -o %(outputVol)s ' % locals()
+        params = '-i %(imagesMd)s -o %(outputVol)s --fast' % locals()
         self._insertFunctionStep('reconstructStep', params)
         self._insertFunctionStep('createOutputStep', outputVol)
         
@@ -73,7 +72,7 @@ class BatchProtNMACluster(BatchProtocol):
         writeSetOfParticles(partSet, imagesMd)
 
     def reconstructStep(self, params):
-        self.runJob('xmipp_reconstruct_fourier', params)
+        self.runJob('xmipp_reconstruct_fourier_accel', params)
     
     def createOutputStep(self, outputVol):
         vol = Volume()

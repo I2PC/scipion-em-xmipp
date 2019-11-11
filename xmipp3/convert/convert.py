@@ -66,7 +66,8 @@ if not getattr(xmippLib, "GHOST_ACTIVATED", False):
         # Additional autopicking-related metadata
         md.RLN_PARTICLE_AUTOPICK_FOM,
         md.RLN_PARTICLE_CLASS,
-        md.RLN_ORIENT_PSI
+        md.RLN_ORIENT_PSI,
+        xmippLib.MDL_GOOD_REGION_SCORE
         ]
 
     CTF_DICT = OrderedDict([
@@ -255,7 +256,7 @@ def objectToRow(obj, row, attrDict, extraLabels=[]):
     attrLabels = attrDict.values()
 
     for label in extraLabels:
-        attrName = '_xmipp_%s' % xmippLib.label2Str(label)
+        attrName = prefixAttribute(xmippLib.label2Str(label))
         if label not in attrLabels and hasattr(obj, attrName):
             value = obj.getAttributeValue(attrName)
             row.setValue(label, value)
@@ -285,18 +286,39 @@ def rowToObject(row, obj, attrDict, extraLabels=[]):
     for label in extraLabels:
         if label not in attrLabels and row.hasLabel(label):
             labelStr = xmippLib.label2Str(label)
-            setattr(obj, '_xmipp_%s' % labelStr, row.getValueAsObject(label))
+            setattr(obj, prefixAttribute(labelStr), row.getValueAsObject(label))
 
-def setXmippAttributes(obj, objRow, *labels):
-    """ Set an attribute to obj from a label that is not
-    basic ones. The new attribute will be named _xmipp_LabelName
-    and the datatype will be set correctly.
+def setXmippAttributes(obj, objRow, *labels, **kwargs):
+    """ Set the labels attribute(s) to obj from a objRow
+        (those not basic ones).
+        More than one label can be set
+        and default can also be a list of same number of entries.
+        The new attribute will be named _xmipp_LabelName
+        and the datatype will be set correctly.
+        If obj doesn't contain a label and a default value is in kwargs,
+        it's set in its corresponding Scipion datatype.
     """
-    for label in labels:
-        value = objRow.getValueAsObject(label)
-        # To avoid empty values
+    defaults = kwargs.get('default', None)
 
+    for idx, label in enumerate(labels):
         if objRow.containsLabel(label):
+            value = objRow.getValueAsObject(label)
+        else:
+            if isinstance(defaults, list):
+                value = defaults[idx]
+            else:
+                value = defaults
+
+            if isinstance(value, int):
+                value = Integer(value)
+            elif isinstance(value, float):
+                value = Float(value)
+            elif isinstance(value, basestring):
+                value = String(value)
+            else:
+                value = None
+
+        if value is not None:
             setXmippAttribute(obj, label, value)
 
 def setXmippAttribute(obj, label, value):
@@ -864,13 +886,13 @@ def writeMicCoordinates(mic, coordList, outputFn, isManual=True,
 
     for coord in coordList:
         x, y = getPosFunc(coord)
-        f.write(" %06d   1   %d  %d  %d   %06d\n"
+        f.write(" %06d   1   %d  %d  %d   %06d \n"
                 % (coord.getObjId(), x, y, 1, mic.getObjId()))
     
     f.close()
     
 
-def readSetOfCoordinates(outputDir, micSet, coordSet, readDiscarded=False):
+def readSetOfCoordinates(outputDir, micSet, coordSet, readDiscarded=False, scale=1):
     """ Read from Xmipp .pos files.
     Params:
         outputDir: the directory where the .pos files are.
@@ -880,6 +902,7 @@ def readSetOfCoordinates(outputDir, micSet, coordSet, readDiscarded=False):
             name should be the same of the micrographs.
         coordSet: the SetOfCoordinates that will be populated.
         readDiscarded: read only the coordinates with the MDL_ENABLE set at -1
+        scale: Factor to scale ONLY x,y coordinates, you are supposed to use an appropiate boxsize (you created the set)
     """
     # Read the boxSize from the config.xmd metadata
     configfile = join(outputDir, 'config.xmd')
@@ -887,15 +910,15 @@ def readSetOfCoordinates(outputDir, micSet, coordSet, readDiscarded=False):
         md = xmippLib.MetaData('properties@' + join(outputDir, 'config.xmd'))
         boxSize = md.getValue(xmippLib.MDL_PICKING_PARTICLE_SIZE,
                               md.firstObject())
-        coordSet.setBoxSize(boxSize)
+        coordSet.setBoxSize(int(boxSize)) #Only coordinates x,y are scaled, you are supposed to use an appropiate boxsize
     for mic in micSet:
         posFile = join(outputDir, replaceBaseExt(mic.getFileName(), 'pos'))
-        readCoordinates(mic, posFile, coordSet, outputDir, readDiscarded)
+        readCoordinates(mic, posFile, coordSet, outputDir, readDiscarded, scale=scale)
 
     coordSet._xmippMd = String(outputDir)
 
 
-def readCoordinates(mic, fileName, coordsSet, outputDir, readDiscarded=False):
+def readCoordinates(mic, fileName, coordsSet, outputDir, readDiscarded=False, scale=1):
         posMd = readPosCoordinates(fileName, readDiscarded)
         # TODO: CHECK IF THIS LABEL IS STILL NECESSARY
         posMd.addLabel(md.MDL_ITEM_ID)
@@ -910,8 +933,8 @@ def readCoordinates(mic, fileName, coordsSet, outputDir, readDiscarded=False):
 
             coord = rowToCoordinate(rowFromMd(posMd, objId))
             coord.setMicrograph(mic)
-            coord.setX(coord.getX())
-            coord.setY(coord.getY())
+            coord.setX(int(coord.getX()*scale))
+            coord.setY(int(coord.getY()*scale))
             coordsSet.append(coord)
             posMd.setValue(md.MDL_ITEM_ID, long(coord.getObjId()), objId)
 

@@ -40,29 +40,29 @@ from xmipp3.utils import isMdEmpty
 from xmipp3.convert import mdToCTFModel, readCTFModel
 from xmippLib import Image
 
-
 class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
     """ Protocol to estimate CTF on a set of micrographs using Xmipp. """
     _label = 'ctf estimation'
 
-    _criterion = ("ctfCritFirstZero<5 OR ctfCritMaxFreq>20 OR "
-                  "ctfCritfirstZeroRatio<0.9 OR ctfCritfirstZeroRatio>1.1 OR "
-                  "ctfCritFirstMinFirstZeroRatio>10 OR ctfCritCorr13<0 OR "
-                  "ctfCritCtfMargin<0 OR ctfCritNonAstigmaticValidty<0 OR "
-                  "ctfCritNonAstigmaticValidty>25 "
-                  "OR ctfBgGaussianSigmaU<1000 OR "
-                  "ctfCritIceness>1")
+    _criterion_psd = ("ctfCritIceness>1.03 OR ctfCritPsdCorr90<0.1")
+
+    _criterion_estimation = ("ctfCritFirstZero<5 OR ctfCritMaxFreq>20 OR "
+                             "ctfCritfirstZeroRatio<0.9 OR ctfCritfirstZeroRatio>1.1 OR "
+                             "ctfCritFirstMinFirstZeroRatio>10 OR ctfCritCorr13<0.27 OR "
+                             "ctfCritCtfMargin<1 OR ctfCritNonAstigmaticValidty<0 OR "
+                             "ctfCritNonAstigmaticValidty>6.5 ")
+                             #"OR ctfBgGaussianSigmaU<1000")
 
     _criterion_phaseplate = ("ctfCritFirstZero<5 OR ctfCritMaxFreq>20 OR "
-                  "ctfCritFirstMinFirstZeroRatio>50 AND "
+                             "ctfCritFirstMinFirstZeroRatio>50 AND "
                              "ctfCritFirstMinFirstZeroRatio!=1000 "
-                  "OR ctfCritfirstZeroRatio<0.9 OR ctfCritfirstZeroRatio>1.1 OR "
-                  "ctfCritNonAstigmaticValidty<=0 OR ctfVPPphaseshift>140 OR " 
-                  "ctfCritNonAstigmaticValidty>25 "
-                  "OR ctfCritIceness>1.03") #ctfCritCorr13==0 OR "ctfCritFirstMinFirstZeroRatio>50 AND "
+                             "OR ctfCritfirstZeroRatio<0.9 OR ctfCritfirstZeroRatio>1.1 OR "
+                             "ctfCritNonAstigmaticValidty<=0 OR ctfVPPphaseshift>140 OR "                   
+                             "ctfCritNonAstigmaticValidty>25") #ctfCritCorr13==0 OR "ctfCritFirstMinFirstZeroRatio>50 AND "
+
+    _targetSamplingList = [1.75, 2.75]
 
     def __init__(self, **args):
-
         em.ProtCTFMicrographs.__init__(self, **args)
 
     def _createFilenameTemplates(self):
@@ -113,7 +113,11 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                            'Downsample factor; and if it fails, +1; '
                            'and if it fails, -1.')
         form.addParam('refineAmplitudeContrast', params.BooleanParam, default=False,
-                      label='Allow amplitude constrast refinement')
+                      label='Allow amplitude constrast refinement',
+                      help = 'The amplitude contrast is normally kept fixed, but in'
+                             'some experiments it has been found that refining it '
+                             'might result in some improvement in the final FSC. '
+                             'This is not a standard practice, and should be used with caution')
 
     def getInputMicrographs(self):
         return self.inputMicrographs.get()
@@ -146,41 +150,26 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         return newItemDict, streamClosed
 
 
-    def calculateAutodownsampling(self,samplingRate, coeff=1.5):
-        ctfDownFactor = coeff / samplingRate
+    def calculateAutodownsampling(self,samplingRate, targetSampling):
+        ctfDownFactor = targetSampling / samplingRate
         if ctfDownFactor < 1.0:
             ctfDownFactor = 1.0
         return ctfDownFactor
 
     def _calculateDownsampleList(self, samplingRate):
-        
+        downsampleList = []
         if self.AutoDownsampling:
-            if self.findPhaseShift:
-                ctfDownFactor = self.calculateAutodownsampling(samplingRate, 1.1)
-            else:
-                ctfDownFactor = self.calculateAutodownsampling(samplingRate)
+            ctfDownFactor = self.calculateAutodownsampling(samplingRate, self._targetSamplingList[0])
+            downsampleList.append(ctfDownFactor)
         else:
             ctfDownFactor = self.ctfDownFactor.get()
-        downsampleList = [ctfDownFactor]
+            downsampleList = [ctfDownFactor]
+            return downsampleList
 
         if self.doCTFAutoDownsampling:
-            downsampleList.append(ctfDownFactor + 1)
-            if ctfDownFactor >= 2:
-                downsampleList.append(ctfDownFactor - 1)
-            else:
-                if ctfDownFactor > 1:
-                    downsampleList.append((ctfDownFactor + 1) / 2)
+            downsampleList.append(self.calculateAutodownsampling(samplingRate, self._targetSamplingList[1]))
+            downsampleList.append(1.0)
         return downsampleList
-
-    def _getFn(self,key,micBase,micDir):
-        return self._getFileName(key, micBase=micBase, root=micDir)
-
-    def bringResultsback(self,mic):
-        micBase = self._getMicBase(mic)
-        micDir = self._getMicrographDir(mic)
-        for key in ['ctfParam', 'psd', 'enhanced_psd', 'ctfmodel_halfplane',
-                    'ctfmodel_quadrant', 'ctf']:
-            pwutils.moveFile(self._getFn(key,micBase,micDir), self._getExtraPath())
 
     def _estimateCTF(self, mic, *args):
         """ Run the estimate CTF program """
@@ -216,9 +205,10 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
             raise Exception("No created dir: %s " % micDir)
 
         finalName = micFn
-        localParams['root'] = self._getFn('prefix',micBase,micDir)
+        def _getFn(key):
+            return self._getFileName(key, micBase=micBase, root=micDir)
+        localParams['root'] = _getFn('prefix')
         downsampleList = self._calculateDownsampleList(mic.getSamplingRate())
-
         try:
             for i, downFactor in enumerate(downsampleList):
                 # Downsample if necessary
@@ -227,49 +217,50 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                     # cannot be written (such as dm3)
                     baseFn = pwutils.replaceBaseExt(micFn, 'mrc')
                     finalName = os.path.join(micDir, baseFn)
-                    self.runJob("xmipp_transform_downsample",
-                                "-i %s -o %s --step %f --method fourier"
-                                % (micFn, finalName, downFactor))
+                    if downFactor>1:
+                        self.runJob("xmipp_transform_downsample",
+                                    "-i %s -o %s --step %f --method fourier"
+                                    % (micFn, finalName, downFactor))
+                    else:
+                        self.runJob("xmipp_image_resize",
+                                    "-i %s -o %s --factor %f --interp linear"
+                                    % (micFn, finalName, 1.0/downFactor))
                     psd = Image(finalName)
                     psd = psd.getData()
                     if psd.shape[0] < self.windowSize.get():
                         localParams['pieceDim'] = self.windowSize.get()/2
                         localParams['ctfmodelSize'] = self.windowSize.get()/2
 
-
                 # Update _params dictionary with mic and micDir
                 localParams['micFn'] = finalName
                 localParams['samplingRate'] = mic.getSamplingRate() * downFactor
 
                 # CTF estimation with Xmipp
-
                 params = self._args % localParams
                 params += " --downSamplingPerformed %f" % downFactor
                 if not self.doInitialCTF:
                     params += " --selfEstimation "
                 self.runJob(self._program, params)
 
-
                 # Check the quality of the estimation and reject it necessary
                 good = self.evaluateSingleMicrograph(mic)
                 if good:
                     break
-
-            self.bringResultsback(mic)
+            for key in ['ctfParam', 'psd', 'enhanced_psd', 'ctfmodel_halfplane',
+                        'ctfmodel_quadrant', 'ctf']:
+                pwutils.moveFile(_getFn(key), self._getExtraPath())
 
         except Exception as ex:
             print >> sys.stderr, "xmipp_ctf_estimate_from_micrograph has " \
                      "failed with micrograph %s" % finalName
 
-    def _restimateCTF(self, micId):
+    def _reEstimateCTF(self, mic, ctfModel):
         """ Run the estimate CTF program """
-        ctfModel = self.recalculateSet[micId]
         self._prepareRecalCommand(ctfModel)
         # CTF estimation with Xmipp
         self.runJob(self._program, self._args % self._params)
         mic = ctfModel.getMicrograph()
         self.evaluateSingleMicrograph(mic)
-        self.bringResultsback(mic)
 
     def _createOutputStep(self):
         pass
@@ -352,7 +343,9 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         if self.findPhaseShift and not self.ctfRelations.hasValue():
             self._params['phaseShift0'] = 1.57079
 
-    def _prepareCommand(self):
+    def _defineCtfParamsDict(self):
+        em.ProtCTFMicrographs._defineCtfParamsDict(self)
+
         if not hasattr(self, "ctfDict"):
             self.getPreviousParameters()
 
@@ -361,13 +354,14 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
 
         # Mapping between base protocol parameters and the package specific
         # command options
-        self.__params = {'kV': self._params['voltage'],
-                         'Cs': self._params['sphericalAberration'],
-                         #'ctfmodelSize': self._params['windowSize'],
-                         'Q0': self._params['ampContrast'],
-                         'min_freq': self._params['lowRes'],
-                         'max_freq': self._params['highRes'],
-                         #'pieceDim': self._params['windowSize']
+        params = self.getCtfParamsDict()
+        self.__params = {'kV': params['voltage'],
+                         'Cs': params['sphericalAberration'],
+                         #'ctfmodelSize': params['windowSize'],
+                         'Q0': params['ampContrast'],
+                         'min_freq': params['lowRes'],
+                         'max_freq': params['highRes'],
+                         #'pieceDim': params['windowSize']
                          }
 
         self._prepareArgs(self.__params)
@@ -388,27 +382,23 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
 
             mic = ctfModel.getMicrograph()
             micDir = self._getMicrographDir(mic)
-            fnPsd = os.path.join(micDir, psdFile)
-            if not os.path.exists(micDir):
-                pwutils.makePath(micDir)
-                pwutils.copyFile(self._getExtraPath(psdFile),fnPsd)
             downFactor = self._calculateDownsampleList(mic.getSamplingRate())[0]
 
-            params2 = {'psdFn': fnPsd,
-                       'defocusU': float(line[0]),
-                       }
-            self._params = dict(self._params.items() + params2.items())
+            params = dict(self.getCtfParamsDict())
+            params.update(self.getRecalCtfParamsDict())
+            params.update({'psdFn': fnPsd,
+                           'defocusU': float(line[0])
+                           })
             # Mapping between base protocol parameters and the package specific
             # command options
-            self.__params = {'sampling_rate': self._params['samplingRate']
-                                              * downFactor,
+            self.__params = {'sampling_rate': params['samplingRate'],
                              'downSamplingPerformed': downFactor,
-                             'kV': self._params['voltage'],
-                             'Cs': self._params['sphericalAberration'],
+                             'kV': params['voltage'],
+                             'Cs': params['sphericalAberration'],
                              'min_freq': line[3],
                              'max_freq': line[4],
-                             'defocusU': self._params['defocusU'],
-                             'Q0': self._params['ampContrast'],
+                             'defocusU': params['defocusU'],
+                             'Q0': params['ampContrast'],
                              'defocus_range': 5000,
                              'ctfmodelSize': size
                              }
@@ -464,12 +454,25 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         except Exception:
             pass
 
-        # Check if it is a good micrograph
         fnRejected = _getStr('rejected')
+
+        # Check if it is a good PSD
+        criterion = self._criterion_psd
+        self.runJob("xmipp_metadata_utilities",
+                    '-i %s --query select "%s" -o %s'
+                    % (fnEval, criterion, fnRejected))
+
+        if not isMdEmpty(fnRejected):
+            mdCTFparam = md.MetaData(fnEval)
+            mdCTFparam.setValue(md.MDL_ENABLED, -1, mdCTFparam.firstObject())
+            mdCTFparam.write(fnEval)
+            return False
+
+         #Check if it is a good CTF estimation
         if self.findPhaseShift:
             criterion = self._criterion_phaseplate
         else:
-            criterion = self._criterion
+            criterion = self._criterion_estimation
         self.runJob("xmipp_metadata_utilities",
                     '-i %s --query select "%s" -o %s'
                     % (fnEval, criterion, fnRejected))
@@ -478,13 +481,75 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         if not isMdEmpty(fnRejected):
             retval = False
             mdCTFparam = md.MetaData(fnEval)
-            Iceness = mdCTFparam.getValue(md.MDL_CTF_CRIT_ICENESS, 1)
             mdCTFparam.setValue(md.MDL_ENABLED, -1, mdCTFparam.firstObject())
             mdCTFparam.write(fnEval)
-            if Iceness > 1.03:
-                retval = True
+
+        #Un-commment the method to see which criteria is rejecting the estimated CTF
+        #self.checkRejectedCriteria(fnEval, fnRejected)
 
         return retval
+
+    def checkRejectedCriteria(self, fnEval, fnRejected):
+        self.runJob("xmipp_metadata_utilities",
+                    '-i %s --query select "ctfCritFirstZero<5" -o %s'
+                    % (fnEval, fnRejected))
+        if not isMdEmpty(fnRejected):
+            print("Rejected ctfCritFirstZero<5")
+        self.runJob("xmipp_metadata_utilities",
+                    '-i %s --query select "ctfCritMaxFreq>20" -o %s'
+                    % (fnEval, fnRejected))
+        if not isMdEmpty(fnRejected):
+            print("Rejected ctfCritMaxFreq>20")
+        self.runJob("xmipp_metadata_utilities",
+                    '-i %s --query select "ctfCritfirstZeroRatio<0.9" -o %s'
+                    % (fnEval, fnRejected))
+        if not isMdEmpty(fnRejected):
+            print("Rejected ctfCritfirstZeroRatio<0.9")
+        self.runJob("xmipp_metadata_utilities",
+                    '-i %s --query select "ctfCritfirstZeroRatio>1.1" -o %s'
+                    % (fnEval, fnRejected))
+        if not isMdEmpty(fnRejected):
+            print("Rejected ctfCritfirstZeroRatio>1.1")
+        self.runJob("xmipp_metadata_utilities",
+                    '-i %s --query select "ctfCritFirstMinFirstZeroRatio>10" -o %s'
+                    % (fnEval, fnRejected))
+        if not isMdEmpty(fnRejected):
+            print("Rejected ctfCritFirstMinFirstZeroRatio>10")
+        self.runJob("xmipp_metadata_utilities",
+                    '-i %s --query select "ctfCritCorr13<0.27" -o %s'
+                    % (fnEval, fnRejected))
+        if not isMdEmpty(fnRejected):
+            print("Rejected ctfCritCorr13<0.27")
+        self.runJob("xmipp_metadata_utilities",
+                    '-i %s --query select "ctfCritCtfMargin<1" -o %s'
+                    % (fnEval, fnRejected))
+        if not isMdEmpty(fnRejected):
+            print("Rejected ctfCritCtfMargin<1")
+        self.runJob("xmipp_metadata_utilities",
+                    '-i %s --query select "ctfCritNonAstigmaticValidty<0" -o %s'
+                    % (fnEval, fnRejected))
+        if not isMdEmpty(fnRejected):
+            print("Rejected ctfCritNonAstigmaticValidty<0")
+        self.runJob("xmipp_metadata_utilities",
+                    '-i %s --query select "ctfCritNonAstigmaticValidty>6.5" -o %s'
+                    % (fnEval, fnRejected))
+        if not isMdEmpty(fnRejected):
+            print("Rejected ctfCritNonAstigmaticValidty>6.5")
+        #self.runJob("xmipp_metadata_utilities",
+        #            '-i %s --query select "ctfBgGaussianSigmaU<1000" -o %s'
+        #            % (fnEval, fnRejected))
+        #if not isMdEmpty(fnRejected):
+        #    print("Rejected ctfBgGaussianSigmaU<1000")
+        self.runJob("xmipp_metadata_utilities",
+                    '-i %s --query select "ctfCritIceness>1.03" -o %s'
+                    % (fnEval, fnRejected))
+        if not isMdEmpty(fnRejected):
+            print("Rejected ctfCritIceness>1.03")
+        self.runJob("xmipp_metadata_utilities",
+                    '-i %s --query select "ctfCritPsdCorr90<0.1" -o %s'
+                    % (fnEval, fnRejected))
+        if not isMdEmpty(fnRejected):
+            print("Rejected ctfCritPsdCorr90<0.1")
 
     def _createCtfModel(self, mic, updateSampling=True):
         if updateSampling:

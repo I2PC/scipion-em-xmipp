@@ -96,8 +96,8 @@ class XmippProtVolumeStrain(ProtAnalysis3D):
         self.runJob("xmipp_transform_mirror","-i %s_localrot.vol --flipX"%fnRoot)
         self.runJob("rm","-f "+self._getExtraPath('result_*.raw'))
         if self.symmetryGroup!="c1":
-            self.runJob("xmipp_transform_symmetrize","-i %s --sym %s"%(fnRoot+"_strain.vol",self.symmetryGroup.get()))
-            self.runJob("xmipp_transform_symmetrize","-i %s --sym %s"%(fnRoot+"_localrot.vol",self.symmetryGroup.get()))
+            self.runJob("xmipp_transform_symmetrize","-i %s --sym %s --dont_wrap"%(fnRoot+"_strain.vol",self.symmetryGroup.get()))
+            self.runJob("xmipp_transform_symmetrize","-i %s --sym %s --dont_wrap"%(fnRoot+"_localrot.vol",self.symmetryGroup.get()))
     
     def createChimeraScript(self):
         fnRoot = "extra/result"

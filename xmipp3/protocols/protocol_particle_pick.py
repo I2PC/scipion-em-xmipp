@@ -87,6 +87,12 @@ class XmippProtParticlePicking(ProtParticlePicking, XmippProtocol):
         if self.saveDiscarded and exists(self._getPath('coordinates.sqlite')):
             self.createDiscardedStep()
 
+        coordSet = self.getCoords()
+        if coordSet:
+            boxSize = Integer(coordSet.getBoxSize())
+            self._defineOutputs(boxsize=boxSize)
+            self._defineSourceRelation(self.inputMicrographs.get(), boxSize)
+
     def _importFromFolderStep(self):
         """ This function will copy Xmipp .pos files for
         simulating a particle picking run...this is only
@@ -212,4 +218,3 @@ class XmippProtParticlePicking(ProtParticlePicking, XmippProtocol):
 
     def getCoordsDir(self):
         return self._getExtraPath()
-    

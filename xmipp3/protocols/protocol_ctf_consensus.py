@@ -549,6 +549,11 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
         # TODO: Change this way to get the ctf.
         ctf = self.inputCTF.get()[ctfId]
 
+        # FIXME: this is a workaround to skip errors, but it should be treat at checkNewInput
+        if ctf is None:
+            return
+
+
         defocusU = ctf.getDefocusU()
         defocusV = ctf.getDefocusV()
         astigm = abs(defocusU - defocusV)
@@ -571,9 +576,15 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
 
         consResolCrit = False
         if self.calculateConsensus:
-            consResolCrit = self.minConsResol < self._freqResol[ctfId]
-            if consResolCrit:
+            # FIXME: this conditional is to avoid an error, but it shouldn't happen!!!
+            if ctfId in self._freqResol:
+                consResolCrit = self.minConsResol < self._freqResol[ctfId]
+                if consResolCrit:
+                    self.discDict['consensusResolution'] += 1
+            else:
+                consResolCrit = True
                 self.discDict['consensusResolution'] += 1
+                self._freqResol[ctfId] = 9999
 
         secondCondition = False
         if self.useCritXmipp:
@@ -660,39 +671,39 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
 
         message.append("*General Criteria*:")
         if self.useDefocus:
-            message.append(" - _Defocus range_: %.0f - %.0f %s"
+            message.append(" - _Defocus_. Range: %.0f - %.0f %s"
                            % (self.minDefocus, self.maxDefocus,
                               addDiscardedStr('defocus')))
 
         if self.useAstigmatism:
-            message.append(" - _Astigmatism threshold_: %.0f %s"
+            message.append(" - _Astigmatism_. Threshold: %.0f %s"
                            % (self.astigmatism,
                               addDiscardedStr('astigmatism')))
 
         if self.useResolution:
-            message.append(" - _Resolution threshold_: %.0f %s"
+            message.append(" - _Resolution_. Threshold: %.0f %s"
                            % (self.resolution,
                               addDiscardedStr('singleResolution')))
 
         if self.useCritXmipp:
             message.append("*Xmipp criteria*:")
-            message.append(" - _First zero threshold_: %.0f %s"
+            message.append(" - _First zero_. Threshold: %.0f %s"
                            % (self.critFirstZero,
                               addDiscardedStr('_xmipp_ctfCritFirstZero')))
-            message.append(" - _First zero astigmatism range_: %.2f - %.2f %s"
+            message.append(" - _First zero astigmatism_. Range: %.2f - %.2f %s"
                            % (self.minCritFirstZeroRatio,
                               self.maxCritFirstZeroRatio,
                               addDiscardedStr('_xmipp_ctfCritfirstZeroRatio')))
-            message.append(" - _Correlation Experimental-Estimated threshold_: "
+            message.append(" - _Correlation Experimental-Estimated_. Threshold: "
                            "%.2f %s" % (self.critCorr,
                                         addDiscardedStr('_xmipp_ctfCritCorr13')))
-            message.append(" - _CTF margin threshold_: %.2f %s"
+            message.append(" - _CTF margin_. Threshold: %.2f %s"
                            % (self.critCtfMargin,
                               addDiscardedStr('_xmipp_ctfCritCtfMargin')))
-            message.append(" - _Iceness threshold_: %.2f %s"
+            message.append(" - _Iceness_. Threshold: %.2f %s"
                            % (self.critIceness,
                               addDiscardedStr('_xmipp_ctfIceness')))
-            message.append(" - _Non Astigmatic validation range_: %.2f - %.2f %s"
+            message.append(" - _Non Astigmatic validation_. Range: %.2f - %.2f %s"
                            % (self.minCritNonAstigmaticValidity,
                               self.maxCritNonAstigmaticValidity,
                               addDiscardedStr('_xmipp_ctfCritNonAstigmaticValidty')))
@@ -710,7 +721,7 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
                 return infoStr
 
             message.append("*CTF consensus*:")
-            message.append(" - _Consensus resolution threshold_: %.0f %s"
+            message.append(" - _Consensus resolution. Threshold_: %.0f %s"
                            % (self.minConsResol,
                               addDiscardedStr('consensusResolution')))
             message.append("   > _Primary CTF_: %s"
@@ -735,7 +746,9 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
                               "estimated using the _Xmipp - CTF estimation_ "
                               "protocol.")
         if self.useCritXmipp.get() and self.calculateConsensus.get():
-            if self.usingXmipp(self.inputCTF2.get().getFirstItem()):
+            if self.usingXmipp(self.inputCTF.get().getFirstItem()):
+                self.xmippCTF = self.inputCTF.get()
+            elif self.usingXmipp(self.inputCTF2.get().getFirstItem()):
                 self.xmippCTF = self.inputCTF2.get()
             else:
                 errors.append("One of the CTF inputs ( _Input CTF_ or "
@@ -744,7 +757,7 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
         return errors
 
     def usingXmipp(self, ctf):
-        return ctf.hasAttribute('_xmipp_ctfCritfirstZeroRatio')
+        return ctf.hasAttribute('_xmipp_ctfCritFirstZero')
 
     def _getCtfResol(self, ctf):
         resolution = ctf.getResolution()

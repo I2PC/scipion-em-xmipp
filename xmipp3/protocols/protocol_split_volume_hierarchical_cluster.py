@@ -59,6 +59,16 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
 
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
+        form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
+                       expertLevel=params.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+
         form.addSection(label='Input')
 
         form.addParam('inputVolume', params.PointerParam, pointerClass='Volume',
@@ -142,6 +152,22 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
                       condition="splitVolume",
                       expertLevel=params.LEVEL_ADVANCED,
                       help="Number of reconstructions to perform the hierarchical clustering.")
+        form.addParam('fr_approx', params.BooleanParam,
+                      label="Approximative reconstruction", default=True,
+                      condition="splitVolume",
+                      expertLevel=params.LEVEL_ADVANCED,
+                      help="If on, an approximation of the Fourier reconstruction algorithm will be used. " \
+                           "This will result in faster processing times, but (slightly) less precise result")
+        form.addParam('fr_gpu_mpi', params.IntParam,
+                      label="Reconstruction GPU MPI", default=1, validators=[params.GE(1,'Error must be greater than 1')],
+                      condition="splitVolume",
+                      expertLevel=params.LEVEL_ADVANCED,
+                      help="Number of MPI processes used for the GPU version of the Fourier Reconstruction")
+        form.addParam('fr_gpu_threads', params.IntParam,
+                      label="Reconstruction threads", default=1, validators=[params.GE(1,'Error must be greater than 1')],
+                      condition="splitVolume",
+                      expertLevel=params.LEVEL_ADVANCED,
+                      help="Number of threads used for the GPU version of the Fourier Reconstruction")
 
         form.addParallelSection(threads=0, mpi=8)
 
@@ -256,7 +282,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         if self.maxCLimgs>0 and blockSize>self.maxCLimgs:
             fnToUSe = self._getTmpPath("coneImages.xmd")
             self.runJob("xmipp_metadata_utilities","-i %s -o %s --operate random_subset %d"\
-                        %(projMdBlock,fnToUSe,self.maxCLimgs))
+                        %(projMdBlock,fnToUSe,self.maxCLimgs),numberOfMpi=1)
         Nclasses = self.directionalClasses.get()
         Nlevels = int(math.ceil(math.log(Nclasses) / math.log(2)))
 
@@ -451,6 +477,18 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
 
         cleanPattern(self._getExtraPath("direction_*"))
 
+    def runReconstruction(self, fnXmd, fnVol):
+        args = "-i %s -o %s --max_resolution 0.25 --sym %s -v 0" % \
+               (fnXmd, fnVol, self.symmetryGroup.get())
+        if self.fr_approx.get():
+            args += " --fast"
+        if self.useGpu.get():
+            args += ' --thr %d' % self.fr_gpu_threads.get()
+            args += ' --device %(GPU)s'
+            self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=self.fr_gpu_mpi.get())
+        else:
+            self.runJob('xmipp_reconstruct_fourier_accel', args)
+
     def splitVolumeStep(self):
         mdDirectional = md.MetaData(self._getDirectionalClassesFn())
         ref2vals = mdDirectional.getColumnValues(xmippLib.MDL_REF2)
@@ -532,15 +570,8 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         defMd1.write(self._getExtraPath("split1.xmd"))
         defMd2.write(self._getExtraPath("split2.xmd"))
 
-        args = "-i %s -o %s --max_resolution 0.25 --sym %s -v 0" % \
-               (self._getExtraPath("split1.xmd"),
-                self._getExtraPath("split1.vol"), self.symmetryGroup.get())
-        self.runJob("xmipp_reconstruct_fourier", args, numberOfMpi=1)
-
-        args = "-i %s -o %s --max_resolution 0.25 --sym %s -v 0" % \
-               (self._getExtraPath("split2.xmd"),
-                self._getExtraPath("split2.vol"), self.symmetryGroup.get())
-        self.runJob("xmipp_reconstruct_fourier", args, numberOfMpi=1)
+        self.runReconstruction(self._getExtraPath("split1.xmd"), self._getExtraPath("split1.vol"))
+        self.runReconstruction(self._getExtraPath("split2.xmd"), self._getExtraPath("split2.vol"))
 
     def cleaningStep(self):
         cleanPattern(self._getExtraPath("gallery*"))
@@ -705,7 +736,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
     # --------------------------- INFO functions -------------------------------
 
     def _validate(self):
-        validateMsgs = []
+        validateMsgs = ProtAnalysis3D._validate(self)
         # if there are Volume references, it cannot be empty.
         if self.inputVolume.get() and not self.inputVolume.hasValue():
             validateMsgs.append('Please provide an input reference volume.')

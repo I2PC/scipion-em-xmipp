@@ -31,7 +31,7 @@ from os import system, popen, mkdir, listdir
 from os.path import join
 from random import randint
 
-from pyworkflow import VERSION_1_2
+from pyworkflow import VERSION_2_0
 from pyworkflow.em import SetOfParticles, ALIGN_2D, ALIGN_NONE
 from pyworkflow.em.protocol import ProtAlign2D
 import pyworkflow.em.metadata as md
@@ -69,11 +69,18 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
     The set of classes will be growing whilst new particle images are
     received."""
     _label = 'gl2d streaming'
-    _lastUpdateVersion = VERSION_1_2
+    _lastUpdateVersion = VERSION_2_0
     _stepsCheckSecs = 10
 
     # --------------------------- DEFINE param functions -----------------------
     def _defineAlignParams(self, form):
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
+                       expertLevel=const.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="GPU may have several cores. Set it to zero"
+                            " if you do not know what we are talking about."
+                            " First core index is 0, second 1 and so on."
+                            " In this protocol is not possible to use several GPUs.")
         form.addParam('maxShift', params.IntParam, default=10,
                       label='Maximum shift (%):',
                       help='Maximum shift allowed during the alignment as '
@@ -112,7 +119,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
                       label='Maximum number of classes',
                       help='Maximum number of classes to be generated',
                       expertLevel=const.LEVEL_ADVANCED)
-        form.addParallelSection(threads=0, mpi=0)
+        form.addParallelSection(threads=0, mpi=8)
 
 
     # --------------------------- INSERT steps functions -----------------------
@@ -570,8 +577,8 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
                    '--maxShift %(maxshift)d --odir %(outDir)s --oroot %(' \
                    'rootFn)s'
 
-            self.runJob("mpirun -np 4 -bynode xmipp_mpi_classify_CL2D",
-                        args % self._params)
+            self.runJob("xmipp_classify_CL2D",
+                        args % self._params, numberOfMpi=self.numberOfMpi.get())
 
             fileTocopy = classesOut.replace('.xmd','_classes.xmd')
             fileTocopy = fileTocopy.replace('extra/', 'extra/level_00/')
@@ -583,11 +590,12 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
                             'outputFile': outImgs,
                             'keepBest': self.keepBest.get(),
                             'maxshift': self.maximumShift,
-                            'outputClassesFile': classesOut
+                            'outputClassesFile': classesOut,
+                            'device': int(self.gpuList.get()),
                             }
             args = '-i_ref %(imgsRef)s -i_exp %(imgsExp)s -o %(outputFile)s '\
                    '--keep_best %(keepBest)d --maxShift %(maxshift)d ' \
-                   '--classify %(outputClassesFile)s --simplifiedMd'
+                   '--classify %(outputClassesFile)s --simplifiedMd --device %(device)d '
             self.runJob("xmipp_cuda_correlation", args % self._params,
                         numberOfMpi=1)
 
@@ -963,6 +971,8 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
         if newSize>x or newSize>y:
             errors.append('The image size must be smaller than the size of '
                           'the input images')
+        if len(self.gpuList.get())>1:
+            errors.append("The GPU list only can have one value for this protocol.")
         return errors
 
     def _summary(self):

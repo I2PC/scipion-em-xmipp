@@ -29,9 +29,11 @@ import requests
 import webbrowser
 
 # FIXME: Avoid this crazy import * statements
+from pyworkflow import VERSION_2_0
 from pyworkflow.em import *
 from pyworkflow.em.convert import ImageHandler, Ccp4Header
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
+from pyworkflow.object import String
 
 
 class XmippProt3DBionotes(ProtAnalysis3D):
@@ -42,36 +44,51 @@ class XmippProt3DBionotes(ProtAnalysis3D):
        http://3dbionotes.cnb.csic.es
     """
     _label = '3d bionotes'
+    _lastUpdateVersion = VERSION_2_0
     
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('inputPDB', PointerParam, pointerClass='PdbFile',
+        form.addParam('inputPDB', PointerParam, pointerClass='AtomStruct',
                       label="Input PDB")
 #         form.addParam('inputVol', PointerParam, pointerClass='Volume',
 #                       label="Input volume", important=True)
     
     #--------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
+        self.url = String("")
         self._insertFunctionStep('bionotesWrapper')
         
     #--------------------------- STEPS functions -------------------------------
     def bionotesWrapper(self):
-#         img = ImageHandler()
-#         fnVol = self._getExtraPath('volume.mrc')
-#         vol = self.inputVol.get()
-#         img.convert(vol,fnVol)
-#
-#         ccp4header = Ccp4Header(fnVol, readHeader= True)
-#         ccp4header.setOffset(vol.getOrigin(force=True).getShifts())
-#         ccp4header.setSampling(vol.getSamplingRate())
-#         ccp4header.writeHeader()
+        #img = ImageHandler()
+        #fnVol = self._getExtraPath('volume.mrc')
+        #vol = self.inputVol.get()
+        #img.convert(vol,fnVol)
+
+        #ccp4header = Ccp4Header(fnVol, readHeader= True)
+        #ccp4header.setOrigin(vol.getOrigin(force=True).getShifts)
+        #ccp4header.setOffset(vol.getOrigin(force=True).getShifts())
+        #ccp4header.setSampling(vol.getSamplingRate())
+        #ccp4header.writeHeader()
         data = {'title':'PDB structure'}
         files = {'structure_file': open(self.inputPDB.get().getFileName(), 'rb')}
 
         response = requests.post('http://3dbionotes.cnb.csic.es/programmatic/upload',data=data, files=files)
         json_data = json.loads(response.text)
-        webbrowser.open_new(json_data["url"])
+        url="http://3dbionotes.cnb.csic.es/programmatic/get/"+json_data['id']
+        webbrowser.open_new(url)
+        self.url=String('http://3dbionotes.cnb.csic.es/programmatic/get/'+json_data['id'])
+        self._store()
+        #webbrowser.open_new(url)
+        print("\n > Visit: %s\n" % self.url)
+        fh=open(self._getExtraPath("id.txt"),"w")
+        fh.write(json_data['id'])
+        fh.close()
 
     #--------------------------- INFO functions --------------------------------
-            
+    def _summary(self):
+        if self.url.get() != '':
+            return ["Visit: %s" % self.url.get()]
+        else:
+            return []
