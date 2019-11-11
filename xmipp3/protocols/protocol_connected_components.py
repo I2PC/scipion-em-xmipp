@@ -27,6 +27,7 @@
 # *
 # **************************************************************************
 import numpy as np
+from sklearn.cluster import KMeans
 from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.protocol.params import PointerParam, FloatParam
 from tomo.objects import SetOfCoordinates3D
@@ -56,8 +57,10 @@ class XmippProtConnectedComponents(EMProtocol):
     # --------------------------- STEPS functions -------------------------------
     def computeConnectedComponents(self):
         inputCoor = self.inputCoordinates.get()
-        d = self.distance.get()
-        matrix = np.zeros([inputCoor.getSize(), inputCoor.getSize()])
+        minDist = self.distance.get()
+
+        # Construct the adjacency matrix (A)
+        A = np.zeros([inputCoor.getSize(), inputCoor.getSize()])
         coorlist = []
         for i, coor in enumerate(inputCoor.iterItems()):
             coorlist.append([coor.getX(), coor.getY(), coor.getZ()])
@@ -67,13 +70,36 @@ class XmippProtConnectedComponents(EMProtocol):
                     break
                 else:
                     coor2 = coorlist[k]
-                    if abs(coor1[0]-coor2[0]) <= d and abs(coor1[1]-coor2[1]) <= d and abs(coor1[2]-coor2[2]) <= d:
-                        matrix[j, k] = 1
+                    if abs(coor1[0]-coor2[0]) <= minDist and abs(coor1[1]-coor2[1]) <= minDist \
+                            and abs(coor1[2]-coor2[2]) <= minDist:
+                        A[j, k] = 1
                     else:
-                        matrix[j, k] = 0
-        np.savetxt(self._getExtraPath('connection_matrix'), matrix)
+                        A[j, k] = 0
+        np.savetxt(self._getExtraPath('adjacency_matrix'), A)
+
+        # Construct the degree matrix (D)
+        D = np.diag(A.sum(axis=1))
+        np.savetxt(self._getExtraPath('degree_matrix'), D)
+
+        # Compute the Laplacian (L) and its eigenvalues and eigenvectors to perform spectral clustering
+        L = D - A
+        np.savetxt(self._getExtraPath('laplacian_matrix'), L)
+        vals, vecs = np.linalg.eig(L)
+        vecs = vecs[:, np.argsort(vals)]
+        vals = vals[np.argsort(vals)]
+        print("vals:", vals)
+        # print("vecs:", vecs)
+
+        # The number of eigenvalues = 0 => number of connected components (n)
+        nonzeros = np.count_nonzero(vals)
+        n = len(vals) - nonzeros
+        kmeans = KMeans(n_clusters=n)
+        kmeans.fit(vecs[:, 1:4]) # ???
+        labels = kmeans.labels_
+        print("Clusters:", labels)
 
     def createOutput(self):
+        # it should be just the coordinates belonging to the biggest cc??
         pass
         # inputSet = self.inputCoordinates.get()
         # outputSet = SetOfCoordinates3D()
