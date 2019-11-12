@@ -2,7 +2,6 @@
 # **************************************************************************
 # *
 # * Authors:     Estrella Fernandez Gimenez
-# *              Carlos Oscar Sanchez Sorzano
 # *
 # *  BCU, Centro Nacional de Biotecnologia, CSIC
 # *
@@ -26,14 +25,16 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+
 import numpy as np
+from scipy import stats as s
 from sklearn.cluster import KMeans
 from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.protocol.params import PointerParam, FloatParam
-from tomo.objects import SetOfCoordinates3D
+from tomo.protocols import ProtTomoBase
 
 
-class XmippProtConnectedComponents(EMProtocol):
+class XmippProtConnectedComponents(EMProtocol, ProtTomoBase):
     """ This protocol takes a set of coordinates and detects the ones which are located along the membrane, removing
     those ones which are not located in the membrane."""
 
@@ -65,7 +66,7 @@ class XmippProtConnectedComponents(EMProtocol):
         for i, coor in enumerate(inputCoor.iterItems()):
             coorlist.append([coor.getX(), coor.getY(), coor.getZ()])
         for j, coor1 in enumerate(coorlist):
-            for k, _ in enumerate(coorlist, start=j):
+            for k, _ in enumerate(coorlist, start=j+1):
                 if k == len(coorlist):
                     break
                 else:
@@ -93,20 +94,32 @@ class XmippProtConnectedComponents(EMProtocol):
         # The number of eigenvalues = 0 => number of connected components (n)
         nonzeros = np.count_nonzero(vals)
         n = len(vals) - nonzeros
+
+        # kmeans on first three vectors with nonzero eigenvalues: kmeans = KMeans(n_clusters=4); kmeans.fit(vecs[:,1:4])
         kmeans = KMeans(n_clusters=n)
-        kmeans.fit(vecs[:, 1:4]) # ???
+        kmeans.fit(vecs[:, 1:n])  # ???
         labels = kmeans.labels_
         print("Clusters:", labels)
+        # it seems that the index of the label corresponds with the id of the coordinate (but it is not demonstrated!!)
+        # count which is the biggest cluster and get the index of the labels belonging to the biggest cluster
+        # if there are more than 1 cluster with "maximun size" it takes the one with the lowest label
+        labelMode = int(s.mode(labels)[0])
+        self.coorIndx = [i for i, x in enumerate(labels) if x == labelMode]
+        print("mode:", labelMode)
+        print("idxs:", self.coorIndx)
+
 
     def createOutput(self):
-        # it should be just the coordinates belonging to the biggest cc??
-        pass
-        # inputSet = self.inputCoordinates.get()
-        # outputSet = SetOfCoordinates3D()
-        # # outputSet.copyInfo(inputSet)
-        # # outputSet.copyItems(inputSet, updateItemCallback=self._updateItem)
-        # self._defineOutputs(outputSetOfCoordinates3D=outputSet)
-        # self._defineSourceRelation(self.inputCoordinates, outputSet)
+        # it should be just the coordinates belonging to the biggest cc
+        inputSet = self.inputCoordinates.get()
+        outputSet = self._createSetOfCoordinates3D(inputSet.getVolumes())
+        outputSet.copyInfo(inputSet)
+        outputSet.setBoxSize(inputSet.getBoxSize())
+        for coor3D in inputSet.iterItems():
+            if (coor3D.getObjId()-1) in self.coorIndx:
+                outputSet.append(coor3D)
+        self._defineOutputs(outputSetOfCoordinates3D=outputSet)
+        self._defineSourceRelation(inputSet, outputSet)
 
     # --------------------------- INFO functions --------------------------------
     def _validate(self):
@@ -122,3 +135,4 @@ class XmippProtConnectedComponents(EMProtocol):
         methods = []
         methods.append("")
         return methods
+
