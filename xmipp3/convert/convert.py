@@ -245,7 +245,7 @@ def objectToRow(obj, row, attrDict, extraLabels=[]):
         enabled = -1
     row.setValue(xmippLib.MDL_ENABLED, enabled)
 
-    for attr, label in attrDict.iteritems():
+    for attr, label in attrDict.items():
         if hasattr(obj, attr):
             valueType = getLabelPythonType(label)
             value = getattr(obj, attr).get()

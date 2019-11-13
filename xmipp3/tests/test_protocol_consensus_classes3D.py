@@ -69,12 +69,12 @@ class TestConsensusClasses3D(BaseTest):
 
             numOfPart = partSet.getSize() if numPart is None else numPart
             partIds = list(partSet.getIdSet())
-            m = numOfPart/numClasses
+            m = int(numOfPart/numClasses)
             
             # random shuffle with a certain seed to get always the same classes
             random.seed(randomSeed)
             random.shuffle(partIds)
-            for clInx in range(0, numClasses):
+            for clInx in list(range(numClasses)):
                 currIds = partIds[clInx*m:(clInx+1)*m]
 
                 newClass = Class3D()
@@ -114,7 +114,7 @@ class TestConsensusClasses3D(BaseTest):
         classItem = setOfIntersections[classId]
         self.assertEqual(classItem.getSize(), len(partIds), 
                          "The size of the class %d is wrong" % classId)
-        self.assertEqual(partIds,list(classItem.getIdSet()),
+        self.assertEqual(partIds, list(classItem.getIdSet()),
                          "The particles in the class %d are wrong." % classId)
 
     def checkPopulation(self, setOfIntersections, population):

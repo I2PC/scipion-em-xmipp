@@ -53,7 +53,7 @@ LABEL_TYPES = {
 def getXmippPath(*paths):
     '''Return the path the the Xmipp installation folder
     if a subfolder is provided, will be concatenated to the path'''
-    if os.environ.has_key(XMIPP_HOME):
+    if os.environ.get(XMIPP_HOME):
         return os.path.join(os.environ[XMIPP_HOME], *paths)
     else:
         raise Exception('XMIPP_HOME environment variable not set')
@@ -170,7 +170,7 @@ class XmippMdRow:
             try:
                 md.setValue(label, value, objId)
             except Exception as ex:
-                print("XmippMdRow.writeToMd: Error writting value to metadata.",
+                print("XmippMdRow.writeToMd: Error writing value to metadata.",
                       file=sys.stderr)
                 print("                     label: %s, value: %s, type(value): %s"
                       % (label2Str(label), value, type(value)), file=sys.stderr)

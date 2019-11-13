@@ -56,7 +56,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
     _lastUpdateVersion = VERSION_2_0
 
     def __init__(self, **args):
-        em.ProtCTFMicrographs.__init__(self, **args)
+        ProtCTFMicrographs.__init__(self, **args)
         self._freqResol = {}
         self.stepsExecutionMode = params.STEPS_SERIAL
 

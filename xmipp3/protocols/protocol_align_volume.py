@@ -216,7 +216,7 @@ class XmippProtAlignVolume(ProtAlignVolume):
             
         self._defineOutputs(**outputArgs)
         for pointer in self.inputVolumes:
-            self._defineSourceRelation(pointer, outputArgs.values()[0])
+            self._defineSourceRelation(pointer, outputArgs['outputVolume'])
     #--------------------------- INFO functions --------------------------------------------
     
     def _validate(self):

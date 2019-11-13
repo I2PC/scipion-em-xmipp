@@ -318,7 +318,7 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
             self._args += "--phase_shift %(phaseShift0)f --VPP_radius 0.005"
         if self.refineAmplitudeContrast:
             self._args += "--refine_amplitude_contrast"
-        for par, val in params.iteritems():
+        for par, val in params.items():
             self._args += " --%s %s" % (par, str(val))
 
     def getPreviousValues(self, ctf):
@@ -382,7 +382,7 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
 
             # get the size and the image of psd
             imgPsd = ctfModel.getPsdFile()
-            psdFile = pwutils.path.basename(imgPsd)
+            psdFile = os.path.basename(imgPsd)
             imgh = ImageHandler()
             size, _, _, _ = imgh.getDimensions(imgPsd)
 

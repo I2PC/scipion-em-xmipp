@@ -392,8 +392,8 @@ class TestAlignment(TestConvertBase):
                 m2 = img.getTransform().getMatrix()
                 print("-"*5)
                 print(img.getFileName(), img.getIndex())
-                sys.stderr.write('m1:\n', m1)
-                sys.stderr.write('m2:\n', m2)
+                sys.stderr.write('m1:%s\n' % m1)
+                sys.stderr.write('m2:%s\n' % m2)
                 self.assertTrue(np.allclose(m1, m2, rtol=1e-2))
 
 #        self.launchTest('alignShiftRotExp', mList, alignType=ALIGN_2D)

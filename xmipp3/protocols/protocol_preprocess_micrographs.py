@@ -36,7 +36,7 @@ from pyworkflow.protocol.params import (PointerParam, BooleanParam, IntParam,
 from pyworkflow.object import Set
 
 from pwem.protocols import ProtPreprocessMicrographs
-from pwem.objects import SetOfMicrographs
+from pwem.objects import SetOfMicrographs, Micrograph
 
 
 class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
@@ -280,7 +280,7 @@ class XmippProtPreprocessMicrographs(ProtPreprocessMicrographs):
                     raise ex
 
         for mic in newDone:
-            micOut = em.data.Micrograph()
+            micOut = Micrograph()
             if self.doDownsample:
                 micOut.setSamplingRate(self.inputMicrographs.get().getSamplingRate()
                                        * self.downFactor.get())
