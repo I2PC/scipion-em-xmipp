@@ -60,8 +60,8 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
 
     _criterion_phaseplate = ("ctfCritFirstZero<5 OR "
                              "ctfCritMaxFreq>20 OR "
-                             "ctfCritFirstMinFirstZeroRatio>50 AND "
-                             "ctfCritFirstMinFirstZeroRatio!=1000 OR "
+                             "(ctfCritFirstMinFirstZeroRatio>50 AND "
+                             "ctfCritFirstMinFirstZeroRatio!=1000) OR "
                              "ctfCritfirstZeroRatio<0.9 OR "
                              "ctfCritfirstZeroRatio>1.1 OR "
                              "ctfCritNonAstigmaticValidty<=0 OR "
