@@ -27,6 +27,7 @@
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 import pyworkflow.em.viewers.showj as showj
 from pyworkflow.protocol.params import LabelParam
+import pyworkflow.em as em
 
 from xmipp3.protocols.protocol_movie_opticalflow import (XmippProtOFAlignment,
                                                  OBJCMD_MOVIE_ALIGNCARTESIAN)
@@ -84,13 +85,22 @@ class XmippMovieMaxShiftViewer(ProtocolViewer):
                  'visualizeMicsDiscarded': self._visualizeMicsDiscarded
                 }
 
-    def _visualizeAny(self, objName):
-        views = []
-
-        if self.protocol.hasAttribute(objName):
-            views.append(self.objectView(getattr(self.protocol, objName),
-                                         viewParams=getViewParams()))
-        else:
+    def _visualizeAny(self, isDiscarded=False):
+        neg = lambda x: x if isDiscarded else lambda x: not x
+        
+        def getView(setClass):
+            views = []
+            for outName, outSet in self.protocol.iterOutputAttributes(setClass):
+                if neg(outName.endswith("Discarded")):
+                    views.append(self.objectView(outSet,
+                                             viewParams=getViewParams()))
+                    return views
+                
+        views = getView(em.SetOfMicrographs)
+        if not views:
+            views = getView(em.SetOfMovies)
+                                         
+        if not views:
             appendStr = ', yet.' if self.protocol.isActive() else '.'
             self.infoMessage('%s does not have %s%s'
                              % (self.protocol.getObjLabel(), objName, appendStr),
@@ -98,10 +108,10 @@ class XmippMovieMaxShiftViewer(ProtocolViewer):
         return views
 
     def _visualizeMics(self, e=None):
-        return self._visualizeAny('outputMicrographs')
+        return self._visualizeAny(isDiscarded=False)
 
     def _visualizeMicsDiscarded(self, e=None):
-        return self._visualizeAny('outputMicrographsDiscarded')
+        return self._visualizeAny(isDiscarded=True)
 
 def getViewParams():
     plotLabels = ('psdCorr._filename plotPolar._filename '
@@ -111,7 +121,7 @@ def getViewParams():
                   showj.ORDER: 'id ' + labels,
                   showj.VISIBLE: 'id ' + labels,
                   showj.RENDER: plotLabels,
-                  showj.ZOOM: 30,
+                  showj.ZOOM: 20,
                   showj.OBJCMDS: "'%s'" % OBJCMD_MOVIE_ALIGNCARTESIAN
                   }
 
