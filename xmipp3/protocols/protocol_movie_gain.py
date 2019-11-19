@@ -28,7 +28,6 @@
 import numpy as np
 import os
 import math
-import cv2
 import sys
 
 from pyworkflow import VERSION_1_1
@@ -47,27 +46,28 @@ from xmippLib import *
 from xmipp_base import *
 from xmipp3.utils import *
 
-def cv2_applyTransform(imag, M, shape):
+def applyTransform(imag_array, M, shape):
     ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
     '''
-    (hdst, wdst) = shape
-    transformed = cv2.warpAffine(imag, M[:2][:], (wdst, hdst),
-                                 borderMode=cv2.BORDER_CONSTANT, borderValue=1.0)
-    return transformed
+    imag= xmippLib.Image()
+    imag.setData(imag_array)
+    imag=imag.applyWarpAffine(list(M.flatten()),shape,1.0)
+    return imag.getData()
 
-def cv2_rotation(imag, angle, shape, P):
+def rotation(imag, angle, shape, P):
     '''Rotate a np.array and return also the transformation matrix
     #imag: np.array
     #angle: angle in degrees
     #shape: output shape
     #P: transform matrix (further transformation in addition to the rotation)'''
     (hsrc, wsrc) = imag.shape
-
     angle *= math.pi / 180
     T = np.asarray([[1, 0, -wsrc / 2], [0, 1, -hsrc / 2], [0, 0, 1]])
     R = np.asarray([[math.cos(angle), math.sin(angle), 0], [-math.sin(angle), math.cos(angle), 0], [0, 0, 1]])
     M = np.matmul(np.matmul(np.linalg.inv(T), np.matmul(R, T)), P)
-    return cv2_applyTransform(imag, M, shape), M
+
+    transformed=applyTransform(imag, M, shape)
+    return transformed, M
 
 def arrays_correlation_FT(ar1,ar2_ft_conj,normalize=True):
     '''Return the correlation matrix of an array and the FT_conjugate of a second array using the fourier transform
@@ -426,27 +426,30 @@ class XmippProtMovieGain(ProtProcessMovies):
                     M = np.identity(3)
                 angle = irot * 90
                 #Transformating the imag array (mirror + rotation)
-                imag_array, R = cv2_rotation(imag_array, angle, est_gain_array.shape, M)
+                imag_array, R = rotation(imag_array, angle, est_gain_array.shape, M)
 
                 # calculating correlation
                 correlationFunction = arrays_correlation_FT(imag_array,est_gain_array_FT_conj)
 
-                minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(correlationFunction)
+                minVal = np.amin(correlationFunction)
+                maxVal = np.amax(correlationFunction)
+                minLoc = np.where(correlationFunction == minVal)
+                maxLoc = np.where(correlationFunction == maxVal)
+                #print(minVal,maxVal,minLoc,maxLoc)
                 if abs(minVal) > abs(best_cor):
-                    # minloc o minloc-h
                     corLoc=translation_correction(minLoc,est_gain_array.shape)
-                    T = np.asarray([[1, 0, corLoc[0]], [0, 1, corLoc[1]], [0, 0, 1]])
                     best_cor = minVal
-                    #Multiply by inverse of translation matrix
-                    best_M = np.matmul(np.linalg.inv(T), R)
+                    best_R = R
+                    T = np.asarray([[1, 0, corLoc[0]], [0, 1, corLoc[1]], [0, 0, 1]])
                 if abs(maxVal) > abs(best_cor):
                     corLoc = translation_correction(maxLoc, est_gain_array.shape)
-                    T = np.asarray([[1, 0, corLoc[0]], [0, 1, corLoc[1]], [0, 0, 1]])
                     best_cor = maxVal
-                    #Multiply by inverse of translation matrix
-                    best_M = np.matmul(np.linalg.inv(T),R)
+                    best_R = R
+                    T = np.asarray([[1, 0, corLoc[0]], [0, 1, corLoc[1]], [0, 0, 1]])
 
-        best_gain_array = cv2_applyTransform(np.asarray(exp_gain.getData(), dtype=np.float64), best_M, est_gain_array.shape)
+        # Multiply by inverse of translation matrix
+        best_M = np.matmul(np.linalg.inv(T), best_R)
+        best_gain_array = applyTransform(np.asarray(exp_gain.getData(), dtype=np.float64), best_M, est_gain_array.shape)
 
         print('Best correlation: ',best_cor)
         if best_cor > 0:
