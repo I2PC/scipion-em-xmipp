@@ -256,7 +256,7 @@ def objectToRow(obj, row, attrDict, extraLabels=[]):
     attrLabels = attrDict.values()
 
     for label in extraLabels:
-        attrName = '_xmipp_%s' % xmippLib.label2Str(label)
+        attrName = prefixAttribute(xmippLib.label2Str(label))
         if label not in attrLabels and hasattr(obj, attrName):
             value = obj.getAttributeValue(attrName)
             row.setValue(label, value)
@@ -286,18 +286,39 @@ def rowToObject(row, obj, attrDict, extraLabels=[]):
     for label in extraLabels:
         if label not in attrLabels and row.hasLabel(label):
             labelStr = xmippLib.label2Str(label)
-            setattr(obj, '_xmipp_%s' % labelStr, row.getValueAsObject(label))
+            setattr(obj, prefixAttribute(labelStr), row.getValueAsObject(label))
 
-def setXmippAttributes(obj, objRow, *labels):
-    """ Set an attribute to obj from a label that is not
-    basic ones. The new attribute will be named _xmipp_LabelName
-    and the datatype will be set correctly.
+def setXmippAttributes(obj, objRow, *labels, **kwargs):
+    """ Set the labels attribute(s) to obj from a objRow
+        (those not basic ones).
+        More than one label can be set
+        and default can also be a list of same number of entries.
+        The new attribute will be named _xmipp_LabelName
+        and the datatype will be set correctly.
+        If obj doesn't contain a label and a default value is in kwargs,
+        it's set in its corresponding Scipion datatype.
     """
-    for label in labels:
-        value = objRow.getValueAsObject(label)
-        # To avoid empty values
+    defaults = kwargs.get('default', None)
 
+    for idx, label in enumerate(labels):
         if objRow.containsLabel(label):
+            value = objRow.getValueAsObject(label)
+        else:
+            if isinstance(defaults, list):
+                value = defaults[idx]
+            else:
+                value = defaults
+
+            if isinstance(value, int):
+                value = Integer(value)
+            elif isinstance(value, float):
+                value = Float(value)
+            elif isinstance(value, basestring):
+                value = String(value)
+            else:
+                value = None
+
+        if value is not None:
             setXmippAttribute(obj, label, value)
 
 def setXmippAttribute(obj, label, value):

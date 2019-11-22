@@ -73,7 +73,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         form.addSection(label='Input')
         form.addParam('inputCoordinates', params.MultiPointerParam,
                       pointerClass='SetOfCoordinates',
-                      label="Input coordinates",
+                      label="Input coordinates", important=True,
                       help='Select the set of coordinates to compare')
         form.addParam('consensusRadius', params.IntParam, default=10,
                       label="Radius",
@@ -253,6 +253,23 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                         self._getExtraPath('jaccard.txt'))
 
         self.processedMics.update([micId])
+
+    def _validate(self):
+
+        errors = []
+
+        # Only for Scipion 2.0, next versions should have the default
+        # PointerList validation and this can be removed
+        if len(self.inputCoordinates) == 0:
+                errors.append('inputCoordinates cannot be EMPTY.')
+        # Consider empty pointers:
+        else:
+            for pointer in self.inputCoordinates:
+                obj = pointer.get()
+                if obj is None:
+                    errors.append('%s is empty.' % obj)
+
+        return errors
 
     def _summary(self):
         message = []
