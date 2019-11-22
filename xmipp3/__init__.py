@@ -262,7 +262,7 @@ def installDeepLearningToolkit(plugin, env):
                                         % (pipCmdScipion, tensorFlowTarget))
         deepLearningTools.append(tensor)
 
-        keras = tryAddPipModule(env, 'keras', '2.1.5', target='keras*',
+        keras = tryAddPipModule(env, 'keras', '2.2.2', target='keras*',
                                 default=False, deps=[cv2, h5py])
 
         deepLearningTools.append(keras)
