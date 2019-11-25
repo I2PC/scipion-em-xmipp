@@ -75,5 +75,30 @@ class XmippProtProjectZ(ProtAnalysis3D):
             p.setLocation(idv+1,fnProj)
             imgSetOut.append(p)
 
+        imgSetOut.setObjComment(self.getSummary(imgSetOut))
         self._defineOutputs(outputReprojections=imgSetOut)
         self._defineSourceRelation(self.input, imgSetOut)
+
+# --------------------------- INFO functions ------------------------------
+    def _methods(self):
+        vols = self.input.get()
+        return [
+            "Top projection of subtomograms/volumes obtained with xmipp_phantom_project",
+            "A total of %d tomograms/volumes of dimensions %s were used"
+               % (vols.getSize(), vols.getDimensions()),
+        ]
+
+    def _summary(self):
+        summary = []
+        if not self.isFinished():
+            summary.append("Output top views not ready yet.")
+
+        if self.getOutputsSize() >= 1:
+            for key, output in self.iterOutputAttributes():
+                summary.append("*%s:* \n %s " % (key, output.getObjComment()))
+        return summary
+
+    def getSummary(self, imgSetOut):
+        summary = []
+        summary.append("\n   -Number of projections generated: %s" % imgSetOut.getSize())
+        return "\n".join(summary)
