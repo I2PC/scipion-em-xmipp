@@ -129,7 +129,7 @@ try:
     from .protocol_apply_alignment_subtomo import XmippProtApplyTransformSubtomo
     from .protocol_undo_alignment_subtomo import XmippProtUndoAlignSubtomo
 except ImportError:
-    raise ImportError(
+    print(
         'To use a Tomography protocol scipion-em-tomo plugin is required.'
         ' See https://github.com/scipion-em/scipion-em-tomo for further details')
 

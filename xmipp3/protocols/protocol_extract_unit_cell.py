@@ -26,10 +26,7 @@
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.em import Volume
-from pyworkflow.em.constants import (SYM_I222, SYM_I222r, SYM_In25, SYM_In25r,
-                                     SYM_CYCLIC, SYM_DIHEDRAL_X, SYM_TETRAHEDRAL,
-                                     SYM_TETRAHEDRAL_Z3, SYM_DIHEDRAL_Y,
-                                     SYM_OCTAHEDRAL, SCIPION_SYM_NAME)
+from pyworkflow.em.constants import (SYM_DIHEDRAL, SCIPION_SYM_NAME)
 from pyworkflow.em.data import Transform
 from pyworkflow.em.convert import Ccp4Header
 from pyworkflow.em.protocol import EMProtocol
@@ -87,11 +84,11 @@ class XmippProtExtractUnit(EMProtocol):
                            "If no symmetry is present, use _c1_."
                       )
         form.addParam('symmetryOrder', IntParam, default=1,
-                      condition='symmetryGroup<=%d' % SYM_DIHEDRAL_X,
+                      condition='symmetryGroup<=%d' % SYM_DIHEDRAL,
                       label='Symmetry Order',
                       help='Order of cyclic symmetry.')
         form.addParam('offset', FloatParam, default=0.,
-                      condition='symmetryGroup<=%d' % SYM_DIHEDRAL_X,
+                      condition='symmetryGroup<=%d' % SYM_DIHEDRAL,
                       label="offset",
                       help="rotate unit cell around z-axis by offset degrees")
         form.addParam('innerRadius', FloatParam, default=-1,
