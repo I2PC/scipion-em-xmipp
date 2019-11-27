@@ -206,7 +206,7 @@ def installDeepLearningToolkit(plugin, env):
 
     scikit_image = tryAddPipModule(env, 'scikit-image', '0.14.2',
                                    target='scikit_image*',
-                                   default=False, deps=['scipy', 'scikit_learn'])
+                                   default=False, deps=['scipy', 'scikit-learn'])
     deepLearningTools.append(scikit_image)
 
     # pandas
