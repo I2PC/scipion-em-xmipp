@@ -120,4 +120,7 @@ from .protocol_angular_alignment_sph import XmippProtAngularAlignmentSPH
 from .protocol_volume_deform_sph import XmippProtVolumeDeformSPH
 from .protocol_structure_map_sph import XmippProtStructureMapSPH
 from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
+from .protocol_local_ctf import XmippProtLocalCTF
+from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
+from .protocol_consensus_local_ctf import XmippProtConsensusLocalCTF
 

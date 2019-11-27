@@ -38,6 +38,7 @@ import xmippLib
 from xmipp3.convert import *
 from xmipp3.protocols.protocol_compare_reprojections import XmippProtCompareReprojections
 from xmipp3.protocols.protocol_compare_angles import XmippProtCompareAngles
+from xmipp3.protocols.protocol_consensus_local_ctf import XmippProtConsensusLocalCTF
 from xmipp3.protocols.protocol_extract_particles import XmippProtExtractParticles
 from xmipp3.protocols.protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
 from xmipp3.protocols.protocol_kerdensom import XmippProtKerdensom
@@ -61,6 +62,7 @@ class XmippViewer(DataViewer):
     _targets = [
                 XmippProtCompareReprojections,
                 XmippProtCompareAngles,
+                XmippProtConsensusLocalCTF,
                 XmippParticlePickingAutomatic,
                 XmippProtExtractParticles,
                 XmippProtExtractParticlesPairs,
@@ -212,6 +214,16 @@ class XmippViewer(DataViewer):
                                               viewParams={ORDER: labels,
                                                       VISIBLE: labels,
                                                       SORT_BY: '_xmipp_angleDiff asc', RENDER:labelRender,
+                                                      MODE: MODE_MD}))
+
+        elif issubclass(cls, XmippProtConsensusLocalCTF):
+                fn = obj.outputParticles.getFileName()
+                labels = 'id enabled _index _filename _ctfModel._xmipp_ctfDefocusA _ctfModel._xmipp_ctfDefocusResidual'
+                labelRender = "_filename"
+                self._views.append(ObjectView(self._project, obj.outputParticles.strId(), fn,
+                                              viewParams={ORDER: labels,
+                                                      VISIBLE: labels,
+                                                      SORT_BY: '_ctfModel._xmipp_ctfDefocusResidual', RENDER:labelRender,
                                                       MODE: MODE_MD}))
 
         elif issubclass(cls, XmippParticlePickingAutomatic):
