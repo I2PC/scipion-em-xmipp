@@ -1,8 +1,8 @@
 # coding=utf-8
 # **************************************************************************
 # *
-# * Authors:     Carlos Oscar Sanchez Sorzano
-# *              Estrella Fernandez Gimenez
+# * Authors:     Estrella Fernandez Gimenez
+# *              Carlos Oscar Sanchez Sorzano
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia, CSIC
 # *

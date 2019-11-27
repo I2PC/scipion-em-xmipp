@@ -1,8 +1,8 @@
 # coding=utf-8
 # **************************************************************************
 # *
-# * Authors:     Carlos Oscar Sanchez Sorzano
-# *              Estrella Fernandez Gimenez
+# * Authors:     Estrella Fernandez Gimenez
+# *              Carlos Oscar Sanchez Sorzano
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia, CSIC
 # *
@@ -27,6 +27,7 @@
 # **************************************************************************
 
 from pyworkflow import VERSION_2_0
+from pyworkflow.object import Float
 from pyworkflow.protocol.params import MultiPointerParam, PointerParam
 from pyworkflow.em.protocol import ProtAnalysis3D
 
@@ -38,9 +39,9 @@ from ..convert import writeSetOfParticles, readSetOfParticles
 import pyworkflow.em.metadata as md
 
 
-class XmippProtCompareLocalCTF(ProtAnalysis3D):
-    """Compares the estimations of local defocus computed by different protocols for a set of particles"""
-    _label = 'compare local defocus'
+class XmippProtConsensusLocalCTF(ProtAnalysis3D):
+    """This protocol compares the estimations of local defocus computed by different protocols for a set of particles"""
+    _label = 'consensus local defocus'
     _lastUpdateVersion = VERSION_2_0
 
     def __init__(self, **args):
@@ -87,6 +88,7 @@ class XmippProtCompareLocalCTF(ProtAnalysis3D):
             for j in enumerate(pdefi):
                 self.defMatrix[i,j[0]]=j[1]
             i+=1
+
         self.median = np.nanmedian(self.defMatrix, axis=1)
         self.mad = np.empty_like(self.median)
         for k in enumerate(self.median):
@@ -100,21 +102,25 @@ class XmippProtCompareLocalCTF(ProtAnalysis3D):
 
     def createOutputStep(self):
         imgSet = self.inputSet.get()
-        fnParts = self._getExtraPath('input_parts.xmd')
-        writeSetOfParticles(imgSet, fnParts)
-        mdParts = md.MetaData(fnParts)
-        for objId in mdParts:
-            pId = mdParts.getValue(xmippLib.MDL_ITEM_ID,objId)
-            partMedian = float(self.median[pId-1])
-            mdParts.setValue(xmippLib.MDL_CTF_DEFOCUSA, partMedian, objId)
-            partMad = float(self.mad[pId-1])
-            mdParts.setValue(xmippLib.MDL_CTF_DEFOCUS_RESIDUAL, partMad, objId)
-        mdParts.write(fnParts)
+
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(imgSet)
-        readSetOfParticles(fnParts, outputSet, extraLabels=[xmippLib.MDL_CTF_DEFOCUSA,xmippLib.MDL_CTF_DEFOCUS_RESIDUAL])
+        # Loop through input set of
+        for part in imgSet.iterItems():
+
+            id = part.getObjId()
+            if id in self.pMatrixIdx:
+                index = self.pMatrixIdx[id]
+                newPart = part.clone()
+                pMedian = Float(self.median[index])
+                pMad = Float(self.mad[index])
+                setXmippAttribute(newPart.getCTF(), xmippLib.MDL_CTF_DEFOCUSA, pMedian)
+                setXmippAttribute(newPart.getCTF(), xmippLib.MDL_CTF_DEFOCUS_RESIDUAL, pMad)
+                outputSet.append(newPart)
+
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(self.inputSet, outputSet)
+
 
     def _updateItem(self, particle, row):
         pId = particle.getObjId()
@@ -124,9 +130,11 @@ class XmippProtCompareLocalCTF(ProtAnalysis3D):
     #--------------------------- INFO functions --------------------------------------------
     def _summary(self):
         summary = []
+        summary.append("Consensus local defocus and residual computed for %s particles" % self.getObjectTag('outputParticles'))
         return summary
 
     def _methods(self):
         methods = []
-        methods.append("The results obtained when local CTF is estimated by different methods are compared here computing the median, MAD and correlation matrix.")
+        methods.append("The results obtained when local CTF is estimated by different methods are compared here "
+                       "computing the median, MAD and correlation matrix.")
         return methods
