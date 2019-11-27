@@ -46,10 +46,10 @@ class XmippProtConnectedComponents(EMProtocol, ProtTomoBase):
         form.addSection(label='Input subtomograms')
         form.addParam('inputCoordinates', PointerParam, label="Input Coordinates",
                       pointerClass='SetOfCoordinates3D', help='Select the SetOfCoordinates3D.')
-        form.addParam('distance', FloatParam, label='Distance', default=100, help='Maximum radial distance (in pixels) '
-                                                                                  'between particles to consider that '
-                                                                                  'they are in the same connected '
-                                                                                  'component.')
+        form.addParam('distance', FloatParam, label='Distance', help='Maximum radial distance (in pixels) between '
+                                                                     'particles to consider that they are in the same '
+                                                                     'connected component. Wizard returns three times '
+                                                                     'the box size of the input coordinates.')
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
