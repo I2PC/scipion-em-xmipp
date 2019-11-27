@@ -34,10 +34,7 @@ from tomo.protocols import ProtTomoBase
 
 
 class XmippProtConnectedComponents(EMProtocol, ProtTomoBase):
-    """ This protocol takes a set of coordinates and identifies connected components ("clusters") among the picked
-    particles, keeping just the coordinates in the biggest cluster. This is performed in order to ideally keep  the
-    "real" particles, which are supposed to be in a region of interest, and removing the coordinates picked in spread
-    areas and background."""
+    """ This protocol takes a set of coordinates and identifies connected components among the picked particles."""
 
     _label = 'connected components'
 
@@ -50,8 +47,9 @@ class XmippProtConnectedComponents(EMProtocol, ProtTomoBase):
         form.addParam('inputCoordinates', PointerParam, label="Input Coordinates",
                       pointerClass='SetOfCoordinates3D', help='Select the SetOfCoordinates3D.')
         form.addParam('distance', FloatParam, label='Distance', default=100, help='Maximum radial distance (in pixels) '
-                                                                                  'between picked particles to consider'
-                                                                                  ' that they are in the same cluster.')
+                                                                                  'between particles to consider that '
+                                                                                  'they are in the same connected '
+                                                                                  'component.')
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -131,9 +129,7 @@ class XmippProtConnectedComponents(EMProtocol, ProtTomoBase):
 
     def _methods(self):
         methods = []
-        methods.append("The biggest connected component identified, with a maximum radial distance of %d pixels, "
-                       "contains %d particles, which have been kept, removing %d false picked particles."
-                       % (self.distance.get(), self.outputSetOfCoordinates3D.getSize(),
-                          self.inputCoordinates.get().getSize() - self.outputSetOfCoordinates3D.getSize()))
+        methods.append("%d connected component identified, with a maximum radial distance of %d pixels."
+                       % (len(self._outputs), self.distance.get()))
         return methods
 
