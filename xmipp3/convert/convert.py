@@ -325,8 +325,9 @@ def setXmippAttribute(obj, label, value):
     """ Sets an attribute of an object prefixing it with xmipp"""
     setattr(obj, prefixAttribute(xmippLib.label2Str(label)), value)
 
-def getXmippAttribute(obj, label, default=None):
-    return getattr(obj, prefixAttribute(xmippLib.label2Str(label)), default)
+def getXmippAttribute(obj, label):
+    """ Sets an attribute of an object prefixing it with xmipp"""
+    return getattr(obj, prefixAttribute(xmippLib.label2Str(label)), None)
 
 def prefixAttribute(attribute):
     return '_xmipp_%s' % attribute
