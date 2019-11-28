@@ -1130,8 +1130,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                     cleanPath(join(fnDirSignificant,
                                                    "images_significant_iter001_00.xmd"))
                             elif self.globalMethod.get() == self.GLOBAL_GPU_SIGNIFICANT:
-                                args = '-i %s -r %s -o %s ' % \
-                                       (fnGroup, fnGalleryGroupMd, fnAnglesGroup)
+                                args = '-i %s -r %s -o %s --keepBestN %f ' % \
+                                       (fnGroup, fnGalleryGroupMd, fnAnglesGroup, self.numberOfReplicates.get())
                                 self.runJob("xmipp_cuda_align_significant",
                                             args, numberOfMpi=1)
 
