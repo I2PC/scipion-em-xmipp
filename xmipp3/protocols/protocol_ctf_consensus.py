@@ -512,7 +512,7 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
                               '_xmipp_ctfCritFirstZero': 0,
                               '_xmipp_ctfCritfirstZeroRatio': 0,
                               '_xmipp_ctfCritCorr13': 0,
-                              '_xmipp_ctfIceness': 0,
+                              '_xmipp_ctfCritIceness': 0,
                               '_xmipp_ctfCritCtfMargin': 0,
                               '_xmipp_ctfCritNonAstigmaticValidty': 0,
                               'consensusResolution': 0
@@ -602,7 +602,7 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
                 compareValue(ctfX, '_xmipp_ctfCritfirstZeroRatio', 'lt', minFirstZero) or
                 compareValue(ctfX, '_xmipp_ctfCritfirstZeroRatio', 'bt', maxFirstZero) or
                 compareValue(ctfX, '_xmipp_ctfCritCorr13', 'lt', corr) or
-                compareValue(ctfX, '_xmipp_ctfIceness', 'bt', iceness) or
+                compareValue(ctfX, '_xmipp_ctfCritIceness', 'bt', iceness) or
                 compareValue(ctfX, '_xmipp_ctfCritCtfMargin', 'lt', ctfMargin) or
                 compareValue(ctfX, '_xmipp_ctfCritNonAstigmaticValidty', 'lt', minNonAstigmatic) or
                 compareValue(ctfX, '_xmipp_ctfCritNonAstigmaticValidty', 'bt', maxNonAstigmatic))
@@ -702,8 +702,8 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
                               addDiscardedStr('_xmipp_ctfCritCtfMargin')))
             message.append(" - _Iceness_. Threshold: %.2f %s"
                            % (self.critIceness,
-                              addDiscardedStr('_xmipp_ctfIceness')))
-            message.append(" - _Non Astigmatic validation_. Range: %.2f - %.2f %s"
+                              addDiscardedStr('_xmipp_ctfCritIceness')))
+            message.append(" - _Non Astigmatic validation range_: %.2f - %.2f %s"
                            % (self.minCritNonAstigmaticValidity,
                               self.maxCritNonAstigmaticValidity,
                               addDiscardedStr('_xmipp_ctfCritNonAstigmaticValidty')))
