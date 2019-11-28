@@ -1316,7 +1316,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 if self.postMaskSymmetry!="c1":
                     fnMask=join(fnDirCurrent,"mask.vol")
                     self.prepareMask(self.postSymmetryWithinMaskMask.get(),fnMask,TsCurrent,volXdim)
-                    self.runJob("xmipp_transform_symmetrize","-i %s --sym %s --mask_in %s"%\
+                    self.runJob("xmipp_transform_symmetrize","-i %s --sym %s --mask_in %s --dont_wrap"%\
                                 (fnVol,self.postSymmetryWithinMaskType.get(),fnMask),numberOfMpi=1)
                     cleanPath(fnMask)
             

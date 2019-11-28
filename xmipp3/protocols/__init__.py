@@ -120,4 +120,9 @@ from .protocol_angular_alignment_sph import XmippProtAngularAlignmentSPH
 from .protocol_volume_deform_sph import XmippProtVolumeDeformSPH
 from .protocol_structure_map_sph import XmippProtStructureMapSPH
 from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
+
 from .protocol_roiIJ import XmippProtRoiIJ
+import pyworkflow
+
+emprotocol = pyworkflow.em.protocol.EMProtocol
+setattr(emprotocol, "_createSetOfMeshes", XmippProtRoiIJ._createSetOfMeshes.__func__)

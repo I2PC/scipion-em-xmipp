@@ -23,15 +23,13 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
 import os
-from zipfile import ZipFile
 
 from pyworkflow.em import *
 from pyworkflow.em.viewers.showj import *
 
-from xmipp_base import getXmippPath
-
+from tomo.objects import Mesh, SetOfMeshes
+from tomo.viewers.views_tkinter_tree import TomogramsTreeProvider, TomogramsDialog
 
 class XmippProtRoiIJ(ProtAnalysis2D):
     """ Tomogram ROI selection in IJ """
@@ -43,64 +41,70 @@ class XmippProtRoiIJ(ProtAnalysis2D):
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label='General parameters')
-        form.addParam('inputTomo', PointerParam, label="Input Tomogram",
-                      pointerClass='Tomogram',
-                      help='Select a Tomogram.')
+        form.addParam('inputTomos', PointerParam, label="Input Tomograms",
+                      pointerClass='SetOfTomograms',
+                      help='Select tomograms.')
 
     # --------------------------- INSERT steps functions ----------------------
     def _insertAllSteps(self):
         # Launch Boxing GUI
         self._insertFunctionStep('launchIJGUIStep', interactive=True)
 
-    def _createOutput(self, outputDir):
-        pass
+    def _createOutput(self):
+        outSet = self._createSetOfMeshes()
+        for file in os.listdir(self._getExtraPath()):
+            if file.endswith(".txt"):
+                mesh_roi = Mesh(self._getExtraPath(file))
+                outSet.append(mesh_roi)
+        self._defineOutputs(outputMesh=outSet)
+        self._defineSourceRelation(self.inputTomos.get(), outSet)
 
     # --------------------------- STEPS functions -----------------------------
     def launchIJGUIStep(self):
 
-        imagej_home = getXmippPath(os.path.join('bindings','java'), 'imagej')
-        macroPath = os.path.join(imagej_home, "macros", "AutoSave_ROI.ijm")
-        macro = r"""path = "%s";
-if (File.exists(path + "ROI.zip")){
-roiManager("Open", path + "ROI.zip");
-}
-else{
-roiManager("Draw");
-}
+        tomoList = [tomo.clone() for tomo in self.inputTomos.get().iterItems()]
 
-setTool("polygon");
-waitForUser("Draw the desired ROIs\n\nThen click Ok");
-wait(50);
+        tomoProvider = TomogramsTreeProvider(tomoList, self._getExtraPath())
 
-while(roiManager("count")==0)
-{
-waitForUser("Draw the desired ROIs\n\nThen click Ok");
-wait(50);
-}
+        path = self._getExtraPath()
+        self.dlg = TomogramsDialog(None, provider=tomoProvider, path=path)
 
-roiManager("save", path + "ROI.zip");
-run("Quit");""" % (os.path.join(self._getExtraPath(), ''))
-        macroFid = open(macroPath, 'w')
-        macroFid.write(macro)
-        macroFid.close()
+        self._createOutput()
 
-        imagej_home = getXmippPath(os.path.join('bindings','java'), 'imagej')
-        macroPath = os.path.join(imagej_home, "macros", "AutoSave_ROI.ijm")
-        args = "-i %s -macro %s" %(self.inputTomo.get().getFileName(), macroPath)
-        app = "xmipp.ij.commons.XmippImageJ"
-
-        runJavaIJapp(None, app, args).wait()
-
-        #self._createOutput(self.getWorkingDir())
 
     def _summary(self):
         summary = []
-        roiPath = os.path.join(self._getExtraPath(),'ROI.zip')
-        if not os.path.isfile(roiPath):
+        if not os.listdir(self._getExtraPath()):
             summary.append("Output ROIs not ready yet.")
-
         else:
-            with ZipFile(roiPath, 'r') as zipObj:
-                listOfiles = zipObj.namelist()
-            summary.append("%s ouput ROIs have been saved in Scipion." % len(listOfiles))
+            count = 0
+            for file in os.listdir(self._getExtraPath()):
+                if file.endswith(".txt"):
+                    count += 1
+            summary.append("Rois defined for %d/%d files have been saved in Scipion (%s)." % (
+                count, self.inputTomos.get().getSize(), self._getExtraPath()))
         return summary
+
+    def _methods(self):
+        tomos = self.inputTomos.get()
+        return [
+            "ROI selection and extraction using ImageJ",
+            "A total of %d tomograms of dimensions %s were used"
+            % (tomos.getSize(), tomos.getDimensions()),
+        ]
+
+    def _createSetOfMeshes(self, suffix=''):
+        return self.__createSet(SetOfMeshes,
+                                'meshes%s.sqlite', suffix)
+
+    def __createSet(self, SetClass, template, suffix, **kwargs):
+        """ Create a set and set the filename using the suffix.
+        If the file exists, it will be delete. """
+        setFn = self._getPath(template % suffix)
+        # Close the connection to the database if
+        # it is open before deleting the file
+        cleanPath(setFn)
+
+        SqliteDb.closeConnection(setFn)
+        setObj = SetClass(filename=setFn, **kwargs)
+        return setObj
