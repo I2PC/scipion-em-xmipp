@@ -27,7 +27,8 @@
 
 import os
 import numpy as np
-from mpl_toolkits.mplot3d import proj3d
+from mpl_toolkits.mplot3d import Axes3D
+from pylab import figure
 
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pyworkflow.gui.plotter import plt
@@ -106,40 +107,23 @@ class XmippProtStructureMappingViewer(ProtocolViewer):
             plt.grid(True)
             plt.show()
                 
-        else: 
-                         
-            fig = plt.figure()
-            ax = fig.add_subplot(111, projection = '3d')
-            
-            ax.scatter(coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], marker = 'o', c='g')
-            ax.set_xlabel('Dimension 1', fontsize=11)
-            ax.set_ylabel('Dimension 2', fontsize=11)
-            ax.set_zlabel('Dimension 3', fontsize=11)
-            ax.text2D(0.05, 0.95, "StructMap", transform=ax.transAxes)
-                         
-            x2, y2, _ = proj3d.proj_transform(coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], ax.get_proj())
-            Labels = []
+        else:         
+            fig = figure()
+	    ax = Axes3D(fig)
+
             for i in range(len(coordinates[:, 0])):
-                text = labels[i]
-                label = ax.annotate(text,
-                                    xycoords='data',
-                                    xy = (x2[i], y2[i]), xytext = (x2[i]+val, y2[i]+val),
-                                    textcoords = 'data', ha = 'right',
-                                     va = 'bottom', fontsize=9,
-                                    bbox = dict(boxstyle = 'round,pad=0.3',
-                                                 fc = 'yellow', alpha = 0.3))
-                                     
-                Labels.append(label)
-                
-            def update_position(e):
-                x2, y2, _ = proj3d.proj_transform(coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], ax.get_proj())
-                for i in range(len(coordinates[:, 0])):
-                    label = Labels[i]
-                    label.xytext = (x2[i],y2[i])
-                    label.update_positions(fig.canvas.get_renderer())
-                fig.canvas.draw()
-            fig.canvas.mpl_connect('button_release_event', update_position)
-            plt.show()
+		ax.scatter(coordinates[i, 0], coordinates[i, 1], coordinates[i, 2], marker = 'o', s=50, c='g')
+		ax.text(coordinates[i,0],coordinates[i,1],coordinates[i,2], '  %s' % (labels[i]), size=15, zorder=1, color='k')
+
+ 	    ax.set_xlabel('Dimension 1', fontsize=15)
+            ax.set_ylabel('Dimension 2', fontsize=15)
+            ax.set_zlabel('Dimension 3', fontsize=15)
+	    ax.xaxis.labelpad = 10
+	    ax.yaxis.labelpad = 10
+	    ax.zaxis.labelpad = 10
+            ax.text2D(0.05, 0.95, "StructMap", transform=ax.transAxes, fontsize=15)
+
+	    plt.show() 
         
         return plot
         
