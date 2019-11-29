@@ -28,8 +28,7 @@
 # *
 # **************************************************************************
 
-from glob import glob
-from os.path import exists, basename
+from os.path import exists
 
 import pyworkflow.em.metadata as md
 import pyworkflow.utils as pwutils
@@ -37,8 +36,7 @@ from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
                                            STATUS_FINISHED)
 import pyworkflow.protocol.params as params
 from pyworkflow.em.protocol import ProtExtractParticles
-from pyworkflow.em.data import Particle
-from pyworkflow.em.constants import RELATION_CTF
+from pyworkflow.em.data import Particle, Integer
 
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
@@ -187,11 +185,15 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
             # the required command line parameters (except input/ouput files)
             micOps = []
 
-            # Compute the variance and Gini coeff. of the part. and mic., resp.
-            args  =  '--pos %s' % fnPosFile
-            args += ' --mic %s' % fnLast
-            args += ' --patchSize %d' % patchSize
-            self.runJob('xmipp_coordinates_noisy_zones_filter', args)
+            try:
+                # Compute the variance and Gini coeff. of the part. and mic., resp.
+                args  =  '--pos %s' % fnPosFile
+                args += ' --mic %s' % fnLast
+                args += ' --patchSize %d' % patchSize
+                self.runJob('xmipp_coordinates_noisy_zones_filter', args)
+            except:
+                print("'xmipp_coordinates_noisy_zones_filter' have failed for "
+                      "%s micrograph. We continue..." % mic.getMicName())
 
             def getMicTmp(suffix):
                 return self._getTmpPath(baseMicName + suffix)
@@ -228,7 +230,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                 fnCTF = None
 
             args = " -i %s --pos %s" % (fnLast, particlesMd)
-            args += " -o %s --Xdim %d" % (outputRoot, boxSize)
+            args += " -o %s.mrc --Xdim %d" % (outputRoot, boxSize)
 
             if doInvert:
                 args += " --invert"
@@ -244,7 +246,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
             # Normalize
             if normalizeArgs:
                 self.runJob('xmipp_transform_normalize',
-                            '-i %s.stk %s' % (outputRoot, normalizeArgs))
+                            '-i %s.mrc %s' % (outputRoot, normalizeArgs))
         else:
             self.warning("The micrograph %s hasn't coordinate file! "
                          % baseMicName)
@@ -277,6 +279,8 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
 
         if self.boxSize <= 0:
             errors.append('Box size must be positive.')
+        else:
+            self.boxSize.set(self.getEven(self.boxSize))
 
         if self.doNormalize:
             if self.backRadius > int(self.boxSize.get() / 2):
@@ -448,9 +452,12 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
         f = float(samplingPicking) / samplingExtract
         return f / self.downFactor.get() if self._doDownsample() else f
 
+    def getEven(self, boxSize):
+        return Integer(int(int(boxSize)/2+0.75)*2)
+
     def getBoxSize(self):
-        # This function is needed by the wizard
-        return int(self.getCoords().getBoxSize() * self.getBoxScale())
+        # This function is needed by the wizard and for auto-boxSize selection
+        return self.getEven(self.getCoords().getBoxSize() * self.getBoxScale())
 
     def _getOutputImgMd(self):
         return self._getPath('images.xmd')
@@ -482,28 +489,30 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                 coordDict[pos] = coord
 
             added = set() # Keep track of added coords to avoid duplicates
-            for row in md.iterRows(self._getMicXmd(mic)):
-                pos = (row.getValue(md.MDL_XCOOR), row.getValue(md.MDL_YCOOR))
-                coord = coordDict.get(pos, None)
-                if coord is not None and coord.getObjId() not in added:
-                    # scale the coordinates according to particles dimension.
-                    coord.scale(self.getBoxScale())
-                    p.copyObjId(coord)
-                    p.setLocation(xmippToLocation(row.getValue(md.MDL_IMAGE)))
-                    p.setCoordinate(coord)
-                    p.setMicId(mic.getObjId())
-                    p.setCTF(mic.getCTF())
-                    # adding the variance and Gini coeff. value of the mic zone
-                    setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
-                    setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
-                    if row.containsLabel(md.MDL_ZSCORE_DEEPLEARNING1):
-                        setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
+            fnMicXmd = self._getMicXmd(mic)
+            if exists(fnMicXmd):
+                for row in md.iterRows(fnMicXmd):
+                    pos = (row.getValue(md.MDL_XCOOR), row.getValue(md.MDL_YCOOR))
+                    coord = coordDict.get(pos, None)
+                    if coord is not None and coord.getObjId() not in added:
+                        # scale the coordinates according to particles dimension.
+                        coord.scale(self.getBoxScale())
+                        p.copyObjId(coord)
+                        p.setLocation(xmippToLocation(row.getValue(md.MDL_IMAGE)))
+                        p.setCoordinate(coord)
+                        p.setMicId(mic.getObjId())
+                        p.setCTF(mic.getCTF())
+                        # adding the variance and Gini coeff. value of the mic zone
+                        setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
+                        setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
+                        if row.containsLabel(md.MDL_ZSCORE_DEEPLEARNING1):
+                            setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
 
-                    # disabled particles (in metadata) should not add to the
-                    # final set
-                    if row.getValue(md.MDL_ENABLED) > 0:
-                        outputParts.append(p)
-                        added.add(coord.getObjId())
+                        # disabled particles (in metadata) should not add to the
+                        # final set
+                        if row.getValue(md.MDL_ENABLED) > 0:
+                            outputParts.append(p)
+                            added.add(coord.getObjId())
 
             # Release the list of coordinates for this micrograph since it
             # will not be longer needed

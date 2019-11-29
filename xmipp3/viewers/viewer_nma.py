@@ -62,7 +62,7 @@ class XmippNMAViewer(ProtocolViewer):
                       label="Display output Normal Modes?", important=True)
         form.addParam('displayMaxDistanceProfile', LabelParam,
                       label="Plot max distance profile?",
-                      help="TODO: ADD HELP ABOUT MAX DISTANCE") 
+                      help="Maximum unitary shift of each atom or pseudoatom over all computed modes.") 
         
         group = form.addGroup('Single mode')  
         group.addParam('modeNumber', IntParam, default=7,
@@ -70,7 +70,8 @@ class XmippNMAViewer(ProtocolViewer):
         group.addParam('displayVmd', LabelParam,
                        label='Display mode animation with VMD?') 
         group.addParam('displayDistanceProfile', LabelParam, default=False,
-                      label="Plot mode distance profile?")
+                      label="Plot mode distance profile?",
+                      help="Unitary shift of each atom or pseudoatom along the mode that is requested to be animated.")
         
     def _getVisualizeDict(self):
         return {'displayModes': self._viewParam,
