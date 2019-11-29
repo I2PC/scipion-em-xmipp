@@ -178,13 +178,36 @@ class XmippProtMovieGain(ProtProcessMovies):
         else:
             # For each movie insert the step to process it
             for idx, movie in enumerate(self.inputMovies.get()):
-                if idx % self.movieStep.get() != 0:
-                    continue
-                if movie.getObjId() not in insertedDict:
+                if idx % self.movieStep.get() != 0 and movie.getObjId() not in insertedDict:
+                    stepId = self.addOutputMovie(movie)
+                    #deps.append(stepId)
+                    insertedDict[movie.getObjId()] = stepId
+                elif movie.getObjId() not in insertedDict:
                     stepId = self._insertMovieStep(movie)
                     deps.append(stepId)
                     insertedDict[movie.getObjId()] = stepId
         return deps
+
+    def addOutputMovie(self, movie):
+        '''Add a movie to the output without estimating its gain'''
+        # Load previously done items (from text file)
+        doneList = self._readDoneList()
+        # Check for newly done items
+        newDone = [movie]
+
+        streamMode = Set.STREAM_OPEN
+
+        self._writeDoneList(newDone)
+
+        saveMovie = self.getAttributeValue('doSaveMovie', False)
+        moviesSet = self._loadOutputSet(em.data.SetOfMovies, 'movies.sqlite', fixSampling=saveMovie, fixGain=True)
+
+        moviesSet.append(movie)
+
+        self._updateOutputSet('outputMovies', moviesSet, streamMode)
+        #TODO: there should be a way to return a real StepId
+        return 0
+
 
     def _processMovie(self, movie):
         movieId = movie.getObjId()
@@ -254,9 +277,11 @@ class XmippProtMovieGain(ProtProcessMovies):
         else:
             fhSummary = open(fnSummary, "a")
             fnMonitorSummary = open(fnMonitorSummary, "a")
-        if os.path.exists(fnGain):
+
+        estim_gain=self._getPath("movie_%06d_gain.xmp" % movieId)
+        if os.path.exists(estim_gain):
             G = xmippLib.Image()
-            G.read(fnGain)
+            G.read(estim_gain)
             mean, dev, min, max = G.computeStats()
             Gnp = G.getData()
             p = np.percentile(Gnp, [2.5, 25, 50, 75, 97.5])
@@ -337,9 +362,7 @@ class XmippProtMovieGain(ProtProcessMovies):
             # (stream closed) and the number of processed movies is
             # equal to the number of inputs
             self.finished = self.streamClosed and \
-                            allDone == int(math.ceil(
-                len(self.listOfMovies) /
-                float(self.movieStep.get())))
+                            allDone == len(self.listOfMovies)
             streamMode = Set.STREAM_CLOSED if self.finished \
                 else Set.STREAM_OPEN
 
