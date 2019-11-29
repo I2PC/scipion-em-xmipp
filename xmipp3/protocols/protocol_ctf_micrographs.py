@@ -291,7 +291,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         if self.ctfDownFactor.get() < 1:
             validateMsgs.append('Downsampling factor must be >=1.')
         if self.doInitialCTF:
-            if not self.ctfRelations.hasValue():
+            if not self.ctfRelations.hasValue() or self.ctfRelations.get() is None:
                 validateMsgs.append('If you want to use a previous estimation '
                                     'of the CTF, the corresponding set of CTFs '
                                     'is needed')
