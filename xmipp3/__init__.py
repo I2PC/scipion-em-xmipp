@@ -126,15 +126,16 @@ class Plugin(pyworkflow.plugin.Plugin):
         joblib = tryAddPipModule(env, 'joblib', '0.11', target='joblib*')
 
         # scikit
-        scipy = tryAddPipModule(env, 'scipy', '0.14.0', default=True,
-                                deps=['lapack', 'matplotlib'])
+        print ("NOTE: Since scipion does not provide scypy dependencies, must be in the system: libopenblas-dev liblapack-dev")
+        scipy = tryAddPipModule(env, 'scipy', '0.14.0', default=True)
         cython = tryAddPipModule(env, 'cython', '0.22', target='Cython-0.22*',
                                  default=True)
         scikit_learn = tryAddPipModule(env, 'scikit-learn', '0.19.1',
                                        target='scikit_learn*',
                                        default=True, deps=[scipy, cython])
 
-        xmippDeps = ['hdf5', scons, joblib, scikit_learn]
+        print("NOTE: Since scipion does not provide hdf5, it must be provided by the system/environment")
+        xmippDeps = [scons, joblib, scikit_learn]
         ## XMIPP SOFTWARE ##
         lastCompiled = "lib/libXmippJNI.so"
         targets = [cls.getHome('bin', 'xmipp_reconstruct_significant'),
@@ -174,11 +175,12 @@ class Plugin(pyworkflow.plugin.Plugin):
         installDeepLearningToolkit(cls, env)
 
         # NMA
-        env.addPackage('nma', version='1.2', tar='nma.tgz', default=False, deps=['arpack'],
-                       commands=[('cd ElNemo; make; mv nma_* ..',
-                                  'nma_elnemo_pdbmat'),
-                                 ('cd NMA_cart; LDFLAGS=-L%s make; mv nma_* ..'
-                                  % env.getLibFolder(), 'nma_diag_arpack')])
+        # Cancelled since it is already a plugin
+        # env.addPackage('nma', version='1.2', tar='nma.tgz', default=False, deps=['arpack'],
+        #                commands=[('cd ElNemo; make; mv nma_* ..',
+        #                           'nma_elnemo_pdbmat'),
+        #                          ('cd NMA_cart; LDFLAGS=-L%s make; mv nma_* ..'
+        #                           % env.getLibFolder(), 'nma_diag_arpack')])
 
         # sh_alignment
         # FIXME: Is this needed when we have it in xmipp/external/sh_alignment ??
