@@ -528,8 +528,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           makePath(tmpPosDir)
           writeSetOfCoordinates(tmpPosDir, coordinatesP.get(), scale=float(Tm[coord_num])/float(Tm[0]))
           for posFname in os.listdir(tmpPosDir):
-              baseName = pwutils.removeBaseExt(posFname)
-              extension = pwutils.getExt(posFname)
+              baseName, extension=os.path.splitext(os.path.basename(posFname))
               if extension==".pos":
                 if baseName not in inputCoordsFnames:
                     inputCoordsFnames[baseName]=["None"]*nCoordsSets

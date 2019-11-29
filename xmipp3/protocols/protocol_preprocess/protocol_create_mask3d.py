@@ -56,7 +56,7 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
     """ Create a 3D mask.
     The mask can be created with a given geometrical shape (Sphere, Box,
     Cylinder...) or it can be obtained from operating on a 3d volume or a
-    previuous mask.
+    previous mask.
     """
     _label = 'create 3d mask'
     
