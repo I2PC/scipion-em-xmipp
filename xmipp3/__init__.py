@@ -173,7 +173,7 @@ class Plugin(pyworkflow.plugin.Plugin):
         installDeepLearningToolkit(cls, env)
 
         # NMA
-        env.addPackage('nma', version='1.2', tar='nma.tgz', default=False, deps=['arpack'],
+        env.addPackage('nma', version='1.2', tar='nma.tgz', default=False,
                        commands=[('cd ElNemo; make; mv nma_* ..',
                                   'nma_elnemo_pdbmat'),
                                  ('cd NMA_cart; LDFLAGS=-L%s make; mv nma_* ..'
