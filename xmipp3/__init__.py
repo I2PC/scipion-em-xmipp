@@ -219,7 +219,7 @@ def installDeepLearningToolkit(plugin, env):
     deepLearningTools.append(skikit_image)
 
     # Keras deps
-    unittest2 = tryAddPipModule(env, 'unittest2', '0.5.1', target='unittest2*',
+    unittest2 = tryAddPipModule(env, 'unittest2', '1.1.0', target='unittest2*',
                                 default=False)
     h5py = tryAddPipModule(env, 'h5py', '2.8.0rc1', target='h5py*',
                            default=False, deps=[unittest2])
