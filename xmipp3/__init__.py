@@ -241,7 +241,7 @@ def installDeepLearningToolkit(plugin, env):
         except:
             nvccVersion = 'None'  # string to avoid 'NoneType is not iterable' error
 
-        nvccVersion = [nvcc.encode("utf8") for nvcc in nvccVersion]
+        nvccVersion = [nvccV.decode("utf8") for nvccV in nvccVersion]
 
         if "release 8.0" in nvccVersion:  # cuda 8
             tensorFlowTarget = "1.4.1"
