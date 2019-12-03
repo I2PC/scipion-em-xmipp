@@ -126,15 +126,14 @@ class Plugin(pyworkflow.plugin.Plugin):
         joblib = tryAddPipModule(env, 'joblib', '0.11', target='joblib*')
 
         # scikit
-        scipy = tryAddPipModule(env, 'scipy', '0.14.0', default=True,
-                                deps=['lapack', 'matplotlib'])
+        scipy = tryAddPipModule(env, 'scipy', '0.16.0', default=True)
         cython = tryAddPipModule(env, 'cython', '0.22', target='Cython-0.22*',
                                  default=True)
         scikit_learn = tryAddPipModule(env, 'scikit-learn', '0.19.1',
                                        target='scikit_learn*',
-                                       default=True, deps=[scipy, cython])
+                                       default=True)
 
-        xmippDeps = ['hdf5', scons, joblib, scikit_learn]
+        xmippDeps = [scons, joblib, scikit_learn]
         ## XMIPP SOFTWARE ##
         lastCompiled = "lib/libXmippJNI.so"
         targets = [cls.getHome('bin', 'xmipp_reconstruct_significant'),
@@ -238,10 +237,11 @@ def installDeepLearningToolkit(plugin, env):
         try:
             nvccVersion = subprocess.Popen(["nvcc", '--version'],
                                            env=plugin.getEnviron(),
-                                           stdout=subprocess.PIPE).stdout.read()
+                                           stdout=subprocess.PIPE).stdout.read().split()
         except:
             nvccVersion = 'None'  # string to avoid 'NoneType is not iterable' error
 
+        nvccVersion = [nvccV.decode("utf8") for nvccV in nvccVersion]
         if "release 8.0" in nvccVersion:  # cuda 8
             tensorFlowTarget = "1.4.1"
             cudNNversion = "v6-cuda8"
