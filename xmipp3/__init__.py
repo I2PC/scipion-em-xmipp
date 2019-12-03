@@ -237,11 +237,10 @@ def installDeepLearningToolkit(plugin, env):
         try:
             nvccVersion = subprocess.Popen(["nvcc", '--version'],
                                            env=plugin.getEnviron(),
-                                           stdout=subprocess.PIPE).stdout.read().split()
+                                           stdout=subprocess.PIPE).stdout.read()
         except:
             nvccVersion = 'None'  # string to avoid 'NoneType is not iterable' error
 
-        nvccVersion = [nvccV.decode("utf8") for nvccV in nvccVersion]
         if "release 8.0" in nvccVersion:  # cuda 8
             tensorFlowTarget = "1.4.1"
             cudNNversion = "v6-cuda8"
