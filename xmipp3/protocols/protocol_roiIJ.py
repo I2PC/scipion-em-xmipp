@@ -55,8 +55,12 @@ class XmippProtRoiIJ(ProtAnalysis2D):
         for file in os.listdir(self._getExtraPath()):
             if file.endswith(".txt"):
                 mesh_roi = Mesh(self._getExtraPath(file))
+                for tomo in self.inputTomos.get().iterItems():
+                    if file[:-5] in tomo.getFileName():
+                        mesh_roi.setVolume(tomo)
                 outSet.append(mesh_roi)
-        self._defineOutputs(outputMesh=outSet)
+        outSet.setVolumes(self.inputTomos.get())
+        self._defineOutputs(outputMeshes=outSet)
         self._defineSourceRelation(self.inputTomos.get(), outSet)
 
     # --------------------------- STEPS functions -----------------------------
@@ -67,7 +71,7 @@ class XmippProtRoiIJ(ProtAnalysis2D):
         tomoProvider = TomogramsTreeProvider(tomoList, self._getExtraPath())
 
         path = self._getExtraPath()
-        self.dlg = TomogramsDialog(None, provider=tomoProvider, path=path)
+        self.dlg = TomogramsDialog(None, False, provider=tomoProvider, path=path)
 
         self._createOutput()
 
