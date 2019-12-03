@@ -192,7 +192,7 @@ class XmippProtMovieGain(ProtProcessMovies):
         # If the gain hasn't been oriented or normalized, we still need bestGain
         if not os.path.exists(self.getBestGain()):
             # No previous gain: bestGain is the estimated
-            if inputGain is not None:
+            if inputGain is None:
                 pass
                 # copyFile(self.getCurrentGain(movieId),
                 #          self.getBestGain())
