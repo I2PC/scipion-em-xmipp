@@ -29,7 +29,6 @@
 import numpy as np
 from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.protocol.params import PointerParam, FloatParam
-from tomo.objects import SetOfCoordinates3D
 from tomo.protocols import ProtTomoBase
 
 
@@ -60,7 +59,6 @@ class XmippProtConnectedComponents(EMProtocol, ProtTomoBase):
     def computeConnectedComponents(self):
         inputCoor = self.inputCoordinates.get()
         minDist = self.distance.get()
-        # Construct the adjacency matrix (A)
         A = np.zeros([inputCoor.getSize(), inputCoor.getSize()])
         coorlist = []
         for i, coor in enumerate(inputCoor.iterItems()):
@@ -72,29 +70,28 @@ class XmippProtConnectedComponents(EMProtocol, ProtTomoBase):
                 else:
                     coor2 = coorlist[k]
                     if abs(coor1[0]-coor2[0]) <= minDist and abs(coor1[1]-coor2[1]) <= minDist \
-                            and abs(coor1[2]-coor2[2]) <= minDist:  # Manhatan distance
+                            and abs(coor1[2]-coor2[2]) <= minDist:
                         A[j, k] = 1
                         A[k, j] = 1
         np.savetxt(self._getExtraPath('adjacency_matrix'), A)
-        # Construct the degree matrix (D)
         D = np.diag(A.sum(axis=1))
         np.savetxt(self._getExtraPath('degree_matrix'), D)
-        # Compute the Laplacian (L) and its eigenvalues and eigenvectors to perform spectral clustering
         L = D - A
         np.savetxt(self._getExtraPath('laplacian_matrix'), L)
         vals, vecs = np.linalg.eig(L)
-        print("vals :", vals)
-        print("vecs :", vecs)
+        vals = vals.real
+        vecs = vecs.real
         np.savetxt(self._getExtraPath('eigenvecs_matrix'), vecs)
-
-        vals0list = [i for i, x in enumerate(vals) if x <= 0]
-        print(vals0list)
-
-        self.listOfSets = []
-        for j in vals0list:
-            coorIndx = np.nonzero(vecs[:, j])
-            self.listOfSets.append(coorIndx)
-        print(self.listOfSets)
+        np.savetxt(self._getExtraPath('eigenvalues_matrix'), vals)
+        vals0list = [i for i, x in enumerate(vals.real) if abs(x) < (1/(np.sqrt(len(inputCoor)))*1e-3)]
+        self.listOfSets = [[] for x in xrange(len(vals0list))]
+        for k in range(len(inputCoor)):
+            row = []
+            for j in vals0list:
+                row.append(vecs[k, j])
+            row = [abs(number)for number in row]
+            ixMax = np.argmax(row)
+            self.listOfSets[ixMax].append(k)
 
     def createOutput(self):
         inputSet = self.inputCoordinates.get()
@@ -102,12 +99,12 @@ class XmippProtConnectedComponents(EMProtocol, ProtTomoBase):
             self._defineOutputs(output3DCoordinates=inputSet)
             self._defineSourceRelation(inputSet, inputSet)
         else:
-            for ix, coorIndx in enumerate(self.listOfSets):
+            for ix, coorInd in enumerate(self.listOfSets):
                 outputSet = self._createSetOfCoordinates3D(inputSet.getVolumes(), ix+1)
                 outputSet.copyInfo(inputSet)
                 outputSet.setBoxSize(inputSet.getBoxSize())
                 for coor3D in inputSet.iterItems():
-                    if (coor3D.getObjId()-1) in coorIndx[0]:
+                    if (coor3D.getObjId()-1) in coorInd:
                         outputSet.append(coor3D)
                 name = 'output3DCoordinates%s' % str(ix+1)
                 args = {}
