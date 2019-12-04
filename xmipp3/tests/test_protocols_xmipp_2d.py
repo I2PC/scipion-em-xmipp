@@ -1111,6 +1111,37 @@ class TestXmippCreateGallery(TestXmippBase):
         prot = self._createGallery(step=10, projections=32)
 
 
+class TestXmippProtProjectZ(TestXmippBase):
+    """This class check if the protocol project top in Xmipp works properly."""
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dsXmipp = DataSet.getDataSet('xmipp_tutorial')
+
+    def importVolumes(self):
+        args = {'filesPath': self.dsXmipp.getFile('volumes/'),
+                'filesPattern': '*mrc',
+                'samplingRate': 1
+                }
+        prot = self.newProtocol(ProtImportVolumes, **args)
+        prot.setObjLabel('import volume')
+        self.launchProtocol(prot)
+
+        return prot
+
+    def _createProjZ(self, inputVolumes):
+        prot = self.newProtocol(XmippProtProjectZ)
+        prot.input.set(inputVolumes)
+        self.launchProtocol(prot)
+
+        return prot
+
+    def test_top(self):
+        protImportVols = self.importVolumes()
+        prot = self._createProjZ(protImportVols.outputVolumes)
+
+
 
 class TestXmippBreakSym(TestXmippBase):
     @classmethod
