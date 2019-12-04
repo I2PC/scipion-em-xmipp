@@ -50,6 +50,8 @@ class XmippProtStructureMapSphViewer(ProtocolViewer):
         form.addParam('numberOfDimensions', params.IntParam, default=2,
                       label="Number of dimensions",
                       help='In normal practice, it should be 1, 2 or, at most, 3.')
+        form.addParam('map', params.EnumParam, choices=['Deformation', 'Correlation'],
+                      default=0, help='Choose the type of metric to display the coordinatess')
         form.addParam('doShowPlot', params.LabelParam,
                       label="Display the StructMap")
     
@@ -59,7 +61,10 @@ class XmippProtStructureMapSphViewer(ProtocolViewer):
         
     def _visualize(self, e=None):
         nDim = self.numberOfDimensions.get()
-        fnOutput = self.protocol._defineResultsName(nDim)
+        if self.map.get()==0:
+            fnOutput = self.protocol._defineResultsName(nDim)
+        else:
+            fnOutput = self.protocol._defineResultsName2(nDim)
         if not os.path.exists(fnOutput):
             return [self.errorMessage('The necessary metadata was not produced\n'
                                       'Execute again the protocol\n',
@@ -71,8 +76,11 @@ class XmippProtStructureMapSphViewer(ProtocolViewer):
         labels = []
         volList, _, _ = self.protocol._iterInputVolumes()
         for voli in volList:
-            count+=1
-            labels.append("vol_%02d"%count)
+            base=os.path.basename(voli)
+            fileName = os.path.splitext(base)[0]
+            count += 1
+            labels.append("vol_%02d"%count) 
+            #labels.append(fileName)
          
         val = 0
         if nDim == 1:
@@ -148,4 +156,3 @@ class XmippProtStructureMapSphViewer(ProtocolViewer):
             errors.append("The number of dimensions should be 1, 2 or, at most, 3.")
         
         return errors
-    
