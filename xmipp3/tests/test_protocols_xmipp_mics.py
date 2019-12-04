@@ -947,6 +947,15 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         prot2.closeMappers()
         return prot2
 
+    def testRemoveDuplicates(self):
+        protDupl = self.newProtocol(XmippProtPickingRemoveDuplicates)
+        protDupl.inputCoordinates.set(self.protFaPi.outputCoordinates)
+        self.launchProtocol(protDupl)
+        self.assertTrue(protDupl.isFinished(), "Consensus failed")
+        self.assertTrue(protDupl.outputCoordinates.getSize() == 403,
+                        "Output coordinates size does not is wrong.")
+
+
     def testStreamingAndNonStreaming(self):
         protAutomaticPP = XmippParticlePickingAutomatic()
         protAutomaticPP.xmippParticlePicking.set(self.protFaPi)
@@ -1005,7 +1014,6 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         self.assertTrue(protCons2.isFinished(), "Consensus failed")
         self.assertTrue(protCons2.consensusCoordinates.getSize() == 390,
                         "Output coordinates size does not is wrong.")
-
 
     # Sorting particles is not possible in streaming mode. Thus, all params
     # related with was removed from extract particle protocol. There exists
