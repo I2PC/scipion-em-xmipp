@@ -244,26 +244,26 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             vol = xmippLib.Image(item)
             self.corrMatrix[ind][ind] = 0.0
             #vol = ih.read(item.get().getFileName())
-	        #vol = vol.getData()
-	        #vol = np.asarray(vol)
+            #vol = vol.getData()
+            #vol = np.asarray(vol)
             if self.computeDef.get():
-            path = self._getExtraPath("*DeformedTo%d.vol" % ind)
-        else:
-            path = self._getExtraPath("*AlignedTo%d.vol" % ind)
-        for fileVol in glob.glob(path):
-            base = ntpath.basename(fileVol)
-            import re
-            matches = re.findall("(\d+)", fileVol)
-            ind2 = int(matches[1])
-		
-            #defVol = ih.read(file)
-	        #defVol = defVol.getData()
-            #defVol = np.asarray(defVol)
-            defVol = xmippLib.Image(fileVol)
-            #corr = np.multiply(vol,defVol)
-            corr = vol.correlation(defVol)
-            self.corrMatrix[ind2][ind] = 1-corr
-        ind += 1
+                path = self._getExtraPath("*DeformedTo%d.vol" % ind)
+            else:
+                path = self._getExtraPath("*AlignedTo%d.vol" % ind)
+            for fileVol in glob.glob(path):
+                base = ntpath.basename(fileVol)
+                import re
+                matches = re.findall("(\d+)", fileVol)
+                ind2 = int(matches[1])
+
+                #defVol = ih.read(file)
+                #defVol = defVol.getData()
+                #defVol = np.asarray(defVol)
+                defVol = xmippLib.Image(fileVol)
+                #corr = np.multiply(vol,defVol)
+                corr = vol.correlation(defVol)
+                self.corrMatrix[ind2][ind] = 1-corr
+            ind += 1
 
     def gatherResultsStepCorr(self, volList):
         fnRoot = self._getExtraPath("CorrMatrix.txt")
