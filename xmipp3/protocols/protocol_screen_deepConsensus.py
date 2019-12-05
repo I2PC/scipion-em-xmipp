@@ -58,7 +58,7 @@ try:
   from xmippPyModules.deepConsensusWorkers.deepConsensus_networkDef import DEEP_PARTICLE_SIZE
 except ImportError as e:
   DEEP_PARTICLE_SIZE = 128
-  
+
 class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     """ Protocol to compute a smart consensus between different particle picking
         algorithms. The protocol takes several Sets of Coordinates calculated
@@ -79,6 +79,10 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     ADD_DATA_TRAIN_NONE = 0
     ADD_DATA_TRAIN_PRECOMP = 1
     ADD_DATA_TRAIN_CUST = 2
+
+    ADD_DATA_TRAIN_CUSTOM_OPT = ["Particles", "Coordinates" ]
+    ADD_DATA_TRAIN_CUSTOM_OPT_PARTS = 0
+    ADD_DATA_TRAIN_CUSTOM_OPT_COORS = 1
 
     ADD_MODEL_TRAIN_TYPES = ["New", "Pretrained", "PreviousRun"]
     ADD_MODEL_TRAIN_NEW = 0
@@ -101,11 +105,11 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                        help="GPU may have several cores. Set it to zero"
                             " if you do not know what we are talking about."
                             " First core index is 0, second 1 and so on.")
-                            
+
         form.addParallelSection(threads=2, mpi=0)
-        
+
         form.addSection(label='Input')
-        
+
         form.addParam('modelInitialization', params.EnumParam,
                       choices=self.ADD_MODEL_TRAIN_TYPES,
                       default=self.ADD_MODEL_TRAIN_NEW,
@@ -116,7 +120,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                            'this project, will be employed'
                            % tuple(self.ADD_MODEL_TRAIN_TYPES))
         #CONTINUE FROM PREVIOUS TRAIN
-                   
+
         form.addParam('continueRun', params.PointerParam,
                       pointerClass=self.getClassName(),
                       condition='modelInitialization== %s'%self.ADD_MODEL_TRAIN_PREVRUN, allowsNull=True,
@@ -166,12 +170,12 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                       help='If you invert the contrast, your particles will be white over a black background in the micrograph. '
                            'We use white particles. Select *No* if you already have inverted the constrast in the micrograph'
                            ' so that we can extract white particles directly')
-        
+
         form.addParam('ignoreCTF', params.BooleanParam, default=True,
                       label='Ignore CTF',
                       help='Deep Consensus extracts particles. Do you want to ignore CTF for '
                             'particle extraction')
-                           
+
         form.addParam('ctfRelations', params.RelationParam, allowsNull=True,
                       relationName=RELATION_CTF, condition="not ignoreCTF",
                       attributeName='_getInputMicrographs',
@@ -180,10 +184,10 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                            'micrographs. \nCTF estimation is needed if you '
                            'want to do phase flipping or you want to '
                            'associate CTF information to the particles.')
-        
+
 
         form.addSection(label='Training')
-        
+
         form.addParam('nEpochs', params.FloatParam,
                       label="Number of epochs", default=5.0,
                       condition="modelInitialization==%s or not skipTraining"%self.ADD_MODEL_TRAIN_NEW,
@@ -219,7 +223,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                            'Tipical values are 1 to 5. The more the better '
                            'until a point where no gain is obtained. '
                            'Each model increases running time linearly')
-                           
+
         form.addParam('doTesting', params.BooleanParam, default=False,
                       label='Perform testing after training?', expertLevel=params.LEVEL_ADVANCED,
                       condition="modelInitialization==%s or not skipTraining"%self.ADD_MODEL_TRAIN_NEW,
@@ -240,42 +244,70 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                       choices=self.ADD_DATA_TRAIN_TYPES,
                       default=self.ADD_DATA_TRAIN_PRECOMP,
                       label='Additional training data',
-                      help='If you set to *%s*, you should select positive and/or '
-                           'negative sets of particles. Regard that our method, '
-                           'internally, uses particles that are extracted from '
-                           'preprocess micrographs. Steps are:\n'
-                           '1) mic donwsampling to the required size such that '
-                           'the particle box size become 128 px. \n   E.g. xmipp_transform_downsample -i'
-                           ' in/100_movie_aligned.mrc -o out1/100_movie_aligned.mrc --step newSamplingRate --method fourier\n'
-                           '2) mic normalization to 0 mean and 1 std and mic contrast inversion to have white particles.\n '
-                           'E.g. '
-                           ' xmipp_transform_normalize -i out1/101_movie_aligned.mrc -o out2/101_movie_aligned.mrc --method '
-                           'OldXmipp [ --invert ]\n'
-                           '3) particles extraction.\n   E.g. xmipp_micrograph_scissor  -i out2/101_movie_aligned.mrc '
-                           '--pos particles@Runs/101_movie_aligned.pos -o out3/105_movie_aligned_particles '
-                           ' --Xdim 128 --downsampling newSamplingRate --fillBorders  ( Correct your coordinates with '
-                           'newSamplingRate if needed)\n'
-                           '4) OPTIONAL: phase flipping using CTF.\n xmipp_ctf_phase_flip  -i '
-                           'particles/105_movie_aligned_noDust.xmp -o particles/105_movie_aligned_flipped.xmp '
-                           '--ctf ctfPath/105_movie_aligned.ctfParam --sampling newSamplingRate\n'
-                           'Then, particles are extracted with no further alteration.\n'
-                           'Please ensure that the additional particles have been '
-                           'preprocessed as indicated before.\n\n'
-                           'Alternatively, you can use a precompiled dataset '
-                           'by selecting *%s* or simply, use only the '
-                           'input coordinates (*%s*).'
-                           %tuple(self.ADD_DATA_TRAIN_TYPES) )
+                      help='If you set to *%s*, only the AND and RANDOM will be used for training.\n'
+                           'If you set to *%s*, a precompiled additional training set will be added to '
+                           'to the AND and RANDOM sets for training.\n'
+                           'If you set to *%s*, you can provide your own data that will be added to '
+                           'the AND and RANDOM sets for training.\n'
+                            %tuple( self.ADD_DATA_TRAIN_TYPES)
+                      )
+
+
+        form.addParam('trainingDataType', params.EnumParam,
+                      condition=("(modelInitialization==%s or not skipTraining ) " +
+                       "and addTrainingData==%s") % (self.ADD_MODEL_TRAIN_NEW, self.ADD_DATA_TRAIN_CUST),
+                      choices=self.ADD_DATA_TRAIN_CUSTOM_OPT,
+                      default=self.ADD_DATA_TRAIN_CUSTOM_OPT_COORS,
+                      label='Additional training data',
+                      help='You can provide either particles or coordinates as additional training set.' \
+                           'If you provide coordinantes, they have to be picked from the same micrographs that the' \
+                           'inputs\n If you provide particles, they have to be processed in the same way that the protocol' \
+                           'does (128x128 pixels and withe particles). Thus, what the protocol does is to perform the ' \
+                           'following steps:\n'
+                            '1) mic donwsampling to the required size such that '
+                            'the particle box size become 128 px. \n   E.g. xmipp_transform_downsample -i'
+                            ' in/100_movie_aligned.mrc -o out1/100_movie_aligned.mrc --step newSamplingRate --method fourier\n'
+                            '2) mic normalization to 0 mean and 1 std and mic contrast inversion to have WHITE particles.\n '
+                            'E.g. '
+                            ' xmipp_transform_normalize -i out1/101_movie_aligned.mrc -o out2/101_movie_aligned.mrc --method '
+                            'OldXmipp [ --invert ]\n'
+                            '3) particles extraction.\n   E.g. xmipp_micrograph_scissor  -i out2/101_movie_aligned.mrc '
+                            '--pos particles@Runs/101_movie_aligned.pos -o out3/105_movie_aligned_particles '
+                            ' --Xdim 128 --downsampling newSamplingRate --fillBorders  ( Correct your coordinates with '
+                            'newSamplingRate if needed)\n'
+                            '4) OPTIONAL: phase flipping using CTF.\n xmipp_ctf_phase_flip  -i '
+                            'particles/105_movie_aligned_noDust.xmp -o particles/105_movie_aligned_flipped.xmp '
+                            '--ctf ctfPath/105_movie_aligned.ctfParam --sampling newSamplingRate\n'
+                            'Then, particles are extracted with no further alteration.\n'
+                            'Please ensure that the additional particles have been '
+                            'preprocessed as indicated before.\n' )
+
         form.addParam('trainTrueSetOfParticles', params.PointerParam,
                       label="Positive train particles 128px (optional)",
                       pointerClass='SetOfParticles', allowsNull=True,
                       condition=("(modelInitialization==%s or not skipTraining ) "+
-                                "and addTrainingData==%s")%(self.ADD_MODEL_TRAIN_NEW, self.ADD_DATA_TRAIN_CUST),
+                                "and addTrainingData==%s and trainingDataType==%s")%(self.ADD_MODEL_TRAIN_NEW,
+                                                                                     self.ADD_DATA_TRAIN_CUST,
+                                                                                     self.ADD_DATA_TRAIN_CUSTOM_OPT_PARTS),
                       help='Select a set of true positive particles. '
-                           'Take care of the preprocessing')
-        form.addParam('trainPosWeight', params.IntParam, default='1',
-                      label="Weight of positive additional train particles",
+                           'Take care of the preprocessing (128x128 pixels, contrast inverted (white particles), possibly '
+                           'CTF corrected')
+
+
+        form.addParam('trainTrueSetOfCoords', params.PointerParam,
+                      label="Positive coordinates(optional)",
+                      pointerClass='SetOfCoordinates', allowsNull=True,
                       condition=("(modelInitialization==%s or not skipTraining ) "+
-                                "and addTrainingData==%s")%(self.ADD_MODEL_TRAIN_NEW, self.ADD_DATA_TRAIN_CUST),
+                                "and addTrainingData==%s and trainingDataType==%s")%(self.ADD_MODEL_TRAIN_NEW,
+                                                                                     self.ADD_DATA_TRAIN_CUST,
+                                                                                     self.ADD_DATA_TRAIN_CUSTOM_OPT_COORS),
+                      help='Select a set of true coordinates collected from the same microgaphs that the input')
+
+        form.addParam('trainPosWeight', params.IntParam, default='1',
+                      label="Weight of positive additional train data",
+                      condition=("(modelInitialization==%s or not skipTraining ) "+
+                                "and addTrainingData==%s")%(self.ADD_MODEL_TRAIN_NEW,
+                                                                                     self.ADD_DATA_TRAIN_CUST),
                       allowsNull=True,
                       help='Select the weigth for the additional train set of '
                            'positive particles.The weight value indicates '
@@ -283,17 +315,32 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                            'If weight is -1, weight will be calculated such that '
                            'the contribution of additional data is equal to '
                            'the contribution of internal particles')
+
         form.addParam('trainFalseSetOfParticles', params.PointerParam,
                       label="Negative train particles 128px (optional)",
                       pointerClass='SetOfParticles',  allowsNull=True,
                       condition=("(modelInitialization==%s or not skipTraining ) "+
-                                "and addTrainingData==%s")%(self.ADD_MODEL_TRAIN_NEW, self.ADD_DATA_TRAIN_CUST),
+                                "and addTrainingData==%s and trainingDataType==%s")%(self.ADD_MODEL_TRAIN_NEW,
+                                                                                     self.ADD_DATA_TRAIN_CUST,
+                                                                                     self.ADD_DATA_TRAIN_CUSTOM_OPT_PARTS),
                       help='Select a set of false positive particles. '
-                           'Take care of the preprocessing')
-        form.addParam('trainNegWeight', params.IntParam, default='1',
-                      label="Weight of negative additional train particles",
+                           'Take care of the preprocessing (128x128 pixels, contrast inverted (white particles), possibly '
+                           'CTF corrected')
+
+
+        form.addParam('trainFalseSetOfCoords', params.PointerParam,
+                      label="Negative coordinates(optional)",
+                      pointerClass='SetOfCoordinates', allowsNull=True,
                       condition=("(modelInitialization==%s or not skipTraining ) "+
-                                "and addTrainingData==%s")%(self.ADD_MODEL_TRAIN_NEW, self.ADD_DATA_TRAIN_CUST),
+                                "and addTrainingData==%s and trainingDataType==%s")%(self.ADD_MODEL_TRAIN_NEW,
+                                                                                     self.ADD_DATA_TRAIN_CUST,
+                                                                                     self.ADD_DATA_TRAIN_CUSTOM_OPT_COORS),
+                      help='Select a set of incorrect coordinates collected from the same microgaphs that the input')
+
+        form.addParam('trainNegWeight', params.IntParam, default='1',
+                      label="Weight of negative additional train data",
+                      condition=("(modelInitialization==%s or not skipTraining ) "+
+                                "and addTrainingData==%s")%(self.ADD_MODEL_TRAIN_NEW, self.ADD_DATA_TRAIN_CUST,),
                       allowsNull=True,
                       help='Select the weigth for the additional train set of '
                            'negative particles. The weight value indicates '
@@ -303,6 +350,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                            'will be calculated such that the contribution of '
                            'additional data is equal to the contribution of '
                            'internal particles')
+
+
 
     def _validate(self):
         errorMsg = []
@@ -322,10 +371,10 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         if  self.testTrueSetOfParticles.get() and self.testTrueSetOfParticles.get().getXDim()!=DEEP_PARTICLE_SIZE:
           errorMsg.append("Error, testTrueSetOfParticles needed to be 128 px")
-          
+
         if  self.testFalseSetOfParticles.get() and self.testFalseSetOfParticles.get().getXDim()!=DEEP_PARTICLE_SIZE:
           errorMsg.append("Error, testFalseSetOfParticles needed to be 128 px")
-          
+
         if len(self.inputCoordinates)==1  and not self.justPredict():
           errorMsg.append("Error, just one coordinate set provided but trained desired. Select pretrained "+
                           "model or previous run model and *No* continue training from previous trained model "+
@@ -338,13 +387,13 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
     def _doContinue(self):
         return self.modelInitialization.get()== self.ADD_MODEL_TRAIN_PREVRUN
-        
+
     def justPredict(self):
       return self.skipTraining.get()==True
-      
+
     def _usePretrainedModel(self):
         return self.modelInitialization.get()== self.ADD_MODEL_TRAIN_PRETRAIN
-        
+
     def _insertAllSteps(self):
 
         self.inputMicrographs = None
@@ -367,6 +416,12 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           depsAnd = self.insertExtractPartSteps('AND', prerequisites=depsAnd)
 
           depsTrain = depsTrain + depsNoise + depsAnd
+
+          if self.addTrainingData.get() == self.ADD_DATA_TRAIN_CUST and self.trainingDataType == self.ADD_DATA_TRAIN_CUSTOM_OPT_COORS:
+            if self.trainTrueSetOfCoords.get() is not None:
+              depsTrain+= self.insertExtractPartSteps('ADDITIONAL_COORDS_TRUE', prerequisites=depsTrain)
+            if self.trainFalseSetOfCoords.get() is not None:
+              depsTrain+= self.insertExtractPartSteps('ADDITIONAL_COORDS_FALSE', prerequisites=depsTrain)
           depTrain = self._insertFunctionStep('trainCNN', prerequisites=depsTrain)
         else:
           depTrain=None
@@ -385,12 +440,15 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                                 self._getExtraPath("testFalseParticlesSet.xmd"))
 
         if self.addTrainingData.get() == self.ADD_DATA_TRAIN_CUST:
-            if self.trainTrueSetOfParticles.get():
-                writeSetOfParticles(self.trainTrueSetOfParticles.get(),
-                                    self._getExtraPath("trainTrueParticlesSet.xmd"))
-            if self.trainFalseSetOfParticles.get():
-                writeSetOfParticles(self.trainFalseSetOfParticles.get(),
-                                    self._getExtraPath("trainFalseParticlesSet.xmd"))
+          if self.trainingDataType== self.ADD_DATA_TRAIN_CUSTOM_OPT_PARTS:
+              if self.trainTrueSetOfParticles.get():
+                  writeSetOfParticles(self.trainTrueSetOfParticles.get(),
+                                      self._getExtraPath("trainTrueParticlesSet.xmd"))
+              if self.trainFalseSetOfParticles.get():
+                  writeSetOfParticles(self.trainFalseSetOfParticles.get(),
+                                      self._getExtraPath("trainFalseParticlesSet.xmd"))
+
+
         elif self.addTrainingData.get() == self.ADD_DATA_TRAIN_PRECOMP:
             writeSetOfParticles(self.retrieveTrainSets(),
                                 self._getTmpPath("addNegTrainParticles.xmd"))
@@ -725,6 +783,14 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           micsFnameSet[micFnameBase]= micFname
         extractCoordsContent="#mics coords\n"
         posDir= self._getExtraPath( self.CONSENSUS_COOR_PATH_TEMPLATE%mode )
+        if mode.startswith("ADDITIONAL_COORDS"):
+          os.mkdir(posDir)
+          if mode.endswith("TRUE"):
+            coordSet= self.trainTrueSetOfCoords.get()
+          elif mode.endswith("FALSE"):
+            coordSet= self.trainFalseSetOfCoords.get()
+          writeSetOfCoordinates(posDir, coordSet)
+
         for posFname in os.listdir(posDir):
           posNameBase=  pwutils.removeExt(posFname)
           posFname= os.path.join(posDir, posFname)
@@ -733,7 +799,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           else:
             print("WARNING, no micFn for coords %s"%(posFname))
 
-        inputsFname= self._getTmpPath("extractParticles_inputs.txt")
+        inputsFname= self._getTmpPath("extractParticles_inputs_%s.txt"%mode)
         ouputDir= self._getConsensusParticlesDir(mode)
         makePath(ouputDir)
         nThrs= self.numberOfThreads.get()
@@ -809,12 +875,24 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           numberOfThreads = self.numberOfThreads.get()
           gpuToUse = None
 
-        if self.trainTrueSetOfParticles.get():
-          posTrainFn = self._getExtraPath("trainTrueParticlesSet.xmd")
-          posTrainDict[posTrainFn] = self.trainPosWeight.get()
-        if self.trainFalseSetOfParticles.get():
-          negTrainFn = self._getExtraPath("trainFalseParticlesSet.xmd")
-          negTrainDict[negTrainFn] = self.trainNegWeight.get()
+        print(self.trainTrueSetOfParticles.get(), self.trainFalseSetOfParticles.get(), self.trainTrueSetOfCoords.get(),
+              self.trainFalseSetOfCoords.get() )
+
+        if self.trainingDataType.get() == self.ADD_DATA_TRAIN_CUSTOM_OPT_PARTS:
+          if self.trainTrueSetOfParticles.get():
+            posTrainFn = self._getExtraPath("trainTrueParticlesSet.xmd")
+            posTrainDict[posTrainFn] = self.trainPosWeight.get()
+          if self.trainFalseSetOfParticles.get():
+            negTrainFn = self._getExtraPath("trainFalseParticlesSet.xmd")
+            negTrainDict[negTrainFn] = self.trainNegWeight.get()
+
+        elif self.trainingDataType.get() == self.ADD_DATA_TRAIN_CUSTOM_OPT_COORS:
+          if self.trainTrueSetOfCoords.get():
+            posTrainFn = self._getExtraPath("particles_ADDITIONAL_COORDS_TRUE.xmd")
+            posTrainDict[posTrainFn] = self.trainPosWeight.get()
+          if self.trainFalseSetOfCoords.get():
+            negTrainFn = self._getExtraPath("particles_ADDITIONAL_COORDS_FALSE.xmd")
+            negTrainDict[negTrainFn] = self.trainNegWeight.get()
 
         effectiveSize=-1
         if self._doContinue():
@@ -921,13 +999,13 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             part.scaleCoordinate(downFactor)
             coordSet.append(coord)
             parSetCorrected.append(part)
-            
+
         coordSet.write()
         parSetCorrected.write()
-        cleanPattern(self._getPath("particles.xmd"))    
+        cleanPattern(self._getPath("particles.xmd"))
         cleanPattern(self._getPath("*outputParts_tmp.sqlite"))
         writeSetOfParticles(parSetCorrected, self._getPath("particles.xmd") )
-        self._defineOutputs(outputCoordinates=coordSet)
+        self._defineOutputs(outputCoordinates=coordSet, outputParticles= parSetCorrected)
 
         for inSetOfCoords in self.inputCoordinates:
             self._defineSourceRelation(inSetOfCoords.get(), coordSet)
