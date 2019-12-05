@@ -37,7 +37,7 @@ from pyworkflow.object import Set
 from pyworkflow.protocol.params import (PointerParam, IntParam,
                                         BooleanParam, LEVEL_ADVANCED)
 from pyworkflow.utils.properties import Message
-from pyworkflow.utils.path import moveFile, copyFile
+from pyworkflow.utils.path import moveFile
 import pyworkflow.protocol.constants as cons
 import pyworkflow.em as em
 
@@ -133,7 +133,7 @@ class XmippProtMovieGain(ProtProcessMovies):
                 self.convertCIStep.append(normStepId)
 
             # For each movie insert the step to process it
-            for idx, movie in enumerate(self.inputMovies.get()):
+            for movie in self.inputMovies.get():
                 stepId = self._insertMovieStep(movie)
                 deps.append(stepId)
                 insertedDict[movie.getObjId()] = stepId
@@ -192,12 +192,7 @@ class XmippProtMovieGain(ProtProcessMovies):
         # If the gain hasn't been oriented or normalized, we still need bestGain
         if not os.path.exists(self.getBestGain()):
             # No previous gain: bestGain is the estimated
-            if inputGain is None:
-                pass
-                # copyFile(self.getCurrentGain(movieId),
-                #          self.getBestGain())
-            # Previous gain: bestGain is the original
-            else:
+            if not inputGain is None:
                 G = xmippLib.Image()
                 G.read(inputGain)
                 G.write(self.getBestGain())
@@ -387,11 +382,13 @@ class XmippProtMovieGain(ProtProcessMovies):
                 if abs(minVal) > abs(best_cor):
                     corLoc=translation_correction(minLoc,est_gain_array.shape)
                     best_cor = minVal
+                    best_transf=(angle,imir)
                     best_R = R
                     T = np.asarray([[1, 0, corLoc[1]], [0, 1, corLoc[0]], [0, 0, 1]])
                 if abs(maxVal) > abs(best_cor):
                     corLoc = translation_correction(maxLoc, est_gain_array.shape)
                     best_cor = maxVal
+                    best_transf = (angle, imir)
                     best_R = R
                     T = np.asarray([[1, 0, corLoc[1]], [0, 1, corLoc[0]], [0, 0, 1]])
 
@@ -400,6 +397,7 @@ class XmippProtMovieGain(ProtProcessMovies):
         best_gain_array = applyTransform(np.asarray(exp_gain.getData(), dtype=np.float64), best_M, est_gain_array.shape)
 
         print('Best correlation: ',best_cor)
+        print('Rotation angle: {}\nVertical mirror: {}'.format(best_transf[0],best_transf[1]==1))
         if best_cor > 0:
             best_gain_array = invert_array(best_gain_array)
 
@@ -412,7 +410,7 @@ class XmippProtMovieGain(ProtProcessMovies):
         return self._getExtraPath("movie_%06d_gain.xmp" % movieId)
 
     def getBestGain(self):
-        return self._getExtraPath("bestGain.xmp")
+        return self._getExtraPath("bestGain.mrc")
 
     def getFinalGain(self):
         fnBest = self.getBestGain()
@@ -432,7 +430,7 @@ class XmippProtMovieGain(ProtProcessMovies):
                    self.frameStep, extraArgs))
 
     def doGainProcess(self, movieId):
-        return movieId == 1 or movieId % self.movieStep.get() == 0
+        return (movieId-1) % self.movieStep.get() == 0 
 
     # --------------------------- INFO functions -------------------------------
     def _validate(self):
@@ -464,30 +462,6 @@ class XmippProtMovieGain(ProtProcessMovies):
 
 
 # --------------------- WORKERS --------------------------------------
-
-def cv2_applyTransform(imag, M, shape):
-    ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
-    '''
-    (hdst, wdst) = shape
-    transformed = cv2.warpAffine(imag, M[:2][:], (wdst, hdst),
-                                 borderMode=cv2.BORDER_CONSTANT, borderValue=1.0)
-    return transformed
-
-
-def cv2_rotation(imag, angle, shape, P):
-    '''Rotate a np.array and return also the transformation matrix
-    #imag: np.array
-    #angle: angle in degrees
-    #shape: output shape
-    #P: transform matrix (further transformation in addition to the rotation)'''
-    (hsrc, wsrc) = imag.shape
-
-    angle *= math.pi / 180
-    T = np.asarray([[1, 0, -wsrc / 2], [0, 1, -hsrc / 2], [0, 0, 1]])
-    R = np.asarray([[math.cos(angle), math.sin(angle), 0], [-math.sin(angle), math.cos(angle), 0], [0, 0, 1]])
-    M = np.matmul(np.matmul(np.linalg.inv(T), np.matmul(R, T)), P)
-    return cv2_applyTransform(imag, M, shape), M
-
 
 def applyTransform(imag_array, M, shape):
     ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
