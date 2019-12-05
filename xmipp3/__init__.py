@@ -58,7 +58,7 @@ class Plugin(pyworkflow.em.Plugin):
         environ.update({
             'PATH': getXmippPath('bin'),
             'LD_LIBRARY_PATH': getXmippPath('lib'),
-            'PYTHONPATH': getXmippPath('pylib')
+            'PYTHONPATH': getXmippPath('pylib')+":"+getXmippPath(os.path.join('pylib','xmippPyModules'))
         }, position=pos)
 
         # environ variables are strings not booleans
