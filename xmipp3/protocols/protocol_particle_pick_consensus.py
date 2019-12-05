@@ -87,7 +87,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                            "by all algorithms: *AND* operation.\n"
                            "*Set to 1* to indicate that it suffices that only "
                            "1 algorithm selects the particle: *OR* operation.")
-        form.addParam('mode', params.EnumParam, choices=['>=','='], default=0,
+        form.addParam('mode', label='Consensus mode', params.EnumParam, choices=['>=','='], default=0,
                       help='Number of votes to progress to the output')
 
         # FIXME: It's not using more than one since
