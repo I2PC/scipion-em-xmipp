@@ -87,6 +87,8 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                            "by all algorithms: *AND* operation.\n"
                            "*Set to 1* to indicate that it suffices that only "
                            "1 algorithm selects the particle: *OR* operation.")
+        form.addParam('mode', params.EnumParam, choices=['>=','='], default=0,
+                      help='Number of votes to progress to the output')
 
         # FIXME: It's not using more than one since
         #         self.stepsExecutionMode = STEPS_SERIAL
@@ -250,7 +252,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
 
         consensusWorker(coords, self.consensus, self.consensusRadius,
                         self._getTmpPath('%s%s.txt' % (FN_PREFIX, micId)),
-                        self._getExtraPath('jaccard.txt'))
+                        self._getExtraPath('jaccard.txt'), self.mode.get())
 
         self.processedMics.update([micId])
 
@@ -284,7 +286,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         return []
 
 
-def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn):
+def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn, mode):
     """ Worker for calculate the consensus of N picking algorithms of
           M_n coordinates each one.
 
@@ -343,7 +345,11 @@ def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn):
         consensus = Ninputs
     else:
         consensus = consensus.get()
-    consensusCoords = allCoords[votes >= consensus, :]
+    if mode==0:
+        consensusCoords = allCoords[votes >= consensus, :]
+    else:
+        consensusCoords = allCoords[votes == consensus, :]
+
     try:
         jaccardIdx = float(len(consensusCoords)) / (
                 float(len(allCoords)) / Ninputs)
