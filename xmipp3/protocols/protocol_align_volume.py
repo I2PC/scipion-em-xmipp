@@ -160,13 +160,15 @@ class XmippProtAlignVolume(em.ProtAlignVolume):
         alignArgs = self._getAlignArgs()
         alignSteps = []
         
+        idx=1
         for vol in self._iterInputVolumes():
             volFn = getImageLocation(vol)
             volId = vol.getObjId()
             stepId = self._insertFunctionStep('alignVolumeStep', refFn, volFn,
-                                              vol.outputName, maskArgs, 
-                                              alignArgs, volId, prerequisites=[])
-            alignSteps.append(stepId)            
+                                              self._getExtraPath("vol%02d.mrc"%idx), maskArgs, 
+                                              alignArgs, idx, prerequisites=[])
+            alignSteps.append(stepId)
+            idx+=1         
         self._insertFunctionStep('createOutputStep', prerequisites=alignSteps)
         
     #--------------------------- STEPS functions --------------------------------------------
