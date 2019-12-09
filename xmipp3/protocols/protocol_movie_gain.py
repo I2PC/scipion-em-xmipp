@@ -46,67 +46,6 @@ from xmippLib import *
 from xmipp_base import *
 from xmipp3.utils import *
 
-def applyTransform(imag_array, M, shape):
-    ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
-    '''
-    imag= xmippLib.Image()
-    imag.setData(imag_array)
-    imag=imag.applyWarpAffine(list(M.flatten()),shape,1.0)
-    return imag.getData()
-
-def rotation(imag, angle, shape, P):
-    '''Rotate a np.array and return also the transformation matrix
-    #imag: np.array
-    #angle: angle in degrees
-    #shape: output shape
-    #P: transform matrix (further transformation in addition to the rotation)'''
-    (hsrc, wsrc) = imag.shape
-    angle *= math.pi / 180
-    T = np.asarray([[1, 0, -wsrc / 2], [0, 1, -hsrc / 2], [0, 0, 1]])
-    R = np.asarray([[math.cos(angle), math.sin(angle), 0], [-math.sin(angle), math.cos(angle), 0], [0, 0, 1]])
-    M = np.matmul(np.matmul(np.linalg.inv(T), np.matmul(R, T)), P)
-
-    transformed=applyTransform(imag, M, shape)
-    return transformed, M
-
-def arrays_correlation_FT(ar1,ar2_ft_conj,normalize=True):
-    '''Return the correlation matrix of an array and the FT_conjugate of a second array using the fourier transform
-    '''
-    if normalize:
-        ar1=normalize_array(ar1)
-
-    ar1_FT = np.fft.fft2(ar1)
-    corr2FT = np.multiply(ar1_FT, ar2_ft_conj)
-    correlationFunction = np.real(np.fft.ifft2(corr2FT)) / ar1_FT.size
-
-    return correlationFunction
-
-def translation_correction(Loc,shape):
-    '''Return translation corrections given the max/min Location and the image shape
-    '''
-    correcs=[]
-    for i in range(2):
-        if Loc[i]>shape[i]/2:
-            correcs+=[Loc[i]-shape[i]]
-        else:
-            correcs+=[Loc[i]]
-    return correcs
-
-def invert_array(gain,thres=0.01,depth=1):
-    '''Return the inverted array by first converting the values under the threshold to the median of the surrounding'''
-    gain=array_zeros_to_median(gain, thres, depth)
-    return 1.0/gain
-
-def array_zeros_to_median(a, thres=0.01, depth=1):
-    '''Return an array, replacing the zeros (values under a threshold) with the median of
-    its surrounding values (with a depth)'''
-    idxs = np.where(np.abs(a) < thres)[0]
-    idys = np.where(np.abs(a) < thres)[1]
-
-    for i in range(len(idxs)):
-        sur_values = surrounding_values(a, idxs[i], idys[i], depth)
-        a[idxs[i]][idys[i]] = np.median(sur_values)
-    return a
 
 class XmippProtMovieGain(ProtProcessMovies):
     """ Estimate the gain image of a camera, directly analyzing one of its movies.
@@ -176,8 +115,7 @@ class XmippProtMovieGain(ProtProcessMovies):
                 deps.append(stepId)
                 insertedDict[movie.getObjId()] = stepId
         else:
-            if (len(insertedDict) == 0 and self.estimateOrientation.get()
-                and self.inputMovies.get().getGain() is not None):
+            if len(insertedDict) == 0 and self.estimateOrientation.get():
                 # Adding a first step to orientate the input gain
                 firstMovie = self.inputMovies.get().getFirstItem()
                 movieDict = firstMovie.getObjDict(includeBasic=True)
@@ -195,72 +133,54 @@ class XmippProtMovieGain(ProtProcessMovies):
                 self.convertCIStep.append(normStepId)
 
             # For each movie insert the step to process it
-            for movie in inputMovies:
-                if movie.getObjId() not in insertedDict:
-                    stepId = self._insertMovieStep(movie)
-                    deps.append(stepId)
-                    insertedDict[movie.getObjId()] = stepId
+            for movie in self.inputMovies.get():
+                stepId = self._insertMovieStep(movie)
+                deps.append(stepId)
+                insertedDict[movie.getObjId()] = stepId
         return deps
 
     def estimateOrientationStep(self, movieDict):
         movie = Movie()
-        movie.setAttributesFromDict(movieDict, setBasic=True,
-                                    ignoreMissing=True)
+        movie.setAttributesFromDict(movieDict, setBasic=True, ignoreMissing=True)
+
         movieId = movie.getObjId()
-        fnMovie = movie.getFileName()
-        gain = self.inputMovies.get().getGain()
-        args = "-i %s --oroot %s --iter 1 --singleRef --frameStep %d" % \
-               (fnMovie, self._getPath("movie_%06d" % movieId),
-                self.frameStep)
-        fnGain = self._getPath("movie_%06d_gain.xmp" % movieId)
+        movieFn = movie.getFileName()
+        expGainFn = self.inputMovies.get().getGain()
+        resGainFn = self.getCurrentGain(movieId)
 
         # Check which estimated gain matches with the experimental gain
-        if self.estimateOrientation.get() and gain is not None and not os.path.exists(
-                self._getPath("bestGain.xmp")):
-            self.runJob("xmipp_movie_estimate_gain", args+" --sigma 0", numberOfMpi=1)
+        args = self.getArgs(movieFn, movieId, " --sigma 0")
+        self.runJob("xmipp_movie_estimate_gain", args, numberOfMpi=1)
 
-            if os.path.exists(fnGain):
-                G = xmippLib.Image()
-                G.read(fnGain)
-                exp_gain = xmippLib.Image()
-                exp_gain.read(gain)
-                self.match_orientation(exp_gain, G)
+        resGain = xmippLib.Image()
+        resGain.read(resGainFn)
+        expGain = xmippLib.Image()
+        expGain.read(expGainFn)
+        self.match_orientation(expGain, resGain)
 
-        if self.normalizeGain.get() and (gain is not None or os.path.exists(
-                self._getPath("bestGain.xmp"))):
-            fnBest=self._getPath("bestGain.xmp")
+    def normalizeGainStep(self):
+        gainFn = self.getFinalGain()
 
-            if os.path.exists(fnBest):
-                # If the best orientatin has been calculated, take it
-                fnGain = fnBest
-            else:
-                fnGain = self.getInputGain()
+        oriGain = xmippLib.Image()
+        oriGain.read(gainFn)
+        oriArray = oriGain.getData()
 
-            if fnGain is not None:
-                oriGain = xmippLib.Image()
-                oriGain.read(fnGain)
-                oriArray = oriGain.getData()
+        # normalize array to mean 1
+        oriArray = oriArray / np.mean(oriArray)
 
-                # normalize array to mean 1
-                oriArray = oriArray / np.mean(oriArray)
-
-                oriGain.setData(oriArray)
-                oriGain.write(self.getBestGain())
+        oriGain.setData(oriArray)
+        oriGain.write(self.getBestGain())
 
     def _processMovie(self, movie):
         movieId = movie.getObjId()
         if not self.doGainProcess(movieId):
             return
         fnMovie = movie.getFileName()
-        gain = self.getInputGain()
+        inputGain = self.getInputGain()
         args = self.getArgs(fnMovie, movieId)
-        fnGain = self.getCurrentGain(movieId)
 
-        if self.useExistingGainImage.get() and gain is not None:
-            if self.estimateOrientation.get() or self.normalizeGain.get():
-                args += " --gainImage %s" % self.getBestGain()
-            else:
-                args += " --gainImage %s" % gain
+        if self.useExistingGainImage.get() and inputGain is not None:
+            args += " --gainImage %s" % self.getFinalGain()
 
         self.runJob("xmipp_movie_estimate_gain", args, numberOfMpi=1)
 
@@ -269,16 +189,13 @@ class XmippProtMovieGain(ProtProcessMovies):
         moveFile(self._getExtraPath("movie_%06d_correction.xmp" % movieId),
                  self.getCurrentGain(movieId))
 
-        #If the gain hasn't been oriented or normalized, we still need bestGain
-        if not os.path.exists(self._getPath("bestGain.xmp")):
-            #No previous gain: bestGain is the estimated
-            if gain is None:
-                os.system("cp %s %s" % (self._getPath("movie_%06d_gain.xmp" % movieId),self._getPath("bestGain.xmp")))
-            #Previous gain: bestGain is the original
-            else:
+        # If the gain hasn't been oriented or normalized, we still need bestGain
+        if not os.path.exists(self.getBestGain()):
+            # No previous gain: bestGain is the estimated
+            if not inputGain is None:
                 G = xmippLib.Image()
-                G.read(gain)
-                G.write(self._getPath("bestGain.xmp"))
+                G.read(inputGain)
+                G.write(self.getBestGain())
 
         fnSummary = self._getPath("summary.txt")
         fnMonitorSummary = self._getPath("summaryForMonitor.txt")
@@ -289,9 +206,10 @@ class XmippProtMovieGain(ProtProcessMovies):
             fhSummary = open(fnSummary, "a")
             fnMonitorSummary = open(fnMonitorSummary, "a")
 
-        if os.path.exists(fnGain):
+        estim_gain = self.getCurrentGain(movieId)
+        if os.path.exists(estim_gain):
             G = xmippLib.Image()
-            G.read(fnGain)
+            G.read(estim_gain)
             mean, dev, min, max = G.computeStats()
             Gnp = G.getData()
             p = np.percentile(Gnp, [2.5, 25, 50, 75, 97.5])
@@ -326,7 +244,7 @@ class XmippProtMovieGain(ProtProcessMovies):
             outputSet.copyInfo(inputMovies)
 
         if fixGain and os.path.isfile(self.getBestGain()):
-            outputSet.setGain(self.getBestGain())
+            outputSet.setGain(self.getFinalGain())
 
         return outputSet
 
@@ -365,10 +283,10 @@ class XmippProtMovieGain(ProtProcessMovies):
             # We have finished when there is not more input movies
             # (stream closed) and the number of processed movies is
             # equal to the number of inputs
-            self.finished = (self.streamClosed and
-                             allDone == len(self.listOfMovies))
-            streamMode = (Set.STREAM_CLOSED if self.finished
-                          else Set.STREAM_OPEN)
+            self.finished = self.streamClosed and \
+                            allDone == len(self.listOfMovies)
+            streamMode = Set.STREAM_CLOSED if self.finished \
+                else Set.STREAM_OPEN
 
             if newDone:
                 self._writeDoneList(newDone)
@@ -464,11 +382,13 @@ class XmippProtMovieGain(ProtProcessMovies):
                 if abs(minVal) > abs(best_cor):
                     corLoc=translation_correction(minLoc,est_gain_array.shape)
                     best_cor = minVal
+                    best_transf=(angle,imir)
                     best_R = R
                     T = np.asarray([[1, 0, corLoc[1]], [0, 1, corLoc[0]], [0, 0, 1]])
                 if abs(maxVal) > abs(best_cor):
                     corLoc = translation_correction(maxLoc, est_gain_array.shape)
                     best_cor = maxVal
+                    best_transf = (angle, imir)
                     best_R = R
                     T = np.asarray([[1, 0, corLoc[1]], [0, 1, corLoc[0]], [0, 0, 1]])
 
@@ -477,6 +397,7 @@ class XmippProtMovieGain(ProtProcessMovies):
         best_gain_array = applyTransform(np.asarray(exp_gain.getData(), dtype=np.float64), best_M, est_gain_array.shape)
 
         print('Best correlation: ',best_cor)
+        print('Rotation angle: {}\nVertical mirror: {}'.format(best_transf[0],best_transf[1]==1))
         if best_cor > 0:
             best_gain_array = invert_array(best_gain_array)
 
@@ -491,18 +412,42 @@ class XmippProtMovieGain(ProtProcessMovies):
     def getBestGain(self):
         return self._getExtraPath("bestGain.mrc")
 
+    def getFinalGain(self):
+        fnBest = self.getBestGain()
+        if os.path.exists(fnBest):
+            # If the best orientatin has been calculated, take it
+            finalGainFn = fnBest
+        else:
+            finalGainFn = self.getInputGain()
+        return finalGainFn
+
     def getInputGain(self):
         return self.inputMovies.get().getGain()
 
     def getArgs(self, movieFn, movieId, extraArgs=''):
         return ("-i %s --oroot %s --iter 1 --singleRef --frameStep %d %s"
                 % (movieFn, self._getExtraPath("movie_%06d" % movieId),
-                self.frameStep, extraArgs))
+                   self.frameStep, extraArgs))
 
     def doGainProcess(self, movieId):
-        return movieId == 1 or movieId % self.movieStep.get() == 0
+        return (movieId-1) % self.movieStep.get() == 0 
 
     # --------------------------- INFO functions -------------------------------
+    def _validate(self):
+        errors = []
+        if self.estimateOrientation.get() and self.getInputGain() is None:
+            errors.append("Experimental gain needed to estimate its proper "
+                         "orientation.")
+        if self.normalizeGain.get() and self.getInputGain() is None:
+            errors.append("Experimental gain needed to normalize it.")
+        if errors:
+            errors.append("An experimental gain can be associated with a "
+                          "setOfMovies during its importing protocol. "
+                          "Otherwise, no gain reorientation nor "
+                          "gain normalization can be performed.")
+
+        return errors
+    
     def _summary(self):
         fnSummary = self._getPath("summary.txt")
         if not os.path.exists(fnSummary):
@@ -515,28 +460,32 @@ class XmippProtMovieGain(ProtProcessMovies):
             fhSummary.close()
         return summary
 
-def cv2_applyTransform(imag, M, shape):
+
+# --------------------- WORKERS --------------------------------------
+
+def applyTransform(imag_array, M, shape):
     ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
     '''
-    (hdst, wdst) = shape
-    transformed = cv2.warpAffine(imag, M[:2][:], (wdst, hdst),
-                                 borderMode=cv2.BORDER_CONSTANT, borderValue=1.0)
-    return transformed
+    imag = xmippLib.Image()
+    imag.setData(imag_array)
+    imag = imag.applyWarpAffine(list(M.flatten()), shape, 1.0)
+    return imag.getData()
 
 
-def cv2_rotation(imag, angle, shape, P):
+def rotation(imag, angle, shape, P):
     '''Rotate a np.array and return also the transformation matrix
     #imag: np.array
     #angle: angle in degrees
     #shape: output shape
     #P: transform matrix (further transformation in addition to the rotation)'''
     (hsrc, wsrc) = imag.shape
-
     angle *= math.pi / 180
     T = np.asarray([[1, 0, -wsrc / 2], [0, 1, -hsrc / 2], [0, 0, 1]])
     R = np.asarray([[math.cos(angle), math.sin(angle), 0], [-math.sin(angle), math.cos(angle), 0], [0, 0, 1]])
     M = np.matmul(np.matmul(np.linalg.inv(T), np.matmul(R, T)), P)
-    return cv2_applyTransform(imag, M, shape), M
+
+    transformed = applyTransform(imag, M, shape)
+    return transformed, M
 
 
 def arrays_correlation_FT(ar1,ar2_ft_conj,normalize=True):
@@ -580,4 +529,3 @@ def array_zeros_to_median(a, thres=0.01, depth=1):
         sur_values = surrounding_values(a, idxs[i], idys[i], depth)
         a[idxs[i]][idys[i]] = np.median(sur_values)
     return a
-
