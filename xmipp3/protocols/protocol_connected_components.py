@@ -29,8 +29,8 @@
 import numpy as np
 from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.protocol.params import PointerParam, FloatParam
-from tomo.protocols import ProtTomoBase
-
+from pyworkflow.utils import importFromPlugin
+ProtTomoBase = importFromPlugin("tomo.protocols", "ProtTomoBase")
 
 class XmippProtConnectedComponents(EMProtocol, ProtTomoBase):
     """ This protocol takes a set of coordinates and identifies connected components among the picked particles."""
