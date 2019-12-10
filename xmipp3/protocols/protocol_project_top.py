@@ -1,6 +1,7 @@
 # **************************************************************************
 # *
 # * Authors:     David Herreros Calero (dherreros@cnb.csic.es)
+# *              Estrella Fernandez Gimenez (me.fernandez@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -35,23 +36,30 @@ import xmippLib
 
 class XmippProtProjectZ(ProtAnalysis3D):
     """
-    Project a set of volumes or a set of subtomograms to obtain their
-    top view.
+    Project a set of volumes or subtomograms to obtain their X, Y or Z projection of the desired range of slices.
     """
     _label = 'Z projection'
     _version = pyworkflow.VERSION_1_1
-    #--------------------------- DEFINE param functions ------------------------
+
+    # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='General parameters')
         form.addParam('input', PointerParam, pointerClass="SetOfSubTomograms, SetOfVolumes",
                       label='Input Volumes/Subtomograms')
+        form.addParam('dir', EnumParam, choices=['X', 'Y', 'Z'], default=2, display=EnumParam.DISPLAY_HLIST,
+                      label='Projection direction')
+        form.addParam('range', EnumParam, choices=['All', 'Range'], default=0, display=EnumParam.DISPLAY_HLIST,
+                      label='Range of slices', help='Range of slices used to compute the projection, where 0 is the '
+                                                    'central slice.')
+        form.addParam('start', IntParam, default=-10, label='From', condition="range == 1")
+        form.addParam('end', IntParam, default=10, label='To', condition="range == 1")
 
-    #--------------------------- INSERT steps functions ------------------------
+    # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
         self._insertFunctionStep('projectZStep')
         self._insertFunctionStep('createOutputStep')
     
-    #--------------------------- STEPS functions -------------------------------
+    # --------------------------- STEPS functions -------------------------------
     def projectZStep(self):
         idx = 1
         x, y, _ = self.input.get().getDim()
@@ -61,7 +69,7 @@ class XmippProtProjectZ(ProtAnalysis3D):
         for item in self.input.get().iterItems():
             self.runJob("xmipp_phantom_project",
                         "-i %d@%s -o %s --angles 0 0 0" %
-                        (item.getIndex(), item.getFileName(), "%d@%s" % (idx,fnProj)))
+                        (item.getIndex(), item.getFileName(), "%d@%s" % (idx, fnProj)))
             idx += 1
 
     def createOutputStep(self):
@@ -72,7 +80,7 @@ class XmippProtProjectZ(ProtAnalysis3D):
         fnProj = self._getExtraPath("projections.mrcs")
         for idv in range(self.input.get().getSize()):
             p = Particle()
-            p.setLocation(idv+1,fnProj)
+            p.setLocation(idv+1, fnProj)
             imgSetOut.append(p)
 
         imgSetOut.setObjComment(self.getSummary(imgSetOut))
@@ -85,7 +93,7 @@ class XmippProtProjectZ(ProtAnalysis3D):
         return [
             "Top projection of subtomograms/volumes obtained with xmipp_phantom_project",
             "A total of %d tomograms/volumes of dimensions %s were used"
-               % (vols.getSize(), vols.getDimensions()),
+            % (vols.getSize(), vols.getDimensions()),
         ]
 
     def _summary(self):

@@ -86,12 +86,17 @@ class XmippProtSubtomoMapBack(EMProtocol, ProtTomoBase):
 
     # --------------------------- STEPS functions -------------------------------
     def convertInput(self):
+        print('-------0--------')
         for tomo in self.inputTomograms.get().iterItems():
+            print('-------1--------')
             print("CONVERT tomoId ", tomo.getObjId())
             img = ImageHandler()
             fnTomo = self._getExtraPath('tomogram_%d.mrc' % tomo.getObjId())
+            print('-------2--------')
             img.convert(tomo, fnTomo)
+            print('-------3--------')
             for classSubt in self.inputClasses.get().iterItems():
+                print('-------4--------')
                 cId = classSubt.getFirstItem().getClassId()
                 fnRef = self._getExtraPath('reference%d.mrc' % cId)
                 img.convert(classSubt.getRepresentative(), fnRef)
