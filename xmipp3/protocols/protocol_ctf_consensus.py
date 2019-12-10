@@ -501,9 +501,13 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
                 if ctfId2 != ctfId:
                     continue
                 self.processedDict.append(ctfId)
-                self._ctfToMd(ctf1, md1)
-                self._ctfToMd(ctf2, md2)
-                self._freqResol[ctfId] = xmippLib.errorMaxFreqCTFs2D(md1, md2)
+                try:
+                    self._ctfToMd(ctf1, md1)
+                    self._ctfToMd(ctf2, md2)
+                    self._freqResol[ctfId] = xmippLib.errorMaxFreqCTFs2D(md1, md2)
+                except TypeError as exc:
+                    print("Error reading ctf for id:%s. %s" % (ctfId, exc))
+                    self._freqResol[ctfId] = 9999 
 
     def initializeRejDict(self):
         self.discDict = {'defocus': 0,
