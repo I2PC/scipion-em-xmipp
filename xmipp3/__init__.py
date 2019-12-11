@@ -246,9 +246,12 @@ def installDeepLearningToolkit(plugin, env):
         elif "release 9.0" in nvccVersion:  # cuda 9
             tensorFlowTarget = "1.10.0"
             cudNNversion = "v7.0.1-cuda9"
+        elif "release 10.0" in nvccVersion:  # cuda 10
+            tensorFlowTarget = "1.13.0"
+            cudNNversion = "v7.4.1-cuda10"
         else:
-            cudNNwarning.append("cudNN requires CUDA 8.0 or CUDA 9.0 "
-                                "(8.0 recommended)")
+            cudNNwarning.append("cudNN requires CUDA 8.0 or CUDA 9.0 or CUDA 10.0 "
+                                "(9.0 recommended)")
 
     if cudNNversion is not None:
         cudNN = tryAddPipModule(env, 'cudnnenv', version='0.6.6',
