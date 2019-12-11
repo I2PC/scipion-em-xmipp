@@ -70,17 +70,17 @@ class XmippProtProjectZ(ProtAnalysis3D):
         if self.rangeParam.get() == 0: cropParam = 0
         else: cropParam = self.cropParam.get()
 
-        if self.dirParam.get() == 2:  # Z
+        if self.dirParam.get() == 2:
             angles = '0 0 0'
             crop = '0 0 %d' % cropParam
             xmippLib.createEmptyFile(fnWin, x, y, z-cropParam, n)
             xmippLib.createEmptyFile(fnProj, x, y, 1, n)
-        elif self.dirParam.get() == 1:  # Y
+        elif self.dirParam.get() == 1:
             angles = '90 90 0'
             crop = '0 %d 0' % cropParam
             xmippLib.createEmptyFile(fnWin, x, y-cropParam, z, n)
             xmippLib.createEmptyFile(fnProj, x, y-cropParam, 1, n)
-        else:  # X
+        else:
             angles = '0 90 0'
             crop = '%d 0 0' % cropParam
             xmippLib.createEmptyFile(fnWin, x-cropParam, y-cropParam, z-cropParam, n)
@@ -97,7 +97,7 @@ class XmippProtProjectZ(ProtAnalysis3D):
         imgSetOut = self._createSetOfAverages()
         imgSetOut.setSamplingRate(self.input.get().getSamplingRate())
         imgSetOut.setAlignmentProj()
-        fnProj = self._getExtraPath("projections.mrcs")
+        fnProj = self._getExtraPath("projection.stk")
         for idv in range(self.input.get().getSize()):
             p = Particle()
             p.setLocation(idv+1, fnProj)
