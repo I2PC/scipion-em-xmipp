@@ -143,7 +143,7 @@ class XmippProtRotationalSymmetry(ProtPreprocessVolumes):
                     "-i %s --rotate_volume euler %f %f 0 --dont_wrap" %
                     (self.fnVolSym,rot0,tilt0))
         self.runJob("xmipp_transform_symmetrize",
-                    "-i %s --sym c%d" %
+                    "-i %s --sym c%d --dont_wrap" %
                     (self.fnVolSym,self.symOrder.get()))
 
     def createOutput(self):
