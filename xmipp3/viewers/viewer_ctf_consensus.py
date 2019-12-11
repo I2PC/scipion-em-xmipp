@@ -92,9 +92,9 @@ class XmippCTFConsensusViewer(ProtocolViewer):
                 getattr(self.protocol, objName).getFileName(),
                 viewParams={MODE: MODE_MD, ORDER: labels, VISIBLE: labels}))
         else:
-            appendStr = ', yet.' if self.protocol.isActive() else '.'
             self.infoMessage('%s does not have %s%s'
-                             % (self.protocol.getObjLabel(), objName, appendStr),
+                             % (self.protocol.getObjLabel(), objName, 
+                                getStringIfActive(self.protocol)),
                              title='Info message').show()
         return views
 
@@ -105,9 +105,9 @@ class XmippCTFConsensusViewer(ProtocolViewer):
             views.append(MicrographsView(self.getProject(),
                                          getattr(self.protocol, objName)))
         else:
-            appendStr = ', yet.' if self.protocol.isActive() else '.'
-            self.infoMessage('%s does not have %s%s'
-                             % (self.protocol.getObjLabel(), objName, appendStr),
+            self.infoMessage('%s does not have %s%s' 
+                             % (self.protocol.getObjLabel(), objName, 
+                                getStringIfActive(self.protocol)),
                              title='Info message').show()
         return views
 
@@ -148,3 +148,7 @@ class XmippCTFConsensusViewer(ProtocolViewer):
             plotter.plotHist(resolution, nbins=numberOfBins)
             views.append(plotter)
         return views
+    
+    
+def getStringIfActive(prot):
+    return ', yet.' if prot.isActive() else '.'

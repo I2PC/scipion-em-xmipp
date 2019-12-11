@@ -32,7 +32,7 @@ from xmipp3.protocols.protocol_movie_opticalflow import (XmippProtOFAlignment,
                                                  OBJCMD_MOVIE_ALIGNCARTESIAN)
 from xmipp3.protocols.protocol_movie_correlation import XmippProtMovieCorr
 from xmipp3.protocols.protocol_movie_max_shift import XmippProtMovieMaxShift
-
+from .viewer_ctf_consensus import getStringIfActive
 
 class XmippMovieAlignViewer(Viewer):
     _targets = [XmippProtOFAlignment, XmippProtMovieCorr]
@@ -84,33 +84,26 @@ class XmippMovieMaxShiftViewer(ProtocolViewer):
                  'visualizeMicsDiscarded': self._visualizeMicsDiscarded
                 }
 
-    def _visualizeAny(self, objNameList):
+    def _visualizeAny(self, outNameCondition):
         views = []
 
-        for objName in objNameList:
-            if self.protocol.hasAttribute(objName):
-                views.append(self.objectView(getattr(self.protocol, objName),
-                                             viewParams=getViewParams()))
+        for outName, outObj in self.protocol.iterOutputAttributes():
+            if outNameCondition(outName):
+                views.append(self.objectView(outObj, viewParams=getViewParams()))
                 break
         if not views:
-            appendStr = ', yet.' if self.protocol.isActive() else '.'
-            self.infoMessage('%s does not have %s%s'
-                             % (self.protocol.getObjLabel(),
-                                ' nor '.join(objNameList), appendStr),
+            outputType = 'discarded' if outNameCondition('Discarded') else 'accepted'
+            self.infoMessage('%s does not have %s outputs%s'
+                             % (self.protocol.getObjLabel(), outputType,
+                                getStringIfActive(self.protocol)),
                              title='Info message').show()
         return views
 
     def _visualizeMics(self, e=None):
-        return self._visualizeAny(['outputMicrographs', 
-                                   'outputMicrographsDoseWeighted',
-                                   'outputMovies',
-                                   'outputMoviesDoseWeigthed'])
+        return self._visualizeAny(lambda x: not x.endswith('Discarded'))
 
     def _visualizeMicsDiscarded(self, e=None):
-        return self._visualizeAny(['outputMicrographsDiscarded',
-                                   'outputMicrographsDoseWeightedDiscarded',
-                                   'outputMoviesDiscarded',
-                                   'outputMoviesDoseWeigthedDiscarded'])
+        return self._visualizeAny(lambda x: x.endswith('Discarded'))
 
 def getViewParams():
     plotLabels = ('psdCorr._filename plotPolar._filename '
