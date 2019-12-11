@@ -123,6 +123,7 @@ from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
 from .protocol_local_ctf import XmippProtLocalCTF
 from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
 from .protocol_consensus_local_ctf import XmippProtConsensusLocalCTF
+from .protocol_project_top import XmippProtProjectZ
 
 try:
     from .protocol_subtomo_map_back import XmippProtSubtomoMapBack

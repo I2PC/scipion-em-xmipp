@@ -1642,7 +1642,11 @@ def writeShiftsMovieAlignment(movie, xmdFn, s0, sN):
 def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
     movieMd = md.MetaData()
     frame = movie.clone()
-    firstFrame, lastFrame, frameIndex = movie.getFramesRange()
+    # get some info about the movie
+    # problem is, that it can come from a movie set, and some
+    # values might refer to different movie, e.g. no of frames :(
+    firstFrame, _, frameIndex = movie.getFramesRange() # info from the movie set
+    _, _ , lastFrame = movie.getDim() # actual no. of frame in the current movie
 
     if lastFrame == 0:
         # this condition is for old SetOfMovies, that has lastFrame = 0.
