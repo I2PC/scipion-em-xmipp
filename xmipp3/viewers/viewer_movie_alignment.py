@@ -86,7 +86,7 @@ class XmippMovieMaxShiftViewer(ProtocolViewer):
 
     def _visualizeAny(self, objNameList):
         views = []
-        self.protocol.getOutput()
+
         for objName in objNameList:
             if self.protocol.hasAttribute(objName):
                 views.append(self.objectView(getattr(self.protocol, objName),
@@ -101,11 +101,16 @@ class XmippMovieMaxShiftViewer(ProtocolViewer):
         return views
 
     def _visualizeMics(self, e=None):
-        return self._visualizeAny(['outputMicrographs', 'ouputMovies'])
+        return self._visualizeAny(['outputMicrographs', 
+                                   'outputMicrographsDoseWeighted',
+                                   'outputMovies',
+                                   'outputMoviesDoseWeigthed'])
 
     def _visualizeMicsDiscarded(self, e=None):
         return self._visualizeAny(['outputMicrographsDiscarded',
-                                   'outputMoviesDiscarded'])
+                                   'outputMicrographsDoseWeightedDiscarded',
+                                   'outputMoviesDiscarded',
+                                   'outputMoviesDoseWeigthedDiscarded'])
 
 def getViewParams():
     plotLabels = ('psdCorr._filename plotPolar._filename '
