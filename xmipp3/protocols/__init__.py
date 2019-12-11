@@ -125,6 +125,10 @@ from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
 from .protocol_consensus_local_ctf import XmippProtConsensusLocalCTF
 
 try:
+    from .protocol_roiIJ import XmippProtRoiIJ
+    import pyworkflow
+    emprotocol = pyworkflow.em.protocol.EMProtocol
+    setattr(emprotocol, "_createSetOfMeshes", XmippProtRoiIJ._createSetOfMeshes.__func__)
     from .protocol_subtomo_map_back import XmippProtSubtomoMapBack
     from .protocol_apply_alignment_subtomo import XmippProtApplyTransformSubtomo
     from .protocol_undo_alignment_subtomo import XmippProtUndoAlignSubtomo
@@ -132,9 +136,3 @@ except ImportError:
     print(
         'To use a Tomography protocol scipion-em-tomo plugin is required.'
         ' See https://github.com/scipion-em/scipion-em-tomo for further details')
-
-from .protocol_roiIJ import XmippProtRoiIJ
-import pyworkflow
-
-emprotocol = pyworkflow.em.protocol.EMProtocol
-setattr(emprotocol, "_createSetOfMeshes", XmippProtRoiIJ._createSetOfMeshes.__func__)

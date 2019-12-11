@@ -27,9 +27,12 @@ import os
 
 from pyworkflow.em import *
 from pyworkflow.em.viewers.showj import *
+from pyworkflow.utils import importFromPlugin
 
-from tomo.objects import Mesh, SetOfMeshes
-from tomo.viewers.views_tkinter_tree import TomogramsTreeProvider, TomogramsDialog
+Mesh = importFromPlugin("tomo.objects", "Mesh")
+SetOfMeshes = importFromPlugin("tomo.objects", "SetOfMeshes")
+TomogramsTreeProvider = importFromPlugin("tomo.viewers.views_tkinter_tree", "TomogramsTreeProvider")
+TomogramsDialog = importFromPlugin("tomo.viewers.views_tkinter_tree", "TomogramsDialog")
 
 class XmippProtRoiIJ(ProtAnalysis2D):
     """ Tomogram ROI selection in IJ """
