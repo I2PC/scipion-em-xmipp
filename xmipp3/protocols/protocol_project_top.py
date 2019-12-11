@@ -25,34 +25,33 @@
 # *
 # **************************************************************************
 
-import pyworkflow
-import pyworkflow.object as pwobj
-from pyworkflow.em import *
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.em.data import Particle
-
+from pyworkflow.em.protocol import ProtAnalysis3D
+from pyworkflow.protocol.params import PointerParam, EnumParam, IntParam
+from pyworkflow.utils import importFromPlugin
+SetOfTomograms = importFromPlugin("tomo.objects", "SetOfTomograms")
 import xmippLib
-
 
 class XmippProtProjectZ(ProtAnalysis3D):
     """
     Project a set of volumes or subtomograms to obtain their X, Y or Z projection of the desired range of slices.
     """
-    _label = 'Z projection'
-    _version = pyworkflow.VERSION_1_1
+    _label = 'Projection'
 
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='General parameters')
         form.addParam('input', PointerParam, pointerClass="SetOfSubTomograms, SetOfVolumes",
-                      label='Input Volumes/Subtomograms')
-        form.addParam('dir', EnumParam, choices=['X', 'Y', 'Z'], default=2, display=EnumParam.DISPLAY_HLIST,
+                      label='Input Volumes')
+        form.addParam('dirParam', EnumParam, choices=['X', 'Y', 'Z'], default=2, display=EnumParam.DISPLAY_HLIST,
                       label='Projection direction')
-        form.addParam('range', EnumParam, choices=['All', 'Range'], default=0, display=EnumParam.DISPLAY_HLIST,
+        form.addParam('rangeParam', EnumParam, choices=['All', 'Range'], default=0, display=EnumParam.DISPLAY_HLIST,
                       label='Range of slices', help='Range of slices used to compute the projection, where 0 is the '
                                                     'central slice.')
-        form.addParam('start', IntParam, default=-10, label='From', condition="range == 1")
-        form.addParam('end', IntParam, default=10, label='To', condition="range == 1")
+        form.addParam('cropParam', IntParam, default=10, label='Voxels', condition="rangeParam == 1",
+                      help='Crop this amount of voxels in the selected direction. Half of the pixels will be cropped '
+                           'from one side and the other half from the other. If X direction is selected, the crop will '
+                           'be performed in X, Y and Z.')
 
     # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
@@ -61,22 +60,43 @@ class XmippProtProjectZ(ProtAnalysis3D):
     
     # --------------------------- STEPS functions -------------------------------
     def projectZStep(self):
-        idx = 1
-        x, y, _ = self.input.get().getDim()
-        fnProj = self._getExtraPath("projections.mrcs")
-        xmippLib.createEmptyFile(fnProj, x, y, 1, self.input.get().getSize())
+        x, y, z = self.input.get().getDim()
+        n = self.input.get().getSize()
+        fnInput = self._getExtraPath("input.stk")
+        fnWin = self._getExtraPath("window.stk")
+        fnProj = self._getExtraPath("projection.stk")
+        xmippLib.createEmptyFile(fnInput, x, y, z, n)
+
+        if self.rangeParam.get() == 0: cropParam = 0
+        else: cropParam = self.cropParam.get()
+
+        if self.dirParam.get() == 2:  # Z
+            angles = '0 0 0'
+            crop = '0 0 %d' % cropParam
+            xmippLib.createEmptyFile(fnWin, x, y, z-cropParam, n)
+            xmippLib.createEmptyFile(fnProj, x, y, 1, n)
+        elif self.dirParam.get() == 1:  # Y
+            angles = '90 90 0'
+            crop = '0 %d 0' % cropParam
+            xmippLib.createEmptyFile(fnWin, x, y-cropParam, z, n)
+            xmippLib.createEmptyFile(fnProj, x, y-cropParam, 1, n)
+        else:  # X
+            angles = '0 90 0'
+            crop = '%d 0 0' % cropParam
+            xmippLib.createEmptyFile(fnWin, x-cropParam, y-cropParam, z-cropParam, n)
+            xmippLib.createEmptyFile(fnProj, x-cropParam, y-cropParam, 1, n)
 
         for item in self.input.get().iterItems():
-            self.runJob("xmipp_phantom_project",
-                        "-i %d@%s -o %s --angles 0 0 0" %
-                        (item.getIndex(), item.getFileName(), "%d@%s" % (idx, fnProj)))
-            idx += 1
+            idx = item.getIndex()
+            if type(self.input.get()) == SetOfTomograms: idx = idx + 1
+            self.runJob("xmipp_image_convert", "-i %d@%s -o %d@%s -a" % (idx, item.getFileName(), idx, fnInput))
+            self.runJob("xmipp_transform_window", "-i %d@%s -o %d@%s --crop %s" % (idx, fnInput, idx, fnWin, crop))
+            self.runJob("xmipp_phantom_project", "-i %d@%s -o %d@%s --angles %s" % (idx, fnWin, idx, fnProj, angles))
 
     def createOutputStep(self):
         imgSetOut = self._createSetOfAverages()
         imgSetOut.setSamplingRate(self.input.get().getSamplingRate())
         imgSetOut.setAlignmentProj()
-
         fnProj = self._getExtraPath("projections.mrcs")
         for idv in range(self.input.get().getSize()):
             p = Particle()
@@ -90,16 +110,13 @@ class XmippProtProjectZ(ProtAnalysis3D):
 # --------------------------- INFO functions ------------------------------
     def _methods(self):
         vols = self.input.get()
-        return [
-            "Top projection of subtomograms/volumes obtained with xmipp_phantom_project",
-            "A total of %d tomograms/volumes of dimensions %s were used"
-            % (vols.getSize(), vols.getDimensions()),
-        ]
+        return ["Projection of %d volumes with dimensions %s obtained with xmipp_phantom_project"
+                % (vols.getSize(), vols.getDimensions())]
 
     def _summary(self):
         summary = []
         if not self.isFinished():
-            summary.append("Output top views not ready yet.")
+            summary.append("Output views not ready yet.")
 
         if self.getOutputsSize() >= 1:
             for key, output in self.iterOutputAttributes():
