@@ -24,13 +24,16 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import numpy as np
 
-from pyworkflow.em.data import Particle
+from pyworkflow.em import ImageHandler
+from pyworkflow.em.data import Image, Volume
 from pyworkflow.em.protocol import ProtAnalysis3D
 from pyworkflow.protocol.params import PointerParam, EnumParam, IntParam
 from pyworkflow.utils import importFromPlugin
 SetOfTomograms = importFromPlugin("tomo.objects", "SetOfTomograms")
 import xmippLib
+
 
 class XmippProtProjectZ(ProtAnalysis3D):
     """
@@ -49,9 +52,7 @@ class XmippProtProjectZ(ProtAnalysis3D):
                       label='Range of slices', help='Range of slices used to compute the projection, where 0 is the '
                                                     'central slice.')
         form.addParam('cropParam', IntParam, default=10, label='Voxels', condition="rangeParam == 1",
-                      help='Crop this amount of voxels in the selected direction. Half of the pixels will be cropped '
-                           'from one side and the other half from the other. If X direction is selected, the crop will '
-                           'be performed in X, Y and Z.')
+                      help='Crop this amount of voxels in each side of the selected direction.')
 
     # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
@@ -60,52 +61,49 @@ class XmippProtProjectZ(ProtAnalysis3D):
     
     # --------------------------- STEPS functions -------------------------------
     def projectZStep(self):
-        x, y, z = self.input.get().getDim()
-        n = self.input.get().getSize()
-        fnInput = self._getExtraPath("input.stk")
-        fnWin = self._getExtraPath("window.stk")
-        fnProj = self._getExtraPath("projection.stk")
-        xmippLib.createEmptyFile(fnInput, x, y, z, n)
+        input = self.input.get()
+        x, y, z = input.getDim()
+        n = input.getSize()
 
-        if self.rangeParam.get() == 0: cropParam = 0
-        else: cropParam = self.cropParam.get()
-
-        if self.dirParam.get() == 2:
-            angles = '0 0 0'
-            crop = '0 0 %d' % cropParam
-            xmippLib.createEmptyFile(fnWin, x, y, z-cropParam, n)
-            xmippLib.createEmptyFile(fnProj, x, y, 1, n)
-        elif self.dirParam.get() == 1:
-            angles = '90 90 0'
-            crop = '0 %d 0' % cropParam
-            xmippLib.createEmptyFile(fnWin, x, y-cropParam, z, n)
-            xmippLib.createEmptyFile(fnProj, x, y-cropParam, 1, n)
+        if self.rangeParam.get() == 1:
+            cropParam = self.cropParam.get()
         else:
-            angles = '0 90 0'
-            crop = '%d 0 0' % cropParam
-            xmippLib.createEmptyFile(fnWin, x-cropParam, y-cropParam, z-cropParam, n)
-            xmippLib.createEmptyFile(fnProj, x-cropParam, y-cropParam, 1, n)
+            cropParam = 0
 
-        for item in self.input.get().iterItems():
-            idx = item.getIndex()
-            if type(self.input.get()) == SetOfTomograms: idx = idx + 1
-            self.runJob("xmipp_image_convert", "-i %d@%s -o %d@%s -a" % (idx, item.getFileName(), idx, fnInput))
-            self.runJob("xmipp_transform_window", "-i %d@%s -o %d@%s --crop %s" % (idx, fnInput, idx, fnWin, crop))
-            self.runJob("xmipp_phantom_project", "-i %d@%s -o %d@%s --angles %s" % (idx, fnWin, idx, fnProj, angles))
+        dir = self.dirParam.get()
+
+        for item in input.iterItems():
+            vol = Volume()
+            idx = item.getObjId()
+            vol.setLocation('%d@%s' % (idx, item.getFileName()))
+            vol = ImageHandler().read(vol.getLocation())
+            volData = vol.getData()
+            proj = np.empty([x, y])
+
+            np.savetxt(self._getExtraPath('volData'), volData)
+
+            if dir == 0:  # X
+                volData = volData[:, :, :, x/2-cropParam:x/2+cropParam]
+                for zi in range(z):
+                    for yi in range(y):
+                        proj[zi][yi] = sum(volData[:, zi, yi, :])
+
+            elif dir == 1:  # Y
+                volData = volData[:, :, x / 2 - cropParam:x / 2 + cropParam, :]
+                for zi in range(z):
+                    for xi in range(x):
+                        proj[zi][xi] = sum(volData[:, zi, :, xi])
+
+            else:       # Z
+                volData = volData[:, x / 2 - cropParam:x / 2 + cropParam, :, :]
+                for xi in range(x):
+                    for yi in range(y):
+                        proj[xi][yi] = np.sum(volData[:, :, yi, xi], axis=1)
+
+            print(proj.size())
 
     def createOutputStep(self):
-        imgSetOut = self._createSetOfAverages()
-        imgSetOut.setSamplingRate(self.input.get().getSamplingRate())
-        imgSetOut.setAlignmentProj()
-        fnProj = self._getExtraPath("projection.stk")
-        for idv in range(self.input.get().getSize()):
-            p = Particle()
-            p.setLocation(idv+1, fnProj)
-            imgSetOut.append(p)
-
-        imgSetOut.setObjComment(self.getSummary(imgSetOut))
-        self._defineOutputs(outputReprojections=imgSetOut)
-        self._defineSourceRelation(self.input, imgSetOut)
+        pass
 
 # --------------------------- INFO functions ------------------------------
     def _methods(self):
