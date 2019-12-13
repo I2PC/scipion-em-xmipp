@@ -32,7 +32,7 @@ from pyworkflow.em.protocol import ProtAnalysis3D
 from pyworkflow.protocol.params import PointerParam, EnumParam, IntParam
 from pyworkflow.utils import importFromPlugin
 SetOfTomograms = importFromPlugin("tomo.objects", "SetOfTomograms")
-
+import xmippLib
 
 class XmippProtSubtomoProject(ProtAnalysis3D):
     """
@@ -70,6 +70,7 @@ class XmippProtSubtomoProject(ProtAnalysis3D):
             cropParam = 0
 
         dir = self.dirParam.get()
+        projs = self._createSetOfImages()
 
         for item in input.iterItems():
             vol = Volume()
@@ -78,27 +79,51 @@ class XmippProtSubtomoProject(ProtAnalysis3D):
             vol = ImageHandler().read(vol.getLocation())
             volData = vol.getData()
             proj = np.empty([x, y])
+            img = ImageHandler().createImage()
+            fnProj = self._getExtraPath("projection%d.stk" % idx)
+            xmippLib.createEmptyFile(fnProj, x, y, z, 1)
 
-            if dir == 0:  # X
+            if dir == 0:
                 volData = volData[:, :, x/2-cropParam:x/2+cropParam]
                 for zi in range(z):
                     for yi in range(y):
-                        proj[zi][yi] = sum(volData[zi, yi, :])
+                        proj[zi][yi] = np.sum(volData[zi, yi, :])  # = 0 ALWAYS!!!!
+                img.setData(proj)
+                img.write(fnProj)
 
-            elif dir == 1:  # Y
+
+            elif dir == 1:
                 volData = volData[:, x / 2 - cropParam:x / 2 + cropParam, :]
                 for zi in range(z):
                     for xi in range(x):
-                        proj[zi][xi] = sum(volData[zi, :, xi])
+                        proj[zi][xi] = np.sum(volData[zi, :, xi])  # = 0 ALWAYS!!!!
+                img.setData(proj)
+                img.write(fnProj)
 
-            else:       # Z
+            else:
                 volData = volData[x / 2 - cropParam:x / 2 + cropParam, :, :]
                 for xi in range(x):
                     for yi in range(y):
-                        proj[xi][yi] = np.sum(volData[:, yi, xi])
+                        proj[xi][yi] = np.sum(volData[:, yi, xi], axis=0)  # = 0 ALWAYS!!!!
+                img.setData(proj)
+                img.write(fnProj)
+
 
     def createOutputStep(self):
-        pass
+        input = self.input.get()
+        imgSetOut = self._createSetOfAverages()
+        imgSetOut.setSamplingRate(input.getSamplingRate())
+        imgSetOut.setAlignmentProj()
+        for item in input.iterItems():
+            idx = item.getObjId()
+            fnProj = self._getExtraPath("projection%d.stk" % idx)
+            p = Image()
+            p.setLocation(fnProj)
+            imgSetOut.append(p)
+
+        imgSetOut.setObjComment(self.getSummary(imgSetOut))
+        self._defineOutputs(outputReprojections=imgSetOut)
+        self._defineSourceRelation(self.input, imgSetOut)
 
 # --------------------------- INFO functions ------------------------------
     def _methods(self):
