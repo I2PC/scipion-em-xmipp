@@ -32,14 +32,13 @@ from pyworkflow.em.protocol import ProtAnalysis3D
 from pyworkflow.protocol.params import PointerParam, EnumParam, IntParam
 from pyworkflow.utils import importFromPlugin
 SetOfTomograms = importFromPlugin("tomo.objects", "SetOfTomograms")
-import xmippLib
 
 
-class XmippProtProjectZ(ProtAnalysis3D):
+class XmippProtSubtomoProject(ProtAnalysis3D):
     """
     Project a set of volumes or subtomograms to obtain their X, Y or Z projection of the desired range of slices.
     """
-    _label = 'Projection'
+    _label = 'subtomo projection'
 
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
@@ -80,27 +79,23 @@ class XmippProtProjectZ(ProtAnalysis3D):
             volData = vol.getData()
             proj = np.empty([x, y])
 
-            np.savetxt(self._getExtraPath('volData'), volData)
-
             if dir == 0:  # X
-                volData = volData[:, :, :, x/2-cropParam:x/2+cropParam]
+                volData = volData[:, :, x/2-cropParam:x/2+cropParam]
                 for zi in range(z):
                     for yi in range(y):
-                        proj[zi][yi] = sum(volData[:, zi, yi, :])
+                        proj[zi][yi] = sum(volData[zi, yi, :])
 
             elif dir == 1:  # Y
-                volData = volData[:, :, x / 2 - cropParam:x / 2 + cropParam, :]
+                volData = volData[:, x / 2 - cropParam:x / 2 + cropParam, :]
                 for zi in range(z):
                     for xi in range(x):
-                        proj[zi][xi] = sum(volData[:, zi, :, xi])
+                        proj[zi][xi] = sum(volData[zi, :, xi])
 
             else:       # Z
-                volData = volData[:, x / 2 - cropParam:x / 2 + cropParam, :, :]
+                volData = volData[x / 2 - cropParam:x / 2 + cropParam, :, :]
                 for xi in range(x):
                     for yi in range(y):
-                        proj[xi][yi] = np.sum(volData[:, :, yi, xi], axis=1)
-
-            print(proj.size())
+                        proj[xi][yi] = np.sum(volData[:, yi, xi])
 
     def createOutputStep(self):
         pass
