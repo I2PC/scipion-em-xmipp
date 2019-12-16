@@ -42,6 +42,8 @@ from pyworkflow.utils import getFiles, removeBaseExt, moveFile
 
 FN_PREFIX = 'consensusCoords_'
 
+PICK_MODE_LARGER = 0
+PICK_MODE_EQUAL = 1
 
 class XmippProtConsensusPicking(ProtParticlePicking):
     """
@@ -87,7 +89,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                            "by all algorithms: *AND* operation.\n"
                            "*Set to 1* to indicate that it suffices that only "
                            "1 algorithm selects the particle: *OR* operation.")
-        form.addParam('mode', params.EnumParam, label='Consensus mode', choices=['>=','='], default=0,
+        form.addParam('mode', params.EnumParam, label='Consensus mode', choices=['>=','='], default=PICK_MODE_LARGER,
                       help='Number of votes to progress to the output')
 
         # FIXME: It's not using more than one since
@@ -345,7 +347,7 @@ def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn, mode):
         consensus = Ninputs
     else:
         consensus = consensus.get()
-    if mode==0:
+    if mode==PICK_MODE_LARGER:
         consensusCoords = allCoords[votes >= consensus, :]
     else:
         consensusCoords = allCoords[votes == consensus, :]
