@@ -1647,7 +1647,7 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
     # values might refer to different movie, e.g. no of frames :(
     firstFrame, _, frameIndex = movie.getFramesRange() # info from the movie set
     _, _ , lastFrame = movie.getDim() # actual no. of frame in the current movie
-
+    lastFrame += 1 # (convert no. of frames to index, one-initiated)
     if lastFrame == 0:
         # this condition is for old SetOfMovies, that has lastFrame = 0.
         frames = movie.getNumberOfFrames()
@@ -1665,9 +1665,8 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
         if alignment is None:
             raise Exception("Can not write alignment for movie. ")
         a0, aN = alignment.getRange()
-        if (firstFrame, lastFrame) != (a0, aN):
-            raise Exception("Mismatch between alignment frames range and "
-                            "movie frames range. ")
+        if a0 < firstFrame or aN > lastFrame:
+            raise Exception("Trying to write frames which have not been aligned.")
         shiftListX, shiftListY = alignment.getShifts()
 
     row = md.Row()

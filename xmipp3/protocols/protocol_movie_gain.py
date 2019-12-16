@@ -134,9 +134,10 @@ class XmippProtMovieGain(ProtProcessMovies):
 
             # For each movie insert the step to process it
             for movie in self.inputMovies.get():
-                stepId = self._insertMovieStep(movie)
-                deps.append(stepId)
-                insertedDict[movie.getObjId()] = stepId
+                if movie.getObjId() not in insertedDict:
+                    stepId = self._insertMovieStep(movie)
+                    deps.append(stepId)
+                    insertedDict[movie.getObjId()] = stepId
         return deps
 
     def estimateOrientationStep(self, movieDict):
@@ -435,17 +436,16 @@ class XmippProtMovieGain(ProtProcessMovies):
     # --------------------------- INFO functions -------------------------------
     def _validate(self):
         errors = []
-        if self.estimateOrientation.get() and self.getInputGain() is None:
+        if self.estimateOrientation.get() and not self.getInputGain():
             errors.append("Experimental gain needed to estimate its proper "
                          "orientation.")
-        if self.normalizeGain.get() and self.getInputGain() is None:
+        if self.normalizeGain.get() and not self.getInputGain():
             errors.append("Experimental gain needed to normalize it.")
         if errors:
             errors.append("An experimental gain can be associated with a "
                           "setOfMovies during its importing protocol. "
                           "Otherwise, no gain reorientation nor "
                           "gain normalization can be performed.")
-
         return errors
     
     def _summary(self):
