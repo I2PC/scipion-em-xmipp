@@ -62,15 +62,9 @@ class XmippProtSubtomoProject(ProtAnalysis3D):
     def projectZStep(self):
         input = self.input.get()
         x, y, z = input.getDim()
-        n = input.getSize()
-
+        dir = self.dirParam.get()
         if self.rangeParam.get() == 1:
             cropParam = self.cropParam.get()
-        else:
-            cropParam = 0
-
-        dir = self.dirParam.get()
-        projs = self._createSetOfImages()
 
         for item in input.iterItems():
             vol = Volume()
@@ -82,32 +76,26 @@ class XmippProtSubtomoProject(ProtAnalysis3D):
             img = ImageHandler().createImage()
             fnProj = self._getExtraPath("projection%d.stk" % idx)
             xmippLib.createEmptyFile(fnProj, x, y, z, 1)
-
             if dir == 0:
-                volData = volData[:, :, x/2-cropParam:x/2+cropParam]
+                if self.rangeParam.get() == 1:
+                    volData = volData[:, :, (x/2-cropParam):(x/2+cropParam):1]
                 for zi in range(z):
                     for yi in range(y):
-                        proj[zi][yi] = np.sum(volData[zi, yi, :])  # = 0 ALWAYS!!!!
-                img.setData(proj)
-                img.write(fnProj)
-
-
+                        proj[zi, yi] = np.sum(volData[zi, yi, :])
             elif dir == 1:
-                volData = volData[:, x / 2 - cropParam:x / 2 + cropParam, :]
+                if self.rangeParam.get() == 1:
+                    volData = volData[:, (x/2-cropParam):(x/2+cropParam):1, :]
                 for zi in range(z):
                     for xi in range(x):
-                        proj[zi][xi] = np.sum(volData[zi, :, xi])  # = 0 ALWAYS!!!!
-                img.setData(proj)
-                img.write(fnProj)
-
+                        proj[zi, xi] = np.sum(volData[zi, :, xi])
             else:
-                volData = volData[x / 2 - cropParam:x / 2 + cropParam, :, :]
+                if self.rangeParam.get() == 1:
+                    volData = volData[(x/2-cropParam):(x/2+cropParam):1, :, :]
                 for xi in range(x):
                     for yi in range(y):
-                        proj[xi][yi] = np.sum(volData[:, yi, xi], axis=0)  # = 0 ALWAYS!!!!
-                img.setData(proj)
-                img.write(fnProj)
-
+                        proj[xi, yi] = np.sum(volData[:, yi, xi])
+            img.setData(proj)
+            img.write(fnProj)
 
     def createOutputStep(self):
         input = self.input.get()
@@ -122,7 +110,7 @@ class XmippProtSubtomoProject(ProtAnalysis3D):
             imgSetOut.append(p)
 
         imgSetOut.setObjComment(self.getSummary(imgSetOut))
-        self._defineOutputs(outputReprojections=imgSetOut)
+        self._defineOutputs(outputProjections=imgSetOut)
         self._defineSourceRelation(self.input, imgSetOut)
 
 # --------------------------- INFO functions ------------------------------
@@ -143,5 +131,5 @@ class XmippProtSubtomoProject(ProtAnalysis3D):
 
     def getSummary(self, imgSetOut):
         summary = []
-        summary.append("\n   -Number of projections generated: %s" % imgSetOut.getSize())
+        summary.append("Number of projections generated: %s" % imgSetOut.getSize())
         return "\n".join(summary)
