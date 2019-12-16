@@ -90,7 +90,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                            ' - *by frame or movie*: Rejects movies if one of '
                                     'the conditions above are met.')
 
-        form.addParam('maxFrameShift', params.FloatParam, default=10,
+        form.addParam('maxFrameShift', params.FloatParam, default=5,
                        label='Max. frame shift (A)',
                        condition='rejType==%s or rejType==%s or rejType==%s'
                                   % (self.REJ_FRAME, self.REJ_AND, self.REJ_OR),
@@ -376,12 +376,16 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         return errors
 
     def _summary(self):
-        moviesAcc = 0 if not self.hasAttribute('outputMovies') else \
-                    self.outputMovies.getSize()
-        moviesDisc = 0 if not self.hasAttribute('outputMoviesDiscarded') else \
-                    self.outputMoviesDiscarded.getSize()
+        def getSize(outNameCondition):
+            for outName, outObj in self.iterOutputAttributes():
+                if outNameCondition(outName):
+                    return outObj.getSize()
+            return 0
 
-        summary = ['Movies processed: %d'%(moviesAcc+moviesDisc)]
-        summary.append('Movies rejected: *%d*' % moviesDisc)
+        moviesAcc = getSize(lambda x: not x.endswith('Discarded'))
+        outDisc = getSize(lambda x: x.endswith('Discarded'))
+
+        summary = ['Movies processed: %d' % (moviesAcc+outDisc),
+                   'Movies rejected: *%d*' % outDisc]
 
         return summary

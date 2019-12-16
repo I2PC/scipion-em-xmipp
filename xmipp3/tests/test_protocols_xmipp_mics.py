@@ -362,6 +362,8 @@ class TestXmippDeepMicrographsCleaner(BaseTest):
                               folder='relion13_tutorial',
                               files={'mics': 'betagal/Micrographs/*mrc',
                                      'coords': 'betagal/PrecalculatedResults/Micrographs/*autopick.star'})
+        cls.dsRelion = DataSet.getDataSet('relion13_tutorial')
+
         micsFn = cls.dataset.getFile('mics')
         coordsDir = cls.dataset.getFile('coords')
 
