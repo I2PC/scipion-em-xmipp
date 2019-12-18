@@ -35,7 +35,7 @@ from pwem.objects import Volume
 import numpy as np
 import os
 import pwem.metadata as md
-from pwem.metadata.constants import (MDL_COST, MDL_ITER, MDL_SCALE)
+from pwem.metadata.constants2 import (MDL_COST, MDL_ITER, MDL_SCALE)
 from ntpath import dirname
 from os.path import exists
 
