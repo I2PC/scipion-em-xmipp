@@ -950,11 +950,12 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         return prot2
 
     def testRemoveDuplicates(self):
-        protDupl = self.newProtocol(XmippProtPickingRemoveDuplicates)
+        protDupl = self.newProtocol(XmippProtPickingRemoveDuplicates,
+                                    consensusRadius=110)
         protDupl.inputCoordinates.set(self.protFaPi.outputCoordinates)
         self.launchProtocol(protDupl)
         self.assertTrue(protDupl.isFinished(), "Consensus failed")
-        self.assertTrue(protDupl.outputCoordinates.getSize() == 403,
+        self.assertTrue(protDupl.outputCoordinates.getSize() == 241,
                         "Output coordinates size does not is wrong.")
 
 
@@ -965,7 +966,9 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         protAutomaticPP.micsToPick.set(1)
         self.proj.launchProtocol(protAutomaticPP, wait=True)
 
-        protCons1 = self.newProtocol(XmippProtConsensusPicking)
+        # NON streaming tests
+        protCons1 = self.newProtocol(XmippProtConsensusPicking,
+                                     objLabel="Xmipp - consensus pick AND")
         protCons1.inputCoordinates.set([self.protFaPi.outputCoordinates,
                                         protAutomaticPP.outputCoordinates])
         self.launchProtocol(protCons1)
@@ -975,6 +978,7 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
                         "Output coordinates size does not is wrong.")
 
         protConsOr = self.newProtocol(XmippProtConsensusPicking,
+                                      objLabel="Xmipp - consensus pick OR",
                                       consensus=1)
         protConsOr.inputCoordinates.set(
             [Pointer(self.protFaPi, extended="outputCoordinates"),
@@ -985,6 +989,19 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         self.assertTrue(protConsOr.consensusCoordinates.getSize() == 422,
                         "Output coordinates size does not is wrong.")
 
+
+        # STREAMING tests
+        def waitForOutput(prot, output, timeout=600):
+            """ Waits until the output is ready
+                or till timeout (in seconds) is reached (10min by default).
+            """
+            count = 0
+            while not prot.hasAttribute(output) and count < timeout:
+                prot = self._updateProtocol(prot)
+                time.sleep(1)
+                count += 1
+            return prot
+
         kwargs = {'nDim': 3,  # 3 objects
                   'creationInterval': 20,  # wait 1 sec. after creation
                   'setof': 1,  # create SetOfMicrographs
@@ -994,28 +1011,38 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         protStream = self.newProtocol(ProtCreateStreamData, **kwargs)
         self.proj.launchProtocol(protStream, wait=False)
 
-        while not protStream.hasAttribute('outputMicrographs'):
-            time.sleep(1)
-            protStream = self._updateProtocol(protStream)
+        protStream = waitForOutput(protStream, 'outputMicrographs')
 
         protAutoPP = XmippParticlePickingAutomatic()
         protAutoPP.xmippParticlePicking.set(self.protFaPi)
         protAutoPP.micsToPick.set(1)
         protAutoPP.inputMicrographs.set(protStream.outputMicrographs)
         self.proj.launchProtocol(protAutoPP, wait=False)
+        protAutoPP = waitForOutput(protAutoPP, 'outputCoordinates')
 
-        while not protAutoPP.hasAttribute('outputCoordinates'):
-            time.sleep(1)
-            protAutoPP = self._updateProtocol(protAutoPP)
-
-        protCons2 = self.newProtocol(XmippProtConsensusPicking)
+        # Consensus Picking launching
+        protCons2 = self.newProtocol(XmippProtConsensusPicking,
+                                     objLabel="Xmipp - consensus pick streaming")
         protCons2.inputCoordinates.set(
             [Pointer(self.protFaPi, extended="outputCoordinates"),
              Pointer(protAutoPP, extended="outputCoordinates")])
-        self.launchProtocol(protCons2)
-        self.assertTrue(protCons2.isFinished(), "Consensus failed")
+        self.proj.launchProtocol(protCons2, wait=False)
+
+        # Remove Duplicates launching
+        protDupl2 = self.newProtocol(XmippProtPickingRemoveDuplicates,
+                                     objLabel="Xmipp - remove duplicates streaming",
+                                     consensusRadius=110)
+        protDupl2.inputCoordinates.set(protAutoPP.outputCoordinates)
+        self.proj.launchProtocol(protDupl2, wait=True)  # don't wait to make the final checks
+
+        time.sleep(3)  # protDupl2 should be as long as protCons2, but just in case
+        protCons2 = self._updateProtocol(protCons2)
         self.assertTrue(protCons2.consensusCoordinates.getSize() == 390,
                         "Output coordinates size does not is wrong.")
+        protDupl2 = self._updateProtocol(protDupl2)
+        self.assertTrue(protDupl2.outputCoordinates.getSize() == 249,
+                        "Output coordinates size does not is wrong.")
+
 
     # Sorting particles is not possible in streaming mode. Thus, all params
     # related with was removed from extract particle protocol. There exists
