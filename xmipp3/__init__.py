@@ -29,8 +29,8 @@
 import subprocess
 from datetime import datetime
 
+from pyworkflow import Config
 import pyworkflow.plugin
-
 import pyworkflow.utils as pwutils
 
 from .base import *
@@ -63,6 +63,9 @@ class Plugin(pyworkflow.plugin.Plugin):
             'PYTHONPATH': getXmippPath('pylib')
         }, position=pos)
 
+        # Add path to python lib folder
+        environ.addLibrary(Config.getPythonLibFolder())
+        
         # environ variables are strings not booleans
         if os.environ.get('CUDA', 'False') != 'False':
             environ.update({
@@ -122,14 +125,14 @@ class Plugin(pyworkflow.plugin.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
-        scons = tryAddPipModule(env, 'scons', '3.0.4')
+        scons = tryAddPipModule(env, 'scons', '3.1.2')
         joblib = tryAddPipModule(env, 'joblib', '0.11', target='joblib*')
 
         # scikit
-        scipy = tryAddPipModule(env, 'scipy', '0.16.0', default=True)
-        cython = tryAddPipModule(env, 'cython', '0.22', target='Cython-0.22*',
+        scipy = tryAddPipModule(env, 'scipy', '1.4.1', default=True)
+        cython = tryAddPipModule(env, 'cython', '0.29.14', target='Cython-0.29*',
                                  default=True)
-        scikit_learn = tryAddPipModule(env, 'scikit-learn', '0.19.1',
+        scikit_learn = tryAddPipModule(env, 'scikit-learn', '0.22',
                                        target='scikit_learn*',
                                        default=True)
 

@@ -458,7 +458,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
         if os.path.exists(setFile):
             outputSet = SetClass(filename=setFile)
-            if (outputSet.__len__() is 0):
+            if (outputSet.__len__() == 0):
                 pwutils.path.cleanPath(setFile)
 
         if os.path.exists(setFile):

@@ -630,14 +630,14 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
         listNewNumImages = [-1] * len(listNumImgs)
         count = 1
         for i in range(len(listNumImgs)):
-            if listNumImgs[i] is not -1:
+            if listNumImgs[i] != -1:
                 listNewNumImages[i] = count
                 count += 1
 
         # Construct the new classes with the renumerated old classes
         mdNewClasses = md.MetaData()
         for i in range(len(listNumImgs)):
-            if listNumImgs[i] is not -1:
+            if listNumImgs[i] != -1:
                 name = listNameImgs[i]
                 fn = name[name.find('@') + 1:-4] + '.xmd'
                 numRef = int(name[0:6])
@@ -664,7 +664,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
         # Generate the intermediate images and the blocks of the intermediate
         # classes for the unchanged classes
         for i in range(len(listNumImgs)):
-            if listNumImgs[i] is not -1:
+            if listNumImgs[i] != -1:
                 name = listNameImgs[i]
                 fn = name[name.find('@') + 1:-4] + '.xmd'
                 numRef = int(name[0:6])

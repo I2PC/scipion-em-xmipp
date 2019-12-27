@@ -329,7 +329,7 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
         return colors
     
     def getColorMap(self):
-        if (COLOR_CHOICES[self.colorMap.get()] is 'other'): 
+        if (COLOR_CHOICES[self.colorMap.get()] == 'other'):
             cmap = cm.get_cmap(self.otherColorMap.get())
         else:
             cmap = cm.get_cmap(COLOR_CHOICES[self.colorMap.get()])
