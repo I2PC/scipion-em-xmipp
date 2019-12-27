@@ -49,39 +49,46 @@ class XmippProtNMABase(EMProtocol):
     def _defineParamsCommon(self, form):
         form.addParam('numberOfModes', IntParam, default=20,
                       label='Number of modes',
-                      help='The maximum number of modes allowed by the method for \n'
-                           'atomic normal mode analysis is 6 times the number of  \n'
-                           'RTB blocks and for pseudoatomic normal mode analysis 3\n'
-                           'times the number of pseudoatoms. However, the protocol\n'
-                           'allows only up to 200 modes as 20-100 modes are usually\n'
-                           'enough. The number of modes given here should be below \n'
+                      help='The maximum number of modes allowed by the method for '
+                           'atomic normal mode analysis is 6 times the number of '
+                           'RTB blocks and for pseudoatomic normal mode analysis 3 '
+                           'times the number of pseudoatoms. However, the protocol '
+                           'allows only up to 200 modes as 20-100 modes are usually '
+                           'enough. The number of modes given here should be below '
                            'the minimum between these two numbers.')
         form.addParam('cutoffMode', EnumParam, choices=['absolute', 'relative'],
                       default=NMA_CUTOFF_REL,
                       label='Cut-off mode',
-                      help='Absolute distance allows specifying the maximum distance (in Angstroms) for which it\n'
-                           'is considered that two atoms are connected. '
-                           'Relative distance allows to specify this distance\n'
-                           'as a percentile of all the distances between an atom and its nearest neighbors.')
+                      help='The cut-off mode can be Absolute or Relative. \n'
+			   'Absolute distance allows specifying the maximum distance (in Angstroms) for which it '
+                           'is considered that two atoms or pseudoatoms are connected. '
+                           'Relative distance allows to specify this distance '
+                           'as a percentile of all the distances between ' 
+			   'an atom or a pseudoatom and its nearest neighbors. \n'
+			   'For pseudoatoms, the Relative cut-off mode is recommened.')
         form.addParam('rc', FloatParam, default=8,
                       label="Cut-off distance (A)", condition='cutoffMode==%d' % NMA_CUTOFF_ABS,
-                      help='Atoms or pseudoatoms beyond this distance will not interact.')
+                      help='Atoms or pseudoatoms beyond this distance will not interact. \n'
+			   'For atoms, the distance of 8 Angstroms can work in majority of cases. \n'
+			   'For pseudoatoms, it is recommended to use Relative as the cut-off mode, together with '
+			   'the Cut-off percentage parameter so that the distance can be computed automatically.')
         form.addParam('rcPercentage', FloatParam, default=95,
                       label="Cut-off percentage", condition='cutoffMode==%d' % NMA_CUTOFF_REL,
-                      help='The interaction cutoff distance is calculated as the distance\n'
-                           'below which is this percentage of interatomic or interpseudoatomic\n'
-                           'distances. \n'
-                           'Atoms or pseudoatoms beyond this distance will not interact.')
+                      help='The parameter used to compute the interaction cutoff distance automatically. \n'
+			   'The interaction cutoff distance is calculated as the distance below which is '
+			   'the percentage of interatomic or interpseudoatomic distances given by this parameter. \n'
+                           'Atoms or pseudoatoms beyond the interaction cutoff distance will not interact. \n'
+			   'For pseudoatoms, this is the recommended way to compute the interaction cutoff distance, '
+			   'obtained via the Relative cut-off mode.')
         form.addParam('collectivityThreshold', FloatParam, default=0.15,
                       label='Threshold on collectivity',
-                      help='Collectivity degree is related to the number of atoms or \n'
-                           'pseudoatoms that are affected by the mode, and it is normalized\n'
-                           'between 0 and 1. Modes below this threshold are deselected in  \n'
-                           'the modes metadata file. Set to 0 for no deselection. You can  \n'
-                           'always modify the selection manually after the modes metadata  \n'
-                           'file is created. The modes metadata file can be used with      \n'
-                           'Flexible fitting protocol. Modes 1-6 are always deselected as  \n'
-                           'they are related to rigid-body movements.')
+                      help='Collectivity degree is related to the number of atoms or pseudoatoms that are affected by '
+			   'the mode, and it is normalized between 0 and 1. Modes below this threshold are deselected in '
+                           'the modes metadata file, which means these modes are much less collective. \n'
+			   'For no deselection, this parameter should be set to 0 . \n'
+			   'Modes 1-6 are always deselected as they are related to rigid-body movements. \n'
+			   'The modes metadata file can be used to see which modes are more collective '
+			   'in order to decide which modes to use at the image analysis step.')
 
     def _printWarnings(self, *lines):
         """ Print some warning lines to 'warnings.xmd', 

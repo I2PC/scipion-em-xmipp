@@ -42,6 +42,8 @@ from pyworkflow.utils import getFiles, removeBaseExt, moveFile
 
 FN_PREFIX = 'consensusCoords_'
 
+PICK_MODE_LARGER = 0
+PICK_MODE_EQUAL = 1
 
 class XmippProtConsensusPicking(ProtParticlePicking):
     """
@@ -73,7 +75,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         form.addSection(label='Input')
         form.addParam('inputCoordinates', params.MultiPointerParam,
                       pointerClass='SetOfCoordinates',
-                      label="Input coordinates",
+                      label="Input coordinates", important=True,
                       help='Select the set of coordinates to compare')
         form.addParam('consensusRadius', params.IntParam, default=10,
                       label="Radius",
@@ -87,6 +89,8 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                            "by all algorithms: *AND* operation.\n"
                            "*Set to 1* to indicate that it suffices that only "
                            "1 algorithm selects the particle: *OR* operation.")
+        form.addParam('mode', params.EnumParam, label='Consensus mode', choices=['>=','='], default=PICK_MODE_LARGER,
+                      help='Number of votes to progress to the output')
 
         # FIXME: It's not using more than one since
         #         self.stepsExecutionMode = STEPS_SERIAL
@@ -250,9 +254,26 @@ class XmippProtConsensusPicking(ProtParticlePicking):
 
         consensusWorker(coords, self.consensus, self.consensusRadius,
                         self._getTmpPath('%s%s.txt' % (FN_PREFIX, micId)),
-                        self._getExtraPath('jaccard.txt'))
+                        self._getExtraPath('jaccard.txt'), self.mode.get())
 
         self.processedMics.update([micId])
+
+    def _validate(self):
+
+        errors = []
+
+        # Only for Scipion 2.0, next versions should have the default
+        # PointerList validation and this can be removed
+        if len(self.inputCoordinates) == 0:
+                errors.append('inputCoordinates cannot be EMPTY.')
+        # Consider empty pointers:
+        else:
+            for pointer in self.inputCoordinates:
+                obj = pointer.get()
+                if obj is None:
+                    errors.append('%s is empty.' % obj)
+
+        return errors
 
     def _summary(self):
         message = []
@@ -267,7 +288,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         return []
 
 
-def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn):
+def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn, mode):
     """ Worker for calculate the consensus of N picking algorithms of
           M_n coordinates each one.
 
@@ -326,7 +347,11 @@ def consensusWorker(coords, consensus, consensusRadius, posFn, jaccFn):
         consensus = Ninputs
     else:
         consensus = consensus.get()
-    consensusCoords = allCoords[votes >= consensus, :]
+    if mode==PICK_MODE_LARGER:
+        consensusCoords = allCoords[votes >= consensus, :]
+    else:
+        consensusCoords = allCoords[votes == consensus, :]
+
     try:
         jaccardIdx = float(len(consensusCoords)) / (
                 float(len(allCoords)) / Ninputs)

@@ -490,7 +490,10 @@ class TestEstimateGain(BaseTest):
 
     def test_estimate(self):
         protGain = self.newProtocol(XmippProtMovieGain,
-                                    objLabel='estimate gain')
+                                    objLabel='estimate gain',
+                                    useExistingGainImage=False,
+                                    estimateOrientation=False,
+                                    normalizeGain=False)
         protGain.inputMovies.set(self.protImport.outputMovies)
         protGain.useExistingGainImage.set(False)
         self.launchProtocol(protGain)

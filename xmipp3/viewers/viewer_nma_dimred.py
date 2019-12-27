@@ -32,6 +32,9 @@ visualization program.
 from os.path import basename, join, exists
 import numpy as np
 
+from pyworkflow.em.convert.atom_struct import cifToPdb
+from pyworkflow.utils import replaceBaseExt
+
 from pyworkflow.utils.path import cleanPath, makePath, cleanPattern
 from pyworkflow.viewer import (ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO)
 from pyworkflow.protocol.params import StringParam, LabelParam
@@ -65,22 +68,22 @@ class XmippDimredNMAViewer(ProtocolViewer):
     def _defineParams(self, form):
         form.addSection(label='Visualization')
         form.addParam('displayRawDeformation', StringParam, default='1',
-                      label='Display raw deformation',
-                      help='Type 1 to see the histogram of raw deformation number 1; \n'
-                           'type 2 to see the histogram of raw deformation number 2, etc.\n'
-                           'Type 1 2 to see the 2D plot of raw deformations number 1 vs 2.\n'
-                           'Type 1 2 3 to see the 3D plot of raw deformations 1, 2 and 3; etc.'
+                      label='Display normal-mode amplitudes in the low-dimensional space',
+                      help='Type 1 to see the histogram of normal-mode amplitudes in the low-dimensional space, using axis 1; \n'
+                           'type 2 to see the histogram of normal-mode amplitudes in the low-dimensional space, using axis 2; etc. \n'
+                           'Type 1 2 to see normal-mode amplitudes in the low-dimensional space, using axes 1 and 2; \n'
+                           'type 1 2 3 to see normal-mode amplitudes in the low-dimensional space, using axes 1, 2, and 3; etc.'
                            )
         
         form.addParam('displayClustering', LabelParam,
                       label='Open clustering tool?',
-                      help='Open a GUI to visualize the images as points'
-                           'and select some of them to create new clusters.')
+                      help='Open a GUI to visualize the images as points '
+                           'and select some of them to create clusters, and compute the 3D reconstructions from the clusters.')
          
         form.addParam('displayTrajectories', LabelParam,
                       label='Open trajectories tool?',
-                      help='Open a GUI to visualize the images as points'
-                           'to draw and ajust trajectories.')       
+                      help='Open a GUI to visualize the images as points, '
+                           'draw and ajust trajectories, and animate them.')       
         
     def _getVisualizeDict(self):
         return {'displayRawDeformation': self._viewRawDeformation,
@@ -100,7 +103,7 @@ class XmippDimredNMAViewer(ProtocolViewer):
         
         if dim > 0:
             modeList = [m - 1 for m in components]
-            modeNameList = ['Mode %d' % m for m in components]
+            modeNameList = ['Axis %d' % m for m in components]
             missingList = []
                     
             if missingList:
@@ -111,17 +114,17 @@ class XmippDimredNMAViewer(ProtocolViewer):
             plotter = XmippNmaPlotter(data=self.getData())
             baseList = [basename(n) for n in modeNameList]
             
+	    self.getData().XIND = modeList[0]
             if dim == 1:
-                self.getData().XIND = modeList[0]
-                plotter.plotArray1D("Histogram for %s" % baseList[0], 
-                                    "Deformation value", "Number of images")
+                plotter.plotArray1D("Histogram of normal-mode amplitudes in low-dimensional space: %s" % baseList[0], 
+                                    "Amplitude", "Number of images")
             else:
                 self.getData().YIND = modeList[1]
                 if dim == 2:
-                    plotter.plotArray2D("%s vs %s" % tuple(baseList), *baseList)
+                    plotter.plotArray2D("Normal-mode amplitudes in low-dimensional space: %s vs %s" % tuple(baseList), *baseList)
                 elif dim == 3:
                     self.getData().ZIND = modeList[2]
-                    plotter.plotArray3D("%s %s %s" % tuple(baseList), *baseList)
+                    plotter.plotArray3D("Normal-mode amplitudes in low-dimensional space: %s %s %s" % tuple(baseList), *baseList)
             views.append(plotter)
             
         return views
@@ -167,7 +170,7 @@ class XmippDimredNMAViewer(ProtocolViewer):
         partSet.write()
         partSet.close()
                 
-        from ..protocols.protocol_batch_cluster import BatchProtNMACluster
+        from xmipp3.protocols.nma.protocol_batch_cluster import BatchProtNMACluster
         newProt = project.newProtocol(BatchProtNMACluster)
         clusterName = self.clusterWindow.getClusterName()
         if clusterName:
@@ -240,6 +243,12 @@ class XmippDimredNMAViewer(ProtocolViewer):
         pdb = prot.getInputPdb()
         pdbFile = pdb.getFileName()
         
+        structureEM = prot.getInputPdb().getPseudoAtoms()
+        if not structureEM:
+             localFn = replaceBaseExt(basename(pdbFile),'pdb')
+             cifToPdb(pdbFile, localFn)
+             pdbFile = basename(localFn)
+
         modesFn = prot.inputNMA.get()._getExtraPath('modes.xmd')
         
         for i, d in enumerate(deformations):

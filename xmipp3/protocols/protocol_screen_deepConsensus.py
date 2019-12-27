@@ -139,6 +139,12 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                       help="All coordinates within this radius "
                            "(as fraction of particle size) "
                            "are presumed to correspond to the same particle")
+        form.addParam('threshold', params.FloatParam, default=0.5,
+                      label='Tolerance threshold',
+                      expertLevel=params.LEVEL_ADVANCED,
+                      help='The method attach a score between 0 and 1, where 0 '
+                           'if for _bad_ particles and 1 for _good_ ones. '
+                           'Introduce -1 to let pass all for posterior inspection.')
 
         form.addSection(label='Preprocess')
         form.addParam('notePreprocess', params.LabelParam,
@@ -522,8 +528,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           makePath(tmpPosDir)
           writeSetOfCoordinates(tmpPosDir, coordinatesP.get(), scale=float(Tm[coord_num])/float(Tm[0]))
           for posFname in os.listdir(tmpPosDir):
-              baseName = pwutils.removeBaseExt(posFname)
-              extension = pwutils.getExt(posFname)
+              baseName, extension=os.path.splitext(os.path.basename(posFname))
               if extension==".pos":
                 if baseName not in inputCoordsFnames:
                     inputCoordsFnames[baseName]=["None"]*nCoordsSets
@@ -915,7 +920,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             setattr(coord, deepZscoreLabel, getattr(part, deepZscoreLabel))
             part = part.clone()
             part.scaleCoordinate(downFactor)
-            coordSet.append(coord)
+            if (self.threshold.get() < 0 or
+                    getattr(part, deepZscoreLabel) > self.threshold.get()):
+                coordSet.append(coord)
             parSetCorrected.append(part)
             
         coordSet.write()

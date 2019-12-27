@@ -31,6 +31,9 @@
 
 from os.path import basename
 
+from pyworkflow.em.convert.atom_struct import cifToPdb
+from pyworkflow.utils import replaceBaseExt
+
 from pyworkflow.utils import isPower2, getListFromRangeString
 from pyworkflow.utils.path import copyFile, cleanPath 
 import pyworkflow.protocol.params as params
@@ -60,47 +63,48 @@ class XmippProtAlignmentNMA(ProtAnalysis3D):
         form.addSection(label='Input')
         form.addParam('inputModes', params.PointerParam, pointerClass='SetOfNormalModes',
                       label="Normal modes",                        
-                      help='Set of normal modes to explore.')
+                      help='Set of modes computed by normal mode analysis.')
         form.addParam('modeList', NumericRangeParam, expertLevel=params.LEVEL_ADVANCED,
                       label="Modes selection",
-                      help='Select which modes do you want to use from all of them.\n'
-                           'If you leave the field empty, all modes will be used.\n'
-                           'You have several ways to specify selected modes.\n'
+                      help='Select the normal modes that will be used for image analysis. \n'
+                           'If you leave this field empty, all computed modes will be selected for image analysis.\n'
+                           'You have several ways to specify the modes.\n'
                            '   Examples:\n'
                            ' "7,8-10" -> [7,8,9,10]\n'
                            ' "8, 10, 12" -> [8,10,12]\n'
                            ' "8 9, 10-12" -> [8,9,10,11,12])\n')
         form.addParam('inputParticles', params.PointerParam, label="Input particles", 
                       pointerClass='SetOfParticles',
-                      help='Select the set of particles that you want to use for flexible analysis.')  
+                      help='Select the set of particles that will be analyzed using normal modes.')  
 
         form.addParam('copyDeformations', params.PathParam,
                       expertLevel=params.LEVEL_ADVANCED,
                       label='Precomputed results (for development)',
-                      help='Enter a metadata file with precomputed elastic  \n'
-                           'and rigid-body alignment parameters and perform \n'
+                      help='Only for tests during development. Enter a metadata file with precomputed elastic '
+                           'and rigid-body alignment parameters and perform '
                            'all remaining steps using this file.')
         
-        form.addSection(label='Angular assignment')
+        form.addSection(label='Combined elastic and rigid-body alignment')
         form.addParam('trustRegionScale', params.IntParam, default=1,
                       expertLevel=params.LEVEL_ADVANCED,
-                      label='Trust region scale',
-                      help='For elastic alignment, this parameter scales the initial \n'
-                           'value of the trust region radius for optimization purposes.\n'
-                           'Use larger values for larger expected deformation amplitudes.')    
+                      label='Elastic-alignment trust region scale',
+                      help='For elastic alignment, this parameter scales the initial '
+                           'value of the trust region radius of Powell optimization. '
+                           'The default value of 1 works in majority of cases. \n'
+			   'This value should not be changed except by expert users. '
+			   'Larger values (e.g., between 1 and 2) can be tried '
+			   'for larger expected amplitudes of conformational change.')    
         form.addParam('alignmentMethod', params.EnumParam, default=NMA_ALIGNMENT_WAV,
                       choices=['wavelets & splines', 'projection matching'],
-                      label='Alignment method',
-                      help='For rigid-body alignment, use Projection Matching (faster) instead\n'
-                           'of Wavelets and Splines (more accurate). In the case of Wavelets \n'
-                           'and Splines, the size of images should be a power of 2.')
+                      label='Rigid-body alignment method',
+                      help='For rigid-body alignment, Projection Matching method (faster) or '
+                           'Wavelets and Splines method (more accurate) can be used. In the case of Wavelets and Splines, '
+			   'the size of images should be a power of 2.')
         form.addParam('discreteAngularSampling', params.FloatParam, default=10,
                       label="Discrete angular sampling (deg)", 
-                      help='This parameter is used in Projection Matching and Wavelets methods\n'
-                           'for a rough rigid-body alignment. It is the angular step (in degrees)\n'
-                           'with which the library of reference projections is computed. This \n'
-                           'alignment is refined with Splines method if Wavelets and Splines \n'
-                           'alignment is chosen.')
+                      help='This is the angular step (in degrees) with which a library of reference projections '
+			   'is computed for rigid-body alignment in Projection Matching and Wavelets methods. \n'
+			   'This alignment is refined with Splines method when Wavelets and Splines alignment is chosen.')
                       
         form.addParallelSection(threads=0, mpi=8)    
     
@@ -114,8 +118,15 @@ class XmippProtAlignmentNMA(ProtAnalysis3D):
         atomsFn = self.getInputPdb().getFileName()
         # Define some outputs filenames
         self.imgsFn = self._getExtraPath('images.xmd') 
-        self.atomsFn = self._getExtraPath(basename(atomsFn))
         self.modesFn = self._getExtraPath('modes.xmd')
+        self.structureEM = self.inputModes.get().getPdb().getPseudoAtoms()
+        if self.structureEM:
+             self.atomsFn = self._getExtraPath(basename(atomsFn))
+             copyFile(atomsFn, self.atomsFn)
+        else:
+             localFn = self._getExtraPath(replaceBaseExt(basename(atomsFn),'pdb'))
+             cifToPdb(atomsFn, localFn)
+             self.atomsFn = self._getExtraPath(basename(localFn))
         
         self._insertFunctionStep('convertInputStep', atomsFn) 
         
@@ -135,8 +146,10 @@ class XmippProtAlignmentNMA(ProtAnalysis3D):
         # Write a metadata with the normal modes information
         # to launch the nma alignment programs
         writeSetOfParticles(self.inputParticles.get(), self.imgsFn)
-        # Copy the atoms file to current working dir
-        copyFile(atomsFn, self.atomsFn)
+        
+	# This is now done differently (see _insertAllSteps) and this line must be removed now
+	# Copy the atoms file to current working dir
+        #copyFile(atomsFn, self.atomsFn)
             
     def writeModesMetaData(self):
         """ Iterate over the input SetOfNormalModes and write

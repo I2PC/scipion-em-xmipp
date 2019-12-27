@@ -24,11 +24,12 @@
 # *
 # **************************************************************************
 
-from xmipp3.protocols.protocol_ctf_consensus import XmippProtCTFConsensus
-from pyworkflow.em.viewers import EmPlotter, ObjectView
-from pyworkflow.em.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE
+from pyworkflow.em.viewers import EmPlotter, ObjectView, MicrographsView, CtfView
+from pyworkflow.em.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER, ZOOM
 from pyworkflow.protocol.params import IntParam, LabelParam
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
+
+from xmipp3.protocols.protocol_ctf_consensus import XmippProtCTFConsensus
 
 
 class XmippCTFConsensusViewer(ProtocolViewer):
@@ -39,48 +40,88 @@ class XmippCTFConsensusViewer(ProtocolViewer):
     _label = 'viewer CTF Consensus'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
     _targets = [XmippProtCTFConsensus]
-    _memory = False
-    resolutionThresholdOLD = -1
-    # temporary metadata file with ctf that has some resolution greathan than X
-    tmpMetadataFile = 'viewersTmp.sqlite'
 
     def _defineParams(self, form):
         form.addSection(label='Visualization')
-        # group = form.addGroup('Overall results')
-        form.addParam('visualizePairs', LabelParam,
-                      label="Visualize ctf + max resolution.",
-                      help="""Reference CTF plus a new column with
-                      resolution up to which reference CTF and target
-                      reference are similar""")
-        form.addParam('visualizeHistogram', IntParam, default=10,
-                      label="Visualize Histogram (Bin size)",
-                      help="Histogram of the resolution at which two methods"
-                           " are equivalent")
+        group = form.addGroup('Valid CTFs')
+        group.addParam('visualizeCtfAccepted', LabelParam,
+                       label="Visualize CTFs + max resolution",
+                       help="Reference CTF plus a new column with "
+                            "resolution up to which reference CTF and target "
+                            "reference are similar.")
+        group.addParam('visualizeMicsAccepted', LabelParam,
+                       label="Visualize passed micrographs",
+                       help="Visualize those micrographs associated with "
+                            "the considered valid CTFs.")
+        group2 = form.addGroup('Discarded CTFs')
+        group2.addParam('visualizeCtfDiscarded', LabelParam,
+                        label="Visualize discarded CTFs",
+                        help="Reference CTF plus a new column with "
+                             "resolution up to which reference CTF and target "
+                             "reference are similar (for discarded CTFs)")
+        group2.addParam('visualizeMicsDiscarded', LabelParam,
+                        label="Visualize discarded micrographs",
+                        help="Visualize those micrographs associated with "
+                             "the discarded CTFs.")
+        if self.protocol.calculateConsensus.get():
+            form.addParam('justSpace', LabelParam, label="")
+            form.addParam('visualizeHistogram', IntParam, default=10,
+                          label="Visualize Histogram (Bin size)",
+                          help="Histogram of the resolution at which two methods"
+                               " are equivalent")
 
     def _getVisualizeDict(self):
         return {
-                 'visualizePairs': self._visualizePairs,
+                 'visualizeCtfAccepted': self._visualizeCtfAccepted,
+                 'visualizeMicsAccepted': self._visualizeMicsAccepted,
+                 'visualizeCtfDiscarded': self._visualizeCtfDiscarded,
+                 'visualizeMicsDiscarded': self._visualizeMicsDiscarded,
                  'visualizeHistogram': self._visualizeHistogram
                 }
 
-    def _visualizePairs(self, e=None):
+    def _visualizeCtfs(self, objName):
         views = []
 
         # display metadata with selected variables
-        labels = 'id enabled _psdFile _micObj_filename _resolution ' \
+        labels = 'id enabled %s _micObj_filename _resolution ' \
                  '_xmipp_consensus_resolution _xmipp_discrepancy_astigmatism' \
-                 ' _defocusU _defocusV _defocusAngle'
-        if hasattr(self.protocol, "outputCTF"):
+                 ' _defocusU _defocusV _defocusAngle' % ' '.join(CtfView.PSD_LABELS)
+        if self.protocol.hasAttribute(objName):
             views.append(ObjectView(
                 self._project, self.protocol.strId(),
-                self.protocol.outputCTF.getFileName(),
+                getattr(self.protocol, objName).getFileName(),
                 viewParams={MODE: MODE_MD, ORDER: labels, VISIBLE: labels}))
-        if hasattr(self.protocol, "outputCTFDiscarded"):
-            views.append(ObjectView(
-                self._project, self.protocol.strId(),
-                self.protocol.outputCTFDiscarded.getFileName(),
-                viewParams={MODE: MODE_MD, ORDER: labels, VISIBLE: labels}))
+        else:
+            self.infoMessage('%s does not have %s%s'
+                             % (self.protocol.getObjLabel(), objName, 
+                                getStringIfActive(self.protocol)),
+                             title='Info message').show()
         return views
+
+    def _visualizeMics(self, objName):
+        views = []
+
+        if self.protocol.hasAttribute(objName):
+            views.append(MicrographsView(self.getProject(),
+                                         getattr(self.protocol, objName)))
+        else:
+            self.infoMessage('%s does not have %s%s' 
+                             % (self.protocol.getObjLabel(), objName, 
+                                getStringIfActive(self.protocol)),
+                             title='Info message').show()
+        return views
+
+    def _visualizeCtfAccepted(self, e=None):
+        return self._visualizeCtfs("outputCTF")
+
+    def _visualizeCtfDiscarded(self, e=None):
+        return self._visualizeCtfs("outputCTFDiscarded")
+
+    def _visualizeMicsAccepted(self, e=None):
+        return self._visualizeMics("outputMicrographs")
+
+    def _visualizeMicsDiscarded(self, e=None):
+        return self._visualizeMics("outputMicrographsDiscarded")
 
     def _visualizeHistogram(self, e=None):
         views = []
@@ -107,3 +148,7 @@ class XmippCTFConsensusViewer(ProtocolViewer):
             plotter.plotHist(resolution, nbins=numberOfBins)
             views.append(plotter)
         return views
+    
+    
+def getStringIfActive(prot):
+    return ', yet.' if prot.isActive() else '.'
