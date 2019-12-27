@@ -46,12 +46,12 @@ class TestMonoTomoBase(BaseTest):
                                          samplingRate=samplingRate
                                          )
         cls.launchProtocol(cls.protImport)
-	cls.protResize = cls.newProtocol(XmippProtCropResizeVolumes,
+        cls.protResize = cls.newProtocol(XmippProtCropResizeVolumes,
                                         inputVolumes = cls.protImport.outputVolume,
 					doResize = True,
 					resizeOption = 2,
 					resizeFactor = 5)
-	cls.launchProtocol(cls.protResize)
+        cls.launchProtocol(cls.protResize)
         return cls.protResize
 
 class TestMonoTomo(TestMonoTomoBase):
