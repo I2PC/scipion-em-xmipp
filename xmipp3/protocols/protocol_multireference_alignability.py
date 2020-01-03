@@ -34,7 +34,7 @@ from pyworkflow.em.data import Volume
 from pyworkflow.em import Viewer
 import pyworkflow.em.metadata as md
 from pyworkflow.em.protocol import ProtAnalysis3D
-from pyworkflow.utils.path import moveFile, makePath
+from pyworkflow.utils.path import moveFile, makePath, cleanPattern
 from pyworkflow.gui.plotter import Plotter
 
 from xmipp3.convert import writeSetOfParticles, writeSetOfVolumes, getImageLocation
@@ -398,7 +398,13 @@ _noisePixelLevel   '0 0'""" % (newXdim , newXdim, pathParticles, self.inputParti
        
         outputVols.setSamplingRate(volume.getSamplingRate())
         self._defineOutputs(outputVolumes=outputVols)
-    
+
+        cleanPattern(self._getPath("reference_particles.*"))
+        cleanPattern(self._getExtraPath("scaled_particles.*"))
+        cleanPattern(self._getExtraPath("reference_particles.*"))
+        cleanPattern(self._getExtraPath("corrected_ctf_particles.*"))
+        cleanPattern(self._getExtraPath("volume.vol"))
+        cleanPattern(self._getExtraPath("params.txt"))
         
     #--------------------------- INFO functions -------------------------------------------- 
     def _validate(self):
