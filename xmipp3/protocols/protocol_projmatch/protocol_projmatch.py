@@ -27,9 +27,9 @@
 # **************************************************************************
 
 from pyworkflow.object import Integer
-from pyworkflow.utils.path import makePath, copyFile
-from pyworkflow.utils import getFloatListFromValues, getBoolListFromValues, getStringListFromValues
-from pyworkflow.em import ProtRefine3D, ProtClassify3D
+from pyworkflow.utils import (getFloatListFromValues, getBoolListFromValues,
+                              getStringListFromValues)
+from pwem.protocols import ProtRefine3D, ProtClassify3D
 
 import xmippLib
 from .projmatch_initialize import *
@@ -381,7 +381,7 @@ class XmippProtProjMatch(ProtRefine3D, ProtClassify3D):
     
     def _fillParticlesFromIter(self, partSet, iteration):
         print("_fillParticlesFromIter")
-        import pyworkflow.em.metadata as md
+        import pwem.metadata as md
         
         imgSet = self.inputParticles.get()
         imgFn = "all_exp_images@" + self._getFileName('docfileInputAnglesIters', iter=iteration, ref=1)
@@ -394,12 +394,12 @@ class XmippProtProjMatch(ProtRefine3D, ProtClassify3D):
     
     def _createItemMatrix(self, item, row):
         from ...convert import createItemMatrix
-        import pyworkflow.em as em
+        from pwem.constants import ALIGN_PROJ
         
-        createItemMatrix(item, row, align=em.ALIGN_PROJ)
+        createItemMatrix(item, row, align=ALIGN_PROJ)
     
     def _getIterParticles(self, it, clean=False):
-        import pyworkflow.em as em
+        import pwem.objects as em
         """ Return a classes .sqlite file for this iteration.
         If the file doesn't exists, it will be created by 
         converting from this iteration data.star file.

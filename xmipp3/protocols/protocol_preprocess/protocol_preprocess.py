@@ -25,19 +25,19 @@
 # *
 # ******************************************************************************
 
-from pyworkflow.em import *
-from pyworkflow.utils import *  
+from pyworkflow.utils import *
 from pyworkflow.protocol.params import *
 from pyworkflow.utils.path import cleanPath
-from pyworkflow.em import Volume
+
+from pwem.objects import Volume, SetOfParticles, SetOfClasses2D
+
 import xmippLib
 from xmipp3.constants import *
-from xmipp3.convert import  writeSetOfParticles
-from .protocol_process import XmippProcessParticles,\
-    XmippProcessVolumes
+from xmipp3.convert import writeSetOfParticles
+from .protocol_process import XmippProcessParticles, XmippProcessVolumes
 
 
-class XmippPreprocessHelper():
+class XmippPreprocessHelper:
     """ 
     Helper class that contains some Protocol utilities methods
     used by both  XmippProtPreprocessParticles and XmippProtPreprocessVolumes.
@@ -336,8 +336,7 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
 
 class XmippProtPreprocessVolumes(XmippProcessVolumes):
     """ Protocol for Xmipp-based preprocess for volumes """
-    import pyworkflow.em.metadata as md
-    
+
     _label = 'preprocess volumes'
     
     # Aggregation constants
@@ -719,7 +718,7 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
         return "-i %s -o %s " % (inputVol, fnMask) + args
     
     def _segMentMaskArgs(self, inputVol, outputVol, fnMask):
-        print "self.isFirstStep, ", self.isFirstStep
+        print("self.isFirstStep, ", self.isFirstStep)
         if self.isFirstStep:
             maskArgs = "-i %s -o %s" % (inputVol, outputVol)
             self._setFalseFirstStep()

@@ -24,20 +24,18 @@
 # **************************************************************************
 
 
-from pyworkflow import VERSION_2_0
-from pyworkflow.em import Volume
-from pyworkflow.em.constants import (SYM_DIHEDRAL, SCIPION_SYM_NAME)
-from pyworkflow.em.data import Transform
-from pyworkflow.em.convert import Ccp4Header
-from pyworkflow.em.protocol import EMProtocol
+from pyworkflow import VERSION_3_0
+from pwem.objects import Volume
+from pwem.constants import (SYM_DIHEDRAL_X,SCIPION_SYM_NAME)
+from pwem.objects import Transform
+from pwem.convert import Ccp4Header
+from pwem.protocols import EMProtocol
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         EnumParam, IntParam)
 
 from xmipp3.constants import (XMIPP_SYM_NAME, XMIPP_TO_SCIPION, XMIPP_CYCLIC,
                               XMIPP_DIHEDRAL_X, XMIPP_TETRAHEDRAL, XMIPP_OCTAHEDRAL,
                               XMIPP_I222, XMIPP_I222r, XMIPP_In25, XMIPP_In25r)
-
-
 
 DEBUG = True
 
@@ -47,7 +45,7 @@ class XmippProtExtractUnit(EMProtocol):
     """
     _label = 'extract unit cell'
     _program = ""
-    _version = VERSION_2_0
+    _version = VERSION_3_0
 
     def __init__(self, **kwargs):
         EMProtocol.__init__(self, **kwargs)
@@ -84,11 +82,11 @@ class XmippProtExtractUnit(EMProtocol):
                            "If no symmetry is present, use _c1_."
                       )
         form.addParam('symmetryOrder', IntParam, default=1,
-                      condition='symmetryGroup<=%d' % SYM_DIHEDRAL,
+                      condition='symmetryGroup<=%d' % SYM_DIHEDRAL_X,
                       label='Symmetry Order',
                       help='Order of cyclic symmetry.')
         form.addParam('offset', FloatParam, default=0.,
-                      condition='symmetryGroup<=%d' % SYM_DIHEDRAL,
+                      condition='symmetryGroup<=%d' % SYM_DIHEDRAL_X,
                       label="offset",
                       help="rotate unit cell around z-axis by offset degrees")
         form.addParam('innerRadius', FloatParam, default=-1,
@@ -116,7 +114,7 @@ class XmippProtExtractUnit(EMProtocol):
         if sym == XMIPP_CYCLIC:
             sym = "%s%d" % (XMIPP_SYM_NAME[XMIPP_CYCLIC][:1], self.symmetryOrder)
         elif sym == XMIPP_DIHEDRAL_X:
-            sym = "%s%d" %\
+            sym = "%s%d" % \
                   (XMIPP_SYM_NAME[XMIPP_DIHEDRAL_X][:1], self.symmetryOrder)
         elif sym == XMIPP_TETRAHEDRAL :
             sym = "%s" % XMIPP_SYM_NAME[XMIPP_TETRAHEDRAL]

@@ -25,25 +25,27 @@
 # **************************************************************************
 
 from glob import glob
+from functools import reduce
 import math
 import numpy as np
 from os.path import join, exists
 
+from pwem import ALIGN_PROJ
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, \
-    BooleanParam, IntParam, GE, USE_GPU, GPU_LIST
+from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
+                                        BooleanParam, IntParam, GE, USE_GPU,
+                                        GPU_LIST)
 from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile
-from pyworkflow.em.protocol import ProtClassify3D
-from pyworkflow.em.metadata.utils import getFirstRow, getSize
-from pyworkflow.em.convert import ImageHandler
-import pyworkflow.em.metadata as md
-import pyworkflow.em as em
+from pwem.protocols import ProtClassify3D
+from pwem.metadata import getFirstRow, getSize
+from pwem.convert import ImageHandler
+import pwem.metadata as md
 
 import xmippLib
 from xmippLib import MetaData, MD_APPEND, MDL_CLASS_COUNT
-from xmipp3.convert import createItemMatrix, setXmippAttributes, \
-    writeSetOfParticles, readSetOfParticles
+from xmipp3.convert import (createItemMatrix, setXmippAttributes,
+                            writeSetOfParticles, readSetOfParticles)
 
 
 class XmippProtReconstructHeterogeneous(ProtClassify3D):
@@ -195,9 +197,9 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
         TsCurrent = max(self.TsOrig, self.targetResolution.get() / 3)
         Xdim = self.inputParticles.get().getDimensions()[0]
-        newXdim = long(round(Xdim * self.TsOrig / TsCurrent))
+        newXdim = int(round(Xdim * self.TsOrig / TsCurrent))
         if newXdim < 40:
-            newXdim = long(40)
+            newXdim = int(40)
             TsCurrent = Xdim * (self.TsOrig / newXdim)
         fnDir = self._getExtraPath()
         self.writeInfoField(fnDir, "sampling", xmippLib.MDL_SAMPLINGRATE,
@@ -205,7 +207,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         self.writeInfoField(fnDir, "size", xmippLib.MDL_XSIZE, newXdim)
 
         # Prepare images
-        print "Preparing images to sampling rate=", TsCurrent
+        print("Preparing images to sampling rate=", TsCurrent)
         fnNewParticles = join(fnDir, "imagesResized.stk")
         fnNewMetadata = join(fnDir, "imagesResized.xmd")
         if newXdim != Xdim:
@@ -955,7 +957,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                            xmippLib.MDL_SHIFT_Y, xmippLib.MDL_ANGLE_ROT,
                            xmippLib.MDL_ANGLE_TILT, xmippLib.MDL_ANGLE_PSI,
                            xmippLib.MDL_MAXCC, xmippLib.MDL_WEIGHT)
-        createItemMatrix(particle, row, align=em.ALIGN_PROJ)
+        createItemMatrix(particle, row, align=ALIGN_PROJ)
 
     def _updateClass(self, item):
         classId = item.getObjId()

@@ -24,14 +24,20 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+from os.path import exists, join
 
-from pyworkflow.em import *
+
+from pyworkflow.object import String, Integer
+from pyworkflow.protocol import BooleanParam, LEVEL_ADVANCED
 from pyworkflow.utils.path import *
-from pyworkflow.em.viewers.showj import launchSupervisedPickerGUI
+
+from pwem import EMObject
+from pwem.protocols import ProtParticlePicking
+from pwem.viewers import launchSupervisedPickerGUI
 
 import xmippLib
 from xmipp3.base import XmippProtocol
-from xmipp3.convert import writeSetOfMicrographs, readSetOfCoordinates
+from xmipp3.convert import readSetOfCoordinates
 
 
 class XmippProtParticlePicking(ProtParticlePicking, XmippProtocol):

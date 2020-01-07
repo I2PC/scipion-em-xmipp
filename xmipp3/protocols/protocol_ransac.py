@@ -28,15 +28,18 @@ import os
 from math import floor
 
 from pyworkflow.object import Float
-from pyworkflow.utils.path import cleanPath, copyFile, cleanPattern
-from pyworkflow.em.convert import ImageHandler
-from pyworkflow.em.protocol import ProtInitialVolume
-from pyworkflow.em.data import SetOfClasses2D
+from pyworkflow.utils.path import cleanPath, copyFile
 from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
-                                        IntParam, StringParam, 
+                                        IntParam, StringParam,
                                         STEPS_PARALLEL, LEVEL_ADVANCED, USE_GPU, GPU_LIST)
+
+from pwem.convert import ImageHandler
+from pwem.protocols import ProtInitialVolume
+from pwem.objects import SetOfClasses2D
+
 import xmippLib
-from xmipp3.convert import writeSetOfClasses2D, readSetOfVolumes, writeSetOfParticles
+from xmipp3.convert import (writeSetOfClasses2D, readSetOfVolumes,
+                            writeSetOfParticles)
 from xmipp3.utils import isMdEmpty
 
 
@@ -257,7 +260,7 @@ class XmippProtRansac(ProtInitialVolume):
         cleanPath(self._getTmpPath(fnBase+'.xmd'))
     
     def reconstructStep(self, fnRoot):
-        from pyworkflow.em.metadata.utils import getSize
+        from pwem.metadata import getSize
         if os.path.exists(fnRoot+".xmd"):
             Nimages=getSize(fnRoot+".xmd")
             if Nimages>0:
@@ -272,7 +275,7 @@ class XmippProtRansac(ProtInitialVolume):
                                 %(fnRoot,fnRoot,self.symmetryGroup.get()))
                 self.runJob("xmipp_transform_mask","-i %s.vol --mask circular -%d "%(fnRoot,self.Xdim2/2))
         else:
-            print fnRoot+".xmd is empty. The corresponding volume is not generated." 
+            print(fnRoot+".xmd is empty. The corresponding volume is not generated.")
     
     def resizeStep(self,fnRoot,Xdim):
         if os.path.exists(fnRoot+".vol"):
@@ -306,7 +309,7 @@ class XmippProtRansac(ProtInitialVolume):
         objId = mdCorr.addObject()
         mdCorr.setValue(xmippLib.MDL_WEIGHT,self.corrThresh.get(),objId)
         mdCorr.write("corrThreshold@"+fnCorr,xmippLib.MD_APPEND)
-        print "Correlation threshold: "+str(self.corrThresh.get())
+        print("Correlation threshold: "+str(self.corrThresh.get()))
     
     
     def evaluateVolumesStep(self):

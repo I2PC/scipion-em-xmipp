@@ -24,8 +24,8 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.data import Volume
-from pyworkflow.em.protocol import ProtReconstruct3D
+from pwem.objects import Volume
+from pwem.protocols import ProtReconstruct3D
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 from xmipp3.convert import writeSetOfParticles

@@ -28,14 +28,15 @@ from os.path import exists
 import numpy as np
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.em.protocol.protocol_movies import ProtProcessMovies
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Set
 from pyworkflow.protocol.constants import STATUS_NEW
 from pyworkflow.protocol.params import PointerParam
 from pyworkflow.utils.properties import Message
-from pyworkflow.em.data import SetOfMovies, SetOfMicrographs
+
+from pwem.protocols import ProtProcessMovies
+from pwem.objects import SetOfMicrographs, SetOfMovies
 
 
 class XmippProtMovieMaxShift(ProtProcessMovies):

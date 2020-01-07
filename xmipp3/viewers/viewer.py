@@ -23,16 +23,14 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+from pwem.objects import SetOfNormalModes
+from pwem.viewers import showj, DataViewer, EmPlotter, CtfView, ObjectView
+from pyworkflow.utils import removeBaseExt
+from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
+from pwem.protocols import *
 
-from pyworkflow.em.viewers import showj
-from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO, CommandView
-from pyworkflow.em.protocol import *
-
-from pyworkflow.em.viewers.viewers_data import DataViewer
-from pyworkflow.em.viewers.plotter import EmPlotter
-from pyworkflow.em.viewers.views import CtfView, ObjectView
-from pyworkflow.em.viewers.showj import *
-from pyworkflow.em.viewers.viewer_monitors import MovieGainMonitorPlotter
+from pwem.viewers.showj import *
+from pwem.viewers.viewer_monitors import MovieGainMonitorPlotter
 
 import xmippLib
 from xmipp3.convert import *

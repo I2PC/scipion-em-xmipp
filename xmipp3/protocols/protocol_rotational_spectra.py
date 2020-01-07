@@ -26,8 +26,8 @@
 
 from os.path import join
 import numpy as np
+from pwem.objects import Image
 
-import pyworkflow.em as em  
 from pyworkflow.utils.path import makePath
 from pyworkflow.gui.plotter import Plotter
 from pyworkflow.protocol.params import EnumParam, IntParam
@@ -164,14 +164,14 @@ class XmippProtRotSpectra(KendersomBaseClassify):
     def _preprocessClass(self, classItem, classRow):
         KendersomBaseClassify._preprocessClass(self, classItem, classRow)
         ref = classRow.getValue(xmippLib.MDL_REF) # get class number
-        classItem.spectraPlot = em.Image()
+        classItem.spectraPlot = Image()
         classItem.spectraPlot.setFileName(self._createSpectraPlot('class', 
                                                                   self.classArray, 
                                                                   ref))
         
     def _postprocessImageRow(self, img, imgRow):
         self.imgCount += 1
-        img.spectraPlot = em.Image()
+        img.spectraPlot = Image()
         img.spectraPlot.setFileName(self._createSpectraPlot('image', 
                                                             self.imgArray, 
                                                             self.imgCount, 

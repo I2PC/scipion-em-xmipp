@@ -30,9 +30,11 @@ This file implements CTF defocus groups using xmipp 3.1
 
 from math import pi
 
-from pyworkflow.em import *  
-from pyworkflow.utils import *  
-from pyworkflow.protocol.params import GE
+from pyworkflow.protocol.params import GE, PointerParam, FloatParam
+
+from pwem.objects import SetOfDefocusGroup, DefocusGroup
+from pwem.protocols import ProtProcessParticles
+
 
 import xmippLib
 from xmipp3.convert import writeSetOfParticles, writeSetOfDefocusGroups
@@ -97,7 +99,8 @@ class XmippProtCTFDefocusGroup(ProtProcessParticles):
         df = DefocusGroup()
         mdImages    = xmippLib.MetaData(self.imgsFn)
         if not mdImages.containsLabel(xmippLib.MDL_CTF_SAMPLING_RATE):
-            mdImages.setValueCol(xmippLib.MDL_CTF_SAMPLING_RATE, self.inputParticles.get().getSamplingRate())
+            mdImages.setValueCol(xmippLib.MDL_CTF_SAMPLING_RATE,
+                                 self.inputParticles.get().getSamplingRate())
         
         mdGroups    = xmippLib.MetaData()
         mdGroups.aggregateMdGroupBy(mdImages, xmippLib.AGGR_COUNT,

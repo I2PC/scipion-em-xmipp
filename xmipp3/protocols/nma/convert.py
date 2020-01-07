@@ -24,11 +24,10 @@
 # *
 # **************************************************************************
 
-import os
 from collections import OrderedDict
 
 from pyworkflow.utils import Environ
-from pyworkflow.em.data import NormalMode
+from pwem.objects import NormalMode
 
 import xmippLib
 from xmipp3.convert import rowToObject, objectToRow
@@ -51,7 +50,7 @@ def rowToMode(row):
 
 def modeToRow(mode, row):
     """ Write the MetaData row from a given NormalMode object. """
-    row.setValue(xmippLib.MDL_ORDER, long(mode.getObjId()))
+    row.setValue(xmippLib.MDL_ORDER, int(mode.getObjId()))
     objectToRow(mode, row, MODE_DICT)
     
     

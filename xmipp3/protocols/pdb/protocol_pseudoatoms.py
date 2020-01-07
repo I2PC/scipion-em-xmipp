@@ -28,7 +28,7 @@
 # **************************************************************************
 
 from pyworkflow.protocol.params import PointerParam
-from pyworkflow.em.data import AtomStruct, Volume, Transform
+from pwem.objects import AtomStruct, Volume, Transform
 
 from xmipp3.convert import getImageLocation
 from .protocol_pseudoatoms_base import XmippProtConvertToPseudoAtomsBase

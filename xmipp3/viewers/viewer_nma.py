@@ -31,7 +31,7 @@ visualization program.
 from pyworkflow.gui.project import ProjectWindow
 from pyworkflow.protocol.params import LabelParam, IntParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.em.viewers import ObjectView, VmdView
+from pwem.viewers import ObjectView, VmdView
 
 import xmippLib
 from xmipp3.protocols import XmippProtNMA

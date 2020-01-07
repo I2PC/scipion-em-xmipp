@@ -30,14 +30,14 @@ import math
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_2_0
 from pyworkflow.utils.path import makePath, cleanPattern, moveFile
-from pyworkflow.em.convert import ImageHandler
-from pyworkflow.em.constants import ALIGN_PROJ
-from pyworkflow.em.data import Image, Volume
-from pyworkflow.em.protocol import ProtAnalysis3D
-from xmipp3.convert import createItemMatrix, writeSetOfParticles, \
-    rowToAlignment, setXmippAttributes, xmippToLocation
-import pyworkflow.em.metadata as md
-import pyworkflow.em as em
+from pwem.convert import ImageHandler
+from pwem.constants import ALIGN_PROJ
+from pwem.objects import Image, Volume
+from pwem.protocols import ProtAnalysis3D
+import pwem.metadata as md
+
+from xmipp3.convert import (createItemMatrix, writeSetOfParticles,
+                            rowToAlignment, setXmippAttributes, xmippToLocation)
 
 import xmippLib
 from xmipp3.base import findRow
@@ -228,7 +228,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
             Ts = inputParticles.getSamplingRate()
             newTs = self.targetResolution.get() * 0.4
             newTs = max(Ts, newTs)
-            newXdim = long(Xdim * Ts / newTs)
+            newXdim = int(Xdim * Ts / newTs)
             self.writeInfoField(self._getExtraPath(), "sampling",
                                 xmippLib.MDL_SAMPLINGRATE, newTs)
             self.writeInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE,
@@ -419,7 +419,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
             if exists(fnDir):
                 mdDirection = xmippLib.MetaData("class000001_images@" + fnDir)
                 mdRandom.randomize(mdDirection)
-                mdSubset.selectPart(mdRandom, 0L,
+                mdSubset.selectPart(mdRandom, 0,
                                     min(mdRandom.size(), minClass))
                 mdAll.unionAll(mdSubset)
         mdAll.removeDuplicates(md.MDL_ITEM_ID)
@@ -700,7 +700,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
                 md.MDL_PARTICLE_ID):
             count += 1
             if count:
-                createItemMatrix(particle, self.lastRow, align=em.ALIGN_PROJ)
+                createItemMatrix(particle, self.lastRow, align=ALIGN_PROJ)
             try:
                 self.lastRow = next(self.iterMd)
             except StopIteration:

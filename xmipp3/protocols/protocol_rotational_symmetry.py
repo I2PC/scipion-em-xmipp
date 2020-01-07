@@ -26,8 +26,11 @@
 
 import pyworkflow
 import pyworkflow.object as pwobj
-from pyworkflow.em import *
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
+from pwem.convert import ImageHandler
+from pwem.objects import Volume
+
+from pwem.protocols import (ProtPreprocessVolumes)
+from pyworkflow.protocol import (PointerParam, IntParam, EnumParam, FloatParam)
 
 from xmippLib import MetaData, MDL_ANGLE_ROT, MDL_ANGLE_TILT
 from xmipp3.convert import getImageLocation
@@ -84,8 +87,8 @@ class XmippProtRotationalSymmetry(ProtPreprocessVolumes):
         tilt.addParam('tiltF', FloatParam, default=180, label='Max')
         tilt.addParam('tiltStep', FloatParam, default=5, label='Step')
 
-        self.rotSym = Float()
-        self.tiltSym = Float()
+        self.rotSym = pwobj.Float()
+        self.tiltSym = pwobj.Float()
 
         form.addParallelSection(threads=4, mpi=0)
 

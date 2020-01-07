@@ -28,18 +28,21 @@
 import os, sys
 from datetime import datetime
 
-import pyworkflow.em as em
-import pyworkflow.em.metadata as md
+import pwem.metadata as md
 import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as param
 from pyworkflow import VERSION_2_0
-from pyworkflow.em.protocol import ProtClassify2D
 from pyworkflow.object import Set
 from pyworkflow.utils import cleanPath
 from pyworkflow.utils.properties import Message
 
-from xmipp3.convert import writeSetOfParticles, \
-    readSetOfParticles, setXmippAttributes
+from pwem import ALIGN_NONE
+from pwem.protocols import ProtClassify2D
+from pwem.objects import SetOfParticles, SetOfAverages, SetOfClasses2D, Class2D
+
+
+from xmipp3.convert import (writeSetOfParticles, readSetOfParticles,
+                            setXmippAttributes)
 
 
 class XmippProtEliminateEmptyBase(ProtClassify2D):
@@ -52,7 +55,7 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
 
     def __init__(self, **args):
         ProtClassify2D.__init__(self, **args)
-        self.stepsExecutionMode = em.STEPS_PARALLEL
+        self.stepsExecutionMode = cons.STEPS_PARALLEL
 
     def addAdvancedParams(self, form):
         form.addParam('addFeatures', param.BooleanParam, default=False,
@@ -104,10 +107,10 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
 
         if self.check == None:  # if no previous, get all
             writeSetOfParticles(partsSet, fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation')
+                                alignType=ALIGN_NONE, orderBy='creation')
         else:  # if previous, take the last ones
             writeSetOfParticles(partsSet, fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation',
+                                alignType=ALIGN_NONE, orderBy='creation',
                                 where='creation>"' + str(self.check) + '"')
 
         # special use of partSet before closing it
@@ -287,7 +290,7 @@ class XmippProtEliminateEmptyParticles(XmippProtEliminateEmptyBase):
             lastToClose = (getattr(self, 'finished', False) and    # last if fisished
                            hasattr(self, '%sParticles' % suffix))  #  and exists
             if newData or lastToClose:
-                outSet = self._loadOutputSet(em.SetOfParticles,
+                outSet = self._loadOutputSet(SetOfParticles,
                                              '%sParticles.sqlite' % suffix)
                 if newData:
                     partsSet = self._createSetOfParticles("AUX")
@@ -365,7 +368,7 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
     # --------------------------- INSERT steps functions ----------------------
     def _validate(self):
         errors = []
-        if (not isinstance(self.getInput(), em.SetOfClasses)
+        if (not isinstance(self.getInput(), SetOfClasses)
                 and self.usePopulation.get()):
             errors.append("Using population to reject classes is not possible "
                           "with Averages as input.\nPlease, introduce a "
@@ -392,7 +395,7 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
             newData = os.path.exists(mdFn)
             enableOut = {}
             if newData or lastToClose:
-                outSet = self._loadOutputSet(em.SetOfAverages,
+                outSet = self._loadOutputSet(SetOfAverages,
                                              '%sAverages.sqlite' % suffix)
                 if newData:
                     # if new data, we read it
@@ -460,12 +463,12 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
     def rejectByPopulation(self, ids):
         if self.usePopulation.get() and self.classesDict is not None:
             sizeDict = {clsId: size for clsId, size
-                        in self.classesDict.iteritems()
+                        in self.classesDict.items()
                         if clsId in ids}
 
             meanPop = sum(sizeDict.values())/len(sizeDict)
 
-            for clsId, size in sizeDict.iteritems():
+            for clsId, size in sizeDict.items():
                 # minPopulation is normalized to 100% not to 1
                 decision = int(size*100 > meanPop * self.minPopulation.get())
                 self.enableCls[clsId] = ACCEPTED if decision else DISCARDED
@@ -480,17 +483,17 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
         baseName = '%sClasses.sqlite' % suffix
         setFile = self._getPath(baseName)
         if os.path.exists(setFile):
-            outputSet = em.SetOfClasses2D(filename=setFile)
+            outputSet = SetOfClasses2D(filename=setFile)
             outputSet.loadAllProperties()
             outputSet.enableAppend()
         else:
-            outputSet = em.SetOfClasses2D(filename=setFile)
+            outputSet = SetOfClasses2D(filename=setFile)
             outputSet.setStreamState(streamingState)
 
         outputSet.copyInfo(self.getInput())  # if fails, delete
 
         decision = ACCEPTED if suffix == 'output' else DISCARDED
-        desiredIds = [ids for ids, enable in enableDict.iteritems()
+        desiredIds = [ids for ids, enable in enableDict.items()
                       if enable == decision]
         enableFunc = lambda cls: cls.getObjId() in desiredIds
         outputSet.appendFromClasses(self.getInput(), enableFunc)

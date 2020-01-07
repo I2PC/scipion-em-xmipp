@@ -23,17 +23,19 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
-import pyworkflow.em as em
-import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
-from pyworkflow.em.convert import ImageHandler
 from pyworkflow.utils.properties import Message
+
+import pwem.metadata as md
+from pwem.convert import ImageHandler
+from pwem.objects import Particle
+from pwem.protocols import ProtAlign2D
+from pwem.constants import ALIGN_NONE
 
 from xmipp3.convert import xmippToLocation, writeSetOfParticles
 
         
-class XmippProtApplyAlignment(em.ProtAlign2D):
+class XmippProtApplyAlignment(ProtAlign2D):
     """ Apply alignment parameters and produce a new set of images. """
     _label = 'apply alignment 2d'
 
@@ -87,7 +89,7 @@ class XmippProtApplyAlignment(em.ProtAlign2D):
                              updateItemCallback=self._updateItem,
                              itemDataIterator=md.iterRows(inputMd, sortByLabel=md.MDL_ITEM_ID))
         # Remove alignment 2D
-        alignedSet.setAlignment(em.ALIGN_NONE)
+        alignedSet.setAlignment(ALIGN_NONE)
 
         # Define the output average
 
@@ -98,7 +100,7 @@ class XmippProtApplyAlignment(em.ProtAlign2D):
 
         avgImage.write(avgFile)
 
-        avg = em.Particle()
+        avg = Particle()
         avg.setLocation(1, avgFile)
         avg.copyInfo(alignedSet)
 

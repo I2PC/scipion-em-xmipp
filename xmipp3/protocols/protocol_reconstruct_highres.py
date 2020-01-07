@@ -26,11 +26,13 @@
 """
 Protocol to perform high-resolution reconstructions
 """
-
-from scipy.io.arff.arffread import MetaData
 from glob import glob
 import math
-from itertools import izip
+try:
+    from itertools import izip
+except ImportError:
+    izip = zip
+
 from os.path import join, exists, split
 
 from pyworkflow import VERSION_1_1
@@ -38,14 +40,15 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
                                         BooleanParam, IntParam, EnumParam,
                                         NumericListParam, USE_GPU, GPU_LIST)
-from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile, createLink, cleanPattern
-from pyworkflow.em.protocol import ProtRefine3D
-from pyworkflow.em.data import SetOfVolumes, Volume
-from pyworkflow.em.metadata.utils import getFirstRow, getSize
+from pyworkflow.utils.path import (cleanPath, makePath, copyFile, moveFile,
+                                   createLink, cleanPattern)
+from pwem.protocols import ProtRefine3D
+from pwem.objects import SetOfVolumes, Volume
+from pwem.metadata import getFirstRow, getSize
 from pyworkflow.utils.utils import getFloatListFromValues
-from pyworkflow.em.convert import ImageHandler
-import pyworkflow.em.metadata as md
-import pyworkflow.em as em
+from pwem.convert import ImageHandler
+import pwem.metadata as md
+from pwem.constants import ALIGN_PROJ
 
 import xmippLib
 from xmipp3.base import HelicalFinder
@@ -404,7 +407,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             setXmippAttributes(particle, row, xmippLib.MDL_ANGLE_TEMPERATURE)
         if row.containsLabel(xmippLib.MDL_WEIGHT_SSNR):
             setXmippAttributes(particle, row, xmippLib.MDL_WEIGHT_SSNR)
-        createItemMatrix(particle, row, align=em.ALIGN_PROJ)
+        createItemMatrix(particle, row, align=ALIGN_PROJ)
 
     def getLastFinishedIter(self):
         fnFscs=sorted(glob(self._getExtraPath("Iter???/fsc.xmd")))
@@ -455,7 +458,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
 
         # Copy reference volumes and window if necessary
         Xdim=self.inputParticles.get().getDimensions()[0]
-        newXdim=long(round(Xdim*self.TsOrig/TsCurrent))
+        newXdim=int(round(Xdim*self.TsOrig/TsCurrent))
         self.writeInfoField(fnDirCurrent,"size",xmippLib.MDL_XSIZE,newXdim)
         
         img = ImageHandler()
@@ -607,11 +610,11 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             if state>=1:
                 return
         
-        print "Preparing images to sampling rate=",TsCurrent
+        print("Preparing images to sampling rate=",TsCurrent)
         Xdim=self.inputParticles.get().getDimensions()[0]
-        newXdim=long(round(Xdim*self.TsOrig/TsCurrent))
+        newXdim=int(round(Xdim*self.TsOrig/TsCurrent))
         if newXdim<40:
-            newXdim=long(40)
+            newXdim=int(40)
             TsCurrent=Xdim*(self.TsOrig/newXdim)
         self.writeInfoField(fnDir,"sampling",xmippLib.MDL_SAMPLINGRATE,TsCurrent)
         self.writeInfoField(fnDir,"size",xmippLib.MDL_XSIZE,newXdim)
@@ -660,7 +663,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                             (fnImagesi,fnPreviousAngles,fnAux),numberOfMpi=1)
                 self.adaptShifts(fnAux, TsPrevious, fnImagesi, TsCurrent)
             cleanPath(fnAux)
-        self.writeInfoField(fnDir,"count",xmippLib.MDL_COUNT,long(1))
+        self.writeInfoField(fnDir,"count",xmippLib.MDL_COUNT,int(1))
         
     def prepareReferences(self,fnDirPrevious,fnDir,TsCurrent,targetResolution):
         if self.checkInfoField(fnDir,"count"):
@@ -668,7 +671,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             if state>=2:
                 return
 
-        print "Preparing references to sampling rate=",TsCurrent
+        print("Preparing references to sampling rate=",TsCurrent)
         fnMask=''
         newXdim=self.readInfoField(fnDir,"size",xmippLib.MDL_XSIZE)
         if self.nextMask.hasValue():
@@ -715,7 +718,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             
         if fnMask!='':
             cleanPath(fnMask)
-        self.writeInfoField(fnDir,"count",xmippLib.MDL_COUNT,long(2))
+        self.writeInfoField(fnDir,"count",xmippLib.MDL_COUNT,int(2))
 
     def prepareMask(self,maskObject,fnMask,TsMaskOut,XdimOut):
         img=ImageHandler()
@@ -999,7 +1002,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 #    args+=" --oresiduals %s"%join(fnDirLocal,"residuals%02i.stk"%i)
                 self.runJob("xmipp_angular_continuous_assign2",args,numberOfMpi=self.numberOfMpi.get())
                 self.runJob("xmipp_transform_mask","-i %s --mask circular -%d"%(fnLocalStk,R),numberOfMpi=min(self.numberOfMpi.get(),24))
-                self.writeInfoField(fnDirLocal,"count",xmippLib.MDL_COUNT,long(2+i))
+                self.writeInfoField(fnDirLocal,"count",xmippLib.MDL_COUNT,int(2+i))
 
     def weightParticles(self, iteration):
         fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)

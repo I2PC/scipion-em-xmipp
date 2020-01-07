@@ -28,12 +28,10 @@
 import os
 
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
-import pyworkflow.em.metadata as md
 from pyworkflow.gui.plotter import plt
 
 import xmippLib
-from xmipp3.protocols.protocol_validate_overfitting import \
-    XmippProtValidateOverfitting
+from xmipp3.protocols.protocol_validate_overfitting import XmippProtValidateOverfitting
 from .plotter import XmippPlotter
 from os.path import exists
 from math import log10

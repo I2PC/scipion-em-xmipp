@@ -31,17 +31,14 @@ import math
 import os
 from tempfile import mkstemp
 
-from pyworkflow.em.convert import ImageHandler
-from pyworkflow.em.data import Transform
-from pyworkflow.em.convert import Ccp4Header
-from pyworkflow.em.protocol import ProtImportVolumes
-from pyworkflow.em.convert.symmetry import Icosahedron
+from pwem.objects import Transform
+from pwem.convert import Ccp4Header, ImageHandler
+from pwem.protocols import ProtImportVolumes
+from pwem.convert.symmetry import Icosahedron
 from pyworkflow.tests import BaseTest, setupTestProject
 from pyworkflow.utils import runJob
-from pyworkflow.em.constants import (SYM_I222r, SYM_I222, SCIPION_SYM_NAME,
-                                     SYM_In25, SYM_In25r, SYM_CYCLIC,
-                                     SYM_DIHEDRAL_X, SYM_TETRAHEDRAL,
-                                     SYM_OCTAHEDRAL)
+from pwem.constants import (SCIPION_SYM_NAME)
+
 from xmipp3 import Plugin
 from xmipp3.protocols import XmippProtConvertToPseudoAtoms, XmippProtExtractUnit
 from xmipp3.protocols.pdb.protocol_pseudoatoms_base import NMA_MASK_THRE
@@ -536,7 +533,7 @@ class TestProtModelBuilding(BaseTest):
                 'expandFactor': .2,
                 'offset': offset
                 }
-        print("args", args)
+
         prot = self.newProtocol(XmippProtExtractUnit, **args)
         prot.setObjLabel('extract unit cell')
         self.launchProtocol(prot)

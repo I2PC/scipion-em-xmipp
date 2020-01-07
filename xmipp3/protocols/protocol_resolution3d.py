@@ -24,9 +24,12 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em import *  
-from pyworkflow.utils import *  
-import pyworkflow.em.metadata as md
+from pyworkflow.protocol import PointerParam, BooleanParam
+from pyworkflow.utils import *
+
+import pwem.metadata as md
+from pwem.objects import FSC
+from pwem.protocols import ProtAnalysis3D
 
 from xmipp3.convert import (getImageLocation)
 
@@ -92,25 +95,25 @@ class XmippProtResolution3D(ProtAnalysis3D):
     def calculateFscStep(self):
         """ Calculate the FSC between two volumes"""
         #if volume is mrc force to be mrc volume (versus stack)
+        projectPath = self.getProject().getPath()
         if self.refVol.endswith('.mrc'):
-            refVol = self.refVol + ':mrc' # Specify that are volumes to read them properly in xmipp
+            refVol = os.path.join(projectPath, self.refVol + ':mrc') # Specify that are volumes to read them properly in xmipp
         else:
-            refVol = self.refVol
+            refVol = os.path.join(projectPath, self.refVol)
         if self.inputVol.endswith('.mrc'):
-            inputVol = self.inputVol + ':mrc' # Specify that are volumes to read them properly in xmipp
+            inputVol = os.path.join(projectPath, self.inputVol + ':mrc') # Specify that are volumes to read them properly in xmipp
         else:
-            inputVol = self.inputVol
+            inputVol = os.path.join(projectPath,self.inputVol)
 
         samplingRate = self.inputVolume.get().getSamplingRate()
-        fscFn = self._defineFscName()
-        args="--ref %s -i %s -o %s --sampling_rate %f --do_dpr" % \
-             (refVol,
-              inputVol,
-              fscFn, samplingRate)
-
+        fscFn = os.path.join(projectPath, self._defineFscName())
+        args = "--ref %s -i %s -o %s --sampling_rate %f --do_dpr" % (refVol,
+                                                                     inputVol,
+                                                                     fscFn,
+                                                                     samplingRate)
 
         self.runJob("xmipp_resolution_fsc", args)
-    
+
     def computeBfactorStep(self):
         """ Calculate the structure factors of the volume"""
         samplingRate = self.inputVolume.get().getSamplingRate()

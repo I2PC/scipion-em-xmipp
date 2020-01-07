@@ -72,7 +72,7 @@ class XmippProtStructureMappingViewer(ProtocolViewer):
         labels = []
         for voli in self.protocol._iterInputVolumes():
             if not voli.getObjLabel():
-                count+=1
+                count += 1
                 labels.append("vol_%02d"%count)                            
             else:
                 labels.append("%s"%voli.getObjLabel())

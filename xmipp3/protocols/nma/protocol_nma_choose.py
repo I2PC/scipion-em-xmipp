@@ -23,15 +23,15 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import math
 
+from pwem.objects import AtomStruct
+from pyworkflow.protocol.params import BooleanParam, STEPS_PARALLEL
 
-from pyworkflow.utils.path import createLink, cleanPath
-from pyworkflow.protocol.params import BooleanParam
-
-from xmippLib import MetaData, MDL_NMA, MDL_ENABLED, MDL_NMA_MINRANGE, \
-    MDL_NMA_MAXRANGE
+from xmippLib import (MetaData, MDL_NMA, MDL_ENABLED, MDL_NMA_MINRANGE,
+                      MDL_NMA_MAXRANGE)
+from xmipp3.protocols.pdb.protocol_pseudoatoms_base import *
 from .protocol_nma_base import *
-from ..pdb.protocol_pseudoatoms_base import *
 
 
 class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
@@ -218,6 +218,7 @@ class XmippProtNMAChoose(XmippProtConvertToPseudoAtomsBase, XmippProtNMABase):
 
         pdb = AtomStruct(self._getPath('pseudoatoms.pdb'), pseudoatoms=True)
         self._defineOutputs(outputPdb=pdb)
+        # FIXME Where does this method come from
         modes = NormalModes(filename=self._getPath('modes.xmd'))
         self._defineOutputs(outputModes=modes)
 

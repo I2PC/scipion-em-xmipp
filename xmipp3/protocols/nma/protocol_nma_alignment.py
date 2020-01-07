@@ -37,11 +37,11 @@ from pyworkflow.utils import replaceBaseExt
 from pyworkflow.utils import isPower2, getListFromRangeString
 from pyworkflow.utils.path import copyFile, cleanPath 
 import pyworkflow.protocol.params as params
-from pyworkflow.em.protocol import ProtAnalysis3D
+from pwem.protocols import ProtAnalysis3D
 
 from pyworkflow.protocol.params import NumericRangeParam
-import pyworkflow.em as em
-import pyworkflow.em.metadata as md
+import pwem.metadata as md
+from pwem.constants import ALIGN_PROJ
 
 from xmipp3.base import XmippMdRow
 from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
@@ -188,7 +188,7 @@ class XmippProtAlignmentNMA(ProtAnalysis3D):
             # Conside the index is the id in the input set
             particle = inputSet[index]
             mdImgs.setValue(md.MDL_IMAGE, getImageLocation(particle), objId)
-            mdImgs.setValue(md.MDL_ITEM_ID, long(particle.getObjId()), objId)
+            mdImgs.setValue(md.MDL_ITEM_ID, int(particle.getObjId()), objId)
         mdImgs.write(self.imgsFn)
         
     def performNmaStep(self, atomsFn, modesFn):
@@ -220,7 +220,7 @@ class XmippProtAlignmentNMA(ProtAnalysis3D):
             # Conside the index is the id in the input set
             particle = inputSet[index]
             mdImgs.setValue(md.MDL_IMAGE, getImageLocation(particle), objId)
-            mdImgs.setValue(md.MDL_ITEM_ID, long(particle.getObjId()), objId)
+            mdImgs.setValue(md.MDL_ITEM_ID, int(particle.getObjId()), objId)
         mdImgs.write(self.imgsFn)
     
     def createOutputStep(self):
@@ -260,9 +260,9 @@ class XmippProtAlignmentNMA(ProtAnalysis3D):
     def _printWarnings(self, *lines):
         """ Print some warning lines to 'warnings.xmd', 
         the function should be called inside the working dir."""
-        fWarn = open("warnings.xmd",'w')
+        fWarn = open("warnings.xmd", 'w')
         for l in lines:
-            print >> fWarn, l
+            fWarn.write(l)
         fWarn.close()
 
     def _getLocalModesFn(self):
@@ -270,5 +270,7 @@ class XmippProtAlignmentNMA(ProtAnalysis3D):
         return self._getBasePath(modesFn)
     
     def _updateParticle(self, item, row):
-        setXmippAttributes(item, row, md.MDL_ANGLE_ROT, md.MDL_ANGLE_TILT, md.MDL_ANGLE_PSI, md.MDL_SHIFT_X, md.MDL_SHIFT_Y, md.MDL_FLIP, md.MDL_NMA, md.MDL_COST)
-        createItemMatrix(item, row, align=em.ALIGN_PROJ)
+        setXmippAttributes(item, row, md.MDL_ANGLE_ROT, md.MDL_ANGLE_TILT,
+                           md.MDL_ANGLE_PSI, md.MDL_SHIFT_X,
+                           md.MDL_SHIFT_Y, md.MDL_FLIP, md.MDL_NMA, md.MDL_COST)
+        createItemMatrix(item, row, align=ALIGN_PROJ)

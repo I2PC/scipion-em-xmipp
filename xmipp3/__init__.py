@@ -29,7 +29,8 @@
 import subprocess
 from datetime import datetime
 
-import pyworkflow.em
+from pyworkflow import Config
+import pyworkflow.plugin
 import pyworkflow.utils as pwutils
 
 from .base import *
@@ -40,7 +41,8 @@ _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
 _currentVersion = '3.19.04'
 
-class Plugin(pyworkflow.em.Plugin):
+
+class Plugin(pyworkflow.plugin.Plugin):
     _homeVar = XMIPP_HOME
     _pathVars = [XMIPP_HOME]
     _supportedVersions = []
@@ -62,6 +64,9 @@ class Plugin(pyworkflow.em.Plugin):
                           getXmippPath(os.path.join('pylib', 'xmippPyModules'))
                              }, position=pos)
 
+        # Add path to python lib folder
+        environ.addLibrary(Config.getPythonLibFolder())
+        
         # environ variables are strings not booleans
         if os.environ.get('CUDA', 'False') != 'False':
             environ.update({
@@ -82,7 +87,7 @@ class Plugin(pyworkflow.em.Plugin):
         """ Return an Environment prepared for launching Matlab
         scripts using the Xmipp binding.
         """
-        env = pwutils.getEnviron()
+        env = pyworkflow.plugin.Plugin.getEnviron()
         env.set('PATH', os.environ.get('MATLAB_BINDIR', ''), pwutils.Environ.BEGIN)
         env.set('LD_LIBRARY_PATH', os.environ.get('MATLAB_LIBDIR', ''),
                 pwutils.Environ.BEGIN)
@@ -120,19 +125,18 @@ class Plugin(pyworkflow.em.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
-        scons = tryAddPipModule(env, 'scons', '3.0.4')
+        scons = tryAddPipModule(env, 'scons', '3.1.2')
         joblib = tryAddPipModule(env, 'joblib', '0.11', target='joblib*')
 
         # scikit
-        scipy = tryAddPipModule(env, 'scipy', '0.14.0', default=True,
-                                deps=['lapack', 'matplotlib'])
-        cython = tryAddPipModule(env, 'cython', '0.22', target='Cython-0.22*',
+        scipy = tryAddPipModule(env, 'scipy', '1.4.1', default=True)
+        cython = tryAddPipModule(env, 'cython', '0.29.14', target='Cython-0.29*',
                                  default=True)
-        scikit_learn = tryAddPipModule(env, 'scikit-learn', '0.19.1',
+        scikit_learn = tryAddPipModule(env, 'scikit-learn', '0.22',
                                        target='scikit_learn*',
-                                       default=True, deps=[scipy, cython])
+                                       default=True)
 
-        xmippDeps = ['hdf5', scons, joblib, scikit_learn]
+        xmippDeps = [scons, joblib, scikit_learn]
         ## XMIPP SOFTWARE ##
         lastCompiled = "lib/libXmippJNI.so"
         targets = [cls.getHome('bin', 'xmipp_reconstruct_significant'),
@@ -172,7 +176,7 @@ class Plugin(pyworkflow.em.Plugin):
         installDeepLearningToolkit(cls, env)
 
         # NMA
-        env.addPackage('nma', version='1.2', tar='nma.tgz', default=False, deps=['arpack'],
+        env.addPackage('nma', version='1.2', tar='nma.tgz', default=False,
                        commands=[('cd ElNemo; make; mv nma_* ..',
                                   'nma_elnemo_pdbmat'),
                                  ('cd NMA_cart; LDFLAGS=-L%s make; mv nma_* ..'
@@ -217,7 +221,7 @@ def installDeepLearningToolkit(plugin, env):
     deepLearningTools.append(pandas)
 
     # Keras deps
-    unittest2 = tryAddPipModule(env, 'unittest2', '0.5.1', target='unittest2*',
+    unittest2 = tryAddPipModule(env, 'unittest2', '1.1.0', target='unittest2*',
                                 default=False)
     h5py = tryAddPipModule(env, 'h5py', '2.8.0rc1', target='h5py*',
                            default=False, deps=[unittest2])
@@ -239,6 +243,7 @@ def installDeepLearningToolkit(plugin, env):
         except:
             nvccVersion = 'None'  # string to avoid 'NoneType is not iterable' error
 
+        nvccVersion = nvccVersion.decode("utf8")
         if "release 8.0" in nvccVersion:  # cuda 8
             tensorFlowTarget = "1.4.1"
             cudNNversion = "v6-cuda8"
@@ -318,4 +323,6 @@ def installDeepLearningToolkit(plugin, env):
                               target)],
                    deps=deepLearningTools, tar='deepLearningToolkit.tgz')
 
-pyworkflow.em.Domain.registerPlugin(__name__)
+
+pyworkflow.plugin.Domain.registerPlugin(__name__)
+

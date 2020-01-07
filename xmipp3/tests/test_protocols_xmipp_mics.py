@@ -24,16 +24,13 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
-import unittest, sys
-from os.path import join, basename
-
-from pyworkflow.em import *
+from pwem.objects import SetOfMicrographs
+from pwem.protocols import (ProtImportMicrographs, ProtCreateStreamData,
+                            ProtImportCoordinates, ProtImportCTF)
+from pyworkflow.object import Pointer
 from pyworkflow.tests import *
 from pyworkflow.protocol import getProtocolFromDb
-import pyworkflow.utils as pwutils
 
-from xmipp3.base import *
 from xmipp3.convert import *
 from xmipp3.constants import *
 from xmipp3.protocols import *
@@ -279,7 +276,7 @@ class TestXmippCTFEstimation(TestXmippBase):
 
     def testCTF(self):
         # Estimate CTF on the downsampled micrographs
-        print "Performing CTF..."
+        print("Performing CTF...")
         protCTF = XmippProtCTFMicrographs()
         protCTF.inputMicrographs.set(self.protImport.outputMicrographs)
         protCTF.ctfDownFactor.set(2)
@@ -308,7 +305,7 @@ class TestXmippBoxsize(TestXmippBase):
     def test1(self):
         #TODO: CHECK IF THE PREDICTIONS ON MIC MATCH THE PREDICTIONS ON DOWNSAMPLED MICS
         # Estimate CTF on the downsampled micrographs
-        print "Estimating boxsize..."
+        print("Estimating boxsize...")
         protCTF = XmippProtParticleBoxsize()
         protCTF.inputMicrographs.set(self.protImport.outputMicrographs)
         self.proj.launchProtocol(protCTF, wait=True)
@@ -330,7 +327,7 @@ class TestXmippAutomaticPicking(TestXmippBase):
         cls.protPP = cls.runFakedPicking(cls.protDown1.outputMicrographs, cls.coordsDir)
 
     def testAutomaticPicking(self):
-        print "Run automatic particle picking"
+        print("Run automatic particle picking")
         protAutomaticPP = XmippParticlePickingAutomatic()
         protAutomaticPP.xmippParticlePicking.set(self.protPP)
         self.proj.launchProtocol(protAutomaticPP, wait=True)
@@ -338,7 +335,7 @@ class TestXmippAutomaticPicking(TestXmippBase):
                              "There was a problem with the automatic particle picking")
 
     def testAutomaticPickingOther(self):
-        print "Run automatic particle picking"
+        print("Run automatic particle picking")
         protAutomaticPP = XmippParticlePickingAutomatic()
         protAutomaticPP.xmippParticlePicking.set(self.protPP)
         protAutomaticPP.inputMicrographs.set(self.protDown2.outputMicrographs)
@@ -514,7 +511,7 @@ class TestXmippExtractParticles(TestXmippBase):
                                3, "The was a problem with the giniCoeffScore")
 
     def testExtractSameAsPicking(self):
-        print "Run extract particles from same micrographs as picking"
+        print("Run extract particles from same micrographs as picking")
         protExtract = self.newProtocol(XmippProtExtractParticles,
                                        boxSize=110,
                                        downsampleType=SAME_AS_PICKING,
@@ -551,7 +548,7 @@ class TestXmippExtractParticles(TestXmippBase):
         self._checkVarianceAndGiniCoeff(outputParts[170], 1.1640, 0.5190)
 
     def testExtractOriginal(self):
-        print "Run extract particles from the original micrographs"
+        print("Run extract particles from the original micrographs")
         protExtract = self.newProtocol(XmippProtExtractParticles,
                                        boxSize=550,
                                        downsampleType=OTHER,
@@ -592,7 +589,7 @@ class TestXmippExtractParticles(TestXmippBase):
         self._checkVarianceAndGiniCoeff(outputParts[170], 1.2081, 0.5754)
 
     def testNoExtractBorders(self):
-        print "Run extract particles avoiding extract in borders"
+        print("Run extract particles avoiding extract in borders")
         protExtract = self.newProtocol(XmippProtExtractParticles,
                                        boxSize=750,
                                        downsampleType=OTHER,
@@ -636,7 +633,7 @@ class TestXmippExtractParticles(TestXmippBase):
         self._checkVarianceAndGiniCoeff(outputParts[170], 1.2120, 0.5275)
 
     def testExtractOther(self):
-        print "Run extract particles from original micrographs, with downsampling"
+        print("Run extract particles from original micrographs, with downsampling")
         downFactor = 3.0
         protExtract = self.newProtocol(XmippProtExtractParticles,
                                        boxSize=183, downsampleType=OTHER,
@@ -688,7 +685,7 @@ class TestXmippExtractParticles(TestXmippBase):
 
     def testExtractNoise(self):
         # here we will try a different patchSize than the default
-        print "Run extract particles from original micrographs, with downsampling"
+        print("Run extract particles from original micrographs, with downsampling")
         downFactor = 5.0
         protExtract = self.newProtocol(XmippProtExtractParticles,
                                        boxSize=183, downsampleType=OTHER,
@@ -710,7 +707,7 @@ class TestXmippExtractParticles(TestXmippBase):
         self._checkVarianceAndGiniCoeff(outputParts[170], 1.1594, 0.5702)
 
     def testExtractCTF(self):
-        print "Run extract particles with CTF"
+        print("Run extract particles with CTF")
         protExtract = self.newProtocol(XmippProtExtractParticles,
                                        boxSize=110,
                                        downsampleType=SAME_AS_PICKING,
@@ -790,7 +787,7 @@ class TestXmippVarianceFiltering(TestXmippBase):
                                3, "The was a problem with the giniCoeffScore")
 
     def testExtractAndVarianceFilteringByScreenParticles(self):
-        print "Run extract particles from same micrographs as picking"
+        print("Run extract particles from same micrographs as picking")
         protExtract = self.newProtocol(XmippProtExtractParticles,
                                        boxSize=110,
                                        downsampleType=SAME_AS_PICKING,

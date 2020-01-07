@@ -25,16 +25,13 @@
 # *
 # **************************************************************************
 
-import numpy as np
-
 from pyworkflow import VERSION_2_0
-from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam, LEVEL_ADVANCED)
-from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
-from pyworkflow.em.data import Volume
-from pyworkflow.object import Float
-from pyworkflow.em import ImageHandler
+from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
+                                        LEVEL_ADVANCED)
+from pwem.protocols import ProtAnalysis3D
+from pwem.objects import Volume
 from pyworkflow.utils import getExt
-import pyworkflow.em.metadata as md
+import pwem.metadata as md
 
 from xmippLib import (MDL_XCOOR, MDL_YCOOR, MDL_ZCOOR,
                       MDL_ANGLE_ROT, MDL_ANGLE_TILT,
@@ -315,4 +312,4 @@ class XmippProtMonoDir(ProtAnalysis3D):
         return summary
 
     def _citations(self):
-	return ['Not yet']
+        return ['Not yet']

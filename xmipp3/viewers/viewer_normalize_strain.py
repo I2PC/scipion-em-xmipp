@@ -24,9 +24,8 @@
 # *
 # **************************************************************************
 
-from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.em.viewers import DataView, ChimeraView
-from xmipp3.viewers import XmippViewer
+from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
+from pwem.viewers import ChimeraView
 from pyworkflow.protocol.params import PointerParam, LabelParam
 
 from xmipp3.protocols.protocol_normalize_strain import XmippProtNormalizeStrain

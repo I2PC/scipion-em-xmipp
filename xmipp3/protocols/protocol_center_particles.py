@@ -27,16 +27,15 @@
 import numpy as np
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.em import ALIGN_2D
-from pyworkflow.em.data import Class2D, Particle, Coordinate
-from pyworkflow.em.protocol import ProtClassify2D
-import pyworkflow.em.metadata as md
+from pwem.constants import ALIGN_2D
+from pwem.objects import Class2D, Particle, Coordinate, Transform
+from pwem.protocols import ProtClassify2D
+import pwem.metadata as md
 import pyworkflow.protocol.params as params
-from pyworkflow.em.data import Transform
 
 from xmippLib import MD_APPEND
 from xmipp3.convert import (rowToAlignment, alignmentToRow,
-                       rowToParticle, writeSetOfClasses2D, xmippToLocation)
+                            rowToParticle, writeSetOfClasses2D, xmippToLocation)
 
 
 class XmippProtCenterParticles(ProtClassify2D):
@@ -243,7 +242,7 @@ class XmippProtCenterParticles(ProtClassify2D):
                 micDict = micDictId
             mic = micDict.get(micKey, None)
             if mic is None:
-                print "Skipping particle, key %s not found" % micKey
+                print("Skipping particle, key %s not found" % micKey)
             else:
                 newCoord.copyObjId(p)
                 x, y = coord.getPosition()

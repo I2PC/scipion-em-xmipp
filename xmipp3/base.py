@@ -43,7 +43,7 @@ from .constants import *
 
 
 LABEL_TYPES = { 
-               xmippLib.LABEL_SIZET: long,
+               xmippLib.LABEL_SIZET: int,
                xmippLib.LABEL_DOUBLE: float,
                xmippLib.LABEL_INT: int,
                xmippLib.LABEL_BOOL: bool
@@ -53,7 +53,7 @@ LABEL_TYPES = {
 def getXmippPath(*paths):
     '''Return the path the the Xmipp installation folder
     if a subfolder is provided, will be concatenated to the path'''
-    if os.environ.has_key(XMIPP_HOME):
+    if os.environ.get(XMIPP_HOME):
         return os.path.join(os.environ[XMIPP_HOME], *paths)
     else:
         raise Exception('XMIPP_HOME environment variable not set')
@@ -65,7 +65,7 @@ def getLabelPythonType(label):
     return LABEL_TYPES.get(labelType, str)
 
 
-class XmippProtocol():
+class XmippProtocol:
     """ This class groups some common functionalities that
     share some Xmipp protocols, like converting steps.
     """
@@ -103,7 +103,7 @@ class XmippProtocol():
         return getattr(self, inputName + 'Xmipp', getattr(self, inputName))
         
 
-class XmippMdRow():
+class XmippMdRow:
     """ Support Xmipp class to store label and value pairs 
     corresponding to a Metadata row. 
     """
@@ -119,7 +119,7 @@ class XmippMdRow():
     
     def containsLabel(self, label):
         # Allow getValue using the label string
-        if isinstance(label, basestring):
+        if isinstance(label, str):
             label = xmippLib.str2Label(label)
         return label in self._labelDict
     
@@ -131,14 +131,14 @@ class XmippMdRow():
         """args: this list should contains tuples with 
         MetaData Label and the desired value"""
         # Allow setValue using the label string
-        if isinstance(label, basestring):
+        if isinstance(label, str):
             label = xmippLib.str2Label(label)
         self._labelDict[label] = value
             
     def getValue(self, label, default=None):
         """ Return the value of the row for a given label. """
         # Allow getValue using the label string
-        if isinstance(label, basestring):
+        if isinstance(label, str):
             label = xmippLib.str2Label(label)
         return self._labelDict.get(label, default)
     
@@ -156,21 +156,21 @@ class XmippMdRow():
             
     def writeToMd(self, md, objId):
         """ Set back row values to a metadata row. """
-        for label, value in self._labelDict.iteritems():
+        for label, value in self._labelDict.items():
             # TODO: Check how to handle correctly unicode type
             # in Xmipp and Scipion
             t = type(value)
             
-            if t is unicode:
+            if t is str:
                 value = str(value)
                 
             if t is int and xmippLib.labelType(label) == xmippLib.LABEL_SIZET:
-                value = long(value)
+                value = int(value)
                 
             try:
                 md.setValue(label, value, objId)
             except Exception as ex:
-                print("XmippMdRow.writeToMd: Error writting value to metadata.",
+                print("XmippMdRow.writeToMd: Error writing value to metadata.",
                       file=sys.stderr)
                 print("                     label: %s, value: %s, type(value): %s"
                       % (label2Str(label), value, type(value)), file=sys.stderr)
@@ -181,24 +181,24 @@ class XmippMdRow():
         self.readFromMd(md, md.firstObject())
         
     def copyFromRow(self, other):
-        for label, value in other._labelDict.iteritems():
+        for label, value in other._labelDict.items():
             self.setValue(label, value)
             
     def __str__(self):
         s = '{'
-        for k, v in self._labelDict.iteritems():
+        for k, v in self._labelDict.items():
             s += '  %s = %s\n' % (xmippLib.label2Str(k), v)
         return s + '}'
     
     def __iter__(self):
-        return self._labelDict.iteritems()
+        return self._labelDict.items()
             
     def printDict(self):
         """ Fancy printing of the row, mainly for debugging. """
         print (str(self))
     
     
-class RowMetaData():
+class RowMetaData:
     """ This class is a wrapper for MetaData in row mode.
     Where only one object is used.
     """
@@ -254,7 +254,7 @@ def findRow(md, label, value):
 
 def findRowById(md, value):
     """ Same as findRow, but using MDL_ITEM_ID for label. """
-    return findRow(md, xmippLib.MDL_ITEM_ID, long(value))
+    return findRow(md, xmippLib.MDL_ITEM_ID, int(value))
   
   
 class XmippSet():
@@ -337,7 +337,7 @@ class XmippSet():
         return setOut   
     
     
-class ProjMatcher():
+class ProjMatcher:
     """ Base class for protocols that use a projection """
     
     def projMatchStep(self, volume, angularSampling, symmetryGroup, images, fnAngles, Xdim):
@@ -425,7 +425,7 @@ class ProjMatcher():
             imgDiff = img-imgRef
             imgDiff.write(MDout.getValue(xmippLib.MDL_IMAGE1,i))
 
-class HelicalFinder():
+class HelicalFinder:
     """ Base class for protocols that find helical symmetry """
 
     def getSymmetry(self,dihedral):
@@ -434,7 +434,9 @@ class HelicalFinder():
         else:
             return "helical"
 
-    def runCoarseSearch(self,fnVol,dihedral,heightFraction,z0,zF,zStep,rot0,rotF,rotStep,Nthr,fnOut,cylinderInnerRadius,cylinderOuterRadius,height,Ts):
+    def runCoarseSearch(self, fnVol, dihedral, heightFraction, z0, zF, zStep,
+                        rot0, rotF, rotStep, Nthr, fnOut, cylinderInnerRadius,
+                        cylinderOuterRadius, height, Ts):
         args="-i %s --sym %s --heightFraction %f -z %f %f %f --rotHelical %f %f %f --thr %d -o %s --sampling %f"%(fnVol,self.getSymmetry(dihedral),heightFraction,
                                                                                 z0,zF,zStep,rot0,rotF,rotStep,Nthr,fnOut,Ts)
         if cylinderOuterRadius>0 and cylinderInnerRadius<0:

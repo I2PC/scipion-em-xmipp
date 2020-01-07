@@ -22,7 +22,7 @@
 # ***************************************************************************/
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
-from pyworkflow.em.protocol import ProtImportVolumes
+from pwem.protocols import ProtImportVolumes
 
 from xmipp3.protocols import XmippProtStructureMapping
 

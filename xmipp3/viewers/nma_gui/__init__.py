@@ -24,9 +24,9 @@
 # *
 # **************************************************************************
 
-from matplotlib_point_selector import PointSelector
-from matplotlib_point_path import PointPath
+from .matplotlib_point_selector import PointSelector
+from .matplotlib_point_path import PointPath
 
-from tk_clustering import ClusteringWindow
-from tk_trajectories import TrajectoriesWindow
+from .tk_clustering import ClusteringWindow
+from .tk_trajectories import TrajectoriesWindow
 

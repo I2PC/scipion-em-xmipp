@@ -30,24 +30,18 @@ This module implement the wrappers aroung Xmipp ML2D protocol
 visualization program.
 """
 
-import numpy as np
-
 from pyworkflow.protocol.executor import StepExecutor
 from pyworkflow.viewer import  ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.em.viewers import DataView, EmPlotter
+from pwem.viewers import (DataView, EmPlotter, showj, ChimeraClientView,
+                          ChimeraView, ObjectView)
 from pyworkflow.utils import createUniqueFileName, cleanPattern
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (LabelParam, IntParam, FloatParam,
                                         StringParam, EnumParam,
                                         NumericRangeParam, BooleanParam)
-from pyworkflow.em.viewers import showj
 from xmipp3.convert import *
 from xmipp3.viewers.plotter import XmippPlotter
 from xmipp3.protocols import XmippProtProjMatch
-from pyworkflow.em.viewers.viewer_chimera import (ChimeraClientView,
-    ChimeraView)
-from pyworkflow.em.viewers.views import ObjectView
-# from .projmatch_initialize import createFilenameTemplates
 from pyworkflow.utils.path import cleanPath
 
 
@@ -333,7 +327,7 @@ Examples:
                 if exists(volFn):
                     volumes.append(volFn)
                 else:
-                    print "Volume %s does not exist" % volFn
+                    print("Volume %s does not exist" % volFn)
         return volumes
     
     def _showRefs(self, paramName=None):
@@ -417,7 +411,7 @@ Examples:
                             mdOut.setValue(xmippLib.MDL_IMAGE, file_reference, id2)
 
                         if mdOut.size() == 0:
-                            print "Empty metadata: ", file_nameReferences
+                            print("Empty metadata: ", file_nameReferences)
                         else:
                             file_nameReferences = self.protocol._getTmpPath('references_library.xmd')
                             sfn = createUniqueFileName(file_nameReferences)
@@ -425,7 +419,7 @@ Examples:
                             mdOut.write(file_nameReferences)
                             list.append(self.createDataView(file_nameReferences))
                 else:
-                    print "File %s does not exist" % file_name
+                    print("File %s does not exist" % file_name)
         return list
     
     def _showProjMatchClasses(self, paramName=None):
@@ -437,11 +431,11 @@ Examples:
                     _, _, _, _, size = xmippLib.MetaDataInfo(classesFn)
                     
                     if size == 0:
-                        print "Empty metadata: ", classesFn
+                        print("Empty metadata: ", classesFn)
                     else:
                         classes.append(self.createDataView(classesFn))
                 else:
-                    print "File %s does not exist" % classesFn
+                    print("File %s does not exist" % classesFn)
         return classes
     
     def _showProjMatchLibAndClasses(self, paramName=None):
@@ -474,7 +468,7 @@ Examples:
                             mdOut.setValue(xmippLib.MDL_IMAGE2, file_reference, id1)
 
                         if mdOut.size() == 0:
-                            print "Empty metadata: ", file_nameReferences
+                            print("Empty metadata: ", file_nameReferences)
                         else:
                             file_nameReferences = self.protocol._getFileName('projectLibrarySampling', iter=it, ref=ref3d)
                             sfn = createUniqueFileName(file_nameReferences)
@@ -484,7 +478,7 @@ Examples:
                             # ToDo: show the metadata in "metadata" form.
                             list.append(self.createDataView(file_nameReferences))
                     else:
-                        print "File %s does not exist" % file_name
+                        print("File %s does not exist" % file_name)
         return list
     
     def _showProjMatchLibAndImages(self, paramName=None):
@@ -536,7 +530,7 @@ Examples:
                         mdOut.setValue(xmippLib.MDL_IMAGE, file_reference, id2)
                         mdOut.setValue(xmippLib.MDL_ANGLE_PSI, 0., id2)
                     if mdOut.size() == 0:
-                        print "Empty metadata"
+                        print("Empty metadata")
                     else:
                         file_nameReferences = self.protocol._getFileName('projectLibrarySampling', iter=it, ref=ref3d)
                         sfn   = createUniqueFileName(file_nameReferences)
@@ -544,7 +538,7 @@ Examples:
                         mdOut.write(file_nameReferences)
                         imgAndClasses.append(self.createDataView(file_nameReferences))
                 else:
-                        print "File %s does not exist" % file_name
+                        print("File %s does not exist" % file_name)
         return imgAndClasses
     
     def _showDiscardedImages(self, paramName=None):
@@ -554,11 +548,11 @@ Examples:
             if exists(file_name):
                 md.read(file_name)
                 if md.size() == 0:
-                    print "Empty metadata: ", file_name
+                    print("Empty metadata: ", file_name)
                 else:
                     return [self.createDataView(file_name)]
             else:
-                print "File %s does not exist" % file_name
+                print("File %s does not exist" % file_name)
                 return []
     
     def _showExperimentalImages(self, paramName=None):
@@ -623,7 +617,7 @@ Examples:
                         baseFileName   = self.protocol._getTmpPath("angle_sort.xmd")
                         fn = self.protocol._getRefBlockFileName("angle_iter", it, "ref3D", ref3d, baseFileName)
                         mDoutRef3D.write(fn, xmippLib.MD_APPEND)
-                        print "File with sorted angles saved in:", fn
+                        print("File with sorted angles saved in:", fn)
 
                     if self.shiftSort:
                         mDoutRef3D.sort(xmippLib.MDL_SHIFT_DIFF)
@@ -631,12 +625,12 @@ Examples:
                         baseFileName   = self.protocol._getTmpPath("angle_sort.xmd")
                         fn = self.protocol._getRefBlockFileName("shift_iter", it, "ref3D", ref3d, baseFileName)
                         mDoutRef3D.write(fn, xmippLib.MD_APPEND)
-                        print "File with sorted shifts saved in:", fn
+                        print("File with sorted shifts saved in:", fn)
 
                     plots.append(xplotterShift)
                     plots.append(xplotter)
             else:
-                print "File %s does not exist" % mdFn
+                print("File %s does not exist" % mdFn)
         return plots
     
 #===============================================================================
@@ -667,7 +661,7 @@ Examples:
             if exists(classesFn):
                 return ChimeraClientView(vol, showProjection=True, angularDistFile=classesFn, spheresDistance=radius)
             else:
-                print "File %s does not exist" % classesFn
+                print("File %s does not exist" % classesFn)
                 return None
         else:
             return self.infoMessage('Please select only one class to display angular distribution')
@@ -684,7 +678,7 @@ Examples:
                 title = 'Ref3D_%d' % ref3d
                 xplotter.plotMdAngularDistribution(title, md)
             else:
-                print "File %s does not exist" % classesFn
+                print("File %s does not exist" % classesFn)
                 return None
         
         return xplotter
@@ -767,7 +761,6 @@ Examples:
 # Utils Functions
 #===============================================================================
     def createScipionPartView(self, partSet, viewParams={}):
-        from pyworkflow.em.viewers import ObjectView
         inputParticlesId = self.protocol.inputParticles.get().strId()
         filename = partSet.getFileName()
         

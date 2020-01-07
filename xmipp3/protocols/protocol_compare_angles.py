@@ -26,12 +26,11 @@
 
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_2_0
-from pyworkflow.em.protocol import ProtAnalysis3D
-import pyworkflow.em.metadata as md
+from pwem.protocols import ProtAnalysis3D
+import pwem.metadata as md
 
 import xmippLib
-from xmipp3.convert import (rowToAlignment, setXmippAttributes,
-                       xmippToLocation, writeSetOfParticles)
+from xmipp3.convert import (setXmippAttributes, writeSetOfParticles)
 from xmipp3.constants import SYM_URL
 
 

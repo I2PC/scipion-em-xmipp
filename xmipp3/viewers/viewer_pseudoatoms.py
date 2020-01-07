@@ -27,8 +27,7 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.viewers.viewer_chimera import ChimeraView
-from pyworkflow.em.viewers.views import DataView
+from pwem.viewers import ChimeraView, DataView
 
 from xmipp3.viewers import XmippViewer
 from xmipp3.protocols import XmippProtConvertToPseudoAtoms

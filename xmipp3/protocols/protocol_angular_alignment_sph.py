@@ -25,17 +25,17 @@
 # *
 # **************************************************************************
 
-
-from pyworkflow.em.protocol import ProtAnalysis3D
 import pyworkflow.protocol.params as params
-import pyworkflow.em as em
-import pyworkflow.em.metadata as md
-from pyworkflow.em.metadata.utils import iterRows
-from pyworkflow.em.convert import ImageHandler
+from pyworkflow.utils.path import moveFile
+
+from pwem.protocols import ProtAnalysis3D
+import pwem.metadata as md
+from pwem.convert import ImageHandler
+from pwem.constants import ALIGN_PROJ
+
 from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
                             setXmippAttributes)
 from xmipp3.utils import writeInfoField, readInfoField
-from pyworkflow.utils.path import moveFile
 import numpy as np
 from sklearn.manifold import TSNE
 
@@ -97,7 +97,7 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         Ts = inputParticles.getSamplingRate()
         newTs = self.targetResolution.get() * 1.0 /3.0
         newTs = max(Ts, newTs)
-        self.newXdim = long(Xdim * Ts / newTs)
+        self.newXdim = int(Xdim * Ts / newTs)
         writeInfoField(self._getExtraPath(), "sampling", md.MDL_SAMPLINGRATE, newTs)
         writeInfoField(self._getExtraPath(), "size", md.MDL_XSIZE, self.newXdim)
         if self.newXdim != Xdim:
@@ -137,7 +137,7 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         fnOut = self._getFileName('fnOut')
         mdOut = md.MetaData(fnOut)
         i = 0
-        for row in iterRows(mdOut):
+        for row in md.iterRows(mdOut):
             coeffs = mdOut.getValue(md.MDL_SPH_COEFFICIENTS, row.getObjId())
             if i==0:
                 coeffMatrix = coeffs
@@ -149,7 +149,7 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
 
         newMdOut = md.MetaData()
         i=0
-        for row in iterRows(mdOut):
+        for row in md.iterRows(mdOut):
             newRow = row
             newRow.setValue(md.MDL_SPH_TSNE_COEFF1D, float(X_tsne_1d[i,0]))
             newRow.setValue(md.MDL_SPH_TSNE_COEFF2D, [float(X_tsne_2d[i, 0]),  float(X_tsne_2d[i, 1])])
@@ -177,7 +177,7 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
                            md.MDL_FLIP, md.MDL_SPH_DEFORMATION,
                            md.MDL_SPH_COEFFICIENTS, md.MDL_SPH_TSNE_COEFF1D,
                            md.MDL_SPH_TSNE_COEFF2D)
-        createItemMatrix(item, row, align=em.ALIGN_PROJ)
+        createItemMatrix(item, row, align=ALIGN_PROJ)
 
     def getInputParticles(self):
         return self.inputParticles.get()

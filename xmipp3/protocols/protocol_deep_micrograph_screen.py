@@ -25,24 +25,17 @@
 # *
 # **************************************************************************
 
-from glob import glob
 import os
-from os.path import exists, basename
 
-import pyworkflow.em.metadata as md
 import pyworkflow.utils as pwutils
-from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
-                                           STATUS_FINISHED, STATUS_NEW)
+from pyworkflow.protocol.constants import (STEPS_PARALLEL, STATUS_NEW)
 import pyworkflow.protocol.params as params
-from pyworkflow.em.protocol import ProtExtractParticles
-from pyworkflow.em.data import Particle
+from pwem.protocols import ProtExtractParticles
 from pyworkflow.object import Set, Pointer
-from pyworkflow.em.constants import RELATION_CTF
 
 from xmipp3 import Plugin
 from xmipp3.base import XmippProtocol, createMetaDataFromPattern
-from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
-                            xmippToLocation, setXmippAttributes, readSetOfCoordinates)
+from xmipp3.convert import (writeMicCoordinates, readSetOfCoordinates)
 from xmipp3.constants import SAME_AS_PICKING, OTHER
 from xmipp3.utils import validateDLtoolkit
 

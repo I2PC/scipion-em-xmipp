@@ -70,7 +70,7 @@ def isMdEmpty(filename):
 def iterMdRows(md):
     """ Iterate over the rows of the given metadata. """
     # If md is string, take as filename and create the metadata
-    if isinstance(md, basestring):
+    if isinstance(md, str):
         md = xmippLib.MetaData(md)
         
     row = XmippMdRow()
@@ -81,7 +81,7 @@ def iterMdRows(md):
 
 def readInfoField(fnDir,block,label):
     mdInfo = xmippLib.MetaData("%s@%s"%(block,join(fnDir,"iterInfo.xmd")))
-    return mdInfo.getValue(label,mdInfo.firstObject())
+    return mdInfo.getValue(label, mdInfo.firstObject())
 
 def writeInfoField(fnDir,block,label, value):
     mdInfo = xmippLib.MetaData()

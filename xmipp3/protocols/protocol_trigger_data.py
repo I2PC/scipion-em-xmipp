@@ -31,7 +31,7 @@ from datetime import datetime
 
 import pyworkflow.protocol.constants as cons
 from pyworkflow import VERSION_2_0
-from pyworkflow.em.protocol import EMProtocol
+from pwem.protocols import EMProtocol
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import BooleanParam, IntParam, PointerParam, GT
 

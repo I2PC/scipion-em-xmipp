@@ -23,13 +23,14 @@
 
 import time
 
-from pyworkflow.em.data import SetOfCTF, CTFModel, Micrograph, SetOfMicrographs
-from pyworkflow.em.protocol import ProtImportMicrographs, ProtImportCTF
-from pyworkflow.em.protocol.protocol_create_stream_data \
-        import ProtCreateStreamData, SET_OF_MICROGRAPHS
 from pyworkflow.tests import BaseTest, DataSet
-from pyworkflow.utils import importFromPlugin
 import pyworkflow.tests as tests
+
+from pwem.objects import SetOfCTF, CTFModel, Micrograph, SetOfMicrographs
+from pwem.protocols import (ProtImportMicrographs, ProtImportCTF,
+                            ProtCreateStreamData)
+from pwem.protocols.protocol_create_stream_data import SET_OF_MICROGRAPHS
+
 
 import xmippLib
 from xmipp3.protocols import XmippProtCTFConsensus, XmippProtCTFMicrographs

@@ -24,9 +24,11 @@
 # *
 # **************************************************************************
 
-import pyworkflow
 import pyworkflow.object as pwobj
-from pyworkflow.em import *
+from pwem.objects import Volume
+from pwem.convert import ImageHandler
+from pwem.protocols import ProtPreprocessVolumes
+import pyworkflow.protocol.params as params
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
 from xmippLib import MetaData, MDL_ANGLE_ROT, MDL_SHIFT_Z
@@ -44,28 +46,28 @@ class XmippProtHelicalParameters(ProtPreprocessVolumes, HelicalFinder):
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='General parameters')
-        form.addParam('inputVolume', PointerParam, pointerClass="Volume", label='Input volume')
-        form.addParam('cylinderInnerRadius',IntParam,label='Cylinder inner radius', default=-1,
+        form.addParam('inputVolume', params.PointerParam, pointerClass="Volume", label='Input volume')
+        form.addParam('cylinderInnerRadius', params.IntParam,label='Cylinder inner radius', default=-1,
                       help="The helix is supposed to occupy this radius in voxels around the Z axis. Leave it as -1 for symmetrizing the whole volume")
-        form.addParam('cylinderOuterRadius',IntParam,label='Cylinder outer radius', default=-1,
+        form.addParam('cylinderOuterRadius',params.IntParam,label='Cylinder outer radius', default=-1,
                       help="The helix is supposed to occupy this radius in voxels around the Z axis. Leave it as -1 for symmetrizing the whole volume")
-        form.addParam('dihedral',BooleanParam,default=False,label='Apply dihedral symmetry')
-        form.addParam('forceDihedralX',BooleanParam,default=False,expertLevel=LEVEL_ADVANCED, label='Force the dihedral axis to be in X',
+        form.addParam('dihedral',params.BooleanParam,default=False,label='Apply dihedral symmetry')
+        form.addParam('forceDihedralX',params.BooleanParam,default=False,expertLevel=LEVEL_ADVANCED, label='Force the dihedral axis to be in X',
                       help="If this option is chosen, then the dihedral axis is not searched and it is assumed that it is around X.")
 
         form.addSection(label='Search limits')
-        form.addParam('heightFraction',FloatParam,default=0.9,label='Height fraction',
+        form.addParam('heightFraction',params.FloatParam,default=0.9,label='Height fraction',
                       help="The helical parameters are only sought using the fraction indicated by this number. "\
                            "In this way, you can avoid including planes that are poorly resolved at the extremes of the volume. " \
                            "However, note that the algorithm can perfectly work with a fraction of 1.")
-        form.addParam('rot0',FloatParam,default=0,label='Minimum rotational angle',help="In degrees")
-        form.addParam('rotF',FloatParam,default=360,label='Maximum rotational angle',help="In degrees")
-        form.addParam('rotStep',FloatParam,default=5,label='Angular step',help="In degrees")
-        form.addParam('z0',FloatParam,default=0,label='Minimum shift Z',help="In Angstroms")
-        form.addParam('zF',FloatParam,default=10,label='Maximum shift Z',help="In Angstroms")
-        form.addParam('zStep',FloatParam,default=0.5,label='Shift step',help="In Angstroms")
-        self.deltaZ=Float()
-        self.deltaRot=Float()
+        form.addParam('rot0',params.FloatParam,default=0,label='Minimum rotational angle',help="In degrees")
+        form.addParam('rotF',params.FloatParam,default=360,label='Maximum rotational angle',help="In degrees")
+        form.addParam('rotStep',params.FloatParam,default=5,label='Angular step',help="In degrees")
+        form.addParam('z0',params.FloatParam,default=0,label='Minimum shift Z',help="In Angstroms")
+        form.addParam('zF',params.FloatParam,default=10,label='Maximum shift Z',help="In Angstroms")
+        form.addParam('zStep',params.FloatParam,default=0.5,label='Shift step',help="In Angstroms")
+        self.deltaZ= params.Float()
+        self.deltaRot=params.Float()
         form.addParallelSection(threads=4, mpi=0)
 
     #--------------------------- INSERT steps functions --------------------------------------------

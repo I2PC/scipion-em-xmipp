@@ -25,7 +25,7 @@
 # **************************************************************************
 
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-import pyworkflow.em.viewers.showj as showj
+import pwem.viewers.showj as showj
 from pyworkflow.protocol.params import LabelParam
 
 from xmipp3.protocols.protocol_movie_opticalflow import (XmippProtOFAlignment,

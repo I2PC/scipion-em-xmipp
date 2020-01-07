@@ -24,10 +24,10 @@
 # *
 # **************************************************************************
 
-from ..nma_plotter import plotArray2D
+from xmipp3.viewers.nma_plotter import plotArray2D
 
         
-class PointSelector():
+class PointSelector:
     """ Graphical manager based on Matplotlib to handle mouse
     events of click, drag and release and mark some point
     from input Data as 'selected'.

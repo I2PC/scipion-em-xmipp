@@ -27,7 +27,7 @@
 
 import os
 import numpy as np
-import Tkinter as tk
+import tkinter as tk
 from math import sqrt
 
 from pyworkflow.utils.properties import Icon
@@ -35,7 +35,7 @@ import pyworkflow.gui as gui
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import LabelParam
 from pyworkflow.gui.widgets import Button, HotButton
-from pyworkflow.em.viewers.views import DataView
+from pwem.viewers.views import DataView
 import pyworkflow.gui.dialog as dialog
 
 import xmippLib

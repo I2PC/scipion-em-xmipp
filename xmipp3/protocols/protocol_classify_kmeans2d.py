@@ -25,17 +25,23 @@
 # *****************************************************************************
 
 import os
-import pyworkflow.em as em
-import pyworkflow.em.metadata as md
-import pyworkflow.protocol.constants as cons
+
 import pyworkflow.protocol.params as param
+
 from pyworkflow import VERSION_2_0
-from pyworkflow.em.protocol import ProtClassify2D, SetOfClasses2D
-from pyworkflow.em.data import SetOfParticles
+
+import pwem.metadata as md
+import pyworkflow.protocol.constants as cons
 from pyworkflow.object import Set
 from pyworkflow.utils.path import cleanPath
 from pyworkflow.utils.properties import Message
-from xmipp3.convert import writeSetOfParticles, xmippToLocation, readSetOfParticles
+
+from pwem.protocols import ProtClassify2D
+from pwem.objects import SetOfParticles, SetOfClasses2D
+from pwem.constants import ALIGN_NONE
+
+from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
+                            readSetOfParticles)
 
 
 class XmippProtKmeansClassif2D(ProtClassify2D):
@@ -47,7 +53,7 @@ class XmippProtKmeansClassif2D(ProtClassify2D):
 
     def __init__(self, **args):
         ProtClassify2D.__init__(self, **args)
-        self.stepsExecutionMode = em.STEPS_PARALLEL
+        self.stepsExecutionMode = param.STEPS_PARALLEL
 
     # --------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
@@ -98,11 +104,11 @@ class XmippProtKmeansClassif2D(ProtClassify2D):
         deps = []
         writeSetOfParticles([m.clone() for m in inputParticles],
                             self._getExtraPath("allDone.xmd"),
-                            alignType=em.ALIGN_NONE)
+                            alignType=ALIGN_NONE)
         writeSetOfParticles([m.clone() for m in inputParticles
                              if int(m.getObjId()) not in insertedDict],
                             self._getExtraPath("newDone.xmd"),
-                            alignType=em.ALIGN_NONE)
+                            alignType=ALIGN_NONE)
 
         stepId = \
             self._insertFunctionStep('kmeansClassifyStep',

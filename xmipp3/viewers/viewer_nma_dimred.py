@@ -38,12 +38,12 @@ from pyworkflow.utils import replaceBaseExt
 from pyworkflow.utils.path import cleanPath, makePath, cleanPattern
 from pyworkflow.viewer import (ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO)
 from pyworkflow.protocol.params import StringParam, LabelParam
-from pyworkflow.em.data import SetOfParticles
+from pwem.objects import SetOfParticles
 from pyworkflow.utils.process import runJob
-from pyworkflow.em.viewers import VmdView
+from pwem.viewers import VmdView
 from pyworkflow.gui.browser import FileBrowserWindow
 
-from xmipp3.protocols.nma.protocol_nma_dimred import XmippProtDimredNMA, DIMRED_MAPPINGS
+from xmipp3.protocols.nma.protocol_nma_dimred import XmippProtDimredNMA
 from xmipp3.protocols.nma.data import Point, Data
 from .nma_plotter import XmippNmaPlotter
 from .nma_gui import ClusteringWindow, TrajectoriesWindow

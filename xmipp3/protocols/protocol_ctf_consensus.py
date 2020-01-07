@@ -30,13 +30,15 @@
 import os
 from datetime import datetime
 
+
 from pyworkflow import VERSION_2_0
-from pyworkflow.em.data import SetOfCTF
+from pwem.objects import SetOfCTF, SetOfMicrographs
 from pyworkflow.object import Set, Float, Integer
 import pyworkflow.protocol.params as params
-import pyworkflow.em as em
 import pyworkflow.utils as pwutils
-from pyworkflow.em.metadata import Row, MetaData
+
+from pwem.protocols import ProtCTFMicrographs
+from pwem.metadata import Row
 from pyworkflow.protocol.constants import (STATUS_NEW)
 
 import xmippLib
@@ -44,7 +46,7 @@ import xmipp3
 from xmipp3.convert import setXmippAttribute, prefixAttribute
 
 
-class XmippProtCTFConsensus(em.ProtCTFMicrographs):
+class XmippProtCTFConsensus(ProtCTFMicrographs):
     """
     Protocol to make a selection of meaningful CTFs in basis of the defocus
     values, the astigmatism, the resolution, other Xmipp parameters, and
@@ -54,7 +56,7 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
     _lastUpdateVersion = VERSION_2_0
 
     def __init__(self, **args):
-        em.ProtCTFMicrographs.__init__(self, **args)
+        ProtCTFMicrographs.__init__(self, **args)
         self._freqResol = {}
         self.stepsExecutionMode = params.STEPS_SERIAL
 
@@ -345,16 +347,16 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
 
         # reading the outputs
         if (len(doneListAccepted) > 0 or len(newDoneAccepted) > 0):
-            ctfSet = self._loadOutputSet(em.SetOfCTF, 'ctfs.sqlite')
-            micSet = self._loadOutputSet(em.SetOfMicrographs,
+            ctfSet = self._loadOutputSet(SetOfCTF, 'ctfs.sqlite')
+            micSet = self._loadOutputSet(SetOfMicrographs,
                                          'micrographs.sqlite')
 
         # AJ new subsets with discarded ctfs
         if (len(doneListDiscarded) > 0 or len(newDoneDiscarded) > 0):
             ctfSetDiscarded = \
-                self._loadOutputSet(em.SetOfCTF, 'ctfsDiscarded.sqlite')
+                self._loadOutputSet(SetOfCTF, 'ctfsDiscarded.sqlite')
             micSetDiscarded = \
-                self._loadOutputSet(em.SetOfMicrographs,
+                self._loadOutputSet(SetOfMicrographs,
                                     'micrographsDiscarded.sqlite')
 
         if newDoneAccepted:
@@ -456,7 +458,7 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
 
         if os.path.exists(setFile):
             outputSet = SetClass(filename=setFile)
-            if (outputSet.__len__() is 0):
+            if (outputSet.__len__() == 0):
                 pwutils.path.cleanPath(setFile)
 
         if os.path.exists(setFile):
@@ -469,9 +471,9 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
 
         micSet = self.inputCTF.get().getMicrographs()
 
-        if isinstance(outputSet, em.SetOfMicrographs):
+        if isinstance(outputSet, SetOfMicrographs):
             outputSet.copyInfo(micSet)
-        elif isinstance(outputSet, em.SetOfCTF):
+        elif isinstance(outputSet, SetOfCTF):
             outputSet.setMicrographs(micSet)
         return outputSet
 
@@ -489,8 +491,8 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
         # move to a single step, each step takes 5 sec while the function
         # takes 0.03 sec
         # convert to md
-        md1 = MetaData()
-        md2 = MetaData()
+        md1 = xmippLib.MetaData()
+        md2 = xmippLib.MetaData()
 
         for ctf1 in method1:  # reference CTF
             ctfId = ctf1.getObjId()
@@ -626,7 +628,7 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
                 with open(fn, 'a') as f:
                     f.write('%d F\n' % ctf.getObjId())
 
-        for k, v in self.discDict.iteritems():
+        for k, v in self.discDict.items():
             setattr(self, "rejBy"+k, Integer(v))
         self._store()
 
@@ -843,7 +845,7 @@ class XmippProtCTFConsensus(em.ProtCTFMicrographs):
     def _loadInputCtfSet(self):
         ctfFile = self.inputCTF.get().getFileName()
         self.debug("Loading input db: %s" % ctfFile)
-        ctfSet = em.SetOfCTF(filename=ctfFile)
+        ctfSet = SetOfCTF(filename=ctfFile)
         ctfSet.loadAllProperties()
         return ctfSet
 

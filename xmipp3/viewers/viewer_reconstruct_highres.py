@@ -27,18 +27,16 @@
 # *
 # **************************************************************************
 
-from glob import glob
 from os.path import exists, join
 
-from pyworkflow.protocol.params import EnumParam, NumericRangeParam, LabelParam, IntParam, FloatParam
+from pyworkflow.protocol.params import (EnumParam, NumericRangeParam,
+                                        LabelParam, IntParam, FloatParam)
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-from pyworkflow.em.viewers import ObjectView, DataView, ChimeraClientView
-import pyworkflow.em.viewers.showj as showj
+from pwem.viewers import ObjectView, DataView, ChimeraClientView, showj
 
 from xmippLib import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
                    MDL_RESOLUTION_FREQ, MDL_RESOLUTION_FRC, MetaData)
-from xmipp3.convert import getImageLocation
 from xmipp3.protocols.protocol_reconstruct_highres import XmippProtReconstructHighRes
 from .plotter import XmippPlotter
 
@@ -259,7 +257,7 @@ Examples:
         view=None
         if exists(fnAngles):
             fnAnglesSqLite = join(fnDir,"angles.sqlite")
-            from pyworkflow.em.metadata.utils import getSize
+            from pwem.metadata import getSize
             self.createAngDistributionSqlite(fnAnglesSqLite, getSize(fnAngles), itemDataIterator=self._iterAngles(fnAngles))
             view = ChimeraClientView(join(fnDir,"volumeAvg.mrc"), showProjection=True, angularDistFile=fnAnglesSqLite, spheresDistance=self.spheresScale.get())
         return view
@@ -270,9 +268,9 @@ Examples:
         view=None
         if exists(fnAngles):
             fnAnglesSqLite = join(fnDir,"angles.sqlite")
-            from pyworkflow.em.viewers import EmPlotter
+            from pwem.viewers import EmPlotter
             if not exists(fnAnglesSqLite):
-                from pyworkflow.em.metadata.utils import getSize
+                from pwem.metadata import getSize
                 self.createAngDistributionSqlite(fnAnglesSqLite, getSize(fnAngles), itemDataIterator=self._iterAngles(fnAngles))
             view = EmPlotter(x=1, y=1, mainTitle="Iteration %d" % it, windowTitle="Angular distribution")
             view.plotAngularDistributionFromMd(fnAnglesSqLite, 'iter %d' % it)

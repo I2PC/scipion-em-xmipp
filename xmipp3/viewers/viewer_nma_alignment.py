@@ -28,12 +28,11 @@ This module implement the wrappers aroung Xmipp CL2D protocol
 visualization program.
 """
 
-import os
-from os.path import join, dirname, basename
+from os.path import basename
 
-from pyworkflow.protocol.params import StringParam, BooleanParam
-from pyworkflow.viewer import (ProtocolViewer, CommandView,
-                               DESKTOP_TKINTER, WEB_DJANGO)
+from pyworkflow.protocol.params import StringParam
+from pyworkflow.viewer import (ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO)
+
 import xmippLib
 from xmipp3.protocols.nma.data import Point, Data
 from .nma_plotter import XmippNmaPlotter

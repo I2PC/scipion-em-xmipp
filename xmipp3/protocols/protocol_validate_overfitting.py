@@ -30,10 +30,8 @@ import glob
 
 from pyworkflow import VERSION_1_1
 from pyworkflow.utils import getFloatListFromValues
-from pyworkflow.utils.path import cleanPattern, cleanPath, copyFile
-from pyworkflow.em.data import Volume
-from pyworkflow.object import Float, String
-from pyworkflow.em.protocol import ProtReconstruct3D
+from pyworkflow.utils.path import cleanPattern
+from pwem.protocols import ProtReconstruct3D
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         NumericListParam, IntParam,
                                         StringParam, BooleanParam,
@@ -433,7 +431,7 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
         fnOut = open(outputFn, 'w')
 
         for fnFreq in fnFreqs:
-            print fnFreq
+            print(fnFreq)
             data = []
             dataInv = []
             fnFreqOpen = open(fnFreq, "r")

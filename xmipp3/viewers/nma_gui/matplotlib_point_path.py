@@ -25,7 +25,7 @@
 # **************************************************************************
 
 from math import sqrt
-from ..nma_plotter import plotArray2D
+from xmipp3.viewers.nma_plotter import plotArray2D
 
 
 STATE_NO_POINTS = 0 # on points have been selected, double-click will add first one

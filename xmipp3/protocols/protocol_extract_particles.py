@@ -30,18 +30,18 @@
 
 from os.path import exists
 
-import pyworkflow.em.metadata as md
+import pwem.metadata as md
 import pyworkflow.utils as pwutils
 from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
                                            STATUS_FINISHED)
 import pyworkflow.protocol.params as params
-from pyworkflow.em.protocol import ProtExtractParticles
-from pyworkflow.em.data import Particle, Integer
+from pwem.protocols import ProtExtractParticles
+from pwem.objects import Particle, Integer
 
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
                             xmippToLocation, setXmippAttributes)
-from xmipp3.constants import SAME_AS_PICKING, OTHER
+from xmipp3.constants import OTHER
 
 
 class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):

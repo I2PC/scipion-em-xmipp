@@ -26,21 +26,16 @@
 # **************************************************************************
 
 import os
-from shutil import copy
-from math import floor
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.em.constants import ALIGN_PROJ
+from pyworkflow.protocol.params import PointerParam
 from pyworkflow.utils.path import cleanPath
-from pyworkflow.em.protocol import ProtAnalysis3D
-from pyworkflow.em.data import SetOfClasses2D, Image, SetOfAverages, SetOfParticles, Class2D
-import pyworkflow.em.metadata as md
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
+from pwem.protocols import ProtAnalysis3D
+from pwem.objects import Image
+import pwem.metadata as md
 
 import xmippLib
-from xmipp3.convert import setXmippAttributes, xmippToLocation, rowToAlignment
+from xmipp3.convert import setXmippAttributes, xmippToLocation
 
         
 class XmippProtGenerateReprojections(ProtAnalysis3D):
@@ -87,7 +82,7 @@ class XmippProtGenerateReprojections(ProtAnalysis3D):
         imgSet = self.inputSet.get()
         writeSetOfParticles(imgSet, self.imgsFn)
 
-        from pyworkflow.em.convert import ImageHandler
+        from pwem.convert import ImageHandler
         img = ImageHandler()
         fnVol = self._getTmpPath("volume.vol")
         img.convert(self.inputVolume.get(), fnVol)
