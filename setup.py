@@ -138,6 +138,7 @@ setup(
     # If using Python 2.6 or earlier, then these have to be included in
     # MANIFEST.in as well.
     # include_package_data=True,
+    entry_points={'pyworkflow.plugin': 'xmipp3 = xmipp3'},
     package_data={  # Optional
       'xmipp3': ['xmipp_logo.png', 'protocols.conf'],
     },
