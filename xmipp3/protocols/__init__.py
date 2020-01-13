@@ -126,9 +126,6 @@ from .protocol_consensus_local_ctf import XmippProtConsensusLocalCTF
 
 try:
     from .protocol_roiIJ import XmippProtRoiIJ
-    import pyworkflow
-    emprotocol = pyworkflow.em.protocol.EMProtocol
-    setattr(emprotocol, "_createSetOfMeshes", XmippProtRoiIJ._createSetOfMeshes.__func__)
     from .protocol_subtomo_map_back import XmippProtSubtomoMapBack
     from .protocol_apply_alignment_subtomo import XmippProtApplyTransformSubtomo
     from .protocol_undo_alignment_subtomo import XmippProtUndoAlignSubtomo
