@@ -1131,7 +1131,7 @@ class TestXmippProtProjectZ(TestXmippBase):
         return prot
 
     def _createProjZ(self, inputVolumes):
-        prot = self.newProtocol(XmippProtProjectZ)
+        prot = self.newProtocol(XmippProtSubtomoProject)
         prot.input.set(inputVolumes)
         self.launchProtocol(prot)
 
