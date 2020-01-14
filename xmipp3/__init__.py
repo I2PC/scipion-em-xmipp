@@ -323,6 +323,3 @@ def installDeepLearningToolkit(plugin, env):
                               target)],
                    deps=deepLearningTools, tar='deepLearningToolkit.tgz')
 
-
-pyworkflow.plugin.Domain.registerPlugin(__name__)
-

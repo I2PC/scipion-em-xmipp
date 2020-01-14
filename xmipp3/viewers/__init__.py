@@ -49,12 +49,7 @@ from .viewer_reconstruct_highres import XmippReconstructHighResViewer
 from .viewer_solid_angles import SolidAnglesViewer
 from .viewer_extract_unit_cell import viewerXmippProtExtractUnit
 
-from .viewer_nma import XmippNMAViewer
-from .viewer_nma_alignment import XmippAlignmentNMAViewer
-from .viewer_nma_dimred import XmippDimredNMAViewer
-from .viewer_structure_mapping import XmippProtStructureMappingViewer
 
-from .viewer_pseudoatoms import XmippPseudoAtomsViewer
 #from .viewer_combine_pdb import XmippProtCombinePdbViewer
 
 from .viewer_projmatch import XmippProjMatchViewer
@@ -62,5 +57,7 @@ from .viewer_projmatch import XmippProjMatchViewer
 #AJ
 from .viewer_structure_map_sph import XmippProtStructureMapSphViewer
 from .viewer_volume_deform_sph import XmippVolumeDeformSphViewer
-from .viewer_angular_alignment_sph import XmippAngularAlignmentSphViewer
+
+# Pablo: without NMA this fails, not sure if it has to be here.
+# from .viewer_angular_alignment_sph import XmippAngularAlignmentSphViewer
 

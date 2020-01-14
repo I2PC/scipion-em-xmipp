@@ -161,4 +161,7 @@ setup(
     #        'sample=sample:main',
     #    ],
     #},
+    entry_points={
+        'pyworkflow.plugin': 'xmipp3 = xmipp3'
+    },
 )

@@ -26,8 +26,6 @@
 # *
 # **************************************************************************
 
-from .nma import *
-from .pdb import *
 from .protocol_preprocess import *
 from .protocol_3dbionotes import XmippProt3DBionotes
 from .protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
