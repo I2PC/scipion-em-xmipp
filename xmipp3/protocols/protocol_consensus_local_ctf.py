@@ -1,7 +1,7 @@
 # coding=utf-8
 # **************************************************************************
 # *
-# * Authors:     Estrella Fernandez Gimenez
+# * Authors:     Estrella Fernandez Gimenez (me.fernandez@cnb.csic.es)
 # *              Carlos Oscar Sanchez Sorzano
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia, CSIC

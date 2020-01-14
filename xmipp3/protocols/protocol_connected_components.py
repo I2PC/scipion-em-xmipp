@@ -100,7 +100,7 @@ class XmippProtConnectedComponents(EMProtocol, ProtTomoBase):
             self._defineSourceRelation(inputSet, inputSet)
         else:
             for ix, coorInd in enumerate(self.listOfSets):
-                outputSet = self._createSetOfCoordinates3D(inputSet.getVolumes(), ix+1)
+                outputSet = self._createSetOfCoordinates3D(inputSet.getPrecedents(), ix+1)
                 outputSet.copyInfo(inputSet)
                 outputSet.setBoxSize(inputSet.getBoxSize())
                 for coor3D in inputSet.iterItems():
