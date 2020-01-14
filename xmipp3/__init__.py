@@ -125,7 +125,12 @@ class Plugin(pyworkflow.plugin.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
-        scons = tryAddPipModule(env, 'scons', '3.1.2')
+        # Cancel for now all binaries installation
+        return
+
+
+
+        scons = tryAddPipModule(env, 'scons', '3.0.4')
         joblib = tryAddPipModule(env, 'joblib', '0.11', target='joblib*')
 
         # scikit
