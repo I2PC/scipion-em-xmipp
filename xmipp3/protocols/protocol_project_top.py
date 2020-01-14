@@ -30,8 +30,6 @@ from pyworkflow.em import ImageHandler
 from pyworkflow.em.data import Image, Volume
 from pyworkflow.em.protocol import ProtAnalysis3D
 from pyworkflow.protocol.params import PointerParam, EnumParam, IntParam
-from pyworkflow.utils import importFromPlugin
-SetOfTomograms = importFromPlugin("tomo.objects", "SetOfTomograms")
 import xmippLib
 
 class XmippProtSubtomoProject(ProtAnalysis3D):
@@ -44,7 +42,8 @@ class XmippProtSubtomoProject(ProtAnalysis3D):
     def _defineParams(self, form):
         form.addSection(label='General parameters')
         form.addParam('input', PointerParam, pointerClass="SetOfSubTomograms, SetOfVolumes",
-                      label='Input Volumes')
+                      label='Input Volumes', help='This protocol can *not* work with .em files *if* the input is a set'
+                                                  ' of tomograms or a set of volumes, ')
         form.addParam('dirParam', EnumParam, choices=['X', 'Y', 'Z'], default=2, display=EnumParam.DISPLAY_HLIST,
                       label='Projection direction')
         form.addParam('rangeParam', EnumParam, choices=['All', 'Range'], default=0, display=EnumParam.DISPLAY_HLIST,
