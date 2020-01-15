@@ -27,10 +27,14 @@
 import numpy as np
 
 from pyworkflow.em import ImageHandler
-from pyworkflow.em.data import Image, Volume
+from pyworkflow.em.data import Particle, Volume, Coordinate, Transform
 from pyworkflow.em.protocol import ProtAnalysis3D
 from pyworkflow.protocol.params import PointerParam, EnumParam, IntParam
+from pyworkflow.utils import importFromPlugin
 import xmippLib
+SubTomogram = importFromPlugin('tomo.objects', 'SubTomogram')
+Tomogram = importFromPlugin('tomo.objects', 'Tomogram')
+
 
 class XmippProtSubtomoProject(ProtAnalysis3D):
     """
@@ -98,18 +102,29 @@ class XmippProtSubtomoProject(ProtAnalysis3D):
 
     def createOutputStep(self):
         input = self.input.get()
-        imgSetOut = self._createSetOfAverages()
+        imgSetOut = self._createSetOfParticles()
         imgSetOut.setSamplingRate(input.getSamplingRate())
         imgSetOut.setAlignmentProj()
         for item in input.iterItems():
             idx = item.getObjId()
             fnProj = self._getExtraPath("projection%d.stk" % idx)
-            p = Image()
+            p = Particle()
             p.setLocation(fnProj)
+            if type(item) == SubTomogram:
+                if item.hasCoordinate3D():
+                    coord = Coordinate()
+                    coord.setX(item.getCoordinate3D().getX())
+                    coord.setY(item.getCoordinate3D().getY())
+                    p.setCoordinate(coord)
+                p.setClassId(item.getClassId())
+            if item.hasTransform():
+                transform = Transform()
+                transform.setMatrix(item.gets().getMatrix())
+                p.setTransform(transform)
             imgSetOut.append(p)
 
         imgSetOut.setObjComment(self.getSummary(imgSetOut))
-        self._defineOutputs(outputProjections=imgSetOut)
+        self._defineOutputs(outputParticles=imgSetOut)
         self._defineSourceRelation(self.input, imgSetOut)
 
 # --------------------------- INFO functions ------------------------------
