@@ -23,17 +23,13 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-import os
 
 from pyworkflow.em import *
 from pyworkflow.em.viewers.showj import *
-from pyworkflow.utils import importFromPlugin
 
-Mesh = importFromPlugin("tomo.objects", "Mesh")
-SetOfMeshes = importFromPlugin("tomo.objects", "SetOfMeshes")
-TomogramsTreeProvider = importFromPlugin("tomo.viewers.views_tkinter_tree", "TomogramsTreeProvider")
-TomogramsDialog = importFromPlugin("tomo.viewers.views_tkinter_tree", "TomogramsDialog")
-ProtTomoBase = importFromPlugin("tomo.protocols.protocol_base", "ProtTomoBase")
+from tomo.objects import Mesh, SetOfMeshes
+from tomo.viewers.views_tkinter_tree import TomogramsTreeProvider, TomogramsDialog
+from tomo.protocols.protocol_base import ProtTomoBase
 
 
 class XmippProtRoiIJ(ProtAnalysis2D, ProtTomoBase):
