@@ -31,9 +31,9 @@ from pyworkflow.em.convert import ImageHandler
 import pyworkflow.em.metadata as md
 from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.protocol.params import PointerParam, EnumParam, BooleanParam, FloatParam
-from pyworkflow.utils import importFromPlugin
-ProtTomoBase = importFromPlugin("tomo.objects", "Tomogram")
-ProtTomoBase = importFromPlugin("tomo.protocols", "ProtTomoBase")
+from tomo.objects import Tomogram
+from tomo.protocols import ProtTomoBase
+
 
 from xmipp3.convert import alignmentToRow
 import xmippLib
