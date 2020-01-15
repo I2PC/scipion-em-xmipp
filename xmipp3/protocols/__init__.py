@@ -129,6 +129,9 @@ try:
     from .protocol_subtomo_map_back import XmippProtSubtomoMapBack
     from .protocol_apply_alignment_subtomo import XmippProtApplyTransformSubtomo
     from .protocol_undo_alignment_subtomo import XmippProtUndoAlignSubtomo
+    from .protocol_project_top import XmippProtSubtomoProject
+    from .protocol_connected_components import XmippProtConnectedComponents
+
 except ImportError:
     print(
         'To use a Tomography protocol scipion-em-tomo plugin is required.'
