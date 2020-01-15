@@ -82,8 +82,8 @@ class XmippProtDimredNMA(ProtAnalysis3D):
                                'Hessian Locally Linear Embedding',
                                'Stochastic Proximity Embedding',
                                'Neighborhood Preserving Embedding'],
-                      label='Dim-Red method',
-                      help=""" Dimensionality Reduction method.
+                      label='Dimensionality reduction method',
+                      help=""" Choose among the following dimensionality reduction methods:
     PCA
        Principal Component Analysis 
     LTSA <k=12>

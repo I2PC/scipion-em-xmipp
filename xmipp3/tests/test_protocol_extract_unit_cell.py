@@ -40,12 +40,17 @@ from pyworkflow.tests import BaseTest, setupTestProject
 from pyworkflow.utils import runJob
 from pyworkflow.em.constants import (SYM_I222r, SYM_I222, SCIPION_SYM_NAME,
                                      SYM_In25, SYM_In25r, SYM_CYCLIC,
-                                     SYM_DIHEDRAL, SYM_TETRAHEDRAL,
+                                     SYM_DIHEDRAL_X, SYM_TETRAHEDRAL,
                                      SYM_OCTAHEDRAL)
 from xmipp3 import Plugin
-from xmipp3.constants import XMIPP_SYM_NAME
 from xmipp3.protocols import XmippProtConvertToPseudoAtoms, XmippProtExtractUnit
 from xmipp3.protocols.pdb.protocol_pseudoatoms_base import NMA_MASK_THRE
+from xmipp3.constants import (XMIPP_SYM_NAME, XMIPP_TO_SCIPION, XMIPP_CYCLIC,
+                              XMIPP_DIHEDRAL_X, XMIPP_TETRAHEDRAL, XMIPP_OCTAHEDRAL,
+                              XMIPP_I222, XMIPP_I222r, XMIPP_In25, XMIPP_In25r)
+
+# xmipp does not define symmetries dihedral_y and tetraedral_z3
+# so we need to renumber the symmetry to have then contiguous
 
 
 OFFSET = 22.5
@@ -356,35 +361,35 @@ class TestProtModelBuilding(BaseTest):
         self.outerRadius = 40.
 
         # C8
-        self.filename[SYM_CYCLIC] = generate(
-            SCIPION_SYM_NAME[SYM_CYCLIC][:1]+str(self.symOrder),
-            'xmipp', XMIPP_SYM_NAME[SYM_CYCLIC][:1]+str(self.symOrder))
-        self.box[SYM_CYCLIC] = (50, 45, 81)
-        self.extractunitCell(SYM_CYCLIC)
+        self.filename[XMIPP_CYCLIC] = generate(
+            SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_CYCLIC]][:1]+str(self.symOrder),
+            'xmipp', XMIPP_SYM_NAME[XMIPP_CYCLIC][:1]+str(self.symOrder))
+        self.box[XMIPP_CYCLIC] = (50, 45, 81)
+        self.extractunitCell(XMIPP_CYCLIC)
 
         # C8 + offset
-        self.filename[SYM_CYCLIC] = generate(
-            SCIPION_SYM_NAME[SYM_CYCLIC][:1]+str(self.symOrder),
-            'xmipp', XMIPP_SYM_NAME[SYM_CYCLIC][:1]+str(self.symOrder), OFFSET)
-        self.box[SYM_CYCLIC] = (46, 48, 81)
-        self.extractunitCell(SYM_CYCLIC, OFFSET)
+        self.filename[XMIPP_CYCLIC] = generate(
+            SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_CYCLIC]][:1]+str(self.symOrder),
+            'xmipp', XMIPP_SYM_NAME[XMIPP_CYCLIC][:1]+str(self.symOrder), OFFSET)
+        self.box[XMIPP_CYCLIC] = (46, 48, 81)
+        self.extractunitCell(XMIPP_CYCLIC, OFFSET)
 
         # C1
-        self.filename[SYM_CYCLIC] = generate(
-            SCIPION_SYM_NAME[SYM_CYCLIC][:1] + str(self.symOrder),
-            'xmipp', XMIPP_SYM_NAME[SYM_CYCLIC][:1] + str(self.symOrder))
-        self.box[SYM_CYCLIC] = (81, 81, 81)
+        self.filename[XMIPP_CYCLIC] = generate(
+            SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_CYCLIC]][:1] + str(self.symOrder),
+            'xmipp', XMIPP_SYM_NAME[XMIPP_CYCLIC][:1] + str(self.symOrder))
+        self.box[XMIPP_CYCLIC] = (81, 81, 81)
         self.symOrder = 1
-        self.extractunitCell(SYM_CYCLIC)
+        self.extractunitCell(XMIPP_CYCLIC)
 
         # C2
         self.symOrder = 8  # set to 8 so a pretty 8 fold phantom is created
-        self.filename[SYM_CYCLIC] = generate(
-            SCIPION_SYM_NAME[SYM_CYCLIC][:1] + str(self.symOrder),
-            'xmipp', XMIPP_SYM_NAME[SYM_CYCLIC][:1] + str(self.symOrder))
-        self.box[SYM_CYCLIC] = (81, 81, 81)
+        self.filename[XMIPP_CYCLIC] = generate(
+            SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_CYCLIC]][:1] + str(self.symOrder),
+            'xmipp', XMIPP_SYM_NAME[XMIPP_CYCLIC][:1] + str(self.symOrder))
+        self.box[XMIPP_CYCLIC] = (81, 81, 81)
         self.symOrder = 2
-        self.extractunitCell(SYM_CYCLIC)
+        self.extractunitCell(XMIPP_CYCLIC)
 
     # function to extract the unit cell of dihedral symmetry
     def test_extractunitCelldihedral(self):
@@ -392,69 +397,72 @@ class TestProtModelBuilding(BaseTest):
         self.outerRadius = 40.
 
         # D8
-        self.filename[SYM_DIHEDRAL] = generate(
-            SCIPION_SYM_NAME[SYM_DIHEDRAL][:1] + str(self.symOrder),
-            'xmipp', XMIPP_SYM_NAME[SYM_DIHEDRAL][:1] + str(self.symOrder))
-        self.box[SYM_DIHEDRAL] = (50, 45, 81)
-        self.extractunitCell(SYM_DIHEDRAL)
+        self.filename[XMIPP_DIHEDRAL_X] = generate(
+            SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_DIHEDRAL_X]][:1] + str(self.symOrder),
+            'xmipp', XMIPP_SYM_NAME[XMIPP_DIHEDRAL_X][:1] + str(self.symOrder))
+        self.box[XMIPP_DIHEDRAL_X] = (50, 45, 81)
+        self.extractunitCell(XMIPP_DIHEDRAL_X)
 
         # D8 + offset
-        self.filename[SYM_DIHEDRAL] = generate(
-            SCIPION_SYM_NAME[SYM_DIHEDRAL][:1] + str(self.symOrder), 'xmipp',
-            XMIPP_SYM_NAME[SYM_DIHEDRAL][:1] + str(self.symOrder), OFFSET)
-        self.box[SYM_DIHEDRAL] = (46, 48, 81)
-        self.extractunitCell(SYM_DIHEDRAL, OFFSET)
+        self.filename[XMIPP_DIHEDRAL_X] = generate(
+            SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_DIHEDRAL_X]][:1] + str(self.symOrder), 'xmipp',
+            XMIPP_SYM_NAME[XMIPP_DIHEDRAL_X][:1] + str(self.symOrder), OFFSET)
+        self.box[XMIPP_DIHEDRAL_X] = (46, 48, 81)
+        self.extractunitCell(XMIPP_DIHEDRAL_X, OFFSET)
 
     # function to extract the unit cell of tetrahedral symmetry
     def test_extractunitCelltetrahedral(self):
         self.innerRadius = 0.
         self.outerRadius = 90.
-        self.filename[SYM_TETRAHEDRAL] = generate(
-            SCIPION_SYM_NAME[SYM_TETRAHEDRAL],
-            'xmipp', XMIPP_SYM_NAME[SYM_TETRAHEDRAL])
-        self.box[SYM_TETRAHEDRAL] = (80, 140, 181)
-        self.extractunitCell(SYM_TETRAHEDRAL)
+        self.filename[XMIPP_TETRAHEDRAL] = generate(
+            SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_TETRAHEDRAL]],
+            'xmipp', XMIPP_SYM_NAME[XMIPP_TETRAHEDRAL])
+        self.box[XMIPP_TETRAHEDRAL] = (80, 140, 181)
+        self.extractunitCell(XMIPP_TETRAHEDRAL)
 
     # function to extract the unit cell of octahedral symmetry
     def test_extractunitCelloctahedral(self):
         self.innerRadius = 0.
         self.outerRadius = 90.
-        self.filename[SYM_OCTAHEDRAL] = generate(
-            SCIPION_SYM_NAME[SYM_OCTAHEDRAL],
-            'xmipp', XMIPP_SYM_NAME[SYM_OCTAHEDRAL])
-        self.box[SYM_OCTAHEDRAL] = (110, 55, 181)
-        self.extractunitCell(SYM_OCTAHEDRAL)
+        self.filename[XMIPP_OCTAHEDRAL] = generate(
+            SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_OCTAHEDRAL]],
+            'xmipp', XMIPP_SYM_NAME[XMIPP_OCTAHEDRAL])
+        self.box[XMIPP_OCTAHEDRAL] = (110, 55, 181)
+        self.extractunitCell(XMIPP_OCTAHEDRAL)
 
     # function to extract the unit cell of icosahedral symmetry
     def test_extractunitCellIco(self):
         self.innerRadius = 37.
         self.outerRadius = 79.
-        self.filename[SYM_I222] = generate(SCIPION_SYM_NAME[SYM_I222],
-                                           'xmipp', XMIPP_SYM_NAME[SYM_I222])
-        self.box[SYM_I222] = (94, 92, 53)
-        self.filename[SYM_I222r] = generate(SCIPION_SYM_NAME[SYM_I222r],
-                                            'xmipp', XMIPP_SYM_NAME[SYM_I222r])
-        self.box[SYM_I222r] = (92, 71, 53)
-        self.filename[SYM_In25] = generate(SCIPION_SYM_NAME[SYM_In25],
-                                           'xmipp', XMIPP_SYM_NAME[SYM_In25])
-        self.box[SYM_In25] = (70, 94, 115)
-        self.filename[SYM_In25r] = generate(SCIPION_SYM_NAME[SYM_In25r],
-                                            'xmipp', XMIPP_SYM_NAME[SYM_In25r])
-        self.box[SYM_In25r] = (70, 71, 55)
+        self.filename[XMIPP_I222] = generate(SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_I222]],
+                                           'xmipp', XMIPP_SYM_NAME[XMIPP_I222])
+        self.box[XMIPP_I222] = (94, 92, 53)
 
-        self.extractunitCell(SYM_I222)  # no crowther 222
-        self.extractunitCell(SYM_I222r)  # crowther 222
-        self.extractunitCell(SYM_In25)
-        self.extractunitCell(SYM_In25r)
+        self.filename[XMIPP_I222r] = generate(SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_I222r]],
+                                            'xmipp', XMIPP_SYM_NAME[XMIPP_I222r])
+        self.box[XMIPP_I222r] = (92, 71, 53)
+
+        self.filename[XMIPP_In25] = generate(SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_In25]],
+                                           'xmipp', XMIPP_SYM_NAME[XMIPP_In25])
+        self.box[XMIPP_In25] = (70, 94, 115)
+
+        self.filename[XMIPP_In25r] = generate(SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_In25r]],
+                                            'xmipp', XMIPP_SYM_NAME[XMIPP_In25r])
+        self.box[XMIPP_In25r] = (70, 71, 55)
+
+        self.extractunitCell(XMIPP_I222)  # no crowther 222
+        self.extractunitCell(XMIPP_I222r)  # crowther 222
+        self.extractunitCell(XMIPP_In25)
+        self.extractunitCell(XMIPP_In25r)
 
     def test_extractunitCellHalfIco(self):
         self.innerRadius = 37.
         self.outerRadius = 79.
-        self.filename[SYM_I222r] = generate(SCIPION_SYM_NAME[SYM_I222r],
-                                            'xmipp', XMIPP_SYM_NAME[SYM_I222r])
-        self.box[SYM_I222r] = (91, 70, 53)
+        self.filename[XMIPP_I222r] = generate(SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_I222r]],
+                                            'xmipp', XMIPP_SYM_NAME[XMIPP_I222r])
+        self.box[XMIPP_I222r] = (91, 70, 53)
 
-        self.extractunitCell(SYM_I222r, cropZ=True)  # crowther 222
+        self.extractunitCell(XMIPP_I222r, cropZ=True)  # crowther 222
 
     # general function to extract the unit cell
     def extractunitCell(self, sym, offset=0, cropZ=False):
@@ -519,6 +527,7 @@ class TestProtModelBuilding(BaseTest):
         prot.setObjLabel('import volume(%s)' % XMIPP_SYM_NAME[sym])
         self.launchProtocol(prot)
         # execute protocol extract unitCell
+
         args = {'inputVolumes': prot.outputVolume,
                 'symmetryGroup': sym,
                 'symmetryOrder': self.symOrder,
@@ -527,6 +536,7 @@ class TestProtModelBuilding(BaseTest):
                 'expandFactor': .2,
                 'offset': offset
                 }
+        print("args", args)
         prot = self.newProtocol(XmippProtExtractUnit, **args)
         prot.setObjLabel('extract unit cell')
         self.launchProtocol(prot)

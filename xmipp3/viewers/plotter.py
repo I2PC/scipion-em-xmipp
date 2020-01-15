@@ -48,7 +48,7 @@ class XmippPlotter(EmPlotter):
         
         self.plotAngularDistribution(title, rot, tilt, weight)
     
-    def plotMd(self, md, mdLabelX, mdLabelY, color='g',**args):
+    def _prepareDataForPlot(self, md, mdLabelX, mdLabelY):
         """ plot metadata columns mdLabelX and mdLabelY
             if nbins is in args then and histogram over y data is made
         """
@@ -61,7 +61,23 @@ class XmippPlotter(EmPlotter):
             if mdLabelX:
                 xx.append(md.getValue(mdLabelX, objId))
             yy.append(md.getValue(mdLabelY, objId))
-        
+        return xx, yy
+
+    def plotScatterMd(self, md, mdLabelX, mdLabelY, color='g', **args):
+        """ scatterplot metadata columns mdLabelX and mdLabelY
+            if nbins is in args then and histogram over y data is made
+        """
+        xx, yy= self._prepareDataForPlot( md, mdLabelX, mdLabelY)
+        try:
+            self.plotScatter(xx, yy, color, **args)
+        except AttributeError:
+            return
+
+    def plotMd(self, md, mdLabelX, mdLabelY, color='g', **args):
+        """ plot metadata columns mdLabelX and mdLabelY
+            if nbins is in args then and histogram over y data is made
+        """
+        xx, yy= self._prepareDataForPlot( md, mdLabelX, mdLabelY)
         nbins = args.pop('nbins', None)
         if nbins is None:
             self.plotData(xx, yy, color, **args)
