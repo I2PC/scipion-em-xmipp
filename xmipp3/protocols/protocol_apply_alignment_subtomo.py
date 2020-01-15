@@ -30,9 +30,8 @@ from pyworkflow.em.convert import ImageHandler
 import pyworkflow.em.metadata as md
 from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.protocol.params import PointerParam
-from pyworkflow.utils import importFromPlugin
-SetOfSubTomograms = importFromPlugin("tomo.objects", "SetOfSubTomograms")
-AverageSubTomogram = importFromPlugin("tomo.objects", "AverageSubTomogram")
+from tomo.objects import SetOfSubTomograms
+from tomo.objects import AverageSubTomogram
 from xmipp3.convert import xmippToLocation, writeSetOfVolumes, alignmentToRow
 import xmippLib
 
