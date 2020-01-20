@@ -594,7 +594,7 @@ class TestXmippExtractParticles(TestXmippBase):
         self._checkVarianceAndGiniCoeff(outputParts[170], 1.2081, 0.5754)
 
     def testExtractBorders(self):
-        print "Run extract particles extracting borders particles"
+        print "Run Extract particles at border"
         protExtract = self.newProtocol(XmippProtExtractParticles,
                                        boxSize=750,
                                        downsampleType=OTHER,
@@ -602,7 +602,7 @@ class TestXmippExtractParticles(TestXmippBase):
                                        doBorders=True,
                                        doFlip=False)
 
-        protExtract.setObjLabel("extract borders")
+        protExtract.setObjLabel("Extract particles at border")
         protExtract.inputCoordinates.set(self.protPP.outputCoordinates)
         protExtract.inputMicrographs.set(self.protImport.outputMicrographs)
         self.launchProtocol(protExtract)
