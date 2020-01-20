@@ -120,4 +120,21 @@ from .protocol_angular_alignment_sph import XmippProtAngularAlignmentSPH
 from .protocol_volume_deform_sph import XmippProtVolumeDeformSPH
 from .protocol_structure_map_sph import XmippProtStructureMapSPH
 from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
+from .protocol_local_ctf import XmippProtLocalCTF
+from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
+from .protocol_consensus_local_ctf import XmippProtConsensusLocalCTF
+from .protocol_particle_pick_remove_duplicates import XmippProtPickingRemoveDuplicates
 
+
+try:
+    from .protocol_subtomo_map_back import XmippProtSubtomoMapBack
+    from .protocol_apply_alignment_subtomo import XmippProtApplyTransformSubtomo
+    from .protocol_undo_alignment_subtomo import XmippProtUndoAlignSubtomo
+    from .protocol_project_top import XmippProtSubtomoProject
+    from .protocol_connected_components import XmippProtConnectedComponents
+    from .protocol_roiIJ import XmippProtRoiIJ
+
+except ImportError:
+    print(
+        'To use a Tomography protocol scipion-em-tomo plugin is required.'
+        ' See https://github.com/scipion-em/scipion-em-tomo for further details')

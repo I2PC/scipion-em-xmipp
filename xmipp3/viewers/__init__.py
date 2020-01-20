@@ -32,9 +32,10 @@ from .viewer_cltomo import XmippCLTomoViewer
 from .viewer_ctf_consensus import XmippCTFConsensusViewer
 from .viewer_deep_consensus import XmippDeepConsensusViewer
 from .viewer_deep_micrograph_cleaner import XmippDeepMicrographViewer
+from .viewer_eliminate_empty_images import XmippEliminateEmptyViewer
 from .viewer_ml2d import XmippML2DViewer
 from .viewer_mltomo import XmippMLTomoViewer
-from .viewer_movie_alignment import XmippMovieAlignViewer
+from .viewer_movie_alignment import XmippMovieAlignViewer, XmippMovieMaxShiftViewer
 from .viewer_normalize_strain import XmippNormalizeStrainViewer
 from .viewer_resolution3d import XmippResolution3DViewer
 from .viewer_resolution_directional import XmippMonoDirViewer
@@ -53,6 +54,7 @@ from .viewer_nma import XmippNMAViewer
 from .viewer_nma_alignment import XmippAlignmentNMAViewer
 from .viewer_nma_dimred import XmippDimredNMAViewer
 from .viewer_structure_mapping import XmippProtStructureMappingViewer
+from .viewer_analyze_local_ctf import XmippAnalyzeLocalCTFViewer
 
 from .viewer_pseudoatoms import XmippPseudoAtomsViewer
 #from .viewer_combine_pdb import XmippProtCombinePdbViewer

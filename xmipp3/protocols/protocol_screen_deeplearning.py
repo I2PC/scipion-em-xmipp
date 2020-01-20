@@ -234,7 +234,7 @@ class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
                 and self.nEpochs.get() > 0):
             assert not self.inTrueSetOfParticles.get() is None, \
                     "Positive particles must be provided for training if nEpochs!=0"
-                    
+
         for dataDict in dataDicts:
             if not dataDict is None:
                 for fnameParticles in sorted(dataDict):

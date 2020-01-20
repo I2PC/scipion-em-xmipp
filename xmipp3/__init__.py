@@ -25,13 +25,15 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+
+import subprocess
 from datetime import datetime
 
 import pyworkflow.em
 import pyworkflow.utils as pwutils
 
-from xmipp3.base import *
-from xmipp3.constants import XMIPP_HOME
+from .base import *
+from .constants import XMIPP_HOME
 from xmipp3.condaEnvManager import CondaEnvManager
 
 _logo = "xmipp_logo.png"
@@ -43,6 +45,7 @@ class Plugin(pyworkflow.em.Plugin):
     _pathVars = [XMIPP_HOME]
     _supportedVersions = []
     _condaRootPath= None
+    
     @classmethod
     def _defineVariables(cls):
         cls._defineEmVar(XMIPP_HOME, 'xmipp')
@@ -57,8 +60,9 @@ class Plugin(pyworkflow.em.Plugin):
         environ.update({
             'PATH': getXmippPath('bin'),
             'LD_LIBRARY_PATH': getXmippPath('lib'),
-            'PYTHONPATH': getXmippPath('pylib')
-        }, position=pos)
+            'PYTHONPATH': getXmippPath('pylib')+":" +  # FIXME: Only pylib should be enough
+                          getXmippPath(os.path.join('pylib', 'xmippPyModules'))
+                             }, position=pos)
 
         # environ variables are strings not booleans
         if os.environ.get('CUDA', 'False') != 'False':
@@ -115,7 +119,6 @@ class Plugin(pyworkflow.em.Plugin):
         if kwargs.get('doRaise', True) and not os.path.exists(model):
             raise Exception("'%s' model not found. Please, run: \n"
                             " > scipion installb deepLearningToolkit" % modelPath[0])
-
         return model
 
     @classmethod

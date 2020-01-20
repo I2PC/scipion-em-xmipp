@@ -107,6 +107,8 @@ class XmippProtResolution3D(ProtAnalysis3D):
              (refVol,
               inputVol,
               fscFn, samplingRate)
+
+
         self.runJob("xmipp_resolution_fsc", args)
     
     def computeBfactorStep(self):
