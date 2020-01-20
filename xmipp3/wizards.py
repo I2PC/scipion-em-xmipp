@@ -29,6 +29,7 @@
 from pyworkflow.em.constants import *
 from pyworkflow.em.wizard import *
 from pyworkflow.em.protocol import ProtImportCoordinates
+from pyworkflow.utils import importFromPlugin
 
 from .constants import *
 from .protocols.protocol_cl2d import IMAGES_PER_CLASS
@@ -41,8 +42,7 @@ from .protocols import (
     XmippProtMaskVolumes, XmippProtAlignVolume, XmippProtCL2D,
     XmippProtHelicalParameters, XmippProtConsensusPicking, XmippProtMonoRes,
     XmippProtRotSpectra, XmippProtReconstructHighRes, XmippProtExtractUnit,
-    XmippProtReconstructHeterogeneous, XmippMetaProtDiscreteHeterogeneityScheduler,
-    XmippProtConnectedComponents)
+    XmippProtReconstructHeterogeneous, XmippMetaProtDiscreteHeterogeneityScheduler)
 
 
 #===============================================================================
@@ -515,12 +515,17 @@ class XmippGaussianVolumesWizard(GaussianVolumesWizard):
         _label = params['label']
         GaussianVolumesWizard.show(self, form, _value, _label, UNIT_PIXEL_FOURIER)
 
-#===============================================================================
+
+# ==============================================================================
 #  TOMO
-#===============================================================================
+# ==============================================================================
+XmippProtConnectedComponents = importFromPlugin("xmipp3.protocols",
+                                                "XmippProtConnectedComponents",
+                                                errorMsg=TOMO_IMPORT_ERROR)
 
 class XmippConnectedCompWizard(Wizard):
-    _targets = [(XmippProtConnectedComponents, ['distance'])]
+    _targets = ([(XmippProtConnectedComponents, ['distance'])]
+                if XmippProtConnectedComponents is not None else [])
 
     def show(self, form):
         tomoCCProt = form.protocol

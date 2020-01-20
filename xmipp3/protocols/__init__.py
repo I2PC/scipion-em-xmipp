@@ -130,4 +130,6 @@ try:
 except Exception:
     from pyworkflow.utils import pluginNotFound
     from xmipp3.constants import TOMO_IMPORT_ERROR
-    pluginNotFound("xmipp-tomo", TOMO_IMPORT_ERROR)
+    pluginNotFound("xmipp-tomo",
+                   'Tomography protocols couldn\'t be imported.' +
+                   TOMO_IMPORT_ERROR)
