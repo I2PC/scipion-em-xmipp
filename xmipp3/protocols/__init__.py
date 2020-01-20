@@ -129,8 +129,5 @@ try:
     from .tomo import *
 except Exception:
     from pyworkflow.utils import pluginNotFound
-    pluginNotFound("xmipp-tomo", 'Tomography protocols couldn\'t be imported.\n'
-                   '   To use a Tomography protocol scipion-em-tomo plugin is '
-                   'required.\n '
-                   'See https://github.com/scipion-em/scipion-em-tomo for '
-                   'further details')
+    from xmipp3.constants import TOMO_IMPORT_ERROR
+    pluginNotFound("xmipp-tomo", TOMO_IMPORT_ERROR)

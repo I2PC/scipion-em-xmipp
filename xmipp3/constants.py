@@ -132,3 +132,9 @@ XMIPP_SYM_NAME[XMIPP_I222] = 'I1'
 XMIPP_SYM_NAME[XMIPP_I222r] = 'I2'
 XMIPP_SYM_NAME[XMIPP_In25] = 'I3'
 XMIPP_SYM_NAME[XMIPP_In25r] = 'I4'
+
+TOMO_IMPORT_ERROR = ('Tomography protocols couldn\'t be imported.\n'
+                     '   To use a Tomography protocol scipion-em-tomo plugin '
+                     'is required.\n '
+                     'See https://github.com/scipion-em/scipion-em-tomo for '
+                     'further details')

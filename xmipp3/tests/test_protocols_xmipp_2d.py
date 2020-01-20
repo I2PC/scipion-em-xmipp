@@ -1131,6 +1131,10 @@ class TestXmippProtProjectZ(TestXmippBase):
         return prot
 
     def _createProjZ(self, inputVolumes):
+        XmippProtSubtomoProject = importFromPlugin("xmipp3.protocols",
+                                                   "XmippProtSubtomoProject",
+                                                   errorMsg=TOMO_IMPORT_ERROR,
+                                                   doRaise=True)
         prot = self.newProtocol(XmippProtSubtomoProject)
         prot.input.set(inputVolumes)
         self.launchProtocol(prot)
