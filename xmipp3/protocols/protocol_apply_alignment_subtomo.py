@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # **************************************************************************
 # *
-# * Authors:     Estrella Fernandez Gimenez
+# * Authors:     Estrella Fernandez Gimenez (me.fernandez@cnb.csic.es)
 # *
 # *  BCU, Centro Nacional de Biotecnologia, CSIC
 # *
@@ -30,7 +30,8 @@ from pyworkflow.em.convert import ImageHandler
 import pyworkflow.em.metadata as md
 from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.protocol.params import PointerParam
-from tomo.objects import SetOfSubTomograms, AverageSubTomogram
+from tomo.objects import SetOfSubTomograms
+from tomo.objects import AverageSubTomogram
 from xmipp3.convert import xmippToLocation, writeSetOfVolumes, alignmentToRow
 import xmippLib
 

@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 # **************************************************************************
 # *
-# * Authors:     Estrella Fernandez Gimenez
-# *              Carlos Oscar Sanchez Sorzano
+# * Authors:     Estrella Fernandez Gimenez (me.fernandez@cnb.csic.es)
 # *
 # *  BCU, Centro Nacional de Biotecnologia, CSIC
 # *
@@ -34,6 +33,8 @@ from pyworkflow.em.protocol import EMProtocol
 from pyworkflow.protocol.params import PointerParam, EnumParam, BooleanParam, FloatParam
 from tomo.objects import Tomogram
 from tomo.protocols import ProtTomoBase
+
+
 from xmipp3.convert import alignmentToRow
 import xmippLib
 
@@ -87,7 +88,6 @@ class XmippProtSubtomoMapBack(EMProtocol, ProtTomoBase):
     # --------------------------- STEPS functions -------------------------------
     def convertInput(self):
         for tomo in self.inputTomograms.get().iterItems():
-            print("CONVERT tomoId ", tomo.getObjId())
             img = ImageHandler()
             fnTomo = self._getExtraPath('tomogram_%d.mrc' % tomo.getObjId())
             img.convert(tomo, fnTomo)
@@ -103,7 +103,6 @@ class XmippProtSubtomoMapBack(EMProtocol, ProtTomoBase):
 
     def runMapBack(self, classId):
         for tomo in self.inputTomograms.get().iterItems():
-            print("RUN tomoId ", tomo.getObjId())
             TsSubtomo = self.inputClasses.get().getSamplingRate()
             TsTomo = tomo.getSamplingRate()
             scaleFactor = TsSubtomo/TsTomo
