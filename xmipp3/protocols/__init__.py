@@ -29,11 +29,10 @@
 from .nma import *
 from .pdb import *
 from .protocol_preprocess import *
+
 from .protocol_3dbionotes import XmippProt3DBionotes
 from .protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from .protocol_align_volume import XmippProtAlignVolume, XmippProtAlignVolumeForWeb
-from .protocol_preprocess.protocol_add_noise import (XmippProtAddNoiseVolumes,
-                                                     XmippProtAddNoiseParticles)
 from .protocol_apply_alignment import XmippProtApplyAlignment
 from .protocol_apply_transformation_matrix import XmippProtApplyTransformationMatrix
 from .protocol_break_symmetry import XmippProtAngBreakSymmetry
@@ -54,8 +53,8 @@ from .protocol_ctf_correct_wiener2d import XmippProtCTFCorrectWiener2D
 from .protocol_consensus_classes3D import XmippProtConsensusClasses3D
 from .protocol_subtract_projection import XmippProtSubtractProjection
 from .protocol_denoise_particles import XmippProtDenoiseParticles
-from .protocol_eliminate_empty_images import XmippProtEliminateEmptyParticles, \
-                                             XmippProtEliminateEmptyClasses
+from .protocol_eliminate_empty_images import (XmippProtEliminateEmptyParticles,
+                                              XmippProtEliminateEmptyClasses)
 from .protocol_extract_particles import XmippProtExtractParticles
 from .protocol_extract_particles_movies import XmippProtExtractMovieParticles
 from .protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
@@ -127,14 +126,11 @@ from .protocol_particle_pick_remove_duplicates import XmippProtPickingRemoveDupl
 
 
 try:
-    from .protocol_subtomo_map_back import XmippProtSubtomoMapBack
-    from .protocol_apply_alignment_subtomo import XmippProtApplyTransformSubtomo
-    from .protocol_undo_alignment_subtomo import XmippProtUndoAlignSubtomo
-    from .protocol_project_top import XmippProtSubtomoProject
-    from .protocol_connected_components import XmippProtConnectedComponents
-    from .protocol_roiIJ import XmippProtRoiIJ
-
-except ImportError:
-    print(
-        'To use a Tomography protocol scipion-em-tomo plugin is required.'
-        ' See https://github.com/scipion-em/scipion-em-tomo for further details')
+    from .tomo import *
+except Exception:
+    from pyworkflow.utils import pluginNotFound
+    pluginNotFound("xmipp-tomo", 'Tomography protocols couldn\'t be imported.\n'
+                   '   To use a Tomography protocol scipion-em-tomo plugin is '
+                   'required.\n '
+                   'See https://github.com/scipion-em/scipion-em-tomo for '
+                   'further details')

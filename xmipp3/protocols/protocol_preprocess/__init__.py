@@ -24,6 +24,9 @@
 # *
 # **************************************************************************
 
+from .protocol_add_noise import XmippProtAddNoiseVolumes
+from .protocol_add_noise import XmippProtAddNoiseParticles
+
 from .protocol_crop_resize import XmippResizeHelper
 from .protocol_crop_resize import XmippProtCropResizeParticles
 from .protocol_crop_resize import XmippProtCropResizeVolumes
