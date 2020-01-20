@@ -506,12 +506,14 @@ class TestXmippExtractParticles(TestXmippBase):
         self.assertTrue(particle.hasAttribute('_xmipp_scoreByVariance'),
                         'Particle has not scoreByVariance attribute.')
         self.assertAlmostEqual(particle._xmipp_scoreByVariance.get(), varianceScore,
-                               3, "The was a problem with the varianceScore")
+                               delta=0.01,
+                               msg="The was a problem with the varianceScore")
 
         self.assertTrue(particle.hasAttribute('_xmipp_scoreByGiniCoeff'),
                         'Particle has not scoreByGiniCoeff attribute.')
         self.assertAlmostEqual(particle._xmipp_scoreByGiniCoeff.get(), giniScore,
-                               3, "The was a problem with the giniCoeffScore")
+                               delta=0.05,
+                               msg="The was a problem with the giniCoeffScore")
 
     def testExtractSameAsPicking(self):
         print "Run extract particles from same micrographs as picking"
@@ -591,16 +593,16 @@ class TestXmippExtractParticles(TestXmippBase):
         self._checkSamplingConsistency(outputParts)
         self._checkVarianceAndGiniCoeff(outputParts[170], 1.2081, 0.5754)
 
-    def testNoExtractBorders(self):
-        print "Run extract particles avoiding extract in borders"
+    def testExtractBorders(self):
+        print "Run Extract particles at border"
         protExtract = self.newProtocol(XmippProtExtractParticles,
                                        boxSize=750,
                                        downsampleType=OTHER,
                                        doInvert=False,
-                                       doBorders=False,
+                                       doBorders=True,
                                        doFlip=False)
 
-        protExtract.setObjLabel("extract-avoid borders")
+        protExtract.setObjLabel("Extract particles at border")
         protExtract.inputCoordinates.set(self.protPP.outputCoordinates)
         protExtract.inputMicrographs.set(self.protImport.outputMicrographs)
         self.launchProtocol(protExtract)
@@ -631,9 +633,10 @@ class TestXmippExtractParticles(TestXmippBase):
         self.assertEqual(outputParts.getSamplingRate(), samplingMics,
                          "Output sampling rate should be equal to input "
                          "sampling rate.")
-        self.assertAlmostEquals(outputParts.getSize(), 399, delta=1)
+        self.assertAlmostEquals(outputParts.getSize(), 403, delta=1)
         self._checkSamplingConsistency(outputParts)
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.2120, 0.5275)
+        # Particle 335 is outbourder with this boxsize. Checking it...
+        self._checkVarianceAndGiniCoeff(outputParts[335], 1.2191, 0.5795)
 
     def testExtractOther(self):
         print "Run extract particles from original micrographs, with downsampling"
@@ -684,7 +687,7 @@ class TestXmippExtractParticles(TestXmippBase):
         for particle in outputParts:
             self.assertTrue(particle.getCoordinate().getMicId() in micsId)
             self.assertAlmostEqual(outputSampling, particle.getSamplingRate())
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.2472, 0.6052)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.2008, 0.5812)
 
     def testExtractNoise(self):
         # here we will try a different patchSize than the default
@@ -706,7 +709,7 @@ class TestXmippExtractParticles(TestXmippBase):
 
         outputParts = protExtract.outputParticles
         self.assertIsNotNone(outputParts, "There was a problem generating the output.")
-        self.assertAlmostEquals(outputParts.getSize(), 403, delta=1)
+        self.assertAlmostEquals(outputParts.getSize(), 395, delta=1)
         self._checkVarianceAndGiniCoeff(outputParts[170], 1.1594, 0.5702)
 
     def testExtractCTF(self):
