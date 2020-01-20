@@ -130,6 +130,7 @@ try:
     from .protocol_undo_alignment_subtomo import XmippProtUndoAlignSubtomo
     from .protocol_project_top import XmippProtSubtomoProject
     from .protocol_connected_components import XmippProtConnectedComponents
+    from .protocol_roiIJ import XmippProtRoiIJ
 
 except ImportError:
     print(
