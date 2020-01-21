@@ -515,27 +515,3 @@ class XmippGaussianVolumesWizard(GaussianVolumesWizard):
         _label = params['label']
         GaussianVolumesWizard.show(self, form, _value, _label, UNIT_PIXEL_FOURIER)
 
-
-# ==============================================================================
-#  TOMO
-# ==============================================================================
-XmippProtConnectedComponents = importFromPlugin("xmipp3.protocols",
-                                                "XmippProtConnectedComponents",
-                                                errorMsg=TOMO_IMPORT_ERROR)
-
-class XmippConnectedCompWizard(Wizard):
-    _targets = ([(XmippProtConnectedComponents, ['distance'])]
-                if XmippProtConnectedComponents is not None else [])
-
-    def show(self, form):
-        tomoCCProt = form.protocol
-        inputCoordinates = tomoCCProt.inputCoordinates.get()
-        if not inputCoordinates:
-            print('You must specify input coordinates')
-            return
-        boxSize = inputCoordinates.getBoxSize()
-        if not boxSize:
-            print('These coordinates do not have box size. Please, enter distance manually.')
-            return
-        distance = boxSize * 3
-        form.setVar('distance', distance)

@@ -123,13 +123,3 @@ from .protocol_local_ctf import XmippProtLocalCTF
 from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
 from .protocol_consensus_local_ctf import XmippProtConsensusLocalCTF
 from .protocol_particle_pick_remove_duplicates import XmippProtPickingRemoveDuplicates
-
-
-try:
-    from .tomo import *
-except Exception:
-    from pyworkflow.utils import pluginNotFound
-    from xmipp3.constants import TOMO_IMPORT_ERROR
-    pluginNotFound("xmipp-tomo",
-                   'Tomography protocols couldn\'t be imported.' +
-                   TOMO_IMPORT_ERROR)
