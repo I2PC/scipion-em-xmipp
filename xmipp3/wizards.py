@@ -29,7 +29,6 @@
 from pyworkflow.em.constants import *
 from pyworkflow.em.wizard import *
 from pyworkflow.em.protocol import ProtImportCoordinates
-from pyworkflow.utils import importFromPlugin
 
 from .constants import *
 from .protocols.protocol_cl2d import IMAGES_PER_CLASS
