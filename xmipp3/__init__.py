@@ -30,7 +30,7 @@ import subprocess
 from datetime import datetime
 
 from pyworkflow import Config
-import pyworkflow.plugin
+import pwem
 import pyworkflow.utils as pwutils
 
 from .base import *
@@ -42,7 +42,7 @@ _references = ['delaRosaTrevin2013', 'Sorzano2013']
 _currentVersion = '3.19.04'
 
 
-class Plugin(pyworkflow.plugin.Plugin):
+class Plugin(pwem.Plugin):
     _homeVar = XMIPP_HOME
     _pathVars = [XMIPP_HOME]
     _supportedVersions = []
@@ -50,7 +50,6 @@ class Plugin(pyworkflow.plugin.Plugin):
     @classmethod
     def _defineVariables(cls):
         cls._defineEmVar(XMIPP_HOME, 'xmipp')
-        cls._defineEmVar(NMA_HOME, 'nma')
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
