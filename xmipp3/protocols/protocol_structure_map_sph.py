@@ -196,7 +196,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
         if self.computeDef.get():
             params = ' -i %s -r %s -o %s --depth %d ' %\
-                     (inputVolFn, refVolFn, fnOut2, self.depth.get())
+                     (fnOut, refVolFn, fnOut2, self.depth.get())
 
             self.runJob("xmipp_volume_deform_sph", params)
             distanceValue = np.loadtxt('./deformation.txt')
