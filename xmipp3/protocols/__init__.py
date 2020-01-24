@@ -41,7 +41,6 @@ from .protocol_break_symmetry import XmippProtAngBreakSymmetry
 from .protocol_cl2d_align import XmippProtCL2DAlign
 from .protocol_cl2d import XmippProtCL2D
 from .protocol_classify_kmeans2d import XmippProtKmeansClassif2D
-from .protocol_cltomo import XmippProtCLTomo
 from .protocol_classification_gpuCorr import XmippProtGpuCrrCL2D
 from .protocol_classification_gpuCorr_semi import XmippProtStrGpuCrrSimple
 from .protocol_classification_gpuCorr_full import XmippProtStrGpuCrrCL2D
@@ -93,7 +92,6 @@ from .protocol_resolution_directional import XmippProtMonoDir
 from .protocol_resolution_monogenic_signal import XmippProtMonoRes
 from .protocol_resolution_deepres import XmippProtDeepRes
 from .protocol_volume_local_sharpening import XmippProtLocSharp
-from .protocol_resolution_monotomo import XmippProtMonoTomo
 from .protocol_rotational_spectra import XmippProtRotSpectra
 from .protocol_rotational_symmetry import XmippProtRotationalSymmetry
 from .protocol_screen_particles import XmippProtScreenParticles
