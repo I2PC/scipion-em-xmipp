@@ -214,7 +214,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             micsDwSet = self._loadOutputSet(SetOfMicrographs,
                                   'micrographs_dose-weighted%s.sqlite' % suffix)
 
-            def tryToAppend(outSet, micOut, tries=1, labelTmp='movie (%s)'):
+            def tryToAppend(outSet, micOut, tries=1, labelPrefix='movie'):
                 """ When micrograph is very big, sometimes it's not ready to be read
                 Then we will wait for it up to a minute in 6 time-growing tries. 
                 Returns True if fails! """
@@ -229,21 +229,21 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                         sleep(tries*3)
                         tryToAppend(outSet, micOut, tries+1)
                     else:
-                        labelStr = labelTmp % micOut.getMicName()
+                        labelStr = ' '.join([labelPrefix, micOut.getMicName()])
                         self.warning("The %s seems corrupted. Skkiping it...\n "
                                      " > %s" % (labelStr, ex))
 
             for movie in newDoneList:
                 tryToAppend(movieSet, movie,
-                            labelTmp='movie (%s)')
+                            labelPrefix='movie')
                 if self.inputMics is not None:
                     mic = self.getMicFromMovie(movie, isDoseWeighted=False)
                     tryToAppend(micsSet, mic,
-                                labelTmp='micrograph (%s)')
+                                labelPrefix='micrograph')
                 if self.inputDwMics is not None:
                     micDw = self.getMicFromMovie(movie, isDoseWeighted=True)
                     tryToAppend(micsDwSet, micDw,
-                                labelTmp='micDW (%s)')
+                                labelPrefix='micDW')
             
             if movieSet.getSize() > 0:
                 self._updateOutputSet('outputMovies%s' % suffix, movieSet,
