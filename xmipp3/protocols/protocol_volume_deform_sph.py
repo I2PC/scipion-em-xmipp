@@ -111,7 +111,7 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
         fnRefVol = self._getFileName('fnRefVol')
         fnOutVol = self._getFileName('fnOutVol')
 
-        params = ' --i1 %s --i2 %s --apply %s --least_squares --local ' % \
+        params = ' --i1 %s --i2 %s --apply %s --least_squares --local --dontScale' % \
                  (fnRefVol, fnInputVol, fnOutVol)
         self.runJob("xmipp_volume_align", params)
 
