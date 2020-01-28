@@ -33,7 +33,7 @@ import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 from pyworkflow.utils.path import cleanPath
 
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
 

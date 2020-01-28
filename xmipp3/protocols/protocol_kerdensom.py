@@ -26,7 +26,7 @@
 from pyworkflow.protocol import (PointerParam, BooleanParam, IntParam,
                                  LEVEL_ADVANCED, StringParam)
 
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 from pwem.objects import Particle
 from pwem.protocols import ProtClassify2D
 

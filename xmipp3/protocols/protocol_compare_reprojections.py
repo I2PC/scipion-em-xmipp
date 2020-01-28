@@ -33,7 +33,7 @@ from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
 from pyworkflow.utils.path import cleanPath
 from pwem.protocols import ProtAnalysis3D
 from pwem.objects import (SetOfClasses2D, Image, SetOfAverages, SetOfParticles)
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
 import xmippLib
@@ -113,7 +113,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             writeSetOfClasses2D(imgSet, self.imgsFn, writeParticles=True)
         else:
             writeSetOfParticles(imgSet, self.imgsFn)
-        from pwem.convert import ImageHandler
+        from pwem.emlib.image import ImageHandler
         img = ImageHandler()
         fnVol = self._getTmpPath("volume.vol")
         img.convert(self.inputVolume.get(), fnVol)

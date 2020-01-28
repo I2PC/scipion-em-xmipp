@@ -40,7 +40,7 @@ import pyworkflow.protocol.constants as const
 from pwem.objects import SetOfParticles,  Set
 from pwem.protocols import ProtAlign2D
 from pwem.constants import ALIGN_2D, ALIGN_NONE
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
 import xmippLib
 from xmippLib import Image, MD_APPEND, DT_DOUBLE

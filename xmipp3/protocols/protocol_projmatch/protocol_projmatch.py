@@ -381,7 +381,7 @@ class XmippProtProjMatch(ProtRefine3D, ProtClassify3D):
     
     def _fillParticlesFromIter(self, partSet, iteration):
         print("_fillParticlesFromIter")
-        import pwem.metadata as md
+        import pwem.emlib.metadata as md
         
         imgSet = self.inputParticles.get()
         imgFn = "all_exp_images@" + self._getFileName('docfileInputAnglesIters', iter=iteration, ref=1)

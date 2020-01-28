@@ -27,7 +27,7 @@
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_2_0
 from pwem.protocols import ProtAnalysis3D
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
 import xmippLib
 from xmipp3.convert import (setXmippAttributes, writeSetOfParticles)

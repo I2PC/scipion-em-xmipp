@@ -34,7 +34,7 @@ from pyworkflow.protocol.constants import (STEPS_SERIAL, LEVEL_ADVANCED)
 import pyworkflow.protocol.params as params
 from pwem.protocols import ProtParticlePicking
 
-import pwem.metadata as MD
+import pwem.emlib.metadata as MD
 from xmipp3.convert import writeSetOfCoordinates, readSetOfCoordsFromPosFnames
 from xmipp3 import XmippProtocol
 

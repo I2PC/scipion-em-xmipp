@@ -26,7 +26,7 @@
 # **************************************************************************
 from pwem.protocols import ProtAnalysis3D
 import pyworkflow.protocol.params as params
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 from pwem.objects import Volume
 from pyworkflow import VERSION_2_0
 

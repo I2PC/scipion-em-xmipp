@@ -32,7 +32,7 @@ import pyworkflow.protocol.params as param
 import pyworkflow.protocol.constants as const
 from pyworkflow.utils.path import cleanPath, makePath
 
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 from pwem.protocols import ProtClassify2D
 from pwem.objects import SetOfClasses2D
 from pwem.constants import ALIGN_NONE, ALIGN_2D

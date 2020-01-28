@@ -23,13 +23,13 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 from pwem.objects import FSC
 from pwem.protocols import ProtAnalysis3D
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.constants import STEPS_PARALLEL
 import pyworkflow.protocol.params as params
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
 from xmipp3.convert import locationToXmipp
 

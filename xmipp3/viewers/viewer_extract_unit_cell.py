@@ -31,7 +31,7 @@ from os.path import exists
 
 import pyworkflow.protocol.params as params
 from pwem.constants import SYM_I222
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 from pwem.objects import (SetOfVolumes)
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
 from pwem.viewers import Chimera, ChimeraView, EmProtocolViewer

@@ -34,7 +34,7 @@ from pyworkflow.utils import Timer, join
 from pyworkflow.utils.path import cleanPattern, cleanPath, makePath, moveFile
 from pyworkflow.protocol.params import *
 
-import pwem.metadata as metadata
+import pwem.emlib.metadata as metadata
 from pwem.protocols import ProtInitialVolume
 from pwem.constants import ALIGN_NONE
 from pwem.objects import SetOfClasses2D, Volume

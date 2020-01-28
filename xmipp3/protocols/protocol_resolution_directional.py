@@ -31,7 +31,7 @@ from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
 from pwem.protocols import ProtAnalysis3D
 from pwem.objects import Volume
 from pyworkflow.utils import getExt
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
 from xmippLib import (MDL_XCOOR, MDL_YCOOR, MDL_ZCOOR,
                       MDL_ANGLE_ROT, MDL_ANGLE_TILT,

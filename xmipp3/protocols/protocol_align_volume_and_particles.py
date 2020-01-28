@@ -30,8 +30,8 @@ from pyworkflow import VERSION_2_0
 from pyworkflow.protocol import STEPS_PARALLEL
 
 from pwem.protocols import ProtAlignVolume
-from pwem.convert import ImageHandler
-import pwem.metadata as md
+from pwem.emlib.image import ImageHandler
+import pwem.emlib.metadata as md
 from pwem.objects import Transform, Volume
 from pwem.constants import ALIGN_PROJ
 

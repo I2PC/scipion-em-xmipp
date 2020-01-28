@@ -26,7 +26,7 @@
 
 from os.path import join, exists
 
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 import pyworkflow.utils.path as path
 from pwem.objects import SetOfClasses2D
 from pyworkflow.protocol.constants import LEVEL_ADVANCED

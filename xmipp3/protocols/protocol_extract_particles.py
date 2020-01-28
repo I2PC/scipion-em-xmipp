@@ -30,7 +30,7 @@
 
 from os.path import exists
 
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 import pyworkflow.utils as pwutils
 from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
                                            STATUS_FINISHED)

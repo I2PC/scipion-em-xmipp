@@ -46,8 +46,8 @@ from pwem.constants import (NO_INDEX, ALIGN_NONE, ALIGN_PROJ, ALIGN_2D,
 from pwem.objects import (Angles, Coordinate, Micrograph, Volume, Particle,
                           MovieParticle, CTFModel, Acquisition, SetOfParticles,
                           Class3D, SetOfVolumes, Transform)
-from pwem.convert import ImageHandler
-import pwem.metadata as md
+from pwem.emlib.image import ImageHandler
+import pwem.emlib.metadata as md
 
 from xmipp3.base import XmippMdRow, getLabelPythonType
 from xmipp3.utils import iterMdRows

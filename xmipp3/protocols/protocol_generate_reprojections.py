@@ -32,7 +32,7 @@ from pyworkflow.protocol.params import PointerParam
 from pyworkflow.utils.path import cleanPath
 from pwem.protocols import ProtAnalysis3D
 from pwem.objects import Image
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
 import xmippLib
 from xmipp3.convert import setXmippAttributes, xmippToLocation
@@ -82,7 +82,7 @@ class XmippProtGenerateReprojections(ProtAnalysis3D):
         imgSet = self.inputSet.get()
         writeSetOfParticles(imgSet, self.imgsFn)
 
-        from pwem.convert import ImageHandler
+        from pwem.emlib.image import ImageHandler
         img = ImageHandler()
         fnVol = self._getTmpPath("volume.vol")
         img.convert(self.inputVolume.get(), fnVol)

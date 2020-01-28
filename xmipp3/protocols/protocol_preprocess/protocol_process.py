@@ -27,7 +27,7 @@
 from pwem.constants import ALIGN_NONE
 from pwem.protocols import ProtProcessParticles, ProtPreprocessVolumes
 from pwem.objects import Volume
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
 from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
                             writeSetOfVolumes, getImageLocation)

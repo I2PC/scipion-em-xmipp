@@ -24,7 +24,7 @@
 # *
 # **************************************************************************
 
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 from pyworkflow.object import String
 from pyworkflow.protocol.params import IntParam, PointerParam, LEVEL_ADVANCED
 from pwem.protocols import ProtProcessParticles

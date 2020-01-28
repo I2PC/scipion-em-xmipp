@@ -34,7 +34,7 @@ import pyworkflow.utils as pwutils
 import pyworkflow.object as pwobj
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 from pwem.objects import Image
 from pwem.protocols.protocol_align_movies import createAlignmentPlot
 from pyworkflow import VERSION_1_1

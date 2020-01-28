@@ -30,7 +30,7 @@ import sys
 import os
 
 from pwem import RELATION_CTF
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfCTF, OrderedDict
 from pyworkflow.object import String
 
@@ -39,7 +39,7 @@ import pyworkflow.protocol.constants as pwconst
 import pyworkflow.utils as pwutils
 
 from pwem.protocols import ProtCTFMicrographs
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
 from xmipp3.utils import isMdEmpty
 from xmipp3.convert import readCTFModel

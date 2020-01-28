@@ -28,7 +28,7 @@ from pyworkflow.object import String
 from pyworkflow.protocol.params import StringParam
 
 from pwem.protocols import ProtProcessParticles
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 from pwem.constants import ALIGN_PROJ
 
 from xmipp3.convert import writeSetOfParticles

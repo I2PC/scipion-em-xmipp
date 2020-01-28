@@ -38,7 +38,7 @@ from pyworkflow.protocol.params import (EnumParam, IntParam, Positive,
                                         BooleanParam)
 
 from pwem.constants import ALIGN_NONE
-from pwem.metadata import getSize, isEmpty
+from pwem.emlib.metadata import getSize, isEmpty
 from pwem.objects import SetOfParticles
 from pwem.protocols import ProtProcessParticles
 
