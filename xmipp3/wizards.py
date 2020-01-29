@@ -383,13 +383,13 @@ class SphMaskWizard(VolumeMaskRadiusWizard):
 
     def _getProvider(self, protocol):
         _objs = self._getParameters(protocol)['input']
-        return ParticleMaskRadiusWizard._getListProvider(self, _objs)
+        return VolumeMaskRadiusWizard._getListProvider(self, _objs)
 
     def show(self, form):
         params = self._getParameters(form.protocol)
         _value = params['value']
         _label = params['label']
-        ParticleMaskRadiusWizard.show(self, form, _value, _label, UNIT_PIXEL)
+        VolumeMaskRadiusWizard.show(self, form, _value, _label, UNIT_PIXEL)
 
 class StructMapSphMaskWizard(VolumeMaskRadiusWizard):
     _targets = [(XmippProtStructureMapSPH, ['Rmax'])]
@@ -406,13 +406,13 @@ class StructMapSphMaskWizard(VolumeMaskRadiusWizard):
 
     def _getProvider(self, protocol):
         _objs = self._getParameters(protocol)['input']
-        return ParticleMaskRadiusWizard._getListProvider(self, _objs)
+        return VolumeMaskRadiusWizard._getListProvider(self, _objs)
 
     def show(self, form):
         params = self._getParameters(form.protocol)
         _value = params['value']
         _label = params['label']
-        ParticleMaskRadiusWizard.show(self, form, _value, _label, UNIT_PIXEL)
+        VolumeMaskRadiusWizard.show(self, form, _value, _label, UNIT_PIXEL)
 
 
 #===============================================================================
