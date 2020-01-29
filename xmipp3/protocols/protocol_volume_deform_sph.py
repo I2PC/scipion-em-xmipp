@@ -50,6 +50,10 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
                       default=8.0,
                       help="In Angstroms, the images and the volume are rescaled so that this resolution is at "
                            "2/3 of the Fourier spectrum.")
+        form.addParam('Rmax', params.IntParam, default=0,
+                      label='Sphere radius',
+                      experLevel=params.LEVEL_ADVANCED,
+                      help='Radius of the sphere where the spherical harmonics will be computed.')
         form.addParam('depth', params.IntParam, default=3,
                       label='Harmonical depth',
                       expertLevel=params.LEVEL_ADVANCED,
@@ -85,7 +89,9 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
         self.newTs = max(TsI, TsR, self.newTs)
         newXdimI = long(XdimI * TsI / self.newTs)
         newXdimR = long(XdimR * TsR / self.newTs)
+        newRmax = long(self.Rmax.get() * TsI / self.newTs)
         self.newXdim = min(newXdimI, newXdimR)
+        self.newRmax = min(newRmax, self.Rmax.get())
 
         ih = ImageHandler()
         ih.convert(self.inputVolume.get(), fnInputVol)
@@ -115,9 +121,10 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
                  (fnRefVol, fnInputVol, fnOutVol)
         self.runJob("xmipp_volume_align", params)
 
-
         params = ' -i %s -r %s -o %s --analyzeStrain --depth %d ' % \
                  (fnOutVol, fnRefVol, fnOutVol, self.depth.get())
+        if self.newRmax != 0:
+            params = params + ' --Rmax %d' % self.newRmax
         self.runJob("xmipp_volume_deform_sph", params)
 
 

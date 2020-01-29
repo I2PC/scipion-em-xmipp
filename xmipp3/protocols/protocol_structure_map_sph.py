@@ -87,8 +87,12 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                       help="In Angstroms, the images and the volume are rescaled so that this resolution is at "
                            "2/3 of the Fourier spectrum.")
         form.addParam('computeDef', params.BooleanParam, label="Compute deformation",
-		              default=True,
+                      default=True,
                       help="Performed and structure mapping with/without deforming the input volumes")
+        form.addParam('Rmax', params.IntParam, default=0,
+                      label='Sphere radius',
+                      experLevel=params.LEVEL_ADVANCED,
+                      help='Radius of the sphere where the spherical harmonics will be computed.')
         form.addParam('depth', params.IntParam, default=3,
                       label='Harmonical depth', condition='computeDef',
                       expertLevel=params.LEVEL_ADVANCED,
@@ -97,30 +101,6 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-
-        #volList, dimList, srList = self._iterInputVolumes()
-        #self.distanceMatrix = np.zeros((len(volList), len(volList)))
-
-        #nVoli = 1
-        #for voli in volList:
-         #   deps = []
-          #  convert = self._insertFunctionStep('convertStep', volList[nVoli - 1],
-         #                            dimList[nVoli - 1], srList[nVoli - 1],
-         #                            min(dimList), max(srList), prerequisites=[])
-         #   nVolj = 1
-         #   for volj in volList:
-         #       if nVolj != nVoli:
-         #           stepID = self._insertFunctionStep('deformStep', volList[nVoli - 1],
-         #                                    volList[nVolj - 1], nVoli - 1,
-         #                                    nVolj - 1, prerequisites=[convert])
-         #           deps.append(stepID)
-
-         #       else:
-         #           stepID = self._insertFunctionStep("extraStep", nVoli, nVolj)
-         #           # self.distanceMatrix[nVoli - 1][nVolj - 1] = 0.0
-         #           deps.append(stepID)
-         #       nVolj += 1
-         #   nVoli += 1
 
         volList, dimList, srList = self._iterInputVolumes()
         self.distanceMatrix = np.zeros((len(volList), len(volList)))
@@ -168,6 +148,8 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         newTs = self.targetResolution.get() * 1.0 / 3.0
         newTs = max(maxSr, newTs)
         newXdim = long(Xdim * Ts / newTs)
+        newRmax = long(self.Rmax.get() * Ts / newTs)
+        self.newRmax = min(newRmax, self.Rmax.get())
         fnOut = os.path.splitext(volFn)[0]
         fnOut = self._getExtraPath(os.path.basename(fnOut + '_crop.vol'))
 
@@ -189,7 +171,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         fnOut = self._getExtraPath('vol%dAlignedTo%d.vol' % (i, j))
         fnOut2 = self._getExtraPath('vol%dDeformedTo%d.vol' % (i, j))
 
-        params = ' --i1 %s --i2 %s --apply %s --least_squares --local ' % \
+        params = ' --i1 %s --i2 %s --apply %s --least_squares --local --dontScale' % \
                  (refVolFn, inputVolFn, fnOut)
 
         self.runJob("xmipp_volume_align", params)
@@ -197,6 +179,8 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         if self.computeDef.get():
             params = ' -i %s -r %s -o %s --depth %d ' %\
                      (fnOut, refVolFn, fnOut2, self.depth.get())
+            if self.newRmax != 0:
+                params = params + ' --Rmax %d' % self.newRmax
 
             self.runJob("xmipp_volume_deform_sph", params)
             distanceValue = np.loadtxt('./deformation.txt')
@@ -289,8 +273,6 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
 
     # --------------------------- UTILS functions --------------------------------------------
-
-
     def _iterInputVolumes(self):
         """ Iterate over all the input volumes. """
         volList = []
