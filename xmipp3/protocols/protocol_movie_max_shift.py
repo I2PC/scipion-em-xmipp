@@ -90,7 +90,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                            ' - *by frame or movie*: Rejects movies if one of '
                                     'the conditions above are met.')
 
-        form.addParam('maxFrameShift', params.FloatParam, default=10,
+        form.addParam('maxFrameShift', params.FloatParam, default=5,
                        label='Max. frame shift (A)',
                        condition='rejType==%s or rejType==%s or rejType==%s'
                                   % (self.REJ_FRAME, self.REJ_AND, self.REJ_OR),
@@ -214,10 +214,12 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             micsDwSet = self._loadOutputSet(SetOfMicrographs,
                                   'micrographs_dose-weighted%s.sqlite' % suffix)
 
-            def tryToAppend(outSet, micOut, tries=1, label='movie'):
+            def tryToAppend(outSet, micOut, tries=1, labelPrefix='movie'):
                 """ When micrograph is very big, sometimes it's not ready to be read
                 Then we will wait for it up to a minute in 6 time-growing tries. 
                 Returns True if fails! """
+                if micOut is None:
+                    return
                 try:
                     micOut.setEnabled(enable)
                     outSet.append(micOut)
@@ -227,21 +229,21 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                         sleep(tries*3)
                         tryToAppend(outSet, micOut, tries+1)
                     else:
+                        labelStr = ' '.join([labelPrefix, micOut.getMicName()])
                         self.warning("The %s seems corrupted. Skkiping it...\n "
-                                     " > %s" % (label, ex))
-                        return True
+                                     " > %s" % (labelStr, ex))
 
             for movie in newDoneList:
                 tryToAppend(movieSet, movie,
-                            label='movie (%s)' % movie.getMicName())
+                            labelPrefix='movie')
                 if self.inputMics is not None:
                     mic = self.getMicFromMovie(movie, isDoseWeighted=False)
                     tryToAppend(micsSet, mic,
-                                label='micrograph (%s)' % mic.getMicName())
+                                labelPrefix='micrograph')
                 if self.inputDwMics is not None:
                     micDw = self.getMicFromMovie(movie, isDoseWeighted=True)
                     tryToAppend(micsDwSet, micDw,
-                                label='micDW (%s)' % micDw.getMicName())
+                                labelPrefix='micDW')
             
             if movieSet.getSize() > 0:
                 self._updateOutputSet('outputMovies%s' % suffix, movieSet,
@@ -376,12 +378,16 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         return errors
 
     def _summary(self):
-        moviesAcc = 0 if not self.hasAttribute('outputMovies') else \
-                    self.outputMovies.getSize()
-        moviesDisc = 0 if not self.hasAttribute('outputMoviesDiscarded') else \
-                    self.outputMoviesDiscarded.getSize()
+        def getSize(outNameCondition):
+            for outName, outObj in self.iterOutputAttributes():
+                if outNameCondition(outName):
+                    return outObj.getSize()
+            return 0
 
-        summary = ['Movies processed: %d'%(moviesAcc+moviesDisc)]
-        summary.append('Movies rejected: *%d*' % moviesDisc)
+        moviesAcc = getSize(lambda x: not x.endswith('Discarded'))
+        outDisc = getSize(lambda x: x.endswith('Discarded'))
+
+        summary = ['Movies processed: %d' % (moviesAcc+outDisc),
+                   'Movies rejected: *%d*' % outDisc]
 
         return summary
