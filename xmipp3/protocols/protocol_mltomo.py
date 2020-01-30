@@ -37,7 +37,7 @@ from pwem.constants import ALIGN_PROJ
 from pwem.objects import SetOfVolumes, SetOfClassesVol
 from pwem.constants import ALIGN_NONE
 
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
 from xmipp3 import Plugin
 from xmipp3.convert import (readSetOfClassesVol, getImageLocation,

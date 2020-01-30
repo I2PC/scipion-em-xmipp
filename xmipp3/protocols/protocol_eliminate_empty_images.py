@@ -28,7 +28,7 @@
 import os
 from datetime import datetime
 
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 import pyworkflow.protocol.constants as cons
 import pyworkflow.protocol.params as param
 from pyworkflow import VERSION_2_0

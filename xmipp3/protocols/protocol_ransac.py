@@ -33,7 +33,7 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
                                         IntParam, StringParam,
                                         STEPS_PARALLEL, LEVEL_ADVANCED, USE_GPU, GPU_LIST)
 
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtInitialVolume
 from pwem.objects import SetOfClasses2D
 
@@ -260,7 +260,7 @@ class XmippProtRansac(ProtInitialVolume):
         cleanPath(self._getTmpPath(fnBase+'.xmd'))
     
     def reconstructStep(self, fnRoot):
-        from pwem.metadata import getSize
+        from pwem.emlib.metadata import getSize
         if os.path.exists(fnRoot+".xmd"):
             Nimages=getSize(fnRoot+".xmd")
             if Nimages>0:

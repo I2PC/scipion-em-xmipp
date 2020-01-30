@@ -36,7 +36,7 @@ from pwem.objects import Image
 from pyworkflow import VERSION_1_1
 from pyworkflow.gui.project import ProjectWindow
 
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 from pwem.protocols.protocol_align_movies import (ProtAlignMovies,
                                                   createAlignmentPlot)
 

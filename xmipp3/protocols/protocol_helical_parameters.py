@@ -26,7 +26,7 @@
 
 import pyworkflow.object as pwobj
 from pwem.objects import Volume
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtPreprocessVolumes
 import pyworkflow.protocol.params as params
 from pyworkflow.protocol.constants import LEVEL_ADVANCED

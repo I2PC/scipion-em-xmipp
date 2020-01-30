@@ -27,7 +27,7 @@
 # **************************************************************************
 
 import xmippLib
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 
 from pyworkflow.protocol.params import PointerParam, StringParam
 

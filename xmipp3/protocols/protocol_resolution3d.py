@@ -27,7 +27,7 @@
 from pyworkflow.protocol import PointerParam, BooleanParam
 from pyworkflow.utils import *
 
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 from pwem.objects import FSC
 from pwem.protocols import ProtAnalysis3D
 

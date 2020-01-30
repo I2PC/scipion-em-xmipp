@@ -44,10 +44,10 @@ from pyworkflow.utils.path import (cleanPath, makePath, copyFile, moveFile,
                                    createLink, cleanPattern)
 from pwem.protocols import ProtRefine3D
 from pwem.objects import SetOfVolumes, Volume
-from pwem.metadata import getFirstRow, getSize
+from pwem.emlib.metadata import getFirstRow, getSize
 from pyworkflow.utils.utils import getFloatListFromValues
-from pwem.convert import ImageHandler
-import pwem.metadata as md
+from pwem.emlib.image import ImageHandler
+import pwem.emlib.metadata as md
 from pwem.constants import ALIGN_PROJ
 
 import xmippLib

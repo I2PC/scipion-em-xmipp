@@ -30,11 +30,11 @@ import math
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_1
 from pyworkflow.utils import makePath, cleanPattern, moveFile
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 from pwem.constants import ALIGN_PROJ
 from pwem.objects import Image, Volume
 from pwem.protocols import ProtAnalysis3D
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
 import xmippLib
 from xmipp3.base import findRow

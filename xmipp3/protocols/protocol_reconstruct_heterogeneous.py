@@ -38,9 +38,9 @@ from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
                                         GPU_LIST)
 from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile
 from pwem.protocols import ProtClassify3D
-from pwem.metadata import getFirstRow, getSize
-from pwem.convert import ImageHandler
-import pwem.metadata as md
+from pwem.emlib.metadata import getFirstRow, getSize
+from pwem.emlib.image import ImageHandler
+import pwem.emlib.metadata as md
 
 import xmippLib
 from xmippLib import MetaData, MD_APPEND, MDL_CLASS_COUNT

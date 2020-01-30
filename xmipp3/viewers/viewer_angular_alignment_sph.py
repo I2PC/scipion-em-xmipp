@@ -26,7 +26,7 @@
 
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 import pyworkflow.protocol.params as params
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 import numpy as np
 import math
 import matplotlib.pyplot as plt

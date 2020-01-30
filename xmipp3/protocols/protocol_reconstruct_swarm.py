@@ -41,7 +41,7 @@ from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
 from pyworkflow.utils.path import cleanPath, copyFile, moveFile
 from pwem.protocols import ProtRefine3D
 from pwem.objects import Volume
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 
 import xmippLib
 from xmipp3.convert import (writeSetOfParticles, getImageLocation)

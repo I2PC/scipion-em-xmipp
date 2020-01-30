@@ -34,7 +34,7 @@ from pwem.objects import FSC
 from pwem.viewers import (DataView, Classes3DView, FscViewer, ObjectView,
                           ChimeraView, ChimeraClientView)
 import pwem.viewers.showj as showj
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 from pyworkflow.protocol.params import EnumParam, NumericRangeParam, LabelParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 

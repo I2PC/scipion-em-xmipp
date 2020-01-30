@@ -31,7 +31,7 @@ from pyworkflow.protocol.params import PointerParam, EnumParam, BooleanParam
 
 from pwem.protocols import ProtOperateParticles
 from pyworkflow.protocol.constants import STEPS_PARALLEL
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 
 import xmippLib
 from xmipp3.convert import (XmippMdRow, particleToRow,

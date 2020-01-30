@@ -38,7 +38,7 @@ import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 
 from pwem.protocols import ProtCTFMicrographs
-from pwem.metadata import Row
+from pwem.emlib.metadata import Row
 from pyworkflow.protocol.constants import (STATUS_NEW)
 
 import xmippLib

@@ -33,8 +33,8 @@ import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as const
 
 from pwem.protocols import ProtAlign2D
-import pwem.metadata as md
-from pwem.metadata import iterRows, getSize
+import pwem.emlib.metadata as md
+from pwem.emlib.metadata import iterRows, getSize
 from pwem.objects import SetOfClasses2D
 from pwem.constants import ALIGN_2D, ALIGN_NONE
 

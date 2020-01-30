@@ -26,8 +26,8 @@
 import pyworkflow.protocol.params as params
 from pyworkflow.utils.properties import Message
 
-import pwem.metadata as md
-from pwem.convert import ImageHandler
+import pwem.emlib.metadata as md
+from pwem.emlib.image import ImageHandler
 from pwem.objects import Particle
 from pwem.protocols import ProtAlign2D
 from pwem.constants import ALIGN_NONE

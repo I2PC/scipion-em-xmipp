@@ -29,8 +29,8 @@ from pyworkflow.protocol.params import LabelParam, StringParam, EnumParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 from pwem.viewers import ChimeraView, DataView
 from xmipp3.protocols.protocol_resolution_directional import XmippProtMonoDir
-from pwem.metadata import MetaData
-from pwem.convert import ImageHandler
+from pwem.emlib.metadata import MetaData
+from pwem.emlib.image import ImageHandler
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm

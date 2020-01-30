@@ -163,7 +163,7 @@ def runTransformMaskStep(self, program, args, **kwargs):
 
 
 def runVolumeConvertStep(self, reconstructedFilteredVolume, maskedFileName):
-    from pwem.convert import ImageHandler
+    from pwem.emlib.image import ImageHandler
     img = ImageHandler()
     img.convert(reconstructedFilteredVolume, maskedFileName)
 

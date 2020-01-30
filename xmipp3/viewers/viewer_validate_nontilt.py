@@ -29,7 +29,7 @@ from pyworkflow.protocol.params import LabelParam, StringParam
 
 from pwem.viewers.showj import RENDER, ORDER, VISIBLE, MODE, MODE_MD
 from pwem.viewers import DataView
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
 from .plotter import XmippPlotter
 from xmipp3.protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
