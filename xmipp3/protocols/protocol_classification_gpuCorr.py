@@ -38,7 +38,7 @@ from pwem.emlib.metadata import iterRows, getSize
 from pwem.objects import SetOfClasses2D
 from pwem.constants import ALIGN_2D, ALIGN_NONE
 
-from xmippLib import MD_APPEND
+from pwem.emlib import MD_APPEND
 from xmipp3.convert import (rowToAlignment, xmippToLocation,
                             writeSetOfParticles, writeSetOfClasses2D)
 

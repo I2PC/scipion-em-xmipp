@@ -35,7 +35,7 @@ from pwem import EMObject
 from pwem.protocols import ProtParticlePicking
 from pwem.viewers import launchSupervisedPickerGUI
 
-import xmippLib
+from pwem import emlib
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import readSetOfCoordinates
 
@@ -169,13 +169,13 @@ class XmippProtParticlePicking(ProtParticlePicking, XmippProtocol):
         msg = ''
         
         if existsConfig:
-            md = xmippLib.MetaData('properties@' + configfile)
+            md = emlib.MetaData('properties@' + configfile)
             configobj = md.firstObject()
-            pickingState = md.getValue(xmippLib.MDL_PICKING_STATE, configobj)
-            particleSize = md.getValue(xmippLib.MDL_PICKING_PARTICLE_SIZE, configobj)
+            pickingState = md.getValue(emlib.MDL_PICKING_STATE, configobj)
+            particleSize = md.getValue(emlib.MDL_PICKING_PARTICLE_SIZE, configobj)
             isAutopick = pickingState != "Manual"
-            manualParts = md.getValue(xmippLib.MDL_PICKING_MANUALPARTICLES_SIZE, configobj)
-            autoParts = md.getValue(xmippLib.MDL_PICKING_AUTOPARTICLES_SIZE, configobj)
+            manualParts = md.getValue(emlib.MDL_PICKING_MANUALPARTICLES_SIZE, configobj)
+            autoParts = md.getValue(emlib.MDL_PICKING_AUTOPARTICLES_SIZE, configobj)
 
             if manualParts is None:
                 manualParts = 0
@@ -204,14 +204,14 @@ class XmippProtParticlePicking(ProtParticlePicking, XmippProtocol):
         configfile = join(self._getExtraPath(), 'config.xmd')
         existsConfig = exists(configfile)
         if existsConfig:
-            md = xmippLib.MetaData('properties@' + configfile)
+            md = emlib.MetaData('properties@' + configfile)
             configobj = md.firstObject()
-            pickingState = md.getValue(xmippLib.MDL_PICKING_STATE, configobj)
-            particleSize = md.getValue(xmippLib.MDL_PICKING_PARTICLE_SIZE, configobj)
-            activeMic = md.getValue(xmippLib.MDL_MICROGRAPH, configobj)
+            pickingState = md.getValue(emlib.MDL_PICKING_STATE, configobj)
+            particleSize = md.getValue(emlib.MDL_PICKING_PARTICLE_SIZE, configobj)
+            activeMic = md.getValue(emlib.MDL_MICROGRAPH, configobj)
             isAutopick = pickingState != "Manual"
-            manualParticlesSize = md.getValue(xmippLib.MDL_PICKING_MANUALPARTICLES_SIZE, configobj)
-            autoParticlesSize = md.getValue(xmippLib.MDL_PICKING_AUTOPARTICLES_SIZE, configobj)
+            manualParticlesSize = md.getValue(emlib.MDL_PICKING_MANUALPARTICLES_SIZE, configobj)
+            autoParticlesSize = md.getValue(emlib.MDL_PICKING_AUTOPARTICLES_SIZE, configobj)
 
             summary.append("Manual particles picked: %d"%manualParticlesSize)
             summary.append("Particle size:%d" %(particleSize))

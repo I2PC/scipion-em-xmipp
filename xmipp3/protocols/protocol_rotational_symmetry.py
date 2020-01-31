@@ -32,7 +32,7 @@ from pwem.objects import Volume
 from pwem.protocols import (ProtPreprocessVolumes)
 from pyworkflow.protocol import (PointerParam, IntParam, EnumParam, FloatParam)
 
-from xmippLib import MetaData, MDL_ANGLE_ROT, MDL_ANGLE_TILT
+from pwem.emlib import MetaData, MDL_ANGLE_ROT, MDL_ANGLE_TILT
 from xmipp3.convert import getImageLocation
 
 

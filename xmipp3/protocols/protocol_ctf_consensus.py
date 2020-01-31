@@ -41,7 +41,7 @@ from pwem.protocols import ProtCTFMicrographs
 from pwem.emlib.metadata import Row
 from pyworkflow.protocol.constants import (STATUS_NEW)
 
-import xmippLib
+from pwem import emlib
 import xmipp3
 from xmipp3.convert import setXmippAttribute, prefixAttribute
 
@@ -491,8 +491,8 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         # move to a single step, each step takes 5 sec while the function
         # takes 0.03 sec
         # convert to md
-        md1 = xmippLib.MetaData()
-        md2 = xmippLib.MetaData()
+        md1 = emlib.MetaData()
+        md2 = emlib.MetaData()
 
         for ctf1 in method1:  # reference CTF
             ctfId = ctf1.getObjId()
@@ -505,7 +505,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                 self.processedDict.append(ctfId)
                 self._ctfToMd(ctf1, md1)
                 self._ctfToMd(ctf2, md2)
-                self._freqResol[ctfId] = xmippLib.errorMaxFreqCTFs2D(md1, md2)
+                self._freqResol[ctfId] = emlib.errorMaxFreqCTFs2D(md1, md2)
 
     def initializeRejDict(self):
         self.discDict = {'defocus': 0,

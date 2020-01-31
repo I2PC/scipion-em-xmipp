@@ -35,7 +35,7 @@ from pwem.protocols import ProtProcessParticles
 import pwem.emlib.metadata as md
 
 
-from xmippLib import *
+from pwem.emlib import *
 
 from xmipp3.convert import xmippToLocation
 

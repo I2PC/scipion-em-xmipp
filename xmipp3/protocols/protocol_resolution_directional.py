@@ -33,7 +33,7 @@ from pwem.objects import Volume
 from pyworkflow.utils import getExt
 import pwem.emlib.metadata as md
 
-from xmippLib import (MDL_XCOOR, MDL_YCOOR, MDL_ZCOOR,
+from pwem.emlib import (MDL_XCOOR, MDL_YCOOR, MDL_ZCOOR,
                       MDL_ANGLE_ROT, MDL_ANGLE_TILT,
                       MDL_MAX, MDL_MIN, MDL_INTSCALE)
 

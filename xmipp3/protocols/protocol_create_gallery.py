@@ -31,7 +31,7 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pwem.protocols import ProtAnalysis3D
 
 
-from xmippLib import MetaData, MDL_ANGLE_ROT, MDL_ANGLE_TILT
+from pwem.emlib import MetaData, MDL_ANGLE_ROT, MDL_ANGLE_TILT
 from xmipp3.convert import readSetOfParticles
 
 

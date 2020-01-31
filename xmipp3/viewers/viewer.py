@@ -32,7 +32,7 @@ from pwem.protocols import *
 from pwem.viewers.showj import *
 from pwem.viewers.viewer_monitors import MovieGainMonitorPlotter
 
-import xmippLib
+from pwem import emlib
 from xmipp3.convert import *
 from xmipp3.protocols.protocol_compare_reprojections import XmippProtCompareReprojections
 from xmipp3.protocols.protocol_compare_angles import XmippProtCompareAngles
@@ -126,20 +126,20 @@ class XmippViewer(DataViewer):
 
             fn = obj._getPath('images.xmd')
             if os.path.exists(fn): # it doesnt unless cls is Xmipp
-                md = xmippLib.MetaData(fn)
+                md = emlib.MetaData(fn)
                 # If Zscore on output images plot Zscore particle sorting
-                if md.containsLabel(xmippLib.MDL_ZSCORE):
+                if md.containsLabel(emlib.MDL_ZSCORE):
                     from plotter import XmippPlotter
                     xplotter = XmippPlotter(windowTitle="Zscore particles sorting")
                     xplotter.createSubPlot("Particle sorting", "Particle number", "Zscore")
-                    xplotter.plotMd(md, False, mdLabelY=xmippLib.MDL_ZSCORE)
+                    xplotter.plotMd(md, False, mdLabelY=emlib.MDL_ZSCORE)
                     self._views.append(xplotter)
                 # If VARscore on output images plot VARscore particle sorting
-                if md.containsLabel(xmippLib.MDL_SCORE_BY_VAR):
+                if md.containsLabel(emlib.MDL_SCORE_BY_VAR):
                     from plotter import XmippPlotter
                     xplotter = XmippPlotter(windowTitle="Variance particles sorting")
                     xplotter.createSubPlot("Variance Histogram", "Variance", "Number of particles")
-                    xplotter.plotMd(md, False, mdLabelY=xmippLib.MDL_SCORE_BY_VAR, nbins=100)
+                    xplotter.plotMd(md, False, mdLabelY=emlib.MDL_SCORE_BY_VAR, nbins=100)
                     self._views.append(xplotter)
 
 
@@ -273,11 +273,11 @@ class XmippViewer(DataViewer):
                                                       MODE: MODE_MD}))
 
             fn = obj._getExtraPath('vol001_pruned_particles_alignability.xmd')
-            md = xmippLib.MetaData(fn)
+            md = emlib.MetaData(fn)
             from .plotter import XmippPlotter
             plotter = XmippPlotter()
             plotter.createSubPlot('Soft-alignment validation plot','Angular Precision', 'Angular Accuracy')
-            plotter.plotMdFile(md, xmippLib.MDL_SCORE_BY_ALIGNABILITY_PRECISION, xmippLib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY,
+            plotter.plotMdFile(md, emlib.MDL_SCORE_BY_ALIGNABILITY_PRECISION, emlib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY,
                                marker='.', markersize=.55, color='red', linestyle='')
             self._views.append(plotter)
 

@@ -38,7 +38,7 @@ import pwem.emlib.metadata as md
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
 
 
-import xmippLib
+from pwem import emlib
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes, xmippToLocation
 from xmipp3.utils import getMdSize, validateDLtoolkit
 import xmipp3
@@ -134,7 +134,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         self.numGPUs = self.gpuList.get()
         self.particles = self._getExtraPath('noisyParticles.xmd')
         writeSetOfParticles(self.inputParticles.get(), self.particles)
-        self.metadata = xmippLib.MetaData(self.particles)
+        self.metadata = emlib.MetaData(self.particles)
         fnNewParticles = self._getExtraPath('resizedParticles.stk')
         self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (
             self.particles, fnNewParticles, self.newXdim))
@@ -155,7 +155,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
     def trainModel(self):
         from keras.models import load_model
         self.X_train = self.gan.extractTrainData(self._getExtraPath(
-            'resizedProjections.xmd'), xmippLib.MDL_IMAGE, -1)
+            'resizedProjections.xmd'), emlib.MDL_IMAGE, -1)
         self.gan.train(self.X_train, epochs=10000,
                                        batch_size=32, save_interval=200)
 
@@ -163,15 +163,15 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
     def predictModel(self):
         from keras.models import load_model
-        metadataPart = xmippLib.MetaData(self._getExtraPath(
+        metadataPart = emlib.MetaData(self._getExtraPath(
             'resizedParticles.xmd'))
         if self.model.get() == ITER_TRAIN:
-            metadataProj = xmippLib.MetaData(self._getExtraPath(
+            metadataProj = emlib.MetaData(self._getExtraPath(
             'resizedProjections.xmd'))
-        img = xmippLib.Image()
+        img = emlib.Image()
         dimMetadata = getMdSize(self._getExtraPath(
                 'resizedParticles.xmd'))
-        xmippLib.createEmptyFile(self._getExtraPath(
+        emlib.createEmptyFile(self._getExtraPath(
             'particlesDenoised.stk'),self.newXdim, self.newXdim,1,
             dimMetadata)
 
@@ -188,13 +188,13 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                 model = load_model(myModelfile)
         for num in range(1,dimMetadata,self.groupParticles):
             self.noisyParticles = self.gan.extractInfoMetadata(metadataPart,
-                                    xmippLib.MDL_IMAGE, img, num,
+                                    emlib.MDL_IMAGE, img, num,
                                                                self.groupParticles, -1)
 
             if self.model.get() == ITER_TRAIN:
                 self.predict = self.gan.predict(self.Generator, self.noisyParticles)
                 self.projections = self.gan.extractInfoMetadata(metadataProj,
-                                    xmippLib.MDL_IMAGE, img, num, self.groupParticles, 1)
+                                    emlib.MDL_IMAGE, img, num, self.groupParticles, 1)
             else:
                 self.predict = self.gan.predict(model, self.noisyParticles)
 
@@ -202,7 +202,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
             self.prepareMetadata(mdNewParticles, img, num)
 
         mdNewParticles.write('particles@' + self._getExtraPath(
-            'particlesDenoised.xmd'), xmippLib.MD_APPEND)
+            'particlesDenoised.xmd'), emlib.MD_APPEND)
         self.runJob("xmipp_transform_normalize", "-i %s --method NewXmipp "
                                                  "--background circle %d "%
                     (self._getExtraPath('particlesDenoised.stk'),
@@ -255,10 +255,10 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
             cleanPath(self._getExtraPath('resizedProjections.xmd'))
 
     def _processRow(self, particle, row):
-        particle.setLocation(xmippToLocation(row.getValue(xmippLib.MDL_IMAGE)))
+        particle.setLocation(xmippToLocation(row.getValue(emlib.MDL_IMAGE)))
         if self.model.get() == ITER_TRAIN:
             setXmippAttributes(particle, row,
-                               xmippLib.MDL_CORR_DENOISED_PROJECTION)
+                               emlib.MDL_CORR_DENOISED_PROJECTION)
 
 
     # --------------------------- INFO functions --------------------------------------------
@@ -359,9 +359,9 @@ class GAN(XmippProtDeepDenoising):
 
     def extractTrainData(self, path, label, norm=-1):
 
-        metadata = xmippLib.MetaData(path)
+        metadata = emlib.MetaData(path)
         Image = []
-        I = xmippLib.Image()
+        I = emlib.Image()
         cont = 0
         for itemId in metadata:
             fn = metadata.getValue(label, itemId)

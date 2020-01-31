@@ -494,7 +494,7 @@ _noisePixelLevel   '0 0'""" % (newXdim , newXdim, pathParticles, self.inputParti
         
     def createPlot2D(self,volPrefix,md):
         
-        import xmippLib
+        from pwem import emlib
         
         figurePath = self._getExtraPath(volPrefix + 'softAlignmentValidation2D.png')
         figureSize = (8, 6)
@@ -510,8 +510,8 @@ _noisePixelLevel   '0 0'""" % (newXdim , newXdim, pathParticles, self.inputParti
         ax.set_ylabel('Angular Accuracy')
 
         for objId in md:
-            x = md.getValue(xmippLib.MDL_SCORE_BY_ALIGNABILITY_PRECISION, objId)
-            y = md.getValue(xmippLib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY, objId)
+            x = md.getValue(emlib.MDL_SCORE_BY_ALIGNABILITY_PRECISION, objId)
+            y = md.getValue(emlib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY, objId)
             ax.plot(x, y, 'r.',markersize=1)
 
         ax.grid(True, which='both')

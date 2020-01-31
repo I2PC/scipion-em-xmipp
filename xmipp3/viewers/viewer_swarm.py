@@ -29,7 +29,7 @@
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
 from pwem.viewers import showj, DataView
 
-import xmippLib
+from pwem import emlib
 from xmipp3.protocols.protocol_reconstruct_swarm import XmippProtReconstructSwarm
 from .viewer import XmippViewer, ObjectView
 
@@ -48,7 +48,7 @@ class XmippReconstructSwarmViewer(XmippViewer):
         fnVolume = self.protocol._getExtraPath("volumeAvg.vol")
         if os.path.exists(fnVolume):
             fnDir = self.protocol._getExtraPath()
-            samplingRate=self.protocol.readInfoField(fnDir,"sampling",xmippLib.MDL_SAMPLINGRATE)
+            samplingRate=self.protocol.readInfoField(fnDir,"sampling",emlib.MDL_SAMPLINGRATE)
             self._views.append(ObjectView(self._project, None, fnVolume, viewParams={showj.RENDER: 'image', showj.SAMPLINGRATE: samplingRate}))
         
         fnSwarm = self.protocol._getExtraPath("swarm.xmd")

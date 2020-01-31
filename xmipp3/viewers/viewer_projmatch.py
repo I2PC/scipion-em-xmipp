@@ -276,14 +276,14 @@ Examples:
         """ Write a metadata with all volumes selected for visualization. """
         mdPath = self.protocol._getTmpPath('viewer_volumes.xmd')
         cleanPath(mdPath)
-        md = xmippLib.MetaData()
+        md = emlib.MetaData()
         
         for volFn in volumes:
             md.clear()
-            md.setValue(xmippLib.MDL_IMAGE, volFn, md.addObject())
+            md.setValue(emlib.MDL_IMAGE, volFn, md.addObject())
             blockName = volFn.split("/")[3]
             #print "Volume: ", volFn, blockName
-            md.write("%s@%s"% (blockName, mdPath), xmippLib.MD_APPEND)
+            md.write("%s@%s"% (blockName, mdPath), emlib.MD_APPEND)
         return [self.createDataView(mdPath)]
 
     def viewVolumesSqlite(self, volumes):
@@ -380,8 +380,8 @@ Examples:
     def _showProjMatchLibrary(self, paramName=None):
         #map stack position with ref number
         list = []
-        mdIn  = xmippLib.MetaData()
-        mdOut = xmippLib.MetaData()
+        mdIn  = emlib.MetaData()
+        mdOut = emlib.MetaData()
         cleanPattern(self.protocol._getTmpPath('references_library*'))
         
         for ref3d in self._refsList:
@@ -391,10 +391,10 @@ Examples:
                 file_nameReferences = 'projectionDirections@' + file_name
                 #last reference name
                 if exists(file_name):
-                    mdReferences     = xmippLib.MetaData(file_nameReferences)
+                    mdReferences     = emlib.MetaData(file_nameReferences)
                     mdReferencesSize = mdReferences.size()
                     for id in mdReferences:
-                        convert_refno_to_stack_position[mdReferences.getValue(xmippLib.MDL_NEIGHBOR,id)]=id
+                        convert_refno_to_stack_position[mdReferences.getValue(emlib.MDL_NEIGHBOR,id)]=id
                     file_nameAverages   = self.protocol._getFileName('outClassesXmd', iter=it, ref=ref3d)
                     if exists(file_nameAverages):
                         #print "OutClassesXmd", OutClassesXmd
@@ -403,12 +403,12 @@ Examples:
                         for i in mdIn:
                             #id1=mdOut.addObject()
                             #mdOut.setValue(MDL_IMAGE,mdIn.getValue(MDL_IMAGE,i),id1)
-                            ref2D = mdIn.getValue(xmippLib.MDL_REF,i)
+                            ref2D = mdIn.getValue(emlib.MDL_REF,i)
                             file_references = self.protocol._getFileName('projectLibraryStk', iter=it, ref=ref3d)
-                            file_reference = xmippLib.FileName()
+                            file_reference = emlib.FileName()
                             file_reference.compose(convert_refno_to_stack_position[ref2D],file_references)
                             id2=mdOut.addObject()
-                            mdOut.setValue(xmippLib.MDL_IMAGE, file_reference, id2)
+                            mdOut.setValue(emlib.MDL_IMAGE, file_reference, id2)
 
                         if mdOut.size() == 0:
                             print("Empty metadata: ", file_nameReferences)
@@ -428,7 +428,7 @@ Examples:
             for it in self._iterations:
                 classesFn = self.protocol._getFileName('outClassesXmd', iter=it, ref=ref3d)
                 if exists(classesFn):
-                    _, _, _, _, size = xmippLib.MetaDataInfo(classesFn)
+                    _, _, _, _, size = emlib.MetaDataInfo(classesFn)
                     
                     if size == 0:
                         print("Empty metadata: ", classesFn)
@@ -441,8 +441,8 @@ Examples:
     def _showProjMatchLibAndClasses(self, paramName=None):
         #map stack position with ref number
         list = []
-        mdIn  = xmippLib.MetaData()
-        mdOut = xmippLib.MetaData()
+        mdIn  = emlib.MetaData()
+        mdOut = emlib.MetaData()
         
         for ref3d in self._refsList:
             for it in self._iterations:
@@ -450,22 +450,22 @@ Examples:
                 file_name = self.protocol._getFileName('projectLibrarySampling', iter=it, ref=ref3d)
                 file_nameReferences = 'projectionDirections@' + file_name
                 if exists(file_name):
-                    mdReferences     = xmippLib.MetaData(file_nameReferences)
+                    mdReferences     = emlib.MetaData(file_nameReferences)
                     mdReferencesSize = mdReferences.size()
                     for id in mdReferences:
-                        convert_refno_to_stack_position[mdReferences.getValue(xmippLib.MDL_NEIGHBOR,id)]=id
+                        convert_refno_to_stack_position[mdReferences.getValue(emlib.MDL_NEIGHBOR,id)]=id
                     file_nameAverages   = self.protocol._getFileName('outClassesXmd', iter=it, ref=ref3d)
                     file_references = self.protocol._getFileName('projectLibraryStk', iter=it, ref=ref3d)
                     if exists(file_nameAverages):
                         mdIn.read(file_nameAverages)
                         mdOut.clear()
                         for i in mdIn:
-                            ref2D = mdIn.getValue(xmippLib.MDL_REF, i)
-                            file_reference = xmippLib.FileName()
+                            ref2D = mdIn.getValue(emlib.MDL_REF, i)
+                            file_reference = emlib.FileName()
                             file_reference.compose(convert_refno_to_stack_position[ref2D],file_references)
                             id1 = mdOut.addObject()
-                            mdOut.setValue(xmippLib.MDL_IMAGE, mdIn.getValue(xmippLib.MDL_IMAGE,i), id1)
-                            mdOut.setValue(xmippLib.MDL_IMAGE2, file_reference, id1)
+                            mdOut.setValue(emlib.MDL_IMAGE, mdIn.getValue(emlib.MDL_IMAGE,i), id1)
+                            mdOut.setValue(emlib.MDL_IMAGE2, file_reference, id1)
 
                         if mdOut.size() == 0:
                             print("Empty metadata: ", file_nameReferences)
@@ -485,9 +485,9 @@ Examples:
         from numpy  import (array, dot)
         #map stack position with ref number
         imgAndClasses = []
-        mdIn  = xmippLib.MetaData()
-        mdOut = xmippLib.MetaData()
-        mdTmp = xmippLib.MetaData()
+        mdIn  = emlib.MetaData()
+        mdOut = emlib.MetaData()
+        mdTmp = emlib.MetaData()
         for ref3d in self._refsList:
             for it in self._iterations:
                 convert_refno_to_stack_position = {}
@@ -495,40 +495,40 @@ Examples:
                 file_nameReferences = 'projectionDirections@' + file_name
                 if exists(file_name):
                     #last reference name
-                    mdReferences = xmippLib.MetaData(file_nameReferences)
+                    mdReferences = emlib.MetaData(file_nameReferences)
                     mdReferencesSize = mdReferences.size()
                     for id in mdReferences:
-                        convert_refno_to_stack_position[mdReferences.getValue(xmippLib.MDL_NEIGHBOR,id)]=id
+                        convert_refno_to_stack_position[mdReferences.getValue(emlib.MDL_NEIGHBOR,id)]=id
                     file_nameImages = "ctfGroup[0-9][0-9][0-9][0-9][0-9][0-9]@" + self.protocol._getFileName('docfileInputAnglesIters', iter=it)
                     mdTmp.read(file_nameImages)#query with ref3D
-                    mdIn.importObjects(mdTmp, xmippLib.MDValueEQ(xmippLib.MDL_REF3D, ref3d))
+                    mdIn.importObjects(mdTmp, emlib.MDValueEQ(emlib.MDL_REF3D, ref3d))
                     mdOut.clear()
                     for i in mdIn:
                         id1 = mdOut.addObject()
-                        mdOut.setValue(xmippLib.MDL_IMAGE, mdIn.getValue(xmippLib.MDL_IMAGE,i), id1)
-                        psi = -1. * mdIn.getValue(xmippLib.MDL_ANGLE_PSI, i)
-                        flip = mdIn.getValue(xmippLib.MDL_FLIP, i)
+                        mdOut.setValue(emlib.MDL_IMAGE, mdIn.getValue(emlib.MDL_IMAGE,i), id1)
+                        psi = -1. * mdIn.getValue(emlib.MDL_ANGLE_PSI, i)
+                        flip = mdIn.getValue(emlib.MDL_FLIP, i)
                         if(flip):
                             psi = -psi
-                        eulerMatrix = xmippLib.Euler_angles2matrix(0., 0., psi)
-                        x = mdIn.getValue(xmippLib.MDL_SHIFT_X, i)
-                        y = mdIn.getValue(xmippLib.MDL_SHIFT_Y, i)
+                        eulerMatrix = emlib.Euler_angles2matrix(0., 0., psi)
+                        x = mdIn.getValue(emlib.MDL_SHIFT_X, i)
+                        y = mdIn.getValue(emlib.MDL_SHIFT_Y, i)
                         shift = array([x, y, 0])
                         shiftOut = dot(eulerMatrix, shift)
                         [x,y,z] = shiftOut
                         if flip:
                             x = -x
-                        mdOut.setValue(xmippLib.MDL_ANGLE_PSI, psi, id1)
-                        mdOut.setValue(xmippLib.MDL_SHIFT_X, x, id1)
-                        mdOut.setValue(xmippLib.MDL_SHIFT_Y, y, id1)
-                        mdOut.setValue(xmippLib.MDL_FLIP, flip, id1)
-                        ref2D = mdIn.getValue(xmippLib.MDL_REF,i)
+                        mdOut.setValue(emlib.MDL_ANGLE_PSI, psi, id1)
+                        mdOut.setValue(emlib.MDL_SHIFT_X, x, id1)
+                        mdOut.setValue(emlib.MDL_SHIFT_Y, y, id1)
+                        mdOut.setValue(emlib.MDL_FLIP, flip, id1)
+                        ref2D = mdIn.getValue(emlib.MDL_REF,i)
                         file_references = self.protocol._getFileName('projectLibraryStk', iter=it, ref=ref3d)
-                        file_reference = xmippLib.FileName()
+                        file_reference = emlib.FileName()
                         file_reference.compose(convert_refno_to_stack_position[ref2D], file_references)
                         id2 = mdOut.addObject()
-                        mdOut.setValue(xmippLib.MDL_IMAGE, file_reference, id2)
-                        mdOut.setValue(xmippLib.MDL_ANGLE_PSI, 0., id2)
+                        mdOut.setValue(emlib.MDL_IMAGE, file_reference, id2)
+                        mdOut.setValue(emlib.MDL_ANGLE_PSI, 0., id2)
                     if mdOut.size() == 0:
                         print("Empty metadata")
                     else:
@@ -542,7 +542,7 @@ Examples:
         return imgAndClasses
     
     def _showDiscardedImages(self, paramName=None):
-        md = xmippLib.MetaData()
+        md = emlib.MetaData()
         for it in self._iterations:
             file_name = self.protocol._getFileName('outClassesDiscarded', iter=it)
             if exists(file_name):
@@ -576,13 +576,13 @@ Examples:
         lenColors=len(colors)
         
         numberOfBins = self.numberOfBins.get()
-        md = xmippLib.MetaData()
+        md = emlib.MetaData()
         for it in self._iterations:
             mdFn = self.protocol._mdDevitationsFn(it)
-            if xmippLib.existsBlockInMetaDataFile(mdFn):
+            if emlib.existsBlockInMetaDataFile(mdFn):
                 md.read(mdFn)
                 if not self.usePsi:
-                    md.fillConstant(xmippLib.MDL_ANGLE_PSI,0.)
+                    md.fillConstant(emlib.MDL_ANGLE_PSI,0.)
 
                 nrefs = len(self._refsList)
                 gridsize = self._getGridSize(nrefs)
@@ -590,41 +590,41 @@ Examples:
                 xplotter = XmippPlotter(*gridsize, mainTitle='Iteration_%d' % it, windowTitle="AngularDistribution")
 
                 for ref3d in self._refsList:
-                    mDoutRef3D = xmippLib.MetaData()
-                    mDoutRef3D.importObjects(md, xmippLib.MDValueEQ(xmippLib.MDL_REF3D, ref3d))
+                    mDoutRef3D = emlib.MetaData()
+                    mDoutRef3D.importObjects(md, emlib.MDValueEQ(emlib.MDL_REF3D, ref3d))
                     _frequency = "Frequency (%d)" % mDoutRef3D.size()
 
-                    xplotterShift.createSubPlot("%s_ref3D_%d"%(xmippLib.label2Str(xmippLib.MDL_SHIFT_DIFF),ref3d), "pixels", _frequency)
-                    xplotter.createSubPlot("%s_ref3D_%d"%(xmippLib.label2Str(xmippLib.MDL_ANGLE_DIFF),ref3d), "degrees", _frequency)
+                    xplotterShift.createSubPlot("%s_ref3D_%d"%(emlib.label2Str(emlib.MDL_SHIFT_DIFF),ref3d), "pixels", _frequency)
+                    xplotter.createSubPlot("%s_ref3D_%d"%(emlib.label2Str(emlib.MDL_ANGLE_DIFF),ref3d), "degrees", _frequency)
                     #mDoutRef3D.write("afterimportObject@mdIter.sqlite",MD_APPEND)
                     xplotter.plotMd(mDoutRef3D,
-                                    xmippLib.MDL_ANGLE_DIFF,
-                                    xmippLib.MDL_ANGLE_DIFF,
+                                    emlib.MDL_ANGLE_DIFF,
+                                    emlib.MDL_ANGLE_DIFF,
                                     color=colors[ref3d%lenColors],
                                     #nbins=50
                                     nbins=int(numberOfBins)
                     )#if nbins is present do an histogram
                     xplotterShift.plotMd(mDoutRef3D,
-                                         xmippLib.MDL_SHIFT_DIFF,
-                                         xmippLib.MDL_SHIFT_DIFF,
+                                         emlib.MDL_SHIFT_DIFF,
+                                         emlib.MDL_SHIFT_DIFF,
                                          color=colors[ref3d%lenColors],
                                          nbins=int(numberOfBins)
                     )#if nbins is present do an histogram
 
                     if self.angleSort:
-                        mDoutRef3D.sort(xmippLib.MDL_ANGLE_DIFF)
-                        fn = xmippLib.FileName()
+                        mDoutRef3D.sort(emlib.MDL_ANGLE_DIFF)
+                        fn = emlib.FileName()
                         baseFileName   = self.protocol._getTmpPath("angle_sort.xmd")
                         fn = self.protocol._getRefBlockFileName("angle_iter", it, "ref3D", ref3d, baseFileName)
-                        mDoutRef3D.write(fn, xmippLib.MD_APPEND)
+                        mDoutRef3D.write(fn, emlib.MD_APPEND)
                         print("File with sorted angles saved in:", fn)
 
                     if self.shiftSort:
-                        mDoutRef3D.sort(xmippLib.MDL_SHIFT_DIFF)
-                        fn = xmippLib.FileName()
+                        mDoutRef3D.sort(emlib.MDL_SHIFT_DIFF)
+                        fn = emlib.FileName()
                         baseFileName   = self.protocol._getTmpPath("angle_sort.xmd")
                         fn = self.protocol._getRefBlockFileName("shift_iter", it, "ref3D", ref3d, baseFileName)
-                        mDoutRef3D.write(fn, xmippLib.MD_APPEND)
+                        mDoutRef3D.write(fn, emlib.MD_APPEND)
                         print("File with sorted shifts saved in:", fn)
 
                     plots.append(xplotterShift)
@@ -674,7 +674,7 @@ Examples:
         for ref3d in self._refsList:
             classesFn = self.protocol._getFileName('outClassesXmd', iter=it, ref=ref3d)
             if exists(classesFn):
-                md = xmippLib.MetaData(classesFn)
+                md = emlib.MetaData(classesFn)
                 title = 'Ref3D_%d' % ref3d
                 xplotter.plotMdAngularDistribution(title, md)
             else:
@@ -690,7 +690,7 @@ Examples:
         threshold = self.resolutionThreshold.get()
         nrefs = len(self._refsList)
         gridsize = self._getGridSize(nrefs)
-        xmippLib.activateMathExtensions()
+        emlib.activateMathExtensions()
         
         for ref3d in self._refsList:
             xplotter = XmippPlotter(*gridsize, windowTitle='Resolution FSC')
@@ -716,9 +716,9 @@ Examples:
             return [xplotter]
     
     def _plotFSC(self, a, mdFn):
-        md = xmippLib.MetaData(mdFn)
-        resolution_inv = [md.getValue(xmippLib.MDL_RESOLUTION_FREQ, id) for id in md]
-        frc = [md.getValue(xmippLib.MDL_RESOLUTION_FRC, id) for id in md]
+        md = emlib.MetaData(mdFn)
+        resolution_inv = [md.getValue(emlib.MDL_RESOLUTION_FREQ, id) for id in md]
+        frc = [md.getValue(emlib.MDL_RESOLUTION_FRC, id) for id in md]
         self.maxFrc = max(frc)
         self.minInv = min(resolution_inv)
         self.maxInv = max(resolution_inv)

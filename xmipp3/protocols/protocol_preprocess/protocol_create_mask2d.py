@@ -26,7 +26,7 @@
 # *
 # **************************************************************************
 
-import xmippLib
+from pwem import emlib
 from pwem.objects import Mask
 from pwem.protocols import ProtCreateMask2D
 
@@ -72,7 +72,7 @@ class XmippProtCreateMask2D(ProtCreateMask2D, XmippGeometricalMask2D):
     def createMaskFromGeometryStep(self):
         # Create empty volume file with desired dimensions
         size = self.size.get()
-        xmippLib.createEmptyFile(self.maskFile, size, size)
+        emlib.createEmptyFile(self.maskFile, size, size)
         
         # Create the mask
         args = '-i %s ' % self.maskFile

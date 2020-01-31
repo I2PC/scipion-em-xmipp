@@ -31,7 +31,7 @@ from pyworkflow.utils.path import cleanPath
 
 from pwem.objects import Volume, SetOfParticles, SetOfClasses2D
 
-import xmippLib
+from pwem import emlib
 from xmipp3.constants import *
 from xmipp3.convert import writeSetOfParticles
 from .protocol_process import XmippProcessParticles, XmippProcessVolumes
@@ -549,12 +549,12 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
             localArgs = self._adjustLocalArgs(inputFn, self.outputStk, args)
             self.runJob("xmipp_transform_adjust_volume_grey_levels", localArgs)
         else:
-            volMd = xmippLib.MetaData(self.inputFn)
-            outVolMd = xmippLib.MetaData(self.outputMd)
+            volMd = emlib.MetaData(self.inputFn)
+            outVolMd = emlib.MetaData(self.outputMd)
             for objId in volMd:
                 args = self._argsAdjust(objId-1)
-                inputVol = volMd.getValue(xmippLib.MDL_IMAGE, objId)
-                outputVol = outVolMd.getValue(xmippLib.MDL_IMAGE, objId)
+                inputVol = volMd.getValue(emlib.MDL_IMAGE, objId)
+                outputVol = outVolMd.getValue(emlib.MDL_IMAGE, objId)
                 localArgs = self._adjustLocalArgs(inputVol, outputVol, args)
                 self.runJob("xmipp_transform_adjust_volume_grey_levels", localArgs)
     
@@ -573,11 +573,11 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
             maskArgs = self._segMentMaskArgs(inputFn, self.outputStk, fnMask)
             self._segmentVolume(localArgs, maskArgs, fnMask)
         else:
-            volMd = xmippLib.MetaData(inputFn)
-            outVolMd = xmippLib.MetaData(self.outputMd)
+            volMd = emlib.MetaData(inputFn)
+            outVolMd = emlib.MetaData(self.outputMd)
             for objId in volMd:
-                inputVol = volMd.getValue(xmippLib.MDL_IMAGE, objId)
-                outputVol = outVolMd.getValue(xmippLib.MDL_IMAGE, objId)
+                inputVol = volMd.getValue(emlib.MDL_IMAGE, objId)
+                outputVol = outVolMd.getValue(emlib.MDL_IMAGE, objId)
                 localArgs = self._segmentLocalArgs(inputVol, fnMask, args)
                 maskArgs = self._segMentMaskArgs(inputVol, outputVol, fnMask)
                 self._segmentVolume(localArgs, maskArgs, fnMask)

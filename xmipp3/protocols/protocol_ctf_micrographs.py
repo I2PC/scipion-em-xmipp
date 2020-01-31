@@ -44,7 +44,7 @@ import pwem.emlib.metadata as md
 from xmipp3.utils import isMdEmpty
 from xmipp3.convert import readCTFModel
 
-from xmippLib import Image
+from pwem.emlib import Image
 
 class XmippProtCTFMicrographs(ProtCTFMicrographs):
     """ Protocol to estimate CTF on a set of micrographs using Xmipp. """

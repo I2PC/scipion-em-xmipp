@@ -26,7 +26,7 @@
 # *
 # **************************************************************************
 
-import xmippLib
+from pwem import emlib
 from pwem.emlib.image import ImageHandler
 
 from pyworkflow.protocol.params import PointerParam, StringParam
@@ -195,7 +195,7 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
     def createMaskFromGeometryStep(self):
         # Create empty volume file with desired dimensions
         size = self.size.get()
-        xmippLib.createEmptyFile(self.maskFile, size, size, size)
+        emlib.createEmptyFile(self.maskFile, size, size, size)
         
         # Create the mask
         args = '-i %s ' % self.maskFile

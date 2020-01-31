@@ -41,7 +41,7 @@ from collections import OrderedDict
 
 from .plotter import XmippPlotter
 
-from xmippLib import *
+from pwem.emlib import *
 
 OUTPUT_RESOLUTION_FILE_CHIMERA = 'MG_Chimera_resolution.vol'
 
@@ -489,7 +489,7 @@ class XmippMonoDirViewer(ProtocolViewer):
         fhCmd.close()
 
 #     def plotAnisotropyResolution(self, path):        
-#         from xmippLib import XmippPlotter as Xmplt
+#         from pwem.emlib import XmippPlotter as Xmplt
 #  
 #         print path
 #         md = MetaData(path)

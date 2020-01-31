@@ -44,7 +44,7 @@ import pyworkflow.utils as pwutils
 import pyworkflow.protocol.params as params
 import pwem.emlib.metadata as md
 
-import xmippLib as xmipp
+from pwem import emlib as xmipp
 import xmipp3
 from xmipp3 import XmippProtocol
 from xmipp3.protocols.protocol_pick_noise import pickNoise_prepareInput

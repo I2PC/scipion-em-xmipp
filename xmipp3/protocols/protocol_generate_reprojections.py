@@ -34,7 +34,7 @@ from pwem.protocols import ProtAnalysis3D
 from pwem.objects import Image
 import pwem.emlib.metadata as md
 
-import xmippLib
+from pwem import emlib
 from xmipp3.convert import setXmippAttributes, xmippToLocation
 
         
@@ -172,7 +172,7 @@ class XmippProtGenerateReprojections(ProtAnalysis3D):
 
     def _processRow(self, particle, row):
         def __setXmippImage(label):
-            attr = '_xmipp_' + xmippLib.label2Str(label)
+            attr = '_xmipp_' + emlib.label2Str(label)
             if not hasattr(particle, attr):
                 img = Image()
                 setattr(particle, attr, img)
@@ -181,16 +181,16 @@ class XmippProtGenerateReprojections(ProtAnalysis3D):
                 img = getattr(particle, attr)
             img.setLocation(xmippToLocation(row.getValue(label)))
 
-        particle.setLocation(xmippToLocation(row.getValue(xmippLib.MDL_IMAGE)))
-        #__setXmippImage(xmippLib.MDL_IMAGE)
-        #__setXmippImage(xmippLib.MDL_IMAGE_REF)
+        particle.setLocation(xmippToLocation(row.getValue(emlib.MDL_IMAGE)))
+        #__setXmippImage(emlib.MDL_IMAGE)
+        #__setXmippImage(emlib.MDL_IMAGE_REF)
 
-        setXmippAttributes(particle, row, xmippLib.MDL_IMAGE_ORIGINAL,
-                           xmippLib.MDL_IMAGE_REF)
+        setXmippAttributes(particle, row, emlib.MDL_IMAGE_ORIGINAL,
+                           emlib.MDL_IMAGE_REF)
 
     def _processRow2(self, particle, row):
         def __setXmippImage(label):
-            attr = '_xmipp_' + xmippLib.label2Str(label)
+            attr = '_xmipp_' + emlib.label2Str(label)
             if not hasattr(particle, attr):
                 img = Image()
                 setattr(particle, attr, img)
@@ -200,12 +200,12 @@ class XmippProtGenerateReprojections(ProtAnalysis3D):
             img.setLocation(xmippToLocation(row.getValue(label)))
 
         particle.setLocation(xmippToLocation(row.getValue(
-            xmippLib.MDL_IMAGE_REF)))
-        #__setXmippImage(xmippLib.MDL_IMAGE)
-        #__setXmippImage(xmippLib.MDL_IMAGE_REF)
+            emlib.MDL_IMAGE_REF)))
+        #__setXmippImage(emlib.MDL_IMAGE)
+        #__setXmippImage(emlib.MDL_IMAGE_REF)
 
-        setXmippAttributes(particle, row, xmippLib.MDL_IMAGE_ORIGINAL,
-                           xmippLib.MDL_IMAGE_REF)
+        setXmippAttributes(particle, row, emlib.MDL_IMAGE_ORIGINAL,
+                           emlib.MDL_IMAGE_REF)
 
 
     #--------------------------- INFO functions --------------------------------------------
