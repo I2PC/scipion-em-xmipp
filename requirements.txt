@@ -1,0 +1,3 @@
+sklearn==0.22.1
+peppercorn
+plotter
