@@ -76,7 +76,6 @@ class XmippMonoResViewer(LocalResolutionViewer):
     def __init__(self, *args, **kwargs):
         ProtocolViewer.__init__(self, *args, **kwargs)
 
-
     def _defineParams(self, form):
         form.addSection(label='Visualization')
         
@@ -327,7 +326,6 @@ class XmippMonoResViewer(LocalResolutionViewer):
         fhCmd.write(line)
 
         fhCmd.close()
-
 
     @staticmethod
     def colorMapToColorList(steps, colorMap):
