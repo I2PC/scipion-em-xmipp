@@ -41,7 +41,8 @@ from xmipp3.viewers.viewer_resolution_directional import (COLOR_OTHER,
                                                           COLOR_CHOICES,
                                                           COLOR_JET, AX_Z)
 
-from pwem.convert import Ccp4Header, ImageHandler
+from pwem.convert import Ccp4Header
+from pwem.emlib.image import ImageHandler
 from pwem.viewers import (LocalResolutionViewer, EmPlotter, ChimeraView,
                           DataView, Chimera)
 from pwem.emlib.metadata import MetaData, MDL_X, MDL_COUNT

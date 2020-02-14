@@ -59,7 +59,8 @@ class Plugin(pwem.Plugin):
         environ.update({
             'PATH': getXmippPath('bin'),
             'LD_LIBRARY_PATH': getXmippPath('lib'),
-            'PYTHONPATH': getXmippPath('pylib')
+            'PYTHONPATH': getXmippPath('pylib'),
+            'XMIPP_HOME': getXmippPath()
         }, position=pos)
 
         # Add path to python lib folder

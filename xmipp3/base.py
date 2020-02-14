@@ -25,7 +25,6 @@
 # *
 # **************************************************************************
 
-from __future__ import print_function
 import os
 import sys
 import platform
@@ -34,6 +33,7 @@ from collections import OrderedDict
 from pyworkflow.object import ObjectWrap
 
 from pwem import emlib
+import pwem
 from pwem.emlib import (MetaData, MetaDataInfo, MDL_IMAGE, MDL_IMAGE1, MDL_IMAGE_REF,
     MDL_ANGLE_ROT, MDL_ANGLE_TILT, MDL_ANGLE_PSI, MDL_REF, MDL_SHIFT_X,
     MDL_SHIFT_Y, MDL_FLIP, MD_APPEND, MDL_MAXCC, MDL_ENABLED, MDL_CTF_MODEL,
@@ -53,10 +53,7 @@ LABEL_TYPES = {
 def getXmippPath(*paths):
     '''Return the path the the Xmipp installation folder
     if a subfolder is provided, will be concatenated to the path'''
-    if os.environ.get(XMIPP_HOME):
-        return os.path.join(os.environ[XMIPP_HOME], *paths)
-    else:
-        raise Exception('XMIPP_HOME environment variable not set')
+    return os.path.join(pwem.Config.XMIPP_HOME, *paths)
 
 
 def getLabelPythonType(label):
