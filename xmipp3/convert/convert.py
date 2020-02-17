@@ -40,7 +40,7 @@ except ImportError:
 import numpy as np
 
 from pyworkflow.utils import replaceBaseExt
-from pyworkflow.object import ObjectWrap, String
+from pyworkflow.object import ObjectWrap, String, Float, Integer
 from pwem.constants import (NO_INDEX, ALIGN_NONE, ALIGN_PROJ, ALIGN_2D,
                             ALIGN_3D)
 from pwem.objects import (Angles, Coordinate, Micrograph, Volume, Particle,
@@ -53,6 +53,9 @@ from xmipp3.base import XmippMdRow, getLabelPythonType
 from xmipp3.utils import iterMdRows
 
 from pwem import emlib
+
+def prefixAttribute(attribute):
+    return '_xmipp_%s' % attribute
 
 if not getattr(emlib, "GHOST_ACTIVATED", False):
     """ Some of MDL may not exist when Ghost is activated
@@ -96,9 +99,9 @@ if not getattr(emlib, "GHOST_ACTIVATED", False):
 
     CTF_PSD_DICT = OrderedDict([
            ("_psdFile", emlib.MDL_PSD),
-           ("_xmipp_enhanced_psd", emlib.MDL_PSD_ENHANCED),
-           ("_xmipp_ctfmodel_quadrant", emlib.MDL_IMAGE1),
-           ("_xmipp_ctfmodel_halfplane", emlib.MDL_IMAGE1)
+           (prefixAttribute("enhanced_psd"), emlib.MDL_PSD_ENHANCED),
+           (prefixAttribute("ctfmodel_quadrant"), emlib.MDL_IMAGE1),
+           (prefixAttribute("ctfmodel_halfplane"), emlib.MDL_IMAGE1)
            ])
 
     CTF_EXTRA_LABELS = [
@@ -219,13 +222,13 @@ if not getattr(emlib, "GHOST_ACTIVATED", False):
            ])
 
     ALIGNMENT_DICT = OrderedDict([
-           ("_xmipp_shiftX", emlib.MDL_SHIFT_X),
-           ("_xmipp_shiftY", emlib.MDL_SHIFT_Y),
-           ("_xmipp_shiftZ", emlib.MDL_SHIFT_Z),
-           ("_xmipp_flip", emlib.MDL_FLIP),
-           ("_xmipp_anglePsi", emlib.MDL_ANGLE_PSI),
-           ("_xmipp_angleRot", emlib.MDL_ANGLE_ROT),
-           ("_xmipp_angleTilt", emlib.MDL_ANGLE_TILT),
+           (prefixAttribute("shiftX"), emlib.MDL_SHIFT_X),
+           (prefixAttribute("shiftY"), emlib.MDL_SHIFT_Y),
+           (prefixAttribute("shiftZ"), emlib.MDL_SHIFT_Z),
+           (prefixAttribute("flip"), emlib.MDL_FLIP),
+           (prefixAttribute("anglePsi"), emlib.MDL_ANGLE_PSI),
+           (prefixAttribute("angleRot"), emlib.MDL_ANGLE_ROT),
+           (prefixAttribute("angleTilt"), emlib.MDL_ANGLE_TILT),
            ])
 
 
@@ -294,7 +297,7 @@ def rowToObject(row, obj, attrDict, extraLabels=[]):
     for label in extraLabels:
         if label not in attrLabels and row.hasLabel(label):
             labelStr = emlib.label2Str(label)
-            setattr(obj, '_xmipp_%s' % labelStr, row.getValueAsObject(label))
+            setattr(obj, prefixAttribute(labelStr), row.getValueAsObject(label))
 
 def setXmippAttributes(obj, objRow, *labels, **kwargs):
     """ Set the labels attribute(s) to obj from a objRow
@@ -321,7 +324,7 @@ def setXmippAttributes(obj, objRow, *labels, **kwargs):
                 value = Integer(value)
             elif isinstance(value, float):
                 value = Float(value)
-            elif isinstance(value, basestring):
+            elif isinstance(value, str):
                 value = String(value)
             else:
                 value = None
@@ -336,9 +339,6 @@ def setXmippAttribute(obj, label, value):
 def getXmippAttribute(obj, label, default=None):
     """ Sets an attribute of an object prefixing it with xmipp"""
     return getattr(obj, prefixAttribute(emlib.label2Str(label)), default)
-
-def prefixAttribute(attribute):
-    return '_xmipp_%s' % attribute
 
 def rowFromMd(md, objId):
     row = XmippMdRow()
