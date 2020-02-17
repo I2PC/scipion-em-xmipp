@@ -31,7 +31,7 @@ from pyworkflow.utils.path import *
 
 from pwem.protocols import ProtParticlePickingAuto
 
-import xmippLib
+from pwem import emlib
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import readSetOfCoordinates
 
@@ -116,11 +116,11 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
             basePos = replaceBaseExt(micPath, "pos")
             fnPos = self.particlePickingRun._getExtraPath(basePos)
             if exists(fnPos):
-                blocks = xmippLib.getBlocksInMetaDataFile(fnPos)
+                blocks = emlib.getBlocksInMetaDataFile(fnPos)
                 copy = True
                 if 'header' in blocks:
-                    mdheader = xmippLib.MetaData("header@" + fnPos)
-                    state = mdheader.getValue(xmippLib.MDL_PICKING_MICROGRAPH_STATE,
+                    mdheader = emlib.MetaData("header@" + fnPos)
+                    state = mdheader.getValue(emlib.MDL_PICKING_MICROGRAPH_STATE,
                                               mdheader.firstObject())
                     if state == "Available":
                         copy = False
@@ -190,16 +190,16 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
         configfile = join(self._getExtraPath(), 'config.xmd')
         existsConfig = exists(configfile)
         if existsConfig:
-            md = xmippLib.MetaData('properties@' + configfile)
+            md = emlib.MetaData('properties@' + configfile)
             configobj = md.firstObject()
             def _get(label):
                 return md.getValue(label, configobj)
-            pickingState = _get(xmippLib.MDL_PICKING_STATE)
-            particleSize = _get(xmippLib.MDL_PICKING_PARTICLE_SIZE)
-            activeMic = _get(xmippLib.MDL_MICROGRAPH)
+            pickingState = _get(emlib.MDL_PICKING_STATE)
+            particleSize = _get(emlib.MDL_PICKING_PARTICLE_SIZE)
+            activeMic = _get(emlib.MDL_MICROGRAPH)
             isAutopick = pickingState != "Manual"
-            manualParticlesSize = _get(xmippLib.MDL_PICKING_MANUALPARTICLES_SIZE)
-            autoParticlesSize = _get(xmippLib.MDL_PICKING_AUTOPARTICLES_SIZE)
+            manualParticlesSize = _get(emlib.MDL_PICKING_MANUALPARTICLES_SIZE)
+            autoParticlesSize = _get(emlib.MDL_PICKING_AUTOPARTICLES_SIZE)
             
             summary.append("Manual particles picked: %s" % manualParticlesSize)
             summary.append("Particle size:%d" %(particleSize))

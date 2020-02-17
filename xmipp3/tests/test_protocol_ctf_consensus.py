@@ -32,7 +32,7 @@ from pwem.protocols import (ProtImportMicrographs, ProtImportCTF,
 from pwem.protocols.protocol_create_stream_data import SET_OF_MICROGRAPHS
 
 
-import xmippLib
+from pwem import emlib
 from xmipp3.protocols import XmippProtCTFConsensus, XmippProtCTFMicrographs
 
 
@@ -77,8 +77,8 @@ class TestXmippCTFConsensusBase(BaseTest):
 
         # create one fake micrographs image
         projSize = 32
-        img = xmippLib.Image()
-        img.setDataType(xmippLib.DT_FLOAT)
+        img = emlib.Image()
+        img.setDataType(emlib.DT_FLOAT)
         img.resize(projSize, projSize)
         img.write(fnMic)
 

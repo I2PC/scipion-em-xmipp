@@ -32,10 +32,10 @@ from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
                                         LEVEL_ADVANCED)
 from pwem.protocols import ProtAnalysis3D
 from pyworkflow.object import Float
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 from pyworkflow.utils import getExt
 from pwem.objects import Volume
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
 MONORES_METHOD_URL = 'http://github.com/I2PC/scipion/wiki/XmippProtMonoRes'
 OUTPUT_RESOLUTION_FILE = 'resolutionMap'

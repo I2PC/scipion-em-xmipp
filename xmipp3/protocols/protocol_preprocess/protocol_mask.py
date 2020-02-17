@@ -25,7 +25,7 @@
 # *
 # **************************************************************************
 
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtMaskParticles, ProtMaskVolumes
 from pyworkflow.protocol.params import EnumParam, PointerParam, IntParam
 

@@ -35,7 +35,7 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pwem.viewers import ObjectView, DataView, ChimeraClientView, showj
 
-from xmippLib import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
+from pwem.emlib import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
                    MDL_RESOLUTION_FREQ, MDL_RESOLUTION_FRC, MetaData)
 from xmipp3.protocols.protocol_reconstruct_highres import XmippProtReconstructHighRes
 from .plotter import XmippPlotter
@@ -219,10 +219,10 @@ Examples:
             fnDir = self.protocol._getExtraPath("Iter%03d"%it)
             fnAngles = join(fnDir,"angles.xmd")
             if self.protocol.weightJumper and it>1:
-                import xmippLib
+                from pwem import emlib
                 xplotter = XmippPlotter(windowTitle="Jumper weight")
                 a = xplotter.createSubPlot("Jumper weight", "Weight", "Count")
-                xplotter.plotMdFile(fnAngles,xmippLib.MDL_WEIGHT_JUMPER,xmippLib.MDL_WEIGHT_JUMPER,nbins=100)
+                xplotter.plotMdFile(fnAngles,emlib.MDL_WEIGHT_JUMPER,emlib.MDL_WEIGHT_JUMPER,nbins=100)
                 views.append(xplotter)
         return views
     
@@ -257,7 +257,7 @@ Examples:
         view=None
         if exists(fnAngles):
             fnAnglesSqLite = join(fnDir,"angles.sqlite")
-            from pwem.metadata import getSize
+            from pwem.emlib.metadata import getSize
             self.createAngDistributionSqlite(fnAnglesSqLite, getSize(fnAngles), itemDataIterator=self._iterAngles(fnAngles))
             view = ChimeraClientView(join(fnDir,"volumeAvg.mrc"), showProjection=True, angularDistFile=fnAnglesSqLite, spheresDistance=self.spheresScale.get())
         return view
@@ -270,7 +270,7 @@ Examples:
             fnAnglesSqLite = join(fnDir,"angles.sqlite")
             from pwem.viewers import EmPlotter
             if not exists(fnAnglesSqLite):
-                from pwem.metadata import getSize
+                from pwem.emlib.metadata import getSize
                 self.createAngDistributionSqlite(fnAnglesSqLite, getSize(fnAngles), itemDataIterator=self._iterAngles(fnAngles))
             view = EmPlotter(x=1, y=1, mainTitle="Iteration %d" % it, windowTitle="Angular distribution")
             view.plotAngularDistributionFromMd(fnAnglesSqLite, 'iter %d' % it)

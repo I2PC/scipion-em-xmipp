@@ -36,8 +36,8 @@ from pyworkflow.protocol.params import (PointerParam, IntParam, BooleanParam,
                                         Positive, FloatParam, EnumParam)
 from pyworkflow.utils.path import cleanPath
 
-import pwem.metadata as md
-from pwem.convert import ImageHandler
+import pwem.emlib.metadata as md
+from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtExtractMovieParticles, ProtProcessMovies
 
 from xmipp3.base import XmippMdRow

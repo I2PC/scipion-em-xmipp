@@ -31,7 +31,7 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, StringParam
 from pwem.protocols import ProtClassify3D
 from pwem.objects import Volume
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 from xmipp3.convert import writeSetOfParticles
 
 

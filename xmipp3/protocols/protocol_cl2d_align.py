@@ -25,7 +25,7 @@
 # ******************************************************************************w
 import pyworkflow.protocol.params as params
 
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 from pwem.objects import Particle
 from pwem.protocols import ProtAlign2D
 from pwem import ALIGN_NONE, ALIGN_2D

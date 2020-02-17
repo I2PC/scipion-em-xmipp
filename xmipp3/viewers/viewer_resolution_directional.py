@@ -29,8 +29,8 @@ from pyworkflow.protocol.params import LabelParam, StringParam, EnumParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 from pwem.viewers import ChimeraView, DataView
 from xmipp3.protocols.protocol_resolution_directional import XmippProtMonoDir
-from pwem.metadata import MetaData
-from pwem.convert import ImageHandler
+from pwem.emlib.metadata import MetaData
+from pwem.emlib.image import ImageHandler
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
@@ -41,7 +41,7 @@ from collections import OrderedDict
 
 from .plotter import XmippPlotter
 
-from xmippLib import *
+from pwem.emlib import *
 
 OUTPUT_RESOLUTION_FILE_CHIMERA = 'MG_Chimera_resolution.vol'
 
@@ -489,7 +489,7 @@ class XmippMonoDirViewer(ProtocolViewer):
         fhCmd.close()
 
 #     def plotAnisotropyResolution(self, path):        
-#         from xmippLib import XmippPlotter as Xmplt
+#         from pwem.emlib import XmippPlotter as Xmplt
 #  
 #         print path
 #         md = MetaData(path)

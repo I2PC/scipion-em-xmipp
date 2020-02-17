@@ -34,7 +34,7 @@ from pyworkflow.protocol.params import (PointerParam, EnumParam, FloatParam,
 
 from pwem.protocols import ProtRefine3D
 from pwem.objects import Volume
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
 from xmipp3.convert import writeSetOfParticles, xmippToLocation
 

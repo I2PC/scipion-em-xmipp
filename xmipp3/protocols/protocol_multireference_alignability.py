@@ -34,7 +34,7 @@ from pyworkflow.utils.path import moveFile, makePath
 from pyworkflow.gui.plotter import Plotter
 
 from pwem.objects import Volume
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 from pwem.protocols import ProtAnalysis3D
 
 
@@ -202,7 +202,7 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
         
         self.runJob('xmipp_image_resize',params)
         
-        from pyworkflow.em.convert import ImageHandler
+        from pwem.emlib.image import ImageHandler
         img = ImageHandler()
         img.convert(self.inputVolumes.get(), self._getExtraPath("volume.vol"))
         Xdim = self.inputVolumes.get().getDim()[0]

@@ -38,12 +38,12 @@ from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
                                         GPU_LIST)
 from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile
 from pwem.protocols import ProtClassify3D
-from pwem.metadata import getFirstRow, getSize
-from pwem.convert import ImageHandler
-import pwem.metadata as md
+from pwem.emlib.metadata import getFirstRow, getSize
+from pwem.emlib.image import ImageHandler
+import pwem.emlib.metadata as md
 
-import xmippLib
-from xmippLib import MetaData, MD_APPEND, MDL_CLASS_COUNT
+from pwem import emlib
+from pwem.emlib import MetaData, MD_APPEND, MDL_CLASS_COUNT
 from xmipp3.convert import (createItemMatrix, setXmippAttributes,
                             writeSetOfParticles, readSetOfParticles)
 
@@ -166,15 +166,15 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
             self._insertFunctionStep('evaluateConvergence', iteration)
 
     def readInfoField(self, fnDir, block, label):
-        mdInfo = xmippLib.MetaData("%s@%s" % (block, join(fnDir, "info.xmd")))
+        mdInfo = emlib.MetaData("%s@%s" % (block, join(fnDir, "info.xmd")))
         return mdInfo.getValue(label, mdInfo.firstObject())
 
     def writeInfoField(self, fnDir, block, label, value):
-        mdInfo = xmippLib.MetaData()
+        mdInfo = emlib.MetaData()
         objId = mdInfo.addObject()
         mdInfo.setValue(label, value, objId)
         mdInfo.write("%s@%s" % (block, join(fnDir, "info.xmd")),
-                     xmippLib.MD_APPEND)
+                     emlib.MD_APPEND)
 
     def convertInputStep(self, inputParticlesId):
         writeSetOfParticles(self.inputParticles.get(), self.imgsFn)
@@ -202,9 +202,9 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
             newXdim = int(40)
             TsCurrent = Xdim * (self.TsOrig / newXdim)
         fnDir = self._getExtraPath()
-        self.writeInfoField(fnDir, "sampling", xmippLib.MDL_SAMPLINGRATE,
+        self.writeInfoField(fnDir, "sampling", emlib.MDL_SAMPLINGRATE,
                             TsCurrent)
-        self.writeInfoField(fnDir, "size", xmippLib.MDL_XSIZE, newXdim)
+        self.writeInfoField(fnDir, "size", emlib.MDL_XSIZE, newXdim)
 
         # Prepare images
         print("Preparing images to sampling rate=", TsCurrent)
@@ -309,16 +309,16 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         makePath(fnDirCurrent)
 
         TsCurrent = self.readInfoField(self._getExtraPath(), "sampling",
-                                       xmippLib.MDL_SAMPLINGRATE)
+                                       emlib.MDL_SAMPLINGRATE)
         newXdim = self.readInfoField(self._getExtraPath(), "size",
-                                     xmippLib.MDL_XSIZE)
+                                     emlib.MDL_XSIZE)
         self.prepareReferences(fnDirPrevious, fnDirCurrent, TsCurrent, newXdim)
 
         # Calculate angular step at this resolution
         angleStep = self.calculateAngStep(newXdim, TsCurrent,
                                           self.targetResolution.get())
         angleStep = max(angleStep, 5.0)
-        self.writeInfoField(fnDirCurrent, "angleStep", xmippLib.MDL_ANGLE_DIFF,
+        self.writeInfoField(fnDirCurrent, "angleStep", emlib.MDL_ANGLE_DIFF,
                             float(angleStep))
 
         # Generate projections
@@ -342,8 +342,8 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
             if not exists(fnLocalStk):
                 # Create defocus groups
                 row = getFirstRow(fnImgsToUse)
-                if row.containsLabel(xmippLib.MDL_CTF_MODEL) or row.containsLabel(
-                        xmippLib.MDL_CTF_DEFOCUSU):
+                if row.containsLabel(emlib.MDL_CTF_MODEL) or row.containsLabel(
+                        emlib.MDL_CTF_DEFOCUSU):
                     self.runJob("xmipp_ctf_group",
                                 "--ctfdat %s -o %s/ctf:stk --pad 1.0 --sampling_rate %f --phase_flipped  --error 0.1 --resol %f" % \
                                 (fnImgsToUse, fnDirCurrent, TsCurrent,
@@ -351,10 +351,10 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                     moveFile("%s/ctf_images.sel" % fnDirCurrent,
                              "%s/ctf_groups.xmd" % fnDirCurrent)
                     cleanPath("%s/ctf_split.doc" % fnDirCurrent)
-                    mdInfo = xmippLib.MetaData(
+                    mdInfo = emlib.MetaData(
                         "numberGroups@%s" % join(fnDirCurrent, "ctfInfo.xmd"))
                     fnCTFs = "%s/ctf_ctf.stk" % fnDirCurrent
-                    numberGroups = mdInfo.getValue(xmippLib.MDL_COUNT,
+                    numberGroups = mdInfo.getValue(emlib.MDL_COUNT,
                                                    mdInfo.firstObject())
                     ctfPresent = True
                 else:
@@ -528,8 +528,8 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
             else:
                 md = MetaData()
             objId = mdVolumes.addObject()
-            mdVolumes.setValue(xmippLib.MDL_IMAGE, fnReferenceVol, objId)
-            md.write(fnOut, xmippLib.MD_APPEND)
+            mdVolumes.setValue(emlib.MDL_IMAGE, fnReferenceVol, objId)
+            md.write(fnOut, emlib.MD_APPEND)
         fnVols = join(fnDirCurrent, "referenceVolumes.xmd")
         mdVolumes.write(fnVols)
 
@@ -557,7 +557,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         fnOut = join(fnDirCurrent, "classes.xmd")
         fnRootVol = join(fnDirCurrent, "class_")
         TsCurrent = self.readInfoField(self._getExtraPath(), "sampling",
-                                       xmippLib.MDL_SAMPLINGRATE)
+                                       emlib.MDL_SAMPLINGRATE)
 
         self.parseSymList()
         listVolumesToProcess = self._readVolumesToProcess()
@@ -578,8 +578,8 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
                 row = getFirstRow(fnAnglesToUse)
                 hasCTF = row.containsLabel(
-                    xmippLib.MDL_CTF_DEFOCUSU) or row.containsLabel(
-                    xmippLib.MDL_CTF_MODEL)
+                    emlib.MDL_CTF_DEFOCUSU) or row.containsLabel(
+                    emlib.MDL_CTF_MODEL)
                 fnCorrectedImagesRoot = join(fnDirCurrent,
                                              "images_corrected%02d" % i)
                 deleteStack = False
@@ -640,7 +640,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
         fnDirCurrent = self._getExtraPath("Iter%03d" % iteration)
         TsCurrent = self.readInfoField(self._getExtraPath(), "sampling",
-                                       xmippLib.MDL_SAMPLINGRATE)
+                                       emlib.MDL_SAMPLINGRATE)
         fnRootVol = join(fnDirCurrent, "class_")
 
         fnMask = ''
@@ -772,7 +772,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
         # Align all volumes with respect to the first one taking care of the mirror
         fnVol1 = join(fnDirCurrent, "volume%02d.mrc" % 1)
-        I1 = xmippLib.Image(fnVol1)
+        I1 = emlib.Image(fnVol1)
         for i in range(2, self.getNumberOfReconstructedVolumes() + 1):
             if (listVolumesToProcess[i - 1] == False):
                 continue
@@ -782,7 +782,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
             self.runJob("xmipp_volume_align",
                         "--i1 %s --i2 %s --frm --apply" % (fnVol1, fnVoliAux1),
                         numberOfMpi=1)
-            Iaux = xmippLib.Image(fnVoliAux1)
+            Iaux = emlib.Image(fnVoliAux1)
             corr1 = I1.correlation(Iaux)
 
             fnVoliAux2 = join(fnDirCurrent, "volume%02d_aux2.mrc" % i)
@@ -792,7 +792,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
             self.runJob("xmipp_volume_align",
                         "--i1 %s --i2 %s --frm --apply" % (fnVol1, fnVoliAux2),
                         numberOfMpi=1)
-            Iaux = xmippLib.Image(fnVoliAux2)
+            Iaux = emlib.Image(fnVoliAux2)
             corr2 = I1.correlation(Iaux)
 
             if corr1 > corr2:
@@ -904,7 +904,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
             raise Exception("The file %s does not exist" % fnLastImages)
         partSet = self.inputParticles.get()
         self.Ts = self.readInfoField(self._getExtraPath(), "sampling",
-                                     xmippLib.MDL_SAMPLINGRATE)
+                                     emlib.MDL_SAMPLINGRATE)
         self.scaleFactor = self.Ts / partSet.getSamplingRate()
 
         classes3D = self._createSetOfClasses3D(partSet)
@@ -946,17 +946,17 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
     def _updateParticle(self, particle, row):
         particle.setClassId(row.getValue(md.MDL_REF3D))
-        if row.containsLabel(xmippLib.MDL_CONTINUOUS_X):
-            row.setValue(xmippLib.MDL_SHIFT_X, row.getValue(xmippLib.MDL_CONTINUOUS_X) * self.scaleFactor)
-            row.setValue(xmippLib.MDL_SHIFT_Y, row.getValue(xmippLib.MDL_CONTINUOUS_Y) * self.scaleFactor)
-            row.setValue(xmippLib.MDL_FLIP, row.getValue(xmippLib.MDL_CONTINUOUS_FLIP))
+        if row.containsLabel(emlib.MDL_CONTINUOUS_X):
+            row.setValue(emlib.MDL_SHIFT_X, row.getValue(emlib.MDL_CONTINUOUS_X) * self.scaleFactor)
+            row.setValue(emlib.MDL_SHIFT_Y, row.getValue(emlib.MDL_CONTINUOUS_Y) * self.scaleFactor)
+            row.setValue(emlib.MDL_FLIP, row.getValue(emlib.MDL_CONTINUOUS_FLIP))
         else:
-            row.setValue(xmippLib.MDL_SHIFT_X, row.getValue(xmippLib.MDL_SHIFT_X) * self.scaleFactor)
-            row.setValue(xmippLib.MDL_SHIFT_Y, row.getValue(xmippLib.MDL_SHIFT_Y) * self.scaleFactor)
-        setXmippAttributes(particle, row, xmippLib.MDL_SHIFT_X,
-                           xmippLib.MDL_SHIFT_Y, xmippLib.MDL_ANGLE_ROT,
-                           xmippLib.MDL_ANGLE_TILT, xmippLib.MDL_ANGLE_PSI,
-                           xmippLib.MDL_MAXCC, xmippLib.MDL_WEIGHT)
+            row.setValue(emlib.MDL_SHIFT_X, row.getValue(emlib.MDL_SHIFT_X) * self.scaleFactor)
+            row.setValue(emlib.MDL_SHIFT_Y, row.getValue(emlib.MDL_SHIFT_Y) * self.scaleFactor)
+        setXmippAttributes(particle, row, emlib.MDL_SHIFT_X,
+                           emlib.MDL_SHIFT_Y, emlib.MDL_ANGLE_ROT,
+                           emlib.MDL_ANGLE_TILT, emlib.MDL_ANGLE_PSI,
+                           emlib.MDL_MAXCC, emlib.MDL_WEIGHT)
         createItemMatrix(particle, row, align=ALIGN_PROJ)
 
     def _updateClass(self, item):

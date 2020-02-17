@@ -27,7 +27,7 @@ except ImportError:
     izip = zip
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtImportMovies
 
 from xmipp3.protocols import (XmippProtMovieCorr, XmippProtOFAlignment,

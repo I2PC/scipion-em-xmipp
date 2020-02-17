@@ -32,7 +32,7 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam, STEPS_PARALLEL
 from pwem.objects import Volume
 from pwem.protocols import ProtAnalysis3D
 from pyworkflow.utils.path import moveFile, makePath
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
 from xmipp3.convert import writeSetOfParticles
 

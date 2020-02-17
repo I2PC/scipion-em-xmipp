@@ -46,28 +46,28 @@ from pwem.constants import (NO_INDEX, ALIGN_NONE, ALIGN_PROJ, ALIGN_2D,
 from pwem.objects import (Angles, Coordinate, Micrograph, Volume, Particle,
                           MovieParticle, CTFModel, Acquisition, SetOfParticles,
                           Class3D, SetOfVolumes, Transform)
-from pwem.convert import ImageHandler
-import pwem.metadata as md
+from pwem.emlib.image import ImageHandler
+import pwem.emlib.metadata as md
 
 from xmipp3.base import XmippMdRow, getLabelPythonType
 from xmipp3.utils import iterMdRows
 
-import xmippLib
+from pwem import emlib
 
-if not getattr(xmippLib, "GHOST_ACTIVATED", False):
+if not getattr(emlib, "GHOST_ACTIVATED", False):
     """ Some of MDL may not exist when Ghost is activated
     """
     # This dictionary will be used to map
     # between CTFModel properties and Xmipp labels
     ACQUISITION_DICT = OrderedDict([
-           ("_amplitudeContrast", xmippLib.MDL_CTF_Q0),
-           ("_sphericalAberration", xmippLib.MDL_CTF_CS),
-           ("_voltage", xmippLib.MDL_CTF_VOLTAGE)
+           ("_amplitudeContrast", emlib.MDL_CTF_Q0),
+           ("_sphericalAberration", emlib.MDL_CTF_CS),
+           ("_voltage", emlib.MDL_CTF_VOLTAGE)
            ])
 
     COOR_DICT = OrderedDict([
-                 ("_x", xmippLib.MDL_XCOOR),
-                 ("_y", xmippLib.MDL_YCOOR)
+                 ("_x", emlib.MDL_XCOOR),
+                 ("_y", emlib.MDL_YCOOR)
                  ])
 
     COOR_EXTRA_LABELS = [
@@ -75,157 +75,157 @@ if not getattr(xmippLib, "GHOST_ACTIVATED", False):
         md.RLN_PARTICLE_AUTOPICK_FOM,
         md.RLN_PARTICLE_CLASS,
         md.RLN_ORIENT_PSI,
-        xmippLib.MDL_GOOD_REGION_SCORE
+        emlib.MDL_GOOD_REGION_SCORE
         ]
 
     CTF_DICT = OrderedDict([
-           ("_defocusU", xmippLib.MDL_CTF_DEFOCUSU),
-           ("_defocusV", xmippLib.MDL_CTF_DEFOCUSV),
-           ("_defocusAngle", xmippLib.MDL_CTF_DEFOCUS_ANGLE),
-           ("_resolution", xmippLib.MDL_CTF_CRIT_MAXFREQ),
-           ("_fitQuality", xmippLib.MDL_CTF_CRIT_FITTINGSCORE)
+           ("_defocusU", emlib.MDL_CTF_DEFOCUSU),
+           ("_defocusV", emlib.MDL_CTF_DEFOCUSV),
+           ("_defocusAngle", emlib.MDL_CTF_DEFOCUS_ANGLE),
+           ("_resolution", emlib.MDL_CTF_CRIT_MAXFREQ),
+           ("_fitQuality", emlib.MDL_CTF_CRIT_FITTINGSCORE)
            ])
 
     # TODO: remove next dictionary when all
     # cTFmodel has resolution and fitQuality
     CTF_DICT_NORESOLUTION = OrderedDict([
-            ("_defocusU", xmippLib.MDL_CTF_DEFOCUSU),
-            ("_defocusV", xmippLib.MDL_CTF_DEFOCUSV),
-            ("_defocusAngle", xmippLib.MDL_CTF_DEFOCUS_ANGLE)
+            ("_defocusU", emlib.MDL_CTF_DEFOCUSU),
+            ("_defocusV", emlib.MDL_CTF_DEFOCUSV),
+            ("_defocusAngle", emlib.MDL_CTF_DEFOCUS_ANGLE)
             ])
 
     CTF_PSD_DICT = OrderedDict([
-           ("_psdFile", xmippLib.MDL_PSD),
-           ("_xmipp_enhanced_psd", xmippLib.MDL_PSD_ENHANCED),
-           ("_xmipp_ctfmodel_quadrant", xmippLib.MDL_IMAGE1),
-           ("_xmipp_ctfmodel_halfplane", xmippLib.MDL_IMAGE1)
+           ("_psdFile", emlib.MDL_PSD),
+           ("_xmipp_enhanced_psd", emlib.MDL_PSD_ENHANCED),
+           ("_xmipp_ctfmodel_quadrant", emlib.MDL_IMAGE1),
+           ("_xmipp_ctfmodel_halfplane", emlib.MDL_IMAGE1)
            ])
 
     CTF_EXTRA_LABELS = [
-        xmippLib.MDL_CTF_CA,
-        xmippLib.MDL_CTF_ENERGY_LOSS,
-        xmippLib.MDL_CTF_LENS_STABILITY,
-        xmippLib.MDL_CTF_CONVERGENCE_CONE,
-        xmippLib.MDL_CTF_LONGITUDINAL_DISPLACEMENT,
-        xmippLib.MDL_CTF_TRANSVERSAL_DISPLACEMENT,
-        xmippLib.MDL_CTF_K,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_K,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAU,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAV,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_CU,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_CV,
-        xmippLib.MDL_CTF_BG_SQRT_K,
-        xmippLib.MDL_CTF_BG_SQRT_U,
-        xmippLib.MDL_CTF_BG_SQRT_V,
-        xmippLib.MDL_CTF_BG_SQRT_ANGLE,
-        xmippLib.MDL_CTF_BG_BASELINE,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_K,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAU,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAV,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_CU,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_CV,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_ANGLE,
-        xmippLib.MDL_CTF_CRIT_FITTINGCORR13,
-        xmippLib.MDL_CTF_CRIT_ICENESS,
-        xmippLib.MDL_CTF_VPP_RADIUS,
-        xmippLib.MDL_CTF_DOWNSAMPLE_PERFORMED,
-        xmippLib.MDL_CTF_CRIT_PSDVARIANCE,
-        xmippLib.MDL_CTF_CRIT_PSDPCA1VARIANCE,
-        xmippLib.MDL_CTF_CRIT_PSDPCARUNSTEST,
-        xmippLib.MDL_CTF_CRIT_FIRSTZEROAVG,
-        xmippLib.MDL_CTF_CRIT_DAMPING,
-        xmippLib.MDL_CTF_CRIT_FIRSTZERORATIO,
-        xmippLib.MDL_CTF_CRIT_PSDCORRELATION90,
-        xmippLib.MDL_CTF_CRIT_PSDRADIALINTEGRAL,
-        xmippLib.MDL_CTF_CRIT_NORMALITY,
+        emlib.MDL_CTF_CA,
+        emlib.MDL_CTF_ENERGY_LOSS,
+        emlib.MDL_CTF_LENS_STABILITY,
+        emlib.MDL_CTF_CONVERGENCE_CONE,
+        emlib.MDL_CTF_LONGITUDINAL_DISPLACEMENT,
+        emlib.MDL_CTF_TRANSVERSAL_DISPLACEMENT,
+        emlib.MDL_CTF_K,
+        emlib.MDL_CTF_BG_GAUSSIAN_K,
+        emlib.MDL_CTF_BG_GAUSSIAN_SIGMAU,
+        emlib.MDL_CTF_BG_GAUSSIAN_SIGMAV,
+        emlib.MDL_CTF_BG_GAUSSIAN_CU,
+        emlib.MDL_CTF_BG_GAUSSIAN_CV,
+        emlib.MDL_CTF_BG_SQRT_K,
+        emlib.MDL_CTF_BG_SQRT_U,
+        emlib.MDL_CTF_BG_SQRT_V,
+        emlib.MDL_CTF_BG_SQRT_ANGLE,
+        emlib.MDL_CTF_BG_BASELINE,
+        emlib.MDL_CTF_BG_GAUSSIAN2_K,
+        emlib.MDL_CTF_BG_GAUSSIAN2_SIGMAU,
+        emlib.MDL_CTF_BG_GAUSSIAN2_SIGMAV,
+        emlib.MDL_CTF_BG_GAUSSIAN2_CU,
+        emlib.MDL_CTF_BG_GAUSSIAN2_CV,
+        emlib.MDL_CTF_BG_GAUSSIAN2_ANGLE,
+        emlib.MDL_CTF_CRIT_FITTINGCORR13,
+        emlib.MDL_CTF_CRIT_ICENESS,
+        emlib.MDL_CTF_VPP_RADIUS,
+        emlib.MDL_CTF_DOWNSAMPLE_PERFORMED,
+        emlib.MDL_CTF_CRIT_PSDVARIANCE,
+        emlib.MDL_CTF_CRIT_PSDPCA1VARIANCE,
+        emlib.MDL_CTF_CRIT_PSDPCARUNSTEST,
+        emlib.MDL_CTF_CRIT_FIRSTZEROAVG,
+        emlib.MDL_CTF_CRIT_DAMPING,
+        emlib.MDL_CTF_CRIT_FIRSTZERORATIO,
+        emlib.MDL_CTF_CRIT_PSDCORRELATION90,
+        emlib.MDL_CTF_CRIT_PSDRADIALINTEGRAL,
+        emlib.MDL_CTF_CRIT_NORMALITY,
         # In xmipp the ctf also contains acquisition information
-        xmippLib.MDL_CTF_Q0,
-        xmippLib.MDL_CTF_CS,
-        xmippLib.MDL_CTF_VOLTAGE,
-        xmippLib.MDL_CTF_SAMPLING_RATE
+        emlib.MDL_CTF_Q0,
+        emlib.MDL_CTF_CS,
+        emlib.MDL_CTF_VOLTAGE,
+        emlib.MDL_CTF_SAMPLING_RATE
         ]
 
     # TODO: remove next dictionary when all
     # cTFmodel has resolution and fitquality
     CTF_EXTRA_LABELS_PLUS_RESOLUTION = [
-        xmippLib.MDL_CTF_CA,
-        xmippLib.MDL_CTF_ENERGY_LOSS,
-        xmippLib.MDL_CTF_LENS_STABILITY,
-        xmippLib.MDL_CTF_CONVERGENCE_CONE,
-        xmippLib.MDL_CTF_LONGITUDINAL_DISPLACEMENT,
-        xmippLib.MDL_CTF_TRANSVERSAL_DISPLACEMENT,
-        xmippLib.MDL_CTF_K,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_K,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAU,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAV,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_CU,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_CV,
-        xmippLib.MDL_CTF_BG_SQRT_K,
-        xmippLib.MDL_CTF_BG_SQRT_U,
-        xmippLib.MDL_CTF_BG_SQRT_V,
-        xmippLib.MDL_CTF_BG_SQRT_ANGLE,
-        xmippLib.MDL_CTF_BG_BASELINE,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_K,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAU,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAV,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_CU,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_CV,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_ANGLE,
-        xmippLib.MDL_CTF_CRIT_MAXFREQ,  # ###
-        xmippLib.MDL_CTF_CRIT_FITTINGSCORE,  # ###
-        xmippLib.MDL_CTF_CRIT_FITTINGCORR13,
-        xmippLib.MDL_CTF_CRIT_ICENESS,
-        xmippLib.MDL_CTF_DOWNSAMPLE_PERFORMED,
-        xmippLib.MDL_CTF_CRIT_PSDVARIANCE,
-        xmippLib.MDL_CTF_CRIT_PSDPCA1VARIANCE,
-        xmippLib.MDL_CTF_CRIT_PSDPCARUNSTEST,
-        xmippLib.MDL_CTF_CRIT_FIRSTZEROAVG,
-        xmippLib.MDL_CTF_CRIT_DAMPING,
-        xmippLib.MDL_CTF_CRIT_FIRSTZERORATIO,
-        xmippLib.MDL_CTF_CRIT_PSDCORRELATION90,
-        xmippLib.MDL_CTF_CRIT_PSDRADIALINTEGRAL,
-        xmippLib.MDL_CTF_CRIT_NORMALITY,
+        emlib.MDL_CTF_CA,
+        emlib.MDL_CTF_ENERGY_LOSS,
+        emlib.MDL_CTF_LENS_STABILITY,
+        emlib.MDL_CTF_CONVERGENCE_CONE,
+        emlib.MDL_CTF_LONGITUDINAL_DISPLACEMENT,
+        emlib.MDL_CTF_TRANSVERSAL_DISPLACEMENT,
+        emlib.MDL_CTF_K,
+        emlib.MDL_CTF_BG_GAUSSIAN_K,
+        emlib.MDL_CTF_BG_GAUSSIAN_SIGMAU,
+        emlib.MDL_CTF_BG_GAUSSIAN_SIGMAV,
+        emlib.MDL_CTF_BG_GAUSSIAN_CU,
+        emlib.MDL_CTF_BG_GAUSSIAN_CV,
+        emlib.MDL_CTF_BG_SQRT_K,
+        emlib.MDL_CTF_BG_SQRT_U,
+        emlib.MDL_CTF_BG_SQRT_V,
+        emlib.MDL_CTF_BG_SQRT_ANGLE,
+        emlib.MDL_CTF_BG_BASELINE,
+        emlib.MDL_CTF_BG_GAUSSIAN2_K,
+        emlib.MDL_CTF_BG_GAUSSIAN2_SIGMAU,
+        emlib.MDL_CTF_BG_GAUSSIAN2_SIGMAV,
+        emlib.MDL_CTF_BG_GAUSSIAN2_CU,
+        emlib.MDL_CTF_BG_GAUSSIAN2_CV,
+        emlib.MDL_CTF_BG_GAUSSIAN2_ANGLE,
+        emlib.MDL_CTF_CRIT_MAXFREQ,  # ###
+        emlib.MDL_CTF_CRIT_FITTINGSCORE,  # ###
+        emlib.MDL_CTF_CRIT_FITTINGCORR13,
+        emlib.MDL_CTF_CRIT_ICENESS,
+        emlib.MDL_CTF_DOWNSAMPLE_PERFORMED,
+        emlib.MDL_CTF_CRIT_PSDVARIANCE,
+        emlib.MDL_CTF_CRIT_PSDPCA1VARIANCE,
+        emlib.MDL_CTF_CRIT_PSDPCARUNSTEST,
+        emlib.MDL_CTF_CRIT_FIRSTZEROAVG,
+        emlib.MDL_CTF_CRIT_DAMPING,
+        emlib.MDL_CTF_CRIT_FIRSTZERORATIO,
+        emlib.MDL_CTF_CRIT_PSDCORRELATION90,
+        emlib.MDL_CTF_CRIT_PSDRADIALINTEGRAL,
+        emlib.MDL_CTF_CRIT_NORMALITY,
         # In xmipp the ctf also contains acquisition information
-        xmippLib.MDL_CTF_Q0,
-        xmippLib.MDL_CTF_CS,
-        xmippLib.MDL_CTF_VOLTAGE,
-        xmippLib.MDL_CTF_SAMPLING_RATE,
-        xmippLib.MDL_CTF_VPP_RADIUS,
+        emlib.MDL_CTF_Q0,
+        emlib.MDL_CTF_CS,
+        emlib.MDL_CTF_VOLTAGE,
+        emlib.MDL_CTF_SAMPLING_RATE,
+        emlib.MDL_CTF_VPP_RADIUS,
         ]
 
     # Some extra labels to take into account the zscore
     IMAGE_EXTRA_LABELS = [
-        xmippLib.MDL_ZSCORE,
-        xmippLib.MDL_ZSCORE_HISTOGRAM,
-        xmippLib.MDL_ZSCORE_RESMEAN,
-        xmippLib.MDL_ZSCORE_RESVAR,
-        xmippLib.MDL_ZSCORE_RESCOV,
-        xmippLib.MDL_ZSCORE_SHAPE1,
-        xmippLib.MDL_ZSCORE_SHAPE2,
-        xmippLib.MDL_ZSCORE_SNR1,
-        xmippLib.MDL_ZSCORE_SNR2,
-        xmippLib.MDL_CUMULATIVE_SSNR,
-        xmippLib.MDL_PARTICLE_ID,
-        xmippLib.MDL_FRAME_ID,
-        xmippLib.MDL_SCORE_BY_VAR,
-        xmippLib.MDL_SCORE_BY_GINI,
-        xmippLib.MDL_ZSCORE_DEEPLEARNING1
+        emlib.MDL_ZSCORE,
+        emlib.MDL_ZSCORE_HISTOGRAM,
+        emlib.MDL_ZSCORE_RESMEAN,
+        emlib.MDL_ZSCORE_RESVAR,
+        emlib.MDL_ZSCORE_RESCOV,
+        emlib.MDL_ZSCORE_SHAPE1,
+        emlib.MDL_ZSCORE_SHAPE2,
+        emlib.MDL_ZSCORE_SNR1,
+        emlib.MDL_ZSCORE_SNR2,
+        emlib.MDL_CUMULATIVE_SSNR,
+        emlib.MDL_PARTICLE_ID,
+        emlib.MDL_FRAME_ID,
+        emlib.MDL_SCORE_BY_VAR,
+        emlib.MDL_SCORE_BY_GINI,
+        emlib.MDL_ZSCORE_DEEPLEARNING1
         ]
 
     ANGLES_DICT = OrderedDict([
-           ("_angleY", xmippLib.MDL_ANGLE_Y),
-           ("_angleY2", xmippLib.MDL_ANGLE_Y2),
-           ("_angleTilt", xmippLib.MDL_ANGLE_TILT)
+           ("_angleY", emlib.MDL_ANGLE_Y),
+           ("_angleY2", emlib.MDL_ANGLE_Y2),
+           ("_angleTilt", emlib.MDL_ANGLE_TILT)
            ])
 
     ALIGNMENT_DICT = OrderedDict([
-           ("_xmipp_shiftX", xmippLib.MDL_SHIFT_X),
-           ("_xmipp_shiftY", xmippLib.MDL_SHIFT_Y),
-           ("_xmipp_shiftZ", xmippLib.MDL_SHIFT_Z),
-           ("_xmipp_flip", xmippLib.MDL_FLIP),
-           ("_xmipp_anglePsi", xmippLib.MDL_ANGLE_PSI),
-           ("_xmipp_angleRot", xmippLib.MDL_ANGLE_ROT),
-           ("_xmipp_angleTilt", xmippLib.MDL_ANGLE_TILT),
+           ("_xmipp_shiftX", emlib.MDL_SHIFT_X),
+           ("_xmipp_shiftY", emlib.MDL_SHIFT_Y),
+           ("_xmipp_shiftZ", emlib.MDL_SHIFT_Z),
+           ("_xmipp_flip", emlib.MDL_FLIP),
+           ("_xmipp_anglePsi", emlib.MDL_ANGLE_PSI),
+           ("_xmipp_angleRot", emlib.MDL_ANGLE_ROT),
+           ("_xmipp_angleTilt", emlib.MDL_ANGLE_TILT),
            ])
 
 
@@ -243,7 +243,7 @@ def objectToRow(obj, row, attrDict, extraLabels=[]):
         enabled = 1
     else:
         enabled = -1
-    row.setValue(xmippLib.MDL_ENABLED, enabled)
+    row.setValue(emlib.MDL_ENABLED, enabled)
 
     for attr, label in attrDict.items():
         if hasattr(obj, attr):
@@ -264,7 +264,7 @@ def objectToRow(obj, row, attrDict, extraLabels=[]):
     attrLabels = attrDict.values()
 
     for label in extraLabels:
-        attrName = prefixAttribute(xmippLib.label2Str(label))
+        attrName = prefixAttribute(emlib.label2Str(label))
         if label not in attrLabels and hasattr(obj, attrName):
             value = obj.getAttributeValue(attrName)
             row.setValue(label, value)
@@ -280,7 +280,7 @@ def rowToObject(row, obj, attrDict, extraLabels=[]):
         extraLabels: a list with extra labels that could be included
             as _xmipp_labelName
     """
-    obj.setEnabled(row.getValue(xmippLib.MDL_ENABLED, 1) > 0)
+    obj.setEnabled(row.getValue(emlib.MDL_ENABLED, 1) > 0)
 
     for attr, label in attrDict.items():
         value = row.getValue(label)
@@ -293,8 +293,8 @@ def rowToObject(row, obj, attrDict, extraLabels=[]):
 
     for label in extraLabels:
         if label not in attrLabels and row.hasLabel(label):
-            labelStr = xmippLib.label2Str(label)
-            setattr(obj, prefixAttribute(labelStr), row.getValueAsObject(label))
+            labelStr = emlib.label2Str(label)
+            setattr(obj, '_xmipp_%s' % labelStr, row.getValueAsObject(label))
 
 def setXmippAttributes(obj, objRow, *labels, **kwargs):
     """ Set the labels attribute(s) to obj from a objRow
@@ -331,11 +331,11 @@ def setXmippAttributes(obj, objRow, *labels, **kwargs):
 
 def setXmippAttribute(obj, label, value):
     """ Sets an attribute of an object prefixing it with xmipp"""
-    setattr(obj, prefixAttribute(xmippLib.label2Str(label)), value)
+    setattr(obj, prefixAttribute(emlib.label2Str(label)), value)
 
-def getXmippAttribute(obj, label):
+def getXmippAttribute(obj, label, default=None):
     """ Sets an attribute of an object prefixing it with xmipp"""
-    return getattr(obj, prefixAttribute(xmippLib.label2Str(label)), None)
+    return getattr(obj, prefixAttribute(emlib.label2Str(label)), default)
 
 def prefixAttribute(attribute):
     return '_xmipp_%s' % attribute
@@ -1624,26 +1624,26 @@ def writeShiftsMovieAlignment(movie, xmdFn, s0, sN):
         for i in range(s0, a0):
             objId = globalShiftsMD.addObject()
             imgFn = locationToXmipp(i, getMovieFileName(movie))
-            globalShiftsMD.setValue(xmippLib.MDL_IMAGE, imgFn, objId)
-            globalShiftsMD.setValue(xmippLib.MDL_SHIFT_X, 0.0, objId)
-            globalShiftsMD.setValue(xmippLib.MDL_SHIFT_Y, 0.0, objId)
+            globalShiftsMD.setValue(emlib.MDL_IMAGE, imgFn, objId)
+            globalShiftsMD.setValue(emlib.MDL_SHIFT_X, 0.0, objId)
+            globalShiftsMD.setValue(emlib.MDL_SHIFT_Y, 0.0, objId)
 
     for shiftX, shiftY in izip(shiftListX, shiftListY):
         if alFrame >= s0 and alFrame <= sN:
             objId = globalShiftsMD.addObject()
             imgFn = locationToXmipp(alFrame, getMovieFileName(movie))
-            globalShiftsMD.setValue(xmippLib.MDL_IMAGE, imgFn, objId)
-            globalShiftsMD.setValue(xmippLib.MDL_SHIFT_X, shiftX, objId)
-            globalShiftsMD.setValue(xmippLib.MDL_SHIFT_Y, shiftY, objId)
+            globalShiftsMD.setValue(emlib.MDL_IMAGE, imgFn, objId)
+            globalShiftsMD.setValue(emlib.MDL_SHIFT_X, shiftX, objId)
+            globalShiftsMD.setValue(emlib.MDL_SHIFT_Y, shiftY, objId)
         alFrame += 1
 
     if sN > aN:
         for j in range(aN, sN):
             objId = globalShiftsMD.addObject()
             imgFn = locationToXmipp(j+1, getMovieFileName(movie))
-            globalShiftsMD.setValue(xmippLib.MDL_IMAGE, imgFn, objId)
-            globalShiftsMD.setValue(xmippLib.MDL_SHIFT_X, 0.0, objId)
-            globalShiftsMD.setValue(xmippLib.MDL_SHIFT_Y, 0.0, objId)
+            globalShiftsMD.setValue(emlib.MDL_IMAGE, imgFn, objId)
+            globalShiftsMD.setValue(emlib.MDL_SHIFT_X, 0.0, objId)
+            globalShiftsMD.setValue(emlib.MDL_SHIFT_Y, 0.0, objId)
 
     globalShiftsMD.write(xmdFn)
 
@@ -1687,8 +1687,8 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
 
         if useAlignment:
             shiftIndex = i - firstFrame
-            row.setValue(xmippLib.MDL_SHIFT_X, shiftListX[shiftIndex])
-            row.setValue(xmippLib.MDL_SHIFT_Y, shiftListY[shiftIndex])
+            row.setValue(emlib.MDL_SHIFT_X, shiftListX[shiftIndex])
+            row.setValue(emlib.MDL_SHIFT_Y, shiftListY[shiftIndex])
 
         row.addToMd(movieMd)
         stackIndex += 1

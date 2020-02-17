@@ -36,7 +36,7 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         NumericListParam, IntParam,
                                         StringParam, BooleanParam,
                                         LEVEL_ADVANCED, GPU_LIST, USE_GPU)
-import xmippLib
+from pwem import emlib
 from xmipp3.convert import writeSetOfParticles
 
 
@@ -318,10 +318,10 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                      fnRoot + "_fsc_%02d.xmd" % iteration, Ts),
                     numberOfMpi=1)
 
-        mdFSC = xmippLib.MetaData(fnRoot + "_fsc_%02d.xmd" % iteration)
+        mdFSC = emlib.MetaData(fnRoot + "_fsc_%02d.xmd" % iteration)
         for id in mdFSC:
-            fscValue = mdFSC.getValue(xmippLib.MDL_RESOLUTION_FRC, id)
-            maxFreq = mdFSC.getValue(xmippLib.MDL_RESOLUTION_FREQREAL, id)
+            fscValue = mdFSC.getValue(emlib.MDL_RESOLUTION_FRC, id)
+            maxFreq = mdFSC.getValue(emlib.MDL_RESOLUTION_FREQREAL, id)
             if fscValue < 0.5:
                 break
         fh = open(fnRoot + "_freq.txt", "a")
@@ -342,10 +342,10 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
             cleanPattern(fnRoot + "_noisesL_0?.xmd")
             cleanPattern(fnRoot + "_noises2_0?.stk")
 
-            mdFSCN = xmippLib.MetaData(fnRootN + "_fsc_%02d.xmd" % iteration)
+            mdFSCN = emlib.MetaData(fnRootN + "_fsc_%02d.xmd" % iteration)
             for id in mdFSCN:
-                fscValueN = mdFSCN.getValue(xmippLib.MDL_RESOLUTION_FRC, id)
-                maxFreqN = mdFSCN.getValue(xmippLib.MDL_RESOLUTION_FREQREAL, id)
+                fscValueN = mdFSCN.getValue(emlib.MDL_RESOLUTION_FRC, id)
+                maxFreqN = mdFSCN.getValue(emlib.MDL_RESOLUTION_FREQREAL, id)
                 if fscValueN < 0.5:
                     break
             fhN = open(fnRootN + "_freq.txt", "a")
@@ -427,7 +427,7 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
         subset = 0
 
         numberOfParticles = getFloatListFromValues(self.numberOfParticles.get())
-        validationMd = xmippLib.MetaData()
+        validationMd = emlib.MetaData()
         fnOut = open(outputFn, 'w')
 
         for fnFreq in fnFreqs:
@@ -460,11 +460,11 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                         + str(stdResInv) + '\n')
         #
         #     objId = validationMd.addObject()
-        #     validationMd.setValue(xmippLib.MDL_COUNT,
+        #     validationMd.setValue(emlib.MDL_COUNT,
         #                           long(numberOfParticles[subset]),
         #                           objId)
-        #     validationMd.setValue(xmippLib.MDL_AVG, meanRes, objId)
-        #     validationMd.setValue(xmippLib.MDL_STDDEV, stdRes, objId)
+        #     validationMd.setValue(emlib.MDL_AVG, meanRes, objId)
+        #     validationMd.setValue(emlib.MDL_STDDEV, stdRes, objId)
             subset += 1
 
         # validationMd.write(outputFn)

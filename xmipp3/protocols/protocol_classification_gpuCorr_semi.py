@@ -39,7 +39,7 @@ import pyworkflow.protocol.constants as const
 from pwem.objects import SetOfParticles, SetOfClasses2D, Class2D
 from pwem.constants import ALIGN_2D, ALIGN_NONE
 from pwem.protocols import ProtAlign2D
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
 from xmipp3.convert import (writeSetOfParticles, rowToAlignment,
                             writeSetOfClasses2D)

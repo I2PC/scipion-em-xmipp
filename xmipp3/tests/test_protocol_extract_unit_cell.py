@@ -40,8 +40,7 @@ from pyworkflow.utils import runJob
 from pwem.constants import (SCIPION_SYM_NAME)
 
 from xmipp3 import Plugin
-from xmipp3.protocols import XmippProtConvertToPseudoAtoms, XmippProtExtractUnit
-from xmipp3.protocols.pdb.protocol_pseudoatoms_base import NMA_MASK_THRE
+from xmipp3.protocols import XmippProtExtractUnit
 from xmipp3.constants import (XMIPP_SYM_NAME, XMIPP_TO_SCIPION, XMIPP_CYCLIC,
                               XMIPP_DIHEDRAL_X, XMIPP_TETRAHEDRAL, XMIPP_OCTAHEDRAL,
                               XMIPP_I222, XMIPP_I222r, XMIPP_In25, XMIPP_In25r)
@@ -463,6 +462,8 @@ class TestProtModelBuilding(BaseTest):
 
     # general function to extract the unit cell
     def extractunitCell(self, sym, offset=0, cropZ=False):
+        from continuousflex.protocols import FlexProtConvertToPseudoAtoms
+        from continuousflex.protocols.pdb.protocol_pseudoatoms_base import NMA_MASK_THRE
 
         """ extract unit cell from icosahedral phantom
             using xmipp_i2 symmetry
@@ -552,7 +553,7 @@ class TestProtModelBuilding(BaseTest):
                 'maskThreshold': 0.5,
                 'pseudoAtomRadius': 1.5
                 }
-        prot = self.newProtocol(XmippProtConvertToPseudoAtoms, **args)
+        prot = self.newProtocol(FlexProtConvertToPseudoAtoms, **args)
         prot.setObjLabel('get pdb')
         self.launchProtocol(prot)
 

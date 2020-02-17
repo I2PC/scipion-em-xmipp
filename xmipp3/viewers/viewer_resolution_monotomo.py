@@ -37,8 +37,8 @@ from pyworkflow.protocol.params import (LabelParam, StringParam, EnumParam,
                                         IntParam, LEVEL_ADVANCED)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 from pwem.viewers import ChimeraView, DataView
-from pwem.metadata import MetaData, MDL_X, MDL_COUNT
-from pwem.convert import ImageHandler
+from pwem.emlib.metadata import MetaData, MDL_X, MDL_COUNT
+from pwem.emlib.image import ImageHandler
 from pwem.viewers import LocalResolutionViewer
 from pwem.constants import COLOR_JET, COLOR_OTHER, COLOR_CHOICES, AX_Z
 

@@ -29,13 +29,13 @@ from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         LEVEL_ADVANCED)
 from pwem.protocols import ProtAnalysis3D
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 from pyworkflow.utils import getExt
 from pwem.objects import Volume
 import numpy as np
 import os
-import pwem.metadata as md
-from pwem.metadata.constants2 import (MDL_COST, MDL_ITER, MDL_SCALE)
+import pwem.emlib.metadata as md
+from pwem.emlib.metadata import (MDL_COST, MDL_ITER, MDL_SCALE)
 from ntpath import dirname
 from os.path import exists
 

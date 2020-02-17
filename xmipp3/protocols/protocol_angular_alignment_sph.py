@@ -29,8 +29,8 @@ import pyworkflow.protocol.params as params
 from pyworkflow.utils.path import moveFile
 
 from pwem.protocols import ProtAnalysis3D
-import pwem.metadata as md
-from pwem.convert import ImageHandler
+import pwem.emlib.metadata as md
+from pwem.emlib.image import ImageHandler
 from pwem.constants import ALIGN_PROJ
 
 from xmipp3.convert import (writeSetOfParticles, createItemMatrix,

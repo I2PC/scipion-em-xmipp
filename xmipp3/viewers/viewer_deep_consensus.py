@@ -31,7 +31,7 @@ from pwem.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER, SORT_BY
 from pyworkflow.protocol.params import IntParam, LabelParam
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 
-import xmippLib
+from pwem import emlib
 from xmipp3.protocols.protocol_screen_deepConsensus import XmippProtScreenDeepConsensus
 from xmipp3.protocols.protocol_screen_deeplearning import XmippProtScreenDeepLearning
 from .plotter import XmippPlotter
@@ -107,14 +107,14 @@ class XmippDeepConsensusViewer(ProtocolViewer):
 
         fnXml = self.protocol._getPath('particles.xmd')
         if os.path.isfile(fnXml):
-            md = xmippLib.MetaData(fnXml)
-            if md.containsLabel(xmippLib.MDL_ZSCORE_DEEPLEARNING1):
+            md = emlib.MetaData(fnXml)
+            if md.containsLabel(emlib.MDL_ZSCORE_DEEPLEARNING1):
                 xplotter = XmippPlotter(windowTitle="Deep consensus score")
                 xplotter.createSubPlot("Deep consensus score",
                                        "Deep consensus score",
                                        "Number of Particles")
                 xplotter.plotMd(md, False,
-                                mdLabelY=xmippLib.MDL_ZSCORE_DEEPLEARNING1,
+                                mdLabelY=emlib.MDL_ZSCORE_DEEPLEARNING1,
                                 nbins=numberOfBins)
                 views.append(xplotter)
             else:

@@ -30,7 +30,7 @@ import subprocess
 from datetime import datetime
 
 from pyworkflow import Config
-import pyworkflow.plugin
+import pwem
 import pyworkflow.utils as pwutils
 
 from .base import *
@@ -42,7 +42,7 @@ _references = ['delaRosaTrevin2013', 'Sorzano2013']
 _currentVersion = '3.19.04'
 
 
-class Plugin(pyworkflow.plugin.Plugin):
+class Plugin(pwem.Plugin):
     _homeVar = XMIPP_HOME
     _pathVars = [XMIPP_HOME]
     _supportedVersions = []
@@ -50,7 +50,6 @@ class Plugin(pyworkflow.plugin.Plugin):
     @classmethod
     def _defineVariables(cls):
         cls._defineEmVar(XMIPP_HOME, 'xmipp')
-        cls._defineEmVar(NMA_HOME, 'nma')
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
@@ -125,7 +124,12 @@ class Plugin(pyworkflow.plugin.Plugin):
             Scipion-defined software can be used as dependencies
             by using its name as string.
         """
-        scons = tryAddPipModule(env, 'scons', '3.1.2')
+        # Cancel for now all binaries installation
+        return
+
+
+
+        scons = tryAddPipModule(env, 'scons', '3.0.4')
         joblib = tryAddPipModule(env, 'joblib', '0.11', target='joblib*')
 
         # scikit
@@ -323,6 +327,4 @@ def installDeepLearningToolkit(plugin, env):
                               target)],
                    deps=deepLearningTools, tar='deepLearningToolkit.tgz')
 
-
-pyworkflow.plugin.Domain.registerPlugin(__name__)
 

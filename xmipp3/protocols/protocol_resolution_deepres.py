@@ -32,7 +32,7 @@ from pyworkflow.protocol.params import (PointerParam, EnumParam,
                                         StringParam, GPU_LIST)
 from pwem.protocols import ProtAnalysis3D
 from pyworkflow.object import Float
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 from pyworkflow.utils import getExt
 from pwem.objects import Volume
 import xmipp3

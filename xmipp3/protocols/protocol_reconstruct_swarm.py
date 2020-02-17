@@ -41,9 +41,9 @@ from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
 from pyworkflow.utils.path import cleanPath, copyFile, moveFile
 from pwem.protocols import ProtRefine3D
 from pwem.objects import Volume
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 
-import xmippLib
+from pwem import emlib
 from xmipp3.convert import (writeSetOfParticles, getImageLocation)
 
 
@@ -118,14 +118,14 @@ class XmippProtReconstructSwarm(ProtRefine3D):
     
     #--------------------------- STEPS functions ---------------------------------------------------
     def readInfoField(self,fnDir,block,label):
-        mdInfo = xmippLib.MetaData("%s@%s"%(block,join(fnDir,"info.xmd")))
+        mdInfo = emlib.MetaData("%s@%s"%(block,join(fnDir,"info.xmd")))
         return mdInfo.getValue(label,mdInfo.firstObject())
 
     def writeInfoField(self,fnDir,block,label, value):
-        mdInfo = xmippLib.MetaData()
+        mdInfo = emlib.MetaData()
         objId=mdInfo.addObject()
         mdInfo.setValue(label,value,objId)
-        mdInfo.write("%s@%s"%(block, join(fnDir,"info.xmd")),xmippLib.MD_APPEND)
+        mdInfo.write("%s@%s"%(block, join(fnDir,"info.xmd")),emlib.MD_APPEND)
 
     def convertInputVolume(self, imgHandler, obj, fnIn, fnOut, TsCurrent, newXdim):
         self.runJob('xmipp_image_resize',"-i %s -o %s --factor %f"%(fnIn,fnOut,obj.getSamplingRate()/TsCurrent),numberOfMpi=1)
@@ -146,8 +146,8 @@ class XmippProtReconstructSwarm(ProtRefine3D):
             newXdim=int(40)
             TsCurrent=Xdim*(TsOrig/newXdim)
         print("Preparing images to sampling rate=",TsCurrent)
-        self.writeInfoField(fnDir,"size",xmippLib.MDL_XSIZE,newXdim)
-        self.writeInfoField(fnDir,"sampling",xmippLib.MDL_SAMPLINGRATE,TsCurrent)
+        self.writeInfoField(fnDir,"size",emlib.MDL_XSIZE,newXdim)
+        self.writeInfoField(fnDir,"sampling",emlib.MDL_SAMPLINGRATE,TsCurrent)
         
         # Prepare particles
         fnNewParticles=join(fnDir,"images.stk")
@@ -175,15 +175,15 @@ class XmippProtReconstructSwarm(ProtRefine3D):
             self.convertInputVolume(imgHandler, vol, getImageLocation(vol), fnVol, TsCurrent, newXdim)
             self.runJob("xmipp_image_operate","-i %s --mult 0 -o %s"%(fnVol,join(fnDir,"volume%03d_speed.vol"%i)),numberOfMpi=1)
             i+=1
-        xmippLib.MetaData().write("best@"+self._getExtraPath("swarm.xmd")) # Empty write to guarantee this block is the first one
-        xmippLib.MetaData().write("bestByVolume@"+self._getExtraPath("swarm.xmd"),xmippLib.MD_APPEND) # Empty write to guarantee this block is the second one
+        emlib.MetaData().write("best@"+self._getExtraPath("swarm.xmd")) # Empty write to guarantee this block is the first one
+        emlib.MetaData().write("bestByVolume@"+self._getExtraPath("swarm.xmd"),emlib.MD_APPEND) # Empty write to guarantee this block is the second one
     
     def evaluateIndividuals(self,iteration):
         fnDir = self._getExtraPath()
-        newXdim = self.readInfoField(fnDir,"size",xmippLib.MDL_XSIZE)
+        newXdim = self.readInfoField(fnDir,"size",emlib.MDL_XSIZE)
         angleStep = max(math.atan2(1,newXdim/2),self.minAngle.get())
         TsOrig=self.inputParticles.get().getSamplingRate()
-        TsCurrent = self.readInfoField(fnDir,"sampling",xmippLib.MDL_SAMPLINGRATE)
+        TsCurrent = self.readInfoField(fnDir,"sampling",emlib.MDL_SAMPLINGRATE)
         fnMask = self._getExtraPath("mask.vol")
         fnImages = join(fnDir,"images.xmd")
         
@@ -196,18 +196,18 @@ class XmippProtReconstructSwarm(ProtRefine3D):
         bestWeightVol={}
         bestIterVol={}
         if iteration>0:
-            mdPrevious = xmippLib.MetaData("bestByVolume@"+self._getExtraPath("swarm.xmd"))
+            mdPrevious = emlib.MetaData("bestByVolume@"+self._getExtraPath("swarm.xmd"))
             for objId in mdPrevious:
-                idx = int(mdPrevious.getValue(xmippLib.MDL_IDX,objId))
-                bestWeightVol[idx]=mdPrevious.getValue(xmippLib.MDL_WEIGHT,objId)
-                bestIterVol[idx]=mdPrevious.getValue(xmippLib.MDL_ITER,objId)
+                idx = int(mdPrevious.getValue(emlib.MDL_IDX,objId))
+                bestWeightVol[idx]=mdPrevious.getValue(emlib.MDL_WEIGHT,objId)
+                bestIterVol[idx]=mdPrevious.getValue(emlib.MDL_ITER,objId)
 
         # Global alignment
-        md=xmippLib.MetaData()
+        md=emlib.MetaData()
         if iteration>1:
-            mdBest = xmippLib.MetaData("best@"+self._getExtraPath("swarm.xmd"))
+            mdBest = emlib.MetaData("best@"+self._getExtraPath("swarm.xmd"))
             objId = mdBest.firstObject()
-            bestWeight = mdBest.getValue(xmippLib.MDL_WEIGHT,objId)
+            bestWeight = mdBest.getValue(emlib.MDL_WEIGHT,objId)
         else:
             bestWeight = -1e38
         for i in range(self.inputVolumes.get().getSize()):
@@ -240,15 +240,15 @@ class XmippProtReconstructSwarm(ProtRefine3D):
             fnAngles = join(fnDir,"angles_iter001_00.xmd")
             if exists(fnAngles):
                 # Significant may decide not to write it if it is not significant
-                mdAngles = xmippLib.MetaData(fnAngles)
-                weight = mdAngles.getColumnValues(xmippLib.MDL_MAXCC)
+                mdAngles = emlib.MetaData(fnAngles)
+                weight = mdAngles.getColumnValues(emlib.MDL_MAXCC)
                 avgWeight = reduce(lambda x, y: x + y, weight) / len(weight)
                 print("Average weight for "+fnVol+" = "+str(avgWeight))
                 objId = md.addObject()
-                md.setValue(xmippLib.MDL_IDX,int(i),objId)
-                md.setValue(xmippLib.MDL_IMAGE,fnVol,objId)
-                md.setValue(xmippLib.MDL_WEIGHT,avgWeight,objId)
-                md.setValue(xmippLib.MDL_ITER,iteration,objId)
+                md.setValue(emlib.MDL_IDX,int(i),objId)
+                md.setValue(emlib.MDL_IMAGE,fnVol,objId)
+                md.setValue(emlib.MDL_WEIGHT,avgWeight,objId)
+                md.setValue(emlib.MDL_ITER,iteration,objId)
                 
                 # Is global best
                 if avgWeight>bestWeight:
@@ -259,12 +259,12 @@ class XmippProtReconstructSwarm(ProtRefine3D):
                         self.runJob("xmipp_image_operate","-i %s --mult 0 -o %s"%(fnVol,self._getExtraPath("volumeBest.vol")),numberOfMpi=1)
                     else:
                         copyFile(fnVol, self._getExtraPath("volumeBest.vol"))
-                    mdBest=xmippLib.MetaData()
+                    mdBest=emlib.MetaData()
                     objId=mdBest.addObject()
-                    mdBest.setValue(xmippLib.MDL_IMAGE,fnVol,objId)
-                    mdBest.setValue(xmippLib.MDL_WEIGHT,bestWeight,objId)
-                    mdBest.setValue(xmippLib.MDL_ITER,iteration,objId)
-                    mdBest.write("best@"+self._getExtraPath("swarm.xmd"),xmippLib.MD_APPEND)
+                    mdBest.setValue(emlib.MDL_IMAGE,fnVol,objId)
+                    mdBest.setValue(emlib.MDL_WEIGHT,bestWeight,objId)
+                    mdBest.setValue(emlib.MDL_ITER,iteration,objId)
+                    mdBest.write("best@"+self._getExtraPath("swarm.xmd"),emlib.MD_APPEND)
                 
                 # Is local best
                 if iteration==0:
@@ -278,24 +278,24 @@ class XmippProtReconstructSwarm(ProtRefine3D):
             cleanPath(fnTest)
             self.runJob("rm -f",fnDir+"/*iter00?_00.xmd",numberOfMpi=1)
             self.runJob("rm -f",fnDir+"/gallery*",numberOfMpi=1)
-        md.write("evaluations_%03d@"%iteration+self._getExtraPath("swarm.xmd"),xmippLib.MD_APPEND)
+        md.write("evaluations_%03d@"%iteration+self._getExtraPath("swarm.xmd"),emlib.MD_APPEND)
         
         # Update best by volume
         if iteration==0:
-            md.write("bestByVolume@"+self._getExtraPath("swarm.xmd"),xmippLib.MD_APPEND)
+            md.write("bestByVolume@"+self._getExtraPath("swarm.xmd"),emlib.MD_APPEND)
         else:
             md.clear()
             for i in range(self.inputVolumes.get().getSize()):
                 objId = md.addObject()
-                md.setValue(xmippLib.MDL_IDX,int(i),objId)
-                md.setValue(xmippLib.MDL_IMAGE,self._getExtraPath("volume%03d_best.vol"%i),objId)
-                md.setValue(xmippLib.MDL_WEIGHT,bestWeightVol[i],objId)
-                md.setValue(xmippLib.MDL_ITER,bestIterVol[i],objId)
-            md.write("bestByVolume@"+self._getExtraPath("swarm.xmd"),xmippLib.MD_APPEND)
+                md.setValue(emlib.MDL_IDX,int(i),objId)
+                md.setValue(emlib.MDL_IMAGE,self._getExtraPath("volume%03d_best.vol"%i),objId)
+                md.setValue(emlib.MDL_WEIGHT,bestWeightVol[i],objId)
+                md.setValue(emlib.MDL_ITER,bestIterVol[i],objId)
+            md.write("bestByVolume@"+self._getExtraPath("swarm.xmd"),emlib.MD_APPEND)
         
     def createOutput(self):
         fnDir = self._getExtraPath()
-        Ts=self.readInfoField(fnDir,"sampling",xmippLib.MDL_SAMPLINGRATE)
+        Ts=self.readInfoField(fnDir,"sampling",emlib.MDL_SAMPLINGRATE)
 
         # Remove files that will not be used any longer
         cleanPath(join(fnDir,"images.stk"))
@@ -328,10 +328,10 @@ class XmippProtReconstructSwarm(ProtRefine3D):
             
     def reconstructNewVolumes(self,iteration):
         fnDir = self._getExtraPath()
-        newXdim = self.readInfoField(fnDir,"size",xmippLib.MDL_XSIZE)
+        newXdim = self.readInfoField(fnDir,"size",emlib.MDL_XSIZE)
         angleStep = max(math.atan2(1,newXdim/2),self.minAngle.get())
         TsOrig=self.inputParticles.get().getSamplingRate()
-        TsCurrent = self.readInfoField(fnDir,"sampling",xmippLib.MDL_SAMPLINGRATE)
+        TsCurrent = self.readInfoField(fnDir,"sampling",emlib.MDL_SAMPLINGRATE)
         fnImages = join(fnDir,"images.xmd")
         
         maxShift=round(0.1*newXdim)

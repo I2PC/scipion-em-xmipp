@@ -42,7 +42,7 @@ import pyworkflow.protocol.constants as cons
 from pwem.objects import SetOfMovies, Movie, SetOfImages, Image
 from pwem.protocols import EMProtocol, ProtProcessMovies
 
-import xmippLib
+from pwem import emlib
 from xmippLib import *
 from xmipp_base import *
 from xmipp3.utils import *
@@ -432,7 +432,7 @@ class XmippProtMovieGain(ProtProcessMovies):
                    self.frameStep, extraArgs))
 
     def doGainProcess(self, movieId):
-        return (movieId-1) % self.movieStep.get() == 0 
+        return (movieId-1) % self.movieStep.get() == 0
 
     # --------------------------- INFO functions -------------------------------
     def _validate(self):
@@ -448,7 +448,7 @@ class XmippProtMovieGain(ProtProcessMovies):
                           "Otherwise, no gain reorientation nor "
                           "gain normalization can be performed.")
         return errors
-    
+
     def _summary(self):
         fnSummary = self._getPath("summary.txt")
         if not os.path.exists(fnSummary):

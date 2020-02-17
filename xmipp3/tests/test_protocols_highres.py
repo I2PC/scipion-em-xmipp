@@ -29,7 +29,7 @@ from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 from pwem.protocols import (ProtImportVolumes, ProtImportParticles, ProtSubSet,
                             exists)
 
-import xmippLib
+from pwem import emlib
 from xmipp3.protocols import XmippProtReconstructHighRes
 
 
@@ -99,7 +99,7 @@ class TestHighres(BaseTest):
         if not exists(fnResolution):
             self.assertTrue(False, fnResolution + " does not exist")
         else:
-            md = xmippLib.MetaData("resolution@" + fnResolution)
-            R = md.getValue(xmippLib.MDL_RESOLUTION_FREQREAL, md.firstObject())
+            md = emlib.MetaData("resolution@" + fnResolution)
+            R = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, md.firstObject())
             # FIXME: Review HighRes! Before pluginization under 8A is achieved
             self.assertTrue(R < 9, "Resolution is not below 9A")

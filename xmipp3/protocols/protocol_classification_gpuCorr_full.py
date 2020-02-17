@@ -40,10 +40,10 @@ import pyworkflow.protocol.constants as const
 from pwem.objects import SetOfParticles,  Set
 from pwem.protocols import ProtAlign2D
 from pwem.constants import ALIGN_2D, ALIGN_NONE
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
-import xmippLib
-from xmippLib import Image, MD_APPEND, DT_DOUBLE
+from pwem import emlib
+from pwem.emlib import Image, MD_APPEND, DT_DOUBLE
 from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
                             rowToAlignment, rowToParticle)
 
@@ -449,7 +449,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
 
             im1 = Image(nameRefLastClasses)
             im2 = Image(nameRefNewClasses)
-            im2 = xmippLib.image_align(im1, im2)
+            im2 = emlib.image_align(im1, im2)
 
             im1.inplaceMultiply(listToMultiply[0])
             im2.inplaceMultiply(listToMultiply[1])

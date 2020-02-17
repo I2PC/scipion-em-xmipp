@@ -30,13 +30,12 @@ from pyworkflow.protocol.constants import STEPS_PARALLEL
 from pyworkflow.protocol.params import IntParam
 from pyworkflow import VERSION_1_1
 
-from pwem.convert import DT_FLOAT
 from pwem.objects import Image
 from pwem.protocols import ProtProcessParticles
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
 
-from xmippLib import *
+from pwem.emlib import *
 
 from xmipp3.convert import xmippToLocation
 

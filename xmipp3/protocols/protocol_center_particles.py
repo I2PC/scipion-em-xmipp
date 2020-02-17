@@ -30,10 +30,10 @@ from pyworkflow import VERSION_2_0
 from pwem.constants import ALIGN_2D
 from pwem.objects import Class2D, Particle, Coordinate, Transform
 from pwem.protocols import ProtClassify2D
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 import pyworkflow.protocol.params as params
 
-from xmippLib import MD_APPEND
+from pwem.emlib import MD_APPEND
 from xmipp3.convert import (rowToAlignment, alignmentToRow,
                             rowToParticle, writeSetOfClasses2D, xmippToLocation)
 

@@ -33,7 +33,7 @@ import subprocess
 import numpy as np
 
 import xmipp3
-import xmippLib
+from pwem import emlib
 from .base import XmippMdRow
 
 def validateXmippGpuBins():
@@ -44,7 +44,7 @@ def getMdFirstRow(filename):
     This method should be used for validations of labels
     or metadata size, but the full metadata is not needed.
     """
-    md = xmippLib.MetaData()
+    md = emlib.MetaData()
     md.read(filename, 1)
     if md.getParsedLines():
         row = XmippMdRow()
@@ -57,7 +57,7 @@ def getMdFirstRow(filename):
 
 def getMdSize(filename):
     """ Return the metadata size without parsing entirely. """
-    md = xmippLib.MetaData()
+    md = emlib.MetaData()
     md.read(filename, 1)
     return md.getParsedLines()
 
@@ -71,7 +71,7 @@ def iterMdRows(md):
     """ Iterate over the rows of the given metadata. """
     # If md is string, take as filename and create the metadata
     if isinstance(md, str):
-        md = xmippLib.MetaData(md)
+        md = emlib.MetaData(md)
         
     row = XmippMdRow()
     
@@ -80,14 +80,14 @@ def iterMdRows(md):
         yield row
 
 def readInfoField(fnDir,block,label):
-    mdInfo = xmippLib.MetaData("%s@%s"%(block,join(fnDir,"iterInfo.xmd")))
+    mdInfo = emlib.MetaData("%s@%s"%(block,join(fnDir,"iterInfo.xmd")))
     return mdInfo.getValue(label, mdInfo.firstObject())
 
 def writeInfoField(fnDir,block,label, value):
-    mdInfo = xmippLib.MetaData()
+    mdInfo = emlib.MetaData()
     objId=mdInfo.addObject()
     mdInfo.setValue(label,value,objId)
-    mdInfo.write("%s@%s"%(block,join(fnDir,"iterInfo.xmd")),xmippLib.MD_APPEND)
+    mdInfo.write("%s@%s"%(block,join(fnDir,"iterInfo.xmd")),emlib.MD_APPEND)
     
 def validateDLtoolkit(errors=None, **kwargs):
     """ Validates if the deepLearningToolkit is installed.

@@ -38,12 +38,12 @@ from pyworkflow.protocol.params import (EnumParam, IntParam, Positive,
                                         BooleanParam)
 
 from pwem.constants import ALIGN_NONE
-from pwem.metadata import getSize, isEmpty
+from pwem.emlib.metadata import getSize, isEmpty
 from pwem.objects import SetOfParticles
 from pwem.protocols import ProtProcessParticles
 
 
-import xmippLib
+from pwem import emlib
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
 
 
@@ -303,17 +303,17 @@ class XmippProtScreenParticles(ProtProcessParticles):
                 varList = []
                 giniList = []
                 print('  - Reading metadata')
-                mdata = xmippLib.MetaData(self.fnInputMd)
+                mdata = emlib.MetaData(self.fnInputMd)
                 for objId in mdata:
-                    varList.append(mdata.getValue(xmippLib.MDL_SCORE_BY_VAR, objId))
-                    giniList.append(mdata.getValue(xmippLib.MDL_SCORE_BY_GINI, objId))
+                    varList.append(mdata.getValue(emlib.MDL_SCORE_BY_VAR, objId))
+                    giniList.append(mdata.getValue(emlib.MDL_SCORE_BY_GINI, objId))
 
                 if self.autoParRejectionVar == self.REJ_VARIANCE:
                     valuesList = varList
-                    self.mdLabels = [xmippLib.MDL_SCORE_BY_VAR]
+                    self.mdLabels = [emlib.MDL_SCORE_BY_VAR]
                 else:  # not working pretty well
                     valuesList = [var*(1-gini) for var, gini in zip(varList, giniList)]
-                    self.mdLabels = [xmippLib.MDL_SCORE_BY_VAR, xmippLib.MDL_SCORE_BY_GINI]
+                    self.mdLabels = [emlib.MDL_SCORE_BY_VAR, emlib.MDL_SCORE_BY_GINI]
 
                 self.varThreshold.set(histThresholding(valuesList))
                 print('  - Variance threshold: %f' % self.varThreshold)
@@ -455,14 +455,14 @@ def rejectByVariance(inputMdFn, outputMdFn, threshold, mode):
     """ Sets MDL_ENABLED to -1 to those items with a higher value
         than the threshold
     """
-    mdata = xmippLib.MetaData(inputMdFn)
+    mdata = emlib.MetaData(inputMdFn)
     for objId in mdata:
         if mode == XmippProtScreenParticles.REJ_VARIANCE:
-            if mdata.getValue(xmippLib.MDL_SCORE_BY_VAR, objId) > threshold:
-                mdata.setValue(xmippLib.MDL_ENABLED, -1, objId)
+            if mdata.getValue(emlib.MDL_SCORE_BY_VAR, objId) > threshold:
+                mdata.setValue(emlib.MDL_ENABLED, -1, objId)
         elif mode == XmippProtScreenParticles.REJ_VARGINI:
-            if (mdata.getValue(xmippLib.MDL_SCORE_BY_VAR, objId) *
-                (1 - mdata.getValue(xmippLib.MDL_SCORE_BY_GINI, objId)) > threshold):
-                mdata.setValue(xmippLib.MDL_ENABLED, -1, objId)
+            if (mdata.getValue(emlib.MDL_SCORE_BY_VAR, objId) *
+                (1 - mdata.getValue(emlib.MDL_SCORE_BY_GINI, objId)) > threshold):
+                mdata.setValue(emlib.MDL_ENABLED, -1, objId)
 
     mdata.write(outputMdFn)

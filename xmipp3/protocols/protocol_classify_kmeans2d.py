@@ -30,7 +30,7 @@ import pyworkflow.protocol.params as param
 
 from pyworkflow import VERSION_2_0
 
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 import pyworkflow.protocol.constants as cons
 from pyworkflow.object import Set
 from pyworkflow.utils.path import cleanPath

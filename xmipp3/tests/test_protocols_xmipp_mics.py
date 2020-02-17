@@ -401,7 +401,7 @@ class TestXmippDeepMicrographsCleaner(BaseTest):
 
     def _compareMaskAndGroundTruth(self, fnameMaskComputed, expectedVal):
 
-      from xmippLib import Image # comparar media
+      from pwem.emlib import Image # comparar media
       import numpy as np
       imgHandler = Image()
       imgHandler.read(fnameMaskComputed)

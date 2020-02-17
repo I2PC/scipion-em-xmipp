@@ -36,15 +36,15 @@ from pyworkflow import VERSION_2_0
 from pyworkflow.utils.path import (makePath, cleanPattern, cleanPath, copyTree,
                                    createLink)
 from pwem.constants import RELATION_CTF, ALIGN_NONE
-from pwem.convert import ImageHandler
+from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfParticles
 from pwem.protocols import ProtParticlePicking, ProtUserSubSet
 
 import pyworkflow.utils as pwutils
 import pyworkflow.protocol.params as params
-import pwem.metadata as md
+import pwem.emlib.metadata as md
 
-import xmippLib as xmipp
+from pwem import emlib as xmipp
 import xmipp3
 from xmipp3 import XmippProtocol
 from xmipp3.protocols.protocol_pick_noise import pickNoise_prepareInput

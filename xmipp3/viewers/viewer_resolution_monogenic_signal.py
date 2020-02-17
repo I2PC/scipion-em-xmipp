@@ -41,10 +41,11 @@ from xmipp3.viewers.viewer_resolution_directional import (COLOR_OTHER,
                                                           COLOR_CHOICES,
                                                           COLOR_JET, AX_Z)
 
-from pwem.convert import Ccp4Header, ImageHandler
+from pwem.convert import Ccp4Header
 from pwem.viewers import (LocalResolutionViewer, EmPlotter, ChimeraView,
                           DataView, Chimera)
-from pwem.metadata import MetaData, MDL_X, MDL_COUNT
+from pwem.emlib.metadata import MetaData, MDL_X, MDL_COUNT
+from pwem.emlib.image import ImageHandler
 
 from xmipp3.protocols.protocol_resolution_monogenic_signal import (
         XmippProtMonoRes, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM,
@@ -74,7 +75,6 @@ class XmippMonoResViewer(LocalResolutionViewer):
    
     def __init__(self, *args, **kwargs):
         ProtocolViewer.__init__(self, *args, **kwargs)
-
 
     def _defineParams(self, form):
         form.addSection(label='Visualization')
@@ -326,7 +326,6 @@ class XmippMonoResViewer(LocalResolutionViewer):
         fhCmd.write(line)
 
         fhCmd.close()
-
 
     @staticmethod
     def colorMapToColorList(steps, colorMap):
