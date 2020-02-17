@@ -297,6 +297,10 @@ class XmippProtReconstructSwarm(ProtRefine3D):
         fnDir = self._getExtraPath()
         Ts=self.readInfoField(fnDir,"sampling",xmippLib.MDL_SAMPLINGRATE)
 
+        # Remove files that will not be used any longer
+        cleanPath(join(fnDir,"images.stk"))
+        cleanPath(join(fnDir,"images.xmd"))
+
         # Final average
         TsOrig=self.inputParticles.get().getSamplingRate()
         XdimOrig=self.inputParticles.get().getDimensions()[0]

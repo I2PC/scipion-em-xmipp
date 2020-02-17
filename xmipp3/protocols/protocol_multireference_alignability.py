@@ -202,7 +202,7 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
         
         self.runJob('xmipp_image_resize',params)
         
-        from pwem.convert import ImageHandler
+        from pyworkflow.em.convert import ImageHandler
         img = ImageHandler()
         img.convert(self.inputVolumes.get(), self._getExtraPath("volume.vol"))
         Xdim = self.inputVolumes.get().getDim()[0]
@@ -399,7 +399,13 @@ _noisePixelLevel   '0 0'""" % (newXdim , newXdim, pathParticles, self.inputParti
        
         outputVols.setSamplingRate(volume.getSamplingRate())
         self._defineOutputs(outputVolumes=outputVols)
-    
+
+        cleanPattern(self._getPath("reference_particles.*"))
+        cleanPattern(self._getExtraPath("scaled_particles.*"))
+        cleanPattern(self._getExtraPath("reference_particles.*"))
+        cleanPattern(self._getExtraPath("corrected_ctf_particles.*"))
+        cleanPattern(self._getExtraPath("volume.vol"))
+        cleanPattern(self._getExtraPath("params.txt"))
         
     #--------------------------- INFO functions -------------------------------------------- 
     def _validate(self):
