@@ -162,7 +162,7 @@ CUDNN_VERSION = 6 or 7
 def copy_image(imag):
     ''' Return a copy of a xmipp_image
     '''
-    new_imag = xmippLib.Image()
+    new_imag = emlib.Image()
     new_imag.setData(imag.getData())
     return new_imag
 

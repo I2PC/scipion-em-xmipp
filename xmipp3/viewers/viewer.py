@@ -157,13 +157,13 @@ class XmippViewer(DataViewer):
                                                   SORT_BY: 'id',
                                                   MODE: MODE_MD}))
 
-            md = xmippLib.MetaData(obj._getExtraPath('particlesDenoised.xmd'))
-            if md.containsLabel(xmippLib.MDL_CORR_DENOISED_PROJECTION) and  md.containsLabel(xmippLib.MDL_CORR_DENOISED_NOISY):
+            md = emlib.MetaData(obj._getExtraPath('particlesDenoised.xmd'))
+            if md.containsLabel(emlib.MDL_CORR_DENOISED_PROJECTION) and  md.containsLabel(emlib.MDL_CORR_DENOISED_NOISY):
                 from plotter import XmippPlotter
                 xplotter = XmippPlotter(windowTitle="denoised vs proj & denoised vs original")
                 xplotter.createSubPlot("Correlations", "corr_denoised_projection", "corr_denoised_original")
-                xplotter.plotScatterMd(md, mdLabelX=xmippLib.MDL_CORR_DENOISED_PROJECTION, 
-                                mdLabelY=xmippLib.MDL_CORR_DENOISED_NOISY )
+                xplotter.plotScatterMd(md, mdLabelX=emlib.MDL_CORR_DENOISED_PROJECTION,
+                                mdLabelY=emlib.MDL_CORR_DENOISED_NOISY )
                 self._views.append(xplotter)
 
         elif issubclass(cls, XmippProtMovieGain):

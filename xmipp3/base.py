@@ -195,7 +195,7 @@ class XmippMdRow:
             
     def printDict(self):
         """ Fancy printing of the row, mainly for debugging. """
-        print (str(self))
+        print(str(self))
     
     
 class RowMetaData:
@@ -277,9 +277,9 @@ class XmippSet():
         for objId in self._md:  
             item = self._itemClass()
             item.readFromMd(self._md, objId)  
-            #m = Image(md.getValue(xmippLib.MDL_IMAGE, objId))
+            #m = Image(md.getValue(emlib.MDL_IMAGE, objId))
             #if self.hasCTF():
-            #    m.ctfModel = XmippCTFModel(md.getValue(xmippLib.MDL_CTF_MODEL, objId))
+            #    m.ctfModel = XmippCTFModel(md.getValue(emlib.MDL_CTF_MODEL, objId))
             yield item
         
 #        
@@ -574,7 +574,7 @@ class ScriptIJBase(XmippScript):
                 missingFiles.append(f)
         self.inputFiles = files
         if len(missingFiles):
-            print ("Missing files: \n %s" % '  \n'.join(missingFiles))
+            print("Missing files: \n %s" % '  \n'.join(missingFiles))
         
         self.args = "-i %s" % ' '.join(self.inputFiles)
         self.readOtherParams()
@@ -596,13 +596,13 @@ class ScriptAppIJ(ScriptIJBase):
         if len(self.inputFiles) > 0:
             runJavaIJapp(self.memory, self.name, self.args, batchMode=False)
         else:
-            print ("No input files. Exiting...")
+            print("No input files. Exiting...")
             
     
 def getImageJPluginCmd(memory, macro, args, batchMode=False):
     if len(memory) == 0:
         memory = "1g"
-        print ("No memory size provided. Using default: " + memory)
+        print("No memory size provided. Using default: " + memory)
     imagej_home = getXmippPath('external', 'imagej')
     plugins_dir = os.path.join(imagej_home, "plugins")
     macro = os.path.join(imagej_home, "macros", macro)
@@ -629,7 +629,7 @@ def getJavaIJappCmd(memory, appName, args, batchMode=False):
     '''Launch an Java application based on ImageJ '''
     if len(memory) == 0:
         memory = "2g"
-        print ("No memory size provided. Using default: " + memory)
+        print("No memory size provided. Using default: " + memory)
     imagej_home = getXmippPath("external", "imagej")
     lib = getXmippPath("lib")
     javaLib = getXmippPath('java', 'lib')

@@ -704,8 +704,8 @@ class GAN(XmippProtDeepDenoising):
             g_loss = self.combined.train_on_batch(noise2, valid_y)
 
             # Plot the progress
-            print ("%d/5000 [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (
-                epoch, d_loss[0], 100 * d_loss[1], g_loss))
+            print("%d/5000 [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (
+                  epoch, d_loss[0], 100 * d_loss[1], g_loss))
 
             evaluate = self.generator.evaluate(self.noise, self.true)
             print("Validation =", evaluate)

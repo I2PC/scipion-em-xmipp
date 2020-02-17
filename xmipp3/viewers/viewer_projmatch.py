@@ -282,7 +282,7 @@ Examples:
             md.clear()
             md.setValue(emlib.MDL_IMAGE, volFn, md.addObject())
             blockName = volFn.split("/")[3]
-            #print "Volume: ", volFn, blockName
+            # print("Volume: %s %s" %(volFn, blockName))
             md.write("%s@%s"% (blockName, mdPath), emlib.MD_APPEND)
         return [self.createDataView(mdPath)]
 
@@ -397,12 +397,12 @@ Examples:
                         convert_refno_to_stack_position[mdReferences.getValue(emlib.MDL_NEIGHBOR,id)]=id
                     file_nameAverages   = self.protocol._getFileName('outClassesXmd', iter=it, ref=ref3d)
                     if exists(file_nameAverages):
-                        #print "OutClassesXmd", OutClassesXmd
+                        # print("OutClassesXmd %s" % OutClassesXmd)
                         mdIn.read(file_nameAverages)
                         mdOut.clear()
                         for i in mdIn:
-                            #id1=mdOut.addObject()
-                            #mdOut.setValue(MDL_IMAGE,mdIn.getValue(MDL_IMAGE,i),id1)
+                            # id1=mdOut.addObject()
+                            # mdOut.setValue(MDL_IMAGE,mdIn.getValue(MDL_IMAGE,i),id1)
                             ref2D = mdIn.getValue(emlib.MDL_REF,i)
                             file_references = self.protocol._getFileName('projectLibraryStk', iter=it, ref=ref3d)
                             file_reference = emlib.FileName()

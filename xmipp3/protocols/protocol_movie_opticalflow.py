@@ -224,8 +224,8 @@ class XmippProtOFAlignment(ProtAlignMovies):
             self._saveAlignmentPlots(movie)
 
         except Exception as e:
-            print ("ERROR: %s failed for movie %s.\n  Exception: %s"
-                   % (program, movie.getFileName(), e))
+            print("ERROR: %s failed for movie %s.\n  Exception: %s"
+                  % (program, movie.getFileName(), e))
     
     #--------------------------- INFO functions -------------------------------
     def _validate(self):

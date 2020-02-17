@@ -158,8 +158,8 @@ class XmippProtRCT(ProtInitialVolume):
             tImg = tImages[imgId]
             
             if uImg is None or tImg is None:
-                print (">>> Warning, for id %d, tilted or untilted particle "
-                       "was not found. Ignored." % imgId)
+                print(">>> Warning, for id %d, tilted or untilted particle "
+                      "was not found. Ignored." % imgId)
             else:
                 objId = classMd.addObject()
                 pairRow = XmippMdRow()

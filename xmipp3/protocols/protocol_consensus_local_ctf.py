@@ -32,7 +32,7 @@ from pyworkflow.protocol.params import MultiPointerParam, PointerParam
 from pyworkflow.em.protocol import ProtAnalysis3D
 
 import numpy as np
-import xmippLib
+from pwem import emlib
 
 from xmipp3.convert import readSetOfMicrographs, writeSetOfMicrographs, setOfMicrographsToMd, setXmippAttribute
 from ..convert import writeSetOfParticles, readSetOfParticles
@@ -114,8 +114,8 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
                 newPart = part.clone()
                 pMedian = Float(self.median[index])
                 pMad = Float(self.mad[index])
-                setXmippAttribute(newPart.getCTF(), xmippLib.MDL_CTF_DEFOCUSA, pMedian)
-                setXmippAttribute(newPart.getCTF(), xmippLib.MDL_CTF_DEFOCUS_RESIDUAL, pMad)
+                setXmippAttribute(newPart.getCTF(), emlib.MDL_CTF_DEFOCUSA, pMedian)
+                setXmippAttribute(newPart.getCTF(), emlib.MDL_CTF_DEFOCUS_RESIDUAL, pMad)
                 outputSet.append(newPart)
 
         self._defineOutputs(outputParticles=outputSet)
@@ -124,8 +124,8 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
 
     def _updateItem(self, particle, row):
         pId = particle.getObjId()
-        setXmippAttribute(particle,xmippLib.MDL_CTF_DEFOCUSA,self.median[self.pMatrixIdx[pId]])
-        setXmippAttribute(particle,xmippLib.MDL_CTF_DEFOCUS_RESIDUAL,self.mad[self.pMatrixIdx[pId]])
+        setXmippAttribute(particle,emlib.MDL_CTF_DEFOCUSA,self.median[self.pMatrixIdx[pId]])
+        setXmippAttribute(particle,emlib.MDL_CTF_DEFOCUS_RESIDUAL,self.mad[self.pMatrixIdx[pId]])
 
     #--------------------------- INFO functions --------------------------------------------
     def _summary(self):

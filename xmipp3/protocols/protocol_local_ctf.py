@@ -37,7 +37,7 @@ from pyworkflow.em.protocol import ProtAnalysis3D
 from pyworkflow.em.convert import ImageHandler
 
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
-import xmippLib
+from pwem import emlib
 
 
 class XmippProtLocalCTF(ProtAnalysis3D):
@@ -118,7 +118,7 @@ class XmippProtLocalCTF(ProtAnalysis3D):
         outputSet = self._createSetOfParticles()
         imgSet = self.inputSet.get()
         outputSet.copyInfo(imgSet)
-        readSetOfParticles(self._getExtraPath('output_imgs.xmd'), outputSet,  extraLabels=[xmippLib.MDL_CTF_DEFOCUS_CHANGE])
+        readSetOfParticles(self._getExtraPath('output_imgs.xmd'), outputSet,  extraLabels=[emlib.MDL_CTF_DEFOCUS_CHANGE])
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(self.inputSet, outputSet)
 

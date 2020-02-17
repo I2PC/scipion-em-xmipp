@@ -32,7 +32,7 @@ from pyworkflow.em.protocol import ProtAnalysis3D
 
 import pyworkflow.em.metadata as md
 import numpy as np
-import xmippLib
+from pwem import emlib
 
 from xmipp3.convert import readSetOfMicrographs, writeSetOfMicrographs, setOfMicrographsToMd, setXmippAttribute
 
@@ -80,7 +80,7 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
         uniqueMicIds = list(set(micIds))
         self.R2={}
 
-        md = xmippLib.MetaData()
+        md = emlib.MetaData()
 
         for micId in uniqueMicIds:
             idx = [i for i,j in enumerate(micIds) if j==micId]
@@ -105,20 +105,20 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
             meanDefocusbyIdArray = np.asarray(meanDefocusbyId)
             coefficients = np.asarray(polynomial)
             self.R2[micId] = 1 - residuals / sum((meanDefocusbyIdArray - meanDefocusbyIdArray.mean()) ** 2)
-            mdBlock = xmippLib.MetaData()
+            mdBlock = emlib.MetaData()
             for xi, yi, deltafi, parti in zip(xbyId,ybyId,meanDefocusbyId,particleIdsbyMicId):
                 objId = mdBlock.addObject()
-                mdBlock.setValue(xmippLib.MDL_ITEM_ID,long(parti),objId)
-                mdBlock.setValue(xmippLib.MDL_XCOOR,xi,objId)
-                mdBlock.setValue(xmippLib.MDL_YCOOR,yi,objId)
-                mdBlock.setValue(xmippLib.MDL_CTF_DEFOCUSA,deltafi,objId)
+                mdBlock.setValue(emlib.MDL_ITEM_ID,long(parti),objId)
+                mdBlock.setValue(emlib.MDL_XCOOR,xi,objId)
+                mdBlock.setValue(emlib.MDL_YCOOR,yi,objId)
+                mdBlock.setValue(emlib.MDL_CTF_DEFOCUSA,deltafi,objId)
                 estimatedVal = coefficients[2]*yi + coefficients[1]*xi + coefficients[0]
                 residuali = deltafi - estimatedVal
-                mdBlock.setValue(xmippLib.MDL_CTF_DEFOCUS_RESIDUAL,residuali,objId)
-            mdBlock.write("mic_%d@%s"%(micId,self._getExtraPath("micrographDefoci.xmd")),xmippLib.MD_APPEND)
+                mdBlock.setValue(emlib.MDL_CTF_DEFOCUS_RESIDUAL,residuali,objId)
+            mdBlock.write("mic_%d@%s"%(micId,self._getExtraPath("micrographDefoci.xmd")),emlib.MD_APPEND)
             objId = md.addObject()
-            md.setValue(xmippLib.MDL_CTF_DEFOCUS_COEFS,coefficients.tolist(),objId)
-            md.write(self._getExtraPath("micrographCoef.xmd"),xmippLib.MD_APPEND)
+            md.setValue(emlib.MDL_CTF_DEFOCUS_COEFS,coefficients.tolist(),objId)
+            md.write(self._getExtraPath("micrographCoef.xmd"),emlib.MD_APPEND)
 
 
     def createOutputStep(self):
@@ -127,14 +127,14 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
         writeSetOfMicrographs(inputMicSet, fnMics)
         mdMics = md.MetaData(fnMics)
         for objId in mdMics:
-            micId = mdMics.getValue(xmippLib.MDL_ITEM_ID,objId)
+            micId = mdMics.getValue(emlib.MDL_ITEM_ID,objId)
             if micId in self.R2:
                 micR2 = float(self.R2[micId])
-                mdMics.setValue(xmippLib.MDL_CTF_DEFOCUS_R2, micR2, objId)
+                mdMics.setValue(emlib.MDL_CTF_DEFOCUS_R2, micR2, objId)
         mdMics.write(fnMics)
         outputSet = self._createSetOfMicrographs()
         outputSet.copyInfo(inputMicSet)
-        readSetOfMicrographs(fnMics, outputSet, extraLabels=[xmippLib.MDL_CTF_DEFOCUS_R2])
+        readSetOfMicrographs(fnMics, outputSet, extraLabels=[emlib.MDL_CTF_DEFOCUS_R2])
 
         self._defineOutputs(outputMicrographs=outputSet)
         self._defineSourceRelation(self.inputSet, outputSet)

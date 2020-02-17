@@ -421,7 +421,7 @@ def runAssignImagesToReferences(self, iterN, **kwargs):
     #with the pairs ctf_group reference    
     for ctfN in self.allCtfGroups():
         ctfFilePrefix = self._getBlockFileName(ctfBlockName, ctfN, '')
-        #print 'read file: ', ctfFilePrefix+outputdocfile
+        # print('read file: %s' % ctfFilePrefix+outputdocfile)
         mdAux.read(ctfFilePrefix + outputdocfile)
         for refN in self.allRefs():
             auxOutputdocfile = self._getRefBlockFileName(ctfBlockName, ctfN, refBlockName, refN, '')
@@ -441,7 +441,7 @@ def insertAngularClassAverageStep(self, iterN, refN, **kwargs):
     outClasses = self._getFileName('outClasses', iter=iterN, ref=refN)
     # FIXME: Why is necessary ask if docFileInputAngles is empty. check if is a validation step
 #     if emlib.isMdEmpty(docFileInputAngles):
-#         print "Empty metadata file: %s" % docFileInputAngles
+#         print("Empty metadata file: %s" % docFileInputAngles)
 #         return
     
     params = {'docFileInputAngles' : docFileInputAngles,

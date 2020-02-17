@@ -412,7 +412,7 @@ class TestXmippDeepMicrographsCleaner(BaseTest):
       self.assertEqual(coordSet1.getBoxSize(), coordSet2.getBoxSize()*scale)
 
     def test_noThreshold(self):
-        print ("Run cleanMics no thr")
+        print("Run cleanMics no thr")
         protCleaner = self.newProtocol(XmippProtDeepMicrographScreen,
                                        micsSource=0,  # same as picking
                                        saveMasks=True)
@@ -431,7 +431,7 @@ class TestXmippDeepMicrographsCleaner(BaseTest):
         self._compareCoorSetsBoxSizes(self.protImportCoords.outputCoordinates, protCleaner.outputCoordinates_Full, )
 
     def test_threshold(self):
-        print ("Run cleanMics with thr")
+        print("Run cleanMics with thr")
         protCleaner = self.newProtocol(XmippProtDeepMicrographScreen,
                                        micsSource=0,  # same as picking
                                        saveMasks=True,
@@ -447,7 +447,7 @@ class TestXmippDeepMicrographsCleaner(BaseTest):
         self._compareCoorSetsBoxSizes(self.protImportCoords.outputCoordinates, protCleaner.outputCoordinates_Auto_090)
 
     def test_fromDownsampled(self):
-        print ("Run cleanMics from downsampled")
+        print("Run cleanMics from downsampled")
 
         protCleaner = self.newProtocol(XmippProtDeepMicrographScreen,
                                        micsSource=1,  # other -> downsampled mics
@@ -1049,7 +1049,7 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
     # another protocol (screen particles) to do it.
 
     # def testExtractSort(self):
-    #     print "Run extract particles with sort by statistics"
+    #     print("Run extract particles with sort by statistics")
     #     protExtract = self.newProtocol(XmippProtExtractParticles,
     #                                    boxSize=110,
     #                                    downsampleType=SAME_AS_PICKING,
@@ -1084,7 +1084,7 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
     #     self._checkSamplingConsistency(outputParts)
     #
     # def testExtractSortSmall(self):
-    #     print "Run extract small particles sort by statistics"
+    #     print("Run extract small particles sort by statistics")
     #     downFactor = 3.0
     #     protExtract = self.newProtocol(XmippProtExtractParticles,
     #                                    boxSize=40,

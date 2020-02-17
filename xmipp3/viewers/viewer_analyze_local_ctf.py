@@ -26,7 +26,7 @@
 # **************************************************************************
 
 import numpy as np
-import xmippLib
+from pwem import emlib
 from os.path import exists
 
 from pyworkflow.viewer import (ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO)
@@ -73,12 +73,12 @@ class XmippAnalyzeLocalCTFViewer(ProtocolViewer):
         fnDefoci="%s"%(self.protocol._getExtraPath("micrographDefoci.xmd"))
         if exists(fnDefoci):
             try:
-                mdPoints = xmippLib.MetaData("mic_%d@%s"%(self.displayLocalDefocus.get(),fnDefoci))
+                mdPoints = emlib.MetaData("mic_%d@%s"%(self.displayLocalDefocus.get(),fnDefoci))
 
-                x = mdPoints.getColumnValues(xmippLib.MDL_XCOOR)
-                y = mdPoints.getColumnValues(xmippLib.MDL_YCOOR)
-                defocusA = mdPoints.getColumnValues(xmippLib.MDL_CTF_DEFOCUSA)
-                residuals = mdPoints.getColumnValues(xmippLib.MDL_CTF_DEFOCUS_RESIDUAL)
+                x = mdPoints.getColumnValues(emlib.MDL_XCOOR)
+                y = mdPoints.getColumnValues(emlib.MDL_YCOOR)
+                defocusA = mdPoints.getColumnValues(emlib.MDL_CTF_DEFOCUSA)
+                residuals = mdPoints.getColumnValues(emlib.MDL_CTF_DEFOCUS_RESIDUAL)
 
                 title="Micrograph %d defocus"%self.displayLocalDefocus.get()
                 xplotter = XmippPlotter(windowTitle=title)

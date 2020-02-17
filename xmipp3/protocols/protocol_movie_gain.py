@@ -43,7 +43,7 @@ from pwem.objects import SetOfMovies, Movie, SetOfImages, Image
 from pwem.protocols import EMProtocol, ProtProcessMovies
 
 from pwem import emlib
-from xmippLib import *
+from pwem.emlib import *
 from xmipp_base import *
 from xmipp3.utils import *
 
@@ -154,16 +154,16 @@ class XmippProtMovieGain(ProtProcessMovies):
         args = self.getArgs(movieFn, movieId, " --sigma 0")
         self.runJob("xmipp_movie_estimate_gain", args, numberOfMpi=1)
 
-        resGain = xmippLib.Image()
+        resGain = emlib.Image()
         resGain.read(resGainFn)
-        expGain = xmippLib.Image()
+        expGain = emlib.Image()
         expGain.read(expGainFn)
         self.match_orientation(expGain, resGain)
 
     def normalizeGainStep(self):
         gainFn = self.getFinalGain()
 
-        oriGain = xmippLib.Image()
+        oriGain = emlib.Image()
         oriGain.read(gainFn)
         oriArray = oriGain.getData()
 
@@ -195,7 +195,7 @@ class XmippProtMovieGain(ProtProcessMovies):
         if not os.path.exists(self.getBestGain()):
             # No previous gain: bestGain is the estimated
             if not inputGain is None:
-                G = xmippLib.Image()
+                G = emlib.Image()
                 G.read(inputGain)
                 G.write(self.getBestGain())
 
@@ -210,7 +210,7 @@ class XmippProtMovieGain(ProtProcessMovies):
 
         estim_gain = self.getCurrentGain(movieId)
         if os.path.exists(estim_gain):
-            G = xmippLib.Image()
+            G = emlib.Image()
             G.read(estim_gain)
             mean, dev, min, max = G.computeStats()
             Gnp = G.getData()
@@ -403,7 +403,7 @@ class XmippProtMovieGain(ProtProcessMovies):
         if best_cor > 0:
             best_gain_array = invert_array(best_gain_array)
 
-        best_gain = xmippLib.Image()
+        best_gain = emlib.Image()
         best_gain.setData(best_gain_array)
         best_gain.write(self.getBestGain())
 
@@ -467,7 +467,7 @@ class XmippProtMovieGain(ProtProcessMovies):
 def applyTransform(imag_array, M, shape):
     ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
     '''
-    imag = xmippLib.Image()
+    imag = emlib.Image()
     imag.setData(imag_array)
     imag = imag.applyWarpAffine(list(M.flatten()), shape, 1.0)
     return imag.getData()
