@@ -383,8 +383,8 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
         self.rejectByPopulation(idsToCheck)
 
     def createOutputs(self):
-        streamMode = (Set.STREAM_CLOSED if getattr(self, 'finished', False)
-                      else Set.STREAM_OPEN)
+        streamMode = Set.STREAM_CLOSED if getattr(self, 'finished', False) \
+            else (Set.STREAM_CLOSED if self.streamClosed else Set.STREAM_OPEN)
 
         def updateOutputs(mdFn, suffix):
             lastToClose = getattr(self, 'finished', False) and \

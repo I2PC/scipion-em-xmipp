@@ -362,6 +362,8 @@ class TestXmippDeepMicrographsCleaner(BaseTest):
                               folder='relion13_tutorial',
                               files={'mics': 'betagal/Micrographs/*mrc',
                                      'coords': 'betagal/PrecalculatedResults/Micrographs/*autopick.star'})
+        cls.dsRelion = DataSet.getDataSet('relion13_tutorial')
+
         micsFn = cls.dataset.getFile('mics')
         coordsDir = cls.dataset.getFile('coords')
 
@@ -504,12 +506,14 @@ class TestXmippExtractParticles(TestXmippBase):
         self.assertTrue(particle.hasAttribute('_xmipp_scoreByVariance'),
                         'Particle has not scoreByVariance attribute.')
         self.assertAlmostEqual(particle._xmipp_scoreByVariance.get(), varianceScore,
-                               3, "The was a problem with the varianceScore")
+                               delta=0.01,
+                               msg="The was a problem with the varianceScore")
 
         self.assertTrue(particle.hasAttribute('_xmipp_scoreByGiniCoeff'),
                         'Particle has not scoreByGiniCoeff attribute.')
         self.assertAlmostEqual(particle._xmipp_scoreByGiniCoeff.get(), giniScore,
-                               3, "The was a problem with the giniCoeffScore")
+                               delta=0.05,
+                               msg="The was a problem with the giniCoeffScore")
 
     def testExtractSameAsPicking(self):
         print "Run extract particles from same micrographs as picking"
@@ -589,16 +593,16 @@ class TestXmippExtractParticles(TestXmippBase):
         self._checkSamplingConsistency(outputParts)
         self._checkVarianceAndGiniCoeff(outputParts[170], 1.2081, 0.5754)
 
-    def testNoExtractBorders(self):
-        print "Run extract particles avoiding extract in borders"
+    def testExtractBorders(self):
+        print "Run Extract particles at border"
         protExtract = self.newProtocol(XmippProtExtractParticles,
                                        boxSize=750,
                                        downsampleType=OTHER,
                                        doInvert=False,
-                                       doBorders=False,
+                                       doBorders=True,
                                        doFlip=False)
 
-        protExtract.setObjLabel("extract-avoid borders")
+        protExtract.setObjLabel("Extract particles at border")
         protExtract.inputCoordinates.set(self.protPP.outputCoordinates)
         protExtract.inputMicrographs.set(self.protImport.outputMicrographs)
         self.launchProtocol(protExtract)
@@ -629,9 +633,10 @@ class TestXmippExtractParticles(TestXmippBase):
         self.assertEqual(outputParts.getSamplingRate(), samplingMics,
                          "Output sampling rate should be equal to input "
                          "sampling rate.")
-        self.assertAlmostEquals(outputParts.getSize(), 399, delta=1)
+        self.assertAlmostEquals(outputParts.getSize(), 403, delta=1)
         self._checkSamplingConsistency(outputParts)
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.2120, 0.5275)
+        # Particle 335 is outbourder with this boxsize. Checking it...
+        self._checkVarianceAndGiniCoeff(outputParts[335], 1.2191, 0.5795)
 
     def testExtractOther(self):
         print "Run extract particles from original micrographs, with downsampling"
@@ -682,7 +687,7 @@ class TestXmippExtractParticles(TestXmippBase):
         for particle in outputParts:
             self.assertTrue(particle.getCoordinate().getMicId() in micsId)
             self.assertAlmostEqual(outputSampling, particle.getSamplingRate())
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.2472, 0.6052)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.2008, 0.5812)
 
     def testExtractNoise(self):
         # here we will try a different patchSize than the default
@@ -704,7 +709,7 @@ class TestXmippExtractParticles(TestXmippBase):
 
         outputParts = protExtract.outputParticles
         self.assertIsNotNone(outputParts, "There was a problem generating the output.")
-        self.assertAlmostEquals(outputParts.getSize(), 403, delta=1)
+        self.assertAlmostEquals(outputParts.getSize(), 395, delta=1)
         self._checkVarianceAndGiniCoeff(outputParts[170], 1.1594, 0.5702)
 
     def testExtractCTF(self):
@@ -947,6 +952,16 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         prot2.closeMappers()
         return prot2
 
+    def testRemoveDuplicates(self):
+        protDupl = self.newProtocol(XmippProtPickingRemoveDuplicates,
+                                    consensusRadius=110)
+        protDupl.inputCoordinates.set(self.protFaPi.outputCoordinates)
+        self.launchProtocol(protDupl)
+        self.assertTrue(protDupl.isFinished(), "Consensus failed")
+        self.assertTrue(protDupl.outputCoordinates.getSize() == 241,
+                        "Output coordinates size does not is wrong.")
+
+
     def testStreamingAndNonStreaming(self):
         protAutomaticPP = XmippParticlePickingAutomatic()
         protAutomaticPP.xmippParticlePicking.set(self.protFaPi)
@@ -954,7 +969,9 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         protAutomaticPP.micsToPick.set(1)
         self.proj.launchProtocol(protAutomaticPP, wait=True)
 
-        protCons1 = self.newProtocol(XmippProtConsensusPicking)
+        # NON streaming tests
+        protCons1 = self.newProtocol(XmippProtConsensusPicking,
+                                     objLabel="Xmipp - consensus pick AND")
         protCons1.inputCoordinates.set([self.protFaPi.outputCoordinates,
                                         protAutomaticPP.outputCoordinates])
         self.launchProtocol(protCons1)
@@ -964,6 +981,7 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
                         "Output coordinates size does not is wrong.")
 
         protConsOr = self.newProtocol(XmippProtConsensusPicking,
+                                      objLabel="Xmipp - consensus pick OR",
                                       consensus=1)
         protConsOr.inputCoordinates.set(
             [Pointer(self.protFaPi, extended="outputCoordinates"),
@@ -974,6 +992,19 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         self.assertTrue(protConsOr.consensusCoordinates.getSize() == 422,
                         "Output coordinates size does not is wrong.")
 
+
+        # STREAMING tests
+        def waitForOutput(prot, output, timeout=600):
+            """ Waits until the output is ready
+                or till timeout (in seconds) is reached (10min by default).
+            """
+            count = 0
+            while not prot.hasAttribute(output) and count < timeout:
+                prot = self._updateProtocol(prot)
+                time.sleep(1)
+                count += 1
+            return prot
+
         kwargs = {'nDim': 3,  # 3 objects
                   'creationInterval': 20,  # wait 1 sec. after creation
                   'setof': 1,  # create SetOfMicrographs
@@ -983,27 +1014,36 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         protStream = self.newProtocol(ProtCreateStreamData, **kwargs)
         self.proj.launchProtocol(protStream, wait=False)
 
-        while not protStream.hasAttribute('outputMicrographs'):
-            time.sleep(1)
-            protStream = self._updateProtocol(protStream)
+        protStream = waitForOutput(protStream, 'outputMicrographs')
 
         protAutoPP = XmippParticlePickingAutomatic()
         protAutoPP.xmippParticlePicking.set(self.protFaPi)
         protAutoPP.micsToPick.set(1)
         protAutoPP.inputMicrographs.set(protStream.outputMicrographs)
         self.proj.launchProtocol(protAutoPP, wait=False)
+        protAutoPP = waitForOutput(protAutoPP, 'outputCoordinates')
 
-        while not protAutoPP.hasAttribute('outputCoordinates'):
-            time.sleep(1)
-            protAutoPP = self._updateProtocol(protAutoPP)
-
-        protCons2 = self.newProtocol(XmippProtConsensusPicking)
+        # Consensus Picking launching
+        protCons2 = self.newProtocol(XmippProtConsensusPicking,
+                                     objLabel="Xmipp - consensus pick streaming")
         protCons2.inputCoordinates.set(
             [Pointer(self.protFaPi, extended="outputCoordinates"),
              Pointer(protAutoPP, extended="outputCoordinates")])
-        self.launchProtocol(protCons2)
-        self.assertTrue(protCons2.isFinished(), "Consensus failed")
+        self.proj.launchProtocol(protCons2, wait=False)
+
+        # Remove Duplicates launching
+        protDupl2 = self.newProtocol(XmippProtPickingRemoveDuplicates,
+                                     objLabel="Xmipp - remove duplicates streaming",
+                                     consensusRadius=110)
+        protDupl2.inputCoordinates.set(protAutoPP.outputCoordinates)
+        self.proj.launchProtocol(protDupl2, wait=True)  # don't wait to make the final checks
+
+        time.sleep(3)  # protDupl2 should be as long as protCons2, but just in case
+        protCons2 = self._updateProtocol(protCons2)
         self.assertTrue(protCons2.consensusCoordinates.getSize() == 390,
+                        "Output coordinates size does not is wrong.")
+        protDupl2 = self._updateProtocol(protDupl2)
+        self.assertTrue(protDupl2.outputCoordinates.getSize() == 249,
                         "Output coordinates size does not is wrong.")
 
 

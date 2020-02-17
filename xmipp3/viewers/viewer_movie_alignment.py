@@ -23,16 +23,16 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-from pyworkflow.em.viewers import MicrographsView
-from pyworkflow.protocol.params import LabelParam
+
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 import pyworkflow.em.viewers.showj as showj
+from pyworkflow.protocol.params import LabelParam
 
 from xmipp3.protocols.protocol_movie_opticalflow import (XmippProtOFAlignment,
                                                  OBJCMD_MOVIE_ALIGNCARTESIAN)
 from xmipp3.protocols.protocol_movie_correlation import XmippProtMovieCorr
 from xmipp3.protocols.protocol_movie_max_shift import XmippProtMovieMaxShift
-
+from .viewer_ctf_consensus import getStringIfActive
 
 class XmippMovieAlignViewer(Viewer):
     _targets = [XmippProtOFAlignment, XmippProtMovieCorr]
@@ -43,23 +43,12 @@ class XmippMovieAlignViewer(Viewer):
     def _visualize(self, obj, **kwargs):
         views = []
 
-        plotLabels = ('psdCorr._filename plotPolar._filename '
-                      'plotCart._filename plotGlobal._filename')
-        labels = plotLabels + ' _filename '
-        viewParams = {showj.MODE: showj.MODE_MD,
-                      showj.ORDER: labels,
-                      showj.VISIBLE: labels,
-                      showj.RENDER: plotLabels,
-                      # showj.ZOOM: 50,
-                      showj.OBJCMDS: "'%s'" % OBJCMD_MOVIE_ALIGNCARTESIAN
-                      }
-
         if obj.hasAttribute('outputMicrographs'):
             views.append(self.objectView(obj.outputMicrographs,
-                                         viewParams=viewParams))
+                                         viewParams=getViewParams()))
         elif obj.hasAttribute('outputMovies'):
             views.append(self.objectView(obj.outputMovies,
-                                         viewParams=viewParams))
+                                         viewParams=getViewParams()))
         else:
             views.append(self.infoMessage("Output (micrographs or movies) has "
                                           "not been produced yet."))
@@ -95,27 +84,37 @@ class XmippMovieMaxShiftViewer(ProtocolViewer):
                  'visualizeMicsDiscarded': self._visualizeMicsDiscarded
                 }
 
-    def _visualizeMics(self, e=None):
+    def _visualizeAny(self, outNameCondition):
         views = []
 
-        if hasattr(self.protocol, "outputMicrographs"):
-            views.append(MicrographsView(self.getProject(),
-                                         self.protocol.outputMicrographs))
-        else:
-            appendStr = ', yet.' if self.protocol.isActive() else '.'
-            self.infoMessage('%s does not have outputMicrographs%s'
-                             % (self.protocol.getObjLabel(), appendStr),
+        for outName, outObj in self.protocol.iterOutputAttributes():
+            if outNameCondition(outName):
+                views.append(self.objectView(outObj, viewParams=getViewParams()))
+                break
+        if not views:
+            outputType = 'discarded' if outNameCondition('Discarded') else 'accepted'
+            self.infoMessage('%s does not have %s outputs%s'
+                             % (self.protocol.getObjLabel(), outputType,
+                                getStringIfActive(self.protocol)),
                              title='Info message').show()
         return views
+
+    def _visualizeMics(self, e=None):
+        return self._visualizeAny(lambda x: not x.endswith('Discarded'))
 
     def _visualizeMicsDiscarded(self, e=None):
-        views = []
+        return self._visualizeAny(lambda x: x.endswith('Discarded'))
 
-        if hasattr(self.protocol, "outputMicrographsDiscarded"):
-            views.append(MicrographsView(self.getProject(),
-                                         self.protocol.outputMicrographsDiscarded))
-        else:
-            self.infoMessage('%s has not discarded micrographs.'
-                             % self.protocol.getObjLabel(),
-                             title='Info message').show()
-        return views
+def getViewParams():
+    plotLabels = ('psdCorr._filename plotPolar._filename '
+                  'plotCart._filename plotGlobal._filename')
+    labels = plotLabels + ' _filename '
+    viewParams = {showj.MODE: showj.MODE_MD,
+                  showj.ORDER: 'id ' + labels,
+                  showj.VISIBLE: 'id ' + labels,
+                  showj.RENDER: plotLabels,
+                  showj.ZOOM: 20,
+                  showj.OBJCMDS: "'%s'" % OBJCMD_MOVIE_ALIGNCARTESIAN
+                  }
+
+    return viewParams
