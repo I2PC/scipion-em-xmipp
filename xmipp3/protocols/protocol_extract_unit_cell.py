@@ -116,14 +116,14 @@ class XmippProtExtractUnit(EMProtocol):
         elif sym == XMIPP_DIHEDRAL_X:
             sym = "%s%d" % \
                   (XMIPP_SYM_NAME[XMIPP_DIHEDRAL_X][:1], self.symmetryOrder)
-        elif sym == XMIPP_TETRAHEDRAL :
+        elif sym == XMIPP_TETRAHEDRAL:
             sym = "%s" % XMIPP_SYM_NAME[XMIPP_TETRAHEDRAL]
         elif sym == XMIPP_OCTAHEDRAL:
             sym = "%s" % XMIPP_SYM_NAME[XMIPP_OCTAHEDRAL]
         elif sym >= XMIPP_I222 and sym <= XMIPP_In25r :
             sym = XMIPP_SYM_NAME[sym]
         
-	inFileName = self.inputVolumes.get().getFileName()
+        inFileName = self.inputVolumes.get().getFileName()
         if inFileName.endswith('.mrc'):
             inFileName = inFileName + ":mrc"
         args = "-i %s -o %s" % \

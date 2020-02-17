@@ -26,17 +26,16 @@
 # *
 # **************************************************************************
 
+import numpy as np
+
 from pyworkflow import VERSION_2_0
 from pyworkflow.object import Float
 from pyworkflow.protocol.params import MultiPointerParam, PointerParam
-from pyworkflow.em.protocol import ProtAnalysis3D
 
-import numpy as np
+from pwem.protocols import ProtAnalysis3D
 from pwem import emlib
 
-from xmipp3.convert import readSetOfMicrographs, writeSetOfMicrographs, setOfMicrographsToMd, setXmippAttribute
-from ..convert import writeSetOfParticles, readSetOfParticles
-import pyworkflow.em.metadata as md
+from xmipp3.convert import setXmippAttribute
 
 
 class XmippProtConsensusLocalCTF(ProtAnalysis3D):

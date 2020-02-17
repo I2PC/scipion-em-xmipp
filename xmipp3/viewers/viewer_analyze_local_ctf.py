@@ -31,9 +31,7 @@ from os.path import exists
 
 from pyworkflow.viewer import (ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO)
 from pyworkflow.protocol.params import IntParam, LabelParam
-from pyworkflow.em.viewers import ObjectView
-import pyworkflow.em.viewers.showj as showj
-
+from pwem.viewers import ObjectView, showj
 
 from xmipp3.protocols.protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
 from .plotter import XmippPlotter

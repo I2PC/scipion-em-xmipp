@@ -26,18 +26,18 @@
 # *
 # **************************************************************************
 
+import numpy as np
+
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import PointerParam
-from pyworkflow.em.protocol import ProtAnalysis3D
 
-import pyworkflow.em.metadata as md
-import numpy as np
 from pwem import emlib
+from pwem.protocols import ProtAnalysis3D
+import pwem.emlib.metadata as md
 
-from xmipp3.convert import readSetOfMicrographs, writeSetOfMicrographs, setOfMicrographsToMd, setXmippAttribute
+from xmipp3.convert import readSetOfMicrographs, writeSetOfMicrographs
 
 
-        
 class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
     """Assigns to each micrograph a coefficient (R2) which evaluates the result of the
         local defocus adjustment and displays the local defocus for all the particles in each micrograph."""

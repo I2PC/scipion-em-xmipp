@@ -31,7 +31,7 @@ import os
 from math import ceil
 
 import pyworkflow.utils as pwutils
-from pyworkflow.utils import yellowStr, redStr, importFromPlugin
+from pyworkflow.utils import yellowStr
 import pyworkflow.object as pwobj
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons

@@ -24,9 +24,10 @@
 # *
 # **************************************************************************
 
-from pwem.protocols import ProtImportVolumes, exists
+from os.path import exists
+
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
-from pyworkflow.em.protocol import ProtImportVolumes
+from pwem.protocols import ProtImportVolumes
 
 from xmipp3.protocols import XmippProtCropResizeVolumes, XmippProtMonoTomo
 
