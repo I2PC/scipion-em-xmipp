@@ -240,7 +240,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
                  (fnTest,fnGalleryMd,maxShift,fnDir)
                 self.runJob('xmipp_reconstruct_significant',args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
             else:
-                args = '-i %s -r %s -o %s ' % (fnTest,fnGalleryMd,fnAngles)
+                args = '-i %s -r %s -o %s --keepBestN 1 ' % (fnTest,fnGalleryMd,fnAngles)
                 self.runJob('xmipp_cuda_align_significant',args,numberOfMpi=1)
 
             # Evaluate 
@@ -372,7 +372,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
                  (fnTrain,fnGalleryMd,maxShift,fnDir)
                 self.runJob('xmipp_reconstruct_significant',args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
             else:
-                args = '-i %s -r %s -o %s ' % (fnTrain,fnGalleryMd,fnAngles)
+                args = '-i %s -r %s -o %s --keepBestN 1 ' % (fnTrain,fnGalleryMd,fnAngles)
                 self.runJob('xmipp_cuda_align_significant',args,numberOfMpi=1)
 
             # Reconstruct

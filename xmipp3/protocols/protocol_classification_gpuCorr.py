@@ -412,8 +412,9 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
             self.runJob("xmipp_cuda_correlation", args % self._params,
                         numberOfMpi=1)
             #TODO: not so easy, we need to create the metadata of the classes in the program
-            # args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s --keepBestN %(keepBest)d '
-            # self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
+            #args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \
+            #       '--keepBestN %(keepBest)d --oUpdatedRefs %(outputClassesFile)s'
+            #self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
         else:
             flag_error=True
             while flag_error:

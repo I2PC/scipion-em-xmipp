@@ -240,7 +240,8 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
         t.tic()
         if self.useGpu.get() and iterNumber > 1:
             # Generate projections
-            # TODO: do we need to change something in how the projection gallery is created as we are not considering mirrors in the GPU version??
+            # TODO: do we need to change something in how the projection gallery
+            # TODO: is created as we are not considering mirrors in the GPU version??
             fnGalleryRoot = join(iterDir, "gallery")
             args = "-i %s -o %s.stk --sampling_rate %f --sym %s " \
                    "--compute_neighbors --angular_distance -1 " \
@@ -251,6 +252,10 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
                     math.sin(self.angularSampling.get()) / 4)
             self.runJob("xmipp_angular_project_library ", args, numberOfMpi=1)
 
+            if self.trueSymsNo != 0:
+                alphaApply = (alpha * self.trueSymsNo) / 2
+            else:
+                alphaApply = alpha / 2
             from pyworkflow.em.metadata.utils import getSize
             N = int(getSize(fnGalleryRoot+'.doc')*alphaApply*2)
             args = '-i %s -r %s.doc -o %s --keepBestN %f ' % \

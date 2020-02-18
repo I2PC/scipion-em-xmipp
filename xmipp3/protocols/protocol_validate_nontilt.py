@@ -28,7 +28,8 @@ from os.path import join
 
 from pyworkflow.object import Float, String
 from pyworkflow.protocol.params import (PointerParam, FloatParam, STEPS_PARALLEL,
-                                        StringParam, EnumParam, LEVEL_ADVANCED)
+                                        StringParam, EnumParam, LEVEL_ADVANCED,
+                                        BooleanParam, USE_GPU, GPU_LIST)
 from pyworkflow.em.data import Volume
 from pyworkflow.em.protocol import ProtAnalysis3D
 from pyworkflow.utils.path import moveFile, makePath
@@ -58,6 +59,16 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
         
     #--------------------------- DEFINE param functions --------------------------------------------   
     def _defineParams(self, form):
+        form.addHidden(USE_GPU, BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       expertLevel=LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+
         form.addSection(label='Input')
         
         form.addParam('inputVolumes', PointerParam, pointerClass='SetOfVolumes, Volume',
@@ -152,14 +163,19 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
                   "angSampling" : self.angularSampling.get(),
                   "orientations" : self.numOrientations.get(),
                   "gallery" : self._getGalleryMd(volId),
-                  "outDir" : self._getVolDir(volId)
+                  "outDir" : self._getVolDir(volId),
+                  "output": self._getAnglesMd(volId)
                   }
 
-        args = ' -i %(inputParts)s --sym %(symmetry)s --angularSampling %(angSampling)0.3f --dontReconstruct'
-        args += ' --useForValidation %(orientations)0.3f --initgallery  %(gallery)s --odir %(outDir)s --iter 1'
-        
-        self.runJob('xmipp_reconstruct_significant', args % params)
-    
+        if not self.useGpu.get():
+            args = ' -i %(inputParts)s --sym %(symmetry)s --angularSampling %(angSampling)0.3f --dontReconstruct'
+            args += ' --useForValidation %(orientations)0.3f --initgallery  %(gallery)s --odir %(outDir)s --iter 1'
+            self.runJob('xmipp_reconstruct_significant', args % params)
+        else:
+            args = '-i %(inputParts)s -r %(gallery)s -o %(output)s --keepBestN %(orientations)f '
+            args += '--odir %(outDir)s '
+            self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+
     def projectionMatchingStep(self, volId):
         params = {"inputParts" : self._getMdParticles(),
                   "outerRadius" : self.partSet.getDimensions()[0]/2,

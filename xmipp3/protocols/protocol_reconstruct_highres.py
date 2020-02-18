@@ -1067,8 +1067,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     args += " --compute_neighbors --angular_distance -1 --experimental_images %s" % self._getExtraPath(
                         "images.xmd")
                     self.runJob("xmipp_angular_project_library", args,
-                                #numberOfMpi=min(self.numberOfMpi.get(), 24))
-                                numberOfMpi=1)
+                                numberOfMpi=min(self.numberOfMpi.get(), 24))
+                                #numberOfMpi=1)
                     cleanPath(join(fnDirSignificant,
                                    "gallery_angles%02d%s.doc" % (i, subset)))
                     moveFile(join(fnDirSignificant,
