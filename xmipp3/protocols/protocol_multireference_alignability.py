@@ -29,12 +29,13 @@ from shutil import copyfile
 
 from pyworkflow.object import Float, String
 from pyworkflow.protocol.params import (PointerParam, FloatParam, STEPS_PARALLEL,
-                                        StringParam, BooleanParam, IntParam, LEVEL_ADVANCED)
+                                        StringParam, BooleanParam, IntParam,
+                                        LEVEL_ADVANCED, USE_GPU, GPU_LIST)
 from pyworkflow.em.data import Volume
 from pyworkflow.em import Viewer
 import pyworkflow.em.metadata as md
 from pyworkflow.em.protocol import ProtAnalysis3D
-from pyworkflow.utils.path import moveFile, makePath
+from pyworkflow.utils.path import moveFile, makePath, cleanPattern
 from pyworkflow.gui.plotter import Plotter
 
 from xmipp3.convert import writeSetOfParticles, writeSetOfVolumes, getImageLocation
@@ -53,6 +54,15 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
         
     #--------------------------- DEFINE param functions --------------------------------------------   
     def _defineParams(self, form):
+        form.addHidden(USE_GPU, BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       expertLevel=LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
 
         form.addSection(label='Input')
         form.addParam('inputVolumes', PointerParam, pointerClass='Volume',
@@ -285,15 +295,25 @@ _noisePixelLevel   '0 0'""" % (newXdim , newXdim, pathParticles, self.inputParti
         
     def significantStep(self, volName, volDir, anglesPath, params):
         nproc = self.numberOfMpi.get()
-        nT=self.numberOfThreads.get() 
+        nT=self.numberOfThreads.get()
+        fnGallery= (volDir+'/gallery.doc')
 
-        fnGallery= (volDir+'/gallery.doc')          
-        params += ' --initgallery  %s' % fnGallery
-        params += ' --odir %s' % volDir
-        params += ' --iter %d' % 1
-        self.runJob('xmipp_reconstruct_significant', 
-                    params, numberOfMpi=nproc,numberOfThreads=nT)
-        copyfile(volDir+'/angles_iter001_00.xmd', self._getTmpPath(anglesPath))
+        if not self.useGpu.get():
+            params += ' --initgallery  %s' % fnGallery
+            params += ' --odir %s' % volDir
+            params += ' --iter %d' % 1
+            self.runJob('xmipp_reconstruct_significant',
+                        params, numberOfMpi=nproc,numberOfThreads=nT)
+            copyfile(volDir+'/angles_iter001_00.xmd', self._getTmpPath(anglesPath))
+        else:
+            if anglesPath=='exp_particles.xmd':
+                params = '  -i %s' % self._getExtraPath('scaled_particles.xmd')
+            elif anglesPath=='ref_particles.xmd':
+                params = '  -i %s' % self._getPath('reference_particles.xmd')
+            params += ' --keepBestN %f' % (self.numOrientations.get() - 1)
+            params += ' -r  %s' % fnGallery
+            params += ' -o  %s' % self._getTmpPath(anglesPath)
+            self.runJob('xmipp_cuda_align_significant', params, numberOfMpi=1)
         
     def alignabilityStep(self, volName,volDir,sym):
         
@@ -319,7 +339,8 @@ _noisePixelLevel   '0 0'""" % (newXdim , newXdim, pathParticles, self.inputParti
         
         if self.doNotUseWeights:
             params += ' --dontUseWeights'
-            
+
+        aaaaaaaaaaaaaaaaaaaaaaaaa
         self.runJob('xmipp_multireference_aligneability', params,numberOfMpi=nproc,numberOfThreads=nT)
 
     def neighbourhoodDirectionStep(self, volName,volDir,sym):
@@ -398,7 +419,13 @@ _noisePixelLevel   '0 0'""" % (newXdim , newXdim, pathParticles, self.inputParti
        
         outputVols.setSamplingRate(volume.getSamplingRate())
         self._defineOutputs(outputVolumes=outputVols)
-    
+
+        cleanPattern(self._getPath("reference_particles.*"))
+        cleanPattern(self._getExtraPath("scaled_particles.*"))
+        cleanPattern(self._getExtraPath("reference_particles.*"))
+        cleanPattern(self._getExtraPath("corrected_ctf_particles.*"))
+        cleanPattern(self._getExtraPath("volume.vol"))
+        cleanPattern(self._getExtraPath("params.txt"))
         
     #--------------------------- INFO functions -------------------------------------------- 
     def _validate(self):

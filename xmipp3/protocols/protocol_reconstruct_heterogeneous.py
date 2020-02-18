@@ -418,12 +418,11 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                                     self.numberOfReplicates.get() - 1)
                             self.runJob('xmipp_reconstruct_significant', args,
                                         numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
-                        else:  # AJ use gpu
-                            args = '-i_exp %s -i_ref %s --maxShift %d -o %s --keep_best %d' % \
-                                   (fnGroup, fnGalleryGroupMd, maxShift,
-                                    fnAnglesSignificant,
+                        else:  # To use gpu
+                            args = '-i %s -r %s -o %s --keepBestN %d' % \
+                                   (fnGroup, fnGalleryGroupMd, fnAnglesSignificant,
                                     self.numberOfReplicates.get())
-                            self.runJob('xmipp_cuda_correlation', args,
+                            self.runJob('xmipp_cuda_align_significant', args,
                                         numberOfMpi=1)
 
                         if (exists(fnAnglesSignificant) and getSize(

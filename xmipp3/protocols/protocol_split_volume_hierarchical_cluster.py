@@ -452,11 +452,15 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
 
         # Global angular assignment
         maxShift = 0.15 * newXdim
-        args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation 0' % \
-               (fnDirectional, fnGalleryMd, maxShift, fnTmpDir)
-        self.runJob('xmipp_reconstruct_significant', args,
-                    numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
         fnAngles = join(fnTmpDir, "angles_iter001_00.xmd")
+        if not self.useGpu.get():
+            args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation 0' % \
+               (fnDirectional, fnGalleryMd, maxShift, fnTmpDir)
+            self.runJob('xmipp_reconstruct_significant', args,
+                    numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
+        else:
+            args = '-i %s -r %s -o %s ' % (fnDirectional, fnGalleryMd, fnAngles)
+            self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
         self.runJob("xmipp_metadata_utilities",
                     "-i %s --operate drop_column ref" % fnAngles, numberOfMpi=1)
         self.runJob("xmipp_metadata_utilities",

@@ -234,10 +234,15 @@ class XmippProtReconstructSwarm(ProtRefine3D):
             self.runJob("xmipp_angular_project_library",args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
             
             # Assign angles
-            args='-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation 1'%\
+            fnAngles = join(fnDir, "angles_iter001_00.xmd")
+            if not self.useGpu.get():
+                args='-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation 1'%\
                  (fnTest,fnGalleryMd,maxShift,fnDir)
-            self.runJob('xmipp_reconstruct_significant',args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
-            
+                self.runJob('xmipp_reconstruct_significant',args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
+            else:
+                args = '-i %s -r %s -o %s --keepBestN 1 ' % (fnTest,fnGalleryMd,fnAngles)
+                self.runJob('xmipp_cuda_align_significant',args,numberOfMpi=1)
+
             # Evaluate 
             fnAngles = join(fnDir,"angles_iter001_00.xmd")
             if exists(fnAngles):
@@ -299,6 +304,10 @@ class XmippProtReconstructSwarm(ProtRefine3D):
         fnDir = self._getExtraPath()
         Ts=self.readInfoField(fnDir,"sampling",xmippLib.MDL_SAMPLINGRATE)
 
+        # Remove files that will not be used any longer
+        cleanPath(join(fnDir,"images.stk"))
+        cleanPath(join(fnDir,"images.xmd"))
+
         # Final average
         TsOrig=self.inputParticles.get().getSamplingRate()
         XdimOrig=self.inputParticles.get().getDimensions()[0]
@@ -357,10 +366,14 @@ class XmippProtReconstructSwarm(ProtRefine3D):
             self.runJob("xmipp_angular_project_library",args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
             
             # Assign angles
-            args='-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation 1'%\
+            fnAngles = join(fnDir, "angles_iter001_00.xmd")
+            if not self.useGpu.get():
+                args='-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation 1'%\
                  (fnTrain,fnGalleryMd,maxShift,fnDir)
-            self.runJob('xmipp_reconstruct_significant',args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
-            fnAngles = join(fnDir,"angles_iter001_00.xmd")
+                self.runJob('xmipp_reconstruct_significant',args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
+            else:
+                args = '-i %s -r %s -o %s --keepBestN 1 ' % (fnTrain,fnGalleryMd,fnAngles)
+                self.runJob('xmipp_cuda_align_significant',args,numberOfMpi=1)
 
             # Reconstruct
             if exists(fnAngles):

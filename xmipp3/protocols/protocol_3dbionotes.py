@@ -33,6 +33,7 @@ from pyworkflow import VERSION_2_0
 from pyworkflow.em import *
 from pyworkflow.em.convert import ImageHandler, Ccp4Header
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
+from pyworkflow.object import String
 
 
 class XmippProt3DBionotes(ProtAnalysis3D):
@@ -55,6 +56,7 @@ class XmippProt3DBionotes(ProtAnalysis3D):
     
     #--------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
+        self.url = String("")
         self._insertFunctionStep('bionotesWrapper')
         
     #--------------------------- STEPS functions -------------------------------
@@ -76,6 +78,17 @@ class XmippProt3DBionotes(ProtAnalysis3D):
         json_data = json.loads(response.text)
         url="http://3dbionotes.cnb.csic.es/programmatic/get/"+json_data['id']
         webbrowser.open_new(url)
+        self.url=String('http://3dbionotes.cnb.csic.es/programmatic/get/'+json_data['id'])
+        self._store()
+        #webbrowser.open_new(url)
+        print("\n > Visit: %s\n" % self.url)
+        fh=open(self._getExtraPath("id.txt"),"w")
+        fh.write(json_data['id'])
+        fh.close()
 
     #--------------------------- INFO functions --------------------------------
-            
+    def _summary(self):
+        if self.url.get() != '':
+            return ["Visit: %s" % self.url.get()]
+        else:
+            return []

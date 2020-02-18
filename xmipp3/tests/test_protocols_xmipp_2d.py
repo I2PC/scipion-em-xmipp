@@ -1111,7 +1111,6 @@ class TestXmippCreateGallery(TestXmippBase):
         prot = self._createGallery(step=10, projections=32)
 
 
-
 class TestXmippBreakSym(TestXmippBase):
     @classmethod
     def setUpClass(cls):
