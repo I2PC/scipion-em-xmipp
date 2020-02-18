@@ -503,12 +503,12 @@ class TestXmippExtractParticles(TestXmippBase):
         self.assertTrue(particle.hasAttribute('_xmipp_scoreByVariance'),
                         'Particle has not scoreByVariance attribute.')
         self.assertAlmostEqual(particle._xmipp_scoreByVariance.get(), varianceScore,
-                               3, "The was a problem with the varianceScore")
+                               3, "There was a problem with the varianceScore")
 
         self.assertTrue(particle.hasAttribute('_xmipp_scoreByGiniCoeff'),
                         'Particle has not scoreByGiniCoeff attribute.')
         self.assertAlmostEqual(particle._xmipp_scoreByGiniCoeff.get(), giniScore,
-                               3, "The was a problem with the giniCoeffScore")
+                               3, "There was a problem with the giniCoeffScore")
 
     def testExtractSameAsPicking(self):
         print("Run extract particles from same micrographs as picking")
@@ -684,7 +684,7 @@ class TestXmippExtractParticles(TestXmippBase):
         for particle in outputParts:
             self.assertTrue(particle.getCoordinate().getMicId() in micsId)
             self.assertAlmostEqual(outputSampling, particle.getSamplingRate())
-        self._checkVarianceAndGiniCoeff(outputParts[170], 1.2008, 0.5812)
+        self._checkVarianceAndGiniCoeff(outputParts[170], 1.229023, 0.512485)
 
     def testExtractNoise(self):
         # here we will try a different patchSize than the default
@@ -907,7 +907,8 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
         protStream = self.newProtocol(ProtCreateStreamData, **kwargs)
         self.proj.launchProtocol(protStream, wait=False)
 
-        while not protStream.hasAttribute('outputParticles'):
+        count = 0
+        while not protStream.hasAttribute('outputParticles') and count < 600:
             time.sleep(1)
             protStream = self._updateProtocol(protStream)
 

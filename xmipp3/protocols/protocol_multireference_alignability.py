@@ -30,7 +30,7 @@ from shutil import copyfile
 from pyworkflow.object import Float
 from pyworkflow.protocol.params import (PointerParam, FloatParam, StringParam,
                                         BooleanParam, IntParam, LEVEL_ADVANCED)
-from pyworkflow.utils.path import moveFile, makePath
+from pyworkflow.utils.path import moveFile, makePath, cleanPattern
 from pyworkflow.gui.plotter import Plotter
 
 from pwem.objects import Volume

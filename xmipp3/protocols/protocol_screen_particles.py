@@ -439,7 +439,7 @@ def histThresholding(valuesList, nBins=256, portion=4, takeNegatives=False):
 
     import numpy as np
     while len(valuesList)*1.0/nBins < 5:
-        nBins = nBins/2
+        nBins = int(nBins/2)
 
     print('Thresholding with %d bins for the histogram.' % nBins)
 

@@ -192,8 +192,9 @@ def insertAngularProjectLibraryStep(self, iterN, refN, **kwargs):
               'samplingRate' : self._angSamplingRateDeg[iterN],
               'symmetry' : self._symmetry[iterN],
               }
-        
-    if self.maxChangeInAngles < 181:
+
+    print("%s %s" % (self.maxChangeInAngles, type(self.maxChangeInAngles)))
+    if int(self.maxChangeInAngles) < 181:
         args += ' --near_exp_data --angular_distance %(maxChangeInAngles)s'
     else:
         args += ' --angular_distance -1'

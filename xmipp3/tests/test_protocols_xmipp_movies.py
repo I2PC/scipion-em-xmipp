@@ -464,12 +464,12 @@ class TestEstimateGain(BaseTest):
 
         frameImg = ih.createImage()
         xdim, ydim, zdim, ndim = ih.getDimensions(inputFn)
-        n = max(zdim, ndim) / 2 # also half of the frames
+        n = max(zdim, ndim) / 2  # also half of the frames
         print("Scaling movie: %s -> %s" % (inputFn, outputFn))
         pwutils.cleanPath(outputFn)
-        for i in range(1, n+1):
+        for i in range(1, int(n+1)):
             frameImg.read((i, inputFn))
-            frameImg.scale(xdim/2, ydim/2)
+            frameImg.scale(int(xdim/2), int(ydim/2))
             frameImg.write((i, outputFn))
 
         args = cls.getArgs(outputFn)

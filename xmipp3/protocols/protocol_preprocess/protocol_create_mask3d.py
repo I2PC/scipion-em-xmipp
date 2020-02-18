@@ -29,7 +29,7 @@
 from pwem import emlib
 from pwem.emlib.image import ImageHandler
 
-from pyworkflow.protocol.params import PointerParam, StringParam
+from pyworkflow.protocol.params import PointerParam, StringParam, PathParam
 
 from pwem.objects import VolumeMask
 from pwem.protocols import ProtCreateMask3D
@@ -116,7 +116,7 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
                                             % SOURCE_FEATURE_FILE)
         # Feature File
         isFeatureFile = 'source==%d' % SOURCE_FEATURE_FILE
-        form.addParam('featureFilePath', params.PathParam,
+        form.addParam('featureFilePath', PathParam,
                       condition=isFeatureFile,
                       label="Feature File",
                       help="""Create a mask using a feature file. Follows an example of feature file 
