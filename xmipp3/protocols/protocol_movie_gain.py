@@ -43,9 +43,6 @@ from pwem.objects import SetOfMovies, Movie, SetOfImages, Image
 from pwem.protocols import EMProtocol, ProtProcessMovies
 
 from pwem import emlib
-from pwem.emlib import *
-from xmipp_base import *
-from xmipp3.utils import *
 
 
 class XmippProtMovieGain(ProtProcessMovies):
@@ -315,7 +312,7 @@ class XmippProtMovieGain(ProtProcessMovies):
 
                 self._updateOutputSet('outputGains', imageSet, streamMode)
 
-            moviesSet = self._loadOutputSet(em.data.SetOfMovies,
+            moviesSet = self._loadOutputSet(SetOfMovies,
                                             'movies.sqlite',
                                             fixGain=True)
             for movie in newDone:
