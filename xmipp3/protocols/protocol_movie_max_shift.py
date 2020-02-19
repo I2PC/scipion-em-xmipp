@@ -231,7 +231,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                         tryToAppend(outSet, micOut, tries+1)
                     else:
                         labelStr = ' '.join([labelPrefix, micOut.getMicName()])
-                        self.warning("The %s seems corrupted. Skkiping it...\n "
+                        self.warning("The %s seems corrupted. Skipping it...\n "
                                      " > %s" % (labelStr, ex))
 
             for movie in newDoneList:
