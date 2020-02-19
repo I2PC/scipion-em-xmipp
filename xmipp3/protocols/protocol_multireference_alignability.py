@@ -340,7 +340,6 @@ _noisePixelLevel   '0 0'""" % (newXdim , newXdim, pathParticles, self.inputParti
         if self.doNotUseWeights:
             params += ' --dontUseWeights'
 
-        aaaaaaaaaaaaaaaaaaaaaaaaa
         self.runJob('xmipp_multireference_aligneability', params,numberOfMpi=nproc,numberOfThreads=nT)
 
     def neighbourhoodDirectionStep(self, volName,volDir,sym):

@@ -635,12 +635,18 @@ _noiseCoord   '0'
 
                 if not exists(self._getExtraPath(fnOutCone)):
                     # Correlation step - calling cuda program
-                    params = ' -i_ref %s -i_exp %s -o %s --odir %s --keep_best 1 ' \
-                                 '--maxShift 10 ' % (fnProjCone, fnExpCone, fnOutCone,
-                                 self._getExtraPath())
-                    #params += ' --device %(GPU)s'
-                    params += ' --device %d' %(int(idx % totalGpu))
-                    self.runJob("xmipp_cuda_correlation", params, numberOfMpi=1)
+                    #params = ' -i_ref %s -i_exp %s -o %s --odir %s --keep_best 1 ' \
+                    #             '--maxShift 10 ' % (fnProjCone, fnExpCone, fnOutCone,
+                    #             self._getExtraPath())
+                    ##params += ' --device %(GPU)s'
+                    #params += ' --device %d' %(int(idx % totalGpu))
+                    #self.runJob("xmipp_cuda_correlation", params, numberOfMpi=1)
+
+                    #TODO: especificar indice de gpu
+                    params = '  -i %s' % fnExpCone
+                    params += ' -r  %s' % fnProjCone
+                    params += ' -o  %s' % self._getExtraPath(fnOutCone)
+                    self.runJob("xmipp_cuda_align_significant", params, numberOfMpi=1)
 
 
 
@@ -758,9 +764,8 @@ _noiseCoord   '0'
 
     def createOutputStep(self):
 
-        #cleanPattern(self._getExtraPath('metadataCone*'))
-        #AJ new (to check)
-        #cleanPattern(self._getExtraPath('projectionsCudaCorr*'))
+        cleanPattern(self._getExtraPath('*.stk'))
+        cleanPattern(self._getExtraPath('projectionsCudaCorr*'))
 
         inputParticles = self.inputSet.get()
         fnOutputParticles = self._getExtraPath('outConesParticles.xmd')

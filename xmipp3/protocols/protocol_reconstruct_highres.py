@@ -112,9 +112,12 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         form.addParam('inputParticles', PointerParam, label="Full-size Images", important=True, 
                       pointerClass='SetOfParticles', allowsNull=True,
                       help='Select a set of images at full resolution')
-        form.addParam('inputVolumes', PointerParam, label="Initial volumes", important=True,
+        form.addParam('inputVolumes', PointerParam, label="Initial volumes", allowsNull=True,
                       condition='not doContinue', pointerClass='Volume, SetOfVolumes',
-                      help='Select a set of volumes with 2 volumes or a single volume')
+                      help='Select a set of volumes with 2 volumes or a single volume. '
+                           'If the input particles have an angular assignment, then you may '
+                           'leave empty this field and a 3D reconstruction of the input images is '
+                           'performed using reconstruct_fourier.')
         form.addParam('particleRadius', IntParam, default=-1, 
                      condition='not doContinue', label='Radius of particle (px)',
                      help='This is the radius (in pixels) of the spherical mask covering the particle in the input images')       

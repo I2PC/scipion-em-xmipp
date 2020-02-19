@@ -377,6 +377,13 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
             self.runJob("xmipp_metadata_utilities", args % self._params,
                         numberOfMpi=1)
 
+            self._params = {'avg1': avg1 + 'average.xmp',
+                            'avg2': avg2 + 'average.xmp',
+                            'outputMd': refSet}
+            args = ('-i %(outputMd)s --fill ref lineal 1 1 -o %(outputMd)s')
+            self.runJob("xmipp_metadata_utilities", args % self._params,
+                        numberOfMpi=1)
+
         # Fourth step: calling program xmipp_cuda_correlation
         if flag_split:
             filename = 'level%03d' % level+'_classes.xmd'
@@ -402,34 +409,50 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                             'maxshift': self.maximumShift,
                             'outputClassesFile': filename,
                             'device': int(self.gpuList.get()),
+                            'outputClassesFileNoExt': 'general_level%03d' % level + '_classes',
                             }
         Nrefs = getSize(refSet)
         if Nrefs>2:
-            args = '-i_ref %(imgsRef)s -i_exp %(imgsExp)s -o %(outputFile)s '\
-                   '--odir %(tmpDir)s --keep_best %(keepBest)d '\
-                   '--maxShift %(maxshift)d --classify %(outputClassesFile)s '\
-                   '--simplifiedMd --device %(device)d '
-            self.runJob("xmipp_cuda_correlation", args % self._params,
-                        numberOfMpi=1)
+            #args = '-i_ref %(imgsRef)s -i_exp %(imgsExp)s -o %(outputFile)s '\
+            #       '--odir %(tmpDir)s --keep_best %(keepBest)d '\
+            #       '--maxShift %(maxshift)d --classify %(outputClassesFile)s '\
+            #       '--simplifiedMd --device %(device)d '
+            #self.runJob("xmipp_cuda_correlation", args % self._params,
+            #            numberOfMpi=1)
             #TODO: not so easy, we need to create the metadata of the classes in the program
-            #args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \
-            #       '--keepBestN %(keepBest)d --oUpdatedRefs %(outputClassesFile)s'
-            #self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
+            args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \
+                   '--keepBestN %(keepBest)d --oUpdatedRefs %(outputClassesFileNoExt)s ' \
+                   '--odir %(tmpDir)s'
+            self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
         else:
             flag_error=True
             while flag_error:
-                try:
-                    flag_error=False
-                    args='-i %(imgsExp)s --ref0 %(imgsRef)s --nref %(Nrefs)d '\
-                         '--iter 1 --distance correlation --classicalMultiref '\
-                         '--maxShift %(maxshift)d --odir %(cl2dDir)s'
-                    self._params['Nrefs']=Nrefs
-                    self._params['cl2dDir'] = self._getExtraPath(
-                                              join('level%03d' % level))
-                    self.runJob("xmipp_classify_CL2D",
-                                args % self._params, numberOfMpi=self.numberOfMpi.get())
-                except Exception as ex:
-                    flag_error = True
+                #try:
+                flag_error=False
+                self._params['Nrefs']=Nrefs
+                self._params['cl2dDir'] = self._getExtraPath(join('level%03d' % level))
+                self._params['cl2dDirNew'] = self._getExtraPath(join('level%03d' % level, "level_00"))
+
+                args='-i %(imgsExp)s --ref0 %(imgsRef)s --nref %(Nrefs)d '\
+                     '--iter 1 --distance correlation --classicalMultiref '\
+                     '--maxShift %(maxshift)d --odir %(cl2dDir)s --dontMirrorImages'
+                self.runJob("xmipp_classify_CL2D",
+                            args % self._params, numberOfMpi=self.numberOfMpi.get())
+
+                #mkdir(self._getExtraPath(join('level%03d' % level, "level_00")))
+                #args = '-i %(imgsExp)s -r %(imgsRef)s -o images.xmd ' \
+                #      '--keepBestN %(keepBest)d --oUpdatedRefs class_classes ' \
+                #      '--odir %(cl2dDirNew)s'
+                #self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
+                #copy(self._getExtraPath(join('level%03d' % level,
+                #                             "level_00",
+                #                             "images.xmd")),
+                #     self._getExtraPath(join('level%03d' % level, "images.xmd")))
+
+                #except Exception as ex:
+                #    flag_error = True
+
+                aaaaaaaaaaaaaaa
 
             if flag_split:
                 copy(self._getExtraPath(join('level%03d' % level,
