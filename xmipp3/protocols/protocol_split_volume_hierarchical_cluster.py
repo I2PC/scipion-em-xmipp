@@ -294,12 +294,11 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         fnDir = self._getExtraPath("direction_%s" % projNumber)
         if not exists(join(fnDir,"level_00")):
             makePath(fnDir)
-
             # Run CL2D classification for the images assigned to one direction
             args = "-i %s " % fnToUse
             args += "--odir %s " % fnDir
-            args += "--ref0 %s --iter %d --nref %d " % (
-            projRef, self.cl2dIterations, Nclasses)
+            args += "--ref0 %s --iter %d --nref %d " % \
+                    (projRef, self.cl2dIterations, Nclasses)
             args += "--distance correlation --classicalMultiref "
             args += "--maxShift %f " % self.maxShift
             try:
@@ -459,7 +458,8 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
             self.runJob('xmipp_reconstruct_significant', args,
                     numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
         else:
-            args = '-i %s -r %s -o %s ' % (fnDirectional, fnGalleryMd, fnAngles)
+            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+            args = '-i %s -r %s -o %s --dev %s ' % (fnDirectional, fnGalleryMd, fnAngles, GpuList)
             self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
         self.runJob("xmipp_metadata_utilities",
                     "-i %s --operate drop_column ref" % fnAngles, numberOfMpi=1)

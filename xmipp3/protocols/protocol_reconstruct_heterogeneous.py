@@ -409,6 +409,9 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                         fnAnglesSignificant = join(fnDirCurrent,
                                                    "angles_iter001_00.xmd")
                         if not self.useGpu.get():
+
+                            #TODO
+                            #AJ: valdria con poner aqui una condicion para que no hiciera este paso (significant) en caso de local alignment???
                             args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d --dontApplyFisher' % \
                                    (fnGroup, fnGalleryGroupMd, maxShift,
                                     fnDirCurrent,
@@ -416,9 +419,10 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                             self.runJob('xmipp_reconstruct_significant', args,
                                         numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
                         else:  # To use gpu
-                            args = '-i %s -r %s -o %s --keepBestN %d' % \
+                            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                            args = '-i %s -r %s -o %s --keepBestN %d --dev %s ' % \
                                    (fnGroup, fnGalleryGroupMd, fnAnglesSignificant,
-                                    self.numberOfReplicates.get())
+                                    self.numberOfReplicates.get(), GpuList)
                             self.runJob('xmipp_cuda_align_significant', args,
                                         numberOfMpi=1)
 
@@ -531,12 +535,12 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         mdVolumes.write(fnVols)
 
         # Classify the images
-        # AJ busca el maximo de correlacion entre todos los volumenes a los que se ha asigando cada particula??
+        # AJ busca el maximo de correlacion entre todos los volumenes
         fnImgsId = self._getExtraPath("imagesId.xmd")
         fnOut = join(fnDirCurrent, "classes.xmd")
-        print("A correr",
-              "xmipp_classify_significant --id %s --angles %s --ref %s -o %s" % (
-              fnImgsId, fnAnglesAll, fnVols, fnOut))
+        #print("A correr",
+        #      "xmipp_classify_significant --id %s --angles %s --ref %s -o %s" % (
+        #      fnImgsId, fnAnglesAll, fnVols, fnOut))
 
         self.runJob("xmipp_classify_significant",
                     "--id %s --angles %s --ref %s -o %s --votes %d" % (
