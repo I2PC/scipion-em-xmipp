@@ -537,9 +537,9 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         # AJ busca el maximo de correlacion entre todos los volumenes
         fnImgsId = self._getExtraPath("imagesId.xmd")
         fnOut = join(fnDirCurrent, "classes.xmd")
-        print("A correr",
-              "xmipp_classify_significant --id %s --angles %s --ref %s -o %s" % (
-              fnImgsId, fnAnglesAll, fnVols, fnOut))
+        #print("A correr",
+        #      "xmipp_classify_significant --id %s --angles %s --ref %s -o %s" % (
+        #      fnImgsId, fnAnglesAll, fnVols, fnOut))
 
         self.runJob("xmipp_classify_significant",
                     "--id %s --angles %s --ref %s -o %s --votes %d" % (

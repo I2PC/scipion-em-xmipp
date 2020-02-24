@@ -28,7 +28,8 @@ import sys, time
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
-                                        IntParam, StringParam, LEVEL_ADVANCED)
+                                        IntParam, StringParam, LEVEL_ADVANCED,
+                                        USE_GPU, GPU_LIST)
 from pyworkflow.em.protocol import ProtMonitor
 from pyworkflow.project import Manager
 from pyworkflow.em.data import Volume
@@ -76,6 +77,16 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
 
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
+        form.addHidden(USE_GPU, BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       expertLevel=LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+
         form.addSection(label='Input')
          
         form.addParam('inputVolume', PointerParam, pointerClass='Volume',
@@ -106,8 +117,6 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                       expertLevel=LEVEL_ADVANCED,
                       label='Maximum shift',
                       help="In pixels")
-        form.addParam('useGpu', BooleanParam, default=False, label="Use GPU")
-
 
         form.addSection(label='Split volume')
 
@@ -224,7 +233,9 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                     cl2dIterations=self.cl2dIterations.get(),
                     splitVolume=self.splitVolume.get(),
                     Niter=self.Niter.get(),
-                    Nrec=self.Nrec.get())
+                    Nrec=self.Nrec.get(),
+                    useGpu=self.useGpu.get(),
+                    gpuList=self.gpuList.get())
 
                 previousSplitProt = self
                 newSubsetNameSplitVol = 'outputVolumesInit'
@@ -247,6 +258,7 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                     particleRadius=self.particleRadius.get(),
                     targetResolution=self.targetResolution.get(),
                     useGpu=self.useGpu.get(),
+                    gpuList=self.gpuList.get(),
                     numberOfIterations=self.numberOfIterations.get(),
                     nxtMask=self.nextMask.get(),
                     angularMinTilt=self.angularMinTilt.get(),

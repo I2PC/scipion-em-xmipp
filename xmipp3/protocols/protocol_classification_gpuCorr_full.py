@@ -91,11 +91,11 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
                       help='Number of classes to assign every input image '
                            'during the alignment',
                       expertLevel=const.LEVEL_ADVANCED)
-        form.addParam('numberOfSplitIterations', params.IntParam, default=2,
+        form.addParam('numberOfSplitIterations', params.IntParam, default=3,
                       label='Number of iterations in split stage:',
                       help='Maximum number of iterations in split stage',
                       expertLevel=const.LEVEL_ADVANCED)
-        form.addParam('numberOfClassifyIterations', params.IntParam, default=2,
+        form.addParam('numberOfClassifyIterations', params.IntParam, default=3,
                       label='Number of iterations in classify stage:',
                       help='Maximum number of iterations when the classification'
                            ' of the whole image set is carried out',
@@ -300,7 +300,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
 
             if flag_split==False and i+1 < self.numberOfClassifyIterations:
                 classesFnPrev = self._getExtraPath('last_classes.xmd')
-                #self.averageClasses(refImgMd, classesFnPrev, refImgMd, True)
+                self.averageClasses(refImgMd, classesFnPrev, refImgMd, True)
             i += 1
 
         self.generateOutputClasses(refImgMd, flag_split)

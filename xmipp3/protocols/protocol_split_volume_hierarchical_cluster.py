@@ -294,12 +294,11 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         fnDir = self._getExtraPath("direction_%s" % projNumber)
         if not exists(join(fnDir,"level_00")):
             makePath(fnDir)
-
             # Run CL2D classification for the images assigned to one direction
             args = "-i %s " % fnToUse
             args += "--odir %s " % fnDir
-            args += "--ref0 %s --iter %d --nref %d " % (
-            projRef, self.cl2dIterations, Nclasses)
+            args += "--ref0 %s --iter %d --nref %d " % \
+                    (projRef, self.cl2dIterations, Nclasses)
             args += "--distance correlation --classicalMultiref "
             args += "--maxShift %f " % self.maxShift
             try:
