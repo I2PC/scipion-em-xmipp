@@ -646,7 +646,11 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 volXdim = vol.getDim()[0]
             if newXdim!=volXdim:
                 self.runJob('xmipp_transform_window',"-i %s --size %d"%(fnVol1,newXdim),numberOfMpi=1)
-            self.runJob('xmipp_transform_randomize_phases',"-i %s -o %s --freq discrete 0.25"%(fnVol1,fnVol2),numberOfMpi=1)
+            if self.alignmentMethod != self.LOCAL_ALIGNMENT:
+               maxFreq=0.25
+            else:
+               maxFreq=0.45
+        self.runJob('xmipp_transform_randomize_phases',"-i %s -o %s --freq discrete %f"%(fnVol1,fnVol2,maxFreq),numberOfMpi=1)
         
         # Compare both reconstructions
         self.evaluateReconstructions(0)
@@ -721,7 +725,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                             objId)
                 break
         if iteration==0:
-            resolution = TsCurrent*4
+            if self.alignmentMethod != self.LOCAL_ALIGNMENT:
+                resolution = TsCurrent * 1/0.25
+            else:
+                resolution = TsCurrent * 1/0.45
         self.writeInfoField(fnDirCurrent,"resolution",xmippLib.MDL_RESOLUTION_FREQREAL,resolution)
         
         # Produce a filtered volume

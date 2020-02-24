@@ -93,10 +93,6 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
                       help='Maximum shift allowed during the alignment as '
                            'percentage of the input set size',
                       expertLevel=const.LEVEL_ADVANCED)
-        form.addParam('keepBest', params.IntParam, default=1,
-                      label='Number of best images:',
-                      help='Number of the best images to keep for every class',
-                      expertLevel=const.LEVEL_ADVANCED)
 
 
     # --------------------------- INSERT steps functions -----------------------
@@ -153,6 +149,11 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
         self.lastDate = p.getObjCreation()
         self._saveCreationTimeFile(self.lastDate)
 
+        metadataRef = md.MetaData(self.imgsRef)
+        if metadataRef.containsLabel(md.MDL_REF) is False:
+            args = ('-i %s --fill ref lineal 1 1 -o %s')%(self.imgsRef, self.imgsRef)
+            self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
+
         # Calling program xmipp_cuda_correlation
         outImgs, clasesOut = self._getOutputsFn()
         self._params = {'imgsRef': self.imgsRef,
@@ -162,12 +163,12 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
                         'maxshift': self.maximumShift,
                         'outputClassesFile': clasesOut,
                         'device': int(self.gpuList.get()),
+                        'outputClassesFileNoExt': clasesOut[:-4],
                         }
 
-        args = ('-i_ref %(imgsRef)s -i_exp %(imgsExp)s -o %(outputFile)s '
-                '--keep_best %(keepBest)d --maxShift %(maxshift)d '
-                '--simplifiedMd --classify %(outputClassesFile)s --device %(device)d ')
-        self.runJob("xmipp_cuda_correlation", args % self._params)
+        args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \
+               '--keepBestN 1 --oUpdatedRefs %(outputClassesFileNoExt)s '
+        self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
 
 
     # ------ Methods for Streaming 2D Classification --------------

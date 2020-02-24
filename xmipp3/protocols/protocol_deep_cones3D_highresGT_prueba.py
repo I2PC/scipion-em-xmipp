@@ -649,7 +649,6 @@ _noiseCoord   '0'
                     self.runJob("xmipp_cuda_align_significant", params, numberOfMpi=1)
 
 
-
     def correlationSignificantStep(self):
 
         mdNumCones = xmippLib.MetaData(self._getExtraPath("coneCenters.doc"))

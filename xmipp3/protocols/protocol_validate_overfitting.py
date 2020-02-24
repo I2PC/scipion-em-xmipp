@@ -208,15 +208,14 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
 
         numberOfParticles = getFloatListFromValues(self.numberOfParticles.get())
         fractionCounter = 0
-        maxNumberOfParticles = 0.5 * self.inputParticles.get().getSize()
+        maxNumberOfParticles = self.inputParticles.get().getSize()
         for number in numberOfParticles:
-            #AJ: comento esta linea para ver que le pasa al protocolo con numero de particulas mayores que size/2
-            #if number <= maxNumberOfParticles:
-            for iteration in range(0, self.numberOfIterations.get()):
-                self._insertFunctionStep('reconstructionStep', number,
-                                         fractionCounter, iteration,
-                                         debugging, fnNewImgMd,
-                                         particlesMd)
+            if number <= maxNumberOfParticles:
+                for iteration in range(0, self.numberOfIterations.get()):
+                    self._insertFunctionStep('reconstructionStep', number,
+                                             fractionCounter, iteration,
+                                             debugging, fnNewImgMd,
+                                             particlesMd)
             fractionCounter += 1
         self._insertFunctionStep('gatherResultsStep', debugging)
         # --------------------------- STEPS functions --------------------------------------------

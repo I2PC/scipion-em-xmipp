@@ -46,6 +46,16 @@ class XmippPreprocessHelper():
     #--------------------------- DEFINE param functions ------------------------
     @classmethod
     def _defineProcessParams(cls, form):
+        form.addHidden(USE_GPU, BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       expertLevel=LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+
         # Invert Contrast
         form.addParam('doInvert', BooleanParam, default=False,
                       label='Invert contrast',
@@ -526,15 +536,28 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
         writeSetOfParticles(newPartSet, imgsFn)
         
         if not partSet.hasAlignmentProj():
-            params = {'imgsFn': imgsFn,
-                      'dir': self._getTmpPath(),
-                      'vols': self.inputFn,
-                      'symmetryGroup': self.sigSymGroup.get(),
-                      }
-            sigArgs = '-i %(imgsFn)s --initvolumes %(vols)s --odir %(dir)s'\
-                      ' --sym %(symmetryGroup)s --alpha0 0.005 --dontReconstruct' \
-                      % params
-            self.runJob("xmipp_reconstruct_significant", sigArgs)
+            if not self.useGpu.get():
+                params = {'imgsFn': imgsFn,
+                          'dir': self._getTmpPath(),
+                          'vols': self.inputFn,
+                          'symmetryGroup': self.sigSymGroup.get(),
+                          }
+                sigArgs = '-i %(imgsFn)s --initvolumes %(vols)s --odir %(dir)s'\
+                          ' --sym %(symmetryGroup)s --alpha0 0.005 --dontReconstruct' \
+                          % params
+                self.runJob("xmipp_reconstruct_significant", sigArgs)
+            else:
+                fnGallery = self._getExtraPath('gallery.stk')
+                fnGalleryMd = self._getExtraPath('gallery.doc')
+                angleStep = 5
+                args = "-i %s -o %s --sampling_rate %f --sym %s --min_tilt_angle 0 --max_tilt_angle 90 " % \
+                       (self.inputFn, fnGallery, angleStep, self.sigSymGroup.get())
+                self.runJob("xmipp_angular_project_library", args,
+                            numberOfMpi=min(self.numberOfMpi.get(), 24))
+
+                fnAngles = 'images_iter001_00.xmd'
+                args = '-i %s -r %s -o %s --odir %s --keepBestN 1 ' % (imgsFn,fnGalleryMd,fnAngles,self._getTmpPath())
+                self.runJob('xmipp_cuda_align_significant',args,numberOfMpi=1)
     
     def adjustStep(self, isFirstStep, changeInserts):
         if isFirstStep:
@@ -790,6 +813,10 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
                 validateMsgs.append('c1 is not a valid symmetry group.'
                                     'If you do not want to symmetrize set'
                                     'the field Symmetrize to not.')
+
+        if not self._isSingleInput() and self.doAdjust:
+            validateMsgs.append('The doAdjust option is only able to work with '
+                                'a Volume object, not with a SetOfVolumes')
                 
         return validateMsgs
     
