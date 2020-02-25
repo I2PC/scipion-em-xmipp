@@ -574,6 +574,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
                     self.runJob("xmipp_metadata_utilities", args % self._params, numberOfMpi=1)
 
         # Fourth step: calling program xmipp_cuda_correlation
+        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
         if flag_split:
             self._params = {'imgsRef': refSet,
                             'imgsExp': imgsExp,
@@ -582,7 +583,8 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
                             'outDir': self._getExtraPath(),
                             'outDirNew': self._getExtraPath("level_00"),
                             'rootFn': classesOut.split('/')[-1].replace('.xmd', ''),
-                            'rootFnNew': classesOut.split('/')[-1].replace('.xmd','_classes')
+                            'rootFnNew': classesOut.split('/')[-1].replace('.xmd','_classes'),
+                            'device': GpuList,
                             }
             if self.useCL2D:
                 args = '-i %(imgsExp)s --ref0 %(imgsRef)s --nref %(Nrefs)d ' \
@@ -597,7 +599,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
                     mkdir(self._getExtraPath("level_00"))
                 args = '-i %(imgsExp)s -r %(imgsRef)s -o images.xmd ' \
                       '--keepBestN 1 --oUpdatedRefs %(rootFnNew)s ' \
-                      '--odir %(outDirNew)s'
+                      '--odir %(outDirNew)s --dev %(device)s '
                 self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
                 copy(self._getExtraPath(join("level_00", "images.xmd")),
                      self._getExtraPath("images.xmd"))
@@ -614,11 +616,11 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
                             'keepBest': self.keepBest.get(),
                             'maxshift': self.maximumShift,
                             'outputClassesFile': classesOut,
-                            'device': int(self.gpuList.get()),
+                            'device': GpuList,
                             'outputClassesFileNoExt': classesOut[:-4],
                             }
             args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \
-                   '--keepBestN 1 --oUpdatedRefs %(outputClassesFileNoExt)s '
+                   '--keepBestN 1 --oUpdatedRefs %(outputClassesFileNoExt)s --dev %(device)s '
             self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
 
 
@@ -1023,4 +1025,3 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
             methods.append(" and produced %s images."
                            % self.getObjectTag('outputClasses'))
         return methods
-

@@ -54,8 +54,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                        label="Choose GPU IDs",
                        help="GPU may have several cores. Set it to zero"
                             " if you do not know what we are talking about."
-                            " First core index is 0, second 1 and so on."
-                            " In this protocol is not possible to use several GPUs.")
+                            " First core index is 0, second 1 and so on.")
         form.addParam('useReferenceImages', params.BooleanParam, default=False,
                       label='Use a Set of Reference Images ?',
                       help='If you set to *Yes*, you should provide a '
@@ -390,6 +389,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                                 numberOfMpi=1)
 
         # Fourth step: calling program xmipp_cuda_correlation
+        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
         if flag_split:
             filename = 'level%03d' % level+'_classes.xmd'
             self._params = {'imgsRef': refSet,
@@ -400,7 +400,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                             'keepBest': self.keepBest.get(),
                             'maxshift': self.maximumShift,
                             'outputClassesFile': filename,
-                            'device': int(self.gpuList.get()),
+                            'device': GpuList,
                             }
         else:
             filename = 'general_level%03d' % level + '_classes.xmd'
@@ -413,20 +413,16 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                             'keepBest': self.keepBest.get(),
                             'maxshift': self.maximumShift,
                             'outputClassesFile': filename,
-                            'device': int(self.gpuList.get()),
+                            'device': GpuList,
                             'outputClassesFileNoExt': 'general_level%03d' % level + '_classes',
                             }
         Nrefs = getSize(refSet)
         if Nrefs>2:
             args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \
                    '--keepBestN 1 --oUpdatedRefs %(outputClassesFileNoExt)s ' \
-                   '--odir %(tmpDir)s'
+                   '--odir %(tmpDir)s --dev %(device)s'
             self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
         else:
-            #flag_error=True
-            #while flag_error:
-                #try:
-                #flag_error=False
             self._params['Nrefs'] = Nrefs
             self._params['cl2dDir'] = self._getExtraPath(join('level%03d' % level))
             self._params['cl2dDirNew'] = self._getExtraPath(join('level%03d' % level, "level_00"))
@@ -434,22 +430,22 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                 args='-i %(imgsExp)s --ref0 %(imgsRef)s --nref %(Nrefs)d '\
                      '--iter 1 --distance correlation --classicalMultiref '\
                      '--maxShift %(maxshift)d --odir %(cl2dDir)s --dontMirrorImages'
-                self.runJob("xmipp_classify_CL2D",
-                            args % self._params, numberOfMpi=self.numberOfMpi.get())
+                try:
+                    self.runJob("xmipp_classify_CL2D",
+                                args % self._params, numberOfMpi=self.numberOfMpi.get())
+                except:
+                    return
             else:
                 if not exists(self._getExtraPath(join('level%03d' % level, "level_00"))):
                     mkdir(self._getExtraPath(join('level%03d' % level, "level_00")))
                 args = '-i %(imgsExp)s -r %(imgsRef)s -o images.xmd ' \
                       '--keepBestN 1 --oUpdatedRefs class_classes ' \
-                      '--odir %(cl2dDirNew)s'
+                      '--odir %(cl2dDirNew)s --dev %(device)s'
                 self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
                 copy(self._getExtraPath(join('level%03d' % level,
                                              "level_00",
                                              "images.xmd")),
                      self._getExtraPath(join('level%03d' % level, "images.xmd")))
-
-                #except Exception as ex:
-                #    flag_error = True
 
             if flag_split:
                 copy(self._getExtraPath(join('level%03d' % level,
@@ -797,8 +793,6 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                                   'have different sizes')
             else:
                 errors.append("Please, enter the reference images")
-        if len(self.gpuList.get())>1:
-            errors.append("The GPU list only can have one value for this protocol.")
         return errors
 
     def _summary(self):
@@ -833,4 +827,3 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
             methods.append(" and produced %s images."
                            % self.getObjectTag('outputClasses'))
         return methods
-

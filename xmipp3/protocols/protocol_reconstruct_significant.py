@@ -258,8 +258,9 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
                 alphaApply = alpha / 2
             from pyworkflow.em.metadata.utils import getSize
             N = int(getSize(fnGalleryRoot+'.doc')*alphaApply*2)
-            args = '-i %s -r %s.doc -o %s --keepBestN %f ' % \
-                   (self.imgsFn, fnGalleryRoot, anglesFn, N)
+            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+            args = '-i %s -r %s.doc -o %s --keepBestN %f --dev %s ' % \
+                   (self.imgsFn, fnGalleryRoot, anglesFn, N, GpuList)
             self.runJob("xmipp_cuda_align_significant", args, numberOfMpi=1)
 
             cleanPattern(fnGalleryRoot + "*")

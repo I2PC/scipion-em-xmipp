@@ -156,18 +156,19 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
 
         # Calling program xmipp_cuda_correlation
         outImgs, clasesOut = self._getOutputsFn()
+        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
         self._params = {'imgsRef': self.imgsRef,
                         'imgsExp': inputImgs,
                         'outputFile': outImgs,
                         'keepBest': self.keepBest.get(),
                         'maxshift': self.maximumShift,
                         'outputClassesFile': clasesOut,
-                        'device': int(self.gpuList.get()),
+                        'device': GpuList,
                         'outputClassesFileNoExt': clasesOut[:-4],
                         }
 
         args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \
-               '--keepBestN 1 --oUpdatedRefs %(outputClassesFileNoExt)s '
+               '--keepBestN 1 --oUpdatedRefs %(outputClassesFileNoExt)s --dev %(device)s '
         self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
 
 

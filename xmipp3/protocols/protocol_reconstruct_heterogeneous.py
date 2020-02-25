@@ -419,9 +419,10 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                             self.runJob('xmipp_reconstruct_significant', args,
                                         numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
                         else:  # To use gpu
-                            args = '-i %s -r %s -o %s --keepBestN %d' % \
+                            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                            args = '-i %s -r %s -o %s --keepBestN %d --dev %s ' % \
                                    (fnGroup, fnGalleryGroupMd, fnAnglesSignificant,
-                                    self.numberOfReplicates.get())
+                                    self.numberOfReplicates.get(), GpuList)
                             self.runJob('xmipp_cuda_align_significant', args,
                                         numberOfMpi=1)
 
