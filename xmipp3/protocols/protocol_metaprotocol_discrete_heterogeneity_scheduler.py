@@ -300,7 +300,9 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                     cl2dIterations=self.cl2dIterations.get(),
                     splitVolume=self.splitVolume.get(),
                     Niter=self.Niter.get(),
-                    Nrec=self.Nrec.get())
+                    Nrec=self.Nrec.get(),
+                    useGpu=self.useGpu.get(),
+                    gpuList=self.gpuList.get())
 
                 newSubsetNameSplitVol = 'outputAuxVolumes'
                 newSplitProt.inputVolume.set(previousSplitProt)
@@ -322,6 +324,7 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                     particleRadius=self.particleRadius.get(),
                     targetResolution=self.targetResolution.get(),
                     useGpu=self.useGpu.get(),
+                    gpuList=self.gpuList.get(),
                     numberOfIterations=self.numberOfIterations.get(),
                     nxtMask=self.nextMask.get(),
                     angularMinTilt=self.angularMinTilt.get(),
