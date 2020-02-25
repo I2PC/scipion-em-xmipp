@@ -372,7 +372,8 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                                      self._defineResultsNoiseTxt())
 
         if not debugging:
-            #cleanPattern(self._getExtraPath("fraction*_freq.txt")) AJ volver
+            cleanPattern(self._getExtraPath("fraction*_freq.txt"))
+            cleanPattern(self._getExtraPath("input_particles.xmd"))
             cleanPattern(self._getExtraPath('newImages.stk'))
             cleanPattern(self._getExtraPath('newImages.xmd'))
             if self.doNoise.get():

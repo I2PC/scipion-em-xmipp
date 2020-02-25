@@ -458,6 +458,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         cleanPattern(self._getExtraPath("corrected_ctf_particles.*"))
         cleanPattern(self._getExtraPath("volume.vol"))
         cleanPattern(self._getExtraPath("params.txt"))
+        cleanPattern(self._getExtraPath("input_particles.xmd"))
 
     # --------------------------- INFO functions --------------------------------------------
     def _validate(self):
