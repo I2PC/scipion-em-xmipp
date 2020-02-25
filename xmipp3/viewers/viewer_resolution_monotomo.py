@@ -201,7 +201,7 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
         sliceNumber = self.sliceNumber.get()
         if sliceNumber < 0:
             x, _, _, _ = ImageHandler().getDimensions(imageFile)
-            sliceNumber = x / 2
+            sliceNumber = int(x / 2)
         else:
             sliceNumber -= 1
         # sliceNumber has no sense to start in zero
