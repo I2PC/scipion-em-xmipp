@@ -33,7 +33,7 @@ import pyworkflow.protocol.constants as cons
 from pyworkflow import VERSION_2_0
 from pwem.protocols import EMProtocol
 from pyworkflow.object import Set
-from pyworkflow.protocol.params import BooleanParam, IntParam, PointerParam
+from pyworkflow.protocol.params import BooleanParam, IntParam, PointerParam, GT
 
 
 class XmippProtTriggerData(EMProtocol):
@@ -79,7 +79,8 @@ class XmippProtTriggerData(EMProtocol):
                            '"Output size" are returned.\n'
                            'If NO is selected, only one open and growing output '
                            'is returned')
-        form.addParam('delay', IntParam, default=1, label="Delay (sec)",
+        form.addParam('delay', IntParam, default=10, label="Delay (sec)",
+                      validators=[GT(3, "must be larger than 3sec.")],
                       help="Delay in seconds before checking new output")
 
     # --------------------------- INSERT steps functions ----------------------

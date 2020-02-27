@@ -491,7 +491,7 @@ class XmippMonoDirViewer(ProtocolViewer):
 #     def plotAnisotropyResolution(self, path):        
 #         from pwem.emlib import XmippPlotter as Xmplt
 #  
-#         print path
+#         print(path)
 #         md = MetaData(path)
 #         y = md.getColumnValues(MDL_COST)
 #         x = md.getColumnValues(MDL_RESOLUTION_SSNR)

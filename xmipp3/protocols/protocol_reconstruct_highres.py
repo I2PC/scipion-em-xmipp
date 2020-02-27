@@ -546,12 +546,11 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         
         # A little bit of statistics (accepted and rejected particles, number of directions, ...)
         if iteration>0:
-            from emlib import AGGR_MAX
             for i in range(1,3):
                 fnAnglesi = join(fnDirCurrent,"angles%02d.xmd"%i)
                 mdAngles = emlib.MetaData(fnAnglesi)
                 mdUnique = emlib.MetaData()
-                mdUnique.aggregateMdGroupBy(mdAngles, AGGR_MAX, [emlib.MDL_PARTICLE_ID], emlib.MDL_WEIGHT, emlib.MDL_WEIGHT)
+                mdUnique.aggregateMdGroupBy(mdAngles, emlib.AGGR_MAX, [emlib.MDL_PARTICLE_ID], emlib.MDL_WEIGHT, emlib.MDL_WEIGHT)
                 mdUnique.sort(emlib.MDL_PARTICLE_ID)
                 fnAnglesUnique = join(fnDirCurrent,"imagesUsed%02d.xmd"%i)
                 mdUnique.write(fnAnglesUnique)
@@ -1319,7 +1318,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 if self.postMaskSymmetry!="c1":
                     fnMask=join(fnDirCurrent,"mask.vol")
                     self.prepareMask(self.postSymmetryWithinMaskMask.get(),fnMask,TsCurrent,volXdim)
-                    self.runJob("xmipp_transform_symmetrize","-i %s --sym %s --mask_in %s"%\
+                    self.runJob("xmipp_transform_symmetrize","-i %s --sym %s --mask_in %s --dont_wrap"%\
                                 (fnVol,self.postSymmetryWithinMaskType.get(),fnMask),numberOfMpi=1)
                     cleanPath(fnMask)
             

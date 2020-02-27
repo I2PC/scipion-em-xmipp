@@ -202,8 +202,8 @@ def createPlots(protML, selectedPlots):
             md2.fillConstant(emlib.MDL_ITER, str(iter))
             md.unionAll(md2)
         # 'iter(.*[1-9].*)@2D/ML2D/run_004/ml2d_iter_refs.xmd')
-        #a = plt.subplot(gs[1, 1])
-        #print "md:", md
+        # a = plt.subplot(gs[1, 1])
+        # print("md: %s" % md)
         md2 = emlib.MetaData()
         md2.aggregate(md, emlib.AGGR_MAX, emlib.MDL_ITER, emlib.MDL_SIGNALCHANGE, emlib.MDL_MAX)
         signal_change = [md2.getValue(emlib.MDL_MAX, id) for id in md2]

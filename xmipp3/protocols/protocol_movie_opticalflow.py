@@ -224,8 +224,8 @@ class XmippProtOFAlignment(ProtAlignMovies):
             self._saveAlignmentPlots(movie)
 
         except Exception as e:
-            print ("ERROR: %s failed for movie %s.\n  Exception: %s"
-                   % (program, movie.getFileName(), e))
+            print("ERROR: %s failed for movie %s.\n  Exception: %s"
+                  % (program, movie.getFileName(), e))
     
     #--------------------------- INFO functions -------------------------------
     def _validate(self):
@@ -256,9 +256,10 @@ class XmippProtOFAlignment(ProtAlignMovies):
         ofGpu = Plugin.getHome("bin", "xmipp_movie_optical_alignment_gpu")
         if not (exists(ofGpu) or exists(ofCpu)):
             errors.append("It seems that Xmipp Optical Alignment is not installed. "
-                          "OpenCV should be installed in the system to compile it.\n"
-                          "Please, install OpenCV in your system and, then, "
-                          "re-install Xmipp by running 'scipion installb xmippSrc'.")
+                          "Please make sure that _scipion/config/scipion.config_ "
+                          "contains *OPENCV=True* and OpenCV is in your system.\n"
+                          "Then, re-install Xmipp by running "
+                          "'scipion installb xmippSrc'.")
         else:
             if self.useGpu and not exists(ofGpu):
                 errors.append("It seems that Xmipp Optical Alignment has not been "

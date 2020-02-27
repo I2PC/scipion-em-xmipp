@@ -164,13 +164,15 @@ class XmippProtAlignVolume(ProtAlignVolume):
         alignArgs = self._getAlignArgs()
         alignSteps = []
         
+        idx=1
         for vol in self._iterInputVolumes():
             volFn = getImageLocation(vol)
             volId = vol.getObjId()
             stepId = self._insertFunctionStep('alignVolumeStep', refFn, volFn,
-                                              vol.outputName, maskArgs, 
-                                              alignArgs, volId, prerequisites=[])
-            alignSteps.append(stepId)            
+                                              self._getExtraPath("vol%02d.mrc"%idx), maskArgs, 
+                                              alignArgs, idx, prerequisites=[])
+            alignSteps.append(stepId)
+            idx+=1         
         self._insertFunctionStep('createOutputStep', prerequisites=alignSteps)
         
     #--------------------------- STEPS functions --------------------------------------------
@@ -190,19 +192,20 @@ class XmippProtAlignVolume(ProtAlignVolume):
     
     def createOutputStep(self):        
         vols = []
+        idx=1
         for vol in self._iterInputVolumes():
             outVol = Volume()
-            outVol.setLocation(vol.outputName)
+            outVol.setLocation(self._getExtraPath("vol%02d.mrc"%idx))
             outVol.setObjComment(vol.getObjComment())
             #set transformation matrix             
-            volId = vol.getObjId()
-            fhInputTranMat = self._getExtraPath('transformation-matrix_vol%06d.txt'%volId)
+            fhInputTranMat = self._getExtraPath('transformation-matrix_vol%06d.txt'%idx)
             transMatFromFile = np.loadtxt(fhInputTranMat)
             transformationMat = np.reshape(transMatFromFile,(4,4))
             transform = Transform()
             transform.setMatrix(transformationMat)
             outVol.setTransform(transform)            
             vols.append(outVol)
+            idx+=1
                         
         if len(vols) > 1:
             volSet = self._createSetOfVolumes()

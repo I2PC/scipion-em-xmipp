@@ -95,7 +95,6 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
                       label='Number of best images:',
                       help='Number of the best images to keep for every class',
                       expertLevel=const.LEVEL_ADVANCED)
-        form.addParallelSection(threads=0, mpi=8)
 
 
     # --------------------------- INSERT steps functions -----------------------

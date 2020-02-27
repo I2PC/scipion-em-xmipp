@@ -34,7 +34,7 @@ from .protocols.protocol_cl2d import IMAGES_PER_CLASS
 from .protocols import (
     XmippProtCTFMicrographs, XmippProtProjMatch, XmippProtPreprocessParticles,
     XmippProtPreprocessMicrographs, XmippProtPreprocessVolumes,
-    XmippProtExtractParticles,
+    XmippProtExtractParticles, XmippProtExtractParticlesPairs, XmippProtPickingRemoveDuplicates,
     XmippProtFilterParticles, XmippProtFilterVolumes, XmippProtMaskParticles,
     XmippProtMaskVolumes, XmippProtAlignVolume, XmippProtCL2D,
     XmippProtHelicalParameters, XmippProtConsensusPicking, XmippProtMonoRes,

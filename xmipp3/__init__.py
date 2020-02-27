@@ -59,8 +59,9 @@ class Plugin(pwem.Plugin):
         environ.update({
             'PATH': getXmippPath('bin'),
             'LD_LIBRARY_PATH': getXmippPath('lib'),
-            'PYTHONPATH': getXmippPath('pylib')
-        }, position=pos)
+            'PYTHONPATH': getXmippPath('pylib')+":" +  # FIXME: Only pylib should be enough
+                          getXmippPath(os.path.join('pylib', 'xmippPyModules'))
+                             }, position=pos)
         environ['XMIPP_HOME'] = getXmippPath()
 
         # Add path to python lib folder
@@ -114,7 +115,6 @@ class Plugin(pwem.Plugin):
         if kwargs.get('doRaise', True) and not os.path.exists(model):
             raise Exception("'%s' model not found. Please, run: \n"
                             " > scipion installb deepLearningToolkit" % modelPath[0])
-
         return model
 
     @classmethod
@@ -214,17 +214,16 @@ def tryAddPipModule(env, moduleName, *args, **kwargs):
 def installDeepLearningToolkit(plugin, env):
     deepLearningTools = []
 
+    scikit_image = tryAddPipModule(env, 'scikit-image', '0.14.2',
+                                   target='scikit_image*',
+                                   default=False, deps=['scipy', 'scikit-learn'])
+    deepLearningTools.append(scikit_image)
+
     # pandas
     pandas = tryAddPipModule(env, 'pandas', '0.20.1',
                                    target='pandas*',
                                    default=False, deps=['scipy'])
     deepLearningTools.append(pandas)
-
-    # scikit-image
-    skikit_image = tryAddPipModule(env, 'scikit-image', '0.14.2',
-                                   target='scikit_image*',
-                                   default=False, deps=['scipy'])
-    deepLearningTools.append(skikit_image)
 
     # Keras deps
     unittest2 = tryAddPipModule(env, 'unittest2', '1.1.0', target='unittest2*',
@@ -276,6 +275,7 @@ def installDeepLearningToolkit(plugin, env):
 
         keras = tryAddPipModule(env, 'keras', '2.2.2', target='keras*',
                                 default=False, deps=[cv2, h5py])
+
         deepLearningTools.append(keras)
         cudnnInstallCmd = ("cudnnenv install %s ; "
                            "cp -r $HOME/.cudnn/active/cuda/lib64/* %s"
@@ -322,7 +322,7 @@ def installDeepLearningToolkit(plugin, env):
                              ("rm %s_* 2>/dev/null ; %s && touch %s"
                               % (modelsPrefix, modelsDownloadCmd, modelsTarget), 
                               modelsTarget),
-                             ("echo ; echo ' > DeepLearnig-Toolkit installed: %s' ; "
+                             ("echo ; echo ' > DeepLearning-Toolkit installed: %s' ; "
                               "echo ; touch %s" % (', '.join(deepLearningToolsStr),
                                                    target),
                               target)],

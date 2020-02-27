@@ -65,7 +65,8 @@ def generate_ico(sym, mode, f):
         f.write("sph  + 1. %.3f %.3f %.3f .65\n" % (x, y, z))
     else:
         f.write('.sphere %.3f %.3f %.3f .65\n' % (x, y, z))
-    # print 5fold points
+    # print(5fold)
+    # print(points)
     for vertice in icosahedron.getVertices():
         if mode == 'xmipp':
             f.write("sph  + 1. %.3f %.3f %.3f .15\n" %
@@ -74,7 +75,8 @@ def generate_ico(sym, mode, f):
             f.write('.sphere %.3f %.3f %.3f .15\n' %
                     (vertice[0], vertice[1], vertice[2]))
 
-    # print 3fold points
+    # print(3fold)
+    # print(points)
     if mode == 'xmipp':
         pass
     else:

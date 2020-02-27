@@ -30,7 +30,7 @@ from shutil import copyfile
 from pyworkflow.object import Float
 from pyworkflow.protocol.params import (PointerParam, FloatParam, StringParam,
                                         BooleanParam, IntParam, LEVEL_ADVANCED)
-from pyworkflow.utils.path import moveFile, makePath
+from pyworkflow.utils.path import moveFile, makePath, cleanPattern
 from pyworkflow.gui.plotter import Plotter
 
 from pwem.objects import Volume
@@ -262,7 +262,7 @@ _noisePixelLevel   '0 0'""" % (newXdim , newXdim, pathParticles, self.inputParti
         param += ' --method fourier'
                 
         #while (~isfile(self._getExtraPath('params'))):
-        #    print 'No created'
+        #    print('No created')
         
         self.runJob('xmipp_phantom_project', 
                     param, numberOfMpi=1,numberOfThreads=1)
@@ -399,7 +399,13 @@ _noisePixelLevel   '0 0'""" % (newXdim , newXdim, pathParticles, self.inputParti
        
         outputVols.setSamplingRate(volume.getSamplingRate())
         self._defineOutputs(outputVolumes=outputVols)
-    
+
+        cleanPattern(self._getPath("reference_particles.*"))
+        cleanPattern(self._getExtraPath("scaled_particles.*"))
+        cleanPattern(self._getExtraPath("reference_particles.*"))
+        cleanPattern(self._getExtraPath("corrected_ctf_particles.*"))
+        cleanPattern(self._getExtraPath("volume.vol"))
+        cleanPattern(self._getExtraPath("params.txt"))
         
     #--------------------------- INFO functions -------------------------------------------- 
     def _validate(self):

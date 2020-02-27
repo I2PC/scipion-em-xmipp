@@ -153,7 +153,45 @@ class TestXmippCreateMask3D(TestXmippBase):
         self.launchProtocol(protMask4)
         self.assertIsNotNone(protMask4.outputMask,
                              "There was a problem with create mask from geometry")
-
+         
+        print("Run create mask from feature file")
+        #create feature file
+        featFileName = "/tmp/kk.feat" 
+        f=open(featFileName,"w")
+        f.write("""# XMIPP_STAR_1 *
+# Type of feature (sph, blo, gau, Cyl, dcy, cub, ell, con)(Required)
+# The operation after adding the feature to the phantom (+/=) (Required)
+# The feature density (Required)
+# The feature center (Required)
+# The vector for special parameters of each vector (Required)
+# Sphere: [radius] 
+# Blob : [radius alpha m] Gaussian : [sigma]
+# Cylinder : [xradius yradius height rot tilt psi]
+# DCylinder : [radius height separation rot tilt psi]
+# Cube : [xdim ydim zdim rot tilt psi]
+# Ellipsoid : [xradius yradius zradius rot tilt psi]
+# Cone : [radius height rot tilt psi]
+data_block1
+ _dimensions3D  '34 34 34' 
+ _phantomBGDensity  0.
+ _scale  1.
+data_block2
+loop_
+ _featureType
+ _featureOperation
+ _featureDensity
+ _featureCenter
+ _featureSpecificVector
+sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
+""")
+        f.close()
+        protMask5 = self.newProtocol(XmippProtCreateMask3D,
+                                     featureFilePath='/tmp/kk.feat',
+                                     source=2, samplingRate=9.89)
+        protMask5.setObjLabel('feat mask')
+        self.launchProtocol(protMask5)
+        self.assertIsNotNone(protMask5.outputMask,
+                             "There was a problem with create mask from feature")
 
 class TestXmippApplyMask3D(TestXmippBase):
     @classmethod

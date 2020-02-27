@@ -1,6 +1,7 @@
 # **************************************************************************
 # *
-# * Authors:     Javier Mota
+# * Authors:     Javier Mota   (original implementation)
+# *              Ruben Sanchez (added U-net and refactoring)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -23,12 +24,15 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import json
 
-import os
+import sys, os
 import numpy as np
-import matplotlib.pyplot as plt
-
+import re
 from pyworkflow import VERSION_2_0
+from xmipp3.protocols import XmippProtCompareReprojections
+
+from .protocol_generate_reprojections import XmippProtGenerateReprojections
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 from pyworkflow.utils.path import cleanPath
@@ -42,22 +46,36 @@ from pwem import emlib
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes, xmippToLocation
 from xmipp3.utils import getMdSize, validateDLtoolkit
 import xmipp3
+from shutil import copyfile
 
-
-def updateEnviron(gpuNum):
-    """ Create the needed environment for TensorFlow programs. """
-    print("updating environ to select gpu %s" % (gpuNum))
-    if gpuNum == '':
-        os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-    else:
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
+EXEC_MODES= ['Train & Predict','Predict']
 ITER_TRAIN = 0
 ITER_PREDICT = 1
+
+MODEL_TYPES = ["GAN", "U-Net"]
+MODEL_TYPE_GAN = 0
+MODEL_TYPE_UNET = 1
+
+
+TRAINING_DATA_MODE = ["ParticlesAndSyntheticNoise", "OnlyParticles"]
+TRAINING_DATA_MODE_SYNNOISE = 0
+TRAINING_DATA_MODE_PARTS = 1
+
+
+TRAINING_LOSS = [ "MSE", "PerceptualLoss", "Both"]
+TRAINING_LOSS_MSE = 0
+TRAINING_LOSS_PERCEPTUAL = 1
+TRAINING_LOSS_BOTH = 2
+
+PRED_BATCH_SIZE=2000
 
 class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
     _label ="deep denoising"
     _lastUpdateVersion = VERSION_2_0
+
+    def __init__(self, **args):
+        XmippProtGenerateReprojections.__init__(self, **args)
 
     def _defineParams(self, form):
 
@@ -70,167 +88,282 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                             " First core index is 0, second 1 and so on."
                             " In case to use several GPUs separate with comas:"
                             "0,1,2")
-        form.addParam('model', params.EnumParam, choices=['Train & Predict',
-                                                          'Predict'],
+
+        form.addParam('modelTrainPredMode', params.EnumParam, choices=EXEC_MODES,
                        default=ITER_TRAIN,
                        label='Train or predict model',
                        help='*Train*: Train the model using noisy particles '
                             'or their projections in an initial volume'
                             '*Predict*: The particles are denoised with a '
                             'pretrained model')
-        form.addParam('inputProjections', params.PointerParam,
-                      pointerClass='SetOfParticles', important=True,
-                      condition='model==%d'%ITER_TRAIN,
 
-                      label='Input projections of the volume to train',
-                      help='use '
-                                                                       'the '
-                      'protocol generate reprojections to generate the '
-                      'reprojections views')
+        form.addParam('continueTraining', params.BooleanParam, default = False,
+                      condition='modelTrainPredMode==%d'%ITER_TRAIN,
+                      label='Continue training? (or train from scratch)', help='Setting "yes" '
+                      'you can continue training from pretrained model '
+                      ' or your previous executions. If you choose'
+                      '"no" the model will be trained from scratch. yes option is experimental')
 
-        form.addParam('modelPretrain', params.BooleanParam, default = False,
-                      condition='model==%d'%ITER_PREDICT,
-                      label='Use a custom model',
-                      help='Setting "yes" you can choose your own model trained. '
-                           'If you choose "no" a general model pre-trained will '
-                           'be assign')
+        form.addParam('customModelOverPretrain', params.BooleanParam, default = False,
+                      condition='modelTrainPredMode==%d or continueTraining'%ITER_PREDICT,
+                      label='Use your own model (or use pretrained)', help='Setting "yes" '
+                      'you can choose your own model trained. If you choose'
+                      '"no" a general model pretrained will be assign')
 
         form.addParam('ownModel', params.PointerParam,
                       pointerClass=self.getClassName(),
-                      condition='modelPretrain==True and model==%d'%ITER_PREDICT,
+                      condition='customModelOverPretrain==True and (modelTrainPredMode==%d or continueTraining)'%ITER_PREDICT,
                       label='Set your model',
                       help='Choose the protocol where your model is trained')
 
+        form.addParam('modelType', params.EnumParam,
+                      choices=MODEL_TYPES,
+                      default=MODEL_TYPE_UNET,
+                      condition='modelTrainPredMode==%d'%ITER_TRAIN,
+                      label='Select model type',
+                      help='If you set to *%s*, GAN will be employed '
+                           'employed. If you set to *%s* U-Net will be used instead'
+                           % tuple(MODEL_TYPES))
+
+        form.addParam('inputProjections', params.PointerParam, allowsNull=True,
+                      pointerClass='SetOfParticles', important=False,
+                      label='Input projections to train (mandatory)/compare (optional)',
+                      help='use the protocol generate reprojections to generate the '
+                      'projections. If compare reprojections protocol output is used as '
+                      '"Input noisy particles", this field is ignored')
+
         form.addParam('inputParticles', params.PointerParam,
                       pointerClass='SetOfParticles', important=True,
-                      label='Input noisy particles to denoise', help='Input '
-                                                                   'noisy '
+                      label='Input noisy particles to denoise', help='Input noisy '
                       'particles from the protocol generate reprojections if '
                       'you are training or from any other protocol if you are '
-                      'predicting')
+                      'predicting. If compare reprojections protocol output is used as '
+                      '"Input noisy particles", "Input projections to train" is ignored')
 
-        form.addParam('imageSize', params.IntParam,
-                      label='Images size',
-                      default=64, help='It is recommended to use small sizes '
-                                        'to have a faster training. The size '
-                                        'must be even. Using high sizes '
-                                        'several GPUs are required' )
+        form.addParam('emptyParticles', params.PointerParam, expertLevel=cons.LEVEL_ADVANCED,
+                      pointerClass='SetOfParticles',  allowsNull=True,
+                      label='Input "empty" particles (optional)', help='Input "empty" '
+                      'particles to learn how to deal with pure noise')
 
-        form.addParallelSection(threads=1, mpi=5)
+        form.addParam('imageSize', params.IntParam, allowsNull=True, expertLevel=cons.LEVEL_ADVANCED,
+                      condition='modelTrainPredMode==%d and not continueTraining'%ITER_TRAIN,
+                      label='Scale images to (px)',
+                      default=-1, help='Scale particles to desired size to improve training'
+                                        'The recommended particle size is 128 px. The size must be even.'
+                                         'Do not use loss=perceptualLoss or loss=Both if  96< size <150.')
+
+        form.addSection(label='Training')
+
+        form.addParam('nEpochs', params.FloatParam,
+                      condition='modelTrainPredMode==%d'%ITER_TRAIN,
+                      label="Number of epochs", default=25.0,
+                      help='Number of epochs for neural network training. GAN requires much '
+                           'more epochs (>100) to obtain succesfull results')
+
+        form.addParam('learningRate', params.FloatParam,
+                      condition='modelTrainPredMode==%d'%ITER_TRAIN,
+                      label="Learning rate", default=1e-4,
+                      help='Learning rate for neural network training')
+
+
+        form.addParam('modelDepth', params.IntParam, default=4,
+                       condition='modelTrainPredMode==%d'%ITER_TRAIN, expertLevel=cons.LEVEL_ADVANCED,
+                       label='Model depth',
+                       help='Indicate the model depth. For 128-64 px images, 4 is the recommend value. '
+                            ' larger images may require bigger models')
+
+        form.addParam('regularizationStrength', params.FloatParam, default=1e-5,
+                       condition='modelTrainPredMode==%d'%ITER_TRAIN, expertLevel=cons.LEVEL_ADVANCED,
+                       label='Regularization strength',
+                       help='Indicate the regularization strength. Make it bigger if sufferening overfitting'
+                            ' and smaller if suffering underfitting')
+
+        form.addParam('trainingSetType', params.EnumParam, choices=TRAINING_DATA_MODE,
+                       condition='modelTrainPredMode==%d'%ITER_TRAIN,
+                       default=TRAINING_DATA_MODE_SYNNOISE, expertLevel=cons.LEVEL_ADVANCED,
+                       label='Select how to generate training set',
+                       help='*ParticlesAndSyntheticNoise*: Train using particles and synthetic noise\n'
+                            'or\n*OnlyParticles*: using only particles\n'
+                            'or\n*Both*: Train using both strategies')
+
+        form.addParam('trainingLoss', params.EnumParam, choices=TRAINING_LOSS,
+                       condition='modelTrainPredMode==%d'%ITER_TRAIN,
+                       default=TRAINING_LOSS_BOTH, expertLevel=cons.LEVEL_ADVANCED,
+                       label='Select loss for training',
+                       help='*MSE*: Train using mean squered error or\n*PerceptualLoss*: '
+                            'Train using DeepConsensus perceptual loss\n or\n*Both*: Train '
+                            'using both DeepConsensus perceptual loss and mean squered error\n')
+
+
+        form.addParam('numberOfDiscVsGenUpdates', params.IntParam, default=5,
+                       condition='modelType==%d and modelTrainPredMode==%d'%(MODEL_TYPE_GAN, ITER_TRAIN),
+                       expertLevel=cons.LEVEL_ADVANCED,
+                       label='D/G trainig ratio',
+                       help='Indicate the number of times the discriminator is trained for each '
+                            'generator training step. If discriminator loss is going to 0, make it '
+                            'smaller, whereas if the discriminator is not training, make it bigger')
+
+        form.addParam('loss_logWeight', params.FloatParam, default=3, expertLevel=cons.LEVEL_ADVANCED,
+                       condition='modelType==%d and modelTrainPredMode==%d'%(MODEL_TYPE_GAN, ITER_TRAIN),
+                       label='D/G loss ratio',
+                       help='Indicate the 10^lossRatio times that the generator loss is stronger than '
+                            ' the discriminator loss. If discriminator loss is going to 0, make it '
+                            'smaller, whereas if the generator is not training, make it bigger')
+
+        form.addParallelSection(threads=2, mpi=0)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
 	
-        updateEnviron(self.gpuList.get())
+        deps = []
+        ret= self._insertFunctionStep('preprocessData', prerequisites=[])
+        deps+= [ret]
+        if self.modelTrainPredMode.get() == ITER_TRAIN:
+            ret= self._insertFunctionStep('trainModel', prerequisites=deps)
+            deps+= [ret]
+        ret= self._insertFunctionStep('predictModel', prerequisites=deps)
+        deps+= [ret]
+        ret= self._insertFunctionStep('createOutputStep', prerequisites=deps)
+        deps+= [ret]
 
-        self.newXdim = self.imageSize.get()
-        self._insertFunctionStep('preprocessData')
-        if self.model.get() == ITER_TRAIN:
-            self._insertFunctionStep('trainModel')
-        self._insertFunctionStep('predictModel')
-        self._insertFunctionStep('createOutputStep')
+    def _validate(self):
+        errorMsg = []
+        if not self.checkIfInputIsCompareReprojection()  and self.modelTrainPredMode.get()==ITER_TRAIN and self.inputProjections.get() is None:
+          errorMsg.append("Error, in training mode, both particles and projections must be provided")
+        if self.imageSize.get() is None and self.modelTrainPredMode.get()==ITER_TRAIN:
+          errorMsg.append("Error, in training mode, image size must be provdided")
+        return errorMsg
+
+    def _getResizedSize(self):
+        resizedSize= self.imageSize.get()
+        if self.modelTrainPredMode.get()==ITER_PREDICT:
+          if self.customModelOverPretrain.get()== True:
+            resizedSize= self.ownModel.get()._getResizedSize()
+          else:
+            resizedSize= 128
+        resizedSize= resizedSize if resizedSize>0 else 128
+        return resizedSize
+
+    def getStackOrResize(self, setOfParticles, mdFnameIn, stackFnameOut):
+
+        if self._getResizedSize()== self.inputParticles.get().getDimensions()[0]:
+            mdFname= re.sub(r"\.stk$", r".xmd", stackFnameOut)
+            writeSetOfParticles(setOfParticles, mdFname )
+            self.runJob("xmipp_image_convert", "-i %s -o %s " % (mdFname, stackFnameOut))
+        else:
+            writeSetOfParticles(setOfParticles, mdFnameIn)
+            self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (mdFnameIn, stackFnameOut,
+                                                                            self._getResizedSize()))
+    def copyStackAndResize(self, stackIn, stackOut):
+        copyfile(stackIn, stackOut + ".tmp")
+        if self._getResizedSize() != self.inputParticles.get().getDimensions()[0]:
+          self.runJob("xmipp_image_resize",
+                      "-i %s -o %s --fourier %d" % (stackOut + ".tmp", stackOut, self._getResizedSize()))
+          os.remove(stackOut + ".tmp")
+
+    def checkIfInputIsCompareReprojection(self):
+        return isinstance( self.inputParticles.getObjValue(), XmippProtCompareReprojections)
 
     def preprocessData(self):
-        self.numGPUs = self.gpuList.get()
-        self.particles = self._getExtraPath('noisyParticles.xmd')
-        writeSetOfParticles(self.inputParticles.get(), self.particles)
-        self.metadata = emlib.MetaData(self.particles)
+
+        particlesFname = self._getExtraPath('noisyParticles.xmd')
         fnNewParticles = self._getExtraPath('resizedParticles.stk')
-        self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (
-            self.particles, fnNewParticles, self.newXdim))
+        projectionsFname = self._getExtraPath('projections.xmd')
+        fnNewProjections = self._getExtraPath('resizedProjections.stk')
 
-        if self.model.get() == ITER_TRAIN:
-            projections = self._getExtraPath('projections.xmd')
-            writeSetOfParticles(self.inputProjections.get(), projections)
-            fnNewProjections = self._getExtraPath('resizedProjections.stk')
-            self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (
-                projections, fnNewProjections, self.newXdim))
+        if self.checkIfInputIsCompareReprojection():
+          for part in self.inputParticles.get():
+            projections_stk, particles_stk= part._xmipp_imageRef._filename.get(), part._xmipp_image._filename.get()
+            print(projections_stk, particles_stk)
+            break
+          self.copyStackAndResize(particles_stk, fnNewParticles)
+          self.copyStackAndResize(projections_stk, fnNewProjections)
+        else:
+          self.getStackOrResize(self.inputParticles.get(), particlesFname, fnNewParticles)
 
-        dir = self._getPath('ModelTrained.h5')
-        self.gan = GAN()
-        self.gan.setSize(self.imageSize.get())
-        self.gan.initModel(dir, self.numGPUs)
+          if not self.inputProjections.get() is None:
+
+              self.getStackOrResize(self.inputProjections.get(), projectionsFname, fnNewProjections)
+
+        if not self.emptyParticles.get() is None:
+            emptyPartsFname = self._getExtraPath('emptyParts.xmd')
+            fnNewEmptyParts = self._getExtraPath('resizedEmptyParts.stk')
+            self.getStackOrResize(self.emptyParticles.get(), emptyPartsFname, fnNewEmptyParts)
 
 
     def trainModel(self):
-        from keras.models import load_model
-        self.X_train = self.gan.extractTrainData(self._getExtraPath(
-            'resizedProjections.xmd'), emlib.MDL_IMAGE, -1)
-        self.gan.train(self.X_train, epochs=10000,
-                                       batch_size=32, save_interval=200)
 
-        self.Generator = load_model(self._getPath('ModelTrained.h5'))
+        modelFname = self._getPath('ModelTrained.h5')
+        builder_args= {"modelType":MODEL_TYPES[self.modelType.get()], "boxSize":self._getResizedSize(),
+                       "saveModelFname":modelFname,
+                       "modelDepth": self.modelDepth.get(), "gpuList":self.gpuList.get(),
+                       "generatorLoss": TRAINING_LOSS[self.trainingLoss.get()],
+                       "trainingDataMode": TRAINING_DATA_MODE[self.trainingSetType.get()],
+                       "regularizationStrength": self.regularizationStrength.get() }
+        if self.modelType.get() == MODEL_TYPE_GAN:
+          builder_args["training_DG_ratio"]= self.numberOfDiscVsGenUpdates.get()
+          builder_args["loss_logWeight"]= self.loss_logWeight.get()
+
+        dataPathParticles= self._getExtraPath('resizedParticles.xmd')
+        dataPathProjections= self._getExtraPath('resizedProjections.xmd')
+        dataPathEmpty= self._getExtraPath('resizedEmptyParts.xmd')
+
+        argsDict={}
+        argsDict["builder"]=builder_args
+        argsDict["running"]={"lr":self.learningRate.get(), "nEpochs":self.nEpochs.get()}
+
+        jsonFname= self._getExtraPath("training_conf.json")
+        with open(jsonFname, "w") as f:
+          json.dump(argsDict, f)
+
+        args= " --mode training -i %s -p %s -c %s "%(dataPathParticles, dataPathProjections, jsonFname)
+        if os.path.isfile(dataPathEmpty):
+          args+=" --empty_particles %s"%dataPathEmpty
+
+        self.runJob("xmipp_deep_denoising", args, numberOfMpi=1)
+
+
+    def _getModelFname(self):
+        if self.modelTrainPredMode.get() == ITER_PREDICT:
+          if self.customModelOverPretrain == True:
+              modelFname = self.ownModel.get()._getPath('ModelTrained.h5')
+          else:
+              modelFname = xmipp3.Plugin.getModel('deepDenoising', 'ModelTrained.h5')
+        else:
+          modelFname = self._getPath('ModelTrained.h5')
+          if self.continueTraining.get():
+            if self.customModelOverPretrain == True:
+              modelFnameInit = self.ownModel.get()._getPath('ModelTrained.h5')
+            else:
+              modelFnameInit = xmipp3.Plugin.getModel('deepDenoising', 'ModelTrained.h5')
+
+            copyfile(modelFnameInit, modelFname)
+        return modelFname
 
     def predictModel(self):
-        from keras.models import load_model
-        metadataPart = emlib.MetaData(self._getExtraPath(
-            'resizedParticles.xmd'))
-        if self.model.get() == ITER_TRAIN:
-            metadataProj = emlib.MetaData(self._getExtraPath(
-            'resizedProjections.xmd'))
-        img = emlib.Image()
-        dimMetadata = getMdSize(self._getExtraPath(
-                'resizedParticles.xmd'))
-        emlib.createEmptyFile(self._getExtraPath(
-            'particlesDenoised.stk'),self.newXdim, self.newXdim,1,
-            dimMetadata)
 
-        mdNewParticles = md.MetaData()
+      builder_args = {"boxSize": self._getResizedSize(), "saveModelFname": self._getModelFname(),
+                      "modelDepth": -1, "gpuList": self.gpuList.get(),"modelType":MODEL_TYPES[self.modelType.get()],
+                      "generatorLoss": TRAINING_LOSS[self.trainingLoss.get()], "batchSize": PRED_BATCH_SIZE}
+      argsDict={}
+      argsDict["builder"] = builder_args
 
-        self.groupParticles = 5000
+      jsonFname = self._getExtraPath("predict_conf.json")
+      with open(jsonFname, "w") as f:
+        json.dump(argsDict, f)
 
-        if self.model.get() == ITER_PREDICT:
-            if self.modelPretrain:
-                model = self.ownModel.get()._getPath('ModelTrained.h5')
-                model = load_model(model)
-            else:
-                myModelfile = xmipp3.Plugin.getModel('deepDenoising', 'PretrainModel.h5')
-                model = load_model(myModelfile)
-        for num in range(1,dimMetadata,self.groupParticles):
-            self.noisyParticles = self.gan.extractInfoMetadata(metadataPart,
-                                    emlib.MDL_IMAGE, img, num,
-                                                               self.groupParticles, -1)
+      inputParticlesMdName = self._getExtraPath('resizedParticles.xmd')
+      dataPathProjections = self._getExtraPath('resizedProjections.xmd')
+      outputParticlesMdName = self._getExtraPath('particlesDenoised.xmd')
 
-            if self.model.get() == ITER_TRAIN:
-                self.predict = self.gan.predict(self.Generator, self.noisyParticles)
-                self.projections = self.gan.extractInfoMetadata(metadataProj,
-                                    emlib.MDL_IMAGE, img, num, self.groupParticles, 1)
-            else:
-                self.predict = self.gan.predict(model, self.noisyParticles)
+      args = " --mode denoising -i %s -c %s -o %s"% (inputParticlesMdName, jsonFname, outputParticlesMdName)
 
-            self.noisyParticles = self.gan.normalization(self.noisyParticles, 1)
-            self.prepareMetadata(mdNewParticles, img, num)
+      if os.path.isfile(dataPathProjections):
+        args += " -p %s" % dataPathProjections
+      elif self.checkIfInputIsCompareReprojection():
+        args += " -p %s" % self._getExtraPath('resizedProjections.stk')
 
-        mdNewParticles.write('particles@' + self._getExtraPath(
-            'particlesDenoised.xmd'), emlib.MD_APPEND)
-        self.runJob("xmipp_transform_normalize", "-i %s --method NewXmipp "
-                                                 "--background circle %d "%
-                    (self._getExtraPath('particlesDenoised.stk'),
-                     self.newXdim/2))
-
-    def prepareMetadata(self, metadata, image, initItem):
-        newRow = md.Row()
-        for i, img in enumerate(self.predict):
-            image.setData(np.squeeze(img))
-            path = '%06d@' % (i + initItem) + self._getExtraPath(
-                   'particlesDenoised.stk')
-            image.write(path)
-
-            pathNoise = '%06d@' % (i + initItem) + self._getExtraPath(
-                'resizedParticles.stk')
-
-            newRow.setValue(md.MDL_IMAGE, path)
-            newRow.setValue(md.MDL_IMAGE_ORIGINAL, pathNoise)
-            if self.model.get() == ITER_TRAIN:
-                from scipy.stats import pearsonr
-                pathProj = '%06d@' % (i + initItem) + self._getExtraPath(
-                    'resizedProjections.stk')
-                newRow.setValue(md.MDL_IMAGE_REF, pathProj)
-                correlations1, _ = pearsonr(img.ravel(), self.projections[
-                    i].ravel())
-                newRow.setValue(md.MDL_CORR_DENOISED_PROJECTION, correlations1)
-            newRow.addToMd(metadata)
-
+      self.runJob("xmipp_deep_denoising", args, numberOfMpi=1)
 
     def createOutputStep(self):
         imgSet = self.inputParticles.get()
@@ -238,13 +371,12 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         outputSet.copyInfo(imgSet)
         Ts = imgSet.getSamplingRate()
         xdim = imgSet.getDimensions()[0]
-        outputSet.setSamplingRate((Ts*xdim)/self.newXdim)
-        imgFn = self._getExtraPath('particlesDenoised.xmd')
-        outputSet.copyItems(imgSet,
-                            updateItemCallback=self._processRow,
-                            itemDataIterator=md.iterRows(imgFn,
-                                                         sortByLabel=md.MDL_ITEM_ID)
-                            )
+        outputSet.setSamplingRate((Ts*xdim)/self._getResizedSize())
+        writeSetOfParticles(self.inputParticles.get(), self._getExtraPath('inputParticles.xmd'))
+        imgFname = self._getExtraPath('particlesDenoised.xmd')
+        outputSet.copyItems(imgSet, updateItemCallback=self._processRow,
+                            itemDataIterator=md.iterRows(imgFname, sortByLabel=md.MDL_ITEM_ID) )
+
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(self.inputParticles, outputSet)
 
@@ -253,13 +385,17 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         cleanPath(self._getExtraPath('projections.xmd'))
         if os.path.exists(self._getExtraPath('resizedProjections.xmd')):
             cleanPath(self._getExtraPath('resizedProjections.xmd'))
+        if os.path.exists(self._getExtraPath('resizedEmptyParts.xmd')):
+            cleanPath(self._getExtraPath('resizedEmptyParts.xmd'))
 
     def _processRow(self, particle, row):
         particle.setLocation(xmippToLocation(row.getValue(emlib.MDL_IMAGE)))
-        if self.model.get() == ITER_TRAIN:
-            setXmippAttributes(particle, row,
-                               emlib.MDL_CORR_DENOISED_PROJECTION)
+        if self.inputProjections.get() is not None:
+            mdToAdd= (md.MDL_IMAGE_ORIGINAL, md.MDL_IMAGE_REF, md.MDL_CORR_DENOISED_PROJECTION, md.MDL_CORR_DENOISED_NOISY)
+        else:
+            mdToAdd= (md.MDL_IMAGE_ORIGINAL, md.MDL_CORR_DENOISED_NOISY )
 
+        setXmippAttributes(particle, row, *mdToAdd)
 
     # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
@@ -568,8 +704,8 @@ class GAN(XmippProtDeepDenoising):
             g_loss = self.combined.train_on_batch(noise2, valid_y)
 
             # Plot the progress
-            print ("%d/5000 [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (
-                epoch, d_loss[0], 100 * d_loss[1], g_loss))
+            print("%d/5000 [D loss: %f, acc.: %.2f%%] [G loss: %f]" % (
+                  epoch, d_loss[0], 100 * d_loss[1], g_loss))
 
             evaluate = self.generator.evaluate(self.noise, self.true)
             print("Validation =", evaluate)
