@@ -49,7 +49,7 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def _defineVariables(cls):
-        cls._defineEmVar(XMIPP_HOME, 'xmipp')
+        cls._addVar(XMIPP_HOME, pwem.Config.XMIPP_HOME)
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
