@@ -164,19 +164,22 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
         if self.micsToPick.get() == MICS_OTHER:
             inputMics = self.inputMicrographs.get()
             manualMics = self.xmippParticlePicking.get().inputMicrographs.get()
-            pixsizeInput = inputMics.getSamplingRate()
+            # FIXME: manualMics is always None when scheduled...
+            #  it should be fixed in the update step at Scipion scheduler app
+            if manualMics is not None:
+                pixsizeInput = inputMics.getSamplingRate()
 
-            pixsizeMics = manualMics.getSamplingRate()
-            acq = manualMics.getAcquisition()
+                pixsizeMics = manualMics.getSamplingRate()
+                acq = manualMics.getAcquisition()
 
-            if pixsizeInput != pixsizeMics:
-                validateMsgs.append('New micrographs should have same sampling '
-                                    'rate as the ones already picked.')
+                if pixsizeInput != pixsizeMics:
+                    validateMsgs.append('New micrographs should have same sampling '
+                                        'rate as the ones already picked.')
 
-            if not inputMics.getAcquisition().equalAttributes(acq):
-                validateMsgs.append('New micrographs should have same '
-                                    'acquisition parameters as the ones '
-                                    'already picked.')
+                if not inputMics.getAcquisition().equalAttributes(acq):
+                    validateMsgs.append('New micrographs should have same '
+                                        'acquisition parameters as the ones '
+                                        'already picked.')
 
         return validateMsgs
     

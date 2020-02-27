@@ -40,7 +40,7 @@ except ImportError:
 import numpy as np
 
 from pyworkflow.utils import replaceBaseExt
-from pyworkflow.object import ObjectWrap, String
+from pyworkflow.object import ObjectWrap, String, Float, Integer
 from pwem.constants import (NO_INDEX, ALIGN_NONE, ALIGN_PROJ, ALIGN_2D,
                             ALIGN_3D)
 from pwem.objects import (Angles, Coordinate, Micrograph, Volume, Particle,
@@ -53,6 +53,9 @@ from xmipp3.base import XmippMdRow, getLabelPythonType
 from xmipp3.utils import iterMdRows
 
 from pwem import emlib
+
+def prefixAttribute(attribute):
+    return '_xmipp_%s' % attribute
 
 if not getattr(emlib, "GHOST_ACTIVATED", False):
     """ Some of MDL may not exist when Ghost is activated
@@ -96,9 +99,9 @@ if not getattr(emlib, "GHOST_ACTIVATED", False):
 
     CTF_PSD_DICT = OrderedDict([
            ("_psdFile", emlib.MDL_PSD),
-           ("_xmipp_enhanced_psd", emlib.MDL_PSD_ENHANCED),
-           ("_xmipp_ctfmodel_quadrant", emlib.MDL_IMAGE1),
-           ("_xmipp_ctfmodel_halfplane", emlib.MDL_IMAGE1)
+           (prefixAttribute("enhanced_psd"), emlib.MDL_PSD_ENHANCED),
+           (prefixAttribute("ctfmodel_quadrant"), emlib.MDL_IMAGE1),
+           (prefixAttribute("ctfmodel_halfplane"), emlib.MDL_IMAGE1)
            ])
 
     CTF_EXTRA_LABELS = [
@@ -219,13 +222,13 @@ if not getattr(emlib, "GHOST_ACTIVATED", False):
            ])
 
     ALIGNMENT_DICT = OrderedDict([
-           ("_xmipp_shiftX", emlib.MDL_SHIFT_X),
-           ("_xmipp_shiftY", emlib.MDL_SHIFT_Y),
-           ("_xmipp_shiftZ", emlib.MDL_SHIFT_Z),
-           ("_xmipp_flip", emlib.MDL_FLIP),
-           ("_xmipp_anglePsi", emlib.MDL_ANGLE_PSI),
-           ("_xmipp_angleRot", emlib.MDL_ANGLE_ROT),
-           ("_xmipp_angleTilt", emlib.MDL_ANGLE_TILT),
+           (prefixAttribute("shiftX"), emlib.MDL_SHIFT_X),
+           (prefixAttribute("shiftY"), emlib.MDL_SHIFT_Y),
+           (prefixAttribute("shiftZ"), emlib.MDL_SHIFT_Z),
+           (prefixAttribute("flip"), emlib.MDL_FLIP),
+           (prefixAttribute("anglePsi"), emlib.MDL_ANGLE_PSI),
+           (prefixAttribute("angleRot"), emlib.MDL_ANGLE_ROT),
+           (prefixAttribute("angleTilt"), emlib.MDL_ANGLE_TILT),
            ])
 
 
@@ -264,7 +267,7 @@ def objectToRow(obj, row, attrDict, extraLabels=[]):
     attrLabels = attrDict.values()
 
     for label in extraLabels:
-        attrName = '_xmipp_%s' % emlib.label2Str(label)
+        attrName = prefixAttribute(emlib.label2Str(label))
         if label not in attrLabels and hasattr(obj, attrName):
             value = obj.getAttributeValue(attrName)
             row.setValue(label, value)
@@ -294,18 +297,39 @@ def rowToObject(row, obj, attrDict, extraLabels=[]):
     for label in extraLabels:
         if label not in attrLabels and row.hasLabel(label):
             labelStr = emlib.label2Str(label)
-            setattr(obj, '_xmipp_%s' % labelStr, row.getValueAsObject(label))
+            setattr(obj, prefixAttribute(labelStr), row.getValueAsObject(label))
 
-def setXmippAttributes(obj, objRow, *labels):
-    """ Set an attribute to obj from a label that is not
-    basic ones. The new attribute will be named _xmipp_LabelName
-    and the datatype will be set correctly.
+def setXmippAttributes(obj, objRow, *labels, **kwargs):
+    """ Set the labels attribute(s) to obj from a objRow
+        (those not basic ones).
+        More than one label can be set
+        and default can also be a list of same number of entries.
+        The new attribute will be named _xmipp_LabelName
+        and the datatype will be set correctly.
+        If obj doesn't contain a label and a default value is in kwargs,
+        it's set in its corresponding Scipion datatype.
     """
-    for label in labels:
-        value = objRow.getValueAsObject(label)
-        # To avoid empty values
+    defaults = kwargs.get('default', None)
 
+    for idx, label in enumerate(labels):
         if objRow.containsLabel(label):
+            value = objRow.getValueAsObject(label)
+        else:
+            if isinstance(defaults, list):
+                value = defaults[idx]
+            else:
+                value = defaults
+
+            if isinstance(value, int):
+                value = Integer(value)
+            elif isinstance(value, float):
+                value = Float(value)
+            elif isinstance(value, str):
+                value = String(value)
+            else:
+                value = None
+
+        if value is not None:
             setXmippAttribute(obj, label, value)
 
 def setXmippAttribute(obj, label, value):
@@ -313,10 +337,8 @@ def setXmippAttribute(obj, label, value):
     setattr(obj, prefixAttribute(emlib.label2Str(label)), value)
 
 def getXmippAttribute(obj, label, default=None):
+    """ Sets an attribute of an object prefixing it with xmipp"""
     return getattr(obj, prefixAttribute(emlib.label2Str(label)), default)
-
-def prefixAttribute(attribute):
-    return '_xmipp_%s' % attribute
 
 def rowFromMd(md, objId):
     row = XmippMdRow()
@@ -570,15 +592,15 @@ def _rowToParticle(partRow, particleClass, **kwargs):
     try:
         if partRow.hasLabel(emlib.MDL_MICROGRAPH_ID):
             img.setMicId(partRow.getValue(emlib.MDL_MICROGRAPH_ID))
-#        elif partRow.hasLabel(xmippLib.MDL_MICROGRAPH):
-#            micName = partRow.getValue(xmippLib.MDL_MICROGRAPH)
+#        elif partRow.hasLabel(emlib.MDL_MICROGRAPH):
+#            micName = partRow.getValue(emlib.MDL_MICROGRAPH)
 #            img._micrograph = micName
-#            print "setting micname as", micName
+#            print("setting micname as %s" % micName)
 #            img.printAll()
-#            print "getAttributes1", img._micrograph
-#            print "getAttributes2", getattr(img,"_micrograph",'kk')
+#            print("getAttributes1 %s" % img._micrograph)
+#            print("getAttributes2 %s" % getattr(img, "_micrograph", 'kk')
 #        else:
-#            print "WARNING: No micname"
+#            print("WARNING: No micname")
     except Exception as e:
         print("Warning:", e.message)
 
@@ -1384,7 +1406,7 @@ def rowToAlignment(alignmentRow, alignType):
         # the conversions to the Transform matrix have not been extensively
         # tested.
         # After this, we should only keep the matrix
-        # for paramName, label in ALIGNMENT_DICT.iteritems():
+        # for paramName, label in ALIGNMENT_DICT.iter():
         #    if alignmentRow.hasLabel(label):
         #        setattr(alignment, paramName,
         #                alignmentRow.getValueAsObject(label))
@@ -1629,8 +1651,12 @@ def writeShiftsMovieAlignment(movie, xmdFn, s0, sN):
 def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
     movieMd = md.MetaData()
     frame = movie.clone()
-    firstFrame, lastFrame, frameIndex = movie.getFramesRange()
-
+    # get some info about the movie
+    # problem is, that it can come from a movie set, and some
+    # values might refer to different movie, e.g. no of frames :(
+    firstFrame, _, frameIndex = movie.getFramesRange() # info from the movie set
+    _, _ , lastFrame = movie.getDim() # actual no. of frame in the current movie
+    lastFrame += 1 # (convert no. of frames to index, one-initiated)
     if lastFrame == 0:
         # this condition is for old SetOfMovies, that has lastFrame = 0.
         frames = movie.getNumberOfFrames()
@@ -1648,9 +1674,8 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
         if alignment is None:
             raise Exception("Can not write alignment for movie. ")
         a0, aN = alignment.getRange()
-        if (firstFrame, lastFrame) != (a0, aN):
-            raise Exception("Mismatch between alignment frames range and "
-                            "movie frames range. ")
+        if a0 < firstFrame or aN > lastFrame:
+            raise Exception("Trying to write frames which have not been aligned.")
         shiftListX, shiftListY = alignment.getShifts()
 
     row = md.Row()

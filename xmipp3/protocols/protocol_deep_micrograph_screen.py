@@ -99,13 +99,12 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
                            "Manual thresholding can be performed after execution through analyze results button. "+
                            "\n0.75 <= Recommended threshold <= 0.9")
 
-        form.addParam("streamingBatchSize", params.IntParam, default=36,
+        form.addParam("streamingBatchSize", params.IntParam, default=50,
                       label="Batch size", expertLevel=params.LEVEL_ADVANCED,
                       help="This value allows to group several items to be "
                            "processed inside the same protocol step. You can "
                            "use the following values: \n"
-                           "*0*    Put in the same step all the items "
-                           "available."
+                           "*0*    Put in the same step all the items  available.\n "
                            "*>1*   The number of items that will be grouped into "
                            "a step.")
 
@@ -190,31 +189,33 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         micsFnDone = self.getDoneMics()
         micLisfFn = [mic.getFileName() for mic in micList
                      if not pwutils.removeBaseExt(mic.getFileName()) in micsFnDone]
-        inputMicsPathMetadataFname= self._getTmpPath("inputMics"+str(hash(micLisfFn[0]))+".xmd")
-        mics_md= createMetaDataFromPattern( micLisfFn )
-        mics_md.write(inputMicsPathMetadataFname)
-        args  =  '-i %s' % inputMicsPathMetadataFname
-        args += ' -c %s' % self._getExtraPath('inputCoords')
-        args += ' -o %s' % self._getExtraPath('outputCoords')
-        args += ' -b %d' % self.getBoxSize()
-        args += ' -s 1' #Downsampling is automatically managed by scipion
-        args += ' -d %s' % Plugin.getModel('deepMicrographCleaner', 'defaultModel.keras')
 
-        if self.threshold.get() > 0:
-            args += ' --deepThr %f ' % (1-self.threshold.get())
-        
-        if self.saveMasks.get():
-            args += ' --predictedMaskDir %s ' % (self._getExtraPath("predictedMasks"))
-            
-        if self.useGpu.get():
-            if self.useQueueForSteps() or self.useQueue():
-                args += ' -g all '
-            else:
-                args += ' -g %s'%(",".join([str(elem) for elem in self.getGpuList()]))
-        else:
-            args += ' -g -1'
-            
-        self.runJob('xmipp_deep_micrograph_cleaner', args)
+        if len(micLisfFn)>0:
+          inputMicsPathMetadataFname= self._getTmpPath("inputMics"+str(hash(micLisfFn[0]))+".xmd")
+          mics_md= createMetaDataFromPattern( micLisfFn )
+          mics_md.write(inputMicsPathMetadataFname)
+          args  =  '-i %s' % inputMicsPathMetadataFname
+          args += ' -c %s' % self._getExtraPath('inputCoords')
+          args += ' -o %s' % self._getExtraPath('outputCoords')
+          args += ' -b %d' % self.getBoxSize()
+          args += ' -s 1' #Downsampling is automatically managed by scipion
+          args += ' -d %s' % Plugin.getModel('deepMicrographCleaner', 'defaultModel.keras')
+
+          if self.threshold.get() > 0:
+              args += ' --deepThr %f ' % (1-self.threshold.get())
+
+          if self.saveMasks.get():
+              args += ' --predictedMaskDir %s ' % (self._getExtraPath("predictedMasks"))
+
+          if self.useGpu.get():
+              if self.useQueueForSteps() or self.useQueue():
+                  args += ' -g all '
+              else:
+                  args += ' -g %s'%(",".join([str(elem) for elem in self.getGpuList()]))
+          else:
+              args += ' -g -1'
+
+          self.runJob('xmipp_deep_micrograph_cleaner', args)
 
 
 

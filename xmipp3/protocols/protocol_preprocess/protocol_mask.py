@@ -33,6 +33,7 @@ from xmipp3.convert import getImageLocation
 from xmipp3.constants import *
 from .geometrical_mask import XmippGeometricalMask3D, XmippGeometricalMask2D
 from .protocol_process import XmippProcessParticles, XmippProcessVolumes
+from .protocol_create_mask3d import XmippProtCreateMask3D
 
 
 class XmippProtMask:
@@ -58,10 +59,12 @@ class XmippProtMask:
         form.addParam('inputMask', PointerParam, pointerClass=self.MASK_CLASSNAME, 
                       condition='source==%d' % SOURCE_MASK,
                       label="Input mask")
-        
-        self.GEOMETRY_BASECLASS.defineParams(self, form, 
-                                             isGeometry='source==%d' % SOURCE_GEOMETRY,
-                                             addSize=False)
+        args={}
+        args['isGeometry'] = 'source==%d' % SOURCE_GEOMETRY
+        args['addSize'] = False
+        if isinstance (self, XmippProtCreateMask3D):
+            args['isFeatureFile'] = 'source==%d' % SOURCE_FEATURE_FILE
+        self.GEOMETRY_BASECLASS.defineParams(self, form, **(args))
         
         form.addParam('fillType', EnumParam, 
                       choices=['value', 'min', 'max', 'avg'], 
@@ -189,6 +192,8 @@ class XmippProtMaskParticles(ProtMaskParticles, XmippProcessParticles,
         XmippProtMask.__init__(self, **kwargs)
         self.allowThreads = False
         self.allowMpi = False
+
+        
     
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineProcessParams(self, form):

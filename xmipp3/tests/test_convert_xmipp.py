@@ -819,15 +819,15 @@ class TestSetConvert(BaseTest):
             self.assertTrue(img.hasCTF())
             
         mdIn = emlib.MetaData(fn)
-        #print mdIn
+        # print(mdIn)
         
         mdOut = emlib.MetaData()
         setOfParticlesToMd(partSet, mdOut)
-        #print mdOut
+        # print(mdOut)
         
         # Labels order is not the same
         # TODO: Implement a better way to compare two metadatas
-        #self.assertEqual(mdIn, mdOut)
+        # self.assertEqual(mdIn, mdOut)
         
     def test_micrographsToMd(self):
         """ Test the conversion of a SetOfMicrographs to Xmipp metadata. """
@@ -889,7 +889,7 @@ class TestSetConvert(BaseTest):
             self.assertTrue(particle.hasTransform())
             t = particle.getTransform()
             self.assertIsNotNone(t)
-            #print t
+            # print(t)
         
         # Read particles from the same metadata, but now
         # ignoring the alignment information explicitly
@@ -920,9 +920,9 @@ class TestSetConvert(BaseTest):
         # test that the metadata contains some geometry labels
         self.assertTrue(md.containsLabel(emlib.MDL_SHIFT_X))
         fn = self.getOutputPath("aligned_particles.xmd")
-        #print "Aligned particles written to: ", fn
-        #md.write(fn)
-        #self.assertEqual(mdScipion, mdXmipp, "metadata are not the same")
+        # print("Aligned particles written to: %s" % fn)
+        # md.write(fn)
+        # self.assertEqual(mdScipion, mdXmipp, "metadata are not the same")
         
     def test_particlesToMd(self):
         """ Test the conversion of a SetOfParticles to Xmipp metadata. """

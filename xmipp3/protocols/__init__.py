@@ -27,7 +27,7 @@
 # **************************************************************************
 
 from .protocol_preprocess import *
-from .protocol_3dbionotes import XmippProt3DBionotes
+
 from .protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from .protocol_align_volume import XmippProtAlignVolume, XmippProtAlignVolumeForWeb
 from .protocol_preprocess.protocol_add_noise import (XmippProtAddNoiseVolumes,
@@ -38,7 +38,6 @@ from .protocol_break_symmetry import XmippProtAngBreakSymmetry
 from .protocol_cl2d_align import XmippProtCL2DAlign
 from .protocol_cl2d import XmippProtCL2D
 from .protocol_classify_kmeans2d import XmippProtKmeansClassif2D
-from .protocol_cltomo import XmippProtCLTomo
 from .protocol_classification_gpuCorr import XmippProtGpuCrrCL2D
 from .protocol_classification_gpuCorr_semi import XmippProtStrGpuCrrSimple
 from .protocol_classification_gpuCorr_full import XmippProtStrGpuCrrCL2D
@@ -52,8 +51,8 @@ from .protocol_ctf_correct_wiener2d import XmippProtCTFCorrectWiener2D
 from .protocol_consensus_classes3D import XmippProtConsensusClasses3D
 from .protocol_subtract_projection import XmippProtSubtractProjection
 from .protocol_denoise_particles import XmippProtDenoiseParticles
-from .protocol_eliminate_empty_images import XmippProtEliminateEmptyParticles, \
-                                             XmippProtEliminateEmptyClasses
+from .protocol_eliminate_empty_images import (XmippProtEliminateEmptyParticles,
+                                              XmippProtEliminateEmptyClasses)
 from .protocol_extract_particles import XmippProtExtractParticles
 from .protocol_extract_particles_movies import XmippProtExtractMovieParticles
 from .protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
@@ -62,7 +61,6 @@ from .protocol_helical_parameters import XmippProtHelicalParameters
 from .protocol_kerdensom import XmippProtKerdensom
 from .protocol_ml2d import XmippProtML2D
 from .protocol_movie_gain import XmippProtMovieGain
-from .protocol_mltomo import XmippProtMLTomo
 from .protocol_movie_average import XmippProtMovieAverage
 from .protocol_movie_correlation import XmippProtMovieCorr
 from .protocol_movie_opticalflow import XmippProtOFAlignment, ProtMovieAlignment
@@ -89,9 +87,9 @@ from .protocol_reconstruct_swarm import XmippProtReconstructSwarm
 from .protocol_resolution3d import XmippProtResolution3D
 from .protocol_resolution_directional import XmippProtMonoDir
 from .protocol_resolution_monogenic_signal import XmippProtMonoRes
+from .protocol_resolution_monotomo import XmippProtMonoTomo
 from .protocol_resolution_deepres import XmippProtDeepRes
 from .protocol_volume_local_sharpening import XmippProtLocSharp
-from .protocol_resolution_monotomo import XmippProtMonoTomo
 from .protocol_rotational_spectra import XmippProtRotSpectra
 from .protocol_rotational_symmetry import XmippProtRotationalSymmetry
 from .protocol_screen_particles import XmippProtScreenParticles
@@ -118,4 +116,7 @@ from .protocol_angular_alignment_sph import XmippProtAngularAlignmentSPH
 from .protocol_volume_deform_sph import XmippProtVolumeDeformSPH
 from .protocol_structure_map_sph import XmippProtStructureMapSPH
 from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
-
+from .protocol_local_ctf import XmippProtLocalCTF
+from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
+from .protocol_consensus_local_ctf import XmippProtConsensusLocalCTF
+from .protocol_particle_pick_remove_duplicates import XmippProtPickingRemoveDuplicates
