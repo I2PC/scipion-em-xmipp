@@ -48,6 +48,7 @@ from .viewer_volume_strain import XmippVolumeStrainViewer
 from .viewer_reconstruct_highres import XmippReconstructHighResViewer
 from .viewer_solid_angles import SolidAnglesViewer
 from .viewer_extract_unit_cell import viewerXmippProtExtractUnit
+from .viewer_classes3D import XmippClasses3DViewer
 
 
 #from .viewer_combine_pdb import XmippProtCombinePdbViewer

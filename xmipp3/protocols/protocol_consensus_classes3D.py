@@ -32,7 +32,7 @@ from pwem.objects import Class3D
 import math
 import numpy as np
 import matplotlib.pyplot as plt
-
+import pickle
 
 class XmippProtConsensusClasses3D(EMProtocol):
     """ Compare several SetOfClasses3D.
@@ -40,7 +40,9 @@ class XmippProtConsensusClasses3D(EMProtocol):
         intersections and the entropy of the clustering formed.
     """
     _label = 'consensus clustering 3D'
-    intersectsList = []
+
+    def __init__(self):
+        EMProtocol.__init__(self)
 
     def _defineParams(self, form):
         form.addSection(label='Input')
@@ -133,29 +135,22 @@ class XmippProtConsensusClasses3D(EMProtocol):
         all_coss_us, ob_values = self.coss_ensemble(cs, min_nclust=1)
         nclusters, ob_values, elbow_idx = plot_all_coss(all_coss_us, ob_values,
                                                         self._getExtraPath() + '/objective_values.png')
+        self._objectiveFData = [nclusters,ob_values]
         self.intersectsList = self.all_iLists[elbow_idx]
         self.nclusters = nclusters
+        self.elbowIdx = elbow_idx
         print('Saving best number of clusters detected: ', nclusters[elbow_idx])
 
+        self.save_outputs()
 
     def createOutputStep(self):
-
-        # self.intersectsList.sort(key=lambda e: e[0], reverse=True)
-
-        # print("   ---   S O R T E D:   ---")
-        # numberOfPart = 0
-        # for classItem in self.intersectsList:
-        #     printTuple = (classItem[0], classItem[2])
-        #     print(printTuple)
-        #     numberOfPart += classItem[0]
-
-        # print('Number of intersections: %d' % len(self.intersectsList))
-        # print('Total of particles: %d' % numberOfPart)
-
+        '''Saves the outputs into the pickle files'''
         inputParticles = self.inputMultiClasses[0].get().getImages()
         outputClasses = self._createSetOfClasses3D(inputParticles)
 
-        for classItem in self.intersectsList:
+        clustering = self.intersectsList
+
+        for classItem in clustering:
             numOfPart = classItem[0]
             partIds = classItem[1]
             setRepId = classItem[2]
@@ -197,6 +192,29 @@ class XmippProtConsensusClasses3D(EMProtocol):
         return errors
 
     # --------------------------- UTILS functions ------------------------------
+    def save_outputs(self):
+        self.saveClusteringsList()
+        self.saveObjectiveFData()
+        self.saveElbowIndex()
+
+    def saveClusteringsList(self):
+        '''Saves the list of clusterings with different number of clusters into a pickle file'''
+        savepath = self._getExtraPath('clusterings.pkl')
+        with open(savepath, 'wb') as f:
+            pickle.dump(self.all_iLists, f)
+
+    def saveObjectiveFData(self):
+        '''Save the data of the objective function'''
+        savepath = self._getExtraPath('ObjectiveFData.pkl')
+        with open(savepath, 'wb') as f:
+            pickle.dump(self._objectiveFData, f)
+
+    def saveElbowIndex(self):
+        '''Save the calculated number of clusters where the function has an elbow'''
+        savepath = self._getExtraPath('elbowclusters.pkl')
+        with open(savepath, 'wb') as f:
+            pickle.dump(self.elbowIdx, f)
+
     def intersectClasses(self, setId1, clId1, ids1,
                          setId2, clId2, ids2, clsSize2=None):
         size1 = len(ids1)
