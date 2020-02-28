@@ -183,18 +183,20 @@ class Plugin(pwem.Plugin):
             cdCmd = 'cd %s && ' % bundleDir
             env.addPackage('xmippDev', tar='void.tgz',
                            commands=[("if ! ls %s/xmipp ; then %s ; fi ; %s"
-                                      % (bundleDir, cloneCmd, removeDone),
-                                      cloneTgt),
+                                      % (bundleDir, cloneCmd, removeDone), cloneTgt),
                                      (cdCmd + compInstCmd, compInstTgt),
-                                     (removeDone, installTgt + [xmippBashrc,
-                                                            cls.getHome('installToken')])])
+                                     (removeDone, installTgt +
+                                                  [xmippBashrc,
+                                                   cls.getHome('installToken')]),
+                                     (bindingsAndLibsCmd, bindingsAndLibsTgt)])
 
         if os.path.exists(os.path.join(env.getIncludeFolder(), 'sqlite3.h')):
             env.addPackage('xmippSrc', version=_currentVersion,
                            # FIXME: adding 'v' before version to fix a package target (post-link)
                            tar='xmippSrc-v'+_currentVersion+'.tgz',
                            commands=[(compileCmd, compileTgt),
-                                 (installCmd, installTgt+[verToken, xmippBashrc])],
+                                     (installCmd, installTgt+[verToken, xmippBashrc]),
+                                     (bindingsAndLibsCmd, bindingsAndLibsTgt)],
                        deps=xmippDeps, default=False)
 
         xmippConf = cls.getHome("xmipp.conf")
@@ -202,12 +204,14 @@ class Plugin(pwem.Plugin):
                       "ln -sf xmippBin_%s-"+_currentVersion+" "+cls.getHome())
         env.addPackage('xmippBin_Debian', version=_currentVersion,
                        commands=[(installBin % 'Debian',
-                                  installTgt + [xmippConf, verToken+'_Debian'])],
+                                  installTgt + [xmippConf, verToken+'_Debian']),
+                                 (bindingsAndLibsCmd, bindingsAndLibsTgt)],
                        deps=xmippDeps, default=False)
 
         env.addPackage('xmippBin_Centos', version=_currentVersion,
                        commands=[(installBin % 'Centos',
-                                  installTgt+[xmippConf, verToken+'_Centos'])],
+                                  installTgt+[xmippConf, verToken+'_Centos']),
+                                 (bindingsAndLibsCmd, bindingsAndLibsTgt)],
                        deps=xmippDeps, default=False)
 
         ## EXTRA PACKAGES ##
