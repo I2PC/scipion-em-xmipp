@@ -87,7 +87,7 @@ class Plugin(pwem.Plugin):
         """ Return an Environment prepared for launching Matlab
         scripts using the Xmipp binding.
         """
-        env = pyworkflow.plugin.Plugin.getEnviron()
+        env = pwem.Plugin.getEnviron()
         env.set('PATH', os.environ.get('MATLAB_BINDIR', ''), pwutils.Environ.BEGIN)
         env.set('LD_LIBRARY_PATH', os.environ.get('MATLAB_LIBDIR', ''),
                 pwutils.Environ.BEGIN)
@@ -150,6 +150,15 @@ class Plugin(pwem.Plugin):
         compileCmd = ("src/xmipp/xmipp config && src/xmipp/xmipp check_config && "
                       "src/xmipp/xmipp compile %d && touch DONE && rm -rf %s 2>/dev/null"
                       % (env.getProcessors(), cls.getHome()))
+
+        # TODO: Check that getHome returns an absolute path
+        bindingsAndLibsCmd = ("ln -s %s %s ; ln -s %s %s"
+                             % (cls.getHome('bindings', 'python'),
+                                Config.SCIPION_BINDINGS,
+                                cls.getHome('lib'),
+                                Config.SCIPION_LIBS))
+        bindingsAndLibsTgt = ([os.path.join(Config.SCIPION_BINDINGS, 'xmippLib.so'),
+                               os.path.join(Config.SCIPION_LIBS, 'libXmipp.so')])
 
         if os.path.exists(os.path.join(env.getIncludeFolder(), 'sqlite3.h')):
             env.addPackage('xmippSrc', version=_currentVersion,
