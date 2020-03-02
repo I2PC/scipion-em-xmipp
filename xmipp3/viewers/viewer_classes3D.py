@@ -28,20 +28,20 @@
 This module implement the wrappers aroung Xmipp CL2D protocol
 visualization program.
 """
-
+from pyworkflow.gui import IconButton, Icon
+from pyworkflow.gui.form import FormWindow
 from pyworkflow.viewer import (ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO)
 from pyworkflow.protocol.params import StringParam, LabelParam, IntParam
 
 from xmipp3.protocols.protocol_consensus_classes3D import XmippProtConsensusClasses3D
 from pwem.objects import Class3D
 
-from pwem.viewers import EmPlotter, DataViewer, ObjectView
 import pickle
 import matplotlib.pyplot as plt
 
 
-class XmippClasses3DViewer(ProtocolViewer, DataViewer):
-    """ Visualization of results from the NMA protocol
+class XmippClasses3DViewer(ProtocolViewer):
+    """ Visualization of results from the consensus classes 3D protocol
     """
     _label = 'viewer classes 3D'
     _targets = [XmippProtConsensusClasses3D]
@@ -52,7 +52,6 @@ class XmippClasses3DViewer(ProtocolViewer, DataViewer):
         self.nclusters, self.objFValues = self.getObjectiveFData()
         self._elbowIdx = self.getElbowIndex()
         self._allClusterings = self.getClusterings()
-        self._views = []
 
     def getObjectiveFData(self):
         loadPath = self.protocol._getExtraPath('ObjectiveFData.pkl')
@@ -79,7 +78,16 @@ class XmippClasses3DViewer(ProtocolViewer, DataViewer):
                       help='Open a GUI to visualize the objective function for each number of clusters ')
         form.addParam('chooseNumberOfClusters', IntParam, default=-1,
                       label='Number of Clusters',
-                      help='Choose the final number of clusters in the consensus clustering')
+                      help='Choose the final number of clusters in the consensus clustering. Press the eye')
+
+        #TODO: set an apply button to change the number of clusters instead of using the eye
+        '''command = self._chooseNumberOfClusters()
+        btn = IconButton(self.getWindow(), "Apply", Icon.ACTION_CONTINUE, command=command)
+        btn.config(relief="flat", activebackground=None, compound='left',
+                   fg='black', overrelief="raised")
+        btn.bind('<Button-1>')
+        btn.grid(row=2, column=2, sticky='nw')'''
+
 
     def _getVisualizeDict(self):
         return {'chooseNumberOfClusters': self._chooseNumberOfClusters,
@@ -96,24 +104,25 @@ class XmippClasses3DViewer(ProtocolViewer, DataViewer):
         plt.title('Objective values for each number of clusters')
         plt.show()
 
-    #def _visualize(self):
-
     def _chooseNumberOfClusters(self, e=None):
         views=[]
         nclusters = self.nclusters
         elbow_nclust = nclusters[self._elbowIdx]
 
         nclust = self.chooseNumberOfClusters.get()
-
         if nclust == -1:
             nclust = elbow_nclust
+        elif nclust > max(nclusters):
+            nclust = max(nclusters)
 
         scipion_clustering = self.buildSetOfClasses(nclust)
+        self.protocol._defineOutputs(outputClasses=scipion_clustering)
+        for item in self.protocol.inputMultiClasses:
+            self.protocol._defineSourceRelation(item, scipion_clustering)
+
         #TODO: esto es un objeto SetOfClasses3D pero no sabemos como lanzar un viewer con el sin tener el protocolo
-        views.append(ObjectView(self._project, self.protocol.strId(), scipion_clustering.getFilename()))
-
+        #views.append(ObjectView(self._project, self.protocol.strId()))
         return views
-
 
     def buildSetOfClasses(self, nclust):
         '''From a list of clusterings, nclust index it and that clustering
@@ -143,6 +152,6 @@ class XmippClasses3DViewer(ProtocolViewer, DataViewer):
             enabledClass.enableAppend()
             for itemId in partIds:
                 enabledClass.append(inputParticles[itemId])
-
             outputClasses.update(enabledClass)
+
         return outputClasses

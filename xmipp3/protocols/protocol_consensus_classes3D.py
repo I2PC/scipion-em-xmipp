@@ -26,7 +26,7 @@
 # **************************************************************************
 
 from pwem.protocols import EMProtocol
-from pyworkflow.protocol.params import MultiPointerParam, EnumParam
+from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam
 from pwem.objects import Class3D
 
 import math
@@ -55,6 +55,10 @@ class XmippProtConsensusClasses3D(EMProtocol):
                       choices=['Yes', 'No'], default=0,
                       label='Get Consensus Clustering', display=EnumParam.DISPLAY_HLIST,
                       help='Use coss ensemble method for obtaing a consensus clustering')
+        form.addParam('numClust', IntParam, default=-1,
+                      label='Set Number of Clusters',
+                      help='Set the final number of clusters. If -1, deduced by the shape of the objective function')
+
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
@@ -136,9 +140,15 @@ class XmippProtConsensusClasses3D(EMProtocol):
         nclusters, ob_values, elbow_idx = plot_all_coss(all_coss_us, ob_values,
                                                         self._getExtraPath() + '/objective_values.png')
         self._objectiveFData = [nclusters,ob_values]
-        self.intersectsList = self.all_iLists[elbow_idx]
         self.nclusters = nclusters
         self.elbowIdx = elbow_idx
+
+        nclust = self.numClust.get()
+        if  nclust == -1:
+            self.intersectsList = self.all_iLists[elbow_idx]
+        else:
+            self.intersectsList = self.all_iLists[nclusters.index(nclust)]
+
         print('Saving best number of clusters detected: ', nclusters[elbow_idx])
 
         self.save_outputs()
