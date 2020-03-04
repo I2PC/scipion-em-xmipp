@@ -184,7 +184,6 @@ class XmippProtLocSharp(ProtAnalysis3D):
         params += ' --exact'
         params += ' --chimera_volume %s' % self._getFileName(
                                                 'OUTPUT_RESOLUTION_FILE_CHIMERA')
-        params += ' --sym %s' % 'c1'
         params += ' --significance %f' % significance
         params += ' --md_outputdata %s' % self._getTmpPath('mask_data.xmd')
         params += ' --threads %i' % self.numberOfThreads.get()
