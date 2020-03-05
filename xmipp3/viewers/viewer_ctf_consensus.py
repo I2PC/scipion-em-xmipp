@@ -24,8 +24,8 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.viewers import EmPlotter, ObjectView, MicrographsView, CtfView
-from pyworkflow.em.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER, ZOOM
+from pwem.viewers import EmPlotter, ObjectView, MicrographsView, CtfView
+from pwem.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER, ZOOM
 from pyworkflow.protocol.params import IntParam, LabelParam
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 

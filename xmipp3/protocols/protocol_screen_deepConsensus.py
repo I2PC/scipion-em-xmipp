@@ -33,23 +33,25 @@ import six
 import json
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.utils.path import makePath, cleanPattern, cleanPath, copyTree, createLink
-from pyworkflow.protocol.constants import *
-from pyworkflow.em.constants import RELATION_CTF, ALIGN_NONE
-from pyworkflow.em.convert import ImageHandler
-from pyworkflow.em.data import SetOfCoordinates, Coordinate, SetOfParticles
-from pyworkflow.em.protocol import ProtParticlePicking, ProtUserSubSet
+from pyworkflow.utils.path import (makePath, cleanPattern, cleanPath, copyTree,
+                                   createLink)
+from pwem.constants import RELATION_CTF, ALIGN_NONE
+from pwem.emlib.image import ImageHandler
+from pwem.objects import SetOfParticles
+from pwem.protocols import ProtParticlePicking, ProtUserSubSet
 
 import pyworkflow.utils as pwutils
 import pyworkflow.protocol.params as params
-import pyworkflow.em.metadata as MD
+import pwem.emlib.metadata as md
 
-import xmippLib as xmipp
+from pwem import emlib
 import xmipp3
 from xmipp3 import XmippProtocol
 from xmipp3.protocols.protocol_pick_noise import pickNoise_prepareInput
-from xmipp3.convert import readSetOfParticles, setXmippAttributes, micrographToCTFParam,\
-                           writeSetOfParticles, writeSetOfCoordinates, readSetOfCoordsFromPosFnames
+from xmipp3.convert import (readSetOfParticles, setXmippAttributes,
+                            micrographToCTFParam, writeSetOfParticles,
+                            writeSetOfCoordinates, readSetOfCoordsFromPosFnames)
+
 
 MIN_NUM_CONSENSUS_COORDS = 256
 
@@ -336,7 +338,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                           "model or previous run model and *No* continue training from previous trained model "+
                           " to score coordiantes directly or add another set of particles and continue training")
         errorMsg = self.validateDLtoolkit(errorMsg, model="deepConsensus",
-                                     assertModel=self.addTrainingData.get()==self.ADD_DATA_TRAIN_PRECOMP)
+                                          assertModel=self.addTrainingData.get()==self.ADD_DATA_TRAIN_PRECOMP)
         return errorMsg
 
 #--------------------------- INSERT steps functions ---------------------------
@@ -747,15 +749,15 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     def joinSetOfParticlesStep( self, mode):
         #Create images.xmd metadata joining from different .stk
         fnImages = self._getExtraPath("particles_%s.xmd" % mode)
-        imgsXmd = MD.MetaData()
+        imgsXmd = md.MetaData()
         posFiles = glob(self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE%mode, '*.pos'))
 
         for posFn in posFiles:
           xmdFn = self._getExtraPath(self.CONSENSUS_PARTS_PATH_TEMPLATE%mode,
                                      pwutils.replaceBaseExt(posFn, "xmd"))
           if os.path.exists(xmdFn):
-            mdFn = MD.MetaData(xmdFn)
-            mdPos = MD.MetaData('particles@%s' % posFn)
+            mdFn = md.MetaData(xmdFn)
+            mdPos = md.MetaData('particles@%s' % posFn)
             mdPos.merge(mdFn) 
             imgsXmd.unionAll(mdPos)
           else:
@@ -774,7 +776,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     def _getEffectiveNumPartsTrain(self, dictTrueData):
         nParts=0
         for mdPath in dictTrueData:
-          mdObject = MD.MetaData(mdPath)
+          mdObject = md.MetaData(mdPath)
           nParts+= mdObject.size()
         return nParts
 
@@ -915,7 +917,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         for part in partSet:
             coord = part.getCoordinate().clone()
             coord.scale(downFactor)
-            deepZscoreLabel = '_xmipp_%s' % xmipp.label2Str(MD.MDL_ZSCORE_DEEPLEARNING1)
+            deepZscoreLabel = '_xmipp_%s' % emlib.label2Str(md.MDL_ZSCORE_DEEPLEARNING1)
             setattr(coord, deepZscoreLabel, getattr(part, deepZscoreLabel))
             part = part.clone()
             part.scaleCoordinate(downFactor)
@@ -951,8 +953,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
     #--------------------------- UTILS functions --------------------------------------------
     def _updateParticle(self, item, row):
-        setXmippAttributes(item, row, MD.MDL_ZSCORE_DEEPLEARNING1)
-        if row.getValue(MD.MDL_ENABLED) <= 0:
+        setXmippAttributes(item, row, md.MDL_ZSCORE_DEEPLEARNING1)
+        if row.getValue(md.MDL_ENABLED) <= 0:
             item._appendItem = False
         else:
             item._appendItem = True

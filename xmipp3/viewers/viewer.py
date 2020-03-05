@@ -23,18 +23,16 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+from pwem.objects import SetOfNormalModes
+from pwem.viewers import showj, DataViewer, EmPlotter, CtfView, ObjectView
+from pyworkflow.utils import removeBaseExt
+from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
+from pwem.protocols import *
 
-from pyworkflow.em.viewers import showj
-from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO, CommandView
-from pyworkflow.em.protocol import *
+from pwem.viewers.showj import *
+from pwem.viewers.viewer_monitors import MovieGainMonitorPlotter
 
-from pyworkflow.em.viewers.viewers_data import DataViewer
-from pyworkflow.em.viewers.plotter import EmPlotter
-from pyworkflow.em.viewers.views import CtfView, ObjectView
-from pyworkflow.em.viewers.showj import *
-from pyworkflow.em.viewers.viewer_monitors import MovieGainMonitorPlotter
-
-import xmippLib
+from pwem import emlib
 from xmipp3.convert import *
 from xmipp3.protocols.protocol_compare_reprojections import XmippProtCompareReprojections
 from xmipp3.protocols.protocol_compare_angles import XmippProtCompareAngles
@@ -130,20 +128,20 @@ class XmippViewer(DataViewer):
 
             fn = obj._getPath('images.xmd')
             if os.path.exists(fn): # it doesnt unless cls is Xmipp
-                md = xmippLib.MetaData(fn)
+                md = emlib.MetaData(fn)
                 # If Zscore on output images plot Zscore particle sorting
-                if md.containsLabel(xmippLib.MDL_ZSCORE):
+                if md.containsLabel(emlib.MDL_ZSCORE):
                     from plotter import XmippPlotter
                     xplotter = XmippPlotter(windowTitle="Zscore particles sorting")
                     xplotter.createSubPlot("Particle sorting", "Particle number", "Zscore")
-                    xplotter.plotMd(md, False, mdLabelY=xmippLib.MDL_ZSCORE)
+                    xplotter.plotMd(md, False, mdLabelY=emlib.MDL_ZSCORE)
                     self._views.append(xplotter)
                 # If VARscore on output images plot VARscore particle sorting
-                if md.containsLabel(xmippLib.MDL_SCORE_BY_VAR):
+                if md.containsLabel(emlib.MDL_SCORE_BY_VAR):
                     from plotter import XmippPlotter
                     xplotter = XmippPlotter(windowTitle="Variance particles sorting")
                     xplotter.createSubPlot("Variance Histogram", "Variance", "Number of particles")
-                    xplotter.plotMd(md, False, mdLabelY=xmippLib.MDL_SCORE_BY_VAR, nbins=100)
+                    xplotter.plotMd(md, False, mdLabelY=emlib.MDL_SCORE_BY_VAR, nbins=100)
                     self._views.append(xplotter)
 
 
@@ -159,13 +157,13 @@ class XmippViewer(DataViewer):
                                                   SORT_BY: 'id',
                                                   MODE: MODE_MD}))
 
-            md = xmippLib.MetaData(obj._getExtraPath('particlesDenoised.xmd'))
-            if md.containsLabel(xmippLib.MDL_CORR_DENOISED_PROJECTION) and  md.containsLabel(xmippLib.MDL_CORR_DENOISED_NOISY):
+            md = emlib.MetaData(obj._getExtraPath('particlesDenoised.xmd'))
+            if md.containsLabel(emlib.MDL_CORR_DENOISED_PROJECTION) and  md.containsLabel(emlib.MDL_CORR_DENOISED_NOISY):
                 from plotter import XmippPlotter
                 xplotter = XmippPlotter(windowTitle="denoised vs proj & denoised vs original")
                 xplotter.createSubPlot("Correlations", "corr_denoised_projection", "corr_denoised_original")
-                xplotter.plotScatterMd(md, mdLabelX=xmippLib.MDL_CORR_DENOISED_PROJECTION, 
-                                mdLabelY=xmippLib.MDL_CORR_DENOISED_NOISY )
+                xplotter.plotScatterMd(md, mdLabelX=emlib.MDL_CORR_DENOISED_PROJECTION,
+                                mdLabelY=emlib.MDL_CORR_DENOISED_NOISY )
                 self._views.append(xplotter)
 
         elif issubclass(cls, XmippProtMovieGain):
@@ -296,11 +294,11 @@ class XmippViewer(DataViewer):
                                                       MODE: MODE_MD}))
 
             fn = obj._getExtraPath('vol001_pruned_particles_alignability.xmd')
-            md = xmippLib.MetaData(fn)
+            md = emlib.MetaData(fn)
             from .plotter import XmippPlotter
             plotter = XmippPlotter()
             plotter.createSubPlot('Soft-alignment validation plot','Angular Precision', 'Angular Accuracy')
-            plotter.plotMdFile(md, xmippLib.MDL_SCORE_BY_ALIGNABILITY_PRECISION, xmippLib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY,
+            plotter.plotMdFile(md, emlib.MDL_SCORE_BY_ALIGNABILITY_PRECISION, emlib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY,
                                marker='.', markersize=.55, color='red', linestyle='')
             self._views.append(plotter)
 

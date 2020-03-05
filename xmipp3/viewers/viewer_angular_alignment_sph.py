@@ -26,17 +26,14 @@
 
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 import pyworkflow.protocol.params as params
-import pyworkflow.em.metadata as md
-from pyworkflow.em.metadata.utils import iterRows
+import pwem.emlib.metadata as md
 import numpy as np
-import matplotlib as mpl
 import math
 import matplotlib.pyplot as plt
-from scipy.interpolate import griddata
 from .nma_gui import ClusteringWindow
 from xmipp3.protocols.nma.data import Point, Data
 from pyworkflow.utils.path import cleanPath
-from pyworkflow.em.data import SetOfParticles
+from pwem.objects import SetOfParticles
 from xmipp3.protocols.protocol_angular_alignment_sph import XmippProtAngularAlignmentSPH
 
 
@@ -184,7 +181,7 @@ class XmippAngularAlignmentSphViewer(ProtocolViewer):
         fnOut = self.protocol._getFileName('fnOut')
         mdOut = md.MetaData(fnOut)
         i=0
-        for row in iterRows(mdOut):
+        for row in md.iterRows(mdOut):
             coeff1D = mdOut.getValue(md.MDL_SPH_TSNE_COEFF1D, row.getObjId())
             if i==0:
                 tsne1D = coeff1D
@@ -197,7 +194,7 @@ class XmippAngularAlignmentSphViewer(ProtocolViewer):
         fnOut = self.protocol._getFileName('fnOut')
         mdOut = md.MetaData(fnOut)
         i=0
-        for row in iterRows(mdOut):
+        for row in md.iterRows(mdOut):
             coeff2D = mdOut.getValue(md.MDL_SPH_TSNE_COEFF2D, row.getObjId())
             if i==0:
                 tsne2D = coeff2D

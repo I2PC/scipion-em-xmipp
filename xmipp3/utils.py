@@ -33,7 +33,8 @@ import subprocess
 import numpy as np
 
 import xmipp3
-import xmippLib
+from pyworkflow import Config
+from pwem import emlib
 from .base import XmippMdRow
 
 def validateXmippGpuBins():
@@ -44,7 +45,7 @@ def getMdFirstRow(filename):
     This method should be used for validations of labels
     or metadata size, but the full metadata is not needed.
     """
-    md = xmippLib.MetaData()
+    md = emlib.MetaData()
     md.read(filename, 1)
     if md.getParsedLines():
         row = XmippMdRow()
@@ -57,7 +58,7 @@ def getMdFirstRow(filename):
 
 def getMdSize(filename):
     """ Return the metadata size without parsing entirely. """
-    md = xmippLib.MetaData()
+    md = emlib.MetaData()
     md.read(filename, 1)
     return md.getParsedLines()
 
@@ -70,8 +71,8 @@ def isMdEmpty(filename):
 def iterMdRows(md):
     """ Iterate over the rows of the given metadata. """
     # If md is string, take as filename and create the metadata
-    if isinstance(md, basestring):
-        md = xmippLib.MetaData(md)
+    if isinstance(md, str):
+        md = emlib.MetaData(md)
         
     row = XmippMdRow()
     
@@ -80,33 +81,33 @@ def iterMdRows(md):
         yield row
 
 def readInfoField(fnDir,block,label):
-    mdInfo = xmippLib.MetaData("%s@%s"%(block,join(fnDir,"iterInfo.xmd")))
-    return mdInfo.getValue(label,mdInfo.firstObject())
+    mdInfo = emlib.MetaData("%s@%s"%(block,join(fnDir,"iterInfo.xmd")))
+    return mdInfo.getValue(label, mdInfo.firstObject())
 
 def writeInfoField(fnDir,block,label, value):
-    mdInfo = xmippLib.MetaData()
+    mdInfo = emlib.MetaData()
     objId=mdInfo.addObject()
     mdInfo.setValue(label,value,objId)
-    mdInfo.write("%s@%s"%(block,join(fnDir,"iterInfo.xmd")),xmippLib.MD_APPEND)
+    mdInfo.write("%s@%s"%(block,join(fnDir,"iterInfo.xmd")), emlib.MD_APPEND)
 
 
 BAD_IMPORT_TENSORFLOW_KERAS_MSG='''
 Error, tensorflow/keras is probably not installed. Install it with:\n  ./scipion installb deepLearningToolkit
 If gpu version of tensorflow desired, install cuda 8.0 or cuda 9.0
 We will try to automatically install cudnn, if unsucesfully, install cudnn and add to LD_LIBRARY_PATH
-add to SCIPION_DIR/config/scipion.conf
+add to {0}
 CUDA = True
 CUDA_VERSION = 8.0 or 9.0
-CUDA_HOME = /path/to/cuda-%(CUDA_VERSION)
+CUDA_HOME = /path/to/cuda-%(CUDA_VERSION)s
 CUDA_BIN = %(CUDA_HOME)s/bin
 CUDA_LIB = %(CUDA_HOME)s/lib64
 CUDNN_VERSION = 6 or 7
-'''
+'''.format(Config.SCIPION_CONFIG)
 
 def copy_image(imag):
     ''' Return a copy of a xmipp_image
     '''
-    new_imag = xmippLib.Image()
+    new_imag = emlib.Image()
     new_imag.setData(imag.getData())
     return new_imag
 

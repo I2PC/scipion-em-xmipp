@@ -24,20 +24,20 @@
 # *
 # **************************************************************************
 
-import os, sys
+import os
 import re
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.utils.path import copyTree
 import pyworkflow.protocol.params as params
-from pyworkflow.em.protocol import ProtProcessParticles
-import pyworkflow.em.metadata as md
+from pwem.protocols import ProtProcessParticles
+import pwem.emlib.metadata as md
 
 from ..convert import writeSetOfParticles, setXmippAttributes
 from ..constants import CONDA_DEFAULT_ENVIRON
 from ..base import XmippProtocol
 
-N_MAX_NEG_SETS= 5
+N_MAX_NEG_SETS = 5
 
 class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
     """ Protocol for screening particles using deep learning. """

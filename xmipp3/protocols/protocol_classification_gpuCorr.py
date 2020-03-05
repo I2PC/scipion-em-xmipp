@@ -29,14 +29,16 @@ from os.path import join, exists
 from os import mkdir, remove, listdir
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.em.protocol import ProtAlign2D
-import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
-from pyworkflow.em.metadata.utils import iterRows, getSize
 import pyworkflow.protocol.constants as const
-from pyworkflow.em import SetOfClasses2D, ALIGN_2D, ALIGN_NONE
 
-from xmippLib import MD_APPEND
+from pwem.protocols import ProtAlign2D
+import pwem.emlib.metadata as md
+from pwem.emlib.metadata import iterRows, getSize
+from pwem.objects import SetOfClasses2D
+from pwem.constants import ALIGN_2D, ALIGN_NONE
+
+from pwem.emlib import MD_APPEND
 from xmipp3.convert import (rowToAlignment, xmippToLocation,
                             writeSetOfParticles, writeSetOfClasses2D)
 
@@ -538,8 +540,6 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
 
         return change, listNumImgs, listNameImgs
 
-
-
     def checkAttraction(self, level, flag_split):
 
         if flag_split:
@@ -630,14 +630,14 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
         listNewNumImages = [-1] * len(listNumImgs)
         count = 1
         for i in range(len(listNumImgs)):
-            if listNumImgs[i] is not -1:
+            if listNumImgs[i] != -1:
                 listNewNumImages[i] = count
                 count += 1
 
         # Construct the new classes with the renumerated old classes
         mdNewClasses = md.MetaData()
         for i in range(len(listNumImgs)):
-            if listNumImgs[i] is not -1:
+            if listNumImgs[i] != -1:
                 name = listNameImgs[i]
                 fn = name[name.find('@') + 1:-4] + '.xmd'
                 numRef = int(name[0:6])
@@ -664,7 +664,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
         # Generate the intermediate images and the blocks of the intermediate
         # classes for the unchanged classes
         for i in range(len(listNumImgs)):
-            if listNumImgs[i] is not -1:
+            if listNumImgs[i] != -1:
                 name = listNameImgs[i]
                 fn = name[name.find('@') + 1:-4] + '.xmd'
                 numRef = int(name[0:6])
@@ -693,8 +693,6 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                                 level,'intermediate_classes.xmd')),
                                 MD_APPEND)
             count = count + 1
-
-
 
     def cleaningPath(self, level):
         if exists(self._getExtraPath(join('level%03d' % level,'refSet.xmd'))):

@@ -27,19 +27,17 @@
 
 import os
 
-import pyworkflow.em.metadata as md
 import pyworkflow.utils as pwutils
-from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
-                                           STATUS_FINISHED, STATUS_NEW)
+from pyworkflow.protocol.constants import (STEPS_PARALLEL, STATUS_NEW)
 import pyworkflow.protocol.params as params
-from pyworkflow.em.protocol import ProtExtractParticles
+from pwem.protocols import ProtExtractParticles
 from pyworkflow.object import Set, Pointer
 
 from xmipp3 import Plugin
 from xmipp3.base import XmippProtocol, createMetaDataFromPattern
-from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
-                            xmippToLocation, setXmippAttributes, readSetOfCoordinates)
+from xmipp3.convert import (writeMicCoordinates, readSetOfCoordinates)
 from xmipp3.constants import SAME_AS_PICKING, OTHER
+from xmipp3.utils import validateDLtoolkit
 
 
 class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
@@ -47,7 +45,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     _label = 'deep micrograph cleaner'
     _conda_env= "micrograph_cleaner_em" #CONDA_DEFAULT_ENVIRON
 
-    
+
     def __init__(self, **kwargs):
         ProtExtractParticles.__init__(self, **kwargs)
         self.stepsExecutionMode = STEPS_PARALLEL
@@ -358,16 +356,16 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
       return nPickMics
 
     def _validate(self):
-        errors=[]
-        errors = self.validateDLtoolkit(assertModel=True,
+        errors = validateDLtoolkit(assertModel=True,
                                    model=('deepMicrographCleaner', 'defaultModel.keras'))
 
         batchSize = self.streamingBatchSize.get()
         if batchSize == 1:
             errors.append('Batch size must be 0 (all at once) or larger than 1.')
-        elif not self.isInStreaming() and batchSize> len(self.inputCoordinates.get().getMicrographs()):
-          errors.append('Batch size (%d) must be <= that the number of micrographs (%d) in static mode. Set it to 0 to use only one batch'%(
-                                                              batchSize, self._getNumPickedMics() ) )
+        elif not self.isInStreaming() and batchSize > len(self.inputCoordinates.get().getMicrographs()):
+            errors.append('Batch size (%d) must be <= that the number of micrographs '
+                          '(%d) in static mode. Set it to 0 to use only one batch'
+                          %(batchSize, self._getNumPickedMics()))
 
         return errors
 

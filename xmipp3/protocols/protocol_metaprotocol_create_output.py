@@ -28,8 +28,8 @@ from shutil import copy
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import MultiPointerParam, PointerParam
-from pyworkflow.em.protocol import EMProtocol
-from pyworkflow.em.data import Volume, Class3D
+from pwem.protocols import EMProtocol
+from pwem.objects import Volume, Class3D
 
 
 class XmippMetaProtCreateOutput(EMProtocol):

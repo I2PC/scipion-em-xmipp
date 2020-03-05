@@ -21,12 +21,14 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # ***************************************************************************/
 
-import os
-from itertools import izip
+try:
+    from itertools import izip
+except ImportError:
+    izip = zip
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
-from pyworkflow.em import ImageHandler
-from pyworkflow.em.protocol import ProtImportMovies
+from pwem.emlib.image import ImageHandler
+from pwem.protocols import ProtImportMovies
 
 from xmipp3.protocols import (XmippProtMovieCorr, XmippProtOFAlignment,
                               XmippProtMovieAverage)
@@ -79,7 +81,7 @@ class TestMixedMovies(BaseTest):
         return protMovieImport
 
     def _compareMovies(self, micSet1, micSet2, tolerance=20):
-        print "Comparing micrographs (binary images) from results. "
+        print("Comparing micrographs (binary images) from results. ")
 
         ih = ImageHandler()
         img1 = ih.createImage()

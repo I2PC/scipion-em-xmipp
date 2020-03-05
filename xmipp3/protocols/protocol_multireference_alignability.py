@@ -24,20 +24,21 @@
 # *
 # **************************************************************************
 
-from os.path import join, isfile
+from os.path import join
 from shutil import copyfile
 
-from pyworkflow.object import Float, String
-from pyworkflow.protocol.params import (PointerParam, FloatParam, STEPS_PARALLEL,
-                                        StringParam, BooleanParam, IntParam, LEVEL_ADVANCED)
-from pyworkflow.em.data import Volume
-from pyworkflow.em import Viewer
-import pyworkflow.em.metadata as md
-from pyworkflow.em.protocol import ProtAnalysis3D
-from pyworkflow.utils.path import moveFile, makePath
+from pyworkflow.object import Float
+from pyworkflow.protocol.params import (PointerParam, FloatParam, StringParam,
+                                        BooleanParam, IntParam, LEVEL_ADVANCED)
+from pyworkflow.utils.path import moveFile, makePath, cleanPattern
 from pyworkflow.gui.plotter import Plotter
 
-from xmipp3.convert import writeSetOfParticles, writeSetOfVolumes, getImageLocation
+from pwem.objects import Volume
+import pwem.emlib.metadata as md
+from pwem.protocols import ProtAnalysis3D
+
+
+from xmipp3.convert import writeSetOfParticles, getImageLocation
 
 
 class XmippProtMultiRefAlignability(ProtAnalysis3D):
@@ -201,7 +202,7 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
         
         self.runJob('xmipp_image_resize',params)
         
-        from pyworkflow.em.convert import ImageHandler
+        from pwem.emlib.image import ImageHandler
         img = ImageHandler()
         img.convert(self.inputVolumes.get(), self._getExtraPath("volume.vol"))
         Xdim = self.inputVolumes.get().getDim()[0]
@@ -261,7 +262,7 @@ _noisePixelLevel   '0 0'""" % (newXdim , newXdim, pathParticles, self.inputParti
         param += ' --method fourier'
                 
         #while (~isfile(self._getExtraPath('params'))):
-        #    print 'No created'
+        #    print('No created')
         
         self.runJob('xmipp_phantom_project', 
                     param, numberOfMpi=1,numberOfThreads=1)
@@ -398,7 +399,13 @@ _noisePixelLevel   '0 0'""" % (newXdim , newXdim, pathParticles, self.inputParti
        
         outputVols.setSamplingRate(volume.getSamplingRate())
         self._defineOutputs(outputVolumes=outputVols)
-    
+
+        cleanPattern(self._getPath("reference_particles.*"))
+        cleanPattern(self._getExtraPath("scaled_particles.*"))
+        cleanPattern(self._getExtraPath("reference_particles.*"))
+        cleanPattern(self._getExtraPath("corrected_ctf_particles.*"))
+        cleanPattern(self._getExtraPath("volume.vol"))
+        cleanPattern(self._getExtraPath("params.txt"))
         
     #--------------------------- INFO functions -------------------------------------------- 
     def _validate(self):
@@ -493,7 +500,7 @@ _noisePixelLevel   '0 0'""" % (newXdim , newXdim, pathParticles, self.inputParti
         
     def createPlot2D(self,volPrefix,md):
         
-        import xmippLib
+        from pwem import emlib
         
         figurePath = self._getExtraPath(volPrefix + 'softAlignmentValidation2D.png')
         figureSize = (8, 6)
@@ -509,8 +516,8 @@ _noisePixelLevel   '0 0'""" % (newXdim , newXdim, pathParticles, self.inputParti
         ax.set_ylabel('Angular Accuracy')
 
         for objId in md:
-            x = md.getValue(xmippLib.MDL_SCORE_BY_ALIGNABILITY_PRECISION, objId)
-            y = md.getValue(xmippLib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY, objId)
+            x = md.getValue(emlib.MDL_SCORE_BY_ALIGNABILITY_PRECISION, objId)
+            y = md.getValue(emlib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY, objId)
             ax.plot(x, y, 'r.',markersize=1)
 
         ax.grid(True, which='both')

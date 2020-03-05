@@ -3,8 +3,8 @@
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 from xmipp3.protocols import XmippProtDeepDenoising
 from xmipp3.protocols import XmippProtGenerateReprojections
-from pyworkflow.em.protocol import ProtImportVolumes, ProtImportParticles
-from pyworkflow.em import exists
+from pwem.protocols import ProtImportVolumes, ProtImportParticles, exists
+
 
 class TestDeepDenoisingBase(BaseTest):
     @classmethod
@@ -38,8 +38,8 @@ class TestDeepDenoisingBase(BaseTest):
                                       inputParticles=cls.projections.outputParticles,
                                       imageSize=32)
         cls.launchProtocol(cls.train)
-        cls.assertTrue(exists(cls.train._getExtraPath(
-            'particlesDenoised.xmd')),"Denoising particles has failed")
+        cls.assertTrue(exists(cls.train._getExtraPath('particlesDenoised.xmd')),
+                       "Denoising particles has failed")
 
 class TestDeepDenoising(TestDeepDenoisingBase):
     @classmethod

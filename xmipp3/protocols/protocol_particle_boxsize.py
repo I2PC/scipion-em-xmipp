@@ -23,15 +23,19 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+
 import random
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.protocol.params import PointerParam, IntParam, LEVEL_ADVANCED
-from pyworkflow.em import ProtMicrographs
 from pyworkflow.object import Integer
+from pyworkflow.protocol.params import PointerParam, IntParam, LEVEL_ADVANCED
+
+from pwem.protocols import ProtMicrographs
+
 
 from xmipp3.convert import writeSetOfMicrographs
 import xmipp3
+
 
 class XmippProtParticleBoxsize(ProtMicrographs, xmipp3.XmippProtocol):
     """ Given a set of micrographs, the protocol estimate the particle box size.
@@ -127,4 +131,4 @@ class XmippProtParticleBoxsize(ProtMicrographs, xmipp3.XmippProtocol):
 
     def _validate(self):
         return self.validateDLtoolkit(model=[('boxsize', 'weights.hdf5'),
-                                        ('boxsize', 'feature_scaler.pkl')])
+                                             ('boxsize', 'feature_scaler.pkl')])

@@ -26,11 +26,16 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em import *  
+from pwem import emlib
+from pwem.emlib.image import ImageHandler
 
-import xmippLib
+from pyworkflow.protocol.params import PointerParam, StringParam, PathParam
+
+from pwem.objects import VolumeMask
+from pwem.protocols import ProtCreateMask3D
+
+
 from xmipp3.convert import getImageLocation
-from xmipp3.constants import *
 from .geometrical_mask import *
 
 
@@ -111,7 +116,7 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
                                             % SOURCE_FEATURE_FILE)
         # Feature File
         isFeatureFile = 'source==%d' % SOURCE_FEATURE_FILE
-        form.addParam('featureFilePath', params.PathParam,
+        form.addParam('featureFilePath', PathParam,
                       condition=isFeatureFile,
                       label="Feature File",
                       help="""Create a mask using a feature file. Follows an example of feature file 
@@ -228,7 +233,7 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
     def createMaskFromGeometryStep(self):
         # Create empty volume file with desired dimensions
         size = self.size.get()
-        xmippLib.createEmptyFile(self.maskFile, size, size, size)
+        emlib.createEmptyFile(self.maskFile, size, size, size)
         
         # Create the mask
         args = '-i %s ' % self.maskFile
