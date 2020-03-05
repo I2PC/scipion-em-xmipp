@@ -153,12 +153,15 @@ class Plugin(pwem.Plugin):
         verToken = cls.getHome('v%s' % _currentVersion)
 
         # TODO: Check that getHome returns an absolute path
-        bindingsAndLibsCmd = ("ln -s %s %s ; ln -s %s %s"
-                             % (cls.getHome('bindings', 'python'),
-                                Config.SCIPION_BINDINGS,
-                                cls.getHome('lib'),
-                                Config.SCIPION_LIBS))
-        bindingsAndLibsTgt = ([os.path.join(Config.SCIPION_BINDINGS, 'xmippLib.so'),
+        bindingsAndLibsCmd = ("ln -fs %s %s ; ln -fs %s %s ; ln -fs %s %s"
+                              % (cls.getHome('bindings', 'python', '*'),
+                                 Config.SCIPION_BINDINGS,
+                                 cls.getHome('lib', 'libXmipp.so'),
+                                 Config.SCIPION_LIBS,
+                                 cls.getHome('lib', 'libXmippCore.so'),
+                                 Config.SCIPION_LIBS))
+        bindingsAndLibsTgt = ([os.path.join(Config.SCIPION_BINDINGS, 'xmipp_base.py'),
+                               os.path.join(Config.SCIPION_BINDINGS, 'xmippLib.so'),
                                os.path.join(Config.SCIPION_LIBS, 'libXmipp.so')])
 
         pluginDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
