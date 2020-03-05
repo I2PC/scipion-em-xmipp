@@ -24,29 +24,26 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-import json
 
+import json
+from shutil import copyfile
 import sys, os
 import numpy as np
 import re
-from pyworkflow import VERSION_2_0
-from xmipp3.protocols import XmippProtCompareReprojections
 
-from .protocol_generate_reprojections import XmippProtGenerateReprojections
+from pyworkflow import VERSION_2_0
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 from pyworkflow.utils.path import cleanPath
 
 import pwem.emlib.metadata as md
-
-from .protocol_generate_reprojections import XmippProtGenerateReprojections
-
-
 from pwem import emlib
-from xmipp3.convert import writeSetOfParticles, setXmippAttributes, xmippToLocation
-from xmipp3.utils import getMdSize, validateDLtoolkit
+
 import xmipp3
-from shutil import copyfile
+from xmipp3.convert import writeSetOfParticles, setXmippAttributes, xmippToLocation
+from xmipp3.protocols import XmippProtCompareReprojections
+from xmipp3.protocols import XmippProtGenerateReprojections
+
 
 EXEC_MODES = ['Train & Predict', 'Predict']
 ITER_TRAIN = 0

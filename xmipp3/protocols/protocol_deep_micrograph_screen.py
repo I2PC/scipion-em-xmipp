@@ -37,7 +37,6 @@ from xmipp3 import Plugin
 from xmipp3.base import XmippProtocol, createMetaDataFromPattern
 from xmipp3.convert import (writeMicCoordinates, readSetOfCoordinates)
 from xmipp3.constants import SAME_AS_PICKING, OTHER
-from xmipp3.utils import validateDLtoolkit
 
 
 class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
@@ -356,8 +355,8 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
       return nPickMics
 
     def _validate(self):
-        errors = validateDLtoolkit(assertModel=True,
-                                   model=('deepMicrographCleaner', 'defaultModel.keras'))
+        errors = self.validateDLtoolkit(assertModel=True,
+                                        model=('deepMicrographCleaner', 'defaultModel.keras'))
 
         batchSize = self.streamingBatchSize.get()
         if batchSize == 1:
