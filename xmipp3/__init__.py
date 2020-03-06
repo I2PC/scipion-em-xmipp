@@ -46,6 +46,7 @@ class Plugin(pwem.Plugin):
     _homeVar = XMIPP_HOME
     _pathVars = [XMIPP_HOME]
     _supportedVersions = []
+    _url = XMIPP_URL
 
     @classmethod
     def _defineVariables(cls):
@@ -196,6 +197,15 @@ class Plugin(pwem.Plugin):
                        'software/lib/python2.7/site-packages/sh_alignment/frm.py')],
             default=False)
 
+    @classmethod
+    def getUrl(cls, prot=None):
+        """ Returns the url for xmipp plugin. It analyzes the traceback, and if the call comes from
+         a protocol it returns the xmipp protocol url instead"""
+        if prot is None:
+            return XMIPP_URL
+        else:
+            # '#' is replaced by %23, otherwise is does not work.
+            return "https://twitter.com/search?q=@scipion-em%%20%%23%s" % prot.__class__.__name__
 
 def tryAddPipModule(env, moduleName, *args, **kwargs):
     """ To try to add certain pipModule.
@@ -327,5 +337,4 @@ def installDeepLearningToolkit(plugin, env):
                                                    target),
                               target)],
                    deps=deepLearningTools, tar='deepLearningToolkit.tgz')
-
 
