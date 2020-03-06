@@ -28,7 +28,7 @@ This modules contains constants related to Xmipp3 protocols
 """
 
 # ------------------ Constants values --------------------------------------
-
+XMIPP_URL = 'https://github.com/i2pc/scipion-em-xmipp'
 XMIPP_HOME = 'XMIPP_HOME'
 NMA_HOME = 'NMA_HOME'
 
