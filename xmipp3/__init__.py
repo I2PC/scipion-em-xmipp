@@ -51,7 +51,7 @@ class Plugin(pwem.Plugin):
     @classmethod
     def _defineVariables(cls):
         cls._addVar(XMIPP_HOME, pwem.Config.XMIPP_HOME)
-        cls._defineEmVar(CONDA_DEFAULT_ENVIRON, "conda_default_env")
+        # cls._defineEmVar(CONDA_DEFAULT_ENVIRON, "conda_default_env")
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
@@ -107,24 +107,6 @@ class Plugin(pwem.Plugin):
                 pwutils.Environ.BEGIN)
 
         return env
-
-    @classmethod
-    def getModel(self, *modelPath, **kwargs):
-        """ Returns the path to the models folder followed by
-            the given relative path.
-        .../xmipp/models/myModel/myFile.h5 <= getModel('myModel', 'myFile.h5')
-
-            NOTE: it raise and exception when model not found, set doRaise=False
-                  in the arguments to skip that raise, especially in validation
-                  asserions!
-        """
-        model = getXmippPath('models', *modelPath)
-
-        # Raising an error to prevent posterior errors and to print a hint
-        if kwargs.get('doRaise', True) and not os.path.exists(model):
-            raise Exception("'%s' model not found. Please, run: \n"
-                            " > scipion installb deepLearningToolkit" % modelPath[0])
-        return model
 
     @classmethod
     def defineBinaries(cls, env):
@@ -227,7 +209,7 @@ class Plugin(pwem.Plugin):
                        deps=xmippDeps, default=False)
 
         ## EXTRA PACKAGES ##
-        # installDeepLearningToolkit(cls, env)
+        installDeepLearningToolkit(cls, env)
 
 
 # def tryAddPipModule(env, moduleName, *args, **kwargs):
@@ -369,7 +351,7 @@ def installDeepLearningToolkit(plugin, env):
     try:
       nvidiaDriversVersion = subprocess.Popen(["nvidia-smi", '--query-gpu=driver_version', "--format=csv,noheader"],
                                      env=plugin.getEnviron(),
-                                     stdout=subprocess.PIPE).stdout.read().split(".")[0]
+                                     stdout=subprocess.PIPE).stdout.read().decode('utf-8').split(".")[0]
       if int(nvidiaDriversVersion)< 390:
         cudaMsgs.append("Your NVIDIA drivers are too old (<390). Tensorflow was installed without GPU "
                             "support. Just CPU computations enabled (slow computations)")

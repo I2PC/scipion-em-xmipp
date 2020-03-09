@@ -218,11 +218,11 @@ class XmippProtDeepRes(ProtAnalysis3D):
 
         if self.range == self.LOW_RESOL:
 #             sampling_new = 1.0
-            MODEL_DEEP_1=xmipp3.Plugin.getModel("deepRes", "model_w13.h5")
+            MODEL_DEEP_1=self.getModel("deepRes", "model_w13.h5")
             params  = ' -dl %s' % MODEL_DEEP_1
         else:
 #             sampling_new = 0.5
-            MODEL_DEEP_2=xmipp3.Plugin.getModel("deepRes", "model_w7.h5")
+            MODEL_DEEP_2=self.getModel("deepRes", "model_w7.h5")
             params  = ' -dl %s' % MODEL_DEEP_2               
         params += ' -i  %s' % self._getFileName(RESIZE_VOL)
         params += ' -m  %s' % self._getFileName(RESIZE_MASK)

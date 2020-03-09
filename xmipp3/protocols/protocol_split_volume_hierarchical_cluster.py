@@ -490,6 +490,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
             self.runJob('xmipp_reconstruct_fourier_accel', args)
 
     def splitVolumeStep(self):
+        # TODO: This should be in a dedicated job: self.runJob(myScript.py, args)
         mdDirectional = md.MetaData(self._getDirectionalClassesFn())
         ref2vals = mdDirectional.getColumnValues(emlib.MDL_REF2)
         ref2Max = max(ref2vals)

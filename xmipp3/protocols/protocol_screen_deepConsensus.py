@@ -449,7 +449,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         #We always work with inverted contrast particles
         modelType = "negativeTrain_%sPhaseFlip_Invert.mrcs" % (
                     prefixNO if self.ignoreCTF.get() else prefixYES) # mics will be always internally inverted if not done before
-        modelPath = xmipp3.Plugin.getModel("deepConsensus", modelType)
+        modelPath = self.getModel("deepConsensus", modelType)
         modelFn = self._getTmpPath(modelType)
         pwutils.createLink(modelPath, modelFn)
 
@@ -785,7 +785,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           effectiveSize=int(5e4)
         modelTypeDir= "keras_models/%sPhaseFlip_Invert/nnetData_%d/tfchkpoints_0" % (
                             "no" if self.ignoreCTF.get() else "", effectiveSize)
-        modelTypeDir= xmipp3.Plugin.getModel("deepConsensus", modelTypeDir)
+        modelTypeDir= self.getModel("deepConsensus", modelTypeDir)
         
         for i in range(self.nModels.get()):
           targetPath= os.path.join(netDataPath, "tfchkpoints_%d"%(i))

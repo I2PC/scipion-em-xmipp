@@ -325,14 +325,14 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
           if self.customModelOverPretrain == True:
               modelFname = self.ownModel.get()._getPath('ModelTrained.h5')
           else:
-              modelFname = xmipp3.Plugin.getModel('deepDenoising', 'ModelTrained.h5')
+              modelFname = self.getModel('deepDenoising', 'ModelTrained.h5')
         else:
           modelFname = self._getPath('ModelTrained.h5')
           if self.continueTraining.get():
             if self.customModelOverPretrain == True:
               modelFnameInit = self.ownModel.get()._getPath('ModelTrained.h5')
             else:
-              modelFnameInit = xmipp3.Plugin.getModel('deepDenoising', 'ModelTrained.h5')
+              modelFnameInit = self.getModel('deepDenoising', 'ModelTrained.h5')
 
             copyfile(modelFnameInit, modelFname)
         return modelFname

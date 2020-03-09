@@ -34,6 +34,7 @@ from collections import OrderedDict
 from pyworkflow.object import ObjectWrap
 from pwem import emlib
 import pwem
+from xmipp3.constants import CONDA_DEFAULT_ENVIRON
 
 try:  # TODO: Avoid these imports by importing them in the protocols/viewers
     from xmipp_base import *  # xmipp_base and xmippViz come from the binding and
@@ -74,10 +75,10 @@ def prepareRunConda(program, arguments, condaEnvName, **kwargs):
     :param kwargs:
     :return: (program, arguments, kwargs). Updated values
     '''
-
     if "env" not in kwargs:
         kwargs['env'] = xmipp3.Plugin.getEnviron()
-    kwargs['env'] = xmipp3.CondaEnvManager.modifyEnvToUseConda(kwargs['env'], condaEnvName)
+    kwargs['env'] = xmipp3.CondaEnvManager.modifyEnvToUseConda(kwargs['env'],
+                                                               condaEnvName)
 
     usePython = False
     programName = os.path.join(getXmippPath('bin'), program)
@@ -92,7 +93,8 @@ def prepareRunConda(program, arguments, condaEnvName, **kwargs):
     else:
         return (program, arguments, kwargs)
 
-class XmippProtocol():
+
+class XmippProtocol:
     """ This class groups some common functionalities that
     share some Xmipp protocols, like converting steps.
     """
@@ -128,6 +130,24 @@ class XmippProtocol():
         it is the same as input, when not conversion was done.
         """
         return getattr(self, inputName + 'Xmipp', getattr(self, inputName))
+
+    @classmethod
+    def getModel(cls, *modelPath, **kwargs):
+        """ Returns the path to the models folder followed by
+            the given relative path.
+        .../xmipp/models/myModel/myFile.h5 <= getModel('myModel', 'myFile.h5')
+
+            NOTE: it raise and exception when model not found, set doRaise=False
+                  in the arguments to skip that raise, especially in validation
+                  asserions!
+        """
+        model = getXmippPath('models', *modelPath)
+
+        # Raising an error to prevent posterior errors and to print a hint
+        if kwargs.get('doRaise', True) and not os.path.exists(model):
+            raise Exception("'%s' model not found. Please, run: \n"
+                            " > scipion installb deepLearningToolkit" % modelPath[0])
+        return model
 
     def validateDLtoolkit(self, errors=None, **kwargs):
         """ Validates if the deepLearningToolkit is installed.
@@ -178,10 +198,10 @@ class XmippProtocol():
             models = models if isinstance(models, list) else [models]
             for model in models:
                 if isinstance(model, str):
-                    if not os.path.exists(xmipp3.Plugin.getModel(model, doRaise=False)):
+                    if not os.path.exists(self.getModel(model, doRaise=False)):
                         modelError = True
                 elif isinstance(model, tuple):
-                    if not os.path.exists(xmipp3.Plugin.getModel(*model, doRaise=False)):
+                    if not os.path.exists(self.getModel(*model, doRaise=False)):
                         modelError = True
             if modelError:
                 errors.append("*Pre-trained model not found*. %s"
@@ -204,16 +224,21 @@ class XmippProtocol():
         :param kwargs: options
         :return:
         '''
-        if (hasattr(self, "_conda_env") ):
-            condaEnvName= self._conda_env
+        if "_conda_env" in kwargs:
+            condaEnvName = kwargs.pop("_conda_env")
+        elif (hasattr(self, "_conda_env") ):
+            condaEnvName = self._conda_env
         else:
-            condaEnvName= CONDA_DEFAULT_ENVIRON
-            # raise Exception("Error, protocols using runCondaJob must define the variable _conda_env")
-        program, arguments, kwargs= prepareRunConda(program, arguments, condaEnvName, **kwargs)
-        super( type(self), self).runJob(program, arguments, **kwargs)
+            condaEnvName = CONDA_DEFAULT_ENVIRON
+            print("Warning: using default conda environment '%s'. "
+                  "CondaJobs should be run under a specific environment to "
+                  "avoid problems. Please, fix it or contact to the developer."
+                  % CONDA_DEFAULT_ENVIRON)
+        program, arguments, kwargs = prepareRunConda(program, arguments, condaEnvName, **kwargs)
+        super(type(self), self).runJob(program, arguments, **kwargs)
 
 
-class XmippMdRow():
+class XmippMdRow:
     """ Support Xmipp class to store label and value pairs 
     corresponding to a Metadata row. 
     """
@@ -367,7 +392,7 @@ def findRowById(md, value):
     return findRow(md, emlib.MDL_ITEM_ID, int(value))
   
   
-class XmippSet():
+class XmippSet:
     """ Support class to store sets in Xmipp base on a MetaData. """
     def __init__(self, itemClass):
         """ Create new set, base on a Metadata.
@@ -587,87 +612,87 @@ class HelicalFinder:
 
 
 
-# TODO: migrate this to xmipp repo (xmipp_base.py)
-class XmippScript():
-    ''' This class will serve as wrapper around the XmippProgram class
-    to have same facilities from Python scripts'''
-
-    def __init__(self, runWithoutArgs=False):
-        self._prog = xmippLib.Program(runWithoutArgs)
-
-    def defineParams(self):
-        ''' This function should be overwrited by subclasses for
-        define its own parameters'''
-        pass
-
-    def readParams(self):
-        ''' This function should be overwrited by subclasses for
-        and take desired params from command line'''
-        pass
-
-    def checkParam(self, param):
-        return self._prog.checkParam(param)
-
-    def getParam(self, param, index=0):
-        return self._prog.getParam(param, index)
-
-    def getIntParam(self, param, index=0):
-        return int(self._prog.getParam(param, index))
-
-    def getDoubleParam(self, param, index=0):
-        return float(self._prog.getParam(param, index))
-
-    def getListParam(self, param):
-        return self._prog.getListParam(param)
-
-    def addUsageLine(self, line, verbatim=False):
-        self._prog.addUsageLine(line, verbatim)
-
-    def addExampleLine(self, line, verbatim=True):
-        self._prog.addExampleLine(line, verbatim)
-
-    def addParamsLine(self, line):
-        self._prog.addParamsLine(line)
-
-    def run(self):
-        ''' This function should be overwrited by subclasses and
-        it the main body of the script'''
-        pass
-
-    def tryRun(self):
-        ''' This function should be overwrited by subclasses and
-        it the main body of the script'''
-        try:
-            print("WARNING: This is xmipp3.base implementation for script")
-            self.defineParams()
-            doRun = self._prog.read(sys.argv)
-            if doRun:
-                self.readParams()
-                self.run()
-        except Exception:
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-            raise
-
-    @classmethod
-    def runCondaCmd(cls, program, arguments, **kwargs):
-        '''
-        This class method is used to run programs that are independent of xmipp but employ conda. The class should
-        possess a _conda_env attribute to be used. Otherwise  CONDA_DEFAULT_ENVIRON is used. To use xmipp dependent
-        programs, runCondaJob within a XmippProtocol is preferred.
-        :param program:str. A program/pythonScript to execute (included in environment bin or full path)
-        :param arguments: str. The arguments for the program
-        :param kwargs: options
-        :return:
-        '''
-        if (hasattr(cls, "_conda_env")):
-            condaEnvName = cls._conda_env
-        else:
-            condaEnvName = CONDA_DEFAULT_ENVIRON
-            # raise Exception("Error, protocols using runCondaJob must define the variable _conda_env")
-        program, arguments, kwargs = prepareRunConda(program, arguments, condaEnvName, **kwargs)
-        print(program + " " + arguments)
-        try:
-            subprocess.check_call(program + " " + arguments, shell=True, **kwargs)
-        except subprocess.CalledProcessError as e:
-            subprocess.check_call(program + " " + arguments, shell=True, **kwargs)
+# # TODO: migrate this to xmipp repo (xmipp_base.py)
+# class XmippScript:
+#     ''' This class will serve as wrapper around the XmippProgram class
+#     to have same facilities from Python scripts'''
+#
+#     def __init__(self, runWithoutArgs=False):
+#         self._prog = xmippLib.Program(runWithoutArgs)
+#
+#     def defineParams(self):
+#         ''' This function should be overwrited by subclasses for
+#         define its own parameters'''
+#         pass
+#
+#     def readParams(self):
+#         ''' This function should be overwrited by subclasses for
+#         and take desired params from command line'''
+#         pass
+#
+#     def checkParam(self, param):
+#         return self._prog.checkParam(param)
+#
+#     def getParam(self, param, index=0):
+#         return self._prog.getParam(param, index)
+#
+#     def getIntParam(self, param, index=0):
+#         return int(self._prog.getParam(param, index))
+#
+#     def getDoubleParam(self, param, index=0):
+#         return float(self._prog.getParam(param, index))
+#
+#     def getListParam(self, param):
+#         return self._prog.getListParam(param)
+#
+#     def addUsageLine(self, line, verbatim=False):
+#         self._prog.addUsageLine(line, verbatim)
+#
+#     def addExampleLine(self, line, verbatim=True):
+#         self._prog.addExampleLine(line, verbatim)
+#
+#     def addParamsLine(self, line):
+#         self._prog.addParamsLine(line)
+#
+#     def run(self):
+#         ''' This function should be overwrited by subclasses and
+#         it the main body of the script'''
+#         pass
+#
+#     def tryRun(self):
+#         ''' This function should be overwrited by subclasses and
+#         it the main body of the script'''
+#         try:
+#             print("WARNING: This is xmipp3.base implementation for script")
+#             self.defineParams()
+#             doRun = self._prog.read(sys.argv)
+#             if doRun:
+#                 self.readParams()
+#                 self.run()
+#         except Exception:
+#             import traceback
+#             traceback.print_exc(file=sys.stderr)
+#             raise
+#
+#     @classmethod
+#     def runCondaCmd(cls, program, arguments, **kwargs):
+#         '''
+#         This class method is used to run programs that are independent of xmipp but employ conda. The class should
+#         possess a _conda_env attribute to be used. Otherwise  CONDA_DEFAULT_ENVIRON is used. To use xmipp dependent
+#         programs, runCondaJob within a XmippProtocol is preferred.
+#         :param program:str. A program/pythonScript to execute (included in environment bin or full path)
+#         :param arguments: str. The arguments for the program
+#         :param kwargs: options
+#         :return:
+#         '''
+#         if (hasattr(cls, "_conda_env")):
+#             condaEnvName = cls._conda_env
+#         else:
+#             condaEnvName = CONDA_DEFAULT_ENVIRON
+#             # raise Exception("Error, protocols using runCondaJob must define the variable _conda_env")
+#         program, arguments, kwargs = prepareRunConda(program, arguments, condaEnvName, **kwargs)
+#         print(program + " " + arguments)
+#         try:
+#             subprocess.check_call(program + " " + arguments, shell=True, **kwargs)
+#         except subprocess.CalledProcessError as e:
+#             subprocess.check_call(program + " " + arguments, shell=True, **kwargs)

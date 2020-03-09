@@ -33,7 +33,6 @@ import pyworkflow.protocol.params as params
 from pwem.protocols import ProtExtractParticles
 from pyworkflow.object import Set, Pointer
 
-from xmipp3 import Plugin
 from xmipp3.base import XmippProtocol, createMetaDataFromPattern
 from xmipp3.convert import (writeMicCoordinates, readSetOfCoordinates)
 from xmipp3.constants import SAME_AS_PICKING, OTHER
@@ -200,7 +199,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
           args += ' -o %s' % self._getExtraPath('outputCoords')
           args += ' -b %d' % self.getBoxSize()
           args += ' -s 1' #Downsampling is automatically managed by scipion
-          args += ' -d %s' % Plugin.getModel('deepMicrographCleaner', 'defaultModel.keras')
+          args += ' -d %s' % self.getModel('deepMicrographCleaner', 'defaultModel.keras')
 
           if self.threshold.get() > 0:
               args += ' --deepThr %f ' % (1-self.threshold.get())

@@ -76,26 +76,26 @@ class XmippProtParticleBoxsize(ProtMicrographs, xmipp3.XmippProtocol):
     def boxsizeStep(self):
         particleBoxSizeFn = self._getExtraPath('particle_boxsize.xmd')
         imgSize = 300  # This should match the img_size used for training weights? Add as metada?
-        weights = xmipp3.Plugin.getModel('boxsize', 'weights.hdf5')
-        featureScaler = xmipp3.Plugin.getModel('boxsize', 'feature_scaler.pkl')
+        weights = self.getModel('boxsize', 'weights.hdf5')
+        featureScaler = self.getModel('boxsize', 'feature_scaler.pkl')
 
         params  = ' --img_size %d' % imgSize
         params += ' --weights %s' % weights
         params += ' --feature_scaler %s' % featureScaler
         params += ' --output %s' % particleBoxSizeFn
 
-        fileNames = [mic.getFileName() + '\n' for mic in self.inputMicrographs.get()]
+        fileNames = [mic.getFileName().encode() + b'\n' for mic in self.inputMicrographs.get()]
 
         nMicsToAnalize= self.nMicsToAnalize.get()
-        if nMicsToAnalize!=-1:
+        if nMicsToAnalize != -1:
             random.shuffle(fileNames)
-            fileNames= fileNames[:min( len(fileNames), nMicsToAnalize )]
+            fileNames= fileNames[:min(len(fileNames), nMicsToAnalize)]
         # TODO: output name is hardcoded
         micNamesPath = self._getTmpPath('mic_names.csv')
         with open(micNamesPath, 'wb') as csvFile:
             csvFile.writelines(fileNames)
         params += ' --micrographs %s' % micNamesPath
-        self.runCondaJob('xmipp_particle_boxsize', params)
+        self.runCondaJob('xmipp_particle_boxsize', params, _conda_env='deepLearningToolkit_v0.3')
         
         with open(particleBoxSizeFn, 'r') as fp:
             self.particleBoxsize = int(fp.read().rstrip('\n'))
