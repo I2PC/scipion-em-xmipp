@@ -25,8 +25,6 @@
 # *
 # **************************************************************************
 
-
-
 from pyworkflow.em.protocol import ProtAnalysis3D
 import pyworkflow.protocol.params as params
 from pyworkflow.em.convert import ImageHandler
@@ -46,6 +44,8 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
                       pointerClass='Volume')
         form.addParam('refVolume', params.PointerParam, label="Reference volume",
                       pointerClass='Volume')
+        form.addParam('sigma', params.NumericListParam, label="Multiresolution",
+                      help="Perform the analysys comparing different filtered versions of the volumes")
         form.addParam('targetResolution', params.FloatParam, label="Target resolution",
                       default=8.0,
                       help="In Angstroms, the images and the volume are rescaled so that this resolution is at "
@@ -65,6 +65,8 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
         myDict = {
             'fnRefVol': self._getExtraPath('ref_volume.vol'),
             'fnInputVol': self._getExtraPath('input_volume.vol'),
+            'fnInputFilt': self._getExtraPath('input_volume_filt.vol'),
+            'fnRefFilt': self._getExtraPath('ref_volume_filt.vol'),
             'fnOutVol': self._getExtraPath('vol1DeformedTo2.vol')
                  }
         self._updateFilenamesDict(myDict)
@@ -104,6 +106,7 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
 
 
         ih.convert(self.refVolume.get(), fnRefVol)
+
         if XdimR != newXdimR:
             self.runJob("xmipp_image_resize",
                         "-i %s --dim %d" % (fnRefVol, newXdimR))
@@ -117,12 +120,17 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
         fnRefVol = self._getFileName('fnRefVol')
         fnOutVol = self._getFileName('fnOutVol')
 
-        params = ' --i1 %s --i2 %s --apply %s --least_squares --local --dontScale' % \
-                 (fnRefVol, fnInputVol, fnOutVol)
-        self.runJob("xmipp_volume_align", params)
+        self.alignSimulated()
 
-        params = ' -i %s -r %s -o %s --analyzeStrain --depth %d ' % \
-                 (fnOutVol, fnRefVol, fnOutVol, self.depth.get())
+        # Normalize the volumes to be passed to SPH program
+        params = " -i %s --method Robust --mask circular 50 -o %s" % (fnRefVol, fnRefVol)
+        self.runJob("xmipp_transform_normalize", params)
+
+        params = " -i %s --method Robust --mask circular 50 -o %s" % (fnOutVol, fnOutVol)
+        self.runJob("xmipp_transform_normalize", params)
+
+        params = ' -i %s -r %s -o %s --analyzeStrain --depth %d --sigma "%s"' % \
+                 (fnOutVol, fnRefVol, fnOutVol, self.depth.get(), self.sigma.get())
         if self.newRmax != 0:
             params = params + ' --Rmax %d' % self.newRmax
         self.runJob("xmipp_volume_deform_sph", params)
@@ -135,3 +143,27 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
         self._defineOutputs(outputVolume=vol)
         self._defineSourceRelation(self.inputVolume, vol)
 
+    def alignSimulated(self):
+        fnInputVol = self._getFileName('fnInputVol')
+        fnInputFilt = self._getFileName('fnInputFilt')
+        fnRefVol = self._getFileName('fnRefVol')
+        fnRefFilt = self._getFileName('fnRefFilt')
+        fnOutVol = self._getFileName('fnOutVol')
+
+        # Filter the volumes to improve alignment quality
+        params = " -i %s -o %s --fourier real_gaussian 2" %  (fnInputVol, fnInputFilt)
+        self.runJob("xmipp_transform_filter", params)
+        params = " -i %s -o %s --fourier real_gaussian 2" % (fnRefVol, fnRefFilt)
+        self.runJob("xmipp_transform_filter", params)
+
+        # Find transformation needed to align the volumes
+        params = ' --i1 %s --i2 %s --apply residual.vol --local --dontScale ' \
+                 '--copyGeo %s' % \
+                 (fnRefFilt, fnInputFilt, self._getExtraPath("geo.txt"))
+        self.runJob("xmipp_volume_align", params)
+
+        # Apply transformation of filtered volume to original volume
+        with open(self._getExtraPath("geo.txt"), 'r') as file:
+            geo_str = file.read().replace('\n', ',')
+        params = " -i %s -o %s --matrix %s --dont_wrap" % (fnInputVol, fnOutVol, geo_str)
+        self.runJob("xmipp_transform_geometry", params)

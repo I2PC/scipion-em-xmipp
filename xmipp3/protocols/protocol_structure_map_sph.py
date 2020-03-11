@@ -89,6 +89,8 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         form.addParam('computeDef', params.BooleanParam, label="Compute deformation",
                       default=True,
                       help="Performed and structure mapping with/without deforming the input volumes")
+        form.addParam('sigma', params.NumericListParam, label="Multiresolution", default="1 2",
+                      help="Perform the analysys comparing different filtered versions of the volumes")
         form.addParam('Rmax', params.IntParam, default=0,
                       label='Sphere radius',
                       experLevel=params.LEVEL_ADVANCED,
@@ -171,14 +173,14 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         fnOut = self._getExtraPath('vol%dAlignedTo%d.vol' % (i, j))
         fnOut2 = self._getExtraPath('vol%dDeformedTo%d.vol' % (i, j))
 
-        params = ' --i1 %s --i2 %s --apply %s --least_squares --local --dontScale' % \
+        params = ' --i1 %s --i2 %s --apply %s --local --dontScale' % \
                  (refVolFn, inputVolFn, fnOut)
 
         self.runJob("xmipp_volume_align", params)
 
         if self.computeDef.get():
-            params = ' -i %s -r %s -o %s --depth %d ' %\
-                     (fnOut, refVolFn, fnOut2, self.depth.get())
+            params = ' -i %s -r %s -o %s --depth %d --sigma "%s"' %\
+                     (fnOut, refVolFn, fnOut2, self.depth.get(), self.sigma.get())
             if self.newRmax != 0:
                 params = params + ' --Rmax %d' % self.newRmax
 
