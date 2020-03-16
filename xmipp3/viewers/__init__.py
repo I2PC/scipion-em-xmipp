@@ -28,7 +28,6 @@ from .viewer import XmippViewer
 from .plotter import XmippPlotter
 
 from .viewer_cl2d import XmippCL2DViewer
-from .viewer_cltomo import XmippCLTomoViewer
 from .viewer_ctf_consensus import XmippCTFConsensusViewer
 from .viewer_deep_consensus import XmippDeepConsensusViewer
 from .viewer_deep_micrograph_cleaner import XmippDeepMicrographViewer
