@@ -63,7 +63,7 @@ class XmippProtHelicalParameters(ProtPreprocessVolumes, HelicalFinder):
         form.addParam('rot0',params.FloatParam,default=0,label='Minimum rotational angle',help="In degrees")
         form.addParam('rotF',params.FloatParam,default=360,label='Maximum rotational angle',help="In degrees")
         form.addParam('rotStep',params.FloatParam,default=5,label='Angular step',help="In degrees")
-        form.addParam('z0',params.FloatParam,default=0,label='Minimum shift Z',help="In Angstroms")
+        form.addParam('z0',params.FloatParam,default=1,label='Minimum shift Z',help="In Angstroms")
         form.addParam('zF',params.FloatParam,default=10,label='Maximum shift Z',help="In Angstroms")
         form.addParam('zStep',params.FloatParam,default=0.5,label='Shift step',help="In Angstroms")
         self.deltaZ= params.Float()
@@ -132,6 +132,12 @@ class XmippProtHelicalParameters(ProtPreprocessVolumes, HelicalFinder):
     def _citations(self):
         papers=[]
         return papers
+
+    def _validate(self):
+        messages=[]
+        if float(self.z0.get())<=0:
+            messages.append("z0 should not be negative or zero")
+        return messages
 
     def _methods(self):
         messages = []      
