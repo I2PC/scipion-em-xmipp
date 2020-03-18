@@ -34,7 +34,7 @@ import pwem
 import pyworkflow.utils as pwutils
 
 from .base import *
-from .constants import XMIPP_HOME
+from .constants import XMIPP_HOME, XMIPP_URL
 
 
 _logo = "xmipp_logo.png"
