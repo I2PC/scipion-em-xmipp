@@ -11,6 +11,8 @@ from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
+from xmipp3 import XMIPP_URL
+
 here = path.abspath(path.dirname(__file__))
 
 # Get the long description from the README file
@@ -66,7 +68,7 @@ setup(
     #
     # This field corresponds to the "Home-Page" metadata field:
     # https://packaging.python.org/specifications/core-metadata/#home-page-optional
-    url='https://github.com/i2pc/scipion-em-xmipp',  # Optional
+    url=XMIPP_URL,  # Optional
 
     # This should be your name or the name of the organization which owns the
     # project.
@@ -102,7 +104,7 @@ setup(
     # project page. What does your project relate to?
     #
     # Note that this is a string of words separated by whitespace, not a list.
-    keywords='scipion cryoem imageprocessing scipion-2.0',  # Optional
+    keywords='scipion cryoem imageprocessing scipion-3.0',  # Optional
 
     # You can just specify package directories manually here if your project is
     # simple. Or you can use find_packages().

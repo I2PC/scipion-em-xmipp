@@ -46,6 +46,7 @@ class Plugin(pwem.Plugin):
     _homeVar = XMIPP_HOME
     _pathVars = [XMIPP_HOME]
     _supportedVersions = []
+    _url = XMIPP_URL
 
     @classmethod
     def _defineVariables(cls):
@@ -351,5 +352,4 @@ class Plugin(pwem.Plugin):
 #                                                    target),
 #                               target)],
 #                    deps=deepLearningTools, tar='deepLearningToolkit.tgz')
-
 
