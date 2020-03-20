@@ -100,6 +100,16 @@ class TestXmippBase(BaseTest):
         if cls.protImport.outputVolume is None:
             raise Exception('Import of volume: %s, failed. outputVolume is None.' % pattern)
         return cls.protImport
+
+    @classmethod
+    def runResizeParticles(cls, particles, doResize, resizeOption, resizeDim):
+        cls.protResize = cls.newProtocol(XmippProtCropResizeParticles,
+                                         doResize=doResize,
+                                         resizeOption=resizeOption,
+                                         resizeDim=resizeDim)
+        cls.protResize.inputParticles.set(particles)
+        cls.launchProtocol(cls.protResize)
+        return cls.protResize
     
     @classmethod
     def runCL2DAlign(cls, particles):
@@ -987,7 +997,7 @@ class TestXmippApplyAlignment(TestXmippBase):
         setupTestProject(cls)
         TestXmippBase.setData('mda')
         cls.protImport = cls.runImportParticles(cls.particlesFn, 3.5)
-        cls.align2D = cls.runCL2DAlign(cls.protImport.outputParticles)
+        cls.align2D = cls.runCL2DAlign(cls.particlesFn, )
 
     def test_apply_alignment(self):
         protApply = self.newProtocol(XmippProtApplyAlignment)
@@ -1008,6 +1018,7 @@ class TestAlignmentAssign(TestXmippBase):
         setupTestProject(cls)
         TestXmippBase.setData('mda')
         cls.protImport = cls.runImportParticles(cls.particlesFn, 3.5)
+        cls.protResize = cls.runResizeParticles(cls.protImport.outputParticles, True, xrh.RESIZE_DIMENSIONS, 50)
         cls.align2D = cls.runCL2DAlign(cls.protImport.outputParticles)
 
     def test_alignment_assign_samesize(self):
@@ -1020,22 +1031,52 @@ class TestAlignmentAssign(TestXmippBase):
         self.assertIsNotNone(protAssign.outputParticles, "There was a problem generating output particles")
         # Check that output particles do not have alignment information
         self.assertTrue(protAssign.outputParticles.hasAlignment(), "Output particles should have alignment information")
+        # Check the scaling between the input and the output translation in the roto-translation transformation matrix
+        self._checkTranslationScaling(protAssign, self.protImport)
 
     def test_alignment_assign_othersize(self):
-        protResize = self.newProtocol(XmippProtCropResizeParticles,
-                                      doResize=True,
-                                      resizeOption=xrh.RESIZE_DIMENSIONS,
-                                      resizeDim=50)
-        protResize.inputParticles.set(self.protImport.outputParticles)
-        self.launchProtocol(protResize)
         protAssign = self.newProtocol(emprot.ProtAlignmentAssign)
         protAssign.setObjLabel("Assign alignment of different size")
-        protAssign.inputParticles.set(protResize.outputParticles)
+        protAssign.inputParticles.set(self.protResize.outputParticles)
         protAssign.inputAlignment.set(self.align2D.outputParticles)
         self.launchProtocol(protAssign)
         # We check that protocol generates output
         self.assertIsNotNone(protAssign.outputParticles, "There was a problem generating output particles")
-        #TODO: Add an assert to check that sampling rate and alignment matrix is ok
+        # Check the scaling between the input and the output translation in the roto-translation transformation matrix
+        self._checkTranslationScaling(protAssign, self.protResize)
+
+    def test_alignment_assign_othersize_shiftsAppliedBefore(self):
+        protAssign = self.newProtocol(emprot.ProtAlignmentAssign, shiftsAppliedBefore=True)
+        protAssign.setObjLabel("Assign alignment of different size (assuming shiftsAppliedBefore)")
+        protAssign.inputParticles.set(self.protResize.outputParticles)
+        protAssign.inputAlignment.set(self.align2D.outputParticles)
+        self.launchProtocol(protAssign)
+        # We check that protocol generates output
+        self.assertIsNotNone(protAssign.outputParticles, "There was a problem generating output particles")
+        # Check the scaling between the input and the output translation in the roto-translation transformation matrix
+        self._checkTranslationScaling(protAssign, self.protResize, shiftsAppliedBefore=True)
+
+    def _checkTranslationScaling(self, protAssign, protParticles, shiftsAppliedBefore=False):
+        inputAlignFirstPartTransMat = self.align2D.outputParticles.getFirstItem().getTransform().getMatrix()
+        outputAlignFirstPartTransMat = protAssign.outputParticles.getFirstItem().getTransform().getMatrix()
+        scale = self.align2D.outputParticles.getSamplingRate() / protParticles.outputParticles.getSamplingRate()
+        outTranslation = [outputAlignFirstPartTransMat[0, 3],  # X trans
+                          outputAlignFirstPartTransMat[1, 3],  # Y trans
+                          outputAlignFirstPartTransMat[2, 3]]  # Z trans
+        if shiftsAppliedBefore:
+            # Translation on X and Y only work with the decimal part of the shift applied (assuming that the user has
+            # selected the option 'apply shifts' when extracting coordinates
+            inTranslation = [inputAlignFirstPartTransMat[0, 3] - int(inputAlignFirstPartTransMat[0, 3]),  # X trans
+                             inputAlignFirstPartTransMat[1, 3] - int(inputAlignFirstPartTransMat[1, 3]),  # Y trans
+                             inputAlignFirstPartTransMat[2, 3]]  # Z trans
+        else:
+            inTranslation = [inputAlignFirstPartTransMat[0, 3],  # X translation
+                             inputAlignFirstPartTransMat[1, 3],  # Y translation
+                             inputAlignFirstPartTransMat[2, 3]]  # Z translation
+
+        self.assertFalse(all(v == 0 for v in inTranslation))
+        self.assertFalse(all(v == 0 for v in outTranslation))
+        [self.assertAlmostEqual(inT * scale, outT) for inT, outT in zip(inTranslation, outTranslation)]
 
 
 class TestXmippRotSpectra(TestXmippBase):
