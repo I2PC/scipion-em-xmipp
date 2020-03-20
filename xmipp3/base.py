@@ -27,20 +27,17 @@
 
 import os
 import sys
-import platform
 from collections import OrderedDict
 
 from pyworkflow.object import ObjectWrap
-
 from pwem import emlib
 import pwem
-from pwem.emlib import (MetaData, MetaDataInfo, MDL_IMAGE, MDL_IMAGE1, MDL_IMAGE_REF,
-    MDL_ANGLE_ROT, MDL_ANGLE_TILT, MDL_ANGLE_PSI, MDL_REF, MDL_SHIFT_X,
-    MDL_SHIFT_Y, MDL_FLIP, MD_APPEND, MDL_MAXCC, MDL_ENABLED, MDL_CTF_MODEL,
-    MDL_SAMPLINGRATE, DT_DOUBLE, MDL_ANGLE_ROT, MDL_SHIFT_Z,
-    Euler_angles2matrix, Image, FileName, getBlocksInMetaDataFile, label2Str)
-from .constants import *
 
+try:  # TODO: Avoid these imports by importing them in the protocols/viewers
+    from xmipp_base import *  # xmipp_base and xmippViz come from the binding and
+    from xmippViz import *    #  it is not available before installing the binaries
+except:
+    pass
 
 LABEL_TYPES = { 
                emlib.LABEL_SIZET: int,
@@ -170,7 +167,7 @@ class XmippMdRow:
                 print("XmippMdRow.writeToMd: Error writing value to metadata.",
                       file=sys.stderr)
                 print("                     label: %s, value: %s, type(value): %s"
-                      % (label2Str(label), value, type(value)), file=sys.stderr)
+                      % (emlib.label2Str(label), value, type(value)), file=sys.stderr)
                 raise ex
             
     def readFromFile(self, fn):
@@ -274,7 +271,7 @@ class XmippSet():
         for objId in self._md:  
             item = self._itemClass()
             item.readFromMd(self._md, objId)  
-            #m = Image(md.getValue(emlib.MDL_IMAGE, objId))
+            #m = emib.Image(md.getValue(emlib.MDL_IMAGE, objId))
             #if self.hasCTF():
             #    m.ctfModel = XmippCTFModel(md.getValue(emlib.MDL_CTF_MODEL, objId))
             yield item
@@ -356,7 +353,7 @@ class ProjMatcher:
         cleanPath(self._getExtraPath('gallery.doc'))
     
         # Write angles in the original file and sort
-        MD=MetaData(fnAngles)
+        MD=emlib.MetaData(fnAngles)
         for id in MD:
             galleryReference = MD.getValue(emlib.MDL_REF,id)
             MD.setValue(emlib.MDL_IMAGE_REF, "%05d@%s" % (galleryReference+1,fnGallery), id)
@@ -366,8 +363,8 @@ class ProjMatcher:
         
         from numpy import array, dot
         fnOut = 'classes_aligned@' + fn
-        MDin = MetaData(images)
-        MDout = MetaData()
+        MDin = emlib.MetaData(images)
+        MDout = emlib.MetaData()
         n = 1
         hasCTF = MDin.containsLabel(emlib.MDL_CTF_MODEL)
         for i in MDin:
@@ -380,7 +377,7 @@ class ProjMatcher:
             flip = MDin.getValue(emlib.MDL_FLIP,i)
             if flip:
                 psi = -psi
-            eulerMatrix = Euler_angles2matrix(0.,0.,psi)
+            eulerMatrix = emlib.Euler_angles2matrix(0.,0.,psi)
             x = MDin.getValue(emlib.MDL_SHIFT_X,i)
             y = MDin.getValue(emlib.MDL_SHIFT_Y,i)
             shift = array([x, y, 0])
@@ -407,8 +404,8 @@ class ProjMatcher:
         MDout.write(fnOut,emlib.MD_APPEND)
         
         # Actually create the differences
-        img = Image()
-        imgRef = Image()
+        img = emlib.Image()
+        imgRef = emlib.Image()
         if hasCTF and volumeIsCTFCorrected:
             Ts = MDin.getValue(emlib.MDL_SAMPLINGRATE, MDin.firstObject())
     
@@ -417,8 +414,8 @@ class ProjMatcher:
             imgRef.read(MDout.getValue(emlib.MDL_IMAGE_REF,i))
             if hasCTF and volumeIsCTFCorrected:
                 fnCTF = MDout.getValue(emlib.MDL_CTF_MODEL,i)
-                applyCTF(imgRef, fnCTF, Ts)
-                img.convert2DataType(DT_DOUBLE)
+                emlib.applyCTF(imgRef, fnCTF, Ts)
+                img.convert2DataType(emlib.DT_DOUBLE)
             imgDiff = img-imgRef
             imgDiff.write(MDout.getValue(emlib.MDL_IMAGE1,i))
 
@@ -443,10 +440,10 @@ class HelicalFinder:
         self.runJob('xmipp_volume_find_symmetry',args, numberOfMpi=1)
 
     def runFineSearch(self, fnVol, dihedral, fnCoarse, fnFine, heightFraction, z0, zF, rot0, rotF, cylinderInnerRadius, cylinderOuterRadius, height, Ts):
-        md=MetaData(fnCoarse)
+        md=emlib.MetaData(fnCoarse)
         objId=md.firstObject()
-        rotInit=md.getValue(MDL_ANGLE_ROT,objId)
-        zInit=md.getValue(MDL_SHIFT_Z,objId)
+        rotInit=md.getValue(emlib.MDL_ANGLE_ROT,objId)
+        zInit=md.getValue(emlib.MDL_SHIFT_Z,objId)
         args="-i %s --sym %s --heightFraction %f --localHelical %f %f -o %s -z %f %f 1 --rotHelical %f %f 1 --sampling %f"%(fnVol,self.getSymmetry(dihedral),heightFraction,
                                                                                            zInit,rotInit,fnFine,z0,zF,rot0,rotF,Ts)
         if cylinderOuterRadius>0 and cylinderInnerRadius<0:
@@ -456,10 +453,10 @@ class HelicalFinder:
         self.runJob('xmipp_volume_find_symmetry',args, numberOfMpi=1)
 
     def runSymmetrize(self, fnVol, dihedral, fnParams, fnOut, heightFraction, cylinderInnerRadius, cylinderOuterRadius, height, Ts):
-        md=MetaData(fnParams)
+        md=emlib.MetaData(fnParams)
         objId=md.firstObject()
-        rot0=md.getValue(MDL_ANGLE_ROT,objId)
-        z0=md.getValue(MDL_SHIFT_Z,objId)
+        rot0=md.getValue(emlib.MDL_ANGLE_ROT,objId)
+        z0=md.getValue(emlib.MDL_SHIFT_Z,objId)
         args="-i %s --sym %s --helixParams %f %f --heightFraction %f -o %s --sampling %f --dont_wrap"%(fnVol,self.getSymmetry(dihedral),z0,rot0,heightFraction,fnOut,Ts)
         self.runJob('xmipp_transform_symmetrize',args,numberOfMpi=1)
         doMask=False
@@ -471,282 +468,3 @@ class HelicalFinder:
             doMask=True
         if doMask:
             self.runJob('xmipp_transform_mask',args,numberOfMpi=1)
-            
-
-# ---------------- Legacy code from 'protlib_xmipp.py' ----------------------
-
-def xmippExists(path):
-    return emlib.FileName(path).exists()
-            
-            
-class XmippScript():
-    ''' This class will serve as wrapper around the XmippProgram class
-    to have same facilities from Python scripts'''
-    def __init__(self, runWithoutArgs=False):
-        self._prog = emlib.Program(runWithoutArgs)
-        
-    def defineParams(self):
-        ''' This function should be overwrited by subclasses for 
-        define its own parameters'''
-        pass
-    
-    def readParams(self):
-        ''' This function should be overwrited by subclasses for 
-        and take desired params from command line'''
-        pass
-    
-    def checkParam(self, param):
-        return self._prog.checkParam(param)
-    
-    def getParam(self, param, index=0):
-        return self._prog.getParam(param, index)
-    
-    def getIntParam(self, param, index=0):
-        return int(self._prog.getParam(param, index))
-    
-    def getDoubleParam(self, param, index=0):
-        return float(self._prog.getParam(param, index))
-    
-    def getListParam(self, param):
-        return self._prog.getListParam(param)
-    
-    def addUsageLine(self, line, verbatim=False):
-        self._prog.addUsageLine(line, verbatim)
-
-    def addExampleLine(self, line, verbatim=True):
-        self._prog.addExampleLine(line, verbatim)
-        
-    def addParamsLine(self, line):
-        self._prog.addParamsLine(line)
-    
-    def run(self):
-        ''' This function should be overwrited by subclasses and
-        it the main body of the script'''   
-        pass
-     
-    def tryRun(self):
-        ''' This function should be overwrited by subclasses and
-        it the main body of the script'''
-        try:
-            self.defineParams()
-            doRun = self._prog.read(sys.argv)
-            if doRun:
-                self.readParams()
-                self.run()
-        except Exception:
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-            
-        
-class ScriptIJBase(XmippScript):
-    def __init__(self, name):
-        XmippScript.__init__(self)
-        self.name = name
-    
-    def defineOtherParams(self):
-        pass
-    
-    def readOtherParams(self):
-        pass
-    
-    def defineParams(self):
-        self.addParamsLine('  --input <...>            : Input files to show');
-        self.addParamsLine('         alias -i;');
-        self.addParamsLine('  [--memory <mem="2g">]    : Memory amount for JVM');
-        self.addParamsLine('         alias -m;');
-        self.defineOtherParams()
-    
-    def readInputFiles(self):
-        self.inputFiles = self.getListParam('-i')
-        
-    def readParams(self):
-        self.readInputFiles()
-        self.memory = self.getParam('--memory')
-        files = []
-        missingFiles = []
-        for f in self.inputFiles:
-            if xmippExists(f):
-                files.append('"%s"' % f) # Escape with " for filenames containing spaces
-            else:
-                missingFiles.append(f)
-        self.inputFiles = files
-        if len(missingFiles):
-            print("Missing files: \n %s" % '  \n'.join(missingFiles))
-        
-        self.args = "-i %s" % ' '.join(self.inputFiles)
-        self.readOtherParams()
- 
- 
-class ScriptPluginIJ(ScriptIJBase):
-    def __init__(self, macro):
-        ScriptIJBase.__init__(self, macro)
-                  
-    def run(self):
-        runImageJPlugin(self.memory, self.name, self.args)
-     
-     
-class ScriptAppIJ(ScriptIJBase):
-    def __init__(self, name):
-        ScriptIJBase.__init__(self, name)
-                  
-    def run(self):
-        if len(self.inputFiles) > 0:
-            runJavaIJapp(self.memory, self.name, self.args, batchMode=False)
-        else:
-            print("No input files. Exiting...")
-            
-    
-def getImageJPluginCmd(memory, macro, args, batchMode=False):
-    if len(memory) == 0:
-        memory = "1g"
-        print("No memory size provided. Using default: " + memory)
-    imagej_home = getXmippPath('external', 'imagej')
-    plugins_dir = os.path.join(imagej_home, "plugins")
-    macro = os.path.join(imagej_home, "macros", macro)
-    imagej_jar = os.path.join(imagej_home, "ij.jar")
-    cmd = """ java -Xmx%s -Dplugins.dir=%s -jar %s -macro %s "%s" """ % (memory, plugins_dir, imagej_jar, macro, args)
-    if batchMode:
-        cmd += " &"
-    return cmd
-
-
-def runImageJPlugin(memory, macro, args, batchMode=False):
-    os.system(getImageJPluginCmd(memory, macro, args, batchMode))
-
-
-def getArchitecture():
-    arch = platform.architecture()[0]
-    for a in ['32', '64']:
-        if a in arch:
-            return a
-    return 'NO_ARCH' 
-
-
-def getJavaIJappCmd(memory, appName, args, batchMode=False):
-    '''Launch an Java application based on ImageJ '''
-    if len(memory) == 0:
-        memory = "2g"
-        print("No memory size provided. Using default: " + memory)
-    imagej_home = getXmippPath("external", "imagej")
-    lib = getXmippPath("lib")
-    javaLib = getXmippPath('java', 'lib')
-    plugins_dir = os.path.join(imagej_home, "plugins")
-    arch = getArchitecture()
-    cmd = "java -Xmx%(memory)s -d%(arch)s -Djava.library.path=%(lib)s -Dplugins.dir=%(plugins_dir)s -cp %(imagej_home)s/*:%(javaLib)s/* %(appName)s %(args)s" % locals()
-    if batchMode:
-        cmd += " &"
-    return cmd
-    
-
-def runJavaIJapp(memory, appName, args, batchMode=True):
-    cmd = getJavaIJappCmd(memory, appName, args, batchMode)
-    print(cmd)
-    os.system(cmd)
-    
-
-def runJavaJar(memory, jarName, args, batchMode=True):
-    jarPath = getXmippPath(jarName)
-    runJavaIJapp(memory, '-jar %s' % jarPath, args, batchMode)
-
-
-class ScriptShowJ(ScriptAppIJ):
-    def __init__(self, viewer='xmipp.viewer.Viewer'):
-        ScriptAppIJ.__init__(self, viewer)
-        
-    def defineOtherParams(self):
-        self.addParamsLine('  [--mode <mode_value=image>]           : List of params ')
-        self.addParamsLine('     where <mode_value> image gallery metadata rotspectra')
-        self.addParamsLine('         alias -d;')
-        self.addParamsLine('  [--poll]                            : Keeps checking for changes on input files  (for image mode only!)')
-        self.addParamsLine('         alias -p;')
-        self.addParamsLine('  [--render <...>]    : Specifies image columns to render (for metadata mode only)')
-        self.addParamsLine('                          : by default the first one that can be visualized is rendered')
-        self.addParamsLine('  [--visible <...>]    : Specifies visible labels')
-        self.addParamsLine('  [--order <...>]    : Specifies labels order')
-        self.addParamsLine('  [--labels <...>]    : Specifies labels to display')
-        self.addParamsLine('  [--sortby <...>]    : Specifies label to sort by. asc or desc mode can be added')
-        
-        self.addParamsLine('         alias -e;')
-        self.addParamsLine('  [--rows <rows>]                            : number of rows in table')
-        self.addParamsLine('         alias -r;')
-        self.addParamsLine('  [--columns <columns>]                            : number of columns in table')
-        self.addParamsLine('         alias -c;')
-        self.addParamsLine('  [--zoom <zoom>]                            : zoom for images')
-        self.addParamsLine('         alias -z;')
-        self.addParamsLine('  [--view <axis="z">]                        : Viewer position (for volumes only)')
-        self.addParamsLine('     where <axis> z y x z_pos y_pos x_pos')
-        self.addParamsLine('  [--dont_apply_geo]                        : Does not read geometrical information(for metadata only)')
-        self.addParamsLine('  [--dont_wrap]                             : Does not wrap (for metadata only)')
-        self.addParamsLine('  [--debug] : debug')
-        self.addParamsLine('  [--mask_toolbar] : Open mask toolbar (only valid for images)')
-        self.addParamsLine('  [--label_alias <alias_string>]  : Activate some metadata label alias, for example')
-        self.addParamsLine('                                  : anglePsi=aPsi;shiftX=sX;shiftY:sY')
-        self.addParamsLine('  [--label_relion]                : Activates the mapping to Relion labels')
-        self.addParamsLine('  [--label_bsoft]                 : Activates the mapping to Bsoft labels')
-        
-    def readOtherParams(self):
-        #FIXME: params seems to be they cannot be passed directly to java
-        params = ['--mode', '--rows', '--columns', '--zoom', '--view', '--sortby']
-        for p in params:
-            if self.checkParam(p):
-                self.args += " %s %s" % (p, self.getParam(p))
-        params = [ '--render', '--visible', '--order', '--labels']
-        pvalues = ''
-        for p in params:
-            if self.checkParam(p):
-                for pvalue in self.getListParam(p):
-                    pvalues = '%s %s'%(pvalues, pvalue)
-                    
-                self.args += " %s %s" % (p, pvalues)
-        params = ['--poll', '--debug', '--dont_apply_geo', '--dont_wrap', '--mask_toolbar']
-        for p in params:
-            if self.checkParam(p):
-                self.args += " %s" % p
-                
-        # Set environment var for extra label alias
-        if self.checkParam('--label_alias'):
-            os.environ['XMIPP_EXTRA_ALIASES'] = self.getParam('--label_alias')
-        elif self.checkParam('--label_bsoft'):
-            from protlib_import import bsoftLabelString
-            os.environ['XMIPP_EXTRA_ALIASES'] = bsoftLabelString()
-        elif self.checkParam('--label_relion') or self.getParam('-i').endswith('.star'):
-            from protlib_import import relionLabelString
-            os.environ['XMIPP_EXTRA_ALIASES'] = relionLabelString()
-            
-
-def createMetaDataFromPattern(pattern, isStack=False, label="image"):
-    ''' Create a metadata from files matching pattern'''
-    import glob
-    if isinstance(pattern, list):
-      files=[]
-      for pat in pattern:
-        files+= glob.glob(pat)
-    else:
-      files = glob.glob(pattern)
-    files.sort()
-
-    label = emlib.str2Label(label) #Check for label value
-    
-    mD = emlib.MetaData()
-    inFile = emlib.FileName()
-    
-    nSize = 1
-    for file in files:
-        fileAux=file
-        if isStack:
-            if file.endswith(".mrc"):
-                fileAux=file+":mrcs"
-            x, x, x, nSize = emlib.getImageSize(fileAux)
-        if nSize != 1:
-            counter = 1
-            for jj in range(nSize):
-                inFile.compose(counter, fileAux)
-                objId = mD.addObject()
-                mD.setValue(label, inFile, objId)
-                mD.setValue(emlib.MDL_ENABLED, 1, objId)
-                counter += 1
-        else:
-            objId = mD.addObject()
-            mD.setValue(label, fileAux, objId)
-            mD.setValue(emlib.MDL_ENABLED, 1, objId)
-    return mD            
