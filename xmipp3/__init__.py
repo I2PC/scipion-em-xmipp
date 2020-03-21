@@ -334,6 +334,7 @@ class Plugin(pwem.Plugin):
 
 def installDeepLearningToolkit(plugin, env):
 
+  preMsgs = []
   cudaMsgs = []
   if os.environ.get('CUDA', 'True') == 'True':
     try:
@@ -345,25 +346,23 @@ def installDeepLearningToolkit(plugin, env):
                             "support. Just CPU computations enabled (slow computations)")
         nvidiaDriversVersion = None
     except Exception as e:
-      print(e)
+      preMsgs.append(str(e))
       nvidiaDriversVersion = None
 
     cmdsInstall=[]
   if nvidiaDriversVersion is not None:
     msg="Tensorflow installed with CUDA SUPPORT"
     cudaMsgs.append(msg)
-    print(msg)
     useGpu=True
   else:
-    print("CUDA will NOT be USED")
+    preMsgs.append("CUDA will NOT be USED")
     msg=("Tensorflow was installed without GPU. Just CPU computations enabled (slow computations)"
          "To enable CUDA, set CUDA=True in xmipp.conf and scipion.conf files")
-    print(msg)
     cudaMsgs.append(msg)
     useGpu=False
 
   for cmd, environName in CondaEnvManager.yieldInstallAllCmds(useGpu=useGpu):
-    cmdsInstall.append( (cmd, environName) )
+    cmdsInstall.append((cmd, environName))
 
   url = "http://scipion.cnb.csic.es/downloads/scipion/software/em"
   modelsDownloadCmd = ("echo 'Downloading pre-trained models...' ; "
@@ -375,17 +374,18 @@ def installDeepLearningToolkit(plugin, env):
   modelsPrefix = "models_UPDATED_on"
   modelsTarget = "%s_%s_%s_%s" % (modelsPrefix, now.day, now.month, now.year)
 
-  xmippInstallCheck = ("if ls %s > /dev/null ; then touch xmippLibToken;"
+  xmippLibToken = 'xmippLibToken'
+  xmippInstallCheck = ("if ls %s > /dev/null ; then touch %s; echo ' > %s' ; "
                        "else echo ; echo ' > Xmipp installation not found, "
                        "please install it first (xmippSrc or xmippBin*).';echo;"
-                       " fi" % plugin.getHome('lib'), 'xmippLibToken')
+                       " fi" % (plugin.getHome('lib/libXmipp.so'), xmippLibToken,
+                                ' ; '.join(preMsgs)), xmippLibToken)
 
-
-  cmdsInstall= [(cmd, envName+".yml") for cmd, envName in cmdsInstall]
+  cmdsInstall = [(cmd, envName+".yml") for cmd, envName in cmdsInstall]
   env.addPackage('deepLearningToolkit', version='0.2', urlSuffix='external',
                  commands=[xmippInstallCheck]+cmdsInstall+[
-                           ("rm %s_* 2>/dev/null ; %s && touch %s && echo %s"
-                            % (modelsPrefix, modelsDownloadCmd, modelsTarget, "\n".join(cudaMsgs)),
+                           ("rm %s_* 2>/dev/null ; %s && touch %s && echo ' > %s'"
+                            % (modelsPrefix, modelsDownloadCmd, modelsTarget, "\n > ".join(cudaMsgs)),
                             modelsTarget),
                  ],
                  deps=[], tar='deepLearningToolkit.tgz')
