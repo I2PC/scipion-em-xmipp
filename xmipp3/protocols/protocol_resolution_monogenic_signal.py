@@ -450,18 +450,18 @@ class XmippProtMonoRes(ProtAnalysis3D):
         # viewer (otherwise since imageFile is not a Scipion object
         # no sampling/origin information can be transfered
 
-        Ccp4Header(imageFile).copyCCP4Header(
-            inputVolumeFileName, volume.getShiftsFromOrigin(),
-            volume.getSamplingRate(), originField=Ccp4Header.START)
+        Ccp4Header(imageFile).copyCCP4Header(volume.getShiftsFromOrigin(),
+                                             volume.getSamplingRate(),
+                                             originField=Ccp4Header.START)
 
         # also update the output volume header. This is not needed
         # since sampling and origin is in the database but
         # it may be usefull if other programs -outside scipion-
         # require  these data.
 
-        Ccp4Header(volume.getFileName()).copyCCP4Header(
-             inputVolumeFileName, volume.getShiftsFromOrigin(),
-             volume.getSamplingRate(), originField=Ccp4Header.START)
+        Ccp4Header(volume.getFileName()).copyCCP4Header(volume.getShiftsFromOrigin(),
+                                                        volume.getSamplingRate(),
+                                                        originField=Ccp4Header.START)
 
 
 

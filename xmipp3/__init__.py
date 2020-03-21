@@ -34,7 +34,7 @@ import pwem
 import pyworkflow.utils as pwutils
 
 from .base import *
-from .constants import XMIPP_HOME
+from .constants import XMIPP_HOME, XMIPP_URL
 from xmipp3.condaEnvManager import CondaEnvManager
 
 _logo = "xmipp_logo.png"
@@ -46,7 +46,8 @@ class Plugin(pwem.Plugin):
     _homeVar = XMIPP_HOME
     _pathVars = [XMIPP_HOME]
     _supportedVersions = []
-    _condaRootPath= None
+    _url = XMIPP_URL
+    _condaRootPath = None
 
     @classmethod
     def _defineVariables(cls):
@@ -128,83 +129,70 @@ class Plugin(pwem.Plugin):
         #                                target='scikit_learn*',
         #                                default=True)
 
-        xmippDeps = []  # scons, joblib, scikit_learn]
         ## XMIPP SOFTWARE ##
-        lastCompiled = "lib/libXmippJNI.so"
-        installTgt = [cls.getHome('bin', 'xmipp_reconstruct_significant'),
-                      cls.getHome(lastCompiled)]
-
-        compileCmd = ("src/xmipp/xmipp config && src/xmipp/xmipp check_config && "
-                      "src/xmipp/xmipp compile %d && touch DONE && rm -rf %s 2>/dev/null"
-                      % (env.getProcessors(), cls.getHome()))
-        compileTgt = ["src/xmippViz/"+lastCompiled, "DONE"]
-
-        installCmd = "rm DONE ; src/xmipp/xmipp install %s" % cls.getHome()
-        xmippBashrc = cls.getHome('xmipp.bashrc')
+        xmippDeps = []  # scons, joblib, scikit_learn
+        installedToken = cls.getHome("installation_finished")
+        bindingsToken = cls.getHome("bindings_linked")
         verToken = cls.getHome('v%s' % _currentVersion)
+        sourceTgt = [cls.getHome('xmipp.bashrc')]
 
-        # TODO: Check that getHome returns an absolute path
-        bindingsAndLibsCmd = ("ln -fs %s %s ; ln -fs %s %s ; ln -fs %s %s"
+        installCmd = ("./xmipp all N=%d dir=%s && touch %s && rm %s 2> /dev/null"
+                      % (env.getProcessors(), cls.getHome(),
+                         installedToken, bindingsToken))
+        installTgt = [cls.getHome('bin', 'xmipp_reconstruct_significant'),
+                      cls.getHome("lib/libXmippJNI.so"), installedToken]
+
+        bindingsAndLibsCmd = ("ln -fs %s %s && ln -fs %s %s && ln -fs %s %s && "
+                              "touch %s && rm %s 2> /dev/null"
                               % (cls.getHome('bindings', 'python', '*'),
-                                 Config.SCIPION_BINDINGS,
+                                 Config.getBindingsFolder(),
                                  cls.getHome('lib', 'libXmipp.so'),
-                                 Config.SCIPION_LIBS,
+                                 Config.getLibFolder(),
                                  cls.getHome('lib', 'libXmippCore.so'),
-                                 Config.SCIPION_LIBS))
-        bindingsAndLibsTgt = ([os.path.join(Config.SCIPION_BINDINGS, 'xmipp_base.py'),
-                               os.path.join(Config.SCIPION_BINDINGS, 'xmippLib.so'),
-                               os.path.join(Config.SCIPION_LIBS, 'libXmipp.so')])
+                                 Config.getLibFolder(),
+                                 bindingsToken, installedToken))
+        bindingsAndLibsTgt = ([os.path.join(Config.getBindingsFolder(), 'xmipp_base.py'),
+                               os.path.join(Config.getBindingsFolder(), 'xmippLib.so'),
+                               os.path.join(Config.getLibFolder(), 'libXmipp.so'),
+                               bindingsToken])
 
+        # plugin  = scipion-em-xmipp  <--  xmipp3    <--     __init__.py
         pluginDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        if (os.path.basename(os.path.dirname(pluginDir)) == 'src'  # xmipp-bundle
-            and os.path.isfile(os.path.join(pluginDir, 'setup.py'))):  # devel mode
-            develBranch = os.environ.get('XMIPP_DEVEL_BRANCH', None)
-            gitBranch = "-b "+develBranch if develBranch else ""
-            xmippBranch = "br="+develBranch if develBranch else ""
+        # bundle  = xmipp-bundle  <-  src  <-  scipion-em-xmipp
+        bundleDir = os.path.dirname(os.path.dirname(pluginDir))
 
-            bundleDir = os.path.dirname(os.path.dirname(pluginDir))
-            cloneCmd = ("git clone https://github.com/i2pc/xmipp %s-TMP %s"
-                        % (bundleDir, gitBranch))  # TMP is needed
-            cloneCmd += (" && cp -a %s-TMP/. %s && rm -rf %s-TMP"
-                         % (bundleDir, bundleDir, bundleDir))
-            cloneTgt = os.path.join(bundleDir, 'src', 'xmipp', 'SConscript')
-            compInstCmd = ('rm -rf %s ; ./xmipp all %s dir=%s && touch %s/DONE'
-                           % (cls.getHome('installToken'), xmippBranch, cls.getHome(), bundleDir))
-            compInstTgt = [os.path.join(bundleDir, "src", "xmippViz", lastCompiled),
-                           os.path.join(bundleDir, "DONE")]
-            removeDone = ("touch %s ; rm %s/DONE"
-                          % (cls.getHome('installToken'), bundleDir))
+        isPypiDev = os.path.isfile(os.path.join(pluginDir, 'setup.py'))
+        isXmippBu = (os.path.isdir(os.path.join(bundleDir, 'src')) and
+                     os.path.isfile(os.path.join(bundleDir, 'xmipp')))
+        develMode = isPypiDev and isXmippBu
+        if develMode:
             cdCmd = 'cd %s && ' % bundleDir
             env.addPackage('xmippDev', tar='void.tgz',
-                           commands=[("if ! ls %s/xmipp ; then %s ; fi ; %s"
-                                      % (bundleDir, cloneCmd, removeDone), cloneTgt),
-                                     (cdCmd + compInstCmd, compInstTgt),
-                                     (removeDone, installTgt +
-                                                  [xmippBashrc,
-                                                   cls.getHome('installToken')]),
-                                     (bindingsAndLibsCmd, bindingsAndLibsTgt)])
-
-        if os.path.exists(os.path.join(env.getIncludeFolder(), 'sqlite3.h')):
-            env.addPackage('xmippSrc', version=_currentVersion,
-                           # FIXME: adding 'v' before version to fix a package target (post-link)
-                           tar='xmippSrc-v'+_currentVersion+'.tgz',
-                           commands=[(compileCmd, compileTgt),
-                                     (installCmd, installTgt+[verToken, xmippBashrc]),
+                           commands=[(cdCmd+installCmd, installTgt+sourceTgt),
                                      (bindingsAndLibsCmd, bindingsAndLibsTgt)],
-                       deps=xmippDeps, default=False)
+                           deps=xmippDeps, default=False)
 
-        xmippConf = cls.getHome("xmipp.conf")
+        sourceTgt.append(verToken)
+        env.addPackage('xmippSrc', version=_currentVersion,
+                       # adding 'v' before version to fix a package target (post-link)
+                       tar='xmippSrc-v'+_currentVersion+'.tgz',
+                       commands=[(installCmd, installTgt + sourceTgt),
+                                 (bindingsAndLibsCmd, bindingsAndLibsTgt)],
+                       deps=xmippDeps, default=not develMode)
+
+        confToken = cls.getHome("xmipp.conf")
         installBin = ("rm -rf "+cls.getHome()+" 2>/dev/null; cd .. ; "
-                      "ln -sf xmippBin_%s-"+_currentVersion+" "+cls.getHome())
+                      "ln -sf xmippBin_%s-"+_currentVersion+" "+cls.getHome()+
+                      " && touch "+installedToken)
         env.addPackage('xmippBin_Debian', version=_currentVersion,
                        commands=[(installBin % 'Debian',
-                                  installTgt + [xmippConf, verToken+'_Debian']),
+                                  installTgt + [confToken, verToken+'_Debian']),
                                  (bindingsAndLibsCmd, bindingsAndLibsTgt)],
                        deps=xmippDeps, default=False)
 
         env.addPackage('xmippBin_Centos', version=_currentVersion,
                        commands=[(installBin % 'Centos',
-                                  installTgt+[xmippConf, verToken+'_Centos']),
+                                  installTgt+[confToken, verToken+'_Centos']),
                                  (bindingsAndLibsCmd, bindingsAndLibsTgt)],
                        deps=xmippDeps, default=False)
 
