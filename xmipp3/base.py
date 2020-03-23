@@ -34,7 +34,6 @@ from collections import OrderedDict
 from pyworkflow.object import ObjectWrap
 from pwem import emlib
 import pwem
-from xmipp3.constants import CONDA_DEFAULT_ENVIRON
 
 try:  # TODO: Avoid these imports by importing them in the protocols/viewers
     from xmipp_base import *  # xmipp_base and xmippViz come from the binding and
@@ -43,7 +42,6 @@ except:
     pass
 
 import xmipp3
-from xmipp3.condaEnvManager import CondaEnvManager
 
 
 LABEL_TYPES = { 
@@ -64,34 +62,6 @@ def getLabelPythonType(label):
     """ From xmipp label to python variable type """
     labelType = emlib.labelType(label)
     return LABEL_TYPES.get(labelType, str)
-
-
-def prepareRunConda(program, arguments, condaEnvName, **kwargs):
-    '''
-    Used to get the arguments for the methods runCondaJob or runCondaCmd
-    :param program: string
-    :param arguments: string
-    :param condaEnvName: string
-    :param kwargs:
-    :return: (program, arguments, kwargs). Updated values
-    '''
-    if "env" not in kwargs:
-        kwargs['env'] = xmipp3.Plugin.getEnviron()
-    kwargs['env'] = xmipp3.CondaEnvManager.modifyEnvToUseConda(kwargs['env'],
-                                                               condaEnvName)
-
-    usePython = False
-    programName = os.path.join(getXmippPath('bin'), program)
-    try:
-        with open(programName) as f:
-            if "python" in f.read(32):
-                usePython = True
-    except (OSError, IOError):
-        pass
-    if usePython:
-        return ("python", programName + " " + arguments, kwargs)
-    else:
-        return (program, arguments, kwargs)
 
 
 class XmippProtocol:
@@ -182,7 +152,7 @@ class XmippProtocol:
         # Trying to import keras to assert if DeepLearningToolkit works fine.
         kerasError = False
         if condaEnvName is None:
-            condaEnvName = CONDA_DEFAULT_ENVIRON
+            condaEnvName = CondaEnvManager.CONDA_DEFAULT_ENVIRON
         env = CondaEnvManager.modifyEnvToUseConda(xmipp3.Plugin.getEnviron(), condaEnvName)
         import subprocess
         try:
@@ -229,11 +199,13 @@ class XmippProtocol:
         elif (hasattr(self, "_conda_env") ):
             condaEnvName = self._conda_env
         else:
-            condaEnvName = CONDA_DEFAULT_ENVIRON
+            condaEnvName = CondaEnvManager.CONDA_DEFAULT_ENVIRON
             print("Warning: using default conda environment '%s'. "
                   "CondaJobs should be run under a specific environment to "
                   "avoid problems. Please, fix it or contact to the developer."
-                  % CONDA_DEFAULT_ENVIRON)
+                  % CondaEnvManager.CONDA_DEFAULT_ENVIRON)
+        if "env" not in kwargs:
+            kwargs['env'] = xmipp3.Plugin.getEnviron()
         program, arguments, kwargs = prepareRunConda(program, arguments, condaEnvName, **kwargs)
 
         super(type(self), self).runJob(program, arguments, **kwargs)
