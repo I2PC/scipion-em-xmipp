@@ -34,9 +34,9 @@ DICT_OF_CONDA_ENVIRONS = {
     "xmippEnviron": True
   },
 
-  "micrograph_cleaner_em": {
+  "xmipp_MicCleaner": {
     "pythonVersion": "3.6",
-    "dependencies": ["numpy=1.16.4", "micrograph-cleaner-em"],
+    "dependencies": ["numpy=1.16.4", "micrograph-cleaner-em", "keras=2.2.4"],
     "channels": ["rsanchez1369", "anaconda", "conda-forge"],
     "pipPackages": [],
     "defaultInstallOptions": {},

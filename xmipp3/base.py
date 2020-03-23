@@ -187,7 +187,7 @@ class XmippProtocol:
         import subprocess
         try:
             subprocess.check_output('python -c "import keras"', shell=True, env=env)
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as e:
             errors.append("*Keras/Tensorflow not found*. Required to run this protocol.")
             kerasError = True
 
@@ -235,6 +235,7 @@ class XmippProtocol:
                   "avoid problems. Please, fix it or contact to the developer."
                   % CONDA_DEFAULT_ENVIRON)
         program, arguments, kwargs = prepareRunConda(program, arguments, condaEnvName, **kwargs)
+
         super(type(self), self).runJob(program, arguments, **kwargs)
 
 

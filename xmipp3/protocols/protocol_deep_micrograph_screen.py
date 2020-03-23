@@ -41,7 +41,7 @@ from xmipp3.constants import SAME_AS_PICKING, OTHER
 class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     """Protocol to remove coordinates in carbon zones or large impurities"""
     _label = 'deep micrograph cleaner'
-    _conda_env= "micrograph_cleaner_em" #CONDA_DEFAULT_ENVIRON
+    _conda_env= "xmipp_MicCleaner"
 
 
     def __init__(self, **kwargs):
@@ -215,9 +215,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
           else:
               args += ' -g -1'
 
-          # self.runCondaJob('xmipp_deep_micrograph_cleaner', args)
           self.runJob('xmipp_deep_micrograph_cleaner', args)
-
 
 
     def _checkNewOutput(self):

@@ -35,6 +35,7 @@ class CondaEnvManager(object):
                 condaRoot = os.path.split(os.path.split(condaRoot)[0])[0]
 
         assert condaRoot is not None, "Error, conda was not found"+str(env)
+        condaRoot= os.path.expanduser(condaRoot)
         return condaRoot
 
     @staticmethod
@@ -53,9 +54,12 @@ class CondaEnvManager(object):
 
         newPythonPath= CondaEnvManager.getCondaPathInEnv(CondaEnvManager.getCoondaRoot(env),
                                                          condaEnv, "lib/python*/site-packages/")
+        print(condaEnv, CondaEnvManager.DICT_OF_CONDA_ENVIRONS[condaEnv]["xmippEnviron"] )
         if CondaEnvManager.DICT_OF_CONDA_ENVIRONS[condaEnv]["xmippEnviron"]:
+            newPythonPath+=":"+os.path.join(os.environ["VIRTUAL_ENV"], "lib/python3.5/site-packages/")
             newPythonPath+=":"+env["PYTHONPATH"]
         env.update({"PYTHONPATH": newPythonPath})
+        print(env["PYTHONPATH"])
         return env
 
     @staticmethod
