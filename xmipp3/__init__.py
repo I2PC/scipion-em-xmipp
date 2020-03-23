@@ -35,7 +35,6 @@ import pyworkflow.utils as pwutils
 
 from .base import *
 from .constants import XMIPP_HOME, XMIPP_URL
-from xmipp3.condaEnvManager import CondaEnvManager
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']

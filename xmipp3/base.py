@@ -156,6 +156,7 @@ class XmippProtocol:
         env = CondaEnvManager.modifyEnvToUseConda(xmipp3.Plugin.getEnviron(), condaEnvName)
         import subprocess
         try:
+#            subprocess.call('which python', shell=True, env=env)
             subprocess.check_output('python -c "import keras"', shell=True, env=env)
         except subprocess.CalledProcessError as e:
             errors.append("*Keras/Tensorflow not found*. Required to run this protocol.")
@@ -583,89 +584,3 @@ class HelicalFinder:
         if doMask:
             self.runJob('xmipp_transform_mask',args,numberOfMpi=1)
 
-
-
-# # TODO: migrate this to xmipp repo (xmipp_base.py)
-# class XmippScript:
-#     ''' This class will serve as wrapper around the XmippProgram class
-#     to have same facilities from Python scripts'''
-#
-#     def __init__(self, runWithoutArgs=False):
-#         self._prog = xmippLib.Program(runWithoutArgs)
-#
-#     def defineParams(self):
-#         ''' This function should be overwrited by subclasses for
-#         define its own parameters'''
-#         pass
-#
-#     def readParams(self):
-#         ''' This function should be overwrited by subclasses for
-#         and take desired params from command line'''
-#         pass
-#
-#     def checkParam(self, param):
-#         return self._prog.checkParam(param)
-#
-#     def getParam(self, param, index=0):
-#         return self._prog.getParam(param, index)
-#
-#     def getIntParam(self, param, index=0):
-#         return int(self._prog.getParam(param, index))
-#
-#     def getDoubleParam(self, param, index=0):
-#         return float(self._prog.getParam(param, index))
-#
-#     def getListParam(self, param):
-#         return self._prog.getListParam(param)
-#
-#     def addUsageLine(self, line, verbatim=False):
-#         self._prog.addUsageLine(line, verbatim)
-#
-#     def addExampleLine(self, line, verbatim=True):
-#         self._prog.addExampleLine(line, verbatim)
-#
-#     def addParamsLine(self, line):
-#         self._prog.addParamsLine(line)
-#
-#     def run(self):
-#         ''' This function should be overwrited by subclasses and
-#         it the main body of the script'''
-#         pass
-#
-#     def tryRun(self):
-#         ''' This function should be overwrited by subclasses and
-#         it the main body of the script'''
-#         try:
-#             print("WARNING: This is xmipp3.base implementation for script")
-#             self.defineParams()
-#             doRun = self._prog.read(sys.argv)
-#             if doRun:
-#                 self.readParams()
-#                 self.run()
-#         except Exception:
-#             import traceback
-#             traceback.print_exc(file=sys.stderr)
-#             raise
-#
-#     @classmethod
-#     def runCondaCmd(cls, program, arguments, **kwargs):
-#         '''
-#         This class method is used to run programs that are independent of xmipp but employ conda. The class should
-#         possess a _conda_env attribute to be used. Otherwise  CONDA_DEFAULT_ENVIRON is used. To use xmipp dependent
-#         programs, runCondaJob within a XmippProtocol is preferred.
-#         :param program:str. A program/pythonScript to execute (included in environment bin or full path)
-#         :param arguments: str. The arguments for the program
-#         :param kwargs: options
-#         :return:
-#         '''
-#         if (hasattr(cls, "_conda_env")):
-#             condaEnvName = cls._conda_env
-#         else:
-#             condaEnvName = CONDA_DEFAULT_ENVIRON
-#             # raise Exception("Error, protocols using runCondaJob must define the variable _conda_env")
-#         program, arguments, kwargs = prepareRunConda(program, arguments, condaEnvName, **kwargs)
-#         print(program + " " + arguments)
-#         try:
-#             subprocess.check_call(program + " " + arguments, shell=True, **kwargs)
-#         except subprocess.CalledProcessError as e:
-#             subprocess.check_call(program + " " + arguments, shell=True, **kwargs)

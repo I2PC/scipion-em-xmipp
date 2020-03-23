@@ -42,6 +42,7 @@ class XmippProtParticleBoxsize(ProtMicrographs, xmipp3.XmippProtocol):
     """
     _label = 'particle boxsize'
     _lastUpdateVersion = VERSION_2_0
+    _conda_env='xmipp_DLTK_v0.3'
     
     def __init__(self, **args):
         ProtMicrographs.__init__(self, **args)
@@ -95,7 +96,7 @@ class XmippProtParticleBoxsize(ProtMicrographs, xmipp3.XmippProtocol):
         with open(micNamesPath, 'wb') as csvFile:
             csvFile.writelines(fileNames)
         params += ' --micrographs %s' % micNamesPath
-        self.runCondaJob('xmipp_particle_boxsize', params, _conda_env='deepLearningToolkit_v0.3')
+        self.runCondaJob('xmipp_particle_boxsize', params)
         
         with open(particleBoxSizeFn, 'r') as fp:
             self.particleBoxsize = int(fp.read().rstrip('\n'))
