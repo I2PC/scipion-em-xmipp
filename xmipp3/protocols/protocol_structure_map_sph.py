@@ -112,7 +112,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         for voli in volList:
             convert = self._insertFunctionStep('convertStep', volList[nVoli - 1],
                                      dimList[nVoli - 1], srList[nVoli - 1],
-                                     min(dimList), max(srList), prerequisites=[])
+                                     min(dimList), max(srList), nVoli, prerequisites=[])
             depsConvert.append(convert)
             nVoli += 1
 
@@ -144,7 +144,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
 
     # --------------------------- STEPS functions ---------------------------------------------------
-    def convertStep(self, volFn, volDim, volSr, minDim, maxSr):
+    def convertStep(self, volFn, volDim, volSr, minDim, maxSr, nVoli):
         Xdim = volDim
         Ts = volSr
         newTs = self.targetResolution.get() * 1.0 / 3.0
@@ -153,7 +153,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         newRmax = long(self.Rmax.get() * Ts / newTs)
         self.newRmax = min(newRmax, self.Rmax.get())
         fnOut = os.path.splitext(volFn)[0]
-        fnOut = self._getExtraPath(os.path.basename(fnOut + '_crop.vol'))
+        fnOut = self._getExtraPath(os.path.basename(fnOut + '%d_crop.vol' % nVoli))
 
         ih = ImageHandler()
         if Xdim != newXdim:
@@ -164,12 +164,12 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             ih.convert(volFn, fnOut)
 
         if newXdim>minDim:
-            self.runJob("xmipp_transform_window", " -i %s -o %s--crop %d" %
+            self.runJob("xmipp_transform_window", " -i %s -o %s --crop %d" %
                         (fnOut, fnOut, (newXdim - minDim)))
 
     def deformStep(self, inputVolFn, refVolFn, i, j):
-        inputVolFn = self._getExtraPath(os.path.basename(os.path.splitext(inputVolFn)[0] + '_crop.vol'))
-        refVolFn = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0] + '_crop.vol'))
+        inputVolFn = self._getExtraPath(os.path.basename(os.path.splitext(inputVolFn)[0] + '%d_crop.vol' % (i+1)))
+        refVolFn = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0] + '%d_crop.vol' % (j+1)))
         fnOut = self._getExtraPath('vol%dAlignedTo%d.vol' % (i, j))
         fnOut2 = self._getExtraPath('vol%dDeformedTo%d.vol' % (i, j))
 
