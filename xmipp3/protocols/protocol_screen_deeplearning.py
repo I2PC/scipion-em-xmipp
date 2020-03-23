@@ -34,7 +34,6 @@ from pwem.protocols import ProtProcessParticles
 import pwem.emlib.metadata as md
 
 from ..convert import writeSetOfParticles, setXmippAttributes
-from ..constants import CONDA_DEFAULT_ENVIRON
 from ..base import XmippProtocol
 
 N_MAX_NEG_SETS = 5

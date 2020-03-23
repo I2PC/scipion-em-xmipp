@@ -31,7 +31,6 @@ This modules contains constants related to Xmipp3 protocols
 XMIPP_URL = 'https://github.com/i2pc/scipion-em-xmipp'
 XMIPP_HOME = 'XMIPP_HOME'
 NMA_HOME = 'NMA_HOME'
-CONDA_DEFAULT_ENVIRON= 'deepLearningToolkit_v0.2'
 
 MASK_FILL_VALUE = 0
 MASK_FILL_MIN = 1
