@@ -57,7 +57,7 @@ METADATA_MASK_FILE = 'metadataresolutions'
 FN_METADATA_HISTOGRAM = 'mdhist'
 
 
-class XmippProtDeepRes(ProtAnalysis3D):
+class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
     """    
     Given a map the protocol assigns local resolutions to each voxel of the map.
     """
@@ -229,7 +229,7 @@ class XmippProtDeepRes(ProtAnalysis3D):
         params += ' -s  %f' % self.inputVolume.get().getSamplingRate()            
         params += ' -o  %s' % self._getFileName(OUTPUT_RESOLUTION_FILE)
 
-        self.runJob("xmipp_deepRes_resolution", params)
+        self.runCondaJob("xmipp_deepRes_resolution", params, numberOfMpi=1)
         
 
     def createHistrogram(self):

@@ -38,7 +38,8 @@ import pwem
 try:  # TODO: Avoid these imports by importing them in the protocols/viewers
     from xmipp_base import *  # xmipp_base and xmippViz come from the binding and
     from xmippViz import *    #  it is not available before installing the binaries
-except:
+    from xmipp_base import _getModel
+except: #TODO: catch exception by type and ensure it is caused by CondaEnvManager
     class CondaEnvManager:
         """ Fake class to avoid fails in very early stages (installation). """
         @classmethod
@@ -156,7 +157,7 @@ class XmippProtocol:
         import subprocess
         try:
 #            subprocess.call('which python', shell=True, env=env)
-            subprocess.check_output('python -c "import keras"', shell=True, env=env)
+            subprocess.check_output('python -W ignore::FutureWarning -c "import keras"', shell=True, env=env)
         except subprocess.CalledProcessError as e:
             errors.append("*Keras/Tensorflow not found*. Required to run this protocol.")
             kerasError = True

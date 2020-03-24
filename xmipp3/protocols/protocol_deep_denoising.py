@@ -43,7 +43,7 @@ import xmipp3
 from xmipp3.convert import writeSetOfParticles, setXmippAttributes, xmippToLocation
 from xmipp3.protocols import XmippProtCompareReprojections
 from xmipp3.protocols import XmippProtGenerateReprojections
-
+from xmipp3 import XmippProtocol
 
 EXEC_MODES = ['Train & Predict', 'Predict']
 ITER_TRAIN = 0
@@ -66,7 +66,7 @@ TRAINING_LOSS_BOTH = 2
 
 PRED_BATCH_SIZE=2000
 
-class XmippProtDeepDenoising(XmippProtGenerateReprojections):
+class XmippProtDeepDenoising(XmippProtGenerateReprojections, XmippProtocol):
 
     _label ="deep denoising"
     _lastUpdateVersion = VERSION_2_0
@@ -77,9 +77,9 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
     def _defineParams(self, form):
 
         form.addSection('Input')
-        form.addHidden(params.GPU_LIST, params.StringParam, default='',
+        form.addHidden(params.GPU_LIST, params.StringParam,
                        expertLevel=cons.LEVEL_ADVANCED,
-                       label="Choose GPU IDs",
+                       label="Choose GPU IDs", default='0',
                        help="GPU may have several cores. Set it to zero"
                             " if you do not know what we are talking about."
                             " First core index is 0, second 1 and so on."
@@ -317,7 +317,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         if os.path.isfile(dataPathEmpty):
           args+=" --empty_particles %s"%dataPathEmpty
 
-        self.runJob("xmipp_deep_denoising", args, numberOfMpi=1)
+        self.runCondaJob("xmipp_deep_denoising", args, numberOfMpi=1)
 
 
     def _getModelFname(self):
@@ -360,7 +360,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
       elif self.checkIfInputIsCompareReprojection():
         args += " -p %s" % self._getExtraPath('resizedProjections.stk')
 
-      self.runJob("xmipp_deep_denoising", args, numberOfMpi=1)
+      self.runCondaJob("xmipp_deep_denoising", args, numberOfMpi=1)
 
     def createOutputStep(self):
         imgSet = self.inputParticles.get()
@@ -402,7 +402,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
 
     def _validate(self):
 
-        assertModel = self.model.get()==ITER_PREDICT and not self.modelPretrain
+        assertModel = self.modelTrainPredMode.get()==ITER_PREDICT and not self.modelPretrain
         errors = self.validateDLtoolkit(assertModel=assertModel,
                                         model=('deepDenoising', 'PretrainModel.h5'),
                                         errorMsg="Required with 'Predict' mode when "
