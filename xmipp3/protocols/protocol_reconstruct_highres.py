@@ -86,9 +86,6 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
     AUTOMATIC_ALIGNMENT = 2
     STOCHASTIC_ALIGNMENT = 3
 
-    GLOBAL_SIGNIFICANT = 0
-    GLOBAL_GPU_SIGNIFICANT = 1
-
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addHidden(USE_GPU, BooleanParam, default=True,
@@ -225,12 +222,6 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                       default=92, condition="restrictReconstructionAngles",
                       help="Perform an angular assignment and only use those images whose angles are within these limits")
 
-        form.addParam('globalMethod', EnumParam,
-                      label="Global alignment method",
-                      choices=['Significant', 'Gpu Signficant'],
-                      default=self.GLOBAL_SIGNIFICANT,
-                      condition='alignmentMethod==0 or alignmentMethod==2 or alignmentMethod==3',
-                      expertLevel=LEVEL_ADVANCED)
         form.addParam('maximumTargetResolution', NumericListParam,
                       label="Max. Target Resolution", default="15 8 4",
                       condition='multiresolution',
@@ -1116,7 +1107,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                 R = self.inputParticles.get().getDimensions()[
                                         0] / 2
                             R = R * self.TsOrig / TsCurrent
-                            if self.globalMethod.get() == self.GLOBAL_SIGNIFICANT:
+                            if not self.useGpu.get():
                                 args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d' % \
                                        (fnGroup, fnGalleryGroupMd, maxShift,
                                         fnDirSignificant,
@@ -1134,8 +1125,13 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                     # cleanPath(join(fnDirSignificant,"angles_iter001_00.xmd"))
                                     cleanPath(join(fnDirSignificant,
                                                    "images_significant_iter001_00.xmd"))
-                            elif self.globalMethod.get() == self.GLOBAL_GPU_SIGNIFICANT:
-                                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                            else:
+                                print("GPU LIST ", self.getGpuList())
+                                if self.useQueueForSteps() or self.useQueue():
+                                    import os
+                                    GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                                else:
+                                    GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
                                 args = '-i %s -r %s -o %s --keepBestN %f --dev %s ' % \
                                        (fnGroup, fnGalleryGroupMd, fnAnglesGroup,
                                        self.numberOfReplicates.get(), GpuList)
