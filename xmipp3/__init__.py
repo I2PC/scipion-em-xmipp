@@ -252,8 +252,8 @@ def installDeepLearningToolkit(plugin, env):
   cmdsInstall = [(cmd, envName+".yml") for cmd, envName in cmdsInstall]
   env.addPackage('deepLearningToolkit', version='0.2', urlSuffix='external',
                  commands=[xmippInstallCheck]+cmdsInstall+[
-                           ("rm %s_* 2>/dev/null ; %s && touch %s && echo ' > %s'"
-                            % (modelsPrefix, modelsDownloadCmd, modelsTarget, "\n > ".join(cudaMsgs)),
-                            modelsTarget),
-                 ],
+                           ("rm %s_* %s 2>/dev/null ; %s && touch %s && echo ' > %s'"
+                            % (modelsPrefix, xmippLibToken,modelsDownloadCmd,
+                               modelsTarget, "\n > ".join(cudaMsgs)),
+                            modelsTarget)],
                  deps=[], tar='deepLearningToolkit.tgz')
