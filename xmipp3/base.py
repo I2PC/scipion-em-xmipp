@@ -116,13 +116,7 @@ class XmippProtocol:
                   in the arguments to skip that raise, especially in validation
                   asserions!
         """
-        model = getXmippPath('models', *modelPath)
-
-        # Raising an error to prevent posterior errors and to print a hint
-        if kwargs.get('doRaise', True) and not os.path.exists(model):
-            raise Exception("'%s' model not found. Please, run: \n"
-                            " > scipion installb deepLearningToolkit" % modelPath[0])
-        return model
+        return _getModel(*modelPath, **kwargs)
 
     def validateDLtoolkit(self, errors=None, **kwargs):
         """ Validates if the deepLearningToolkit is installed.
