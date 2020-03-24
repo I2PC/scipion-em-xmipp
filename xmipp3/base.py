@@ -39,7 +39,12 @@ try:  # TODO: Avoid these imports by importing them in the protocols/viewers
     from xmipp_base import *  # xmipp_base and xmippViz come from the binding and
     from xmippViz import *    #  it is not available before installing the binaries
 except:
-    pass
+    class CondaEnvManager:
+        """ Fake class to avoid fails in very early stages (installation). """
+        @classmethod
+        def yieldInstallAllCmds(*args, **kwargs):
+            yield '', ''
+
 
 import xmipp3
 
