@@ -997,7 +997,7 @@ class TestXmippApplyAlignment(TestXmippBase):
         setupTestProject(cls)
         TestXmippBase.setData('mda')
         cls.protImport = cls.runImportParticles(cls.particlesFn, 3.5)
-        cls.align2D = cls.runCL2DAlign(cls.particlesFn, )
+        cls.align2D = cls.runCL2DAlign(cls.protImport.outputParticles)
 
     def test_apply_alignment(self):
         protApply = self.newProtocol(XmippProtApplyAlignment)
