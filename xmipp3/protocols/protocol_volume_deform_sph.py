@@ -44,7 +44,7 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
                       pointerClass='Volume')
         form.addParam('refVolume', params.PointerParam, label="Reference volume",
                       pointerClass='Volume')
-        form.addParam('sigma', params.NumericListParam, label="Multiresolution",
+        form.addParam('sigma', params.NumericListParam, label="Multiresolution", default="1 2",
                       help="Perform the analysys comparing different filtered versions of the volumes")
         form.addParam('targetResolution', params.FloatParam, label="Target resolution",
                       default=8.0,
@@ -123,11 +123,11 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
         self.alignSimulated()
 
         # Normalize the volumes to be passed to SPH program
-        params = " -i %s --method Robust --mask circular 50 -o %s" % (fnRefVol, fnRefVol)
-        self.runJob("xmipp_transform_normalize", params)
-
-        params = " -i %s --method Robust --mask circular 50 -o %s" % (fnOutVol, fnOutVol)
-        self.runJob("xmipp_transform_normalize", params)
+        # params = " -i %s --method Robust --mask circular 50 --clip -o %s" % (fnRefVol, fnRefVol)
+        # self.runJob("xmipp_transform_normalize", params)
+        #
+        # params = " -i %s --method Robust --mask circular 50 --clip -o %s" % (fnOutVol, fnOutVol)
+        # self.runJob("xmipp_transform_normalize", params)
 
         params = ' -i %s -r %s -o %s --analyzeStrain --depth %d --sigma "%s"' % \
                  (fnOutVol, fnRefVol, fnOutVol, self.depth.get(), self.sigma.get())
