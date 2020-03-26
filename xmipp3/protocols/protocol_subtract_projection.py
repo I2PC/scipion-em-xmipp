@@ -29,13 +29,13 @@
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.params import PointerParam, EnumParam, BooleanParam
 
-from pyworkflow.em.protocol import ProtOperateParticles
+from pwem.protocols import ProtOperateParticles
 from pyworkflow.protocol.constants import STEPS_PARALLEL
-from pyworkflow.em import ImageHandler
+from pwem.emlib.image import ImageHandler
 
-import xmippLib
+from pwem import emlib
 from xmipp3.convert import (XmippMdRow, particleToRow,
-                       getImageLocation, geometryFromMatrix)
+                            getImageLocation, geometryFromMatrix)
 
 
 class XmippProtSubtractProjection(ProtOperateParticles):
@@ -108,8 +108,8 @@ class XmippProtSubtractProjection(ProtOperateParticles):
 
         depsOutPut=[]
         for thread in range(0, numberOfThreads):
-            start = long(thread * groupSize+1)
-            end = long(thread * groupSize+groupSize)
+            start = int(thread * groupSize+1)
+            end = int(thread * groupSize+groupSize)
             if thread == (numberOfThreads-1):
                 end += groupRemainder
             idStep = self._insertFunctionStep('projectStep', start, end,
@@ -121,25 +121,25 @@ class XmippProtSubtractProjection(ProtOperateParticles):
     #--------------------------- STEPS functions -------------------------------
     def convertInputStep(self, volName):
         # Read volume and convert to DOUBLE
-        self.vol = xmippLib.Image(volName)
-        self.vol.convert2DataType(xmippLib.DT_DOUBLE)
+        self.vol = emlib.Image(volName)
+        self.vol.convert2DataType(emlib.DT_DOUBLE)
         # Mask volume if needed
         if self.refMask.get() is not None:
             maskName = getImageLocation(self.refMask.get())
-            self.mask = xmippLib.Image(maskName)
-            self.mask.convert2DataType(xmippLib.DT_DOUBLE)
+            self.mask = emlib.Image(maskName)
+            self.mask.convert2DataType(emlib.DT_DOUBLE)
             self.vol.inplaceMultiply(self.mask)
         padding = 2
         maxFreq = 0.5
         splineDegree = 3
         ###
-        self.fourierProjectVol = xmippLib.FourierProjector(self.vol, padding, maxFreq, splineDegree)
+        self.fourierProjectVol = emlib.FourierProjector(self.vol, padding, maxFreq, splineDegree)
         ###
         partSet = self.inputParticles.get()
         nPart = len(partSet)
         numberOfTasks = min(nPart, max(self.numberOfThreads.get()-1, 1))
         taskSize = nPart / numberOfTasks
-        md = xmippLib.MetaData()
+        md = emlib.MetaData()
 
         # Convert angles and shifts from volume system of coordinates to
         # projection system of coordinates
@@ -151,12 +151,12 @@ class XmippProtSubtractProjection(ProtOperateParticles):
             particleToRow(part, imgRow)
             shifts, angles = geometryFromMatrix(part.getTransform().getMatrix(), True)
 
-            imgRow.setValue(xmippLib.MDL_SHIFT_X,-shifts[0])
-            imgRow.setValue(xmippLib.MDL_SHIFT_Y,-shifts[1])
-            imgRow.setValue(xmippLib.MDL_SHIFT_Z,0.)
-            imgRow.setValue(xmippLib.MDL_ANGLE_ROT,angles[0])
-            imgRow.setValue(xmippLib.MDL_ANGLE_TILT,angles[1])
-            imgRow.setValue(xmippLib.MDL_ANGLE_PSI,angles[2])
+            imgRow.setValue(emlib.MDL_SHIFT_X,-shifts[0])
+            imgRow.setValue(emlib.MDL_SHIFT_Y,-shifts[1])
+            imgRow.setValue(emlib.MDL_SHIFT_Z,0.)
+            imgRow.setValue(emlib.MDL_ANGLE_ROT,angles[0])
+            imgRow.setValue(emlib.MDL_ANGLE_TILT,angles[1])
+            imgRow.setValue(emlib.MDL_ANGLE_PSI,angles[2])
 
             imgRow.writeToMd(md, objId)
 
@@ -170,19 +170,19 @@ class XmippProtSubtractProjection(ProtOperateParticles):
                 mdCount += 1
 
         x, y, _ = partSet.getDim()
-        xmippLib.createEmptyFile(self._getProjGalleryFn(), x, y, 1, nPart)
+        emlib.createEmptyFile(self._getProjGalleryFn(), x, y, 1, nPart)
 
     def projectStep(self, start, end, samplingRate, threadNumber):
         # Project
-        md = xmippLib.MetaData(self._getInputParticlesSubsetFn(threadNumber))
+        md = emlib.MetaData(self._getInputParticlesSubsetFn(threadNumber))
         ##
-        projection = xmippLib.Image()
-        projection.setDataType(xmippLib.DT_DOUBLE)
+        projection = emlib.Image()
+        projection.setDataType(emlib.DT_DOUBLE)
         ##
         for id in md:
-            rot  = md.getValue(xmippLib.MDL_ANGLE_ROT,  id)
-            tilt = md.getValue(xmippLib.MDL_ANGLE_TILT, id)
-            psi  = md.getValue(xmippLib.MDL_ANGLE_PSI,  id)
+            rot  = md.getValue(emlib.MDL_ANGLE_ROT,  id)
+            tilt = md.getValue(emlib.MDL_ANGLE_TILT, id)
+            psi  = md.getValue(emlib.MDL_ANGLE_PSI,  id)
 
             ##projection =self.vol.projectVolumeDouble(rot, tilt, psi)
             self.fourierProjectVol.projectVolume(projection, rot, tilt, psi)
@@ -191,17 +191,17 @@ class XmippProtSubtractProjection(ProtOperateParticles):
             if self.projType == self.CORRECT_NONE:
                 pass
             elif self.projType == self.CORRECT_FULL_CTF:
-                xmippLib.applyCTF(projection, md, samplingRate, id, False)
+                emlib.applyCTF(projection, md, samplingRate, id, False)
             elif self.projType == self.CORRECT_PHASE_FLIP:
-                xmippLib.applyCTF(projection, md, samplingRate, id, True)
+                emlib.applyCTF(projection, md, samplingRate, id, True)
             else:
                 raise Exception("ERROR: Unknown projection mode: %d" % self.projType)
 
             # Shift image
             projection.applyGeo(md,id,True,False)#onlyapplyshist, wrap
             ih = ImageHandler()
-            expProj = ih.read(md.getValue(xmippLib.MDL_IMAGE, id))
-            expProj.convert2DataType(xmippLib.DT_DOUBLE)
+            expProj = ih.read(md.getValue(emlib.MDL_IMAGE, id))
+            expProj.convert2DataType(emlib.DT_DOUBLE)
             # Subtract from experimental and write result
             projection.resetOrigin()
             if self.normalize:

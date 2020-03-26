@@ -28,13 +28,14 @@
 # **************************************************************************
 
 import pyworkflow.protocol.constants as const
-from pyworkflow.protocol.params import BooleanParam, EnumParam, FloatParam, IntParam
-from pyworkflow.em.data import Volume
+from pyworkflow.protocol.params import (BooleanParam, EnumParam, FloatParam,
+                                        IntParam)
+from pwem.objects import Volume
 
 from .protocol_process import XmippProcessParticles, XmippProcessVolumes
 
 
-class XmippResizeHelper():
+class XmippResizeHelper:
     """ Common features to change dimensions of either SetOfParticles,
     Volume or SetOfVolumes objects.
     """
@@ -323,7 +324,9 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
                              " in Fourier space" if self.doFourier else "")]
         if not self.doResize and not self.doWindow:
             methods += ["did nothing to them"]
-        str = "%s and %s. Output particles: %s" % (", ".join(methods[:-1]), methods[-1], self.getObjectTag('outputParticles'))
+        str = "%s and %s. Output particles: %s" % (", ".join(methods[:-1]),
+                                                   methods[-1],
+                                                   self.getObjectTag('outputParticles'))
         return [str]
 
     def _validate(self):

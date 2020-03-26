@@ -31,14 +31,15 @@ from .viewer_cl2d import XmippCL2DViewer
 from .viewer_ctf_consensus import XmippCTFConsensusViewer
 from .viewer_deep_consensus import XmippDeepConsensusViewer
 from .viewer_deep_micrograph_cleaner import XmippDeepMicrographViewer
-from .viewer_eliminate_empty_images import XmippEliminateEmptyViewer
 from .viewer_ml2d import XmippML2DViewer
-from .viewer_movie_alignment import XmippMovieAlignViewer, XmippMovieMaxShiftViewer
+from .viewer_mltomo import XmippMLTomoViewer
+from .viewer_movie_alignment import XmippMovieAlignViewer
 from .viewer_normalize_strain import XmippNormalizeStrainViewer
 from .viewer_resolution3d import XmippResolution3DViewer
 from .viewer_resolution_directional import XmippMonoDirViewer
 from .viewer_resolution_monogenic_signal import XmippMonoResViewer
 from .viewer_resolution_deepres import XmippResDeepResViewer
+from .viewer_resolution_monotomo import XmippMonoTomoViewer
 from .viewer_validate_nontilt import XmippValidateNonTiltViewer
 from .viewer_split_volume import XmippViewerSplitVolume
 from .viewer_validate_overfitting import XmippValidateOverfittingViewer
@@ -47,13 +48,7 @@ from .viewer_reconstruct_highres import XmippReconstructHighResViewer
 from .viewer_solid_angles import SolidAnglesViewer
 from .viewer_extract_unit_cell import viewerXmippProtExtractUnit
 
-from .viewer_nma import XmippNMAViewer
-from .viewer_nma_alignment import XmippAlignmentNMAViewer
-from .viewer_nma_dimred import XmippDimredNMAViewer
-from .viewer_structure_mapping import XmippProtStructureMappingViewer
-from .viewer_analyze_local_ctf import XmippAnalyzeLocalCTFViewer
 
-from .viewer_pseudoatoms import XmippPseudoAtomsViewer
 #from .viewer_combine_pdb import XmippProtCombinePdbViewer
 
 from .viewer_projmatch import XmippProjMatchViewer
@@ -61,5 +56,7 @@ from .viewer_projmatch import XmippProjMatchViewer
 #AJ
 from .viewer_structure_map_sph import XmippProtStructureMapSphViewer
 from .viewer_volume_deform_sph import XmippVolumeDeformSphViewer
-from .viewer_angular_alignment_sph import XmippAngularAlignmentSphViewer
+
+# Pablo: without NMA this fails, not sure if it has to be here.
+# from .viewer_angular_alignment_sph import XmippAngularAlignmentSphViewer
 

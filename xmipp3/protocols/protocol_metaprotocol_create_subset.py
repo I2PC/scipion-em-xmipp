@@ -26,8 +26,8 @@
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import PointerParam, IntParam
-from pyworkflow.em.protocol import EMProtocol
-from pyworkflow.em.data import Volume
+from pwem.protocols import EMProtocol
+from pwem.objects import Volume
 
 
 class XmippMetaProtCreateSubset(EMProtocol):

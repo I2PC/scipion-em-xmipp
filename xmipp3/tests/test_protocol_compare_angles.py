@@ -23,7 +23,7 @@
 # ***************************************************************************/
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
-from pyworkflow.em.protocol import ProtImportParticles, ProtSplitSet
+from pwem.protocols import ProtImportParticles, ProtSplitSet
 
 from xmipp3.protocols import XmippProtCompareAngles
 

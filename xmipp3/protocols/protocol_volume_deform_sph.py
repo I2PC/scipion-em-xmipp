@@ -24,11 +24,10 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
-from pyworkflow.em.protocol import ProtAnalysis3D
+from pwem.protocols import ProtAnalysis3D
 import pyworkflow.protocol.params as params
-from pyworkflow.em.convert import ImageHandler
-from pyworkflow.em.data import Volume
+from pwem.emlib.image import ImageHandler
+from pwem.objects import Volume
 from pyworkflow import VERSION_2_0
 
 

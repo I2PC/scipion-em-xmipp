@@ -31,15 +31,15 @@ import os
 from math import ceil
 
 import pyworkflow.utils as pwutils
-from pyworkflow.utils import yellowStr, redStr, importFromPlugin
+from pyworkflow.utils import yellowStr
 import pyworkflow.object as pwobj
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
-import pyworkflow.em as em
-import pyworkflow.em.metadata as md
+import pwem.emlib.metadata as md
+from pwem.objects import Image
+from pwem.protocols.protocol_align_movies import createAlignmentPlot
 from pyworkflow import VERSION_1_1
-from pyworkflow.em.protocol import ProtAlignMovies
-from pyworkflow.em.protocol.protocol_align_movies import createAlignmentPlot
+from pwem.protocols import ProtAlignMovies
 
 from xmipp3.convert import writeMovieMd
 
@@ -319,10 +319,10 @@ class XmippProtMovieCorr(ProtAlignMovies):
             movie: Pass the reference movie
             obj: should pass either the created micrograph or movie
         """
-        obj.plotCart = em.Image()
+        obj.plotCart = Image()
         obj.plotCart.setFileName(self._getPlotCart(movie))
         if self.doComputePSD:
-            obj.psdCorr = em.Image()
+            obj.psdCorr = Image()
             obj.psdCorr.setFileName(self._getPsdCorr(movie))
 
         meanX, meanY = self._loadMeanShifts(movie)

@@ -25,14 +25,15 @@
 # **************************************************************************
 
 from os.path import basename
-import Tkinter as tk
+import tkinter as tk
 
 import pyworkflow.gui as gui
 from pyworkflow.gui.widgets import Button, HotButton
 
 from xmipp3.protocols.nma.data import Point
-from . import PointSelector
-from ..nma_plotter import XmippNmaPlotter
+from xmipp3.viewers.nma_plotter import XmippNmaPlotter
+
+from .matplotlib_point_selector import PointSelector
 
     
 class ClusteringWindow(gui.Window):

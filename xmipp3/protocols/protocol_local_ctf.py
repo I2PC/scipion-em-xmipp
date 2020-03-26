@@ -30,14 +30,13 @@ from math import floor
 import os
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam
+from pyworkflow.protocol.params import PointerParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.utils.path import cleanPattern
-from pyworkflow.em.protocol import ProtAnalysis3D
-from pyworkflow.em.convert import ImageHandler
+from pwem.protocols import ProtAnalysis3D
+from pwem import emlib
 
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
-import xmippLib
 
 
 class XmippProtLocalCTF(ProtAnalysis3D):
@@ -81,7 +80,7 @@ class XmippProtLocalCTF(ProtAnalysis3D):
     def convertStep(self):
         imgSet = self.inputSet.get()
         writeSetOfParticles(imgSet, self._getExtraPath('input_imgs.xmd'))
-        img = ImageHandler()
+        img = emlib.image.ImageHandler()
         fnVol = self._getExtraPath("volume.vol")
         img.convert(self.inputVolume.get(), fnVol)
         xDimVol=self.inputVolume.get().getDim()[0]
@@ -118,7 +117,7 @@ class XmippProtLocalCTF(ProtAnalysis3D):
         outputSet = self._createSetOfParticles()
         imgSet = self.inputSet.get()
         outputSet.copyInfo(imgSet)
-        readSetOfParticles(self._getExtraPath('output_imgs.xmd'), outputSet,  extraLabels=[xmippLib.MDL_CTF_DEFOCUS_CHANGE])
+        readSetOfParticles(self._getExtraPath('output_imgs.xmd'), outputSet,  extraLabels=[emlib.MDL_CTF_DEFOCUS_CHANGE])
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(self.inputSet, outputSet)
 

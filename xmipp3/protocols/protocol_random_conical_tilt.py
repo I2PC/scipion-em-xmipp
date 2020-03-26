@@ -30,11 +30,11 @@ from os.path import exists
 from pyworkflow.object import String
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 import pyworkflow.protocol.params as params
-from pyworkflow.em.protocol import ProtInitialVolume
-from pyworkflow.em.data import Volume, SetOfParticles
-from pyworkflow.em.constants import ALIGN_2D
+from pwem.protocols import ProtInitialVolume
+from pwem.objects import Volume, SetOfParticles
+from pwem.constants import ALIGN_2D
 
-import xmippLib
+from pwem import emlib
 from xmipp3.base import XmippMdRow
 from xmipp3.convert import getImageLocation, alignmentToRow
 
@@ -138,7 +138,7 @@ class XmippProtRCT(ProtInitialVolume):
     def _appendRctImages(self, particles):
         blockMd = "class%06d_images@%s" % (particles.getObjId(),
                                            self.rctClassesFn)
-        classMd = xmippLib.MetaData()
+        classMd = emlib.MetaData()
 
         partPairs = self.inputParticlesTiltPair.get()
         uImages = partPairs.getUntilted()
@@ -158,22 +158,22 @@ class XmippProtRCT(ProtInitialVolume):
             tImg = tImages[imgId]
             
             if uImg is None or tImg is None:
-                print (">>> Warning, for id %d, tilted or untilted particle "
-                       "was not found. Ignored." % imgId)
+                print(">>> Warning, for id %d, tilted or untilted particle "
+                      "was not found. Ignored." % imgId)
             else:
                 objId = classMd.addObject()
                 pairRow = XmippMdRow()
-                pairRow.setValue(xmippLib.MDL_IMAGE, getImageLocation(uImg))
+                pairRow.setValue(emlib.MDL_IMAGE, getImageLocation(uImg))
                 uCoord = uImg.getCoordinate()
                 micId = uCoord.getMicId()
                 uMic = uMics[micId]
                 angles = sangles[micId]
-                pairRow.setValue(xmippLib.MDL_MICROGRAPH, uMic.getFileName())
-                pairRow.setValue(xmippLib.MDL_XCOOR, uCoord.getX())
-                pairRow.setValue(xmippLib.MDL_YCOOR, uCoord.getY())
-                pairRow.setValue(xmippLib.MDL_ENABLED, 1)
-                pairRow.setValue(xmippLib.MDL_ITEM_ID, long(imgId))
-                pairRow.setValue(xmippLib.MDL_REF, 1)
+                pairRow.setValue(emlib.MDL_MICROGRAPH, uMic.getFileName())
+                pairRow.setValue(emlib.MDL_XCOOR, uCoord.getX())
+                pairRow.setValue(emlib.MDL_YCOOR, uCoord.getY())
+                pairRow.setValue(emlib.MDL_ENABLED, 1)
+                pairRow.setValue(emlib.MDL_ITEM_ID, int(imgId))
+                pairRow.setValue(emlib.MDL_REF, 1)
     
                 alignment = img.getTransform()
     
@@ -181,17 +181,17 @@ class XmippProtRCT(ProtInitialVolume):
                 alignment.scale(scaleFactor)
                 alignmentToRow(alignment, pairRow, alignType=ALIGN_2D)
                                    
-                pairRow.setValue(xmippLib.MDL_IMAGE_TILTED, getImageLocation(tImg))
+                pairRow.setValue(emlib.MDL_IMAGE_TILTED, getImageLocation(tImg))
                 tMic = tMics[micId]
-                pairRow.setValue(xmippLib.MDL_MICROGRAPH_TILTED, tMic.getFileName())
+                pairRow.setValue(emlib.MDL_MICROGRAPH_TILTED, tMic.getFileName())
                 (angleY, angleY2, angleTilt) = angles.getAngles()
-                pairRow.setValue(xmippLib.MDL_ANGLE_Y, float(angleY))
-                pairRow.setValue(xmippLib.MDL_ANGLE_Y2, float(angleY2))
-                pairRow.setValue(xmippLib.MDL_ANGLE_TILT, float(angleTilt))
+                pairRow.setValue(emlib.MDL_ANGLE_Y, float(angleY))
+                pairRow.setValue(emlib.MDL_ANGLE_Y2, float(angleY2))
+                pairRow.setValue(emlib.MDL_ANGLE_TILT, float(angleTilt))
                 
                 pairRow.writeToMd(classMd, objId)
         
-        classMd.write(blockMd, xmippLib.MD_APPEND)
+        classMd.write(blockMd, emlib.MD_APPEND)
             
     def _reconstructImages(self, particles, deps):
         """ Function to insert the step needed to reconstruct a
@@ -252,12 +252,12 @@ class XmippProtRCT(ProtInitialVolume):
 
         if exists(classVolumeOut):
             mdFn = self._getPath('volumes.xmd')
-            md = xmippLib.MetaData()
+            md = emlib.MetaData()
             
             if exists(mdFn):
                 md.read(mdFn)
             objId = md.addObject()
-            md.setValue(xmippLib.MDL_IMAGE, classVolumeOut, objId)
+            md.setValue(emlib.MDL_IMAGE, classVolumeOut, objId)
                         
             if self.doFilter.get():
                 filteredVolume = classVolumeOut.replace('.vol', '_filtered.vol')
@@ -267,7 +267,7 @@ class XmippProtRCT(ProtInitialVolume):
                 args += " --thr %d" % self.numberOfThreads.get()
                 self.runJob("xmipp_transform_filter", args, numberOfMpi=1)
                 objId = md.addObject()
-                md.setValue(xmippLib.MDL_IMAGE, filteredVolume, objId)
+                md.setValue(emlib.MDL_IMAGE, filteredVolume, objId)
             md.write(mdFn)
                     
     def createOutputStep(self):

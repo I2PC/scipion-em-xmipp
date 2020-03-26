@@ -24,23 +24,24 @@
 # *
 # **************************************************************************
 
-from pyworkflow.gui.plotter import Plotter
-from plotter import XmippPlotter
+
 from pyworkflow.protocol.params import LabelParam, StringParam, EnumParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
-from pyworkflow.em.viewers import ChimeraView, DataView
+from pwem.viewers import ChimeraView, DataView
 from xmipp3.protocols.protocol_resolution_directional import XmippProtMonoDir
-from pyworkflow.em.metadata import MetaData
-from xmippLib import *
-from pyworkflow.em import ImageHandler
+from pwem.emlib.metadata import MetaData
+from pwem.emlib.image import ImageHandler
 import numpy as np
 import matplotlib.pyplot as plt
-from math import sqrt
 from matplotlib import cm
 import matplotlib.colors as mcolors
 from pyworkflow.utils import getExt, removeExt
 from os.path import abspath, exists
 from collections import OrderedDict
+
+from .plotter import XmippPlotter
+
+from pwem.emlib import *
 
 OUTPUT_RESOLUTION_FILE_CHIMERA = 'MG_Chimera_resolution.vol'
 
@@ -261,7 +262,7 @@ class XmippMonoDirViewer(ProtocolViewer):
     
 
     def _plotCurve(self, a, fnDir, labelmd):
-        print labelmd
+        print(labelmd)
         md = MetaData(fnDir)
         resolution = []
         radius = []
@@ -488,9 +489,9 @@ class XmippMonoDirViewer(ProtocolViewer):
         fhCmd.close()
 
 #     def plotAnisotropyResolution(self, path):        
-#         from xmippLib import XmippPlotter as Xmplt
+#         from pwem.emlib import XmippPlotter as Xmplt
 #  
-#         print path
+#         print(path)
 #         md = MetaData(path)
 #         y = md.getColumnValues(MDL_COST)
 #         x = md.getColumnValues(MDL_RESOLUTION_SSNR)
@@ -520,7 +521,7 @@ class XmippMonoDirViewer(ProtocolViewer):
         xbin = floor((xmax - xmin)/resstep)
         ybin = ceil((ymax - ymin)/0.05)
         
-        print xbin, ybin
+        print(xbin, ybin)
         
         from matplotlib.pyplot import contour, contourf
         plt.figure()
@@ -537,14 +538,14 @@ class XmippMonoDirViewer(ProtocolViewer):
         xplotter = XmippPlotter(x=1, y=1, mainTitle="aaaaa "
                                                      "along %s-axis."
                                                      %self._getAxis())
-        a = xplotter.createSubPlot("Slice " , '', '')
+        a = xplotter.createSubPlot("Slice ", '', '')
         matrix = img
-        print matrix
+        print(matrix)
         plot = xplotter.plotMatrix(a, matrix, 0, 200,
                                        cmap=self.getColorMap(),
                                        interpolation="nearest")
         xplotter.getColorBar(plot)
-        print matrix
+        print(matrix)
         
         return [xplotter]
 
@@ -568,10 +569,10 @@ class XmippMonoDirViewer(ProtocolViewer):
         return colors
     
     def getColorMap(self):
-        if (COLOR_CHOICES[self.colorMap.get()] is 'other'): 
+        if (COLOR_CHOICES[self.colorMap.get()] == 'other'):
             cmap = cm.get_cmap(self.otherColorMap.get())
         else:
             cmap = cm.get_cmap(COLOR_CHOICES[self.colorMap.get()])
         if cmap is None:
             cmap = cm.jet
-	return cmap
+        return cmap
