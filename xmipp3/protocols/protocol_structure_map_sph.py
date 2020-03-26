@@ -24,16 +24,20 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-from pwem.protocols import ProtAnalysis3D
-import pyworkflow.protocol.params as params
-from pwem.emlib.image import ImageHandler
-from pwem.objects import SetOfVolumes, Volume
-from pyworkflow import VERSION_2_0
+
 import numpy as np
 import glob
 import math
 import os
 import ntpath
+
+from pwem.protocols import ProtAnalysis3D
+import pyworkflow.protocol.params as params
+from pwem.emlib.image import ImageHandler
+from pwem.objects import SetOfVolumes, Volume
+from pyworkflow import VERSION_2_0
+from pyworkflow.utils import cleanPattern
+
 
 def mds(d, dimensions=2):
     """
@@ -143,8 +147,8 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         Ts = volSr
         newTs = self.targetResolution.get() * 1.0 / 3.0
         newTs = max(maxSr, newTs)
-        newXdim = long(Xdim * Ts / newTs)
-        newRmax = long(self.Rmax.get() * Ts / newTs)
+        newXdim = Xdim * Ts / newTs
+        newRmax = self.Rmax.get() * Ts / newTs
         self.newRmax = min(newRmax, self.Rmax.get())
         fnOut = os.path.splitext(volFn)[0]
         fnOut = self._getExtraPath(os.path.basename(fnOut + '%d_crop.vol' % nVoli))
@@ -214,9 +218,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         self.corrMatrix = np.zeros((len(volList), len(volList)))
         self.corrMatrix[len(volList)-1][len(volList)-1] = 0.0
 
-        from pyworkflow.em.convert import ImageHandler
         import xmippLib
-        ih = ImageHandler()
 
         volSet = self.inputVolumes
 

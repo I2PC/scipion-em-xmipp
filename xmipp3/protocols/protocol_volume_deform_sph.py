@@ -24,6 +24,7 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+
 from pwem.protocols import ProtAnalysis3D
 import pyworkflow.protocol.params as params
 from pwem.emlib.image import ImageHandler
@@ -88,9 +89,9 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
         TsR = self.refVolume.get().getSamplingRate()
         self.newTs = self.targetResolution.get() * 1.0 / 3.0
         self.newTs = max(TsI, TsR, self.newTs)
-        newXdimI = long(XdimI * TsI / self.newTs)
-        newXdimR = long(XdimR * TsR / self.newTs)
-        newRmax = long(self.Rmax.get() * TsI / self.newTs)
+        newXdimI = XdimI * TsI / self.newTs
+        newXdimR = XdimR * TsR / self.newTs
+        newRmax = self.Rmax.get() * TsI / self.newTs
         self.newXdim = min(newXdimI, newXdimR)
         self.newRmax = min(newRmax, self.Rmax.get())
 
