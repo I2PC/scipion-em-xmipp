@@ -418,12 +418,12 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                                     self.numberOfReplicates.get() - 1)
                             self.runJob('xmipp_reconstruct_significant', args,
                                         numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
-                        else:  # AJ use gpu
-                            args = '-i_exp %s -i_ref %s --maxShift %d -o %s --keep_best %d' % \
-                                   (fnGroup, fnGalleryGroupMd, maxShift,
-                                    fnAnglesSignificant,
-                                    self.numberOfReplicates.get())
-                            self.runJob('xmipp_cuda_correlation', args,
+                        else:  # To use gpu
+                            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                            args = '-i %s -r %s -o %s --keepBestN %d --dev %s ' % \
+                                   (fnGroup, fnGalleryGroupMd, fnAnglesSignificant,
+                                    self.numberOfReplicates.get(), GpuList)
+                            self.runJob('xmipp_cuda_align_significant', args,
                                         numberOfMpi=1)
 
                         if (exists(fnAnglesSignificant) and getSize(
@@ -538,9 +538,9 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         # AJ busca el maximo de correlacion entre todos los volumenes
         fnImgsId = self._getExtraPath("imagesId.xmd")
         fnOut = join(fnDirCurrent, "classes.xmd")
-        print("A correr",
-              "xmipp_classify_significant --id %s --angles %s --ref %s -o %s" % (
-              fnImgsId, fnAnglesAll, fnVols, fnOut))
+        #print("A correr",
+        #      "xmipp_classify_significant --id %s --angles %s --ref %s -o %s" % (
+        #      fnImgsId, fnAnglesAll, fnVols, fnOut))
 
         self.runJob("xmipp_classify_significant",
                     "--id %s --angles %s --ref %s -o %s --votes %d" % (

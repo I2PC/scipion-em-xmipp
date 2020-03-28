@@ -51,7 +51,8 @@ class XmippProtConvertToPseudoAtomsBase(Prot3D):
                       choices=['none', 'threshold', 'file'],
                       default=NMA_MASK_NONE,
                       label='Mask mode', display=EnumParam.DISPLAY_COMBO,
-                      help='')
+                      help='Mask to remove the background noise in the volume. \n'
+			   'If the volume was masked outside of this program, no need for masking here.')
         form.addParam('maskThreshold', FloatParam, default=0.01,
                       condition='maskMode==%d' % NMA_MASK_THRE,
                       label='Threshold value',
@@ -62,17 +63,16 @@ class XmippProtConvertToPseudoAtomsBase(Prot3D):
                       )
         form.addParam('pseudoAtomRadius', FloatParam, default=1,
                       label='Pseudoatom radius (vox)',
-                      help='Pseudoatoms are defined as Gaussians whose \n'
-                           'standard deviation is this value in voxels')
+                      help='Pseudoatoms are defined as Gaussians whose '
+                           'standard deviation is this value in voxels.')
         form.addParam('pseudoAtomTarget', FloatParam, default=5,
                       expertLevel=LEVEL_ADVANCED,
                       label='Volume approximation error(%)',
                       help='This value is a percentage (between 0.001 and '
-                           '100) \n specifying how fine you want to '
-                           'approximate the EM \n volume by the pseudoatomic '
-                           'structure. Lower values \n imply lower '
-                           'approximation error, and consequently, \n'
-                           'more pseudoatoms.')
+                           '100) specifying how fine you want to '
+                           'approximate the EM volume by the pseudoatomic '
+                           'structure. Lower values imply lower '
+                           'approximation error, and consequently, more pseudoatoms.')
 
         # --------------------------- INSERT steps functions ----------------
 
@@ -96,7 +96,10 @@ class XmippProtConvertToPseudoAtomsBase(Prot3D):
         outputFn = self._getPath(pseudoatoms)
         sigma = sampling * self.pseudoAtomRadius.get()
         targetErr = self.pseudoAtomTarget.get()
-        nthreads = self.numberOfThreads.get() * self.numberOfMpi.get()
+        #volume-to-pseudoatom conversion was not MPI-parallelized and the number of MPIs was removed from the gui
+        #nthreads = self.numberOfThreads.get() * self.numberOfMpi.get()
+	nthreads = self.numberOfThreads.get()
+
         params = "-i %(inputFn)s -o %(outputFn)s --sigma %(sigma)f --thr " \
                  "%(nthreads)d "
         params += "--targetError %(targetErr)f --sampling_rate %(sampling)f " \

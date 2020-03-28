@@ -54,6 +54,9 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
     SPLIT_HT = 0
     SPLIT_OTSU = 1
 
+    GLOBAL_SIGNIFICANT = 0
+    GLOBAL_GPU_SIGNIFICANT = 1
+
     def __init__(self, **kwargs):
         ProtMonitor.__init__(self, **kwargs)
         self._runIds = pwobj.CsvList(pType=int)
@@ -205,6 +208,11 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 previousProtVol = newHighRes
                 namePreviousVol = 'outputVolume'
 
+            if self.useGpu.get():
+                myGlobalMethod=self.GLOBAL_GPU_SIGNIFICANT
+            else:
+                myGlobalMethod= self.GLOBAL_SIGNIFICANT
+
             newHighRes = project.newProtocol(
                 XmippProtReconstructHighRes,
                 objLabel='HighRes - group %s'%chr(65+i),
@@ -236,7 +244,8 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 postDifference = self.postDifference.get(),
                 numberOfMpi=self.numberOfMpi.get(),
                 useGpu=self.useGpu.get(),
-                gpuList = self.gpuList.get()
+                gpuList = self.gpuList.get(),
+                globalMethod=myGlobalMethod
             )
 
             previousProtPart = self

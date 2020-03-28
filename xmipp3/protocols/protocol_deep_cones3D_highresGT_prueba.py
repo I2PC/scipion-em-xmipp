@@ -24,28 +24,28 @@
 # *
 # **************************************************************************
 
-from os import remove
-from os.path import exists
+
 from pyworkflow import VERSION_1_2
 from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, \
     IntParam, BooleanParam, GPU_LIST, STEPS_PARALLEL
 from pyworkflow.utils.path import moveFile, cleanPattern
 from pyworkflow.em.protocol import ProtRefine3D
-from shutil import copy
-from xmipp3.convert import readSetOfParticles
-import xmippLib
 from xmipp3.utils import writeInfoField, readInfoField
-import numpy as np
-import math
 from pyworkflow.em.metadata.utils import iterRows
-import cv2
 import pyworkflow.em.metadata as md
-from xmipp3.convert import createItemMatrix, setXmippAttributes
+from xmipp3.convert import createItemMatrix, setXmippAttributes, rowToAlignment, \
+    readSetOfParticles, geometryFromMatrix
 import pyworkflow.em as em
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
+import xmippLib
 import os
 import sys
-
+import numpy as np
+import math
+import cv2
+from shutil import copy
+from os import remove
+from os.path import exists
 
 class XmippProtDeepCones3DGT_2(ProtRefine3D):
     """Performs a fast and approximate angular assignment that can be further refined
@@ -311,6 +311,27 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
             fnTrain = self._getExtraPath(nameTrain + "%d.xmd" % (i + 1))
             mdList[i].write(fnTrain)
 
+
+        # #################################
+        # mdOut = xmippLib.MetaData()
+        # for i in auxList:
+        #     for row in iterRows(mdCones):
+        #         idCone = row.getValue(xmippLib.MDL_REF)
+        #         if (i) == idCone:
+        #             row.addToMd(mdOut)
+        #             break
+        # # mdPart = xmippLib.MetaData(self.trainImgsFn)
+        # # for row in iterRows(mdPart):
+        # #     row.addToMd(mdOut)
+        # mdOut.write(self._getExtraPath('VamosAVer.xmd'))
+        #
+        # outputSetOfParticles = self._createSetOfParticles()
+        # outputSetOfParticles.copyInfo(self.inputSet.get())
+        # outputSetOfParticles.setAlignmentProj()
+        # readSetOfParticles(self._getExtraPath('VamosAVer.xmd'), outputSetOfParticles)
+        # self._defineOutputs(outputParticles=outputSetOfParticles)
+        # aaaaaaaaaaaaaaaaa
+
     def prepareImagesForTraining(self):
 
         fnCentersMd = self._getExtraPath("coneCenters.doc")
@@ -347,6 +368,8 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
                                                    'projectionsExp',
                                                    counterCones + 1, False)
                     # AJ posiblemente con alrededor de 8000 podria valer...
+            else: #AJ to check en general y con modelPretrain
+                remove(self._getExtraPath('projections%d.xmd' % (counterCones + 1)))
             counterCones = counterCones + 1
 
         if self.modelPretrain.get() is False:
@@ -416,31 +439,36 @@ _noiseCoord   '0'
             Xdim, Ydim, _, _ = I.getDimensions()
             Xdim2 = Xdim / 2
             Ydim2 = Ydim / 2
-            for i in range(Nrepeats):
-                psiDeg = np.random.uniform(-maxPsi, maxPsi)
-                psi = psiDeg * math.pi / 180.0
-                deltaX = np.random.uniform(-maxShift, maxShift)
-                deltaY = np.random.uniform(-maxShift, maxShift)
-                c = math.cos(psi)
-                s = math.sin(psi)
-                M = np.float32([[c, s, (1 - c) * Xdim2 - s * Ydim2 + deltaX],
-                                [-s, c, s * Xdim2 + (1 - c) * Ydim2 + deltaY]])
-                newImg = cv2.warpAffine(I.getData(), M, (Xdim, Ydim),
-                                        borderMode=cv2.BORDER_REFLECT_101)
-                # AAAAJJJJJJ cuidado con el borderMode del warpAffine
-                if boolNoise:
-                    newImg = newImg + np.random.normal(0.0, 5.0, [Xdim,
-                                                                  Xdim])  # AJ 2.0 antes
-                newFn = ('%06d@' % idx) + fnExp[:-3] + 'stk'
-                newImage.setData(newImg)
-                newImage.write(newFn)
-                myRow.setValue(xmippLib.MDL_IMAGE, newFn)
-                myRow.setValue(xmippLib.MDL_ANGLE_PSI, psiDeg)
-                myRow.setValue(xmippLib.MDL_SHIFT_X, deltaX)
-                myRow.setValue(xmippLib.MDL_SHIFT_Y, deltaY)
+            if Nrepeats==0:
                 myRow.addToMd(mdExp)
                 idx += 1
                 fileLabels.write(str(label - 1) + '\n')
+            else:
+                for i in range(Nrepeats):
+                    psiDeg = np.random.uniform(-maxPsi, maxPsi)
+                    psi = psiDeg * math.pi / 180.0
+                    deltaX = np.random.uniform(-maxShift, maxShift)
+                    deltaY = np.random.uniform(-maxShift, maxShift)
+                    c = math.cos(psi)
+                    s = math.sin(psi)
+                    M = np.float32([[c, s, (1 - c) * Xdim2 - s * Ydim2 + deltaX],
+                                    [-s, c, s * Xdim2 + (1 - c) * Ydim2 + deltaY]])
+                    newImg = cv2.warpAffine(I.getData(), M, (Xdim, Ydim),
+                                            borderMode=cv2.BORDER_REFLECT_101)
+                    # AAAAJJJJJJ cuidado con el borderMode del warpAffine
+                    if boolNoise:
+                        newImg = newImg + np.random.normal(0.0, 5.0, [Xdim,
+                                                                      Xdim])  # AJ 2.0 antes
+                    newFn = ('%06d@' % idx) + fnExp[:-3] + 'stk'
+                    newImage.setData(newImg)
+                    newImage.write(newFn)
+                    myRow.setValue(xmippLib.MDL_IMAGE, newFn)
+                    myRow.setValue(xmippLib.MDL_ANGLE_PSI, psiDeg)
+                    myRow.setValue(xmippLib.MDL_SHIFT_X, deltaX)
+                    myRow.setValue(xmippLib.MDL_SHIFT_Y, deltaY)
+                    myRow.addToMd(mdExp)
+                    idx += 1
+                    fileLabels.write(str(label - 1) + '\n')
         mdExp.write(fnExp)
         fileLabels.close()
         if (label - 1) > 0:
@@ -522,8 +550,8 @@ _noiseCoord   '0'
 
     def predictStep(self, gpuId):
 
-        mdNumCones = xmippLib.MetaData(self._getExtraPath("coneCenters.doc"))
-        self.numCones = mdNumCones.size()
+        # mdNumCones = xmippLib.MetaData(self._getExtraPath("coneCenters.doc"))
+        # self.numCones = mdNumCones.size()
 
         if not exists(self._getExtraPath('conePrediction.txt')):
             # if self.useQueueForSteps() or self.useQueue():
@@ -613,6 +641,11 @@ _noiseCoord   '0'
                     #params += ' --device %d' %(int(idx % totalGpu))
                     self.runJob("xmipp_cuda_correlation", params, numberOfMpi=1)
 
+                    #TODO: especificar indice de gpu
+                    params = '  -i %s' % fnExpCone
+                    params += ' -r  %s' % fnProjCone
+                    params += ' -o  %s' % self._getExtraPath(fnOutCone)
+                    self.runJob("xmipp_cuda_align_significant", params, numberOfMpi=1)
 
 
     def correlationSignificantStep(self):
@@ -729,9 +762,8 @@ _noiseCoord   '0'
 
     def createOutputStep(self):
 
-        cleanPattern(self._getExtraPath('metadataCone*'))
-        #AJ new (to check)
-        cleanPattern(self._getExtraPath('projectionCudaCorr*'))
+        cleanPattern(self._getExtraPath('*.stk'))
+        cleanPattern(self._getExtraPath('projectionsCudaCorr*'))
 
         inputParticles = self.inputSet.get()
         fnOutputParticles = self._getExtraPath('outConesParticles.xmd')

@@ -28,7 +28,8 @@ import sys, time
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
-                                        IntParam, StringParam, LEVEL_ADVANCED)
+                                        IntParam, StringParam, LEVEL_ADVANCED,
+                                        USE_GPU, GPU_LIST)
 from pyworkflow.em.protocol import ProtMonitor
 from pyworkflow.project import Manager
 from pyworkflow.em.data import Volume
@@ -51,33 +52,42 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
     def __init__(self, **kwargs):
         ProtMonitor.__init__(self, **kwargs)
         self._runIds = pwobj.CsvList(pType=int)
-        self.childs=[]
+        self.childs = []
 
     def setAborted(self):
-        #print("en el setaborted")
-        #sys.out.flush()
+        # print("en el setaborted")
+        # sys.out.flush()
         for child in self.childs:
             if child.isRunning() or child.isScheduled():
-                #child.setAborted()
+                # child.setAborted()
                 self.getProject().stopProtocol(child)
 
         ProtMonitor.setAborted(self)
 
-
     def setFailed(self, errorMsg):
-        #print("en el setfailed")
-        #sys.out.flush()
+        # print("en el setfailed")
+        # sys.out.flush()
         for child in self.childs:
             if child.isRunning() or child.isScheduled():
-                #child.setFailed(errorMsg)
+                # child.setFailed(errorMsg)
                 self.getProject().stopProtocol(child)
 
         ProtMonitor.setFailed(self, errorMsg)
 
-    #--------------------------- DEFINE param functions ------------------------
+    # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
+        form.addHidden(USE_GPU, BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       expertLevel=LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+
         form.addSection(label='Input')
-         
+
         form.addParam('inputVolume', PointerParam, pointerClass='Volume',
                       label="Input volume",
                       help='Select the input volume.')
@@ -106,8 +116,6 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                       expertLevel=LEVEL_ADVANCED,
                       label='Maximum shift',
                       help="In pixels")
-        form.addParam('useGpu', BooleanParam, default=False, label="Use GPU")
-
 
         form.addSection(label='Split volume')
 
@@ -151,7 +159,6 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                       help="In degrees. An image belongs to a group if its "
                            "distance is smaller than this value")
 
-
         form.addSection(label='Reconstruct')
 
         form.addParam('numberOfIterations', IntParam, default=3,
@@ -173,7 +180,8 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                       label="Max. Number of Replicates", default=1,
                       expertLevel=LEVEL_ADVANCED,
                       help="Significant alignment is allowed to replicate each image up to this number of times")
-        form.addParam("numberVotes", IntParam, label="Number of votes", default=3,
+        form.addParam("numberVotes", IntParam, label="Number of votes",
+                      default=3,
                       expertLevel=LEVEL_ADVANCED,
                       help="Number of votes for classification (maximum 5)")
         form.addParam('stochastic', BooleanParam, label="Stochastic",
@@ -188,14 +196,13 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                       help="Number of images in the random subset")
 
         form.addParallelSection(threads=1, mpi=8)
-            
-         
-    #--------------------------- INSERT steps functions ------------------------
+
+    # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
-        self.classListProtocols=[]
-        self.classListSizes=[]
-        self.classListIds=[]
-        self.finished=False
+        self.classListProtocols = []
+        self.classListSizes = []
+        self.classListIds = []
+        self.finished = False
         self._insertFunctionStep('monitorStep')
 
     # --------------------------- STEPS functions ----------------------------
@@ -205,15 +212,15 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
         manager = Manager()
         project = manager.loadProject(self.getProject().getName())
 
-        self.numIter=self.maxNumClasses.get()
-        for iter in range(1,self.numIter):
+        self.numIter = self.maxNumClasses.get()
+        for iter in range(1, self.numIter):
 
-            if iter==1:
+            if iter == 1:
                 self.convertInputStep()
 
                 newSplitProt = project.newProtocol(
                     XmippProtSplitVolumeHierarchical,
-                    objLabel='split volume hierarchical - iter %d'%iter,
+                    objLabel='split volume hierarchical - iter %d' % iter,
                     symmetryGroup=self.symmetryGroup.get(),
                     angularSampling=self.angularSampling.get(),
                     angularDistance=self.angularDistance.get(),
@@ -224,7 +231,9 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                     cl2dIterations=self.cl2dIterations.get(),
                     splitVolume=self.splitVolume.get(),
                     Niter=self.Niter.get(),
-                    Nrec=self.Nrec.get())
+                    Nrec=self.Nrec.get(),
+                    useGpu=self.useGpu.get(),
+                    gpuList=self.gpuList.get())
 
                 previousSplitProt = self
                 newSubsetNameSplitVol = 'outputVolumesInit'
@@ -247,6 +256,7 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                     particleRadius=self.particleRadius.get(),
                     targetResolution=self.targetResolution.get(),
                     useGpu=self.useGpu.get(),
+                    gpuList=self.gpuList.get(),
                     numberOfIterations=self.numberOfIterations.get(),
                     nxtMask=self.nextMask.get(),
                     angularMinTilt=self.angularMinTilt.get(),
@@ -261,19 +271,22 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                 previousSignifProt = newSplitProt
                 newSubsetNameSignifParts = 'outputParticlesInit'
                 newSignificantProt.inputParticles.set(previousSplitProt)
-                newSignificantProt.inputParticles.setExtended(newSubsetNameSignifParts)
+                newSignificantProt.inputParticles.setExtended(
+                    newSubsetNameSignifParts)
 
                 newSubsetNameSignifVol = 'outputVolumes'
                 newSignificantProt.inputVolumes.set(previousSignifProt)
-                newSignificantProt.inputVolumes.setExtended(newSubsetNameSignifVol)
+                newSignificantProt.inputVolumes.setExtended(
+                    newSubsetNameSignifVol)
 
-                project.scheduleProtocol(newSignificantProt, self._runPrerequisites)
+                project.scheduleProtocol(newSignificantProt,
+                                         self._runPrerequisites)
                 # Next schedule will be after this one
                 self._runPrerequisites.append(newSignificantProt.getObjId())
                 self.childs.append(newSignificantProt)
 
 
-            elif iter>1 and not self.finished:
+            elif iter > 1 and not self.finished:
 
                 newSplitProt = project.newProtocol(
                     XmippProtSplitVolumeHierarchical,
@@ -288,7 +301,9 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                     cl2dIterations=self.cl2dIterations.get(),
                     splitVolume=self.splitVolume.get(),
                     Niter=self.Niter.get(),
-                    Nrec=self.Nrec.get())
+                    Nrec=self.Nrec.get(),
+                    useGpu=self.useGpu.get(),
+                    gpuList=self.gpuList.get())
 
                 newSubsetNameSplitVol = 'outputAuxVolumes'
                 newSplitProt.inputVolume.set(previousSplitProt)
@@ -310,6 +325,7 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                     particleRadius=self.particleRadius.get(),
                     targetResolution=self.targetResolution.get(),
                     useGpu=self.useGpu.get(),
+                    gpuList=self.gpuList.get(),
                     numberOfIterations=self.numberOfIterations.get(),
                     nxtMask=self.nextMask.get(),
                     angularMinTilt=self.angularMinTilt.get(),
@@ -324,13 +340,16 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                 previousSignifProt = newSplitProt
                 newSubsetNameSignifParts = 'outputAuxParticles'
                 newSignificantProt.inputParticles.set(previousSplitProt)
-                newSignificantProt.inputParticles.setExtended(newSubsetNameSignifParts)
+                newSignificantProt.inputParticles.setExtended(
+                    newSubsetNameSignifParts)
 
                 newSubsetNameSignifVol = 'outputVolumes'
                 newSignificantProt.inputVolumes.set(previousSignifProt)
-                newSignificantProt.inputVolumes.setExtended(newSubsetNameSignifVol)
+                newSignificantProt.inputVolumes.setExtended(
+                    newSubsetNameSignifVol)
 
-                project.scheduleProtocol(newSignificantProt, self._runPrerequisites)
+                project.scheduleProtocol(newSignificantProt,
+                                         self._runPrerequisites)
                 # Next schedule will be after this one
                 self._runPrerequisites.append(newSignificantProt.getObjId())
                 self.childs.append(newSignificantProt)
@@ -338,19 +357,22 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
             if not self.finished:
                 finishedIter = False
                 while finishedIter == False:
-                    #print("ESPERA 1 Iter", iter)
-                    #sys.stdout.flush()
+                    # print("ESPERA 1 Iter", iter)
+                    # sys.stdout.flush()
                     time.sleep(15)
                     newSplitProt = self._updateProtocol(newSplitProt)
-                    newSignificantProt = self._updateProtocol(newSignificantProt)
+                    newSignificantProt = self._updateProtocol(
+                        newSignificantProt)
                     if newSplitProt.isFailed() or newSplitProt.isAborted():
-                        #print("XmippProtSplitVolumeHierarchical has failed", iter)
-                        #sys.out.flush()
-                        raise Exception('XmippProtSplitVolumeHierarchical has failed')
+                        # print("XmippProtSplitVolumeHierarchical has failed", iter)
+                        # sys.out.flush()
+                        raise Exception(
+                            'XmippProtSplitVolumeHierarchical has failed')
                     if newSignificantProt.isFailed() or newSignificantProt.isAborted():
-                        #print("XmippProtReconstructHeterogeneous has failed", iter)
-                        #sys.out.flush()
-                        raise Exception('XmippProtReconstructHeterogeneous has failed')
+                        # print("XmippProtReconstructHeterogeneous has failed", iter)
+                        # sys.out.flush()
+                        raise Exception(
+                            'XmippProtReconstructHeterogeneous has failed')
                     if newSignificantProt.isFinished():
                         finishedIter = True
                         for classItem in newSignificantProt.outputClasses:
@@ -366,21 +388,23 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                         time.sleep(5)
                         subsetProt = self._updateProtocol(subsetProt)
                         if subsetProt.isFailed() or subsetProt.isAborted():
-                            raise Exception('XmippMetaProtCreateSubset has failed')
+                            raise Exception(
+                                'XmippMetaProtCreateSubset has failed')
                         if subsetProt.isFinished():
                             finishedSubset = True
                     previousSplitProt = subsetProt
-                elif iter == self.numIter-1:
+                elif iter == self.numIter - 1:
                     outputMetaProt = self.createOutputStep(project)
                     while finishedLast == False:
                         time.sleep(5)
                         outputMetaProt = self._updateProtocol(outputMetaProt)
                         if outputMetaProt.isFailed():
-                            raise Exception('XmippMetaProtCreateOutput has failed')
+                            raise Exception(
+                                'XmippMetaProtCreateOutput has failed')
                         if outputMetaProt.isFinished():
                             finishedLast = True
 
-            if self.finished and iter == self.numIter-1:
+            if self.finished and iter == self.numIter - 1:
                 finishedLast = False
                 outputMetaProt = self.createOutputStep(project)
                 while finishedLast == False:
@@ -394,9 +418,7 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
             if self.finished and iter < self.numIter - 1:
                 continue
 
-
-
-    #--------------------------- STEPS functions -------------------------------
+    # --------------------------- STEPS functions -------------------------------
 
     def _updateProtocol(self, protocol):
         """ Retrieve the updated protocol
@@ -406,7 +428,7 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                                   protocol.getObjId())
 
         # Close DB connections
-        #prot2.getProject().closeMapper()
+        # prot2.getProject().closeMapper()
         prot2.closeMappers()
         return prot2
 
@@ -416,28 +438,28 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
         outputParticles.copyItems(self.inputParticles.get())
         self._defineOutputs(outputParticlesInit=outputParticles)
         self._store(outputParticles)
-        #outputParticles.close()
+        # outputParticles.close()
 
         outputVolumes = Volume()
         outputVolumes.setFileName(self.inputVolume.get().getFileName())
         outputVolumes.setSamplingRate(self.inputVolume.get().getSamplingRate())
         self._defineOutputs(outputVolumesInit=outputVolumes)
         self._store(outputVolumes)
-        #outputVolumes.close()
+        # outputVolumes.close()
 
         # self.splitInputVol = outputVolumes
         # self.splitInputParts = outputParticles
         # self.signifInputParts = outputParticles
 
-
     def checkOutputsStep(self, project, iter):
 
         maxSize = max(self.classListSizes)
-        minMax = float((self.inputParticles.get().getSize()/len(self.classListSizes))*0.2)
+        minMax = float((self.inputParticles.get().getSize() / len(
+            self.classListSizes)) * 0.2)
         newSubsetProt = None
 
-        if(maxSize<minMax or maxSize<100):
-            self.finished=True
+        if (maxSize < minMax or maxSize < 100):
+            self.finished = True
 
         if not self.finished:
             idx = self.classListSizes.index(maxSize)
@@ -447,9 +469,9 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
             newSubsetProt = project.newProtocol(
                 XmippMetaProtCreateSubset,
                 objLabel='metaprotocol subset - iter %d' % iter,
-                #inputSetOfVolumes=signifProt.outputVolumes,
-                #inputSetOfClasses3D=signifProt.outputClasses,
-                idx = idMaxSize
+                # inputSetOfVolumes=signifProt.outputVolumes,
+                # inputSetOfClasses3D=signifProt.outputClasses,
+                idx=idMaxSize
             )
             # nameVol = 'outputVolumes'
             # newSubsetProt.inputSetOfVolumes.set(signifProt)
@@ -462,7 +484,6 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
             # Next schedule will be after this one
             self._runPrerequisites.append(newSubsetProt.getObjId())
             self.childs.append(newSubsetProt)
-
 
             self.classListIds.pop(idx)
             self.classListProtocols.pop(idx)
@@ -492,18 +513,12 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
         self._runPrerequisites.append(outputMetaProt.getObjId())
         return outputMetaProt
 
-
-
-
-
-
-    #--------------------------- INFO functions --------------------------------
+    # --------------------------- INFO functions --------------------------------
     def _validate(self):
         errors = []
         return errors
-    
+
     def _summary(self):
         summary = []
         return summary
-
 

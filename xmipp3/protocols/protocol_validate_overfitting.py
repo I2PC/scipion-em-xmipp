@@ -208,7 +208,7 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
 
         numberOfParticles = getFloatListFromValues(self.numberOfParticles.get())
         fractionCounter = 0
-        maxNumberOfParticles = 0.5 * self.inputParticles.get().getSize()
+        maxNumberOfParticles = self.inputParticles.get().getSize()
         for number in numberOfParticles:
             if number <= maxNumberOfParticles:
                 for iteration in range(0, self.numberOfIterations.get()):
@@ -216,7 +216,7 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                                              fractionCounter, iteration,
                                              debugging, fnNewImgMd,
                                              particlesMd)
-                fractionCounter += 1
+            fractionCounter += 1
         self._insertFunctionStep('gatherResultsStep', debugging)
         # --------------------------- STEPS functions --------------------------------------------
 
@@ -372,7 +372,8 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                                      self._defineResultsNoiseTxt())
 
         if not debugging:
-            #cleanPattern(self._getExtraPath("fraction*_freq.txt")) AJ volver
+            cleanPattern(self._getExtraPath("fraction*_freq.txt"))
+            cleanPattern(self._getExtraPath("input_particles.xmd"))
             cleanPattern(self._getExtraPath('newImages.stk'))
             cleanPattern(self._getExtraPath('newImages.xmd'))
             if self.doNoise.get():

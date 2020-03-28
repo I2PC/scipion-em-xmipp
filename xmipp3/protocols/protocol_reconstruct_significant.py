@@ -240,31 +240,29 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
         t.tic()
         if self.useGpu.get() and iterNumber > 1:
             # Generate projections
+            # TODO: do we need to change something in how the projection gallery
+            # TODO: is created as we are not considering mirrors in the GPU version??
             fnGalleryRoot = join(iterDir, "gallery")
             args = "-i %s -o %s.stk --sampling_rate %f --sym %s " \
                    "--compute_neighbors --angular_distance -1 " \
                    "--experimental_images %s --min_tilt_angle %f " \
-                   "--max_tilt_angle %f -v 0 --perturb %f" % \
-                   (prevVolFn, fnGalleryRoot, self.angularSampling,
+                   "--max_tilt_angle %f -v 0 --perturb %f " % \
+                   (prevVolFn, fnGalleryRoot, self.angularSampling.get(),
                     self.symmetryGroup, self.imgsFn, self.minTilt, self.maxTilt,
                     math.sin(self.angularSampling.get()) / 4)
-            self.runJob("xmipp_angular_project_library ", args)
+            self.runJob("xmipp_angular_project_library ", args, numberOfMpi=1)
 
-            # Align
-            # TODO check the alpha values for gpu
             if self.trueSymsNo != 0:
                 alphaApply = (alpha * self.trueSymsNo) / 2
             else:
                 alphaApply = alpha / 2
-            if self.maximumShift == -1:
-                maxShift = 10
-            else:
-                maxShift = self.maximumShift
-            args = '-i_ref %s.doc -i_exp %s -o %s --significance %f ' \
-                   '--maxShift %f' % \
-                   (fnGalleryRoot, self.imgsFn, anglesFn, alphaApply,
-                    maxShift)
-            self.runJob("xmipp_cuda_correlation", args, numberOfMpi=1)
+            from pyworkflow.em.metadata.utils import getSize
+            N = int(getSize(fnGalleryRoot+'.doc')*alphaApply*2)
+            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+            args = '-i %s -r %s.doc -o %s --keepBestN %f --dev %s ' % \
+                   (self.imgsFn, fnGalleryRoot, anglesFn, N, GpuList)
+            self.runJob("xmipp_cuda_align_significant", args, numberOfMpi=1)
+
             cleanPattern(fnGalleryRoot + "*")
         else:
             args = self.getSignificantArgs(self.imgsFn)
