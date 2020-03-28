@@ -295,6 +295,9 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         for row in iterRows(mdTrain):
             rot = row.getValue(xmippLib.MDL_ANGLE_ROT)
             tilt = row.getValue(xmippLib.MDL_ANGLE_TILT)
+            flip = row.getValue(xmippLib.MDL_FLIP)
+            if flip:
+                tilt = tilt + 180
             if rot < 0:
                 rot = rot + 360
             if tilt < 0:
@@ -506,8 +509,8 @@ _noiseCoord   '0'
                         expSet, fnLabels, self._getExtraPath(),
                         modelFn, self.numEpochs, newXdim, 2, self.batchSize)
                         #args += " %(GPU)s"
-                        #args += " %s " % (gpuId)
-                        args += " %s " %(int(idx % totalGpu))
+                        args += " %s " % (gpuId)
+                        #args += " %s " %(int(idx % totalGpu))
                         print("2 ARGS", args)
                         self.runJob("xmipp_cone_deepalign", args, numberOfMpi=1)
                     except Exception as e:
@@ -547,9 +550,9 @@ _noiseCoord   '0'
             newXdim = readInfoField(self._getExtraPath(), "size",
                                 xmippLib.MDL_XSIZE)
             args = "%s %s %d %d %d " % (imgsOutXmd, self._getExtraPath(), newXdim, self.numCones, numMax)
-            args += " %(GPU)s"
+            #args += " %(GPU)s"
             #AJ dejar que se envie el trabajo de prediccion a todas las GPUs disponibles??
-            #args += " %s "%(gpuId)
+            args += " %s "%(gpuId)
             self.runJob("xmipp_cone_deepalign_predict", args, numberOfMpi=1)
 
 
@@ -606,7 +609,8 @@ _noiseCoord   '0'
                                  '--maxShift 10 ' % (fnProjCone, fnExpCone, fnOutCone,
                                  self._getExtraPath())
                     #params += ' --device %(GPU)s'
-                    params += ' --device %d' %(int(idx % totalGpu))
+		    params += ' --device %s '%(gpuId)
+                    #params += ' --device %d' %(int(idx % totalGpu))
                     self.runJob("xmipp_cuda_correlation", params, numberOfMpi=1)
 
 
