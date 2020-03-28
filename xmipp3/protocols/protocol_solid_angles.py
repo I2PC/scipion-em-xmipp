@@ -247,7 +247,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         args += '--method fourier 1 0.25 bspline --compute_neighbors '
         args += '--angular_distance %f ' % self.angularDistance
         args += '--experimental_images %s ' % self._getInputParticlesFn()
-        args += '--max_tilt_angle 90 '
+        args += '--max_tilt_angle 180 '
 
         # Create a gallery of projections of the input volume
         # with the given angular sampling
@@ -258,7 +258,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         args += '-o %s ' % self._getExtraPath("neighbours.xmd")
         args += '--dist %f ' % self.angularDistance
         args += '--sym %s ' % self.symmetryGroup
-        args += '--check_mirrors '
+        #args += '--check_mirrors '
 
         # Compute several groups of the experimental images into
         # different angular neighbourhoods
@@ -446,8 +446,25 @@ class XmippProtSolidAngles(ProtAnalysis3D):
             self.runJob('xmipp_reconstruct_significant', args,
                         numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
         else:
-            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
-            args = '-i %s -r %s -o %s --dev %s ' % (fnDirectional, fnGalleryMd, fnAngles, GpuList)
+	    import os
+	    count=0
+            GpuListCuda=''
+            if self.useQueueForSteps() or self.useQueue():
+                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+	        GpuList = GpuList.split(",")
+	        for elem in GpuList:
+		    GpuListCuda = GpuListCuda+str(count)+' '
+		    count+=1
+            else:
+                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+	        GpuListAux = ''
+                for elem in self.getGpuList():
+	            GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListAux = GpuListAux+str(elem)+','
+                    count+=1
+	        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
+            args = '-i %s -r %s -o %s --dev %s ' % (fnDirectional, fnGalleryMd, fnAngles, GpuListCuda)
             self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
 
         self.runJob("xmipp_metadata_utilities",

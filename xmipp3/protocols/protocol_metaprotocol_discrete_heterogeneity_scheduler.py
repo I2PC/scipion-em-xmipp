@@ -174,7 +174,7 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                             expertLevel=LEVEL_ADVANCED)
         line.addParam('angularMinTilt', FloatParam, label="Min.", default=0,
                       expertLevel=LEVEL_ADVANCED)
-        line.addParam('angularMaxTilt', FloatParam, label="Max.", default=90,
+        line.addParam('angularMaxTilt', FloatParam, label="Max.", default=180,
                       expertLevel=LEVEL_ADVANCED)
         form.addParam('numberOfReplicates', IntParam,
                       label="Max. Number of Replicates", default=1,

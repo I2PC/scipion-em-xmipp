@@ -332,7 +332,24 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
             copyfile(volDir + '/angles_iter001_00.xmd',
                      self._getTmpPath(anglesPath))
         else:
-            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+	    import os
+	    count=0
+            GpuListCuda=''
+            if self.useQueueForSteps() or self.useQueue():
+                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+	        GpuList = GpuList.split(",")
+	        for elem in GpuList:
+		    GpuListCuda = GpuListCuda+str(count)+' '
+		    count+=1
+            else:
+                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+	        GpuListAux = ''
+                for elem in self.getGpuList():
+	            GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListAux = GpuListAux+str(elem)+','
+                    count+=1
+	        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
             if anglesPath == 'exp_particles.xmd':
                 params = '  -i %s' % self._getExtraPath('scaled_particles.xmd')
             elif anglesPath == 'ref_particles.xmd':
@@ -340,7 +357,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
             params += ' --keepBestN %f' % (self.numOrientations.get() - 1)
             params += ' -r  %s' % fnGallery
             params += ' -o  %s' % self._getTmpPath(anglesPath)
-            params += ' --dev %s ' % GpuList
+            params += ' --dev %s ' % GpuListCuda
             self.runJob('xmipp_cuda_align_significant', params, numberOfMpi=1)
 
     def alignabilityStep(self, volName, volDir, sym):

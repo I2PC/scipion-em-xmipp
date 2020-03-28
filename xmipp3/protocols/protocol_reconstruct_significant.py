@@ -102,7 +102,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
                            'in the reconstruction of fibers from side views. '
                            '0 degrees is a top view, while 90 degrees is a  '
                            'side view.')
-        form.addParam('maxTilt', FloatParam, default=90,
+        form.addParam('maxTilt', FloatParam, default=180,
                       expertLevel=LEVEL_ADVANCED,
                       label='Maximum tilt (deg)',
                       help='Use the minimum and maximum tilts to limit the  '
@@ -258,9 +258,27 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
                 alphaApply = alpha / 2
             from pyworkflow.em.metadata.utils import getSize
             N = int(getSize(fnGalleryRoot+'.doc')*alphaApply*2)
-            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+            
+	    import os
+	    count=0
+            GpuListCuda=''
+            if self.useQueueForSteps() or self.useQueue():
+                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+	        GpuList = GpuList.split(",")
+	        for elem in GpuList:
+		    GpuListCuda = GpuListCuda+str(count)+' '
+		    count+=1
+            else:
+                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+	        GpuListAux = ''
+                for elem in self.getGpuList():
+	            GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListAux = GpuListAux+str(elem)+','
+                    count+=1
+	        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
             args = '-i %s -r %s.doc -o %s --keepBestN %f --dev %s ' % \
-                   (self.imgsFn, fnGalleryRoot, anglesFn, N, GpuList)
+                   (self.imgsFn, fnGalleryRoot, anglesFn, N, GpuListCuda)
             self.runJob("xmipp_cuda_align_significant", args, numberOfMpi=1)
 
             cleanPattern(fnGalleryRoot + "*")

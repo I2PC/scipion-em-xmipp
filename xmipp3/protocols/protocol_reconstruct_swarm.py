@@ -283,9 +283,26 @@ class XmippProtReconstructSwarm(ProtRefine3D):
                 self.runJob('xmipp_reconstruct_significant', args,
                             numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
             else:
-                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+		import os
+		count=0
+                GpuListCuda=''
+                if self.useQueueForSteps() or self.useQueue():
+                    GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+		    GpuList = GpuList.split(",")
+		    for elem in GpuList:
+			GpuListCuda = GpuListCuda+str(count)+' '
+			count+=1
+                else:
+                    GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+		    GpuListAux = ''
+                    for elem in self.getGpuList():
+		        GpuListCuda = GpuListCuda+str(count)+' '
+                        GpuListAux = GpuListAux+str(elem)+','
+                        count+=1
+		    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
                 args = '-i %s -r %s -o %s --keepBestN 1 --dev %s ' % (
-                fnTest, fnGalleryMd, fnAngles, GpuList)
+                fnTest, fnGalleryMd, fnAngles, GpuListCuda)
                 self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
 
             # Evaluate
@@ -439,9 +456,26 @@ class XmippProtReconstructSwarm(ProtRefine3D):
                 self.runJob('xmipp_reconstruct_significant', args,
                             numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
             else:
-                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+		import os
+		count=0
+                GpuListCuda=''
+                if self.useQueueForSteps() or self.useQueue():
+                    GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+		    GpuList = GpuList.split(",")
+		    for elem in GpuList:
+			GpuListCuda = GpuListCuda+str(count)+' '
+			count+=1
+                else:
+                    GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+		    GpuListAux = ''
+                    for elem in self.getGpuList():
+		        GpuListCuda = GpuListCuda+str(count)+' '
+                        GpuListAux = GpuListAux+str(elem)+','
+                        count+=1
+		    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
                 args = '-i %s -r %s -o %s --keepBestN 1 --dev %s ' % (
-                fnTrain, fnGalleryMd, fnAngles, GpuList)
+                fnTrain, fnGalleryMd, fnAngles, GpuListCuda)
                 self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
 
             # Reconstruct

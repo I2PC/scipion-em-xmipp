@@ -187,9 +187,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         line.addParam('angularMinTilt', FloatParam, label="Min.", default=0,
                       expertLevel=LEVEL_ADVANCED,
                       help="Side views are around 90 degrees, top views around 0")
-        line.addParam('angularMaxTilt', FloatParam, label="Max.", default=90,
-                      expertLevel=LEVEL_ADVANCED,
-                      help="You may generate redudant galleries by setting this angle to 180, this may help if c1 symmetry is considered")
+        line.addParam('angularMaxTilt', FloatParam, label="Max.", default=180,
+                      expertLevel=LEVEL_ADVANCED)
         form.addParam('alignmentMethod', EnumParam, label='Image alignment',
                       choices=['Global', 'Local', 'Automatic', 'Stochastic'],
                       default=self.GLOBAL_ALIGNMENT)
@@ -632,9 +631,17 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             fnVol1=join(fnDirCurrent,"volume%02d.vol"%1)
             fnVol2=join(fnDirCurrent,"volume%02d.vol"%2)
             if self.inputVolumes.get() is None:
-                self.runJob('xmipp_reconstruct_fourier',"-i %s -o %s --max_resolution 0.3 --sampling %f --sym %s"%\
-                            (self.imgsFn,fnVol1,TsCurrent,self.symmetryGroup.get()))
+                args = "-i %s -o %s --max_resolution 0.3 --sampling %f --sym %s" % (
+                    self.imgsFn, fnVol1, TsCurrent, self.symmetryGroup.get())
+                if self.useGpu.get():
+                    tmpArgs = args + ' --device %(GPU)s' + ' --thr %s' % self.numberOfThreads.get()
+                    self.runJob('xmipp_cuda_reconstruct_fourier ', tmpArgs,
+                                numberOfMpi=1)
+                else:
+                    self.runJob("xmipp_reconstruct_fourier_accel", args,
+                                numberOfMpi=self.numberOfMpi.get())
                 volXdim = Xdim
+
             else:
                 vol=self.inputVolumes.get()
                 img.convert(vol, fnVol1)
@@ -1108,7 +1115,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                         0] / 2
                             R = R * self.TsOrig / TsCurrent
                             if not self.useGpu.get():
-                                args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d' % \
+                                args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d --dontCheckMirrors ' % \
                                        (fnGroup, fnGalleryGroupMd, maxShift,
                                         fnDirSignificant,
                                         self.numberOfReplicates.get() - 1)
@@ -1126,15 +1133,26 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                     cleanPath(join(fnDirSignificant,
                                                    "images_significant_iter001_00.xmd"))
                             else:
-                                print("GPU LIST ", self.getGpuList())
+				import os
+				count=0
+                                GpuListCuda=''
                                 if self.useQueueForSteps() or self.useQueue():
-                                    import os
                                     GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+				    GpuList = GpuList.split(",")
+				    for elem in GpuList:
+					GpuListCuda = GpuListCuda+str(count)+' '
+					count+=1
                                 else:
                                     GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+				    GpuListAux = ''
+                                    for elem in self.getGpuList():
+				        GpuListCuda = GpuListCuda+str(count)+' '
+                                        GpuListAux = GpuListAux+str(elem)+','
+                                        count+=1
+				    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                                 args = '-i %s -r %s -o %s --keepBestN %f --dev %s ' % \
                                        (fnGroup, fnGalleryGroupMd, fnAnglesGroup,
-                                       self.numberOfReplicates.get(), GpuList)
+                                       self.numberOfReplicates.get(), GpuListCuda)
                                 self.runJob("xmipp_cuda_align_significant",
                                             args, numberOfMpi=1)
 
@@ -1746,7 +1764,27 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 args = "-i %s -o %s --sym %s --weight" % (
                     fnAnglesToUse, fnVol, self.symmetryGroup)
                 if self.useGpu.get():
-                    tmpArgs = args + ' --device %(GPU)s' + ' --thr %s' % self.numberOfThreads.get()
+		    import os
+		    count=0
+                    GpuListCuda=''
+                    if self.useQueueForSteps() or self.useQueue():
+                        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+		        GpuList = GpuList.split(",")
+		        for elem in GpuList:
+			    GpuListCuda = GpuListCuda+str(count)+' '
+			    count+=1
+                            break #AJ by now, because we are solving problems with several gpus implementation of recons fourier
+                    else:
+                        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+		        GpuListAux = ''
+                        for elem in self.getGpuList():
+		            GpuListCuda = GpuListCuda+str(count)+' '
+                            GpuListAux = GpuListAux+str(elem)+','
+                            count+=1
+                            break #AJ by now, because we are solving problems with several gpus implementation of recons fourier
+		        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
+                    tmpArgs = args + ' --device %s --thr %s' % (GpuListCuda, self.numberOfThreads.get())
                     self.runJob('xmipp_cuda_reconstruct_fourier ', tmpArgs,
                                 numberOfMpi=1)
                 else:

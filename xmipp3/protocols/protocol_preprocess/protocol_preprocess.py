@@ -552,23 +552,40 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
                           'symmetryGroup': self.sigSymGroup.get(),
                           }
                 sigArgs = '-i %(imgsFn)s --initvolumes %(vols)s --odir %(dir)s' \
-                          ' --sym %(symmetryGroup)s --alpha0 0.005 --dontReconstruct' \
+                          ' --sym %(symmetryGroup)s --alpha0 0.005 --dontReconstruct ' \
                           % params
                 self.runJob("xmipp_reconstruct_significant", sigArgs)
             else:
                 fnGallery = self._getExtraPath('gallery.stk')
                 fnGalleryMd = self._getExtraPath('gallery.doc')
                 angleStep = 5
-                args = "-i %s -o %s --sampling_rate %f --sym %s --min_tilt_angle 0 --max_tilt_angle 90 " % \
+                args = "-i %s -o %s --sampling_rate %f --sym %s --min_tilt_angle 0 --max_tilt_angle 180 " % \
                        (self.inputFn, fnGallery, angleStep,
                         self.sigSymGroup.get())
                 self.runJob("xmipp_angular_project_library", args,
                             numberOfMpi=min(self.numberOfMpi.get(), 24))
 
-                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+		import os
+		count=0
+                GpuListCuda=''
+                if self.useQueueForSteps() or self.useQueue():
+                    GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+		    GpuList = GpuList.split(",")
+		    for elem in GpuList:
+			GpuListCuda = GpuListCuda+str(count)+' '
+			count+=1
+                else:
+                    GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+		    GpuListAux = ''
+                    for elem in self.getGpuList():
+		        GpuListCuda = GpuListCuda+str(count)+' '
+                        GpuListAux = GpuListAux+str(elem)+','
+                        count+=1
+		    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
                 fnAngles = 'images_iter001_00.xmd'
                 args = '-i %s -r %s -o %s --odir %s --keepBestN 1 --dev %s ' % (
-                imgsFn, fnGalleryMd, fnAngles, self._getTmpPath(), GpuList)
+                imgsFn, fnGalleryMd, fnAngles, self._getTmpPath(), GpuListCuda)
                 self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
 
     def adjustStep(self, isFirstStep, changeInserts):

@@ -103,7 +103,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                             expertLevel=LEVEL_ADVANCED)
         line.addParam('angularMinTilt', FloatParam, label="Min.", default=0,
                       expertLevel=LEVEL_ADVANCED)
-        line.addParam('angularMaxTilt', FloatParam, label="Max.", default=90,
+        line.addParam('angularMaxTilt', FloatParam, label="Max.", default=180,
                       expertLevel=LEVEL_ADVANCED)
         form.addParam('numberOfReplicates', IntParam,
                       label="Max. Number of Replicates", default=1,
@@ -412,17 +412,34 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
                             #TODO
                             #AJ: valdria con poner aqui una condicion para que no hiciera este paso (significant) en caso de local alignment???
-                            args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d --dontApplyFisher' % \
+                            args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d --dontApplyFisher --dontCheckMirrors ' % \
                                    (fnGroup, fnGalleryGroupMd, maxShift,
                                     fnDirCurrent,
                                     self.numberOfReplicates.get() - 1)
                             self.runJob('xmipp_reconstruct_significant', args,
                                         numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
                         else:  # To use gpu
-                            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+			    import os
+			    count=0
+                            GpuListCuda=''
+                            if self.useQueueForSteps() or self.useQueue():
+                                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+			        GpuList = GpuList.split(",")
+			        for elem in GpuList:
+				    GpuListCuda = GpuListCuda+str(count)+' '
+				    count+=1
+                            else:
+                                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+			        GpuListAux = ''
+                                for elem in self.getGpuList():
+			            GpuListCuda = GpuListCuda+str(count)+' '
+                                    GpuListAux = GpuListAux+str(elem)+','
+                                    count+=1
+			        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux                            
+
                             args = '-i %s -r %s -o %s --keepBestN %d --dev %s ' % \
                                    (fnGroup, fnGalleryGroupMd, fnAnglesSignificant,
-                                    self.numberOfReplicates.get(), GpuList)
+                                    self.numberOfReplicates.get(), GpuListCuda)
                             self.runJob('xmipp_cuda_align_significant', args,
                                         numberOfMpi=1)
 

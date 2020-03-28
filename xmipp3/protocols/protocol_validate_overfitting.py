@@ -210,14 +210,13 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
         fractionCounter = 0
         maxNumberOfParticles = 0.5 * self.inputParticles.get().getSize()
         for number in numberOfParticles:
-            #AJ: comento esta linea para ver que le pasa al protocolo con numero de particulas mayores que size/2
-            #if number <= maxNumberOfParticles:
-            for iteration in range(0, self.numberOfIterations.get()):
-                self._insertFunctionStep('reconstructionStep', number,
-                                         fractionCounter, iteration,
-                                         debugging, fnNewImgMd,
-                                         particlesMd)
-            fractionCounter += 1
+            if number <= numberOfParticles: #AJ before maxNumberOfParticles
+                for iteration in range(0, self.numberOfIterations.get()):
+                    self._insertFunctionStep('reconstructionStep', number,
+                                             fractionCounter, iteration,
+                                             debugging, fnNewImgMd,
+                                             particlesMd)
+                fractionCounter += 1
         self._insertFunctionStep('gatherResultsStep', debugging)
         # --------------------------- STEPS functions --------------------------------------------
 
@@ -418,6 +417,11 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                 self.newSize.get() == self.inputParticles.get().getDim()[0]):
             errors.append("The new chosen size is equal to the "
                           "recent particles size")
+        if self.useGpu.get() and self.numberOfMpi.get() > 1:
+            errors.append("MPI version is under development")
+        if len((self.gpuList.get()).split(','))>1 and self.numberOfMpi.get() == 1:
+            errors.append("To use several GPUs you must use MPIs")
+
         return errors
 
         # --------------------------- UTILS functions --------------------------------------------

@@ -173,12 +173,30 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
 
         args = '-i %(inputVol)s -o %(gallery)s --sampling_rate %(angSampling)f --sym %(symmetry)s'
         args += ' --method fourier 1 0.25 bspline --compute_neighbors --angular_distance -1'
-        args += ' --experimental_images %(expParticles)s --max_tilt_angle 90'
+        args += ' --experimental_images %(expParticles)s --max_tilt_angle 180'
 
         self.runJob("xmipp_angular_project_library", args % params)
 
     def significantStep(self, volId):
-        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+	import os
+	count=0
+        GpuListCuda=''
+        if self.useGpu.get():
+            if self.useQueueForSteps() or self.useQueue():
+                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+	        GpuList = GpuList.split(",")
+	        for elem in GpuList:
+		    GpuListCuda = GpuListCuda+str(count)+' '
+		    count+=1
+            else:
+                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+	        GpuListAux = ''
+                for elem in self.getGpuList():
+	            GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListAux = GpuListAux+str(elem)+','
+                    count+=1
+	        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
         params = {"inputParts": self._getMdParticles(),
                   "symmetry": self.symmetryGroup.get(),
                   "angSampling": self.angularSampling.get(),
@@ -186,12 +204,12 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
                   "gallery": self._getGalleryMd(volId),
                   "outDir": self._getVolDir(volId),
                   "output": self._getAnglesMd(volId),
-                  "device": GpuList,
+                  "device": GpuListCuda,
                   }
 
         if not self.useGpu.get():
             args = ' -i %(inputParts)s --sym %(symmetry)s --angularSampling %(angSampling)0.3f --dontReconstruct'
-            args += ' --useForValidation %(orientations)0.3f --initgallery  %(gallery)s --odir %(outDir)s --iter 1'
+            args += ' --useForValidation %(orientations)0.3f --initgallery  %(gallery)s --odir %(outDir)s --iter 1 --dontCheckMirrors'
             self.runJob('xmipp_reconstruct_significant', args % params)
         else:
             args = '-i %(inputParts)s -r %(gallery)s -o %(output)s --keepBestN %(orientations)f '
