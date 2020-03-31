@@ -26,6 +26,7 @@
 
 from os.path import join, isfile
 from shutil import copyfile
+import os
 
 from pyworkflow.object import Float, String
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
@@ -332,7 +333,6 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
             copyfile(volDir + '/angles_iter001_00.xmd',
                      self._getTmpPath(anglesPath))
         else:
-	    import os
 	    count=0
             GpuListCuda=''
             if self.useQueueForSteps() or self.useQueue():

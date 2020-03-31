@@ -124,35 +124,36 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
             digRes = self.inputParticles.get().getSamplingRate() / self.maxRes.get()
         params += ' --max_resolution %0.3f' %digRes
         params += ' --padding %0.3f %0.3f' % (self.pad_proj.get(), self.pad_vol.get())
-        if self.useGpu.get():
-	    if self.numberOfMpi.get()==1:
-                params += ' --thr %d' % self.numberOfThreads.get()
-            if self.numberOfMpi.get()>1:
-                N_GPUs = len((self.gpuList.get()).split(','))
-                params += ' -gpusPerNode %d' % N_GPUs
-                params += ' -threadsPerGPU %d' % 1 #max(self.numberOfThreads.get(),4)
         params += ' --sampling %f' % self.inputParticles.get().getSamplingRate()
         params += ' %s' % self.extraParams.get()
         params += ' --fast' if self.approx.get() else ''
-	#AJ to make it work with and without queue system
-	count=0
-        GpuListCuda=''
-        if self.useQueueForSteps() or self.useQueue():
-            GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
-	    GpuList = GpuList.split(",")
-	    for elem in GpuList:
-		GpuListCuda = GpuListCuda+str(count)+' '
-		count+=1
-        else:
-	    GpuListAux = ''
-            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
-            for elem in self.getGpuList():
-	        GpuListCuda = GpuListCuda+str(count)+' '
-                GpuListAux = GpuListAux+str(elem)+','
-                count+=1
-	    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
-	if self.numberOfMpi.get()==1:
-            params += ' --device %s'%(GpuListCuda) if self.useGpu.get() else ''
+
+        if self.useGpu.get():
+	    #AJ to make it work with and without queue system
+            params += ' --thr %d' % self.numberOfThreads.get()
+            if self.numberOfMpi.get()>1:
+                N_GPUs = len((self.gpuList.get()).split(','))
+                params += ' -gpusPerNode %d' % N_GPUs
+                params += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+	    count=0
+            GpuListCuda=''
+            if self.useQueueForSteps() or self.useQueue():
+                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+	        GpuList = GpuList.split(",")
+	        for elem in GpuList:
+		    GpuListCuda = GpuListCuda+str(count)+' '
+		    count+=1
+            else:
+	        GpuListAux = ''
+                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                for elem in self.getGpuList():
+	            GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListAux = GpuListAux+str(elem)+','
+                    count+=1
+	        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+	    if self.numberOfMpi.get()==1:
+                params += ' --device %s'%(GpuListCuda) if self.useGpu.get() else ''
+
         self._insertFunctionStep('reconstructStep', params)
         
     #--------------------------- STEPS functions --------------------------------------------
@@ -169,7 +170,7 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
         """
         if self.useGpu.get():
             if self.numberOfMpi.get()>1:
-                self.runJob('xmipp_cuda_reconstruct_fourier', params, numberOfMpi=self.numberOfMpi.get())
+                self.runJob('xmipp_cuda_reconstruct_fourier', params, numberOfMpi=len((self.gpuList.get()).split(','))+1)
 	    else:
                 self.runJob('xmipp_cuda_reconstruct_fourier', params)
         else:
@@ -199,10 +200,6 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
             errors.append("Approximative version is not implemented for Legacy code")
         if not self.useGpu.get() and self.numberOfThreads.get() > 1:
             errors.append("CPU version can use only a single thread. Use MPI instead")
-        if self.useGpu.get() and self.numberOfMpi.get() > 1:
-            errors.append("MPI version is under development")
-        if len((self.gpuList.get()).split(','))>1 and self.numberOfMpi.get() == 1:
-            errors.append("To use several GPUs you must use MPIs")
         return errors
     
     def _summary(self):

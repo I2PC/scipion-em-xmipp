@@ -25,6 +25,7 @@
 # **************************************************************************
 
 from os.path import join
+import os
 
 from pyworkflow.object import Float, String
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
@@ -178,7 +179,6 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
         self.runJob("xmipp_angular_project_library", args % params)
 
     def significantStep(self, volId):
-	import os
 	count=0
         GpuListCuda=''
         if self.useGpu.get():

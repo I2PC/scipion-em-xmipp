@@ -26,6 +26,7 @@
 
 from os.path import join, exists
 import math
+import os
 
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_2_0
@@ -255,7 +256,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         args += '--method fourier 1 0.25 bspline --compute_neighbors '
         args += '--angular_distance %f ' % self.angularDistance
         args += '--experimental_images %s ' % self._getInputParticlesFn()
-        args += '--max_tilt_angle 180 '
+        args += '--max_tilt_angle 90 '
 
         # Create a gallery of projections of the input volume
         # with the given angular sampling
@@ -266,7 +267,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         args += '-o %s ' % self._getExtraPath("neighbours.xmd")
         args += '--dist %f ' % self.angularDistance
         args += '--sym %s ' % self.symmetryGroup
-        #args += '--check_mirrors '
+        args += '--check_mirrors '
 
         # Compute several groups of the experimental images into
         # different angular neighbourhoods
@@ -458,7 +459,6 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
             self.runJob('xmipp_reconstruct_significant', args,
                     numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
         else:
-	    import os
 	    count=0
             GpuListCuda=''
             if self.useQueueForSteps() or self.useQueue():
@@ -504,9 +504,34 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         if self.fr_approx.get():
             args += " --fast"
         if self.useGpu.get():
+	    #AJ to make it work with and without queue system
+	    if self.numberOfMpi.get()>1:
+	        N_GPUs = len((self.gpuList.get()).split(','))
+	        args += ' -gpusPerNode %d' % N_GPUs
+	        args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+	    count=0
+	    GpuListCuda=''
+	    if self.useQueueForSteps() or self.useQueue():
+	        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+	        GpuList = GpuList.split(",")
+	        for elem in GpuList:
+		    GpuListCuda = GpuListCuda+str(count)+' '
+		    count+=1
+	    else:
+	        GpuListAux = ''
+	        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+	        for elem in self.getGpuList():
+		    GpuListCuda = GpuListCuda+str(count)+' '
+	            GpuListAux = GpuListAux+str(elem)+','
+	            count+=1
+	        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+	    if self.numberOfMpi.get()==1:
+	        args += ' --device %s' % GpuListCuda
             args += ' --thr %d' % self.fr_gpu_threads.get()
-            args += ' --device %(GPU)s'
-            self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=self.fr_gpu_mpi.get())
+            if self.numberOfMpi.get()>1:
+                self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+            else:
+                self.runJob('xmipp_cuda_reconstruct_fourier', args)
         else:
             self.runJob('xmipp_reconstruct_fourier_accel', args)
 

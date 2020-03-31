@@ -351,6 +351,7 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
 class XmippProtPreprocessVolumes(XmippProcessVolumes):
     """ Protocol for Xmipp-based preprocess for volumes """
     import pyworkflow.em.metadata as md
+    import os
 
     _label = 'preprocess volumes'
 
@@ -565,7 +566,6 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
                 self.runJob("xmipp_angular_project_library", args,
                             numberOfMpi=min(self.numberOfMpi.get(), 24))
 
-		import os
 		count=0
                 GpuListCuda=''
                 if self.useQueueForSteps() or self.useQueue():

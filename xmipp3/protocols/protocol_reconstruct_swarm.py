@@ -12,7 +12,6 @@
 # * This program is distributed in the hope that it will be useful,
 # * but WITHOUT ANY WARRANTY; without even the implied warranty of
 # * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# * GNU General Public License for more details.
 # *
 # * You should have received a copy of the GNU General Public License
 # * along with this program; if not, write to the Free Software
@@ -29,6 +28,7 @@ import math
 import random
 from itertools import izip
 from os.path import join, exists
+import os
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
@@ -283,7 +283,6 @@ class XmippProtReconstructSwarm(ProtRefine3D):
                 self.runJob('xmipp_reconstruct_significant', args,
                             numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
             else:
-		import os
 		count=0
                 GpuListCuda=''
                 if self.useQueueForSteps() or self.useQueue():
@@ -456,7 +455,6 @@ class XmippProtReconstructSwarm(ProtRefine3D):
                 self.runJob('xmipp_reconstruct_significant', args,
                             numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
             else:
-		import os
 		count=0
                 GpuListCuda=''
                 if self.useQueueForSteps() or self.useQueue():
@@ -484,10 +482,35 @@ class XmippProtReconstructSwarm(ProtRefine3D):
                 args = "-i %s -o %s --sym %s --weight --fast" % (
                 fnAngles, fnVol, self.symmetryGroup)
                 if self.useGpu.get():
+		    #AJ to make it work with and without queue system
+		    if self.numberOfMpi.get()>1:
+		        N_GPUs = len((self.gpuList.get()).split(','))
+		        args += ' -gpusPerNode %d' % N_GPUs
+		        args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+		    count=0
+		    GpuListCuda=''
+		    if self.useQueueForSteps() or self.useQueue():
+		        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+		        GpuList = GpuList.split(",")
+		        for elem in GpuList:
+			    GpuListCuda = GpuListCuda+str(count)+' '
+			    count+=1
+		    else:
+		        GpuListAux = ''
+		        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+		        for elem in self.getGpuList():
+			    GpuListCuda = GpuListCuda+str(count)+' '
+		            GpuListAux = GpuListAux+str(elem)+','
+		            count+=1
+		        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
                     args += " --thr %s" % self.numberOfThreads.get()
-                    args += " --device %(GPU)s"
-                    self.runJob("xmipp_cuda_reconstruct_fourier", args,
-                                numberOfMpi=1)
+		    if self.numberOfMpi.get()==1:
+                        args += " --device %s" % GpuListCuda
+                    if self.numberOfMpi.get()>1:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+	            else:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args)
                 else:
                     self.runJob('xmipp_reconstruct_fourier_accel', args)
                 args = "-i %s --mask circular %f" % (fnVol, -R)

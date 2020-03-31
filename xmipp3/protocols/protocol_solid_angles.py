@@ -26,6 +26,7 @@
 
 from os.path import join, exists
 import math
+import os
 
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_1
@@ -247,7 +248,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         args += '--method fourier 1 0.25 bspline --compute_neighbors '
         args += '--angular_distance %f ' % self.angularDistance
         args += '--experimental_images %s ' % self._getInputParticlesFn()
-        args += '--max_tilt_angle 180 '
+        args += '--max_tilt_angle 90 '
 
         # Create a gallery of projections of the input volume
         # with the given angular sampling
@@ -258,7 +259,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         args += '-o %s ' % self._getExtraPath("neighbours.xmd")
         args += '--dist %f ' % self.angularDistance
         args += '--sym %s ' % self.symmetryGroup
-        #args += '--check_mirrors '
+        args += '--check_mirrors '
 
         # Compute several groups of the experimental images into
         # different angular neighbourhoods
@@ -446,7 +447,6 @@ class XmippProtSolidAngles(ProtAnalysis3D):
             self.runJob('xmipp_reconstruct_significant', args,
                         numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
         else:
-	    import os
 	    count=0
             GpuListCuda=''
             if self.useQueueForSteps() or self.useQueue():

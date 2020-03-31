@@ -27,6 +27,7 @@
 
 import math
 from shutil import copy
+import os
 
 from pyworkflow.utils import Timer
 from pyworkflow.utils.path import cleanPattern, cleanPath
@@ -183,7 +184,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
 
     def getSignificantArgs(self, imgsFn):
         """ Return the arguments needed to launch the program. """
-        # Prepare arguments to call program: xmipp_classify_CL2D
+        # Prepare arguments to call program
         self._params = {'imgsFn': imgsFn,
                         'extraDir': self._getExtraPath(),
                         'symmetryGroup': self.symmetryGroup.get(),
@@ -240,8 +241,6 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
         t.tic()
         if self.useGpu.get() and iterNumber > 1:
             # Generate projections
-            # TODO: do we need to change something in how the projection gallery
-            # TODO: is created as we are not considering mirrors in the GPU version??
             fnGalleryRoot = join(iterDir, "gallery")
             args = "-i %s -o %s.stk --sampling_rate %f --sym %s " \
                    "--compute_neighbors --angular_distance -1 " \
@@ -259,7 +258,6 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
             from pyworkflow.em.metadata.utils import getSize
             N = int(getSize(fnGalleryRoot+'.doc')*alphaApply*2)
             
-	    import os
 	    count=0
             GpuListCuda=''
             if self.useQueueForSteps() or self.useQueue():
@@ -286,6 +284,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
             args = self.getSignificantArgs(self.imgsFn)
             args += ' --odir %s' % iterDir
             args += ' --alpha0 %f --alphaF %f' % (alpha, alpha)
+            args += ' --dontCheckMirrors '
 
             if iterNumber == 1:
                 if self.thereisRefVolume:
@@ -308,9 +307,36 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
             anglesFn)
         t.tic()
         if self.useGpu.get():
-            cudaReconArgs = reconsArgs + ' --thr %s' %  self.numberOfThreads.get()
-            cudaReconArgs += ' --device %(GPU)s'
-            self.runJob("xmipp_cuda_reconstruct_fourier", cudaReconArgs, numberOfMpi=1)
+            cudaReconsArgs = reconsArgs
+	    #AJ to make it work with and without queue system
+	    if self.numberOfMpi.get()>1:
+	        N_GPUs = len((self.gpuList.get()).split(','))
+	        cudaReconsArgs += ' -gpusPerNode %d' % N_GPUs
+	        cudaReconsArgs += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+	    count=0
+	    GpuListCuda=''
+	    if self.useQueueForSteps() or self.useQueue():
+	        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+	        GpuList = GpuList.split(",")
+	        for elem in GpuList:
+		    GpuListCuda = GpuListCuda+str(count)+' '
+		    count+=1
+	    else:
+	        GpuListAux = ''
+	        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+	        for elem in self.getGpuList():
+		    GpuListCuda = GpuListCuda+str(count)+' '
+	            GpuListAux = GpuListAux+str(elem)+','
+	            count+=1
+	        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
+            cudaReconArgs += ' --thr %s' %  self.numberOfThreads.get()
+	    if self.numberOfMpi.get()==1:
+                cudaReconArgs += ' --device %s' %(GpuListCuda)
+            if self.numberOfMpi.get()>1:
+                self.runJob('xmipp_cuda_reconstruct_fourier', cudaReconArgs, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+            else:
+                self.runJob('xmipp_cuda_reconstruct_fourier', cudaReconArgs)
         else:
             self.runJob("xmipp_reconstruct_fourier_accel", reconsArgs)
         t.toc('Reconstruct fourier took: ')

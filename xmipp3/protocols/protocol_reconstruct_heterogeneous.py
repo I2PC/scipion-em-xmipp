@@ -28,6 +28,7 @@ from glob import glob
 import math
 import numpy as np
 from os.path import join, exists
+import os
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
@@ -419,7 +420,6 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                             self.runJob('xmipp_reconstruct_significant', args,
                                         numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
                         else:  # To use gpu
-			    import os
 			    count=0
                             GpuListCuda=''
                             if self.useQueueForSteps() or self.useQueue():
@@ -621,11 +621,35 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                     args = "-i %s -o %s --sym %s --weight --thr %d" % (
                         fnAnglesToUse, fnOutVol, self.symList[i - 1],
                         self.numberOfThreads.get())
-                    args += " --device %(GPU)s"
+
+		    if self.numberOfMpi.get()>1:
+		        N_GPUs = len((self.gpuList.get()).split(','))
+		        args += ' -gpusPerNode %d' % N_GPUs
+		        args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+		    count=0
+		    GpuListCuda=''
+		    if self.useQueueForSteps() or self.useQueue():
+		        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+		        GpuList = GpuList.split(",")
+		        for elem in GpuList:
+			    GpuListCuda = GpuListCuda+str(count)+' '
+			    count+=1
+		    else:
+		        GpuListAux = ''
+		        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+		        for elem in self.getGpuList():
+			    GpuListCuda = GpuListCuda+str(count)+' '
+		            GpuListAux = GpuListAux+str(elem)+','
+		            count+=1
+		        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+		    if self.numberOfMpi.get()==1:
+                        args += " --device %s" %GpuListCuda
                     if self.approx:
                         args += " --fast"
-                    self.runJob("xmipp_cuda_reconstruct_fourier", args,
-                                numberOfMpi=self.fr_gpu_mpi.get())
+                    if self.numberOfMpi.get()>1:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+	            else:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args)
                 else:
                     args = "-i %s -o %s --sym %s --weight" % (
                         fnAnglesToUse, fnOutVol, self.symList[i - 1])
