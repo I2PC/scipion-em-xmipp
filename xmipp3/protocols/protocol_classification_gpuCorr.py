@@ -27,6 +27,7 @@
 from shutil import copy
 from os.path import join, exists
 from os import mkdir, remove, listdir
+import os
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.em.protocol import ProtAlign2D
@@ -98,7 +99,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                            'If *No*, all the generated classes will be '
                            'balanced',
                       expertLevel=const.LEVEL_ADVANCED,)
-        form.addParam('useCL2D', params.BooleanParam, default=False,
+        form.addParam('useCL2D', params.BooleanParam, default=True,
                       label='Use CL2D',
                       help='If you set to *Yes*, you will use CL2D (CPU) '
                            'to make the split process',
@@ -389,7 +390,23 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                                 numberOfMpi=1)
 
         # Fourth step: calling program xmipp_cuda_correlation
-        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+        count = 0
+        GpuListCuda = ''
+        if self.useQueueForSteps() or self.useQueue():
+            GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+            GpuList = GpuList.split(",")
+            for elem in GpuList:
+                GpuListCuda = GpuListCuda + str(count) + ' '
+                count += 1
+        else:
+            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+            GpuListAux = ''
+            for elem in self.getGpuList():
+                GpuListCuda = GpuListCuda + str(count) + ' '
+                GpuListAux = GpuListAux + str(elem) + ','
+                count += 1
+            os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
         if flag_split:
             filename = 'level%03d' % level+'_classes.xmd'
             self._params = {'imgsRef': refSet,
@@ -400,7 +417,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                             'keepBest': self.keepBest.get(),
                             'maxshift': self.maximumShift,
                             'outputClassesFile': filename,
-                            'device': GpuList,
+                            'device': GpuListCuda,
                             }
         else:
             filename = 'general_level%03d' % level + '_classes.xmd'
@@ -413,7 +430,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                             'keepBest': self.keepBest.get(),
                             'maxshift': self.maximumShift,
                             'outputClassesFile': filename,
-                            'device': GpuList,
+                            'device': GpuListCuda,
                             'outputClassesFileNoExt': 'general_level%03d' % level + '_classes',
                             }
         Nrefs = getSize(refSet)

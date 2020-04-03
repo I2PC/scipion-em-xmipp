@@ -28,6 +28,7 @@
 from os.path import getmtime
 from datetime import datetime
 from os.path import exists
+import os
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.em import SetOfParticles, SetOfClasses2D, ALIGN_2D, ALIGN_NONE
@@ -155,15 +156,31 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
             self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
 
         # Calling program xmipp_cuda_correlation
+        count = 0
+        GpuListCuda = ''
+        if self.useQueueForSteps() or self.useQueue():
+            GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+            GpuList = GpuList.split(",")
+            for elem in GpuList:
+                GpuListCuda = GpuListCuda + str(count) + ' '
+                count += 1
+        else:
+            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+            GpuListAux = ''
+            for elem in self.getGpuList():
+                GpuListCuda = GpuListCuda + str(count) + ' '
+                GpuListAux = GpuListAux + str(elem) + ','
+                count += 1
+            os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
         outImgs, clasesOut = self._getOutputsFn()
-        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
         self._params = {'imgsRef': self.imgsRef,
                         'imgsExp': inputImgs,
                         'outputFile': outImgs,
                         'keepBest': self.keepBest.get(),
                         'maxshift': self.maximumShift,
                         'outputClassesFile': clasesOut,
-                        'device': GpuList,
+                        'device': GpuListCuda,
                         'outputClassesFileNoExt': clasesOut[:-4],
                         }
 
@@ -246,8 +263,6 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
         if x1 != x2 or y1 != y2 or z1 != z2:
             errors.append('The input images and the reference images '
                           'have different sizes')
-        if len(self.gpuList.get())>1:
-            errors.append("The GPU list only can have one value for this protocol.")
         return errors
 
     def _summary(self):
