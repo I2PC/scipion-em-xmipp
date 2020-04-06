@@ -632,6 +632,11 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         R=min(round(R*self.TsOrig/TsCurrent*(1+self.angularMaxShift.get()*0.01)),newXdim/2)
         self.runJob("xmipp_transform_mask","-i %s --mask circular -%d"%(fnNewParticles,R),numberOfMpi=min(self.numberOfMpi.get(),24))
         fnSource=join(fnDir,"images.xmd")
+
+        if not self.inputParticles.get().isPhaseFlipped():
+            self.runJob("xmipp_ctf_correct_phase", "-i %s --sampling_rate %f" % (fnSource, TsCurrent),
+                        numberOfMpi=min(self.numberOfMpi.get(), 24))
+
         if self.splitMethod==self.SPLIT_STOCHASTIC:
             self.runJob('xmipp_metadata_utilities','-i %s --set intersection %s particleId particleId -o %s/all_images.xmd'%\
                         (fnSource,self._getExtraPath('images.xmd'),fnDir),numberOfMpi=1)
@@ -1485,9 +1490,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if not self.doContinue and self.inputParticles.hasValue() and \
            self.alignmentMethod.get()==self.LOCAL_ALIGNMENT and not self.inputParticles.get().hasAlignmentProj():
             errors.append("If the first iteration is local, then the input particles must have an alignment")
-        if not self.inputParticles.get().isPhaseFlipped():
-            errors.append("The input particles must be phase flipped")
-        return errors    
+        return errors
     
     def _warnings(self):
         warnings = []
