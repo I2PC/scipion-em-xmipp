@@ -151,7 +151,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         newRmax = self.Rmax.get() * Ts / newTs
         self.newRmax = min(newRmax, self.Rmax.get())
         fnOut = os.path.splitext(volFn)[0]
-        fnOut = self._getExtraPath(os.path.basename(fnOut + '%d_crop.vol' % nVoli))
+        fnOut = self._getExtraPath(os.path.basename(fnOut + '_%d_crop.vol' % nVoli))
 
         ih = ImageHandler()
         if Xdim != newXdim:
@@ -166,8 +166,8 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                         (fnOut, fnOut, (newXdim - minDim)))
 
     def deformStep(self, inputVolFn, refVolFn, i, j):
-        inputVolFn = self._getExtraPath(os.path.basename(os.path.splitext(inputVolFn)[0] + '%d_crop.vol' % (i+1)))
-        refVolFn = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0] + '%d_crop.vol' % (j+1)))
+        inputVolFn = self._getExtraPath(os.path.basename(os.path.splitext(inputVolFn)[0] + '_%d_crop.vol' % (i+1)))
+        refVolFn = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0] + '_%d_crop.vol' % (j+1)))
         fnOut = self._getExtraPath('vol%dAlignedTo%d.vol' % (i, j))
         fnOut2 = self._getExtraPath('vol%dDeformedTo%d.vol' % (i, j))
 
