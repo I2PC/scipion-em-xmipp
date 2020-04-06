@@ -1494,10 +1494,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
     
     def _warnings(self):
         warnings = []
-        if not self.doContinue and self.inputParticles.hasValue() and not self.inputParticles.get().isPhaseFlipped():
-            warnings.append("Highres is designed to work on phase flipped particles. The input particles are not phase flipped. "
-                            "Unless you work with phantoms, you need to extract particles with phase flip.")
-        return warnings    
+        return warnings
 
     def _summary(self):
         summary = []
