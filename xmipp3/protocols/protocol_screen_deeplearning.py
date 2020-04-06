@@ -42,6 +42,8 @@ class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
     """ Protocol for screening particles using deep learning. """
     _label = 'screen deep learning'
     _lastUpdateVersion = VERSION_2_0
+    _conda_env = 'xmipp_DLTK_v0.3'
+
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         # GPU settings

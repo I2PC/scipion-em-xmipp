@@ -42,7 +42,7 @@ class XmippProtParticleBoxsize(ProtMicrographs, xmipp3.XmippProtocol):
     """
     _label = 'particle boxsize'
     _lastUpdateVersion = VERSION_2_0
-    _conda_env='xmipp_DLTK_v0.3'
+    _conda_env = 'xmipp_DLTK_v0.3'
     
     def __init__(self, **args):
         ProtMicrographs.__init__(self, **args)

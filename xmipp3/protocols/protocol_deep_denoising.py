@@ -70,6 +70,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections, XmippProtocol):
 
     _label ="deep denoising"
     _lastUpdateVersion = VERSION_2_0
+    _conda_env = 'xmipp_DLTK_v0.3'
 
     def __init__(self, **args):
         XmippProtGenerateReprojections.__init__(self, **args)
@@ -401,10 +402,10 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections, XmippProtocol):
         return summary
 
     def _validate(self):
-
-        assertModel = self.modelTrainPredMode.get()==ITER_PREDICT and not self.modelPretrain
+        assertModel = (self.modelTrainPredMode.get()==ITER_PREDICT and
+                       not self.customModelOverPretrain.get())
         errors = self.validateDLtoolkit(assertModel=assertModel,
-                                        model=('deepDenoising', 'PretrainModel.h5'),
+                                        model=('deepDenoising', 'ModelTrained.h5'),
                                         errorMsg="Required with 'Predict' mode when "
                                                  "no custom model is provided.")
 

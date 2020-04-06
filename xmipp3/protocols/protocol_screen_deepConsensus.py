@@ -71,6 +71,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     """
     _label = 'deep consensus picking'
     _lastUpdateVersion = VERSION_2_0
+    _conda_env = 'xmipp_DLTK_v0.3'
 
     CONSENSUS_COOR_PATH_TEMPLATE="consensus_coords_%s"
     CONSENSUS_PARTS_PATH_TEMPLATE="consensus_parts_%s"

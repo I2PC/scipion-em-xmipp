@@ -61,8 +61,8 @@ class Plugin(pwem.Plugin):
         environ.update({
             'PATH': getXmippPath('bin'),
             'LD_LIBRARY_PATH': getXmippPath('lib'),
-            'PYTHONPATH': getXmippPath('pylib')+":" +  # FIXME: Only pylib should be enough
-                          getXmippPath(os.path.join('pylib', 'xmippPyModules'))
+            'PYTHONPATH': getXmippPath('pylib')  # FIXME: Only pylib should be enough
+                          # +":"+getXmippPath(os.path.join('pylib', 'xmippPyModules'))
                              }, position=pos)
         environ['XMIPP_HOME'] = getXmippPath()
 
@@ -86,17 +86,17 @@ class Plugin(pwem.Plugin):
 
     @classmethod
     def getCondaPathInEnv(cls, condaEnv, condaSubDir):
-      if cls._condaRootPath is None: #This is for performance reasons.
-        cls._condaRootPath= CondaEnvManager.getCoondaRoot( cls.getEnviron() )
-      condaRoot = cls._condaRootPath
-      return CondaEnvManager.getCondaPathInEnv(condaRoot, condaEnv, condaSubDir)
+        if cls._condaRootPath is None:  # This is for performance reasons.
+            cls._condaRootPath = CondaEnvManager.getCondaRoot(cls.getEnviron())
+        condaRoot = cls._condaRootPath
+        return CondaEnvManager.getCondaPathInEnv(condaRoot, condaEnv, condaSubDir)
 
     @classmethod
     def getMatlabEnviron(cls, *toolPaths):
         """ Return an Environment prepared for launching Matlab
         scripts using the Xmipp binding.
         """
-        env = pwem.Plugin.getEnviron()
+        env = pwutils.Environ(os.environ)
         env.set('PATH', os.environ.get('MATLAB_BINDIR', ''), pwutils.Environ.BEGIN)
         env.set('LD_LIBRARY_PATH', os.environ.get('MATLAB_LIBDIR', ''),
                 pwutils.Environ.BEGIN)
@@ -129,32 +129,48 @@ class Plugin(pwem.Plugin):
         #                                default=True)
 
         ## XMIPP SOFTWARE ##
-        xmippDeps = []  # scons, joblib, scikit_learn
-        installedToken = cls.getHome("installation_finished")
-        bindingsToken = cls.getHome("bindings_linked")
+        xmippDeps = []  # Deps should be at requirements.txt (old: scons, joblib, scikit_learn)
+
+        # Installation vars for commands formating
         verToken = cls.getHome('v%s' % _currentVersion)
-        sourceTgt = [cls.getHome('xmipp.bashrc')]
+        confToken = cls.getHome("xmipp.conf")
+        installVars = {'installedToken': cls.getHome("installation_finished"),
+                       'bindingsToken': cls.getHome("bindings_linked"),
+                       'verToken': verToken,
+                       'nProcessors': env.getProcessors(),
+                       'xmippHome': cls.getHome(),
+                       'bindingsSrc': cls.getHome('bindings', 'python', '*'),
+                       'bindingsDst': Config.getBindingsFolder(),
+                       'xmippLib': cls.getHome('lib', 'libXmipp.so'),
+                       'coreLib': cls.getHome('lib', 'libXmippCore.so'),
+                       'libsDst': Config.getLibFolder(),
+                       'confToken': confToken,
+                       'strPlaceHolder': '%s',  # to be replaced in the future
+                       'currVersion': _currentVersion
+                       }
 
-        installCmd = ("./xmipp all N=%d dir=%s && touch %s && rm %s 2> /dev/null"
-                      % (env.getProcessors(), cls.getHome(),
-                         installedToken, bindingsToken))
+        ## Installation commands (removing bindingsToken)
+        installCmd = ("./xmipp all N=%(nProcessors)d dir=%(xmippHome)s && "
+                      "touch %(installedToken)s && rm %(bindingsToken)s 2> /dev/null"
+                      % installVars)
         installTgt = [cls.getHome('bin', 'xmipp_reconstruct_significant'),
-                      cls.getHome("lib/libXmippJNI.so"), installedToken]
+                      cls.getHome("lib/libXmippJNI.so"),
+                      installVars['installedToken']]
 
-        bindingsAndLibsCmd = ("ln -fs %s %s && ln -fs %s %s && ln -fs %s %s && "
-                              "touch %s && rm %s 2> /dev/null"
-                              % (cls.getHome('bindings', 'python', '*'),
-                                 Config.getBindingsFolder(),
-                                 cls.getHome('lib', 'libXmipp.so'),
-                                 Config.getLibFolder(),
-                                 cls.getHome('lib', 'libXmippCore.so'),
-                                 Config.getLibFolder(),
-                                 bindingsToken, installedToken))
-        bindingsAndLibsTgt = ([os.path.join(Config.getBindingsFolder(), 'xmipp_base.py'),
-                               os.path.join(Config.getBindingsFolder(), 'xmippLib.so'),
-                               os.path.join(Config.getLibFolder(), 'libXmipp.so'),
-                               bindingsToken])
+        ## Linking bindings (removing installationToken)
+        bindingsAndLibsCmd = ("ln -fs %(bindingsSrc)s %(bindingsDst)s && "
+                              "ln -fs %(xmippLib)s %(libsDst)s && "
+                              "ln -fs %(coreLib)s %(libsDst)s && "
+                              "touch %(bindingsToken)s && "
+                              "rm %(installedToken)s 2> /dev/null"
+                              % installVars)
+        bindingsAndLibsTgt = [os.path.join(Config.getBindingsFolder(), 'xmipp_base.py'),
+                              os.path.join(Config.getBindingsFolder(), 'xmippLib.so'),
+                              os.path.join(Config.getLibFolder(), 'libXmipp.so'),
+                              installVars['bindingsToken']]
 
+        sourceTgt = [cls.getHome('xmipp.bashrc')]  # Target for xmippSrc and xmippDev
+        ## Allowing xmippDev if devel mode detected
         # plugin  = scipion-em-xmipp  <--  xmipp3    <--     __init__.py
         pluginDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         # bundle  = xmipp-bundle  <-  src  <-  scipion-em-xmipp
@@ -171,7 +187,7 @@ class Plugin(pwem.Plugin):
                                      (bindingsAndLibsCmd, bindingsAndLibsTgt)],
                            deps=xmippDeps, default=False)
 
-        sourceTgt.append(verToken)
+        sourceTgt.append(installVars['verToken'])
         env.addPackage('xmippSrc', version=_currentVersion,
                        # adding 'v' before version to fix a package target (post-link)
                        tar='xmippSrc-v'+_currentVersion+'.tgz',
@@ -179,10 +195,10 @@ class Plugin(pwem.Plugin):
                                  (bindingsAndLibsCmd, bindingsAndLibsTgt)],
                        deps=xmippDeps, default=not develMode)
 
-        confToken = cls.getHome("xmipp.conf")
-        installBin = ("rm -rf "+cls.getHome()+" 2>/dev/null; cd .. ; "
-                      "ln -sf xmippBin_%s-"+_currentVersion+" "+cls.getHome()+
-                      " && touch "+installedToken)
+        installBin = ("rm -rf %(xmippHome)s 2>/dev/null; cd .. ; "
+                      "ln -sf xmippBin_%(strPlaceHolder)s-%(currVersion)s "
+                      "%(xmippHome)s && touch %(installedToken)s"
+                      % installVars)
         env.addPackage('xmippBin_Debian', version=_currentVersion,
                        commands=[(installBin % 'Debian',
                                   installTgt + [confToken, verToken+'_Debian']),
@@ -201,59 +217,71 @@ class Plugin(pwem.Plugin):
 
 def installDeepLearningToolkit(plugin, env):
 
-  preMsgs = []
-  cudaMsgs = []
-  nvidiaDriversVersion = None
-  if os.environ.get('CUDA', 'True') == 'True':
-    try:
-      nvidiaDriversVersion = subprocess.Popen(["nvidia-smi", '--query-gpu=driver_version', "--format=csv,noheader"],
-                                     env=plugin.getEnviron(),
-                                     stdout=subprocess.PIPE).stdout.read().decode('utf-8').split(".")[0]
-      if int(nvidiaDriversVersion)< 390:
-        cudaMsgs.append("Your NVIDIA drivers are too old (<390). Tensorflow was installed without GPU "
-                            "support. Just CPU computations enabled (slow computations)")
-        nvidiaDriversVersion = None
-    except Exception as e:
-      preMsgs.append(str(e))
+    preMsgs = []
+    cudaMsgs = []
+    nvidiaDriverVer = None
+    if os.environ.get('CUDA', 'True') == 'True':
+        try:
+            nvidiaDriverVer = subprocess.Popen(["nvidia-smi",
+                                                "--query-gpu=driver_version",
+                                                "--format=csv,noheader"],
+                                               env=plugin.getEnviron(),
+                                               stdout=subprocess.PIPE
+                                               ).stdout.read().decode('utf-8').split(".")[0]
+            if int(nvidiaDriverVer) < 390:
+                preMsgs.append("Incompatible driver %s" % nvidiaDriverVer)
+                cudaMsgs.append("Your NVIDIA drivers are too old (<390). "
+                                "Tensorflow was installed without GPU support. "
+                                "Just CPU computations enabled (slow computations).")
+                nvidiaDriverVer = None
+        except Exception as e:
+            preMsgs.append(str(e))
 
-    cmdsInstall=[]
-  if nvidiaDriversVersion is not None:
-    preMsgs.append("CUDA support find. Driver version: %s" % nvidiaDriversVersion)
-    msg="Tensorflow installed with CUDA SUPPORT"
-    cudaMsgs.append(msg)
-    useGpu=True
-  else:
-    preMsgs.append("CUDA will NOT be USED")
-    msg=("Tensorflow was installed without GPU. Just CPU computations enabled (slow computations)"
-         "To enable CUDA, set CUDA=True in xmipp.conf and scipion.conf files")
-    cudaMsgs.append(msg)
-    useGpu=False
+    if nvidiaDriverVer is not None:
+        preMsgs.append("CUDA support find. Driver version: %s" % nvidiaDriverVer)
+        msg = "Tensorflow installed with CUDA SUPPORT."
+        cudaMsgs.append(msg)
+        useGpu = True
+    else:
+        preMsgs.append("CUDA will NOT be USED. (not found or incompatible)")
+        msg = ("Tensorflow installed without GPU. Just CPU computations "
+               "enabled (slow computations). To enable CUDA (drivers>390 needed), "
+               "set CUDA=True in 'scipion.conf' file")
+        cudaMsgs.append(msg)
+        useGpu = False
 
-  for cmd, environName in CondaEnvManager.yieldInstallAllCmds(useGpu=useGpu):
-    cmdsInstall.append((cmd, environName))
+    # commands  = [(command, target), (cmd, tgt), ...]
+    cmdsInstall = [(cmd, envName + ".yml") for cmd, envName in
+                   CondaEnvManager.yieldInstallAllCmds(useGpu=useGpu)]
 
-  url = "http://scipion.cnb.csic.es/downloads/scipion/software/em"
-  modelsDownloadCmd = ("echo 'Downloading pre-trained models...' ; "
-                       "%s update %s %s DLmodels"
-                       % (plugin.getHome('bin/xmipp_sync_data'),
-                          plugin.getHome('models'), url))
+    now = datetime.now()
+    installDLvars = {'modelsUrl': "http://scipion.cnb.csic.es/downloads/scipion/software/em",
+                     'syncBin': plugin.getHome('bin/xmipp_sync_data'),
+                     'modelsDir': plugin.getHome('models'),
+                     'modelsPrefix': "models_UPDATED_on",
+                     'xmippLibToken': 'xmippLibToken',
+                     'libXmipp': plugin.getHome('lib/libXmipp.so'),
+                     'preMsgsStr': ' ; '.join(preMsgs),
+                     'afterMsgs': "\n > ".join(cudaMsgs)}
 
-  now = datetime.now()
-  modelsPrefix = "models_UPDATED_on"
-  modelsTarget = "%s_%s_%s_%s" % (modelsPrefix, now.day, now.month, now.year)
+    installDLvars.update({'modelsTarget': "%s_%s_%s_%s"
+                                          % (installDLvars['modelsPrefix'],
+                                             now.day, now.month, now.year)})
 
-  xmippLibToken = 'xmippLibToken'
-  xmippInstallCheck = ("if ls %s > /dev/null ; then touch %s; echo ' > %s' ; "
-                       "else echo ; echo ' > Xmipp installation not found, "
-                       "please install it first (xmippSrc or xmippBin*).';echo;"
-                       " fi" % (plugin.getHome('lib/libXmipp.so'), xmippLibToken,
-                                ' ; '.join(preMsgs)), xmippLibToken)
+    modelsDownloadCmd = ("rm %(modelsPrefix)s_* %(xmippLibToken)s 2>/dev/null ; "
+                         "echo 'Downloading pre-trained models...' ; "
+                         "%(syncBin)s update %(modelsDir)s %(modelsUrl)s DLmodels && "
+                         "touch %(modelsTarget)s && echo ' > %(afterMsgs)s'"
+                         % installDLvars,                # End of command
+                         installDLvars['modelsTarget'])  # Target
 
-  cmdsInstall = [(cmd, envName+".yml") for cmd, envName in cmdsInstall]
-  env.addPackage('deepLearningToolkit', version='0.2', urlSuffix='external',
-                 commands=[xmippInstallCheck]+cmdsInstall+[
-                           ("rm %s_* %s 2>/dev/null ; %s && touch %s && echo ' > %s'"
-                            % (modelsPrefix, xmippLibToken,modelsDownloadCmd,
-                               modelsTarget, "\n > ".join(cudaMsgs)),
-                            modelsTarget)],
-                 deps=[], tar='deepLearningToolkit.tgz')
+    xmippInstallCheck = ("if ls %(libXmipp)s > /dev/null ; "
+                         "then touch %(xmippLibToken)s; echo ' > %(preMsgsStr)s' ; "
+                         "else echo ; echo ' > Xmipp installation not found, "
+                         "please install it first (xmippSrc or xmippBin*).';echo;"
+                         " fi" % installDLvars,           # End of command
+                         installDLvars['xmippLibToken'])  # Target
+
+    env.addPackage('deepLearningToolkit', version='0.2', urlSuffix='external',
+                   commands=[xmippInstallCheck]+cmdsInstall+[modelsDownloadCmd],
+                   deps=[], tar='deepLearningToolkit.tgz')

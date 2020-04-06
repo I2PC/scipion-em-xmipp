@@ -28,14 +28,11 @@
 This module contains utils functions for Xmipp protocols
 """
 
-from os.path import exists, join
-import subprocess
+from os.path import join
 import numpy as np
 
-import xmipp3
 from pyworkflow import Config
 from pwem import emlib
-from .base import XmippMdRow
 
 def validateXmippGpuBins():
     pass
@@ -48,7 +45,7 @@ def getMdFirstRow(filename):
     md = emlib.MetaData()
     md.read(filename, 1)
     if md.getParsedLines():
-        row = XmippMdRow()
+        row = emlib.metadata.Row()
         row.readFromMd(md, md.firstObject())
     else:
         row = None
@@ -74,7 +71,7 @@ def iterMdRows(md):
     if isinstance(md, str):
         md = emlib.MetaData(md)
         
-    row = XmippMdRow()
+    row = emlib.metadata.Row()
     
     for objId in md:
         row.readFromMd(md, objId)

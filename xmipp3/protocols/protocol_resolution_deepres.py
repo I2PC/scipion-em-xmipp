@@ -63,6 +63,7 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
     """
     _label = 'local deepRes'
     _lastUpdateVersion = VERSION_2_0
+    _conda_env = 'xmipp_DLTK_v0.3'
     
     #RESOLUTION RANGE
     LOW_RESOL = 0

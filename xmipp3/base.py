@@ -28,24 +28,22 @@
 import os
 import subprocess
 
-import sys
-from collections import OrderedDict
-
-from pyworkflow.object import ObjectWrap
+from pyworkflow.protocol import Protocol
+from pyworkflow.utils.path import cleanPath
 from pwem import emlib
 import pwem
 
 try:  # TODO: Avoid these imports by importing them in the protocols/viewers
     from xmipp_base import *  # xmipp_base and xmippViz come from the binding and
     from xmippViz import *    #  it is not available before installing the binaries
-    from xmipp_base import _getModel
-except: #TODO: catch exception by type and ensure it is caused by CondaEnvManager
+except Exception as exc:  # TODO: catch exception by type and ensure it is caused by CondaEnvManager
+    error = exc
     class CondaEnvManager:
-        """ Fake class to avoid fails in very early stages (installation). """
+        """ Fake class to avoid very early fails (during installation). """
         @classmethod
         def yieldInstallAllCmds(*args, **kwargs):
-            yield '', ''
-
+            yield ('echo "Some error occurred when importing xmipp_base '
+                   '(from Xmipp binding): %s"' % error, 'void.target')
 
 import xmipp3
 
@@ -84,7 +82,8 @@ class XmippProtocol:
         """
         inputAttr = getattr(self, inputName)
         if not isinstance(inputAttr, xmippClass):
-            self._insertFunctionStep('convertInputToXmipp', inputName, xmippClass, resultFn)
+            self._insertFunctionStep('convertInputToXmipp', inputName, xmippClass,
+                                     resultFn)
             return resultFn
         return inputAttr.getFileName()
          
@@ -99,7 +98,7 @@ class XmippProtocol:
          
         if inputXmipp is not inputAttr:
             self._insertChild(inputName + 'Xmipp', inputXmipp)
-            return [resultFn] # validate resultFn was produced if converted
+            return [resultFn]  # validate resultFn was produced if converted
          
     def getConvertedInput(self, inputName):
         """ Retrieve the converted input, it can be the case that
@@ -117,12 +116,15 @@ class XmippProtocol:
                   in the arguments to skip that raise, especially in validation
                   asserions!
         """
-        return _getModel(*modelPath, **kwargs)
+        os.environ['XMIPP_HOME'] = getXmippPath()
+        return getModel(*modelPath, **kwargs)
 
     def validateDLtoolkit(self, errors=None, **kwargs):
         """ Validates if the deepLearningToolkit is installed.
             Additionally, it assert if a certain models is present when
             kwargs are present, following:
+              - _conda_env: The conda env to be load
+                            (default: the protocol._conda_env or CONDA_DEFAULT_ENVIRON)
               - assertModel: if models should be evaluated or not (default: True).
               - errorMsg: a custom message error (default: '').
               - model: a certain model name/route/list (default: no model assert)
@@ -141,49 +143,52 @@ class XmippProtocol:
                                          errorMsg="myModel3 is required for the "
                                                   "prediction mode")
         """
-        if (hasattr(self, "_conda_env") ):
-            condaEnvName= self._conda_env
-        else:
-            condaEnvName = None
-
         # initialize errors if needed
         errors = errors if errors is not None else []
 
         # Trying to import keras to assert if DeepLearningToolkit works fine.
         kerasError = False
-        if condaEnvName is None:
-            condaEnvName = CondaEnvManager.CONDA_DEFAULT_ENVIRON
-        env = CondaEnvManager.modifyEnvToUseConda(xmipp3.Plugin.getEnviron(), condaEnvName)
-        import subprocess
+        # condaEnvName preference: kwargs > protocol default > general default
+        condaEnvName = kwargs.get('_conda_env', getattr(self, "_conda_env",
+                                  CondaEnvManager.CONDA_DEFAULT_ENVIRON))
+        env = CondaEnvManager.modifyEnvToUseConda(xmipp3.Plugin.getEnviron(),
+                                                  condaEnvName)
         try:
-#            subprocess.call('which python', shell=True, env=env)
-            subprocess.check_output('python -W ignore::FutureWarning -c "import keras"', shell=True, env=env)
+            # subprocess.call('which python', shell=True, env=env)
+            subprocess.check_output('python -W ignore::FutureWarning '
+                                    '-c "import keras"', shell=True, env=env)
         except subprocess.CalledProcessError as e:
-            errors.append("*Keras/Tensorflow not found*. Required to run this protocol.")
+            errors.append("*Keras/Tensorflow not found*."
+                            "Required to run this protocol.")
             kerasError = True
 
         # Asserting if the model exists only if the software is well installed
-        modelError = False
         models = kwargs.get('model', '')
+        failedModels = []
         if not kerasError and kwargs.get('assertModel', True) and models != '':
             models = models if isinstance(models, list) else [models]
             for model in models:
                 if isinstance(model, str):
-                    if not os.path.exists(self.getModel(model, doRaise=False)):
-                        modelError = True
+                    modelFn = self.getModel(model, doRaise=False)
+                    modelName = model.split('/')[0]  # This differs from dirname
                 elif isinstance(model, tuple):
-                    if not os.path.exists(self.getModel(*model, doRaise=False)):
-                        modelError = True
-            if modelError:
-                errors.append("*Pre-trained model not found*. %s"
-                              % kwargs.get('errorMsg', ''))
+                    modelFn = self.getModel(*model, doRaise=False)
+                    modelName = model[0]
+                else:
+                    print("Deep Learning model type unknown (%s validation):\n"
+                          " > %s %s" % (self, model, type(model)))
+                    continue
+                if not os.path.exists(modelFn):
+                    failedModels.append(modelName)
+            if failedModels:
+                errors.append("*Pre-trained model(s) not found*: %s"
+                              % ', '.join(failedModels))
 
         # Hint to install the deepLearningToolkit
-        if kerasError or modelError:
+        if kerasError or failedModels:
             errors.append("Please, *run* 'scipion installb deepLearningToolkit' "
-                          "or install the scipion-em-xmipp/deepLearningToolkit "
+                          "or install the scipion-em-xmipp > deepLearningToolkit "
                           "package using the *plugin manager*.")
-
         return errors
 
     def runCondaJob(self, program, arguments, **kwargs):
@@ -197,145 +202,21 @@ class XmippProtocol:
         '''
         if "_conda_env" in kwargs:
             condaEnvName = kwargs.pop("_conda_env")
-        elif (hasattr(self, "_conda_env") ):
+        elif self.hasAttribute("_conda_env"):
             condaEnvName = self._conda_env
         else:
             condaEnvName = CondaEnvManager.CONDA_DEFAULT_ENVIRON
             print("Warning: using default conda environment '%s'. "
                   "CondaJobs should be run under a specific environment to "
                   "avoid problems. Please, fix it or contact to the developer."
-                  % CondaEnvManager.CONDA_DEFAULT_ENVIRON)
+                  % condaEnvName)
         if "env" not in kwargs:
             kwargs['env'] = xmipp3.Plugin.getEnviron()
-        program, arguments, kwargs = prepareRunConda(program, arguments, condaEnvName, **kwargs)
+        program, arguments, kwargs = prepareRunConda(program, arguments,
+                                                     condaEnvName, **kwargs)
 
         super(type(self), self).runJob(program, arguments, **kwargs)
 
-
-class XmippMdRow:
-    """ Support Xmipp class to store label and value pairs 
-    corresponding to a Metadata row. 
-    """
-    def __init__(self):
-        self._labelDict = OrderedDict() # Dictionary containing labels and values
-        self._objId = None # Set this id when reading from a metadata
-        
-    def getObjId(self):
-        return self._objId
-    
-    def hasLabel(self, label):
-        return self.containsLabel(label)
-    
-    def containsLabel(self, label):
-        # Allow getValue using the label string
-        if isinstance(label, str):
-            label = emlib.str2Label(label)
-        return label in self._labelDict
-    
-    def removeLabel(self, label):
-        if self.hasLabel(label):
-            del self._labelDict[label]
-    
-    def setValue(self, label, value):
-        """args: this list should contains tuples with 
-        MetaData Label and the desired value"""
-        # Allow setValue using the label string
-        if isinstance(label, str):
-            label = emlib.str2Label(label)
-        self._labelDict[label] = value
-            
-    def getValue(self, label, default=None):
-        """ Return the value of the row for a given label. """
-        # Allow getValue using the label string
-        if isinstance(label, str):
-            label = emlib.str2Label(label)
-        return self._labelDict.get(label, default)
-    
-    def getValueAsObject(self, label, default=None):
-        """ Same as getValue, but making an Object wrapping. """
-        return ObjectWrap(self.getValue(label, default))
-    
-    def readFromMd(self, md, objId):
-        """ Get all row values from a given id of a metadata. """
-        self._labelDict.clear()
-        self._objId = objId
-        
-        for label in md.getActiveLabels():
-            self._labelDict[label] = md.getValue(label, objId)
-            
-    def writeToMd(self, md, objId):
-        """ Set back row values to a metadata row. """
-        for label, value in self._labelDict.items():
-            # TODO: Check how to handle correctly unicode type
-            # in Xmipp and Scipion
-            t = type(value)
-            
-            if t is str:
-                value = str(value)
-                
-            if t is int and emlib.labelType(label) == emlib.LABEL_SIZET:
-                value = int(value)
-                
-            try:
-                md.setValue(label, value, objId)
-            except Exception as ex:
-                print("XmippMdRow.writeToMd: Error writing value to metadata.",
-                      file=sys.stderr)
-                print("                     label: %s, value: %s, type(value): %s"
-                      % (emlib.label2Str(label), value, type(value)), file=sys.stderr)
-                raise ex
-            
-    def readFromFile(self, fn):
-        md = emlib.MetaData(fn)
-        self.readFromMd(md, md.firstObject())
-        
-    def copyFromRow(self, other):
-        for label, value in other._labelDict.items():
-            self.setValue(label, value)
-            
-    def __str__(self):
-        s = '{'
-        for k, v in self._labelDict.items():
-            s += '  %s = %s\n' % (emlib.label2Str(k), v)
-        return s + '}'
-    
-    def __iter__(self):
-        return self._labelDict.items()
-            
-    def printDict(self):
-        """ Fancy printing of the row, mainly for debugging. """
-        print(str(self))
-    
-    
-class RowMetaData:
-    """ This class is a wrapper for MetaData in row mode.
-    Where only one object is used.
-    """
-    def __init__(self, filename=None):
-        self._md = emlib.MetaData()
-        self._md.setColumnFormat(False)
-        self._id = self._md.addObject()
-        
-        if filename:
-            self.read(filename)
-        
-    def setValue(self, label, value):
-        self._md.setValue(label, value, self._id)
-        
-    def getValue(self, label):
-        return self._md.getValue(label, self._id)
-        
-    def write(self, filename, mode=emlib.MD_APPEND):
-        self._md.write(filename, mode)
-        
-    def read(self, filename):
-        self._md.read(filename)
-        self._md.setColumnFormat(False)
-        self._id = self._md.firstObject()
-        
-    def __str__(self):
-        return str(self._md)
-    
         
 def findRow(md, label, value):
     """ Query the metadata for a row with label=value.
@@ -344,7 +225,7 @@ def findRow(md, label, value):
         label: label to check value
         value: value for equal condition
     Returns:
-        XmippMdRow object of the row found.
+        Row object of the row found.
         None if no row is found with label=value
     """
     mdQuery = emlib.MetaData() # store result
@@ -354,10 +235,11 @@ def findRow(md, label, value):
     if n == 0:
         row = None
     elif n == 1:
-        row = XmippMdRow()
+        row = emlib.metadata.Row()
         row.readFromMd(mdQuery, mdQuery.firstObject())
     else:
-        raise Exception("findRow: more than one row found matching the query %s = %s" % (emlib.label2Str(label), value))
+        raise Exception("findRow: more than one row found matching the query "
+                        "%s = %s" % (emlib.label2Str(label), value))
     
     return row
 
@@ -367,15 +249,16 @@ def findRowById(md, value):
   
   
 class XmippSet:
+    # FIXME: It seems unused...
     """ Support class to store sets in Xmipp base on a MetaData. """
     def __init__(self, itemClass):
         """ Create new set, base on a Metadata.
         itemClass: Class that represent the items.
         A method .getFileName should be available to store the md.
-        Items contained in XmippSet are supposed to inherit from XmippMdRow.
+        Items contained in XmippSet are supposed to inherit from Row.
         """
         self._itemClass = itemClass 
-        #self._fileName = fileName      
+        # self._fileName = fileName
         self._md = emlib.MetaData()
         
         
@@ -450,18 +333,22 @@ class ProjMatcher:
     """ Base class for protocols that use a projection """
     
     def projMatchStep(self, volume, angularSampling, symmetryGroup, images, fnAngles, Xdim):
-        from pyworkflow.utils.path import cleanPath
         # Generate gallery of projections        
         fnGallery = self._getExtraPath('gallery.stk')
         if volume.endswith('.mrc'):
             volume+=":mrc"
         
-        self.runJob("xmipp_angular_project_library", "-i %s -o %s --sampling_rate %f --sym %s --method fourier 1 0.25 bspline --compute_neighbors --angular_distance -1 --experimental_images %s"\
-                   % (volume, fnGallery, angularSampling, symmetryGroup, images))
+        self.runJob("xmipp_angular_project_library",
+                    "-i %s -o %s --sampling_rate %f --sym %s --method fourier 1 0.25 bspline "
+                    "--compute_neighbors --angular_distance -1 --experimental_images %s"
+                    % (volume, fnGallery, angularSampling, symmetryGroup, images))
     
         # Assign angles
-        self.runJob("xmipp_angular_projection_matching", "-i %s -o %s --ref %s --Ri 0 --Ro %s --max_shift 1000 --search5d_shift %s --search5d_step  %s --append"\
-                   % (images, fnAngles, fnGallery, str(Xdim/2), str(int(Xdim/10)), str(int(Xdim/25))))
+        self.runJob("xmipp_angular_projection_matching",
+                    "-i %s -o %s --ref %s --Ri 0 --Ro %s --max_shift 1000 "
+                    "--search5d_shift %s --search5d_step  %s --append"
+                    % (images, fnAngles, fnGallery, str(Xdim/2),
+                       str(int(Xdim/10)), str(int(Xdim/25))))
         
         cleanPath(self._getExtraPath('gallery_sampling.xmd'))
         cleanPath(self._getExtraPath('gallery_angles.doc'))
@@ -471,7 +358,7 @@ class ProjMatcher:
         MD=emlib.MetaData(fnAngles)
         for id in MD:
             galleryReference = MD.getValue(emlib.MDL_REF,id)
-            MD.setValue(emlib.MDL_IMAGE_REF, "%05d@%s" % (galleryReference+1,fnGallery), id)
+            MD.setValue(emlib.MDL_IMAGE_REF, "%05d@%s" % (galleryReference+1, fnGallery), id)
         MD.write(fnAngles)
         
     def produceAlignedImagesStep(self, volumeIsCTFCorrected, fn, images):
@@ -492,7 +379,7 @@ class ProjMatcher:
             flip = MDin.getValue(emlib.MDL_FLIP,i)
             if flip:
                 psi = -psi
-            eulerMatrix = emlib.Euler_angles2matrix(0.,0.,psi)
+            eulerMatrix = emlib.Euler_angles2matrix(0., 0., psi)
             x = MDin.getValue(emlib.MDL_SHIFT_X,i)
             y = MDin.getValue(emlib.MDL_SHIFT_Y,i)
             shift = array([x, y, 0])
@@ -534,6 +421,7 @@ class ProjMatcher:
             imgDiff = img-imgRef
             imgDiff.write(MDout.getValue(emlib.MDL_IMAGE1,i))
 
+
 class HelicalFinder:
     """ Base class for protocols that find helical symmetry """
 
@@ -546,40 +434,50 @@ class HelicalFinder:
     def runCoarseSearch(self, fnVol, dihedral, heightFraction, z0, zF, zStep,
                         rot0, rotF, rotStep, Nthr, fnOut, cylinderInnerRadius,
                         cylinderOuterRadius, height, Ts):
-        args="-i %s --sym %s --heightFraction %f -z %f %f %f --rotHelical %f %f %f --thr %d -o %s --sampling %f"%(fnVol,self.getSymmetry(dihedral),heightFraction,
-                                                                                z0,zF,zStep,rot0,rotF,rotStep,Nthr,fnOut,Ts)
-        if cylinderOuterRadius>0 and cylinderInnerRadius<0:
-            args+=" --mask cylinder %d %d"%(-cylinderOuterRadius,-height)
-        elif cylinderOuterRadius>0 and cylinderInnerRadius>0:
-            args+=" --mask tube %d %d %d"%(-cylinderInnerRadius,-cylinderOuterRadius,-height)
-        self.runJob('xmipp_volume_find_symmetry',args, numberOfMpi=1)
+        args = ("-i %s --sym %s --heightFraction %f -z %f %f %f "
+                "--rotHelical %f %f %f --thr %d -o %s --sampling %f"
+                %(fnVol, self.getSymmetry(dihedral), heightFraction, z0, zF, zStep,
+                  rot0, rotF, rotStep, Nthr, fnOut, Ts))
+        if cylinderOuterRadius > 0 and cylinderInnerRadius < 0:
+            args += " --mask cylinder %d %d"%(-cylinderOuterRadius, -height)
+        elif cylinderOuterRadius > 0 and cylinderInnerRadius > 0:
+            args += " --mask tube %d %d %d" % (-cylinderInnerRadius, -cylinderOuterRadius, -height)
+        self.runJob('xmipp_volume_find_symmetry', args, numberOfMpi=1)
 
-    def runFineSearch(self, fnVol, dihedral, fnCoarse, fnFine, heightFraction, z0, zF, rot0, rotF, cylinderInnerRadius, cylinderOuterRadius, height, Ts):
+    def runFineSearch(self, fnVol, dihedral, fnCoarse, fnFine, heightFraction,
+                      z0, zF, rot0, rotF, cylinderInnerRadius, cylinderOuterRadius,
+                      height, Ts):
         md=emlib.MetaData(fnCoarse)
         objId=md.firstObject()
         rotInit=md.getValue(emlib.MDL_ANGLE_ROT,objId)
         zInit=md.getValue(emlib.MDL_SHIFT_Z,objId)
-        args="-i %s --sym %s --heightFraction %f --localHelical %f %f -o %s -z %f %f 1 --rotHelical %f %f 1 --sampling %f"%(fnVol,self.getSymmetry(dihedral),heightFraction,
-                                                                                           zInit,rotInit,fnFine,z0,zF,rot0,rotF,Ts)
+        args=("-i %s --sym %s --heightFraction %f --localHelical %f %f -o %s "
+              "-z %f %f 1 --rotHelical %f %f 1 --sampling %f"
+              %(fnVol, self.getSymmetry(dihedral), heightFraction, zInit, rotInit,
+                fnFine, z0, zF, rot0, rotF, Ts))
         if cylinderOuterRadius>0 and cylinderInnerRadius<0:
             args+=" --mask cylinder %d %d"%(-cylinderOuterRadius,-height)
         elif cylinderOuterRadius>0 and cylinderInnerRadius>0:
             args+=" --mask tube %d %d %d"%(-cylinderInnerRadius,-cylinderOuterRadius,-height)
         self.runJob('xmipp_volume_find_symmetry',args, numberOfMpi=1)
 
-    def runSymmetrize(self, fnVol, dihedral, fnParams, fnOut, heightFraction, cylinderInnerRadius, cylinderOuterRadius, height, Ts):
+    def runSymmetrize(self, fnVol, dihedral, fnParams, fnOut, heightFraction,
+                      cylinderInnerRadius, cylinderOuterRadius, height, Ts):
         md=emlib.MetaData(fnParams)
         objId=md.firstObject()
         rot0=md.getValue(emlib.MDL_ANGLE_ROT,objId)
         z0=md.getValue(emlib.MDL_SHIFT_Z,objId)
-        args="-i %s --sym %s --helixParams %f %f --heightFraction %f -o %s --sampling %f --dont_wrap"%(fnVol,self.getSymmetry(dihedral),z0,rot0,heightFraction,fnOut,Ts)
+        args=("-i %s --sym %s --helixParams %f %f --heightFraction %f -o %s "
+              "--sampling %f --dont_wrap"
+              % (fnVol,self.getSymmetry(dihedral),z0,rot0,heightFraction,fnOut,Ts))
         self.runJob('xmipp_transform_symmetrize',args,numberOfMpi=1)
         doMask=False
         if cylinderOuterRadius>0 and cylinderInnerRadius<0:
             args="-i %s --mask cylinder %d %d"%(fnVol,-cylinderOuterRadius,-height)
             doMask=True
         elif cylinderOuterRadius>0 and cylinderInnerRadius>0:
-            args="-i %s --mask tube %d %d %d"%(fnVol,-cylinderInnerRadius,-cylinderOuterRadius,-height)
+            args="-i %s --mask tube %d %d %d"%(fnVol,-cylinderInnerRadius,
+                                               -cylinderOuterRadius,-height)
             doMask=True
         if doMask:
             self.runJob('xmipp_transform_mask',args,numberOfMpi=1)
