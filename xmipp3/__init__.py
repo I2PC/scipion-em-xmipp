@@ -51,7 +51,6 @@ class Plugin(pwem.Plugin):
     @classmethod
     def _defineVariables(cls):
         cls._addVar(XMIPP_HOME, pwem.Config.XMIPP_HOME)
-        # cls._defineEmVar(CONDA_DEFAULT_ENVIRON, "conda_default_env")
 
     @classmethod
     def getEnviron(cls, xmippFirst=True):
