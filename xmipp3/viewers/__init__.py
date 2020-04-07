@@ -57,6 +57,6 @@ from .viewer_projmatch import XmippProjMatchViewer
 from .viewer_structure_map_sph import XmippProtStructureMapSphViewer
 from .viewer_volume_deform_sph import XmippVolumeDeformSphViewer
 
-# Pablo: without NMA this fails, not sure if it has to be here.
+# TODO: Import from continuousflex the modules needed to create clusters (soft dependency)
 from .viewer_angular_alignment_sph import XmippAngularAlignmentSphViewer
 
