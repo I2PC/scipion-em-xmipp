@@ -120,7 +120,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
                       help="If on, protocol will automatically determine necessary number of control points.")
         group.addParam('minLocalRes', params.FloatParam, default=500,
                        expertLevel=cons.LEVEL_ADVANCED,
-                       label='Min resolution of the patch (A)',
+                       label='Min size of the patch (A)',
                        help="How many A should contain each patch?")
 
         group.addParam('skipAutotuning', params.BooleanParam, default=False,
