@@ -1204,10 +1204,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         # was performed as a single iteration
         fnDirPrevious=self._getExtraPath("Iter%03d"%(iteration-1))
         fnCorrectedImages1=join(fnDirPrevious,"images_corrected01.stk")
-        if exists(fnCorrectedImages1):
+        if exists(fnCorrectedImages1) and self.saveSpace.get():
             cleanPath(fnCorrectedImages1)
         fnCorrectedImages2=join(fnDirPrevious,"images_corrected02.stk")
-        if exists(fnCorrectedImages2):
+        if exists(fnCorrectedImages2) and self.saveSpace.get():
             cleanPath(fnCorrectedImages2)
         
         grayAdjusted=False
