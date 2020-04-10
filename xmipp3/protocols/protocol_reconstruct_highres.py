@@ -667,6 +667,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                             (fnImagesi,fnPreviousAngles,fnAux),numberOfMpi=1)
                 self.adaptShifts(fnAux, TsPrevious, fnImagesi, TsCurrent)
             cleanPath(fnAux)
+
         self.writeInfoField(fnDir,"count",emlib.MDL_COUNT,int(1))
         
     def prepareReferences(self,fnDirPrevious,fnDir,TsCurrent,targetResolution):
@@ -1031,7 +1032,11 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     raise Exception("Angles for iteration "+str(iteration)+" not found")
             self.writeInfoField(fnDirCurrent,"sampling",emlib.MDL_SAMPLINGRATE,TsCurrent)
             self.writeInfoField(fnDirCurrent,"size",emlib.MDL_XSIZE,Xdim)
-                
+
+            # Sometimes some images are empty
+            self.runJob("xmipp_image_eliminate_byEnergy", "-i %s.xmd" % fnAngles,
+                        numberOfMpi=min(self.numberOfMpi.get(), 12))
+
             if self.weightSSNR:
                 row=getFirstRow(fnAngles)
                 if row.containsLabel(emlib.MDL_WEIGHT_SSNR):
@@ -1227,13 +1232,14 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     if self.inputParticles.get().isPhaseFlipped():
                         args+=" --phase_flipped"
                     self.runJob("xmipp_ctf_correct_wiener2d",args,numberOfMpi=min(self.numberOfMpi.get(),24))
-                    self.runJob("xmipp_image_eliminate_largeEnergy","-i %s.xmd --sigma2 9"%fnCorrectedImagesRoot,numberOfMpi=min(self.numberOfMpi.get(),12))
+                    self.runJob("xmipp_image_eliminate_byEnergy","-i %s.xmd --sigma2 9 -minSigma2 0.01"%\
+                                fnCorrectedImagesRoot,numberOfMpi=min(self.numberOfMpi.get(),12))
                     fnAnglesToUse = fnCorrectedImagesRoot+".xmd"
                     deleteStack = True
                     deletePattern = fnCorrectedImagesRoot+".*"
                     if self.alignmentMethod!=self.STOCHASTIC_ALIGNMENT:
                         self.runJob('xmipp_metadata_utilities','-i %s --set intersection %s particleId particleId'%(fnAngles,fnAnglesToUse),numberOfMpi=1) 
-                        # This is because eliminate_largeEnergy may have reduced the number of images in fnAngles
+                        # This is because eliminate_byEnergy may have reduced the number of images in fnAngles
                 
                 if self.contGrayValues or (self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT and iteration>=5):
                     grayAdjusted=True
