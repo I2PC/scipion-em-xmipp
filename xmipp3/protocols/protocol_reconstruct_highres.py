@@ -1033,10 +1033,6 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             self.writeInfoField(fnDirCurrent,"sampling",emlib.MDL_SAMPLINGRATE,TsCurrent)
             self.writeInfoField(fnDirCurrent,"size",emlib.MDL_XSIZE,Xdim)
 
-            # Sometimes some images are empty
-            self.runJob("xmipp_image_eliminate_byEnergy", "-i %s.xmd" % fnAngles,
-                        numberOfMpi=min(self.numberOfMpi.get(), 12))
-
             if self.weightSSNR:
                 row=getFirstRow(fnAngles)
                 if row.containsLabel(emlib.MDL_WEIGHT_SSNR):
