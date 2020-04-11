@@ -131,7 +131,7 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                       help="Set to -1 for no homogeneization. Set to 0 for homogeneizing "
                            "to the minimum of class size. Set to any other number to "
                            "homogeneize to that particular number")
-        form.addParam('cl2dIterations', IntParam, default=5,
+        form.addParam('class2dIterations', IntParam, default=5,
                       expertLevel=LEVEL_ADVANCED,
                       condition="directionalClasses > 1",
                       label='Number of CL2D iterations')
@@ -228,7 +228,7 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                     directionalClasses=self.directionalClasses.get(),
                     homogeneize=self.homogeneize.get(),
                     targetResolution=self.targetResolution.get(),
-                    cl2dIterations=self.cl2dIterations.get(),
+                    class2dIterations=self.class2dIterations.get(),
                     splitVolume=self.splitVolume.get(),
                     Niter=self.Niter.get(),
                     Nrec=self.Nrec.get(),
@@ -298,7 +298,7 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                     directionalClasses=self.directionalClasses.get(),
                     homogeneize=self.homogeneize.get(),
                     targetResolution=self.targetResolution.get(),
-                    cl2dIterations=self.cl2dIterations.get(),
+                    class2dIterations=self.class2dIterations.get(),
                     splitVolume=self.splitVolume.get(),
                     Niter=self.Niter.get(),
                     Nrec=self.Nrec.get(),
