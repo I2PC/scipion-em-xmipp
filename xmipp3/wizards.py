@@ -36,13 +36,12 @@ from .protocols.protocol_cl2d import IMAGES_PER_CLASS
 from .protocols import (
     XmippProtCTFMicrographs, XmippProtProjMatch, XmippProtPreprocessParticles,
     XmippProtPreprocessMicrographs, XmippProtPreprocessVolumes,
-    XmippProtExtractParticles, XmippProtExtractParticlesPairs,
+    XmippProtExtractParticles, XmippProtExtractParticlesPairs, XmippProtPickingRemoveDuplicates,
     XmippProtFilterParticles, XmippProtFilterVolumes, XmippProtMaskParticles,
     XmippProtMaskVolumes, XmippProtAlignVolume, XmippProtCL2D,
     XmippProtHelicalParameters, XmippProtConsensusPicking, XmippProtMonoRes,
     XmippProtRotSpectra, XmippProtReconstructHighRes, XmippProtExtractUnit,
-    XmippProtReconstructHeterogeneous, XmippMetaProtDiscreteHeterogeneityScheduler,
-    XmippProtConnectedComponents)
+    XmippProtReconstructHeterogeneous, XmippMetaProtDiscreteHeterogeneityScheduler)
 
 
 #===============================================================================
@@ -159,6 +158,22 @@ class XmippParticleConsensusRadiusWizard(Wizard):
         if protocol.inputCoordinates.hasValue():
             boxSize=protocol.inputCoordinates[0].get().getBoxSize()
             radius = int(boxSize*0.1)
+            if radius<10:
+                radius=10
+        else:
+            radius = 10
+        return radius
+
+    def show(self, form):
+        form.setVar('consensusRadius', self._getRadius(form.protocol))
+
+class XmippParticleRemoveDuplicatesRadiusWizard(Wizard):
+    _targets = [(XmippProtPickingRemoveDuplicates, ['consensusRadius'])]
+
+    def _getRadius(self, protocol):
+        if protocol.inputCoordinates.hasValue():
+            boxSize=protocol.inputCoordinates.get().getBoxSize()
+            radius = int(boxSize*0.25)
             if radius<10:
                 radius=10
         else:
@@ -499,22 +514,3 @@ class XmippGaussianVolumesWizard(GaussianVolumesWizard):
         _label = params['label']
         GaussianVolumesWizard.show(self, form, _value, _label, UNIT_PIXEL_FOURIER)
 
-#===============================================================================
-#  TOMO
-#===============================================================================
-
-class XmippConnectedCompWizard(Wizard):
-    _targets = [(XmippProtConnectedComponents, ['distance'])]
-
-    def show(self, form):
-        tomoCCProt = form.protocol
-        inputCoordinates = tomoCCProt.inputCoordinates.get()
-        if not inputCoordinates:
-            print('You must specify input coordinates')
-            return
-        boxSize = inputCoordinates.getBoxSize()
-        if not boxSize:
-            print('These coordinates do not have box size. Please, enter distance manually.')
-            return
-        distance = boxSize * 3
-        form.setVar('distance', distance)
