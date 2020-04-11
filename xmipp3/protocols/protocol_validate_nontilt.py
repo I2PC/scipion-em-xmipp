@@ -32,10 +32,10 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         STEPS_PARALLEL,
                                         StringParam, EnumParam, LEVEL_ADVANCED,
                                         BooleanParam, USE_GPU, GPU_LIST)
-from pyworkflow.em.data import Volume
-from pyworkflow.em.protocol import ProtAnalysis3D
+from pwem.objects import Volume
+from pwem.protocols import ProtAnalysis3D
 from pyworkflow.utils.path import moveFile, makePath
-import pyworkflow.em.metadata as md
+import pwem.emlib.metadata as md
 
 from xmipp3.convert import writeSetOfParticles
 
@@ -179,23 +179,23 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
         self.runJob("xmipp_angular_project_library", args % params)
 
     def significantStep(self, volId):
-	count=0
+        count=0
         GpuListCuda=''
         if self.useGpu.get():
             if self.useQueueForSteps() or self.useQueue():
                 GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
-	        GpuList = GpuList.split(",")
-	        for elem in GpuList:
-		    GpuListCuda = GpuListCuda+str(count)+' '
-		    count+=1
+                GpuList = GpuList.split(",")
+                for elem in GpuList:
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    count+=1
             else:
                 GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
-	        GpuListAux = ''
+                GpuListAux = ''
                 for elem in self.getGpuList():
-	            GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListCuda = GpuListCuda+str(count)+' '
                     GpuListAux = GpuListAux+str(elem)+','
                     count+=1
-	        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
 
         params = {"inputParts": self._getMdParticles(),
                   "symmetry": self.symmetryGroup.get(),

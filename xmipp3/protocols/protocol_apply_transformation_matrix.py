@@ -27,8 +27,10 @@
 import numpy as np
 
 from pyworkflow import VERSION_1_1
-from pyworkflow.em.protocol import ProtProcessParticles
 import pyworkflow.protocol.params as params
+
+from pwem.protocols import ProtProcessParticles
+
 
 from xmipp3.convert import writeSetOfParticles
 

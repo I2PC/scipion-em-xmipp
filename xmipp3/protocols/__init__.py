@@ -26,11 +26,8 @@
 # *
 # **************************************************************************
 
-from .nma import *
-from .pdb import *
 from .protocol_preprocess import *
 
-from .protocol_3dbionotes import XmippProt3DBionotes
 from .protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from .protocol_align_volume import XmippProtAlignVolume, XmippProtAlignVolumeForWeb
 from .protocol_preprocess.protocol_add_noise import (XmippProtAddNoiseVolumes,

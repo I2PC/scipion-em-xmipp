@@ -25,9 +25,11 @@
 # **************************************************************************
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.protocol.params import PointerParam
-from pyworkflow.em import ProtMicrographs
 from pyworkflow.object import Integer
+from pyworkflow.protocol.params import PointerParam
+
+from pwem.protocols import ProtMicrographs
+
 
 from xmipp3.convert import writeSetOfMicrographs
 import xmipp3

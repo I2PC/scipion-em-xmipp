@@ -33,12 +33,14 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         STEPS_PARALLEL,
                                         StringParam, BooleanParam, IntParam,
                                         LEVEL_ADVANCED, USE_GPU, GPU_LIST)
-from pyworkflow.em.data import Volume
-from pyworkflow.em import Viewer
-import pyworkflow.em.metadata as md
-from pyworkflow.em.protocol import ProtAnalysis3D
+
 from pyworkflow.utils.path import moveFile, makePath, cleanPattern
 from pyworkflow.gui.plotter import Plotter
+
+from pwem.objects import Volume
+import pwem.emlib.metadata as md
+from pwem.protocols import ProtAnalysis3D
+
 
 from xmipp3.convert import writeSetOfParticles, writeSetOfVolumes, \
     getImageLocation
@@ -219,19 +221,17 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
         newTs, newXdim = self._getModifiedSizeAndSampling()
 
         if self.doWiener.get():
-            params = '  -i %s' % self._getExtraPath(
-                'corrected_ctf_particles.xmd')
-        else:
-            params = '  -i %s' % self._getPath('input_particles.xmd')
-
-        params += '  -o %s' % self._getExtraPath('scaled_particles.stk')
-        params += '  --save_metadata_stack %s' % self._getExtraPath(
-            'scaled_particles.xmd')
-        params += '  --fourier %d' % newXdim
-
-        self.runJob('xmipp_image_resize', params)
-
-        from pyworkflow.em.convert import ImageHandler
+            params =  '  -i %s' % self._getExtraPath('corrected_ctf_particles.xmd')
+        else :
+            params =  '  -i %s' % self._getPath('input_particles.xmd')
+            
+        params +=  '  -o %s' % self._getExtraPath('scaled_particles.stk')
+        params +=  '  --save_metadata_stack %s' % self._getExtraPath('scaled_particles.xmd')
+        params +=  '  --fourier %d' % newXdim
+        
+        self.runJob('xmipp_image_resize',params)
+        
+        from pwem.emlib.image import ImageHandler
         img = ImageHandler()
         img.convert(self.inputVolumes.get(), self._getExtraPath("volume.vol"))
         Xdim = self.inputVolumes.get().getDim()[0]
@@ -290,12 +290,12 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         param += ' -o %s' % self._getPath('reference_particles.xmd')
         param += ' --sampling_rate % 0.3f' % newTs
         param += ' --method fourier'
-
-        # while (~isfile(self._getExtraPath('params'))):
-        #    print 'No created'
-
-        self.runJob('xmipp_phantom_project',
-                    param, numberOfMpi=1, numberOfThreads=1)
+                
+        #while (~isfile(self._getExtraPath('params'))):
+        #    print('No created')
+        
+        self.runJob('xmipp_phantom_project', 
+                    param, numberOfMpi=1,numberOfThreads=1)
 
         param = ' -i %s' % self._getPath('reference_particles.stk')
         param += ' --mask circular %d' % R
@@ -333,22 +333,22 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
             copyfile(volDir + '/angles_iter001_00.xmd',
                      self._getTmpPath(anglesPath))
         else:
-	    count=0
+            count=0
             GpuListCuda=''
             if self.useQueueForSteps() or self.useQueue():
                 GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
-	        GpuList = GpuList.split(",")
-	        for elem in GpuList:
-		    GpuListCuda = GpuListCuda+str(count)+' '
-		    count+=1
+                GpuList = GpuList.split(",")
+                for elem in GpuList:
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    count+=1
             else:
                 GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
-	        GpuListAux = ''
+                GpuListAux = ''
                 for elem in self.getGpuList():
-	            GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListCuda = GpuListCuda+str(count)+' '
                     GpuListAux = GpuListAux+str(elem)+','
                     count+=1
-	        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
 
             if anglesPath == 'exp_particles.xmd':
                 params = '  -i %s' % self._getExtraPath('scaled_particles.xmd')
@@ -576,16 +576,13 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         item._xmipp_scoreAlignabilityAccuracy = Float(
             row.getValue(md.MDL_SCORE_BY_ALIGNABILITY_ACCURACY))
         item._xmipp_scoreMirror = Float(row.getValue(md.MDL_SCORE_BY_MIRROR))
-        item._xmipp_weight = Float(
-            float(item._xmipp_scoreAlignabilityAccuracy) * float(
-                item._xmipp_scoreAlignabilityPrecision))
-
-    def createPlot2D(self, volPrefix, md):
-
-        import xmippLib
-
-        figurePath = self._getExtraPath(
-            volPrefix + 'softAlignmentValidation2D.png')
+        item._xmipp_weight = Float( float(item._xmipp_scoreAlignabilityAccuracy)*float(item._xmipp_scoreAlignabilityPrecision))
+        
+    def createPlot2D(self,volPrefix,md):
+        
+        from pwem import emlib
+        
+        figurePath = self._getExtraPath(volPrefix + 'softAlignmentValidation2D.png')
         figureSize = (8, 6)
 
         # alignedMovie = mic.alignMetaData
@@ -599,9 +596,9 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         ax.set_ylabel('Angular Accuracy')
 
         for objId in md:
-            x = md.getValue(xmippLib.MDL_SCORE_BY_ALIGNABILITY_PRECISION, objId)
-            y = md.getValue(xmippLib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY, objId)
-            ax.plot(x, y, 'r.', markersize=1)
+            x = md.getValue(emlib.MDL_SCORE_BY_ALIGNABILITY_PRECISION, objId)
+            y = md.getValue(emlib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY, objId)
+            ax.plot(x, y, 'r.',markersize=1)
 
         ax.grid(True, which='both')
         ax.autoscale_view(True, True, True)

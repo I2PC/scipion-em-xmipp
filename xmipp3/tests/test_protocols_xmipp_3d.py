@@ -25,14 +25,17 @@
 # *
 # **************************************************************************
 
-import sys
-import unittest
-from itertools import izip
+from pwem.protocols import (ProtImportVolumes, ProtImportMask,
+                            ProtImportParticles, ProtImportAverages,
+                            ProtImportPdb, ProtSubSet)
 
-from pyworkflow.utils import redStr, greenStr, magentaStr
+try:
+    from itertools import izip
+except ImportError:
+    izip = zip
+
+from pyworkflow.utils import greenStr, magentaStr
 from pyworkflow.tests import *
-from pyworkflow.em import *
-
 from xmipp3.base import *
 from xmipp3.convert import *
 from xmipp3.constants import *
@@ -109,7 +112,7 @@ class TestXmippCreateMask3D(TestXmippBase):
         cls.protImport = cls.runImportVolumes(cls.vol1, 9.896)
 
     def testCreateMask(self):
-        print "Run create threshold mask from volume"
+        print("Run create threshold mask from volume")
         protMask1 = self.newProtocol(XmippProtCreateMask3D,
                                      source=0, volumeOperation=0,
                                      threshold=0.4)
@@ -120,7 +123,7 @@ class TestXmippCreateMask3D(TestXmippBase):
                              "There was a problem with create mask from volume")
 
 
-        print "Run create segment mask from volume"
+        print("Run create segment mask from volume")
         protMask2 = self.newProtocol(XmippProtCreateMask3D,
                                      source=0, volumeOperation=1,
                                      segmentationType=3)
@@ -131,7 +134,7 @@ class TestXmippCreateMask3D(TestXmippBase):
                              "There was a problem with create mask from volume")
 
     
-        print "Run create mask from another mask"
+        print("Run create mask from another mask")
         protMask3 = self.newProtocol(XmippProtCreateMask3D,
                                      source=0, volumeOperation=2,
                                      doMorphological=True, elementSize=3)
@@ -141,7 +144,7 @@ class TestXmippCreateMask3D(TestXmippBase):
         self.assertIsNotNone(protMask3.outputMask,
                              "There was a problem with mask from another mask")
 
-        print "Run create mask from geometry"
+        print("Run create mask from geometry")
         protMask4 = self.newProtocol(XmippProtCreateMask3D,
                                      source=1, size=64, samplingRate=9.89,
                                      geo=6, innerRadius=10, outerRadius=25,
@@ -198,7 +201,7 @@ class TestXmippApplyMask3D(TestXmippBase):
         cls.protImport = cls.runImportVolumes(cls.vol1, 9.896)
 
     def testApplyCircularMask(self):
-        print "Run apply circular mask for volumes"
+        print("Run apply circular mask for volumes")
         protMask1 = self.newProtocol(XmippProtMaskVolumes,
                                      source=0, geo=0, radius=-1,
                                      fillType=0, fillValue=5 )
@@ -212,7 +215,7 @@ class TestXmippApplyMask3D(TestXmippBase):
                              "There was a problem with apply circular mask for Volumes")
     
     def testApplyBoxMask(self):
-        print "Run apply box mask for Volumes"
+        print("Run apply box mask for Volumes")
         protMask2 = self.newProtocol(XmippProtMaskVolumes,
                                      source=0, geo=1, boxSize=-1,
                                      fillType=1 )
@@ -226,7 +229,7 @@ class TestXmippApplyMask3D(TestXmippBase):
                              "There was a problem with apply boxed mask for Volumes")
     
     def testapplyCrownMask(self):
-        print "Run apply crown mask for Volumes"
+        print("Run apply crown mask for Volumes")
         protMask3 = self.newProtocol(XmippProtMaskVolumes,
                                      source=0, geo=2, innerRadius=2, outerRadius=12,
                                      fillType=2 )
@@ -239,7 +242,7 @@ class TestXmippApplyMask3D(TestXmippBase):
         self.assertIsNotNone(protMask3.outputVol, "There was a problem with apply crown mask for Volumes")
         
     def testApplyGaussianMask(self):
-        print "Run apply gaussian mask for Volumes"
+        print("Run apply gaussian mask for Volumes")
         protMask4 = self.newProtocol(XmippProtMaskVolumes,
                                      source=0, geo=3, sigma=-1,
                                      fillType=3 )
@@ -252,7 +255,7 @@ class TestXmippApplyMask3D(TestXmippBase):
         self.assertIsNotNone(protMask4.outputVol, "There was a problem with apply gaussian mask for Volumes")
         
     def testApplyRaisedCosineMask(self):
-        print "Run apply raised cosine mask for Volumes"
+        print("Run apply raised cosine mask for Volumes")
         protMask5 = self.newProtocol(XmippProtMaskVolumes,
                                      source=0, geo=4, innerRadius=2, outerRadius=12,
                                      fillType=0, fillValue=5 )
@@ -265,7 +268,7 @@ class TestXmippApplyMask3D(TestXmippBase):
         self.assertIsNotNone(protMask5.outputVol, "There was a problem with apply raised cosine mask for Volumes")
         
     def testApplyRaisedCrownMask(self):
-        print "Run apply raised crown mask for Volumes"
+        print("Run apply raised crown mask for Volumes")
         protMask6 = self.newProtocol(XmippProtMaskVolumes,
                                      source=0, geo=5, innerRadius=2, outerRadius=12, borderDecay=2,
                                      fillType=1 )
@@ -279,7 +282,7 @@ class TestXmippApplyMask3D(TestXmippBase):
         self.assertIsNotNone(protMask6.outputVol, "There was a problem with apply raised crown mask for Volumes")
         
     def testApplyUserMask(self):
-        print "Run apply user mask for Volumes"
+        print("Run apply user mask for Volumes")
         # Create MASK
         protMask01 = self.newProtocol(XmippProtCreateMask3D,
                                      source=1, size=64, samplingRate=9.89,
@@ -324,7 +327,7 @@ class TestXmippPreprocessVolumes(TestXmippBase):
 
 
     def testPreprocessVolumes(self):
-        print "Run preprocess a volume"
+        print("Run preprocess a volume")
         protPreprocessVol1 = XmippProtPreprocessVolumes(doChangeHand=True, doRandomize=True, doSymmetrize=True, symmetryGroup='d6',
                                                         doSegment=True, doNormalize=True, backRadius=20, doInvert=True,
                                                         doThreshold=True, thresholdType=1)
@@ -332,7 +335,7 @@ class TestXmippPreprocessVolumes(TestXmippBase):
         self.proj.launchProtocol(protPreprocessVol1, wait=True)
         self.assertIsNotNone(protPreprocessVol1.outputVol, "There was a problem with a volume")
 
-        print "Run preprocess a SetOfVolumes"
+        print("Run preprocess a SetOfVolumes")
         protPreprocessVol2 = XmippProtPreprocessVolumes(doChangeHand=True, doRandomize=True, doSymmetrize=True, symmetryGroup='d6',
                                                         doSegment=True, doNormalize=True, backRadius=20, doInvert=True,
                                                         doThreshold=True, thresholdType=1)
@@ -340,7 +343,7 @@ class TestXmippPreprocessVolumes(TestXmippBase):
         self.proj.launchProtocol(protPreprocessVol2, wait=True)
         self.assertIsNotNone(protPreprocessVol2.outputVol, "There was a problem with preprocess a SetOfVolumes")
 
-        print "Run preprocess a volume using mask_1 in the symmetrization"
+        print("Run preprocess a volume using mask_1 in the symmetrization")
         protPreprocessVol3 = XmippProtPreprocessVolumes(doChangeHand=False, doRandomize=False,
                                                         doRotateIco=True, rotateFromIco=0, rotateToIco=2,
                                                         doSymmetrize=True, symmetryGroup='i3',
@@ -353,7 +356,7 @@ class TestXmippPreprocessVolumes(TestXmippBase):
         self.proj.launchProtocol(protPreprocessVol3, wait=True)
         self.assertIsNotNone(protPreprocessVol3.outputVol, "There was a problem with a volume")
 
-        print "Run preprocess a volume using mask_2 in the symmetrization"
+        print("Run preprocess a volume using mask_2 in the symmetrization")
         protPreprocessVol4 = XmippProtPreprocessVolumes(doChangeHand=False, doRandomize=False,
                                                         doSymmetrize=True, symmetryGroup='c7',
                                                         doSegment=False, doNormalize=False,
@@ -375,7 +378,7 @@ class TestXmippResolution3D(TestXmippBase):
         cls.protImport2 = cls.runImportVolumes(cls.vol3, 9.896)
 
     def testCalculateResolution(self):
-        print "Run resolution 3D"
+        print("Run resolution 3D")
         protResol3D = XmippProtResolution3D(doSSNR=False)
         protResol3D.inputVolume.set(self.protImport1.outputVolume)
         protResol3D.referenceVolume.set(self.protImport2.outputVolume)
@@ -387,7 +390,7 @@ class TestXmippResolution3D(TestXmippBase):
 class TestXmippFilterVolumes(TestXmippBase):
     @classmethod
     def setUpClass(cls):
-        print ("\n", greenStr(" Filter Volumes Set Up - Collect data ".center(75, '-')))
+        print("\n", greenStr(" Filter Volumes Set Up - Collect data ".center(75, '-')))
         setupTestProject(cls)
         TestXmippBase.setData()
         cls.protImport1 = cls.runImportVolumes(cls.volumes, 9.896)
@@ -396,7 +399,7 @@ class TestXmippFilterVolumes(TestXmippBase):
     # Tests with single volume as input.
     def launchAndTestSingle(self, **kwargs):
         "Launch XmippProtFilterVolumes on single volume and check results."
-        print magentaStr("\n==> Filter singe volume input params: %s" % kwargs)
+        print(magentaStr("\n==> Filter singe volume input params: %s" % kwargs))
         prot = XmippProtFilterVolumes(**kwargs)
         prot.inputVolumes.set(self.protImport2.outputVolume)
         self.proj.launchProtocol(prot, wait=True)
@@ -422,7 +425,7 @@ class TestXmippFilterVolumes(TestXmippBase):
     # Tests with multiple volumes as input.
     def launchAndTestSet(self, **kwargs):
         "Launch XmippProtFilterVolumes on set of volumes and check results."
-        print magentaStr("\n==> Filter multiple volumes input params: %s" % kwargs)
+        print(magentaStr("\n==> Filter multiple volumes input params: %s" % kwargs))
         prot = XmippProtFilterVolumes(**kwargs)
         vIn = self.protImport1.outputVolumes  # short notation
         prot.inputVolumes.set(vIn)
@@ -460,14 +463,14 @@ class TestXmippMaskVolumes(TestXmippBase):
         cls.protImport2 = cls.runImportVolumes(cls.vol1, 9.896)
 
     def testMaskVolumes(self):
-        print "Run mask single volume"
+        print("Run mask single volume")
         protMaskVolume = self.newProtocol(XmippProtMaskVolumes,
                                           radius=23)
         protMaskVolume.inputVolumes.set(self.protImport2.outputVolume)
         self.launchProtocol(protMaskVolume)
         self.assertIsNotNone(protMaskVolume.outputVol, "There was a problem with applying mask to a volume")
 
-        print "Run mask SetOfVolumes"
+        print("Run mask SetOfVolumes")
         protMaskVolumes = self.newProtocol(XmippProtMaskVolumes,
                                            geo=MASK3D_CROWN, innerRadius=18, outerRadius=23)
         protMaskVolumes.inputVolumes.set(self.protImport1.outputVolumes)
@@ -478,7 +481,7 @@ class TestXmippMaskVolumes(TestXmippBase):
 class TestXmippCropResizeVolumes(TestXmippBase):
     @classmethod
     def setUpClass(cls):
-        print "\n", greenStr(" Crop/Resize Volumes Set Up - Collect data ".center(75, '-'))
+        print("\n", greenStr(" Crop/Resize Volumes Set Up - Collect data ".center(75, '-')))
         setupTestProject(cls)
         TestXmippBase.setData()
         cls.protImport1 = cls.runImportVolumes(cls.volumes, 9.896)
@@ -487,7 +490,7 @@ class TestXmippCropResizeVolumes(TestXmippBase):
     # Tests with single volume as input.
     def launchSingle(self, **kwargs):
         "Launch XmippProtCropResizeVolumes and return output volume."
-        print magentaStr("\n==> Crop/Resize single volume input params: %s" % kwargs)
+        print(magentaStr("\n==> Crop/Resize single volume input params: %s" % kwargs))
         prot = XmippProtCropResizeVolumes(**kwargs)
         prot.inputVolumes.set(self.protImport2.outputVolume)
         self.proj.launchProtocol(prot, wait=True)
@@ -538,7 +541,7 @@ class TestXmippCropResizeVolumes(TestXmippBase):
     # Tests with multiple volumes as input.
     def launchSet(self, **kwargs):
         "Launch XmippProtCropResizeVolumes and return output volumes."
-        print magentaStr("\n==> Crop/Resize single set of volumes input params: %s" % kwargs)
+        print(magentaStr("\n==> Crop/Resize single set of volumes input params: %s" % kwargs))
         prot = XmippProtCropResizeVolumes(**kwargs)
         prot.inputVolumes.set(self.protImport1.outputVolumes)
         self.proj.launchProtocol(prot, wait=True)
@@ -608,7 +611,7 @@ class TestXmippOperateVolumes(TestXmippBase):
     # Tests with single volume as input.
     def launchSingle(self, **kwargs):
         "Launch XmippProtImageOperateVolumes and return output volume."
-        print magentaStr("\n==> Operate single volume input params: %s" % kwargs)
+        print(magentaStr("\n==> Operate single volume input params: %s" % kwargs))
         prot = XmippProtImageOperateVolumes()
         prot.operation.set(kwargs.get('operation', 1))
         prot.inputVolumes.set(self.protImport1.outputVolume)
@@ -662,7 +665,7 @@ class TestXmippOperateVolumes(TestXmippBase):
 #     # Tests with multiple volumes as input.
     def launchSet(self, **kwargs):
         "Launch XmippProtImageOperateVolumes and return output volumes."
-        print magentaStr("\n==> Operate set of volumes input params: %s" % kwargs)
+        print(magentaStr("\n==> Operate set of volumes input params: %s" % kwargs))
         prot = XmippProtImageOperateVolumes()
         prot.operation.set(kwargs.get('operation', 1))
         prot.inputVolumes.set(self.protImport3.outputVolumes)
@@ -795,7 +798,7 @@ class TestXmippConvertToPseudoatoms(TestXmippBase):
         cls.protImport = cls.runImportVolumes(cls.vol1, 9.896)
 
     def testConvertToPseudoatoms(self):
-        print "Run convert to pseudoatoms"
+        print("Run convert to pseudoatoms")
         prot = XmippProtConvertToPseudoAtoms(pseudoAtomTarget=15)
         prot.inputStructure.set(self.protImport.outputVolume)
         self.proj.launchProtocol(prot, wait=True)
@@ -811,7 +814,7 @@ class TestXmippProtHelicalParameters(TestXmippBase):
         cls.protImport = cls.runImportVolumes(cls.vol, 1.0)
 
     def testHelicalParameters(self):
-        print "Run symmetrize helical"
+        print("Run symmetrize helical")
         protHelical = XmippProtHelicalParameters(cylinderOuterRadius=20,dihedral=True,rot0=50,rotF=70,rotStep=5,z0=5,zF=10,zStep=0.5)
         protHelical.inputVolume.set(self.protImport.outputVolume)
         self.proj.launchProtocol(protHelical, wait=True)
@@ -819,7 +822,7 @@ class TestXmippProtHelicalParameters(TestXmippBase):
         self.assertIsNotNone(protHelical.outputVolume, "There was a problem with Helical output volume")
         self.assertIsNotNone(protHelical.deltaRot.get(), "Output delta rot is None")
         self.assertIsNotNone(protHelical.deltaZ.get(), "Output delta Z is None")
-        print "protHelical.deltaRot.get() ", protHelical.deltaRot.get()
+        print("protHelical.deltaRot.get() ", protHelical.deltaRot.get())
         self.assertAlmostEqual(protHelical.deltaRot.get(), 59.59, delta=1, msg="Output delta rot is wrong")
         self.assertAlmostEqual(protHelical.deltaZ.get(), 6.628, delta=0.2, msg="Output delta Z is wrong")
 
@@ -841,7 +844,7 @@ class TestXmippRansacMda(TestXmippBase):
 
     def test_ransac(self):
         #Import a set of averages
-        print "Import Set of averages"
+        print("Import Set of averages")
         protImportAvg = self.newProtocol(ProtImportAverages, 
                                          filesPath=self.averages, 
                                          checkStack=True,
@@ -849,7 +852,7 @@ class TestXmippRansacMda(TestXmippBase):
         self.launchProtocol(protImportAvg)
         self.assertIsNotNone(protImportAvg.getFiles(), "There was a problem with the import")
         
-        print "Run Ransac"
+        print("Run Ransac")
         protRansac = self.newProtocol(XmippProtRansac,
                                       symmetryGroup=self.symmetryGroup, 
                                       angularSampling=self.angularSampling,
@@ -898,7 +901,7 @@ class TestXmippSwarmMda(TestXmippBase):
 
     def test_swarm(self):
         #Import a set of averages
-        print "Import Set of averages"
+        print("Import Set of averages")
         protImportAvg = self.newProtocol(ProtImportAverages, 
                                          filesPath=self.averages, 
                                          checkStack=True,
@@ -907,7 +910,7 @@ class TestXmippSwarmMda(TestXmippBase):
         self.assertIsNotNone(protImportAvg.getFiles(), "There was a problem with the import")
         
         #Import a set of particles
-        print "Import Set of particles"
+        print("Import Set of particles")
         protImportParticles = self.newProtocol(ProtImportParticles, 
                                          filesPath=self.particles, 
                                          checkStack=True,
@@ -915,7 +918,7 @@ class TestXmippSwarmMda(TestXmippBase):
         self.launchProtocol(protImportParticles)
         self.assertIsNotNone(protImportParticles.getFiles(), "There was a problem with the import")
 
-        print "Run Ransac"
+        print("Run Ransac")
         protRansac = self.newProtocol(XmippProtRansac,
                                       symmetryGroup=self.symmetryGroup, 
                                       angularSampling=self.angularSampling,
@@ -929,7 +932,7 @@ class TestXmippSwarmMda(TestXmippBase):
         self.launchProtocol(protRansac)
         self.assertIsNotNone(protRansac.outputVolumes, "There was a problem with ransac protocol")
 
-        print "Run Swarm"
+        print("Run Swarm")
         protSwarm = self.newProtocol(XmippProtReconstructSwarm,
                                       symmetryGroup=self.symmetryGroup,
                                       numberOfIterations=5,
@@ -950,7 +953,7 @@ class TestXmippRotationalSymmetry(TestXmippBase):
         cls.vol = cls.dataset.getFile('vol110')
 
     def test_rotsym(self):
-        print "Import Volume"
+        print("Import Volume")
         protImportVol = self.newProtocol(ProtImportVolumes,
                                          objLabel='Volume',
                                          filesPath=self.vol,
@@ -959,7 +962,7 @@ class TestXmippRotationalSymmetry(TestXmippBase):
         self.assertIsNotNone(protImportVol.getFiles(),
                              "There was a problem with the import")
         
-        print "Run find rotational symmetry axis"
+        print("Run find rotational symmetry axis")
         protRotSym = self.newProtocol(XmippProtRotationalSymmetry,
                                          symOrder=2,
                                          searchMode=2,
@@ -980,7 +983,7 @@ class TestXmippProjMatching(TestXmippBase):
         cls.vol = cls.dataset.getFile('volume')
 
     def testXmippProjMatching(self):
-        print "Import Particles"
+        print("Import Particles")
         protImportParts = self.newProtocol(ProtImportParticles,
                                  objLabel='Particles from scipion',
                                  importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
@@ -992,7 +995,7 @@ class TestXmippProjMatching(TestXmippBase):
         self.launchProtocol(protImportParts)
         self.assertIsNotNone(protImportParts.getFiles(), "There was a problem with the import")
         
-        print "Get a Subset of particles"
+        print("Get a Subset of particles")
         protSubset = self.newProtocol(ProtSubSet,
                                          objLabel='100 Particles',
                                          chooseAtRandom=True,
@@ -1000,7 +1003,7 @@ class TestXmippProjMatching(TestXmippBase):
         protSubset.inputFullSet.set(protImportParts.outputParticles)
         self.launchProtocol(protSubset)
         
-        print "Import Volume"
+        print("Import Volume")
         protImportVol = self.newProtocol(ProtImportVolumes,
                                          objLabel='Volume',
                                          filesPath=self.vol,
@@ -1008,7 +1011,7 @@ class TestXmippProjMatching(TestXmippBase):
         self.launchProtocol(protImportVol)
         self.assertIsNotNone(protImportVol.getFiles(), "There was a problem with the import")
         
-        print "Run Projection Matching"
+        print("Run Projection Matching")
         protProjMatch = self.newProtocol(XmippProtProjMatch,
                                          ctfGroupMaxDiff=0.00001,
                                          mpiJobSize=10,
@@ -1030,14 +1033,14 @@ class TestPdbImport(TestXmippBase):
         cls.pdb = cls.dataset.getFile('pdb')
     
     def testImportPdbFromId(self):
-        print "Run convert a pdb from database"
+        print("Run convert a pdb from database")
         protConvert = self.newProtocol(ProtImportPdb, pdbId="3j3i")
         self.launchProtocol(protConvert)
         self.assertIsNotNone(protConvert.outputPdb.getFileName(), 
                              "There was a problem with the import")
         
     def testImportPdbFromFn(self):
-        print "Run convert a pdb from file"
+        print("Run convert a pdb from file")
         protConvert = self.newProtocol(ProtImportPdb, 
                                        inputPdbData=ProtImportPdb.IMPORT_FROM_FILES, 
                                        pdbFile=self.pdb)
@@ -1054,7 +1057,7 @@ class TestXmippPdbConvert(TestXmippBase):
         cls.pdb = cls.dataset.getFile('pdb')
     
     def testXmippPdbConvertFromDb(self):
-        print "Run convert a pdb from database"
+        print("Run convert a pdb from database")
         protConvert = self.newProtocol(XmippProtConvertPdb, pdbId="3j3i", sampling=4, setSize=True, size=100)
         self.launchProtocol(protConvert)
         self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
@@ -1062,7 +1065,7 @@ class TestXmippPdbConvert(TestXmippBase):
         self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size.get(), places=1, msg="wrong size")
         
     def testXmippPdbConvertFromObj(self):
-        print "Run convert a pdb from import"
+        print("Run convert a pdb from import")
         protImport = self.newProtocol(ProtImportPdb, 
                                       inputPdbData=ProtImportPdb.IMPORT_FROM_FILES, 
                                       pdbFile=self.pdb)
@@ -1079,7 +1082,7 @@ class TestXmippPdbConvert(TestXmippBase):
         self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size.get(), places=1, msg="wrong size")
 
     def testXmippPdbConvertFromFn(self):
-        print "Run convert a pdb from file"
+        print("Run convert a pdb from file")
         protConvert = self.newProtocol(XmippProtConvertPdb,inputPdbData=2, pdbFile=self.pdb, sampling=2, setSize=True)
         self.launchProtocol(protConvert)
         self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
@@ -1095,7 +1098,7 @@ class TestXmippValidateNonTilt(TestXmippBase):
         cls.vol = cls.dataset.getFile('volume')
 
     def testXmippValidateNonTilt(self):
-        print "Import Particles"
+        print("Import Particles")
         protImportParts = self.newProtocol(ProtImportParticles,
                                  objLabel='Particles from scipion',
                                  importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
@@ -1107,7 +1110,7 @@ class TestXmippValidateNonTilt(TestXmippBase):
         self.launchProtocol(protImportParts)
         self.assertIsNotNone(protImportParts.getFiles(), "There was a problem with the import")
         
-        print "Get a Subset of particles"
+        print("Get a Subset of particles")
         protSubset = self.newProtocol(ProtSubSet,
                                          objLabel='100 Particles',
                                          chooseAtRandom=True,
@@ -1115,7 +1118,7 @@ class TestXmippValidateNonTilt(TestXmippBase):
         protSubset.inputFullSet.set(protImportParts.outputParticles)
         self.launchProtocol(protSubset)
         
-        print "Import Volume"
+        print("Import Volume")
         protImportVol = self.newProtocol(ProtImportVolumes,
                                          objLabel='Volume',
                                          filesPath=self.vol,
@@ -1123,14 +1126,14 @@ class TestXmippValidateNonTilt(TestXmippBase):
         self.launchProtocol(protImportVol)
         self.assertIsNotNone(protImportVol.getFiles(), "There was a problem with the import")
         
-        print "Run Validate Non-Tilt significant"
+        print("Run Validate Non-Tilt significant")
         protValidate = self.newProtocol(XmippProtValidateNonTilt)
         protValidate.inputParticles.set(protSubset.outputParticles)
         protValidate.inputVolumes.set(protImportVol.outputVolume)
         self.launchProtocol(protValidate)
         self.assertIsNotNone(protValidate.outputVolumes, "There was a problem with Validate Non-Tilt")
         
-        print "Run Validate Non-Tilt projection matching"
+        print("Run Validate Non-Tilt projection matching")
         protValidate = self.newProtocol(XmippProtValidateNonTilt, alignmentMethod=1)
         protValidate.inputParticles.set(protSubset.outputParticles)
         protValidate.inputVolumes.set(protImportVol.outputVolume)
@@ -1146,6 +1149,6 @@ if __name__ == "__main__":
             suite = unittest.TestLoader().loadTestsFromTestCase(cls)
             unittest.TextTestRunner(verbosity=2).run(suite)
         else:
-            print "Test: '%s' not found." % className
+            print("Test: '%s' not found." % className)
     else:
         unittest.main()

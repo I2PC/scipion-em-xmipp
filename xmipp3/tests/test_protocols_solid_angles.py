@@ -24,9 +24,8 @@
 import os
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
-from pyworkflow.em.protocol import (ProtImportParticles, ProtImportVolumes,
-                                    ProtSubSet)
-from pyworkflow.em import ProtUserSubSet
+from pwem.protocols import (ProtImportParticles, ProtImportVolumes,
+                            ProtSubSet, ProtUserSubSet)
 
 from xmipp3.protocols import XmippProtSolidAngles, XmippProtSplitvolume
 

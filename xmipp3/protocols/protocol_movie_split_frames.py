@@ -24,15 +24,15 @@
 # *
 # **************************************************************************
 
-import os
-
+from os.path import basename
 import pyworkflow.utils as pwutils
-import pyworkflow.object as pwobj
-import pyworkflow.em as em
 from pyworkflow import VERSION_1_1
-from pyworkflow.em.protocol.protocol_movies import ProtPreprocessMicrographs
 from pyworkflow.protocol.params import (PointerParam, BooleanParam)
-from pyworkflow.em.data import SetOfMovies, Movie, SetOfMicrographs
+
+from pwem.protocols import ProtPreprocessMicrographs
+
+from pwem.objects import Movie, Micrograph
+
 
 class XmippProtSplitFrames(ProtPreprocessMicrographs):
     """
@@ -67,8 +67,8 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
         for movie in self.inputMovies.get():
             fnMovie = movie.getFileName()
 
-            fnMovieOdd = pwutils.removeExt(pwutils.basename(fnMovie)) + "_odd.xmd"
-            fnMovieEven = pwutils.removeExt(pwutils.basename(fnMovie)) + "_even.xmd"
+            fnMovieOdd = pwutils.removeExt(basename(fnMovie)) + "_odd.xmd"
+            fnMovieEven = pwutils.removeExt(basename(fnMovie)) + "_even.xmd"
             
             args = '--img "%s" ' % fnMovie
             args += '-o "%s" ' % self._getExtraPath(fnMovieOdd)
@@ -84,11 +84,11 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
         for movie in self.inputMovies.get():
             fnMovie = movie.getFileName()
 
-            fnMovieOdd = pwutils.removeExt(pwutils.basename(fnMovie)) + "_odd.xmd"
-            fnMovieEven = pwutils.removeExt(pwutils.basename(fnMovie)) + "_even.xmd"
+            fnMovieOdd = pwutils.removeExt(basename(fnMovie)) + "_odd.xmd"
+            fnMovieEven = pwutils.removeExt(basename(fnMovie)) + "_even.xmd"
 
-            fnMovieOddMrc = pwutils.removeExt(pwutils.basename(fnMovieOdd)) + ".mrc"
-            fnMovieEvenMrc = pwutils.removeExt(pwutils.basename(fnMovieEven)) + ".mrc"
+            fnMovieOddMrc = pwutils.removeExt(basename(fnMovieOdd)) + ".mrc"
+            fnMovieEvenMrc = pwutils.removeExt(basename(fnMovieEven)) + ".mrc"
 
             args = '-i "%s" ' % self._getExtraPath(fnMovieOdd)
             args += '-o "%s" ' % self._getExtraPath(fnMovieOddMrc)
@@ -109,8 +109,8 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
         for movie in self.inputMovies.get():
             fnMovie = movie.getFileName()
 
-            fnMovieOddMrc = self._getExtraPath(pwutils.removeExt(pwutils.basename(fnMovie)) + "_odd.mrc")
-            fnMovieEvenMrc = self._getExtraPath(pwutils.removeExt(pwutils.basename(fnMovie)) + "_even.mrc")
+            fnMovieOddMrc = self._getExtraPath(pwutils.removeExt(basename(fnMovie)) + "_odd.mrc")
+            fnMovieEvenMrc = self._getExtraPath(pwutils.removeExt(basename(fnMovie)) + "_even.mrc")
             
             imgOutOdd = Movie()
             imgOutEven = Movie()
@@ -144,11 +144,11 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
             
                 fnMovie = movie.getFileName()
 
-                fnMicOdd = self._getExtraPath(pwutils.removeExt(pwutils.basename(fnMovie)) + "_odd_aligned.mrc")
-                fnMicEven = self._getExtraPath(pwutils.removeExt(pwutils.basename(fnMovie)) + "_even_aligned.mrc")
+                fnMicOdd = self._getExtraPath(pwutils.removeExt(basename(fnMovie)) + "_odd_aligned.mrc")
+                fnMicEven = self._getExtraPath(pwutils.removeExt(basename(fnMovie)) + "_even_aligned.mrc")
 
-                imgOutOdd = em.data.Micrograph()
-                imgOutEven = em.data.Micrograph()
+                imgOutOdd = Micrograph()
+                imgOutEven = Micrograph()
                 
                 imgOutOdd.setFileName(fnMicOdd)
                 imgOutEven.setFileName(fnMicEven)
@@ -188,4 +188,4 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
         return summary
 
     def _citations(self):
-	return ['']
+        return ['']

@@ -25,9 +25,9 @@
 # **************************************************************************
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.em.protocol.protocol import EMProtocol
+from pwem.protocols import EMProtocol
 from pyworkflow.protocol.params import MultiPointerParam
-from pyworkflow.em import Class3D
+from pwem.objects import Class3D
 
 
 class XmippProtConsensusClasses3D(EMProtocol):

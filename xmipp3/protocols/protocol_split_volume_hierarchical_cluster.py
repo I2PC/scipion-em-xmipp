@@ -32,16 +32,16 @@ from shutil import copy
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_2_0
 from pyworkflow.utils.path import makePath, cleanPattern, moveFile
-from pyworkflow.em.convert import ImageHandler
-from pyworkflow.em.constants import ALIGN_PROJ
-from pyworkflow.em.data import Image, Volume
-from pyworkflow.em.protocol import ProtAnalysis3D
-from xmipp3.convert import createItemMatrix, writeSetOfParticles, \
-    rowToAlignment, setXmippAttributes, xmippToLocation
-import pyworkflow.em.metadata as md
-import pyworkflow.em as em
+from pwem.emlib.image import ImageHandler
+from pwem.constants import ALIGN_PROJ
+from pwem.objects import Image, Volume
+from pwem.protocols import ProtAnalysis3D
+import pwem.emlib.metadata as md
 
-import xmippLib
+from xmipp3.convert import (createItemMatrix, writeSetOfParticles,
+                            rowToAlignment, setXmippAttributes, xmippToLocation)
+
+from pwem import emlib
 from xmipp3.base import findRow
 from xmipp3.constants import SYM_URL
 import numpy as np
@@ -201,15 +201,15 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
     # --------------------------- STEPS functions -------------------------------
 
     def readInfoField(self, fnDir, block, label):
-        mdInfo = xmippLib.MetaData("%s@%s" % (block, join(fnDir, "iterInfo.xmd")))
+        mdInfo = emlib.MetaData("%s@%s" % (block, join(fnDir, "iterInfo.xmd")))
         return mdInfo.getValue(label, mdInfo.firstObject())
 
     def writeInfoField(self, fnDir, block, label, value):
-        mdInfo = xmippLib.MetaData()
+        mdInfo = emlib.MetaData()
         objId = mdInfo.addObject()
         mdInfo.setValue(label, value, objId)
         mdInfo.write("%s@%s" % (block, join(fnDir, "iterInfo.xmd")),
-                     xmippLib.MD_APPEND)
+                     emlib.MD_APPEND)
 
     def convertInputStep(self, particlesId, volId):
         """ Write the input images as a Xmipp metadata file.
@@ -230,10 +230,10 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
             Ts = inputParticles.getSamplingRate()
             newTs = self.targetResolution.get() * 0.4
             newTs = max(Ts, newTs)
-            newXdim = long(Xdim * Ts / newTs)
+            newXdim = int(Xdim * Ts / newTs)
             self.writeInfoField(self._getExtraPath(), "sampling",
-                                xmippLib.MDL_SAMPLINGRATE, newTs)
-            self.writeInfoField(self._getExtraPath(), "size", xmippLib.MDL_XSIZE,
+                                emlib.MDL_SAMPLINGRATE, newTs)
+            self.writeInfoField(self._getExtraPath(), "size", emlib.MDL_XSIZE,
                                 newXdim)
             self.runJob("xmipp_image_resize",
                         "-i %s -o %s --save_metadata_stack %s --fourier %d" %
@@ -375,7 +375,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         self.runJob("xmipp_transform_geometry", args, numberOfMpi=1)
 
         for classNo in range(1, Nclasses + 1):
-            localImagesMd = xmippLib.MetaData("class%06d_images@%s"
+            localImagesMd = emlib.MetaData("class%06d_images@%s"
                                            % (classNo, classesXmd))
 
             # New class detected
@@ -383,27 +383,27 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
             # Check which images have not been assigned yet to any class
             # and assign them to this new class
             for objId in localImagesMd:
-                imgId = localImagesMd.getValue(xmippLib.MDL_ITEM_ID, objId)
+                imgId = localImagesMd.getValue(emlib.MDL_ITEM_ID, objId)
                 # Add images not classify yet and store their class number
                 if imgId not in self.classImages:
                     self.classImages.add(imgId)
                     newObjId = mdImages.addObject()
-                    mdImages.setValue(xmippLib.MDL_ITEM_ID, imgId, newObjId)
-                    mdImages.setValue(xmippLib.MDL_REF2, self.classCount, newObjId)
+                    mdImages.setValue(emlib.MDL_ITEM_ID, imgId, newObjId)
+                    mdImages.setValue(emlib.MDL_REF2, self.classCount, newObjId)
 
             newClassId = mdClasses.addObject()
-            mdClasses.setValue(xmippLib.MDL_REF, projNumber, newClassId)
-            mdClasses.setValue(xmippLib.MDL_REF2, self.classCount, newClassId)
-            mdClasses.setValue(xmippLib.MDL_IMAGE, "%d@%s" %
+            mdClasses.setValue(emlib.MDL_REF, projNumber, newClassId)
+            mdClasses.setValue(emlib.MDL_REF2, self.classCount, newClassId)
+            mdClasses.setValue(emlib.MDL_IMAGE, "%d@%s" %
                                (classNo, classesStk), newClassId)
-            mdClasses.setValue(xmippLib.MDL_IMAGE1, projRef, newClassId)
-            mdClasses.setValue(xmippLib.MDL_CLASS_COUNT, localImagesMd.size(),
+            mdClasses.setValue(emlib.MDL_IMAGE1, projRef, newClassId)
+            mdClasses.setValue(emlib.MDL_CLASS_COUNT, localImagesMd.size(),
                                newClassId)
 
     def classifyGroupsStep(self):
         # Create two metadatas, one for classes and another one for images
-        mdClasses = xmippLib.MetaData()
-        mdImages = xmippLib.MetaData()
+        mdClasses = emlib.MetaData()
+        mdImages = emlib.MetaData()
 
         fnNeighbours = self._getExtraPath("neighbours.xmd")
         fnGallery = self._getExtraPath("gallery.stk")
@@ -411,7 +411,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         self.classCount = 0
         self.classImages = set()
 
-        for block in xmippLib.getBlocksInMetaDataFile(fnNeighbours):
+        for block in emlib.getBlocksInMetaDataFile(fnNeighbours):
             # Figure out the projection number from the block name
             projNumber = int(block.split("_")[1])
 
@@ -421,12 +421,12 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
                                   mdClasses=mdClasses,
                                   mdImages=mdImages)
 
-        galleryMd = xmippLib.MetaData(self._getExtraPath("gallery.doc"))
+        galleryMd = emlib.MetaData(self._getExtraPath("gallery.doc"))
         # Increment the reference number to starts from 1
         galleryMd.operate("ref=ref+1")
-        mdJoined = xmippLib.MetaData()
+        mdJoined = emlib.MetaData()
         # Add extra information from the gallery metadata
-        mdJoined.join1(mdClasses, galleryMd, xmippLib.MDL_REF)
+        mdJoined.join1(mdClasses, galleryMd, emlib.MDL_REF)
         # Remove unnecessary columns
         md.keepColumns(mdJoined, "ref", "ref2", "image", "image1",
                        "classCount", "angleRot", "angleTilt")
@@ -447,7 +447,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         # Look for the block with the minimum number of images
         if minClass == 0:
             minClass = 1e38
-            for block in xmippLib.getBlocksInMetaDataFile(fnNeighbours):
+            for block in emlib.getBlocksInMetaDataFile(fnNeighbours):
                 projNumber = int(block.split("_")[1])
                 fnDir = self._getExtraPath("direction_%d" % projNumber,
                                            "level_00", "class_classes.xmd")
@@ -457,17 +457,17 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
                         minClass = blockSize
 
         # Construct the homogeneized metadata
-        mdAll = xmippLib.MetaData()
-        mdSubset = xmippLib.MetaData()
-        mdRandom = xmippLib.MetaData()
-        for block in xmippLib.getBlocksInMetaDataFile(fnNeighbours):
+        mdAll = emlib.MetaData()
+        mdSubset = emlib.MetaData()
+        mdRandom = emlib.MetaData()
+        for block in emlib.getBlocksInMetaDataFile(fnNeighbours):
             projNumber = int(block.split("_")[1])
             fnDir = self._getExtraPath("direction_%d" % projNumber, "level_00",
                                        "class_classes.xmd")
             if exists(fnDir):
-                mdDirection = xmippLib.MetaData("class000001_images@" + fnDir)
+                mdDirection = emlib.MetaData("class000001_images@" + fnDir)
                 mdRandom.randomize(mdDirection)
-                mdSubset.selectPart(mdRandom, 0L,
+                mdSubset.selectPart(mdRandom, 0,
                                     min(mdRandom.size(), minClass))
                 mdAll.unionAll(mdSubset)
         mdAll.removeDuplicates(md.MDL_ITEM_ID)
@@ -484,9 +484,9 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         fnDirectional = self._getDirectionalClassesFn()
         inputParticles = self.inputParticles.get()
         newTs = self.readInfoField(self._getExtraPath(), "sampling",
-                                   xmippLib.MDL_SAMPLINGRATE)
+                                   emlib.MDL_SAMPLINGRATE)
         newXdim = self.readInfoField(self._getExtraPath(), "size",
-                                     xmippLib.MDL_XSIZE)
+                                     emlib.MDL_XSIZE)
 
         # Generate projections
         fnGallery = join(fnTmpDir, "gallery.stk")
@@ -586,7 +586,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
 
     def splitVolumeStep(self):
         mdDirectional = md.MetaData(self._getDirectionalClassesFn())
-        ref2vals = mdDirectional.getColumnValues(xmippLib.MDL_REF2)
+        ref2vals = mdDirectional.getColumnValues(emlib.MDL_REF2)
         ref2Max = max(ref2vals)
 
         matrixCoOc=np.zeros((ref2Max, ref2Max))
@@ -614,7 +614,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
             outMd = md.MetaData(fnRoot+'_avg1.xmd')
             listObjRef1=[]
             for id1 in outMd:
-                refObj = outMd.getValue(xmippLib.MDL_REF2, id1)
+                refObj = outMd.getValue(emlib.MDL_REF2, id1)
                 listObjRef1.append(refObj)
             for val1 in listObjRef1:
                 for val2 in listObjRef1:
@@ -625,7 +625,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
             outMd = md.MetaData(fnRoot + '_avg2.xmd')
             listObjRef2 = []
             for id1 in outMd:
-                refObj = outMd.getValue(xmippLib.MDL_REF2, id1)
+                refObj = outMd.getValue(emlib.MDL_REF2, id1)
                 listObjRef2.append(refObj)
             for val1 in listObjRef2:
                 for val2 in listObjRef2:
@@ -656,7 +656,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         defMd2 = md.MetaData()
         origMd = md.MetaData(self._getDirectionalClassesFn())
         for row in md.iterRows(origMd):
-            refIdx = origMd.getValue(xmippLib.MDL_REF2, row.getObjId())
+            refIdx = origMd.getValue(emlib.MDL_REF2, row.getObjId())
             if(listLabels[refIdx-1]==0):
                 row.addToMd(defMd1)
             else:
@@ -683,12 +683,12 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         #     newTs = self.readInfoField(self._getExtraPath(), "sampling",
         #                                xmipp.MDL_SAMPLINGRATE)
 
-        self.mdClasses = xmippLib.MetaData(self._getDirectionalClassesFn())
-        self.mdImages = xmippLib.MetaData(self._getDirectionalImagesFn())
+        self.mdClasses = emlib.MetaData(self._getDirectionalClassesFn())
+        self.mdImages = emlib.MetaData(self._getDirectionalImagesFn())
 
         origTs = inputParticles.getSamplingRate()
         lastTs = self.readInfoField(self._getExtraPath(), "sampling",
-                                       xmippLib.MDL_SAMPLINGRATE)
+                                       emlib.MDL_SAMPLINGRATE)
 
         if origTs!=lastTs:
             newXdim=inputParticles.getXDim()
@@ -742,16 +742,16 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         #AJ testing
         #AJ por que desaparece una clase que tiene imagenes asignadas
         listRefId=[]
-        for row in md.iterRows(self.mdClasses, xmippLib.MDL_REF2):
+        for row in md.iterRows(self.mdClasses, emlib.MDL_REF2):
 
-            refId = row.getValue(xmippLib.MDL_REF2, row.getObjId())
+            refId = row.getValue(emlib.MDL_REF2, row.getObjId())
             if len(listRefId)>0 and refId != listRefId[-1]+1:
                 whereEnd = listRefId[-1]+1
                 for i in range(refId-whereEnd):
                     rowNew = row
-                    rowNew.setValue(xmippLib.MDL_REF2, listRefId[-1]+i+1)
-                    rowNew.setValue(xmippLib.MDL_IMAGE, 'None')
-                    rowNew.setValue(xmippLib.MDL_IMAGE1, 'None')
+                    rowNew.setValue(emlib.MDL_REF2, listRefId[-1]+i+1)
+                    rowNew.setValue(emlib.MDL_IMAGE, 'None')
+                    rowNew.setValue(emlib.MDL_IMAGE1, 'None')
                     rowNew.addToMd(self.mdClasses)
                     listRefId.append(listRefId[-1]+i+1)
 
@@ -760,7 +760,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
                 listRefId.append(refId)
 
         self.mdClasses.write(self._getDirectionalClassesFn())
-        self.mdClasses = xmippLib.MetaData(self._getDirectionalClassesFn())
+        self.mdClasses = emlib.MetaData(self._getDirectionalClassesFn())
         #END AJ
 
 
@@ -795,7 +795,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
                 md.MDL_PARTICLE_ID):
             count += 1
             if count:
-                createItemMatrix(particle, self.lastRow, align=em.ALIGN_PROJ)
+                createItemMatrix(particle, self.lastRow, align=ALIGN_PROJ)
             try:
                 self.lastRow = next(self.iterMd)
             except StopIteration:
@@ -805,26 +805,26 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
 
 
     def _updateParticle(self, item, row):
-        item.setClassId(row.getValue(xmippLib.MDL_REF2))
+        item.setClassId(row.getValue(emlib.MDL_REF2))
 
     def _updateClass(self, item):
         classId = item.getObjId()
-        classRow = findRow(self.mdClasses, xmippLib.MDL_REF2, classId)
+        classRow = findRow(self.mdClasses, emlib.MDL_REF2, classId)
 
         if classRow is not None:
             representative = item.getRepresentative()
             representative.setTransform(rowToAlignment(classRow, ALIGN_PROJ))
             representative.setLocation(
-                xmippToLocation(classRow.getValue(xmippLib.MDL_IMAGE)))
-            setXmippAttributes(representative, classRow, xmippLib.MDL_ANGLE_ROT)
-            setXmippAttributes(representative, classRow, xmippLib.MDL_ANGLE_TILT)
-            setXmippAttributes(representative, classRow, xmippLib.MDL_CLASS_COUNT)
+                xmippToLocation(classRow.getValue(emlib.MDL_IMAGE)))
+            setXmippAttributes(representative, classRow, emlib.MDL_ANGLE_ROT)
+            setXmippAttributes(representative, classRow, emlib.MDL_ANGLE_TILT)
+            setXmippAttributes(representative, classRow, emlib.MDL_CLASS_COUNT)
 
             self.averageSet.append(representative)
 
             reprojection = Image()
             reprojection.setLocation(
-                xmippToLocation(classRow.getValue(xmippLib.MDL_IMAGE1)))
+                xmippToLocation(classRow.getValue(emlib.MDL_IMAGE1)))
             item.reprojection = reprojection
 
 

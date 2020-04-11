@@ -26,16 +26,20 @@
 # **************************************************************************
 
 import math
-from shutil import copy
 import os
+from glob import glob
+from shutil import copy
 
-from pyworkflow.utils import Timer
-from pyworkflow.utils.path import cleanPattern, cleanPath
-from pyworkflow.em import *
-import pyworkflow.em.metadata as metadata
+from pyworkflow.utils import Timer, join
+from pyworkflow.utils.path import cleanPattern, cleanPath, makePath, moveFile
 from pyworkflow.protocol.params import *
 
-import xmippLib
+import pwem.emlib.metadata as metadata
+from pwem.protocols import ProtInitialVolume
+from pwem.constants import ALIGN_NONE
+from pwem.objects import SetOfClasses2D, Volume
+
+from pwem import emlib
 from xmipp3.base import XmippMdRow
 from xmipp3.convert import writeSetOfClasses2D, writeSetOfParticles, volumeToRow
 
@@ -212,7 +216,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
         # Convert input images if necessary
         self.imgsFn = self._getExtraPath('input_classes.xmd')
         self._insertFunctionStep('convertInputStep', self.imgsFn)
-        SL = xmippLib.SymList()
+        SL = emlib.SymList()
         SL.readSymmetryFile(self.symmetryGroup.get())
         self.trueSymsNo = SL.getTrueSymsNo()
         self.TsCurrent = self.inputSet.get().getSamplingRate()
@@ -255,25 +259,25 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
                 alphaApply = (alpha * self.trueSymsNo) / 2
             else:
                 alphaApply = alpha / 2
-            from pyworkflow.em.metadata.utils import getSize
+            from pwem.emlib.metadata import getSize
             N = int(getSize(fnGalleryRoot+'.doc')*alphaApply*2)
-            
-	    count=0
+
+            count=0
             GpuListCuda=''
             if self.useQueueForSteps() or self.useQueue():
                 GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
-	        GpuList = GpuList.split(",")
-	        for elem in GpuList:
-		    GpuListCuda = GpuListCuda+str(count)+' '
-		    count+=1
+                GpuList = GpuList.split(",")
+                for elem in GpuList:
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    count+=1
             else:
                 GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
-	        GpuListAux = ''
+                GpuListAux = ''
                 for elem in self.getGpuList():
-	            GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListCuda = GpuListCuda+str(count)+' '
                     GpuListAux = GpuListAux+str(elem)+','
                     count+=1
-	        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
 
             args = '-i %s -r %s.doc -o %s --keepBestN %f --dev %s ' % \
                    (self.imgsFn, fnGalleryRoot, anglesFn, N, GpuListCuda)
@@ -303,40 +307,40 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
         reconsArgs += ' -o %s' % volFn
         reconsArgs += ' --weight -v 0  --sym %s ' % self.symmetryGroup
 
-        print "Number of images for reconstruction: ", metadata.getSize(
-            anglesFn)
+        print("Number of images for reconstruction: ", metadata.getSize(
+            anglesFn))
         t.tic()
         if self.useGpu.get():
             cudaReconsArgs = reconsArgs
-	    #AJ to make it work with and without queue system
-	    if self.numberOfMpi.get()>1:
-	        N_GPUs = len((self.gpuList.get()).split(','))
-	        cudaReconsArgs += ' -gpusPerNode %d' % N_GPUs
-	        cudaReconsArgs += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
-	    count=0
-	    GpuListCuda=''
-	    if self.useQueueForSteps() or self.useQueue():
-	        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
-	        GpuList = GpuList.split(",")
-	        for elem in GpuList:
-		    GpuListCuda = GpuListCuda+str(count)+' '
-		    count+=1
-	    else:
-	        GpuListAux = ''
-	        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
-	        for elem in self.getGpuList():
-		    GpuListCuda = GpuListCuda+str(count)+' '
-	            GpuListAux = GpuListAux+str(elem)+','
-	            count+=1
-	        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
-
-            cudaReconArgs += ' --thr %s' %  self.numberOfThreads.get()
-	    if self.numberOfMpi.get()==1:
-                cudaReconArgs += ' --device %s' %(GpuListCuda)
+            #AJ to make it work with and without queue system
             if self.numberOfMpi.get()>1:
-                self.runJob('xmipp_cuda_reconstruct_fourier', cudaReconArgs, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+                N_GPUs = len((self.gpuList.get()).split(','))
+                cudaReconsArgs += ' -gpusPerNode %d' % N_GPUs
+                cudaReconsArgs += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+            count=0
+            GpuListCuda=''
+            if self.useQueueForSteps() or self.useQueue():
+                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                GpuList = GpuList.split(",")
+                for elem in GpuList:
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    count+=1
             else:
-                self.runJob('xmipp_cuda_reconstruct_fourier', cudaReconArgs)
+                GpuListAux = ''
+                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                for elem in self.getGpuList():
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListAux = GpuListAux+str(elem)+','
+                    count+=1
+                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
+            cudaReconsArgs += ' --thr %s' %  self.numberOfThreads.get()
+            if self.numberOfMpi.get()==1:
+                cudaReconsArgs += ' --device %s' %(GpuListCuda)
+            if self.numberOfMpi.get()>1:
+                self.runJob('xmipp_cuda_reconstruct_fourier', cudaReconsArgs, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+            else:
+                self.runJob('xmipp_cuda_reconstruct_fourier', cudaReconsArgs)
         else:
             self.runJob("xmipp_reconstruct_fourier_accel", reconsArgs)
         t.toc('Reconstruct fourier took: ')
@@ -390,9 +394,9 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
             self.TsCurrent = max([TsOrig, self.maxResolution.get(), TsRefVol])
             self.TsCurrent = self.TsCurrent / 3
             Xdim = self.inputSet.get().getDimensions()[0]
-            self.newXdim = long(round(Xdim * TsOrig / self.TsCurrent))
+            self.newXdim = int(round(Xdim * TsOrig / self.TsCurrent))
             if self.newXdim < 40:
-                self.newXdim = long(40)
+                self.newXdim = int(40)
                 self.TsCurrent = float(TsOrig) * (
                         float(Xdim) / float(self.newXdim))
             if self.newXdim != Xdim:
@@ -431,7 +435,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
             fnVolumes = self._getExtraPath('input_volumes.xmd')
             row = XmippMdRow()
             volumeToRow(inputVolume, row, alignType=ALIGN_NONE)
-            md = xmippLib.MetaData()
+            md = emlib.MetaData()
             row.writeToMd(md, md.addObject())
             md.write(fnVolumes)
 
@@ -466,7 +470,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
             else:
                 errors.append("Please, enter a reference image")
 
-        SL = xmippLib.SymList()
+        SL = emlib.SymList()
         SL.readSymmetryFile(self.symmetryGroup.get())
         if (100 - self.alpha0.get()) / 100.0 * (SL.getTrueSymsNo() + 1) > 1:
             errors.append("Increase the initial significance it is too low "
@@ -500,11 +504,11 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
                       self.getObjectTag('inputSet')
             if self.thereisRefVolume:
                 retval += " We used %s volume " % self.getObjectTag('refVolume')
-                retval+="as a starting point of the reconstruction iterations."
+                retval += "as a starting point of the reconstruction iterations."
             else:
                 retval += " We started the iterations with 1 random volume."
             retval += " %d iterations were run going from a " % self.iter
-            retval+="starting significance of %f%% to a final one of %f%%." % \
+            retval += "starting significance of %f%% to a final one of %f%%." % \
                       (self.alpha0, self.alphaF)
             if self.useImed:
                 retval += " IMED weighting was used."
@@ -527,7 +531,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
     def getLastIteration(self, Nvolumes):
         lastIter = -1
         for n in range(1, self.iter.get() + 1):
-            NvolumesIter=len(glob(self._getExtraPath('volume_iter%03d*.vol'%n)))
+            NvolumesIter = len(glob(self._getExtraPath('volume_iter%03d*.vol' % n)))
             if NvolumesIter == 0:
                 continue
             elif NvolumesIter == Nvolumes:

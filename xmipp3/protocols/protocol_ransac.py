@@ -28,15 +28,18 @@ import os
 from math import floor
 
 from pyworkflow.object import Float
-from pyworkflow.utils.path import cleanPath, copyFile, cleanPattern
-from pyworkflow.em.convert import ImageHandler
-from pyworkflow.em.protocol import ProtInitialVolume
-from pyworkflow.em.data import SetOfClasses2D
+from pyworkflow.utils.path import cleanPath, copyFile
 from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
-                                        IntParam, StringParam, 
+                                        IntParam, StringParam,
                                         STEPS_PARALLEL, LEVEL_ADVANCED, USE_GPU, GPU_LIST)
-import xmippLib
-from xmipp3.convert import writeSetOfClasses2D, readSetOfVolumes, writeSetOfParticles
+
+from pwem.emlib.image import ImageHandler
+from pwem.protocols import ProtInitialVolume
+from pwem.objects import SetOfClasses2D
+
+from pwem import emlib
+from xmipp3.convert import (writeSetOfClasses2D, readSetOfVolumes,
+                            writeSetOfParticles)
 from xmipp3.utils import isMdEmpty
 
 
@@ -257,7 +260,7 @@ class XmippProtRansac(ProtInitialVolume):
         cleanPath(self._getTmpPath(fnBase+'.xmd'))
     
     def reconstructStep(self, fnRoot):
-        from pyworkflow.em.metadata.utils import getSize
+        from pwem.emlib.metadata import getSize
         if os.path.exists(fnRoot+".xmd"):
             Nimages=getSize(fnRoot+".xmd")
             if Nimages>0:
@@ -298,7 +301,7 @@ class XmippProtRansac(ProtInitialVolume):
                                 %(fnRoot,fnRoot,self.symmetryGroup.get()))
                 self.runJob("xmipp_transform_mask","-i %s.vol --mask circular -%d "%(fnRoot,self.Xdim2/2))
         else:
-            print fnRoot+".xmd is empty. The corresponding volume is not generated." 
+            print(fnRoot+".xmd is empty. The corresponding volume is not generated.")
     
     def resizeStep(self,fnRoot,Xdim):
         if os.path.exists(fnRoot+".vol"):
@@ -308,21 +311,21 @@ class XmippProtRansac(ProtInitialVolume):
     def getCorrThreshStep(self):
         corrVector = []
         fnCorr=self._getExtraPath("correlations.xmd")               
-        mdCorr= xmippLib.MetaData()
+        mdCorr= emlib.MetaData()
     
         for n in range(self.nRansac.get()):
             fnRoot="ransac%05d"%n
             fnAngles=self._getTmpPath("angles_"+fnRoot+".xmd")
-            md = xmippLib.MetaData(fnAngles)
+            md = emlib.MetaData(fnAngles)
             
             for objId in md:
-                corr = md.getValue(xmippLib.MDL_MAXCC, objId)
+                corr = md.getValue(emlib.MDL_MAXCC, objId)
                 corrVector.append(corr)
                 objIdCorr = mdCorr.addObject()
-                mdCorr.setValue(xmippLib.MDL_MAXCC,float(corr),objIdCorr)
+                mdCorr.setValue(emlib.MDL_MAXCC,float(corr),objIdCorr)
     
-        mdCorr.write("correlations@"+fnCorr,xmippLib.MD_APPEND)
-        mdCorr= xmippLib.MetaData()
+        mdCorr.write("correlations@"+fnCorr,emlib.MD_APPEND)
+        mdCorr= emlib.MetaData()
         sortedCorrVector = sorted(corrVector)
         indx = int(floor(self.corrThresh.get()*(len(sortedCorrVector)-1)))    
         
@@ -330,32 +333,32 @@ class XmippProtRansac(ProtInitialVolume):
         #CorrThresh = sortedCorrVector[indx]#
             
         objId = mdCorr.addObject()
-        mdCorr.setValue(xmippLib.MDL_WEIGHT,self.corrThresh.get(),objId)
-        mdCorr.write("corrThreshold@"+fnCorr,xmippLib.MD_APPEND)
-        print "Correlation threshold: "+str(self.corrThresh.get())
+        mdCorr.setValue(emlib.MDL_WEIGHT,self.corrThresh.get(),objId)
+        mdCorr.write("corrThreshold@"+fnCorr,emlib.MD_APPEND)
+        print("Correlation threshold: "+str(self.corrThresh.get()))
     
     
     def evaluateVolumesStep(self):
         fnCorr=self._getExtraPath("correlations.xmd")
         fnCorr = 'corrThreshold@'+fnCorr
-        mdCorr= xmippLib.MetaData(fnCorr)
+        mdCorr= emlib.MetaData(fnCorr)
         objId = mdCorr.firstObject()    
-        CorrThresh = mdCorr.getValue(xmippLib.MDL_WEIGHT,objId)
+        CorrThresh = mdCorr.getValue(emlib.MDL_WEIGHT,objId)
         for n in range(self.nRansac.get()):        
             fnRoot="ransac%05d"%n              
             fnAngles=self._getTmpPath("angles_"+fnRoot+".xmd")    
-            md = xmippLib.MetaData(fnAngles)
+            md = emlib.MetaData(fnAngles)
             numInliers=0
             for objId in md:
-                corr = md.getValue(xmippLib.MDL_MAXCC, objId)
+                corr = md.getValue(emlib.MDL_MAXCC, objId)
                
                 if (corr >= CorrThresh) :
                     numInliers = numInliers+corr
     
-            md= xmippLib.MetaData()
+            md= emlib.MetaData()
             objId = md.addObject()
-            md.setValue(xmippLib.MDL_WEIGHT,float(numInliers),objId)
-            md.write("inliers@"+fnAngles,xmippLib.MD_APPEND)
+            md.setValue(emlib.MDL_WEIGHT,float(numInliers),objId)
+            md.write("inliers@"+fnAngles,emlib.MD_APPEND)
     
     def getBestVolumesStep(self):
         volumes = []
@@ -363,8 +366,8 @@ class XmippProtRansac(ProtInitialVolume):
         
         for n in range(self.nRansac.get()):
             fnAngles = self._getTmpPath("angles_ransac%05d"%n+".xmd")
-            md=xmippLib.MetaData("inliers@"+fnAngles)
-            numInliers=md.getValue(xmippLib.MDL_WEIGHT,md.firstObject())
+            md=emlib.MetaData("inliers@"+fnAngles)
+            numInliers=md.getValue(emlib.MDL_WEIGHT,md.firstObject())
             volumes.append(fnAngles)
             inliers.append(numInliers)
         
@@ -411,19 +414,19 @@ class XmippProtRansac(ProtInitialVolume):
                  
     def scoreFinalVolumes(self):
         threshold=self.getCCThreshold()
-        mdOut=xmippLib.MetaData()
+        mdOut=emlib.MetaData()
         for n in range(self.numVolumes.get()):
             fnRoot=self._getPath('proposedVolume%05d'%n)
             fnAssignment=fnRoot+".xmd"
             if os.path.exists(fnAssignment):
                 self.runJob("xmipp_metadata_utilities","-i %s --fill weight constant 1"%fnAssignment)
-                MDassignment=xmippLib.MetaData(fnAssignment)
+                MDassignment=emlib.MetaData(fnAssignment)
                 sum=0
                 thresholdedSum=0
                 N=0
                 minCC=2
                 for id in MDassignment:
-                    cc=MDassignment.getValue(xmippLib.MDL_MAXCC,id)
+                    cc=MDassignment.getValue(emlib.MDL_MAXCC,id)
                     sum+=cc
                     thresholdedSum+=cc-threshold
                     if cc<minCC:
@@ -434,11 +437,11 @@ class XmippProtRansac(ProtInitialVolume):
                 else:
                     avg=0.0
                 id=mdOut.addObject()
-                mdOut.setValue(xmippLib.MDL_IMAGE,fnRoot+".vol",id)
-                mdOut.setValue(xmippLib.MDL_VOLUME_SCORE_SUM,float(sum),id)
-                mdOut.setValue(xmippLib.MDL_VOLUME_SCORE_SUM_TH,float(thresholdedSum),id)
-                mdOut.setValue(xmippLib.MDL_VOLUME_SCORE_MEAN,float(avg),id)
-                mdOut.setValue(xmippLib.MDL_VOLUME_SCORE_MIN,float(minCC),id)
+                mdOut.setValue(emlib.MDL_IMAGE,fnRoot+".vol",id)
+                mdOut.setValue(emlib.MDL_VOLUME_SCORE_SUM,float(sum),id)
+                mdOut.setValue(emlib.MDL_VOLUME_SCORE_SUM_TH,float(thresholdedSum),id)
+                mdOut.setValue(emlib.MDL_VOLUME_SCORE_MEAN,float(avg),id)
+                mdOut.setValue(emlib.MDL_VOLUME_SCORE_MIN,float(minCC),id)
         mdOut.write(self._getPath("proposedVolumes.xmd"))
 
 
@@ -455,15 +458,15 @@ class XmippProtRansac(ProtInitialVolume):
     def _postprocessVolume(self, vol, row):
         self._counter += 1
         vol.setObjComment('ransac volume %02d' % self._counter)
-        vol._xmipp_volScoreSum   = Float(row.getValue(xmippLib.MDL_VOLUME_SCORE_SUM))
-        vol._xmipp_volScoreSumTh = Float(row.getValue(xmippLib.MDL_VOLUME_SCORE_SUM_TH))
-        vol._xmipp_volScoreMean = Float(row.getValue(xmippLib.MDL_VOLUME_SCORE_MEAN))
-        vol._xmipp_volScoreMin = Float(row.getValue(xmippLib.MDL_VOLUME_SCORE_MIN))
+        vol._xmipp_volScoreSum   = Float(row.getValue(emlib.MDL_VOLUME_SCORE_SUM))
+        vol._xmipp_volScoreSumTh = Float(row.getValue(emlib.MDL_VOLUME_SCORE_SUM_TH))
+        vol._xmipp_volScoreMean = Float(row.getValue(emlib.MDL_VOLUME_SCORE_MEAN))
+        vol._xmipp_volScoreMin = Float(row.getValue(emlib.MDL_VOLUME_SCORE_MIN))
         
     def createOutputStep(self):
         inputSet = self.inputSet.get()
         fn = self._getPath('proposedVolumes.xmd')
-#        md = xmippLib.MetaData(fn)
+#        md = emlib.MetaData(fn)
 #        md.addItemId()
 #        md.write(fn)
         
@@ -528,8 +531,8 @@ class XmippProtRansac(ProtInitialVolume):
     #--------------------------- UTILS functions --------------------------------------------        
     def getCCThreshold(self):
         fnCorr = self._getExtraPath("correlations.xmd")               
-        mdCorr = xmippLib.MetaData("corrThreshold@"+fnCorr)
-        return mdCorr.getValue(xmippLib.MDL_WEIGHT, mdCorr.firstObject())
+        mdCorr = emlib.MetaData("corrThreshold@"+fnCorr)
+        return mdCorr.getValue(emlib.MDL_WEIGHT, mdCorr.firstObject())
     
     def _storeSummaryInfo(self, numVolumes):
         """ Store some information when the protocol finishes. """
@@ -541,7 +544,7 @@ class XmippProtRansac(ProtInitialVolume):
             fnRoot = self._getPath(fnBase + ".xmd")
                                
             if os.path.isfile(fnRoot):
-                md = xmippLib.MetaData(fnRoot)
+                md = emlib.MetaData(fnRoot)
                 size = md.size()
                 if (size < 5):
                     msg1 = "Num of inliers for model %d too small and equal to %d \n" % (n, size)
@@ -549,7 +552,7 @@ class XmippProtRansac(ProtInitialVolume):
                  
         fnRoot = self._getTmpPath("ransac00000.xmd")
         if os.path.isfile(fnRoot):
-            md = xmippLib.MetaData(fnRoot)
+            md = emlib.MetaData(fnRoot)
             size = md.size()
             if (size < 5):
                 msg2 = "Num of random samples too small and equal to %d.\n" % size

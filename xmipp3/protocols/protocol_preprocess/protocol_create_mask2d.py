@@ -26,11 +26,10 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em import *
+from pwem import emlib
+from pwem.objects import Mask
+from pwem.protocols import ProtCreateMask2D
 
-import xmippLib
-from xmipp3.convert import getImageLocation
-from xmipp3.constants import *
 from .geometrical_mask import *
 
 
@@ -73,7 +72,7 @@ class XmippProtCreateMask2D(ProtCreateMask2D, XmippGeometricalMask2D):
     def createMaskFromGeometryStep(self):
         # Create empty volume file with desired dimensions
         size = self.size.get()
-        xmippLib.createEmptyFile(self.maskFile, size, size)
+        emlib.createEmptyFile(self.maskFile, size, size)
         
         # Create the mask
         args = '-i %s ' % self.maskFile

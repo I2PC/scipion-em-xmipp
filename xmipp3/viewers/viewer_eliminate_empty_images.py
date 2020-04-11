@@ -24,10 +24,10 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.viewers import EmPlotter, ObjectView, MicrographsView, DataViewer, ClassesView
-from pyworkflow.em.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER, ZOOM, SORT_BY, MODE_TABLE
 from pyworkflow.protocol.params import IntParam, LabelParam
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
+from pwem.viewers import EmPlotter, ObjectView, ClassesView
+from pwem.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER, SORT_BY
 
 from xmipp3.protocols.protocol_eliminate_empty_images import \
     XmippProtEliminateEmptyClasses, XmippProtEliminateEmptyParticles
