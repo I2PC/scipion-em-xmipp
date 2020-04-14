@@ -81,11 +81,15 @@ class XmippCTFConsensusViewer(ProtocolViewer):
 
     def _visualizeCtfs(self, objName):
         views = []
-
+        CtfView.PSD_LABELS
         # display metadata with selected variables
-        labels = 'id enabled %s _micObj_filename _resolution ' \
-                 '_xmipp_consensus_resolution _xmipp_discrepancy_astigmatism' \
-                 ' _defocusU _defocusV _defocusAngle' % ' '.join(CtfView.PSD_LABELS)
+        labels = ('id enabled _micObj._filename _psdFile _ctf2_psdFile '
+                  '_xmipp_ctfmodel_quadrant '
+                  '_defocusU _defocusV _defocus_discrepancy '
+                  '_resolution _ctf2_resolution _consensus_resolution '
+                  '_defocusAngle _defocusAngle_discrepancy '
+                  '_fitQuality _ctf2_fitQuality '
+                  '_phaseShift _phaseShift_discrepancy')
         if self.protocol.hasAttribute(objName):
             views.append(ObjectView(
                 self._project, self.protocol.strId(),
@@ -148,7 +152,8 @@ class XmippCTFConsensusViewer(ProtocolViewer):
             plotter.plotHist(resolution, nbins=numberOfBins)
             views.append(plotter)
         return views
-    
+
+# TODO: Add histograms using viewer_eliminate_empty_images.plotMultiHistogram()
     
 def getStringIfActive(prot):
     return ', yet.' if prot.isActive() else '.'
