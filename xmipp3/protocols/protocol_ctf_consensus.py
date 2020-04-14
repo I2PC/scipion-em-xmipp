@@ -195,20 +195,22 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                 return s
         return None
 
-    def _insertNewCtfsSteps(self, SetOfCtf1, SetOfCtf2, insDict):
+    def _insertNewCtfsSteps(self, setOfCtf1, setOfCtf2, insDict):
         deps = []
-        discrepId = self._insertFunctionStep("_computeCTFDiscrepancy",
-                                             SetOfCtf1, SetOfCtf2,
+        ctf1Dict = setOfCtf1.getObjDict(includeBasic=True)
+        ctf2Dict = setOfCtf2.getObjDict(includeBasic=True)
+        discrepId = self._insertFunctionStep("ctfDiscrepancyStep",
+                                             ctf1Dict, ctf2Dict,
                                              prerequisites=[])
         deps.append(discrepId)
-        if (len(SetOfCtf1) > len(SetOfCtf2)):
-            SetOfCtf = SetOfCtf2
+        if len(setOfCtf1) > len(setOfCtf2):
+            setOfCtf = setOfCtf2
         else:
-            SetOfCtf = SetOfCtf1
-        for ctf in SetOfCtf:
+            setOfCtf = setOfCtf1
+        for ctf in setOfCtf:
             ctfId = ctf.getObjId()
             if ctfId not in insDict:
-                stepId = self._insertFunctionStep('_selectCTF', ctfId,
+                stepId = self._insertFunctionStep('selectCtfStep', ctfId,
                                                   prerequisites=[discrepId])
                 deps.append(stepId)
                 insDict[ctfId] = stepId
@@ -221,7 +223,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         for ctf in inputCtfs:
             ctfId = ctf.getObjId()
             if ctfId not in insertedDict:
-                stepId = self._insertFunctionStep('_selectCTF', ctfId,
+                stepId = self._insertFunctionStep('selectCtfStep', ctfId,
                                                   prerequisites=[])
                 deps.append(stepId)
                 insertedDict[ctfId] = stepId
@@ -486,11 +488,15 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                                 alignType=xmipp3.convert.ALIGN_NONE)
         ctfRow.addToMd(ctfMd)
 
-    def _computeCTFDiscrepancy(self, method1, method2):
+    def ctfDiscrepancyStep(self, met1Dict, met2Dict):
         # TODO must be same micrographs
         # move to a single step, each step takes 5 sec while the function
         # takes 0.03 sec
         # convert to md
+        method1 = SetOfCTF()
+        method1.setAttributesFromDict(met1Dict, setBasic=True, ignoreMissing=True)
+        method2 = SetOfCTF()
+        method2.setAttributesFromDict(met2Dict, setBasic=True, ignoreMissing=True)
         md1 = emlib.MetaData()
         md2 = emlib.MetaData()
 
@@ -527,7 +533,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             setattr(self, "rejBy"+k, Integer(0))
         self._store()
 
-    def _selectCTF(self, ctfId):
+    def selectCtfStep(self, ctfId):
         # Depending on the flags selected by the user, we set the values of
         # the params to compare with
 
