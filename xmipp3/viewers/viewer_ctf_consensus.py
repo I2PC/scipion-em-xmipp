@@ -81,15 +81,21 @@ class XmippCTFConsensusViewer(ProtocolViewer):
 
     def _visualizeCtfs(self, objName):
         views = []
-        CtfView.PSD_LABELS
+
         # display metadata with selected variables
         labels = ('id enabled _micObj._filename _psdFile _ctf2_psdFile '
                   '_xmipp_ctfmodel_quadrant '
-                  '_defocusU _defocusV _defocus_discrepancy '
+                  '_defocusU _defocusV _ctf2_defocus_diff '
+                  '_astigmatism _ctf2_astigmatism '
+                  '_defocusRatio _ctf2_defocusRatio '
+                  '_defocusAngle _ctf2_defocusAngle_diff '
                   '_resolution _ctf2_resolution _consensus_resolution '
-                  '_defocusAngle _defocusAngle_discrepancy '
-                  '_fitQuality _ctf2_fitQuality '
-                  '_phaseShift _phaseShift_discrepancy')
+                  '_phaseShift _ctf2_phaseShift_diff '
+                  '_fitQuality _ctf2_fitQuality ')
+
+        if self.protocol.useCritXmipp.get():
+            labels += ' '.join(CtfView.EXTRA_LABELS)
+
         if self.protocol.hasAttribute(objName):
             views.append(ObjectView(
                 self._project, self.protocol.strId(),
