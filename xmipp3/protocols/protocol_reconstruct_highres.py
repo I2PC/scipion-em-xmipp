@@ -130,8 +130,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                       help='Select a previous run to continue from.')
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group',
-                      help='See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
-                           'If no symmetry is present, give c1')
+                      help='If no symmetry is present, give c1')
         form.addParam("saveSpace", BooleanParam, default=True,
                       label="Remove intermediate files",
                       expertLevel=LEVEL_ADVANCED)
@@ -321,8 +320,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         groupSymmetry.addParam('postSymmetryWithinMaskType', StringParam,
                                label="Mask symmetry", default="i1",
                                condition="postSymmetryWithinMask",
-                               help='If See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
-                                    'If no symmetry is present, give c1')
+                               help='If no symmetry is present, give c1')
         groupSymmetry.addParam('postSymmetryWithinMaskMask', PointerParam,
                                label="Mask", pointerClass='VolumeMask',
                                allowsNull=True,

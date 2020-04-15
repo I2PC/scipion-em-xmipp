@@ -26,8 +26,7 @@
 
 from shutil import copy
 from os.path import join, exists
-from os import mkdir, remove, listdir
-import os
+from os import mkdir, remove, listdir, environ
 
 from pyworkflow import VERSION_2_0
 import pyworkflow.protocol.params as params
@@ -55,9 +54,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
         form.addHidden(params.GPU_LIST, params.StringParam, default='0',
                        expertLevel=const.LEVEL_ADVANCED,
                        label="Choose GPU IDs",
-                       help="GPU may have several cores. Set it to zero"
-                            " if you do not know what we are talking about."
-                            " First core index is 0, second 1 and so on.")
+                       help="Add a list of GPU devices that can be used")
         form.addParam('useReferenceImages', params.BooleanParam, default=False,
                       label='Use a Set of Reference Images ?',
                       help='If you set to *Yes*, you should provide a '
@@ -395,7 +392,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
         count = 0
         GpuListCuda = ''
         if self.useQueueForSteps() or self.useQueue():
-            GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+            GpuList = environ["CUDA_VISIBLE_DEVICES"]
             GpuList = GpuList.split(",")
             for elem in GpuList:
                 GpuListCuda = GpuListCuda + str(count) + ' '
@@ -407,7 +404,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                 GpuListCuda = GpuListCuda + str(count) + ' '
                 GpuListAux = GpuListAux + str(elem) + ','
                 count += 1
-            os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+            environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
 
         if flag_split:
             filename = 'level%03d' % level+'_classes.xmd'

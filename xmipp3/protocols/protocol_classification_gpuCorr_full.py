@@ -78,10 +78,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
         form.addHidden(params.GPU_LIST, params.StringParam, default='0',
                        expertLevel=const.LEVEL_ADVANCED,
                        label="Choose GPU IDs",
-                       help="GPU may have several cores. Set it to zero"
-                            " if you do not know what we are talking about."
-                            " First core index is 0, second 1 and so on."
-                            " In this protocol is not possible to use several GPUs.")
+                       help="Add a list of GPU devices that can be used")
         form.addParam('maxShift', params.IntParam, default=10,
                       label='Maximum shift (%):',
                       help='Maximum shift allowed during the alignment as '

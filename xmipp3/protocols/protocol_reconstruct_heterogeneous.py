@@ -284,7 +284,6 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                         (
                         fnReferenceVol, self.targetResolution.get(), TsCurrent),
                         numberOfMpi=1)
-            # AJ duda: se filtra dos veces??
             R = self.particleRadius.get()
             if R <= 0:
                 R = self.inputParticles.get().getDimensions()[
@@ -414,7 +413,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                         if not self.useGpu.get():
 
                             #TODO
-                            #AJ: valdria con poner aqui una condicion para que no hiciera este paso (significant) en caso de local alignment???
+                            #AJ: consider if we can simply leave out this part of the code in case of local alignment
                             args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d --dontApplyFisher --dontCheckMirrors ' % \
                                    (fnGroup, fnGalleryGroupMd, maxShift,
                                     fnDirCurrent,
@@ -454,7 +453,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                                 join(fnDirCurrent, "images_iter001_00.xmd"))
                             cleanPath(join(fnDirCurrent,
                                            "images_significant_iter001_00.xmd"))
-                        else:  # AJ que pasa cuando no se asignan imagenes a ese volumen
+                        else:
                             noAsignedGroups += 1
                             print("noAsignedGroups", noAsignedGroups)
                             if noAsignedGroups == numberGroups:
@@ -554,12 +553,9 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         mdVolumes.write(fnVols)
 
         # Classify the images
-        # AJ busca el maximo de correlacion entre todos los volumenes
         fnImgsId = self._getExtraPath("imagesId.xmd")
         fnOut = join(fnDirCurrent, "classes.xmd")
-        #print("A correr",
-        #      "xmipp_classify_significant --id %s --angles %s --ref %s -o %s" % (
-        #      fnImgsId, fnAnglesAll, fnVols, fnOut))
+
 
         self.runJob("xmipp_classify_significant",
                     "--id %s --angles %s --ref %s -o %s --votes %d" % (
@@ -567,8 +563,6 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         # cleanPath(fnVols)
         # cleanPath(fnAnglesAll)
 
-        #AJ testing
-        #copyFile("./correlations.txt", join(fnDirCurrent, "correlations.txt"))
 
 
     def reconstruct(self, iteration):
