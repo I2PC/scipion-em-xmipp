@@ -357,7 +357,7 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                 phaseShift0 = ctf.getPhaseShift()
             else:
                 phaseShift0 = 1.57079  # pi/2
-            ctfValues = (ctf.getDefocusU(), ctf.getDefocusV(), phaseShift0)
+            ctfValues = (ctf.getDefocusU(), ctf.getDefocusV(), ctf.getDefocusAngle(), phaseShift0)
         else:
             ctfValues = (ctf.getDefocusU(), ctf.getDefocusV(), ctf.getDefocusAngle(), phaseShift0)
 
