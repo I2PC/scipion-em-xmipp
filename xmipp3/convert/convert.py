@@ -40,7 +40,7 @@ except ImportError:
 import numpy as np
 
 from pyworkflow.utils import replaceBaseExt
-from pyworkflow.object import ObjectWrap, String, Float, Integer
+from pyworkflow.object import ObjectWrap, String, Float, Integer, Object
 from pwem.constants import (NO_INDEX, ALIGN_NONE, ALIGN_PROJ, ALIGN_2D,
                             ALIGN_3D)
 from pwem.objects import (Angles, Coordinate, Micrograph, Volume, Particle,
@@ -320,17 +320,22 @@ def setXmippAttributes(obj, objRow, *labels, **kwargs):
             else:
                 value = defaults
 
-            if isinstance(value, int):
-                value = Integer(value)
-            elif isinstance(value, float):
-                value = Float(value)
-            elif isinstance(value, str):
-                value = String(value)
-            else:
-                value = None
+            value = getScipionObj(value)
 
         if value is not None:
             setXmippAttribute(obj, label, value)
+
+def getScipionObj(value):
+    if isinstance(value, Object):
+        return value
+    elif isinstance(value, int):
+        return Integer(value)
+    elif isinstance(value, float):
+        return Float(value)
+    elif isinstance(value, str):
+        return String(value)
+    else:
+        return None
 
 def setXmippAttribute(obj, label, value):
     """ Sets an attribute of an object prefixing it with xmipp"""

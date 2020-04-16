@@ -44,7 +44,6 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     _label = 'deep micrograph cleaner'
     _conda_env= "xmipp_MicCleaner"
 
-
     def __init__(self, **kwargs):
         ProtExtractParticles.__init__(self, **kwargs)
         self.stepsExecutionMode = STEPS_PARALLEL

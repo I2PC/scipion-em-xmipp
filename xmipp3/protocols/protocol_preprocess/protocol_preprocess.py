@@ -159,14 +159,16 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
                            'If this value is 0, then half the box size is used.')
         form.addParam('doCenter', BooleanParam, default=False,
                       label='Center images')
+        form.addParam('doPhaseFlip', BooleanParam, default=False,
+                      label='Phase flip images')
         XmippPreprocessHelper._defineProcessParams(form)
     
     #--------------------------- INSERT steps functions ------------------------
     def _insertProcessStep(self):
         self.isFirstStep = True
         # this is for when the options selected has changed and the protocol is resumed
-        changeInserts = [self.doRemoveDust, self.doNormalize, self.doInvert,
-                         self.doThreshold, self.doCenter]
+        changeInserts = [self.doRemoveDust.get(), self.doNormalize.get(), self.doInvert.get(),
+                         self.doThreshold.get(), self.doCenter.get(), self.doPhaseFlip.get()]
         
         if self.doRemoveDust:
             args = self._argsRemoveDust()
@@ -183,7 +185,11 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
         if self.doCenter:
             args = self._argsCenter()
             self._insertFunctionStep("centerStep", args, changeInserts)
-        
+
+        if self.doPhaseFlip:
+            args = self._argsPhaseFlip()
+            self._insertFunctionStep("phaseFlipStep", args, changeInserts)
+
         XmippPreprocessHelper._insertCommonSteps(self, changeInserts)
         
     #--------------------------- STEPS functions -------------------------------
@@ -204,7 +210,10 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
     
     def centerStep(self, args, changeInserts):
         self.runJob("xmipp_transform_center_image", args % locals())
-    
+
+    def phaseFlipStep(self, args, changeInserts):
+        self.runJob("xmipp_ctf_correct_phase", args % locals())
+
     def sortImages(self, outputFn, outputMd):
         pass
 
@@ -322,7 +331,17 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
         else:
             args = "-i %s" % self.outputStk
         return args
-    
+
+    def _argsPhaseFlip(self):
+        if self.isFirstStep:
+            args = "-i %s -o %s --save_metadata_stack %s" \
+                   % (self.inputFn, self.outputStk, self.outputMd)
+            self._setFalseFirstStep()
+        else:
+            args = "-i %s" % self.outputMd
+        args+=" --sampling_rate %f"%self.inputParticles.get().getSamplingRate()
+        return args
+
     def _getSize(self):
         """ get the size of SetOfParticles object"""
         Xdim = self.inputParticles.get().getDimensions()[0]
@@ -332,6 +351,10 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
     def _setFalseFirstStep(self):
         if self.isFirstStep:
                 self.isFirstStep = False
+
+    def _postprocessOutput(self, outputSet):
+        if self.doPhaseFlip.get():
+            outputSet.setIsPhaseFlipped(not self.inputParticles.get().isPhaseFlipped())
 
 
 class XmippProtPreprocessVolumes(XmippProcessVolumes):
