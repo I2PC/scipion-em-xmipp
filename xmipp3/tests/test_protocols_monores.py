@@ -88,14 +88,11 @@ class TestMonoRes(TestMonoResBase):
                                    halfVolumes=False,
                                    inputVolumes=self.protImportVol.outputVolume,
                                    Mask=self.protCreateMask.outputMask,
-                                   symmetry='d2',
                                    minRes=1,
-                                   maxRes=25,
-                                   isPremasked = False,
-                                   filterInput=False,
+                                   maxRes=25
                                    )
         self.launchProtocol(MonoRes)
-        self.assertTrue(exists(MonoRes._getExtraPath('mgresolution.mrc')),
+        self.assertTrue(exists(MonoRes._getExtraPath('monoresResolutionMap.mrc')),
                         "MonoRes (no split, no premasked) has failed")
  
     def testMonoRes2(self):
@@ -106,16 +103,12 @@ class TestMonoRes(TestMonoResBase):
                                    inputVolume2=self.protImportHalf2.outputVolume,
                                    provideMaskInHalves=True,
                                    Mask=self.protCreateMask.outputMask,
-                                   symmetry='d2',
-                                   isPremasked = True,
-                                   volumeRadiusHalf = 50,
                                    minRes=1,
                                    maxRes=25,
-                                   filterInput=False,
                                    )
         self.launchProtocol(MonoRes)
-        self.assertTrue(exists(MonoRes._getExtraPath('mgresolution.mrc')),
-                        "MonoRes (split, pre-masked, no filter) has failed")
+        self.assertTrue(exists(MonoRes._getExtraPath('monoresResolutionMap.mrc')),
+                        "MonoRes (split, no filter) has failed")
  
     def testMonoRes3(self):
         MonoRes = self.newProtocol(XmippProtMonoRes,
@@ -123,13 +116,11 @@ class TestMonoRes(TestMonoResBase):
                                    halfVolumes=False,
                                    inputVolumes=self.protImportVol.outputVolume,
                                    Mask=self.protCreateMask.outputMask,
-                                   symmetry='d2',
-                                   preMasked = True,
-                                   volumeRadius = 50,
+				   gaussian=True,
                                    minRes=1,
                                    maxRes=25,
                                    filterInput=True,
                                    )
         self.launchProtocol(MonoRes)
-        self.assertTrue(exists(MonoRes._getExtraPath('mgresolution.mrc')),
-                        "MonoRes filter has failed")
+        self.assertTrue(exists(MonoRes._getExtraPath('monoresResolutionMap.mrc')),
+                        "MonoRes with gaussian noise has failed")

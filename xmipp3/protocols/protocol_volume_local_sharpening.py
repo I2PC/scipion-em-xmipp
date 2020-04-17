@@ -44,7 +44,7 @@ LOCALDEBLUR_METHOD_URL='http://github.com/I2PC/scipion/wiki/XmippProtLocSharp'
 
 class XmippProtLocSharp(ProtAnalysis3D):
     """    
-    Given a resolution map the protocol calculate the sharpened map.
+    Given a resolution map the protocol calculates a sharpened map.
     """
     _label = 'localdeblur sharpening'
     _lastUpdateVersion = VERSION_1_1
@@ -91,8 +91,7 @@ class XmippProtLocSharp(ProtAnalysis3D):
         """ Centralize how files are called """
         myDict= {           
                 'BINARY_MASK': self._getTmpPath('binaryMask.vol'),
-                'OUTPUT_RESOLUTION_FILE': self._getTmpPath('resolutionMonoRes.vol'),                
-                'OUTPUT_RESOLUTION_FILE_CHIMERA': self._getTmpPath('MonoResChimera.vol'),
+                'OUTPUT_RESOLUTION_FILE': self._getTmpPath('monoresResolutionMap.mrc'),                
                 'METADATA_PARAMS_SHARPENING': self._getTmpPath('params.xmd'),                                                                                 
                 }
         self._updateFilenamesDict(myDict) 
@@ -164,28 +163,15 @@ class XmippProtLocSharp(ProtAnalysis3D):
         
         significance = 0.95
 
-        mtd = md.MetaData()
-        if exists(os.path.join(pathres,'mask_data.xmd')):    
-            mtd.read(os.path.join(pathres,'mask_data.xmd')) 
-            radius = mtd.getValue(MDL_SCALE,1)
-        else:
-            xdim, _ydim, _zdim = self.inputVolume.get().getDim()
-            radius = xdim*0.5 
-        
         params = ' --vol %s' % self._getExtraPath('sharpenedMap_'+str(iter)+'.mrc')
         params += ' --mask %s' % self._getFileName('BINARY_MASK')
         params += ' --sampling_rate %f' % sampling
         params += ' --minRes %f' % (2*sampling)
         params += ' --maxRes %f' % max_res           
         params += ' --step %f' % 0.25
-        params += ' --mask_out %s' % self._getTmpPath('refined_mask.vol')
-        params += ' -o %s' % self._getFileName('OUTPUT_RESOLUTION_FILE')
-        params += ' --volumeRadius %f' % radius
-        params += ' --exact'
-        params += ' --chimera_volume %s' % self._getFileName(
-                                                'OUTPUT_RESOLUTION_FILE_CHIMERA')
+        params += ' -o %s' % self._getTmpPath()
         params += ' --significance %f' % significance
-        params += ' --md_outputdata %s' % self._getTmpPath('mask_data.xmd')
+        #params += ' --md_outputdata %s' % self._getTmpPath('mask_data.xmd')
         params += ' --threads %i' % self.numberOfThreads.get()
 
         self.runJob('xmipp_resolution_monogenic_signal', params)
@@ -257,8 +243,7 @@ class XmippProtLocSharp(ProtAnalysis3D):
             max_res = np.amax(imgData)
             min_res = 2*self.inputVolume.get().getSamplingRate()
             
-            #print ("minres %s  y maxres  %s"  % (min_res, max_res))          
-        
+       
             if (max_res-min_res<0.75):
                 nextIter = False
                 break

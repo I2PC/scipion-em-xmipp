@@ -28,7 +28,8 @@
 import numpy as np
 
 from pyworkflow import VERSION_1_1
-from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
+from pyworkflow.protocol.params import (PointerParam, StringParam, 
+                                        BooleanParam, FloatParam,
                                         LEVEL_ADVANCED)
 from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
 from pyworkflow.object import Float
@@ -38,16 +39,13 @@ from pyworkflow.em.data import Volume
 import pyworkflow.em.metadata as md
 from pyworkflow.em.convert import Ccp4Header
 
-
-CHIMERA_RESOLUTION_VOL = 'MG_Chimera_resolution.mrc'
 MONORES_METHOD_URL = 'http://github.com/I2PC/scipion/wiki/XmippProtMonoRes'
-OUTPUT_RESOLUTION_FILE = 'resolutionMap'
-FN_FILTERED_MAP = 'filteredMap'
-OUTPUT_RESOLUTION_FILE_CHIMERA = 'outputChimera'
-OUTPUT_MASK_FILE = 'outputmask'
+OUTPUT_RESOLUTION_FILE = 'monoresResolutionMap.mrc'
+OUTPUT_RESOLUTION_FILE_CHIMERA = 'monoresResolutionChimera.mrc'
+OUTPUT_MASK_FILE = 'refinedMask.mrc'
 FN_MEAN_VOL = 'meanvol'
 METADATA_MASK_FILE = 'metadataresolutions'
-FN_METADATA_HISTOGRAM = 'mdhist'
+FN_METADATA_HISTOGRAM = 'hist.xmd'
 BINARY_MASK = 'binarymask'
 FN_GAUSSIAN_MAP = 'gaussianfilter'
 
@@ -99,14 +97,15 @@ class XmippProtMonoRes(ProtAnalysis3D):
                       help='The mask determines which points are specimen'
                       ' and which are not')
 
-        group = form.addGroup('Extra parameters')
-#         group.addParam('symmetry', StringParam, default='c1',
-#                       label="Symmetry",
-#                       help='Symmetry group. By default = c1.'
-#                       'See [[http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry][Symmetry]]'
-#                       'for a description of the symmetry groups format,' 
-#                       'If no symmetry is present, give c1.')
+        form.addParam('MaskExcl', PointerParam, pointerClass='VolumeMask',
+		      expertLevel=LEVEL_ADVANCED,
+                      condition='(halfVolumes) or (not halfVolumes)',
+                      allowsNull=True,
+                      label="Exclude Area", 
+                      help='The mask determines the area of the protein to be'
+		      'excluded in the estimation of the local resolution')
 
+        group = form.addGroup('Extra parameters')
         line = group.addLine('Resolution Range (Å)',
                             help="If the user knows the range of resolutions or"
                                 " only a range of frequencies needs to be analysed." 
@@ -126,48 +125,25 @@ class XmippProtMonoRes(ProtAnalysis3D):
                       'will try to binarize it. Bmask values below the threshold'
                       'will be change to 0 and above the thresthol will be 1')
         
-        group.addParam('isPremasked', BooleanParam, default=False,
-                      label="Is the original premasked?",
-                      help='Sometimes the original volume is masked inside '
-                      'a spherical mask. In this case please select yes')
-        
         form.addParam('noiseonlyinhalves', BooleanParam, expertLevel=LEVEL_ADVANCED,
                       default=True,
-                      label="Use noise outside the mask?", 
+                      label="Use noise inside protein?", 
                       condition = 'halfVolumes',
-                      help='Select yes if the volume present noise outside the mask.'
-                      ' Otherwise, select No.')
-        
-        group.addParam('volumeRadius', FloatParam, default=-1,
-                      label="Spherical mask radius (px)",
-                      condition = 'isPremasked and not halfVolumes', 
-                      help='When the original volume is originally premasked,'
-                      'the noise estimation ought to be performed inside'
-                      'that premask, and out of the provieded mask asked in'
-                      'the previus box. The radius value, determines the'
-                      'radius of the spherical premask. '
-                      'By default radius = -1 use the half of the '
-                      'volume size as radius')
-        
-        group.addParam('volumeRadiusHalf', FloatParam, default=-1,
-                      label="Spherical mask radius (px)",
-                      condition = 'halfVolumes and isPremasked',
-                      help='When the origianl volume is originally premasked,'
-                      'the noise estimation ought to be performed inside that'
-                      'premask, and out of the provieded mask asked in the previus'
-                      'box. The radius value, determines the radius in pixels of '
-                      'the spherical premask. By default radius = -1 use the half'
-                      'of the volume size as radius')
+                      help='(Yes recommended) the noise distribution will be estimated'
+		      ' in the protein region (inside the mask) by means of the '
+		      'difference of both half maps.')
 
+        form.addParam('gaussianNoise', BooleanParam, expertLevel=LEVEL_ADVANCED,
+                      default=False,
+                      label="Consider noise gaussian?", 
+                      help='It assumens the noise in the map as gaussian. '
+			'Note that this assumption might not be true, despite ,it is '
+			' in general.')
+        
         line.addParam('minRes', FloatParam, default=0, label='High')
         line.addParam('maxRes', FloatParam, allowsNull=True, label='Low')
         line.addParam('stepSize', FloatParam, allowsNull=True,
                       expertLevel=LEVEL_ADVANCED, label='Step')
-
-        group.addParam('filterInput', BooleanParam, default=False, 
-                      label="Filter input volume with local resolution?",
-                      help='The input map is locally filtered at'
-                      'the local resolution map.')
         
         form.addParallelSection(threads = 4, mpi = 0)
 
@@ -177,12 +153,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
         """ Centralize how files are called """
         myDict = {
                  FN_MEAN_VOL: self._getExtraPath('mean_volume.mrc'),
-                 OUTPUT_MASK_FILE: self._getExtraPath("output_Mask.mrc"),
-                 OUTPUT_RESOLUTION_FILE_CHIMERA: self._getExtraPath(CHIMERA_RESOLUTION_VOL),
-                 FN_FILTERED_MAP: self._getExtraPath('filteredMap.mrc'),
-                 OUTPUT_RESOLUTION_FILE: self._getExtraPath('mgresolution.mrc'),
                  METADATA_MASK_FILE: self._getExtraPath('mask_data.xmd'),
-                 FN_METADATA_HISTOGRAM: self._getExtraPath('hist.xmd'),
                  BINARY_MASK: self._getExtraPath('binarized_mask.mrc'),
                  FN_GAUSSIAN_MAP: self._getExtraPath('gaussianfilted.mrc')
                  }
@@ -294,86 +265,36 @@ class XmippProtMonoRes(ProtAnalysis3D):
                 xdim, _ydim, _zdim = self.inputVolumes.get().getDim()
                 xdim = xdim*0.5
         return xdim
-    
-    def resolutionMonogenicAuto(self):
-        freq_step = 1
 
-        xdim = self.maskRadius(self.halfVolumes, self.isPremasked)
-
-
-        if self.halfVolumes:
-            params = ' --vol %s' % self.vol1Fn
-            params += ' --vol2 %s' % self.vol2Fn
-            params += ' --meanVol %s' % self._getFileName(FN_MEAN_VOL)
-            params += ' --mask %s' % self._getFileName(BINARY_MASK)
-            params += ' --sampling_rate %f' % self.inputVolume.get().getSamplingRate()
-            if (self.noiseonlyinhalves is False):
-                params += ' --noiseonlyinhalves'
-        else:
-            params = ' --vol %s' % self.vol0Fn
-            params += ' --mask %s' % self._getFileName(BINARY_MASK)
-            params += ' --sampling_rate %f' % self.inputVolumes.get().getSamplingRate()
-
-        params += ' --automatic '
-        params += ' --step %f' % freq_step
-        params += ' --mask_out %s' % self._getFileName(OUTPUT_MASK_FILE)
-        params += ' -o %s' % self._getFileName(OUTPUT_RESOLUTION_FILE)
-        params += ' --volumeRadius %f' % xdim
-        params += ' --chimera_volume %s' % self._getFileName(
-                                                    OUTPUT_RESOLUTION_FILE_CHIMERA)
-        params += ' --sym %s' % 'c1'#self.symmetry.get()
-        params += ' --significance %f' % self.significance.get()
-        params += ' --md_outputdata %s' % self._getFileName(METADATA_MASK_FILE)  
-        params += ' --filtered_volume %s' % ''
-
-        self.runJob('xmipp_resolution_monogenic_signal', params)
 
     def resolutionMonogenicSignalStep(self):
-        # Number of frequencies
-        if (not self.maxRes.hasValue()):
-            self.resolutionMonogenicAuto()
-            imageFile = self._getFileName(OUTPUT_RESOLUTION_FILE)
-            min_, max_ = self.getMinMax(imageFile)
-        else:    
-            max_ = self.maxRes.get()
-
         if self.stepSize.hasValue():
             freq_step = self.stepSize.get()
         else:
             freq_step = 0.25
-  
-        xdim = self.maskRadius(self.halfVolumes, self.isPremasked)
 
         if self.halfVolumes:
             params = ' --vol %s' % self.vol1Fn
             params += ' --vol2 %s' % self.vol2Fn
-            params += ' --meanVol %s' % self._getFileName(FN_MEAN_VOL)
-            params += ' --mask %s' % self._getFileName(BINARY_MASK)
             params += ' --sampling_rate %f' % self.inputVolume.get().getSamplingRate()
-            if (self.noiseonlyinhalves is False):
+            if (self.noiseonlyinhalves.get() is True):
                 params += ' --noiseonlyinhalves'
         else:
             params = ' --vol %s' % self.vol0Fn
-            params += ' --mask %s' % self._getFileName(BINARY_MASK)
             params += ' --sampling_rate %f' % self.inputVolumes.get().getSamplingRate()
 
+	params += ' --mask %s' % self._getFileName(BINARY_MASK)
+        if self.MaskExcl.hasValue():
+	    params += ' --maskExcl %s' % self.MaskExcl.get().getFileName()
         params += ' --minRes %f' % self.minRes.get()
-        params += ' --maxRes %f' % max_
-            
+        params += ' --maxRes %f' % self.maxRes.get()
         params += ' --step %f' % freq_step
-        params += ' --mask_out %s' % self._getFileName(OUTPUT_MASK_FILE)
-        params += ' -o %s' % self._getFileName(OUTPUT_RESOLUTION_FILE)
-        params += ' --volumeRadius %f' % xdim
-        params += ' --exact'
-        params += ' --chimera_volume %s' % self._getFileName(
-                                                    OUTPUT_RESOLUTION_FILE_CHIMERA)
-        params += ' --sym %s' % 'c1'#self.symmetry.get()
+        params += ' -o %s' % self._getExtraPath()
+        if self.gaussianNoise.get() is True:        
+	    params += ' --gaussian'
         params += ' --significance %f' % self.significance.get()
-        params += ' --md_outputdata %s' % self._getFileName(METADATA_MASK_FILE)  
-        if self.filterInput.get():
-            params += ' --filtered_volume %s' % self._getFileName(FN_FILTERED_MAP)
-        else:
-            params += ' --filtered_volume %s' % ''
+        params += ' --md_outputdata %s' % self._getFileName(METADATA_MASK_FILE)
+	params += ' --threads %i' % self.numberOfThreads.get()  
 
         self.runJob('xmipp_resolution_monogenic_signal', params)
 
@@ -385,11 +306,11 @@ class XmippProtMonoRes(ProtAnalysis3D):
         m = float(self.min_res_init)
         range_res = round((M - m)*4.0)
 
-        params = ' -i %s' % self._getFileName(OUTPUT_RESOLUTION_FILE)
-        params += ' --mask binary_file %s' % self._getFileName(OUTPUT_MASK_FILE)
+        params = ' -i %s' % self._getExtraPath(OUTPUT_RESOLUTION_FILE)
+        params += ' --mask binary_file %s' % self._getExtraPath(OUTPUT_MASK_FILE)
         params += ' --steps %f' % (range_res)
         params += ' --range %f %f' % (self.min_res_init, self.max_res_init)
-        params += ' -o %s' % self._getFileName(FN_METADATA_HISTOGRAM)
+        params += ' -o %s' % self._getExtraPath(FN_METADATA_HISTOGRAM)
 
         self.runJob('xmipp_image_histogram', params)
         
@@ -411,7 +332,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
 
     def createOutputStep(self):
         volume=Volume()
-        volume.setFileName(self._getFileName(OUTPUT_RESOLUTION_FILE))
+        volume.setFileName(self._getExtraPath(OUTPUT_RESOLUTION_FILE))
         if (self.halfVolumes):
             volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
             volume.setOrigin(self.inputVolume.get().getOrigin(True))
@@ -426,24 +347,12 @@ class XmippProtMonoRes(ProtAnalysis3D):
             inputVolumeFileName = self.inputVolumes.get().getFileName()
 
         #Setting the min max for the summary
-        imageFile = self._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
+        imageFile = self._getExtraPath(OUTPUT_RESOLUTION_FILE_CHIMERA)
         min_, max_ = self.getMinMax(imageFile)
         self.min_res_init.set(round(min_*100)/100)
         self.max_res_init.set(round(max_*100)/100)
         self._store(self.min_res_init)
         self._store(self.max_res_init)
-
-        if self.filterInput.get():
-            print 'Saving filtered map'
-            volume.setFileName(self._getFileName(FN_FILTERED_MAP))
-            if (self.halfVolumes):
-                volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
-                self._defineOutputs(outputVolume_Filtered=volume)
-                self._defineSourceRelation(self.inputVolume, volume)
-            else:
-                volume.setSamplingRate(self.inputVolumes.get().getSamplingRate())
-                self._defineOutputs(outputVolume_Filtered=volume)
-                self._defineSourceRelation(self.inputVolumes, volume)
             
 
         # fill ccp4 header so we can transfer the origin to the
