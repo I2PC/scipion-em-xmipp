@@ -669,6 +669,9 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if newXdim<40:
             newXdim=int(40)
             TsCurrent=Xdim*(self.TsOrig/newXdim)
+        elif newXdim%2==1:
+            newXdim+=1
+            TsCurrent=Xdim*(self.TsOrig/newXdim)
         self.writeInfoField(fnDir,"sampling",emlib.MDL_SAMPLINGRATE,TsCurrent)
         self.writeInfoField(fnDir,"size",emlib.MDL_XSIZE,newXdim)
         
@@ -811,6 +814,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             # if iteration>1: # This causes images to be replicated
             #    getShiftsFrom=fnDirPrevious
             self.prepareImages(fnDirPrevious,fnGlobal,TsCurrent,getShiftsFrom)
+            TsCurrent=self.readInfoField(fnDirGlobal,"sampling",emlib.MDL_SAMPLINGRATE) # Prepare images may have changed it
             self.prepareReferences(fnDirPrevious,fnGlobal,TsCurrent,targetResolution)
 
             # Calculate angular step at this resolution
@@ -1012,6 +1016,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     produceNewReferences=False
             if produceNewReferences:
                 self.prepareImages(fnDirPrevious,fnDirLocal,TsCurrent,fnDirPrevious)
+                TsCurrent=self.readInfoField(fnDirGlobal,"sampling",emlib.MDL_SAMPLINGRATE) # Prepare images may have changed it
                 self.prepareReferences(fnDirPrevious,fnDirLocal,TsCurrent,targetResolution)
             else:
                 newXdim=self.readInfoField(fnDirGlobal,"size",emlib.MDL_XSIZE)
