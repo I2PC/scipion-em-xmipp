@@ -34,7 +34,7 @@ from pwem.protocols import ProtExtractParticles
 from pyworkflow.object import Set, Pointer
 
 from xmipp3 import Plugin
-from xmipp3.base import XmippProtocol, createMetaDataFromPattern
+from xmipp3.base import XmippProtocol
 from xmipp3.convert import (writeMicCoordinates, readSetOfCoordinates)
 from xmipp3.constants import SAME_AS_PICKING, OTHER
 from xmipp3.utils import validateDLtoolkit
