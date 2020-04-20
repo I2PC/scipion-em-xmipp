@@ -46,21 +46,22 @@ def mds(d, dimensions=2):
     distances.
     """
 
+    # Distance matrix size
     (n, n) = d.shape
-    E = (-0.5 * d ** 2)
 
-    # Use mat to get column and row means to act as column and row means.
-    Er = np.mat(np.mean(E, 1))
-    Es = np.mat(np.mean(E, 0))
+    # Centering Matrix
+    J = np.identity(n, float) - (1 / n) * np.ones([n, n], float)
 
-    # From Principles of Multivariate Analysis: A User's Perspective (page 107).
-    F = np.array(E - np.transpose(Er) - Es + np.mean(E))
+    # Center distance matrix
+    B = -0.5 * J @ d @ J
 
-    [U, S, V] = np.linalg.svd(F)
+    # Singular value decomposition
+    [U, S, V] = np.linalg.svd(B)
 
-    Y = U * np.sqrt(S)
+    # Coordinates matrix from MDS
+    Y = U[:, 1:(dimensions+1)] @ V[1:(dimensions+1), 1:(dimensions+1)]
 
-    return (Y[:, 0:dimensions], S)
+    return Y
 
 
 class XmippProtStructureMapSPH(ProtAnalysis3D):
