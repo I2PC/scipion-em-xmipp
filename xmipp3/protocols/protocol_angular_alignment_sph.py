@@ -35,7 +35,7 @@ from pwem.constants import ALIGN_PROJ
 
 from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
                             setXmippAttributes)
-from xmipp3.utils import writeInfoField, readInfoField
+from xmipp3.base import writeInfoField, readInfoField
 import numpy as np
 
 from pyworkflow import VERSION_2_0

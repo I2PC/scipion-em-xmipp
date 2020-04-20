@@ -40,7 +40,7 @@ from xmipp3.convert import (createItemMatrix, writeSetOfParticles,
                             rowToAlignment, setXmippAttributes, xmippToLocation)
 
 from pwem import emlib
-from xmipp3.base import findRow
+from xmipp3.base import findRow, writeInfoField, readInfoField
 from xmipp3.constants import SYM_URL
 import numpy as np
 
@@ -197,18 +197,6 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         self._insertFunctionStep('createOutputStep')
 
     # --------------------------- STEPS functions -------------------------------
-
-    def readInfoField(self, fnDir, block, label):
-        mdInfo = emlib.MetaData("%s@%s" % (block, join(fnDir, "iterInfo.xmd")))
-        return mdInfo.getValue(label, mdInfo.firstObject())
-
-    def writeInfoField(self, fnDir, block, label, value):
-        mdInfo = emlib.MetaData()
-        objId = mdInfo.addObject()
-        mdInfo.setValue(label, value, objId)
-        mdInfo.write("%s@%s" % (block, join(fnDir, "iterInfo.xmd")),
-                     emlib.MD_APPEND)
-
     def convertInputStep(self, particlesId, volId):
         """ Write the input images as a Xmipp metadata file.
         particlesId: is only need to detect changes in
@@ -229,10 +217,10 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
             newTs = self.targetResolution.get() * 0.4
             newTs = max(Ts, newTs)
             newXdim = int(Xdim * Ts / newTs)
-            self.writeInfoField(self._getExtraPath(), "sampling",
-                                emlib.MDL_SAMPLINGRATE, newTs)
-            self.writeInfoField(self._getExtraPath(), "size", emlib.MDL_XSIZE,
-                                newXdim)
+            writeInfoField(self._getExtraPath(), "sampling",
+                           emlib.MDL_SAMPLINGRATE, newTs)
+            writeInfoField(self._getExtraPath(), "size", emlib.MDL_XSIZE,
+                           newXdim)
             self.runJob("xmipp_image_resize",
                         "-i %s -o %s --save_metadata_stack %s --fourier %d" %
                         (self._getExpParticlesFn(),
@@ -435,10 +423,10 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         fnTmpDir = self._getTmpPath()
         fnDirectional = self._getDirectionalClassesFn()
         inputParticles = self.inputParticles.get()
-        newTs = self.readInfoField(self._getExtraPath(), "sampling",
-                                   emlib.MDL_SAMPLINGRATE)
-        newXdim = self.readInfoField(self._getExtraPath(), "size",
-                                     emlib.MDL_XSIZE)
+        newTs = readInfoField(self._getExtraPath(), "sampling",
+                              emlib.MDL_SAMPLINGRATE)
+        newXdim = readInfoField(self._getExtraPath(), "size",
+                                emlib.MDL_XSIZE)
 
         # Generate projections
         fnGallery = join(fnTmpDir, "gallery.stk")
@@ -586,15 +574,15 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         # if not self._useSeveralClasses():
         #     newTs = inputParticles.getSamplingRate()
         # else:
-        #     newTs = self.readInfoField(self._getExtraPath(), "sampling",
-        #                                xmipp.MDL_SAMPLINGRATE)
+        #     newTs = readInfoField(self._getExtraPath(), "sampling",
+        #                           xmipp.MDL_SAMPLINGRATE)
 
         self.mdClasses = emlib.MetaData(self._getDirectionalClassesFn())
         self.mdImages = emlib.MetaData(self._getDirectionalImagesFn())
 
         origTs = inputParticles.getSamplingRate()
-        lastTs = self.readInfoField(self._getExtraPath(), "sampling",
-                                       emlib.MDL_SAMPLINGRATE)
+        lastTs = readInfoField(self._getExtraPath(), "sampling",
+                               emlib.MDL_SAMPLINGRATE)
 
         if origTs!=lastTs:
             newXdim=inputParticles.getXDim()

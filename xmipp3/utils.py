@@ -34,58 +34,9 @@ import numpy as np
 from pyworkflow import Config
 from pwem import emlib
 
+
 def validateXmippGpuBins():
     pass
-
-def getMdFirstRow(filename):
-    """ Create a MetaData but only read the first row.
-    This method should be used for validations of labels
-    or metadata size, but the full metadata is not needed.
-    """
-    md = emlib.MetaData()
-    md.read(filename, 1)
-    if md.getParsedLines():
-        row = emlib.metadata.Row()
-        row.readFromMd(md, md.firstObject())
-    else:
-        row = None
-    
-    return row
-
-
-def getMdSize(filename):
-    """ Return the metadata size without parsing entirely. """
-    md = emlib.MetaData()
-    md.read(filename, 1)
-    return md.getParsedLines()
-
-
-def isMdEmpty(filename):
-    """ Use getMdSize to check if metadata is empty. """
-    return getMdSize(filename) == 0
-
-
-def iterMdRows(md):
-    """ Iterate over the rows of the given metadata. """
-    # If md is string, take as filename and create the metadata
-    if isinstance(md, str):
-        md = emlib.MetaData(md)
-        
-    row = emlib.metadata.Row()
-    
-    for objId in md:
-        row.readFromMd(md, objId)
-        yield row
-
-def readInfoField(fnDir,block,label):
-    mdInfo = emlib.MetaData("%s@%s"%(block,join(fnDir,"iterInfo.xmd")))
-    return mdInfo.getValue(label, mdInfo.firstObject())
-
-def writeInfoField(fnDir,block,label, value):
-    mdInfo = emlib.MetaData()
-    objId=mdInfo.addObject()
-    mdInfo.setValue(label,value,objId)
-    mdInfo.write("%s@%s"%(block,join(fnDir,"iterInfo.xmd")), emlib.MD_APPEND)
 
 
 BAD_IMPORT_TENSORFLOW_KERAS_MSG='''
@@ -101,12 +52,14 @@ CUDA_LIB = %(CUDA_HOME)s/lib64
 CUDNN_VERSION = 6 or 7
 '''.format(Config.SCIPION_CONFIG)
 
+
 def copy_image(imag):
     ''' Return a copy of a xmipp_image
     '''
     new_imag = emlib.Image()
     new_imag.setData(imag.getData())
     return new_imag
+
 
 def matmul_serie(mat_list, size=4):
     '''Return the matmul of several numpy arrays'''
@@ -119,12 +72,14 @@ def matmul_serie(mat_list, size=4):
         res = np.identity(size)
     return res
 
+
 def normalize_array(ar):
     '''Normalize values in an array with mean 0 and std deviation 1
     '''
     ar -= np.mean(ar)
     ar /= np.std(ar)
     return ar
+
 
 def surrounding_values(a,ii,jj,depth=1):
     '''Return a list with the surrounding elements, given the indexs of the center, from an 2D numpy array

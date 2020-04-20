@@ -38,7 +38,7 @@ from pyworkflow.utils import getMemoryAvailable, removeExt, cleanPath, makePath,
 
 from pwem import emlib
 from xmipp3.convert import createClassesFromImages
-from xmipp3.utils import isMdEmpty
+from xmipp3.base import isMdEmpty
 
 
 ctfBlockName = 'ctfGroup'

@@ -49,8 +49,7 @@ from pwem.objects import (Angles, Coordinate, Micrograph, Volume, Particle,
 from pwem.emlib.image import ImageHandler
 import pwem.emlib.metadata as md
 
-from xmipp3.base import getLabelPythonType
-from xmipp3.utils import iterMdRows
+from xmipp3.base import getLabelPythonType, iterMdRows
 
 from pwem import emlib
 

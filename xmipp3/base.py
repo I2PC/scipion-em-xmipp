@@ -33,7 +33,7 @@ from pyworkflow.utils.path import cleanPath
 from pwem import emlib
 import pwem
 
-try:  # TODO: Avoid these imports by importing them in the protocols/viewers
+try:  # If binding is not already done, this will fail.
     from xmipp_base import *  # xmipp_base and xmippViz come from the binding and
     from xmippViz import *    #  it is not available before installing the binaries
 except Exception as exc:  # TODO: catch exception by type and ensure it is caused by CondaEnvManager
@@ -217,7 +217,8 @@ class XmippProtocol:
 
         super(type(self), self).runJob(program, arguments, **kwargs)
 
-        
+
+# findRow() cannot go to xmipp_base (binding) because depends on emlib.metadata.Row()
 def findRow(md, label, value):
     """ Query the metadata for a row with label=value.
     Params:
@@ -228,10 +229,10 @@ def findRow(md, label, value):
         Row object of the row found.
         None if no row is found with label=value
     """
-    mdQuery = emlib.MetaData() # store result
+    mdQuery = emlib.MetaData()  # store result
     mdQuery.importObjects(md, emlib.MDValueEQ(label, value))
     n = mdQuery.size()
-    
+
     if n == 0:
         row = None
     elif n == 1:
@@ -240,12 +241,43 @@ def findRow(md, label, value):
     else:
         raise Exception("findRow: more than one row found matching the query "
                         "%s = %s" % (emlib.label2Str(label), value))
-    
+
     return row
+
 
 def findRowById(md, value):
     """ Same as findRow, but using MDL_ITEM_ID for label. """
     return findRow(md, emlib.MDL_ITEM_ID, int(value))
+
+
+# getMdFirstRow() cannot go to xmipp_base (binding) because depends on emlib.metadata.Row()
+def getMdFirstRow(filename):
+    """ Create a MetaData but only read the first row.
+    This method should be used for validations of labels
+    or metadata size, but the full metadata is not needed.
+    """
+    md = emlib.MetaData()
+    md.read(filename, 1)
+    if md.getParsedLines():
+        row = emlib.metadata.Row()
+        row.readFromMd(md, md.firstObject())
+    else:
+        row = None
+
+    return row
+
+# iterMdRows() cannot go to xmipp_base (binding) because depends on emlib.metadata.Row()
+def iterMdRows(md):
+    """ Iterate over the rows of the given metadata. """
+    # If md is string, take as filename and create the metadata
+    if isinstance(md, str):
+        md = emlib.MetaData(md)
+
+    row = emlib.metadata.Row()
+
+    for objId in md:
+        row.readFromMd(md, objId)
+        yield row
   
   
 class XmippSet:
