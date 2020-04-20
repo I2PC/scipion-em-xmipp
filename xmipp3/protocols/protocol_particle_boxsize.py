@@ -32,7 +32,6 @@ from pyworkflow.protocol.params import PointerParam, IntParam, LEVEL_ADVANCED
 
 from pwem.protocols import ProtMicrographs
 
-
 from xmipp3.convert import writeSetOfMicrographs
 import xmipp3
 
@@ -43,11 +42,11 @@ class XmippProtParticleBoxsize(ProtMicrographs, xmipp3.XmippProtocol):
     _label = 'particle boxsize'
     _lastUpdateVersion = VERSION_2_0
     _conda_env = 'xmipp_DLTK_v0.3'
-    
+
     def __init__(self, **args):
         ProtMicrographs.__init__(self, **args)
         self.particleBoxsize = None
-    
+
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
@@ -59,8 +58,10 @@ class XmippProtParticleBoxsize(ProtMicrographs, xmipp3.XmippProtocol):
         form.addParam('nMicsToAnalize', IntParam,
                       label="Number of mics to use for estimation",
                       default=10, expertLevel=LEVEL_ADVANCED,
-                      help='The boxsize estimation is the median of the boxsize estimations on different micrographs.'
-                           'This number selects a random subset of input micrographs to perform analysis. Use -1 to '
+                      help='The boxsize estimation is the median of the boxsize '
+                           'estimations on different micrographs.'
+                           'This number selects a random subset of input '
+                           'micrographs to perform analysis. Use -1 to '
                            'consider all micrographs')
 
     # --------------------------- INSERT steps functions -----------------------
@@ -76,18 +77,16 @@ class XmippProtParticleBoxsize(ProtMicrographs, xmipp3.XmippProtocol):
 
     def boxsizeStep(self):
         particleBoxSizeFn = self._getExtraPath('particle_boxsize.xmd')
-        imgSize = 300  # This should match the img_size used for training weights? Add as metada?
+        imgSize = 400  # This should match the img_size used for training weights? Add as metada?
         weights = self.getModel('boxsize', 'weights.hdf5')
-        featureScaler = self.getModel('boxsize', 'feature_scaler.pkl')
 
-        params  = ' --img_size %d' % imgSize
+        params = ' --img_size %d' % imgSize
         params += ' --weights %s' % weights
-        params += ' --feature_scaler %s' % featureScaler
         params += ' --output %s' % particleBoxSizeFn
 
         fileNames = [mic.getFileName().encode() + b'\n' for mic in self.inputMicrographs.get()]
 
-        nMicsToAnalize= self.nMicsToAnalize.get()
+        nMicsToAnalize = self.nMicsToAnalize.get()
         if nMicsToAnalize != -1:
             random.shuffle(fileNames)
             fileNames= fileNames[:min(len(fileNames), nMicsToAnalize)]
@@ -97,7 +96,7 @@ class XmippProtParticleBoxsize(ProtMicrographs, xmipp3.XmippProtocol):
             csvFile.writelines(fileNames)
         params += ' --micrographs %s' % micNamesPath
         self.runCondaJob('xmipp_particle_boxsize', params)
-        
+
         with open(particleBoxSizeFn, 'r') as fp:
             self.particleBoxsize = int(fp.read().rstrip('\n'))
 
@@ -118,7 +117,7 @@ class XmippProtParticleBoxsize(ProtMicrographs, xmipp3.XmippProtocol):
         if hasattr(self, 'boxsize'):
             messages.append('Estimated box size: %s pixels' % self.boxsize)
         return messages
-    
+
     def _summary(self):
         messages = []
         if hasattr(self, 'boxsize'):
@@ -131,5 +130,4 @@ class XmippProtParticleBoxsize(ProtMicrographs, xmipp3.XmippProtocol):
         return ['']
 
     def _validate(self):
-        return self.validateDLtoolkit(model=[('boxsize', 'weights.hdf5'),
-                                             ('boxsize', 'feature_scaler.pkl')])
+        return self.validateDLtoolkit(model=('boxsize', 'weights.hdf5'))
