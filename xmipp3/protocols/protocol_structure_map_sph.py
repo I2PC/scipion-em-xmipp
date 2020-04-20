@@ -57,9 +57,10 @@ def mds(d, dimensions=2):
 
     # Singular value decomposition
     [U, S, V] = np.linalg.svd(B)
+    S = np.diag(S)
 
     # Coordinates matrix from MDS
-    Y = U[:, 1:(dimensions+1)] @ V[1:(dimensions+1), 1:(dimensions+1)]
+    Y = U[:, 0:dimensions] @ np.power(S[0:dimensions, 0:dimensions], 0.5)
 
     return Y
 
@@ -208,7 +209,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
         distance = np.asarray(self.distanceMatrix)
         for i in range(1, 4):
-            embed, _ = mds(distance, i)
+            embed = mds(distance, i)
             embedExtended = np.pad(embed, ((0, 0), (0, i - embed.shape[1])),
                                    "constant", constant_values=0)
             np.savetxt(self._defineResultsName(i), embedExtended)
@@ -265,7 +266,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
         corr = np.asarray(self.corrMatrix)
         for i in range(1, 4):
-            embed, _ = mds(corr, i)
+            embed = mds(corr, i)
             embedExtended = np.pad(embed, ((0, 0), (0, i - embed.shape[1])),
                                    "constant", constant_values=0)
             np.savetxt(self._defineResultsName2(i), embedExtended)
