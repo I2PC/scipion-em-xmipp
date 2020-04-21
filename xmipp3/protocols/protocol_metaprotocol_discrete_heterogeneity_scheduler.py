@@ -57,8 +57,6 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
         self.childs = []
 
     def setAborted(self):
-        # print("en el setaborted")
-        # sys.out.flush()
         for child in self.childs:
             if child.isRunning() or child.isScheduled():
                 # child.setAborted()
@@ -67,8 +65,6 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
         ProtMonitor.setAborted(self)
 
     def setFailed(self, errorMsg):
-        # print("en el setfailed")
-        # sys.out.flush()
         for child in self.childs:
             if child.isRunning() or child.isScheduled():
                 # child.setFailed(errorMsg)
@@ -359,22 +355,14 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
             if not self.finished:
                 finishedIter = False
                 while finishedIter == False:
-                    # print("ESPERA 1 Iter", iter)
-                    # sys.stdout.flush()
                     time.sleep(15)
                     newSplitProt = self._updateProtocol(newSplitProt)
                     newSignificantProt = self._updateProtocol(
                         newSignificantProt)
                     if newSplitProt.isFailed() or newSplitProt.isAborted():
-                        # print("XmippProtSplitVolumeHierarchical has failed", iter)
-                        # sys.out.flush()
-                        raise Exception(
-                            'XmippProtSplitVolumeHierarchical has failed')
+                        raise Exception('XmippProtSplitVolumeHierarchical has failed')
                     if newSignificantProt.isFailed() or newSignificantProt.isAborted():
-                        # print("XmippProtReconstructHeterogeneous has failed", iter)
-                        # sys.out.flush()
-                        raise Exception(
-                            'XmippProtReconstructHeterogeneous has failed')
+                        raise Exception('XmippProtReconstructHeterogeneous has failed')
                     if newSignificantProt.isFinished():
                         finishedIter = True
                         for classItem in newSignificantProt.outputClasses:
