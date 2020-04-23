@@ -6,46 +6,59 @@ from xmipp3.protocols import XmippProtGenerateReprojections
 from pwem.protocols import ProtImportVolumes, ProtImportParticles, exists
 
 
-class TestDeepDenoisingBase(BaseTest):
-    @classmethod
-    def importData(cls):
-        cls.importVolume = cls.newProtocol(ProtImportVolumes,
-                                filesPath=cls.dsRelion.getFile(
-                                    'import/refine3d/extra/relion_class001.mrc'),
-                                samplingRate=1.0)
-        cls.launchProtocol(cls.importVolume)
-
-        cls.importParticles = cls.newProtocol(ProtImportParticles,
-                                filesPath=cls.dsRelion.getFile(
-                                    'import/case2/particles.mrcs'),
-                                samplingRate=1.0)
-        cls.launchProtocol(cls.importParticles)
-
-    @classmethod
-    def generateProjections(cls):
-
-        cls.projections = cls.newProtocol(XmippProtGenerateReprojections,
-                                       inputSet=cls.importParticles.outputParticles,
-                                       inputVolume=cls.importVolume.outputVolume)
-        cls.launchProtocol(cls.projections)
-
-    @classmethod
-    def denoiseSet(cls):
-
-        cls.train = cls.newProtocol(XmippProtDeepDenoising,
-                                      model='0',
-                                      inputProjections=cls.projections.outputProjections,
-                                      inputParticles=cls.projections.outputParticles,
-                                      imageSize=32)
-        cls.launchProtocol(cls.train)
-        cls.assertTrue(exists(cls.train._getExtraPath('particlesDenoised.xmd')),
-                       "Denoising particles has failed")
-
-class TestDeepDenoising(TestDeepDenoisingBase):
+class TestDeepDenoising(BaseTest):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
-        cls.dsRelion = DataSet.getDataSet('relion_tutorial')
-        cls.protData = cls.importData()
-        cls.projections = cls.generateProjections()
-        cls.denoise = cls.denoiseSet()
+        dsRelion = DataSet.getDataSet('relion_tutorial')
+        cls.relionVolFn = dsRelion.getFile('import/refine3d/extra/relion_class001.mrc')
+        cls.relionPartsFn = dsRelion.getFile('import/case2/particles.mrcs')
+
+    @classmethod
+    def importData(cls):
+        importVolume = cls.newProtocol(ProtImportVolumes,
+                                       filesPath=cls.relionVolFn,
+                                       samplingRate=1.0)
+        cls.launchProtocol(importVolume)
+        cls.inVolume = importVolume.outputVolume
+
+        importParticles = cls.newProtocol(ProtImportParticles,
+                                          filesPath=cls.relionPartsFn,
+                                          samplingRate=1.0)
+        cls.launchProtocol(importParticles)
+        cls.inParticles = importParticles.outputParticles
+
+    @classmethod
+    def generateProjections(cls):
+        protGenProj = cls.newProtocol(XmippProtGenerateReprojections,
+                                      inputSet=cls.inParticles,
+                                      inputVolume=cls.inVolume)
+        cls.launchProtocol(protGenProj)
+        cls.projections = protGenProj.outputProjections
+        cls.particles = protGenProj.outputParticles
+
+    def test_train_and_predict(self):
+        self.importData()
+        self.generateProjections()
+
+        trainAndPredictProt = self.newProtocol(XmippProtDeepDenoising,
+                                               model='0',
+                                               inputProjections=self.projections,
+                                               inputParticles=self.particles,
+                                               imageSize=32)
+        self.launchProtocol(trainAndPredictProt)
+        self.assertIsNotEmpty(trainAndPredictProt.outputParticles)
+
+    def test_only_predict(self):
+        self.importData()
+        self.generateProjections()
+
+        predictProt = self.newProtocol(XmippProtDeepDenoising,
+                                       model='0',
+                                       nEpochs=1,
+                                       inputProjections=self.projections,
+                                       inputParticles=self.particles,
+                                       imageSize=32)
+        self.launchProtocol(predictProt)
+
+        self.assertIsNotEmpty(predictProt.outputParticles)

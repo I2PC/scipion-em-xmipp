@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # **************************************************************************
 # *
 # * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
@@ -28,11 +28,12 @@
 
 import subprocess
 
-from pwem.objects import SetOfMicrographs
 from pyworkflow.tests import *
 from pyworkflow.utils.properties import colorText
 
+from pwem.objects import SetOfMicrographs
 from pwem import emlib
+from pwem.emlib import metadata
 
 import xmipp3
 from xmipp3.base import *
@@ -58,7 +59,7 @@ class TestBasic(BaseTest):
         return ctf
     
     def test_rowToCtfModel(self):
-        row = XmippMdRow()
+        row = metadata.Row()
         row.setValue(emlib.MDL_CTF_DEFOCUSU, 2520.)
         row.setValue(emlib.MDL_CTF_DEFOCUSV, 2510.)
         row.setValue(emlib.MDL_CTF_DEFOCUS_ANGLE, 45.)
@@ -77,7 +78,7 @@ class TestBasic(BaseTest):
         self.assertIsNone(ctf)
         
     def test_rowToImage(self):
-        row = XmippMdRow()
+        row = metadata.Row()
         index = 1
         filename = 'images.stk'
         row.setValue(emlib.MDL_ITEM_ID, 1)
@@ -227,13 +228,13 @@ class TestAlignment(TestConvertBase):
             matrix = np.array(matrix)
             a = Transform(matrix)
             
-            row = XmippMdRow()
+            row = metadata.Row()
             alignmentToRow(a, row, alignType=ALIGN_2D)
 
-            row2 = XmippMdRow()
+            row2 = metadata.Row()
             alignmentToRow(a, row2, alignType=ALIGN_3D)
 
-            row3 = XmippMdRow()
+            row3 = metadata.Row()
             alignmentToRow(a, row3, alignType=ALIGN_PROJ)
 
             return row, row2, row3
@@ -625,12 +626,12 @@ class TestReconstruct(TestConvertBase):
                 ]
 
         aList = [np.array(m) for m in mList]
-        rowa = XmippMdRow()
-        rowap = XmippMdRow()
-        rowb = XmippMdRow()
-        rowb1 = XmippMdRow()
-        rowb2 = XmippMdRow()
-        rowb3 = XmippMdRow()
+        rowa = metadata.Row()
+        rowap = metadata.Row()
+        rowb = metadata.Row()
+        rowb1 = metadata.Row()
+        rowb2 = metadata.Row()
+        rowb3 = metadata.Row()
         labelList=[emlib.MDL_ANGLE_ROT,
                    emlib.MDL_ANGLE_TILT,
                    emlib.MDL_ANGLE_PSI,
@@ -1018,7 +1019,7 @@ class TestSetConvert(BaseTest):
         #reference metadata
         md = emlib.MetaData()
         objId = md.addObject()
-        defocusGroupRow = XmippMdRow()
+        defocusGroupRow = metadata.Row()
 
         defocusGroupRow.setValue(emlib.MDL_ENABLED, 1)
         defocusGroupRow.setValue(emlib.MDL_CTF_GROUP, 1)
