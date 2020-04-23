@@ -27,7 +27,6 @@
 
 import numpy as np
 from scipy.spatial.distance import pdist
-# from scipy.signal import convolve2d
 from scipy.signal import find_peaks
 from scipy.stats import entropy
 from scipy.ndimage.filters import gaussian_filter
@@ -293,10 +292,6 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             np.savetxt(self._defineResultsName2(i), embedExtended)
 
     def entropyConsensus(self):
-        # Debug Purposes
-        import matplotlib.pyplot as plt
-        # import time
-        # time.sleep(10)
         for i in range(2, 4):
             X1 = np.loadtxt(self._defineResultsName(i))
             X2 = np.loadtxt(self._defineResultsName2(i))
@@ -335,44 +330,20 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                         X1 = X1_attempt
 
             # Round point to place them in a grid
-            Xr1 = np.round(X1, decimals=2)
-            Xr2 = np.round(X2, decimals=2)
+            Xr1 = np.round(X1, decimals=3)
+            Xr2 = np.round(X2, decimals=3)
             size_grid = 1.2 * max((np.amax(Xr1), np.amax(Xr2)))
 
             # Parameters needed for future convolution
-            grid_coords = np.arange(-size_grid, size_grid, 0.01)
+            if i == 2:
+                grid_coords = np.arange(-size_grid, size_grid, 0.001)
+            else:
+                grid_coords = np.arange(-size_grid, size_grid, 0.003)
             if i == 2:
                 R, C = np.meshgrid(grid_coords, grid_coords, indexing='ij')
             else:
                 R, C, D = np.meshgrid(grid_coords, grid_coords, grid_coords, indexing='ij')
-            # center = [np.sum(C[:,0]) / C.shape[0], np.sum(C[:,0]) / C.shape[0]]
-            sigma = R.shape[0] / (120 / 3)
-            # Gauss = gauss2D(R, C, sigma, center)
-
-            # # Create grid from rounded point coordinates
-            # S1 = np.zeros(R.shape)
-            # S2 = np.zeros(R.shape)
-
-            # # Place points on grid
-            # for p in range(Xr1.shape[0]):
-            #     indx = np.argmin(np.abs(R[:,0] - Xr1[p,0]))
-            #     indy = np.argmin(np.abs(C[0,:] - Xr1[p,1]))
-            #     S1[indx, indy] = 1.0
-            #
-            #     indx = np.argmin(np.abs(R[:,0] - Xr2[p,0]))
-            #     indy = np.argmin(np.abs(C[0,:] - Xr2[p,1]))
-            #     S2[indx, indy] = 1.0
-
-
-            # Convolve grids with the Gaussian
-            # X1_gauss = convolve2d(S1, Gauss, mode='same')
-            # X1_gauss = gaussian_filter(S1, sigma=sigma)
-            # X2_gauss = convolve2d(S2, Gauss, mode='same')
-
-            # # Show convolved grids
-            # plt.figure()
-            # plt.imshow(X1_gauss)
-            # plt.show()
+            sigma = R.shape[0] / (120 / 5)
 
             # Consensus
             alpha_vect = np.arange(0, 1.01, 0.01)
@@ -384,7 +355,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                 X_matrices.append(X)
 
                 # Round points to place them in a grid
-                Xr = np.round(X1, decimals=2)
+                Xr = np.round(X, decimals=3)
 
                 # Create the grid
                 S = np.zeros(R.shape)
@@ -402,37 +373,23 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                         S[indx, indy, indz] = 1.0
 
                 # Convolve the grid with the Gaussian previously defined
-                # X_gauss = convolve2d(S, Gauss, mode='same')
                 X_gauss = gaussian_filter(S, sigma=sigma)
 
                 # Compute the Shannon entropy associated to the convolved grid
                 _, counts = np.unique(X_gauss, return_counts=True)
                 entropy_vect.append(entropy(counts, base=2))
 
-            # Plot Entropy
-            # plt.plot(alpha_vect, entropy_vect)
-            # plt.show()
-
             # Find optimal entropy value (minimum)
             entropy_vect = np.asarray(entropy_vect)
             id_peaks, _ = find_peaks(-entropy_vect)
-            if not id_peaks.size == 0:
+            if id_peaks.size > 1:
                 peaks = entropy_vect[id_peaks]
-                id_optimal = np.argmin(peaks)
+                id_optimal = np.argmax(peaks)
+            elif id_peaks.size == 1:
+                id_optimal = id_peaks[0]
             else:
                 id_optimal = 0
             X_optimal = X_matrices[id_optimal]
-
-            # # Show X_optimal
-            # if i == 2:
-            #     plt.figure()
-            #     plt.scatter(X_optimal[:,0], X_optimal[:,1])
-            #     plt.show()
-            # else:
-            #     from mpl_toolkits.mplot3d import Axes3D
-            #     ax = plt.figure().add_subplot(111, projection='3d')
-            #     plt.scatter(X_optimal[:,0], X_optimal[:,1], X_optimal[:,2])
-            #     plt.show()
 
             np.savetxt(self._defineResultsName3(i), X_optimal)
 
