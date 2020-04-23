@@ -133,8 +133,8 @@ class Plugin(pwem.Plugin):
         # Installation vars for commands formating
         verToken = cls.getHome('v%s' % _currentVersion)
         confToken = cls.getHome("xmipp.conf")
-        installVars = {'installedToken': cls.getHome("installation_finished"),
-                       'bindingsToken': cls.getHome("bindings_linked"),
+        installVars = {'installedToken': "installation_finished",
+                       'bindingsToken': "bindings_linked",
                        'verToken': verToken,
                        'nProcessors': env.getProcessors(),
                        'xmippHome': cls.getHome(),
@@ -149,20 +149,19 @@ class Plugin(pwem.Plugin):
                        }
 
         ## Installation commands (removing bindingsToken)
-        installCmd = ("./xmipp all N=%(nProcessors)d dir=%(xmippHome)s && "
-                      "touch %(installedToken)s && rm %(bindingsToken)s 2> /dev/null"
-                      % installVars)
+        installCmd = ("cd {cwd} && ./xmipp all N={nProcessors:d} && "
+                      "ln -srf build {xmippHome} && cd - && "
+                      "touch {installedToken} && rm {bindingsToken} 2> /dev/null")
         installTgt = [cls.getHome('bin', 'xmipp_reconstruct_significant'),
                       cls.getHome("lib/libXmippJNI.so"),
                       installVars['installedToken']]
 
         ## Linking bindings (removing installationToken)
-        bindingsAndLibsCmd = ("ln -fs %(bindingsSrc)s %(bindingsDst)s && "
-                              "ln -fs %(xmippLib)s %(libsDst)s && "
-                              "ln -fs %(coreLib)s %(libsDst)s && "
-                              "touch %(bindingsToken)s && "
-                              "rm %(installedToken)s 2> /dev/null"
-                              % installVars)
+        bindingsAndLibsCmd = ("ln -srf {bindingsSrc} {bindingsDst} && "
+                              "ln -srf {xmippLib} {libsDst} && "
+                              "ln -srf {coreLib} {libsDst} && "
+                              "touch {bindingsToken} && "
+                              "rm {installedToken} 2> /dev/null")
         bindingsAndLibsTgt = [os.path.join(Config.getBindingsFolder(), 'xmipp_base.py'),
                               os.path.join(Config.getBindingsFolder(), 'xmippLib.so'),
                               os.path.join(Config.getLibFolder(), 'libXmipp.so'),
@@ -180,32 +179,34 @@ class Plugin(pwem.Plugin):
                      os.path.isfile(os.path.join(bundleDir, 'xmipp')))
         develMode = isPypiDev and isXmippBu
         if develMode:
-            cdCmd = 'cd %s && ' % bundleDir
             env.addPackage('xmippDev', tar='void.tgz',
-                           commands=[(cdCmd+installCmd, installTgt+sourceTgt),
-                                     (bindingsAndLibsCmd, bindingsAndLibsTgt)],
+                           commands=[(installCmd.format(**installVars, cwd=bundleDir),
+                                      installTgt+sourceTgt),
+                                     (bindingsAndLibsCmd.format(**installVars),
+                                      bindingsAndLibsTgt)],
                            deps=xmippDeps, default=False)
 
         sourceTgt.append(verToken)
         env.addPackage('xmippSrc', version=_currentVersion,
                        # adding 'v' before version to fix a package target (post-link)
                        tar='xmippSrc-v'+_currentVersion+'.tgz',
-                       commands=[(installCmd, installTgt + sourceTgt),
-                                 (bindingsAndLibsCmd, bindingsAndLibsTgt)],
+                       commands=[(installCmd.format(**installVars, cwd='.'),
+                                  installTgt + sourceTgt),
+                                 (bindingsAndLibsCmd.format(**installVars),
+                                  bindingsAndLibsTgt)],
                        deps=xmippDeps, default=not develMode)
 
-        installBin = ("rm -rf %(xmippHome)s 2>/dev/null; cd .. ; "
-                      "ln -sf xmippBin_%(strPlaceHolder)s-%(currVersion)s "
-                      "%(xmippHome)s && touch %(installedToken)s"
-                      % installVars)
+        installBin = ("rm -rf {xmippHome} 2>/dev/null; cd .. ; "
+                      "ln -srf xmippBin_{distro}-{currVersion} {xmippHome} && "
+                      "touch {installedToken}")
         env.addPackage('xmippBin_Debian', version=_currentVersion,
-                       commands=[(installBin % 'Debian',
+                       commands=[(installBin.format(**installVars, distro='Debian'),
                                   installTgt + [confToken, verToken+'_Debian']),
                                  (bindingsAndLibsCmd, bindingsAndLibsTgt)],
                        deps=xmippDeps, default=False)
 
         env.addPackage('xmippBin_Centos', version=_currentVersion,
-                       commands=[(installBin % 'Centos',
+                       commands=[(installBin.format(**installVars, distro='Centos'),
                                   installTgt+[confToken, verToken+'_Centos']),
                                  (bindingsAndLibsCmd, bindingsAndLibsTgt)],
                        deps=xmippDeps, default=False)
