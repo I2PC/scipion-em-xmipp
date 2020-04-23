@@ -26,8 +26,12 @@
 # **************************************************************************
 
 import numpy as np
+from scipy.spatial.distance import pdist
+# from scipy.signal import convolve2d
+from scipy.signal import find_peaks
+from scipy.stats import entropy
+from scipy.ndimage.filters import gaussian_filter
 import glob
-import math
 import os
 import ntpath
 
@@ -63,6 +67,22 @@ def mds(d, dimensions=2):
     Y = U[:, 0:dimensions] @ np.power(S[0:dimensions, 0:dimensions], 0.5)
 
     return Y
+
+def rigidRegistration(X, Y):
+    Xcm = np.sum(X, axis=0) / X.shape[0]
+    Ycm = np.sum(Y, axis=0) / Y.shape[0]
+    Xc = np.transpose(X - Xcm)
+    Yc = np.transpose(Y - Ycm)
+    [U, S, V] = np.linalg.svd(Xc @ Yc.T)
+    R = V @ U.T
+    t = Ycm - R @ Xcm
+    return R, t
+
+# def gauss2D(x, y, sigma, center):
+#     xc = center[0]
+#     yc = center[1]
+#     exponent = (((x - xc) ** 2) + ((y - yc) ** 2)) / (2 * sigma)
+#     return np.exp(-exponent)
 
 
 class XmippProtStructureMapSPH(ProtAnalysis3D):
@@ -142,6 +162,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
         cleanPattern(self._getExtraPath('*.vol'))
 
+        self._insertFunctionStep('entropyConsensus')
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self, volFn, volDim, volSr, minDim, maxSr, nVoli):
@@ -271,6 +292,149 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                                    "constant", constant_values=0)
             np.savetxt(self._defineResultsName2(i), embedExtended)
 
+    def entropyConsensus(self):
+        # Debug Purposes
+        import matplotlib.pyplot as plt
+        # import time
+        # time.sleep(10)
+        for i in range(2, 4):
+            X1 = np.loadtxt(self._defineResultsName(i))
+            X2 = np.loadtxt(self._defineResultsName2(i))
+
+            # Normalize the matrices
+            [_, S, _] = np.linalg.svd(X1) ; X1 = X1 / np.amax(np.abs(S))
+            [_, S, _] = np.linalg.svd(X2) ; X2 = X2 / np.amax(np.abs(S))
+
+            # Register the points (taking mirrors into account)
+            for idf in range(4):
+                if idf == 0:
+                    R, t = rigidRegistration(X1, X2)
+                    X1 = t + np.transpose(R @ X1.T)
+                    cost = np.sum(pdist(X1 - X2))
+                elif idf == 1:
+                    X1_attempt = np.fliplr(X1)
+                    X1_attempt = t + np.transpose(R @ X1_attempt.T)
+                    cost_attempt = np.sum(pdist(X1_attempt - X2))
+                    if cost_attempt < cost:
+                        cost = cost_attempt
+                        X1 = X1_attempt
+                elif idf == 2:
+                    X1_attempt = np.flipud(X1)
+                    X1_attempt = t + np.transpose(R @ X1_attempt.T)
+                    cost_attempt = np.sum(pdist(X1_attempt - X2))
+                    if cost_attempt < cost:
+                        cost = cost_attempt
+                        X1 = X1_attempt
+                elif idf == 3:
+                    X1_attempt = np.fliplr(X1)
+                    X1_attempt = np.flipud(X1_attempt)
+                    X1_attempt = t + np.transpose(R @ X1_attempt.T)
+                    cost_attempt = np.sum(pdist(X1_attempt - X2))
+                    if cost_attempt < cost:
+                        cost = cost_attempt
+                        X1 = X1_attempt
+
+            # Round point to place them in a grid
+            Xr1 = np.round(X1, decimals=2)
+            Xr2 = np.round(X2, decimals=2)
+            size_grid = 1.2 * max((np.amax(Xr1), np.amax(Xr2)))
+
+            # Parameters needed for future convolution
+            grid_coords = np.arange(-size_grid, size_grid, 0.01)
+            if i == 2:
+                R, C = np.meshgrid(grid_coords, grid_coords, indexing='ij')
+            else:
+                R, C, D = np.meshgrid(grid_coords, grid_coords, grid_coords, indexing='ij')
+            # center = [np.sum(C[:,0]) / C.shape[0], np.sum(C[:,0]) / C.shape[0]]
+            sigma = R.shape[0] / (120 / 3)
+            # Gauss = gauss2D(R, C, sigma, center)
+
+            # # Create grid from rounded point coordinates
+            # S1 = np.zeros(R.shape)
+            # S2 = np.zeros(R.shape)
+
+            # # Place points on grid
+            # for p in range(Xr1.shape[0]):
+            #     indx = np.argmin(np.abs(R[:,0] - Xr1[p,0]))
+            #     indy = np.argmin(np.abs(C[0,:] - Xr1[p,1]))
+            #     S1[indx, indy] = 1.0
+            #
+            #     indx = np.argmin(np.abs(R[:,0] - Xr2[p,0]))
+            #     indy = np.argmin(np.abs(C[0,:] - Xr2[p,1]))
+            #     S2[indx, indy] = 1.0
+
+
+            # Convolve grids with the Gaussian
+            # X1_gauss = convolve2d(S1, Gauss, mode='same')
+            # X1_gauss = gaussian_filter(S1, sigma=sigma)
+            # X2_gauss = convolve2d(S2, Gauss, mode='same')
+
+            # # Show convolved grids
+            # plt.figure()
+            # plt.imshow(X1_gauss)
+            # plt.show()
+
+            # Consensus
+            alpha_vect = np.arange(0, 1.01, 0.01)
+            entropy_vect = []
+            X_matrices = []
+
+            for alpha in alpha_vect:
+                X = alpha * X1 + (1 - alpha) * X2
+                X_matrices.append(X)
+
+                # Round points to place them in a grid
+                Xr = np.round(X1, decimals=2)
+
+                # Create the grid
+                S = np.zeros(R.shape)
+
+                # Place rounded points on the grid
+                for p in range(Xr1.shape[0]):
+                    if i == 2:
+                        indx = np.argmin(np.abs(R[:, 0] - Xr[p, 0]))
+                        indy = np.argmin(np.abs(C[0, :] - Xr[p, 1]))
+                        S[indx, indy] = 1.0
+                    else:
+                        indx = np.argmin(np.abs(R[:, 0, 0] - Xr[p, 0]))
+                        indy = np.argmin(np.abs(C[0, :, 0] - Xr[p, 1]))
+                        indz = np.argmin(np.abs(D[0, 0, :] - Xr[p, 2]))
+                        S[indx, indy, indz] = 1.0
+
+                # Convolve the grid with the Gaussian previously defined
+                # X_gauss = convolve2d(S, Gauss, mode='same')
+                X_gauss = gaussian_filter(S, sigma=sigma)
+
+                # Compute the Shannon entropy associated to the convolved grid
+                _, counts = np.unique(X_gauss, return_counts=True)
+                entropy_vect.append(entropy(counts, base=2))
+
+            # Plot Entropy
+            # plt.plot(alpha_vect, entropy_vect)
+            # plt.show()
+
+            # Find optimal entropy value (minimum)
+            entropy_vect = np.asarray(entropy_vect)
+            id_peaks, _ = find_peaks(-entropy_vect)
+            if not id_peaks.size == 0:
+                peaks = entropy_vect[id_peaks]
+                id_optimal = np.argmin(peaks)
+            else:
+                id_optimal = 0
+            X_optimal = X_matrices[id_optimal]
+
+            # # Show X_optimal
+            # if i == 2:
+            #     plt.figure()
+            #     plt.scatter(X_optimal[:,0], X_optimal[:,1])
+            #     plt.show()
+            # else:
+            #     from mpl_toolkits.mplot3d import Axes3D
+            #     ax = plt.figure().add_subplot(111, projection='3d')
+            #     plt.scatter(X_optimal[:,0], X_optimal[:,1], X_optimal[:,2])
+            #     plt.show()
+
+            np.savetxt(self._defineResultsName3(i), X_optimal)
 
     # --------------------------- UTILS functions --------------------------------------------
     def _iterInputVolumes(self):
@@ -300,6 +464,9 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
     def _defineResultsName2(self, i):
         return self._getExtraPath('CoordinateMatrixCorr%d.txt' % i)
+
+    def _defineResultsName3(self, i):
+        return self._getExtraPath('ConsensusMatrix%d.txt' % i)
 
 
 

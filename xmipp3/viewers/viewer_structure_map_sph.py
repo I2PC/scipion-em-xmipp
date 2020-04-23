@@ -50,7 +50,7 @@ class XmippProtStructureMapSphViewer(ProtocolViewer):
         form.addParam('numberOfDimensions', params.IntParam, default=2,
                       label="Number of dimensions",
                       help='In normal practice, it should be 1, 2 or, at most, 3.')
-        form.addParam('map', params.EnumParam, choices=['Deformation', 'Correlation'],
+        form.addParam('map', params.EnumParam, choices=['Deformation', 'Correlation', 'Consensus'],
                       default=0, help='Choose the type of metric to display the coordinatess')
         form.addParam('doShowPlot', params.LabelParam,
                       label="Display the StructMap")
@@ -63,8 +63,10 @@ class XmippProtStructureMapSphViewer(ProtocolViewer):
         nDim = self.numberOfDimensions.get()
         if self.map.get()==0:
             fnOutput = self.protocol._defineResultsName(nDim)
-        else:
+        elif self.map.get() == 1:
             fnOutput = self.protocol._defineResultsName2(nDim)
+        elif self.map.get() == 2:
+            fnOutput = self.protocol._defineResultsName3(nDim)
         if not os.path.exists(fnOutput):
             return [self.errorMessage('The necessary metadata was not produced\n'
                                       'Execute again the protocol\n',
