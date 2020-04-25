@@ -25,7 +25,6 @@
 # *
 # **************************************************************************
 
-import numpy as np
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import (PointerParam, BooleanParam,
@@ -35,12 +34,10 @@ from pyworkflow.em.metadata.constants import (MDL_VOLUME_SCORE1, MDL_VOLUME_SCOR
 from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
 from pyworkflow.utils import getExt
 from pyworkflow.object import Float
-from shutil import copyfile
-from pyworkflow.em.data import VolumeMask
+from pyworkflow.em.data import Volume
 from pyworkflow.em import ImageHandler
 from pyworkflow.em.convert import Ccp4Header
-import pyworkflow.em as em
-import xmipp3
+
 
 VALIDATE_METHOD_URL = 'http://github.com/I2PC/scipion-em-xmipp/wiki/XmippProtValFit'
 OUTPUT_PDBVOL_FILE = 'pdbVol'
@@ -61,7 +58,7 @@ MD_MEANS = 'params.xmd'
 
 class XmippProtValFit(ProtAnalysis3D):
     """    
-    The protocol evaluates the quality of the fitting.
+    The protocol assesses the quality of the fit.
     """
     _label = 'validate fsc-q'
     _lastUpdateVersion = VERSION_2_0
@@ -357,16 +354,25 @@ class XmippProtValFit(ProtAnalysis3D):
         params += ' --origin %f %f %f' %(self.x, self.y, self.z)
         params += ' --radius 0.8'  
         params += ' --md %s' % self._getFileName(MD_MEANS)     
-        self.runJob('xmipp_pdb_from_volume', params)      
+        self.runJob('xmipp_pdb_label_from_volume', params)      
         
     def createOutputStep(self):    
+        
+        volume=Volume()
+        volume.setFileName(self._getFileName(RESTA_FILE_MRC))
+        volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
+        volume.setOrigin(self.inputVolume.get().getOrigin(True))
+        self._defineOutputs(fscq_Volume=volume)
+        self._defineTransformRelation(self.inputVolume, volume)
+        
+        #mean values of FSC-Q
               
         mtd = md.MetaData()
         mtd.read(self._getFileName(MD_MEANS))
             
         self.mean = mtd.getValue(MDL_VOLUME_SCORE1,1)
         self.meanA = mtd.getValue(MDL_VOLUME_SCORE2,1)
-        
+        #Setting the mean fsc-q for the summary
         self.mean_init.set(round(self.mean*100)/100) 
         self.meanA_init.set(round(self.meanA*100)/100)             
         self._store(self.mean_init)

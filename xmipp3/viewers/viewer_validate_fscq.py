@@ -33,38 +33,23 @@ import matplotlib.colors as mcolors
 from pyworkflow.utils import getExt, removeExt
 from os.path import abspath
 
+ 
+from pyworkflow.em.viewers.viewer_chimera import (Chimera)
 
-# from pyworkflow.em.viewers import LocalResolutionViewer, EmPlotter 
-from pyworkflow.em.viewers.viewer_chimera import (Chimera,
-                                                  sessionFile)
-from pyworkflow.viewer import DESKTOP_TKINTER, Viewer
-
-
-from pyworkflow.em.constants import (COLOR_JET, COLOR_TERRAIN,
- COLOR_GIST_EARTH, COLOR_GIST_NCAR, COLOR_GNU_PLOT, COLOR_GNU_PLOT2,
- COLOR_OTHER, COLOR_CHOICES, AX_X, AX_Y, AX_Z)
-from pyworkflow.protocol.params import (LabelParam, StringParam, EnumParam,
-                                        IntParam, EnumParam, LEVEL_ADVANCED)
+from pyworkflow.protocol.params import (LabelParam, EnumParam)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
-from pyworkflow.em.viewers import ChimeraView
-from pyworkflow.em.metadata import MetaData, MDL_X, MDL_COUNT
-from pyworkflow.em import ImageHandler
-
-from .plotter import XmippPlotter
-from xmipp3.protocols.protocol_validate_fitting import \
+from xmipp3.protocols.protocol_validate_fscq import \
         XmippProtValFit, RESTA_FILE_MRC, OUTPUT_PDBMRC_FILE, \
         PDB_VALUE_FILE
 
 
 class XmippProtValFitViewer(ProtocolViewer):
     """
-    Visualization tools for validation fitting.
+    Visualization tools for validation fsc-q.
     
-    DeepRes is a Xmipp package for computing the local resolution of 3D
-    density maps studied in structural biology, primarily by cryo-electron
-    microscopy (cryo-EM).
+    FSC-Q is a Xmipp package for evaluate the map-to-model fit
     """
-    _label = 'viewer validation_fitting'
+    _label = 'viewer validation_fsc-q'
     _targets = [XmippProtValFit]      
     _environments = [DESKTOP_TKINTER]
     
