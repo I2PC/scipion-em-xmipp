@@ -101,6 +101,7 @@ from .protocol_split_volume import XmippProtSplitvolume
 from .protocol_trigger_data import XmippProtTriggerData
 from .protocol_validate_nontilt import XmippProtValidateNonTilt
 from .protocol_validate_overfitting import XmippProtValidateOverfitting
+from .protocol_validate_fscq import XmippProtValFit
 from .protocol_volume_strain import XmippProtVolumeStrain
 from .protocol_enrich import XmippProtEnrich
 from .protocol_write_testC import XmippProtWriteTestC
