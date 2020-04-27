@@ -1,6 +1,6 @@
 language: python
 os: linux
-dist: trusty
+dist: bionic
 python: 3.8
 git:
     depth: false # to get blame information for SonarCloud
