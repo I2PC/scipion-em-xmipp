@@ -26,14 +26,16 @@
 
 from os.path import join, exists
 
-import pyworkflow.em.data as data
-import pyworkflow.em.metadata as md
+import pwem.emlib.metadata as md
 import pyworkflow.utils.path as path
-from pyworkflow.em.protocol import ProtClassify2D
-from pyworkflow.em.constants import ALIGN_2D
+from pwem.objects import SetOfClasses2D
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, IntParam,
                                         FloatParam)
+
+from pwem.protocols import ProtClassify2D
+from pwem.constants import ALIGN_2D
+
 
 from xmipp3.convert import writeSetOfParticles, rowToAlignment, xmippToLocation
 
@@ -367,7 +369,7 @@ class XmippProtML2D(ProtClassify2D):
             path.cleanPath(dataClasses)
         
         if not exists(dataClasses):
-            clsSet = data.SetOfClasses2D(filename=dataClasses)
+            clsSet = SetOfClasses2D(filename=dataClasses)
             clsSet.setImages(self.inputParticles.get())
             self._fillClassesFromIter(clsSet, it)
             clsSet.write()

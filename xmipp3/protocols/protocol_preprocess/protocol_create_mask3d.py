@@ -26,16 +26,22 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em import *  
+from pwem import emlib
+from pwem.emlib.image import ImageHandler
 
-import xmippLib
+from pyworkflow.protocol.params import PointerParam, StringParam, PathParam
+
+from pwem.objects import VolumeMask
+from pwem.protocols import ProtCreateMask3D
+
+
 from xmipp3.convert import getImageLocation
-from xmipp3.constants import *
 from .geometrical_mask import *
 
 
 SOURCE_VOLUME=0
 SOURCE_GEOMETRY=1
+SOURCE_FEATURE_FILE=2
 
 OPERATION_THRESHOLD=0
 OPERATION_SEGMENT=1
@@ -64,7 +70,7 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
     def _defineParams(self, form):
         form.addSection(label='Mask generation')
         form.addParam('source', EnumParam, default=SOURCE_VOLUME,
-                      choices=['Volume','Geometry'],
+                      choices=['Volume', 'Geometry', 'Feature File'	],
                       label='Mask source')
         # For volume sources
         isVolume = 'source==%d' % SOURCE_VOLUME
@@ -72,7 +78,7 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
                       label="Input volume",  condition=isVolume,
                       help="Select the volume that will be used to create the mask")
         form.addParam('volumeOperation', EnumParam, default=OPERATION_THRESHOLD,
-                      choices=['Threshold','Segment','Only postprocess'],
+                      choices=['Threshold', 'Segment', 'Only postprocess'],
                       label='Operation', condition=isVolume)
         #TODO: add wizard
         form.addParam('threshold', FloatParam, default=0.0,
@@ -83,8 +89,8 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
         form.addParam('segmentationType', EnumParam, default=SEGMENTATION_DALTON, 
                       condition=isSegmentation,
                       label='Segmentation type',
-                      choices=['Number of voxels','Number of aminoacids',
-                               'Dalton mass','Automatic'])
+                      choices=['Number of voxels', 'Number of aminoacids',
+                               'Dalton mass', 'Automatic'])
         form.addParam('nvoxels', IntParam, 
                       condition='%s and segmentationType==%d'
                       % (isSegmentation, SEGMENTATION_VOXELS),
@@ -100,12 +106,45 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
         
         # For geometrical sources
         form.addParam('samplingRate', FloatParam, default=1, 
-                      condition='source==%d' % SOURCE_GEOMETRY, 
+                      condition='source==%d or source==%d' % (SOURCE_GEOMETRY, SOURCE_FEATURE_FILE), 
                       label="Sampling Rate (Å/px)")
         XmippGeometricalMask3D.defineParams(self, form, 
                                             isGeometry='source==%d'
                                             % SOURCE_GEOMETRY,
                                             addSize=True)
+        # Feature File
+        isFeatureFile = 'source==%d' % SOURCE_FEATURE_FILE
+        form.addParam('featureFilePath', PathParam,
+                      condition=isFeatureFile,
+                      label="Feature File",
+                      help="""Create a mask using a feature file. Follows an example of feature file 
+# XMIPP_STAR_1 *
+# Type of feature (sph, blo, gau, Cyl, dcy, cub, ell, con)(Required)
+# The operation after adding the feature to the phantom (+/=) (Required)
+# The feature density (Required)
+# The feature center (Required)
+# The vector for special parameters of each vector (Required)
+# Sphere: [radius] 
+# Blob : [radius alpha m] Gaussian : [sigma]
+# Cylinder : [xradius yradius height rot tilt psi]
+# DCylinder : [radius height separation rot tilt psi]
+# Cube : [xdim ydim zdim rot tilt psi]
+# Ellipsoid : [xradius yradius zradius rot tilt psi]
+# Cone : [radius height rot tilt psi]
+data_block1
+ _dimensions3D  '34 34 34' 
+ _phantomBGDensity  0.
+ _scale  1.
+data_block2
+loop_
+ _featureType
+ _featureOperation
+ _featureDensity
+ _featureCenter
+ _featureSpecificVector
+sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
+"""
+)
 
         # Postprocessing
         form.addSection(label='Postprocessing')
@@ -157,6 +196,8 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
         elif self.source == SOURCE_GEOMETRY:
             self.inputVolume.set(None)
             self._insertFunctionStep('createMaskFromGeometryStep')
+        elif self.source == SOURCE_FEATURE_FILE:
+            self._insertFunctionStep('createMaskFromFeatureFile')
         self._insertFunctionStep('postProcessMaskStep')
         self._insertFunctionStep('createOutputStep')
     
@@ -190,7 +231,7 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
     def createMaskFromGeometryStep(self):
         # Create empty volume file with desired dimensions
         size = self.size.get()
-        xmippLib.createEmptyFile(self.maskFile, size, size, size)
+        emlib.createEmptyFile(self.maskFile, size, size, size)
         
         # Create the mask
         args = '-i %s ' % self.maskFile
@@ -199,7 +240,15 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
         self.runJob("xmipp_transform_mask", args)
         
         return [self.maskFile]
-    
+
+    def createMaskFromFeatureFile(self):
+        featFileName = self.featureFilePath.get()
+        
+        self.runJob("xmipp_phantom_create", "-i %s -o %s"
+                % (featFileName, self.maskFile) )
+            
+        return [self.maskFile]
+
     def postProcessMaskStep(self):        
         if self.doSmall:
             self.runJob("xmipp_transform_morphology","-i %s --binaryOperation removeSmall %d"

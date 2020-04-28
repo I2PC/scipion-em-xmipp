@@ -30,9 +30,8 @@ from pyworkflow.tests import *
 
 from xmipp3.convert import *
 from xmipp3.protocols import *
-from pyworkflow.em.protocol import ProtImportMovies
+from pwem.protocols import ProtImportMovies, ProtImportCoordinates
 import pyworkflow.utils as pwutils
-from pyworkflow.em.protocol import ProtImportCoordinates
 
 # Some utility functions to import movies that are used in several tests.
 class TestXmippBase(BaseTest):
@@ -465,12 +464,12 @@ class TestEstimateGain(BaseTest):
 
         frameImg = ih.createImage()
         xdim, ydim, zdim, ndim = ih.getDimensions(inputFn)
-        n = max(zdim, ndim) / 2 # also half of the frames
-        print "Scaling movie: %s -> %s" % (inputFn, outputFn)
+        n = int(max(zdim, ndim) / 2)  # also half of the frames
+        print("Scaling movie: %s -> %s" % (inputFn, outputFn))
         pwutils.cleanPath(outputFn)
         for i in range(1, n+1):
             frameImg.read((i, inputFn))
-            frameImg.scale(xdim/2, ydim/2)
+            frameImg.scale(int(xdim/2), int(ydim/2))
             frameImg.write((i, outputFn))
 
         args = cls.getArgs(outputFn)

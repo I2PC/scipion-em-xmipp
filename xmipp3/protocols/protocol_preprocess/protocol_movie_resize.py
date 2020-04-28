@@ -28,13 +28,14 @@ from os.path import exists
 
 from pyworkflow import VERSION_1_2
 from pyworkflow.utils.properties import Message
-from pyworkflow.protocol.params import PointerParam, FloatParam, EnumParam, \
-                                       IntParam
-from pyworkflow.em.protocol import EMProtocol, ProtProcessMovies
+from pyworkflow.protocol.params import (PointerParam, FloatParam, EnumParam,
+                                       IntParam)
 from pyworkflow.object import Set
 import pyworkflow.protocol.constants as cons
-from pyworkflow.em import STEPS_PARALLEL
-from pyworkflow.em.data import SetOfMovies, Movie
+from pyworkflow.protocol.constants import STEPS_PARALLEL
+
+from pwem.protocols import EMProtocol, ProtProcessMovies
+from pwem.objects import SetOfMovies, Movie
 
 
 RESIZE_SAMPLINGRATE = 0
@@ -48,7 +49,6 @@ class XmippProtMovieResize(ProtProcessMovies):
     """
     _label = 'movie resize'
     _lastUpdateVersion = VERSION_1_2
-
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)

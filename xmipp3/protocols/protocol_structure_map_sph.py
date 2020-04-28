@@ -24,13 +24,10 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
-
-
-from pyworkflow.em.protocol import ProtAnalysis3D
+from pwem.protocols import ProtAnalysis3D
 import pyworkflow.protocol.params as params
-from pyworkflow.em.convert import ImageHandler
-from pyworkflow.em.data import SetOfVolumes, Volume
+from pwem.emlib.image import ImageHandler
+from pwem.objects import SetOfVolumes, Volume
 from pyworkflow import VERSION_2_0
 import numpy as np
 
@@ -111,7 +108,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         Ts = volSr
         newTs = self.targetResolution.get() * 1.0 / 3.0
         newTs = max(maxSr, newTs)
-        newXdim = long(Xdim * Ts / newTs)
+        newXdim = int(Xdim * Ts / newTs)
 
         ih = ImageHandler()
         if Xdim != newXdim:

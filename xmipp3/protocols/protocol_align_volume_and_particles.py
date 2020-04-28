@@ -26,20 +26,24 @@
 
 import numpy as np
 import pyworkflow.protocol.params as params
-import pyworkflow.em as em
 from pyworkflow import VERSION_2_0
-from pyworkflow.em.convert import ImageHandler
-import pyworkflow.em.metadata as md
-from pyworkflow.em.data import Transform
-from pyworkflow.em import ALIGN_PROJ
-from xmipp3.convert import rowToAlignment, alignmentToRow, writeSetOfParticles, readSetOfParticles
+from pyworkflow.protocol import STEPS_PARALLEL
+
+from pwem.protocols import ProtAlignVolume
+from pwem.emlib.image import ImageHandler
+import pwem.emlib.metadata as md
+from pwem.objects import Transform, Volume
+from pwem.constants import ALIGN_PROJ
+
+from xmipp3.convert import (rowToAlignment, alignmentToRow, writeSetOfParticles,
+                            readSetOfParticles)
 from xmipp3.constants import SYM_URL
 
 ALIGN_MASK_CIRCULAR = 0
 ALIGN_MASK_BINARY_FILE = 1
 
 
-class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
+class XmippProtAlignVolumeParticles(ProtAlignVolume):
     """ 
     Aligns a volume (inputVolume) using a Fast Fourier method
     with respect to a reference one (inputReference).
@@ -51,8 +55,8 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
     nVols = 0
     
     def __init__(self, **args):
-        em.ProtAlignVolume.__init__(self, **args)
-        self.stepsExecutionMode = em.STEPS_PARALLEL
+        ProtAlignVolume.__init__(self, **args)
+        self.stepsExecutionMode = STEPS_PARALLEL
     
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
@@ -155,7 +159,7 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
         outParticlesFn = self._getExtraPath('outputParticles.xmd')
         transMatFromFile = np.loadtxt(fhInputTranMat)
         transformationMat = np.reshape(transMatFromFile,(4,4))
-        transform = em.Transform()
+        transform = Transform()
         transform.setMatrix(transformationMat)
 
         resultMat = Transform()
@@ -177,13 +181,13 @@ class XmippProtAlignVolumeParticles(em.ProtAlignVolume):
     def createOutputStep(self):   
 
         outVolFn = self._getExtraPath("inputVolumeAligned.vol")
-        outVol = em.Volume()
+        outVol = Volume()
         outVol.setLocation(outVolFn)
         #set transformation matrix             
         fhInputTranMat = self._getExtraPath('transformation-matrix.txt')
         transMatFromFile = np.loadtxt(fhInputTranMat)
         transformationMat = np.reshape(transMatFromFile,(4,4))
-        transform = em.Transform()
+        transform = Transform()
         transform.setMatrix(transformationMat)
         outVol.setTransform(transform)
         outVol.setSamplingRate(self.inputVolume.get().getSamplingRate())

@@ -30,19 +30,20 @@
 import os
 from datetime import datetime
 
-import pyworkflow.em as em
 import pyworkflow.protocol.constants as cons
-
-from pyworkflow.em.metadata import getSize, isEmpty
 from pyworkflow.utils import cleanPath
-from pyworkflow.em.data import SetOfParticles
-from pyworkflow.em.protocol import ProtProcessParticles
 from pyworkflow.object import Set, Float
 from pyworkflow.protocol.params import (EnumParam, IntParam, Positive,
                                         Range, LEVEL_ADVANCED, FloatParam,
                                         BooleanParam)
 
-import xmippLib
+from pwem.constants import ALIGN_NONE
+from pwem.emlib.metadata import getSize, isEmpty
+from pwem.objects import SetOfParticles
+from pwem.protocols import ProtProcessParticles
+
+
+from pwem import emlib
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
 
 
@@ -207,13 +208,13 @@ class XmippProtScreenParticles(ProtProcessParticles):
             break
         if self.check is None:
             writeSetOfParticles(inPartsSet, self.fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation')
+                                alignType=ALIGN_NONE, orderBy='creation')
         else:
             writeSetOfParticles(inPartsSet, self.fnInputMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation',
+                                alignType=ALIGN_NONE, orderBy='creation',
                                 where='creation>"' + str(self.check) + '"')
             writeSetOfParticles(inPartsSet, self.fnInputOldMd,
-                                alignType=em.ALIGN_NONE, orderBy='creation',
+                                alignType=ALIGN_NONE, orderBy='creation',
                                 where='creation<"' + str(self.check) + '"')
         self.check = check
 
@@ -248,7 +249,7 @@ class XmippProtScreenParticles(ProtProcessParticles):
 
                 writeSetOfParticles(outSet.iterItems(orderBy='_xmipp_zScore'),
                                     self._getPath("images.xmd"),
-                                    alignType=em.ALIGN_NONE)
+                                    alignType=ALIGN_NONE)
                 cleanPath(self.fnOutputMd)
 
             self._updateOutputSet('outputParticles', outSet, streamMode)
@@ -302,17 +303,17 @@ class XmippProtScreenParticles(ProtProcessParticles):
                 varList = []
                 giniList = []
                 print('  - Reading metadata')
-                mdata = xmippLib.MetaData(self.fnInputMd)
+                mdata = emlib.MetaData(self.fnInputMd)
                 for objId in mdata:
-                    varList.append(mdata.getValue(xmippLib.MDL_SCORE_BY_VAR, objId))
-                    giniList.append(mdata.getValue(xmippLib.MDL_SCORE_BY_GINI, objId))
+                    varList.append(mdata.getValue(emlib.MDL_SCORE_BY_VAR, objId))
+                    giniList.append(mdata.getValue(emlib.MDL_SCORE_BY_GINI, objId))
 
                 if self.autoParRejectionVar == self.REJ_VARIANCE:
                     valuesList = varList
-                    self.mdLabels = [xmippLib.MDL_SCORE_BY_VAR]
+                    self.mdLabels = [emlib.MDL_SCORE_BY_VAR]
                 else:  # not working pretty well
                     valuesList = [var*(1-gini) for var, gini in zip(varList, giniList)]
-                    self.mdLabels = [xmippLib.MDL_SCORE_BY_VAR, xmippLib.MDL_SCORE_BY_GINI]
+                    self.mdLabels = [emlib.MDL_SCORE_BY_VAR, emlib.MDL_SCORE_BY_GINI]
 
                 self.varThreshold.set(histThresholding(valuesList))
                 print('  - Variance threshold: %f' % self.varThreshold)
@@ -438,7 +439,7 @@ def histThresholding(valuesList, nBins=256, portion=4, takeNegatives=False):
 
     import numpy as np
     while len(valuesList)*1.0/nBins < 5:
-        nBins = nBins/2
+        nBins = int(nBins/2)
 
     print('Thresholding with %d bins for the histogram.' % nBins)
 
@@ -454,14 +455,14 @@ def rejectByVariance(inputMdFn, outputMdFn, threshold, mode):
     """ Sets MDL_ENABLED to -1 to those items with a higher value
         than the threshold
     """
-    mdata = xmippLib.MetaData(inputMdFn)
+    mdata = emlib.MetaData(inputMdFn)
     for objId in mdata:
         if mode == XmippProtScreenParticles.REJ_VARIANCE:
-            if mdata.getValue(xmippLib.MDL_SCORE_BY_VAR, objId) > threshold:
-                mdata.setValue(xmippLib.MDL_ENABLED, -1, objId)
+            if mdata.getValue(emlib.MDL_SCORE_BY_VAR, objId) > threshold:
+                mdata.setValue(emlib.MDL_ENABLED, -1, objId)
         elif mode == XmippProtScreenParticles.REJ_VARGINI:
-            if (mdata.getValue(xmippLib.MDL_SCORE_BY_VAR, objId) *
-                (1 - mdata.getValue(xmippLib.MDL_SCORE_BY_GINI, objId)) > threshold):
-                mdata.setValue(xmippLib.MDL_ENABLED, -1, objId)
+            if (mdata.getValue(emlib.MDL_SCORE_BY_VAR, objId) *
+                (1 - mdata.getValue(emlib.MDL_SCORE_BY_GINI, objId)) > threshold):
+                mdata.setValue(emlib.MDL_ENABLED, -1, objId)
 
     mdata.write(outputMdFn)

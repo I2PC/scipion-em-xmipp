@@ -24,12 +24,13 @@
 # *
 # **************************************************************************
 
-import pyworkflow.em.metadata as md
+import pwem.emlib.metadata as md
 from pyworkflow.object import String
 from pyworkflow.protocol.params import IntParam, PointerParam, LEVEL_ADVANCED
-from pyworkflow.em.protocol import ProtProcessParticles
+from pwem.protocols import ProtProcessParticles
 
-from xmipp3.convert import writeSetOfParticles, writeSetOfClasses2D, xmippToLocation
+from xmipp3.convert import (writeSetOfParticles, writeSetOfClasses2D,
+                            xmippToLocation)
 
         
 class XmippProtDenoiseParticles(ProtProcessParticles):

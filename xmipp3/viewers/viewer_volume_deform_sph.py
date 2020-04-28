@@ -25,7 +25,7 @@
 # **************************************************************************
 
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-from pyworkflow.em.viewers import ChimeraView
+from pwem.viewers import ChimeraView
 import pyworkflow.protocol.params as params
 from pyworkflow.utils import getExt, removeExt
 from os.path import abspath
