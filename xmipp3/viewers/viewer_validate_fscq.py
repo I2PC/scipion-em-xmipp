@@ -79,51 +79,27 @@ class XmippProtValFitViewer(ProtocolViewer):
         self.protocol._createFilenameTemplates()
         visualizeDict = {'displayVolume': self._visualize_vol,
                          'displayPDB': self._visualize_pdb}
-        # If the is some error during the load, just show that instead
-        # of any viewer
-#         if self._errors:
-#             for k in visualizeDict.keys():
-#                 visualizeDict[k] = self._showErrors
         return visualizeDict    
 
     def _visualize_vol(self, obj, **args):
          
-        # show coordinate axis
+
         fnRoot = os.path.abspath(self.protocol._getExtraPath())
         
         _inputVol = self.protocol.inputVolume.get()
-#         dim = _inputVol.getDim()[0]
-#         bildFileName = os.path.abspath(self.protocol._getTmpPath(
-#             "axis_output.bild"))
-#         Chimera.createCoordinateAxisFile(dim,
-#                                  bildFileName=bildFileName,
-#                                  sampling=_inputVol.getSamplingRate())
         fnCmd = self.protocol._getTmpPath("chimera_VOLoutput.cmd")
+        
         f = open(fnCmd, 'w')
-#         f.write("open %s\n" % bildFileName)
-        # show volume
-#         showVolFileName = os.path.abspath(
-#                         ImageHandler.removeFileType(_inputVol.getFileName()))
+
         f.write("open %s\n" % (fnRoot+'/'+OUTPUT_PDBMRC_FILE))
-        f.write("open %s\n" % (fnRoot+'/'+RESTA_FILE_MRC))
-#         if _inputVol.hasOrigin():
-#             x, y, z = _inputVol.getOrigin().getShifts()
-#         else:
-#             x, y, z = _inputVol.getOrigin(force=True).getShifts()
-            
-            
+        f.write("open %s\n" % (fnRoot+'/'+RESTA_FILE_MRC))           
         f.write("volume #0 voxelSize %f step 1\n" % (_inputVol.getSamplingRate()))
         f.write("volume #1 voxelSize %f\n" % (_inputVol.getSamplingRate()))
         f.write("vol #1 hide\n")
         f.write("scolor #0 volume #1 perPixel false cmap -3,#ff0000:"
                 "0,#ffff00:1,#00ff00:2,#00ffff:3,#0000ff\n")
         f.write("colorkey 0.01,0.05 0.02,0.95 -3 #ff0000 -2 #ff4500 -1 #ff7f00 "
-                 "0 #ffff00 1  #00ff00 2 #00ffff 3 #0000ff\n")    
-
-#         f.write("volume #1 style surface voxelSize %f\n"
-#                 "volume #1 origin %0.2f,%0.2f,%0.2f\n"
-#                 % (_inputVol.getSamplingRate(), x, y, z))
-#         f.write("cofr #0\n")  # set center of coordinates       
+                 "0 #ffff00 1  #00ff00 2 #00ffff 3 #0000ff\n")        
 
         f.close()
 

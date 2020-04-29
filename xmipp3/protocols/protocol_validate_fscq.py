@@ -26,7 +26,7 @@
 # **************************************************************************
 
 
-from pyworkflow import VERSION_2_0
+from pyworkflow import VERSION_3_0
 from pyworkflow.protocol.params import (PointerParam, BooleanParam,
                                         IntParam, FileParam, FloatParam)
 import pwem.emlib.metadata as md
@@ -35,7 +35,6 @@ from pwem.protocols import ProtAnalysis3D
 from pyworkflow.utils import getExt
 from pyworkflow.object import Float
 from pwem.objects import Volume
-from pwem.emlib.image import ImageHandler
 from pwem.convert import Ccp4Header
 
 
@@ -46,7 +45,7 @@ BLOCRES_AVG_FILE = 'blocresAvg'
 BLOCRES_HALF_FILE = 'blocresHalf'
 RESTA_FILE = 'diferencia.vol'
 RESTA_FILE_MRC = 'diferencia.map'
-PDB_VALUE_FILE = 'pdb_diferencia.pdb'
+PDB_VALUE_FILE = 'pdb_fsc-q.pdb'
 MASK_FILE_MRC = 'mask.map'
 MASK_FILE = 'mask.vol' 
 FN_VOL = 'vol.map'
@@ -61,7 +60,7 @@ class XmippProtValFit(ProtAnalysis3D):
     The protocol assesses the quality of the fit.
     """
     _label = 'validate fsc-q'
-    _lastUpdateVersion = VERSION_2_0
+    _lastUpdateVersion = VERSION_3_0
     
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
@@ -90,7 +89,7 @@ class XmippProtValFit(ProtAnalysis3D):
                            ' If the volume is not entered,' 
                            ' it is automatically created from the PDB.')        
 
-        form.addParam('Mask', PointerParam, pointerClass='VolumeMask', 
+        form.addParam('inputMask', PointerParam, pointerClass='VolumeMask', 
                       allowsNull=True,
                       label="Soft Mask", 
                       help='The mask determines which points are specimen'
@@ -128,7 +127,7 @@ class XmippProtValFit(ProtAnalysis3D):
                  BLOCRES_HALF_FILE: self._getTmpPath('blocres_half.map'),
                  RESTA_FILE: self._getTmpPath('diferencia.vol'),
                  RESTA_FILE_MRC: self._getExtraPath('diferencia.map'),
-                 PDB_VALUE_FILE:  self._getExtraPath('pdb_diferencia.pdb'),
+                 PDB_VALUE_FILE:  self._getExtraPath('pdb_fsc-q.pdb'),
                  MASK_FILE_MRC : self._getExtraPath('mask.map'),  
                  MASK_FILE: self._getTmpPath('mask.vol'), 
                  FN_VOL: self._getTmpPath("vol.map"),
@@ -142,10 +141,10 @@ class XmippProtValFit(ProtAnalysis3D):
  
         self._createFilenameTemplates() 
         input = self._insertFunctionStep('convertInputStep')
-        Id = []
+        id = []
         for i in range(2):
-            Id.append(self._insertFunctionStep('runBlocresStep', i, prerequisites=[input]))   
-        input1 = self._insertFunctionStep('substractBlocresStep',prerequisites=Id)    
+            id.append(self._insertFunctionStep('runBlocresStep', i, prerequisites=[input]))   
+        input1 = self._insertFunctionStep('substractBlocresStep',prerequisites=id)    
         input2 = self._insertFunctionStep('assignPdbStep', prerequisites=[input1])  
         self._insertFunctionStep('createOutputStep', prerequisites=[input2])         
            
@@ -223,13 +222,12 @@ class XmippProtValFit(ProtAnalysis3D):
         
         
         """ Create a mask"""               
-        if self.Mask.hasValue():
-            self.maskIn = self.Mask.get().getFileName()
+        if self.inputMask.hasValue():
+            self.maskIn = self.inputMask.get().getFileName()
             self.maskFn = self._getFileName(MASK_FILE_MRC)           
             Ccp4Header.fixFile(self.maskIn, self.maskFn, self.origin, self.sampling,
                         Ccp4Header.START)
-
-            
+           
             self.mask_xmipp = self.maskFn + ':mrc' 
             
         else:
@@ -248,33 +246,16 @@ class XmippProtValFit(ProtAnalysis3D):
                 params += ' -o %s' % self.mask_xmipp
                 params += ' --binaryOperation dilation --size 3'                    
                 self.runJob('xmipp_transform_morphology', params) 
-                 
+                
                 """ convert mask.vol to mrc format """
-                               
                 self.maskFn = self._getFileName(MASK_FILE_MRC)           
-                ImageHandler().convert(self.mask_xmipp, self.maskFn) 
+                Ccp4Header.fixFile(self.mask_xmipp, self.maskFn, self.origin, self.sampling,
+                        Ccp4Header.START)
                 
             else:
-                """ Convert PDB to Map """           
-                params = ' --centerPDB '
-                params += ' -v 0 '        
-                params += ' --sampling %f' % self.inputVolume.get().getSamplingRate()        
-                params += ' --size %d' % self.inputVolume.get().getXDim()
-                params += ' -i %s' % self.inputPDB.get()        
-                params += ' -o %s' % self._getFileName(OUTPUT_PDBVOL_FILE)
-                self.runJob('xmipp_volume_from_pdb', params)            
-        
-                """ Align pdbMap to reconstruction Map """  
-                  
-                params = ' --i1 %s' % self.vol_xmipp        
-                params += ' --i2 %s' % self._getFileName(OUTPUT_PDBVOL_FILE)+'.vol'
-                params += ' --local --apply'  
-                params += ' %s' % self._getFileName(OUTPUT_PDBVOL_FILE)+'.vol'                    
-                self.runJob('xmipp_volume_align', params)  
                 
-                """ create mask from pdbMap """
-                
-                params = ' -i %s' % self._getFileName(OUTPUT_PDBVOL_FILE)+'.vol'          
+                """ create mask from pdbMap """                
+                params = ' -i %s' % self._getFileName(OUTPUT_PDBMRC_FILE)+':mrc'          
                 params += ' -o %s' % self.mask_xmipp
                 params += ' --select below 0.02 --substitute binarize'                    
                 self.runJob('xmipp_transform_threshold', params) 
