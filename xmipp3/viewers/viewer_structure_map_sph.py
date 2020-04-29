@@ -65,15 +65,18 @@ class XmippProtStructureMapSphViewer(ProtocolViewer):
             fnOutput = self.protocol._defineResultsName(nDim)
         elif self.map.get() == 1:
             fnOutput = self.protocol._defineResultsName2(nDim)
-        elif self.map.get() == 2:
+        elif self.map.get() == 2 and nDim != 1:
             fnOutput = self.protocol._defineResultsName3(nDim)
+        elif self.map.get() == 2 and nDim == 1:
+            return [self.errorMessage('Consensus in only avalaible for two and three dimensions\n',
+                                      title='Functionality not supported')]
         if not os.path.exists(fnOutput):
             return [self.errorMessage('The necessary metadata was not produced\n'
                                       'Execute again the protocol\n',
                                       title='Missing result file')]
         coordinates = np.loadtxt(fnOutput)
         
-        # Create labels        
+        # Create labels
         count = 0
         labels = []
         volList, _, _ = self.protocol._iterInputVolumes()
@@ -81,7 +84,7 @@ class XmippProtStructureMapSphViewer(ProtocolViewer):
             base=os.path.basename(voli)
             fileName = os.path.splitext(base)[0]
             count += 1
-            labels.append("vol_%02d"%count) 
+            labels.append("vol_%02d"%count)
             #labels.append(fileName)
          
         val = 0
@@ -93,7 +96,7 @@ class XmippProtStructureMapSphViewer(ProtocolViewer):
             plt.title('StructMap')
              
             for label, x, y in zip(labels, coordinates, np.zeros_like(coordinates)):
-                plt.annotate(label, 
+                plt.annotate(label,
                              xy = (x, y), xytext = (x+val, y+val),
                              textcoords = 'data', ha = 'right', va = 'bottom',fontsize=9,
                              bbox = dict(boxstyle = 'round,pad=0.3', fc = 'yellow', alpha = 0.3))
@@ -106,7 +109,7 @@ class XmippProtStructureMapSphViewer(ProtocolViewer):
             plt.ylabel('Dimension 2', fontsize=11)
             plt.title('StructMap')
             for label, x, y in zip(labels, coordinates[:, 0], coordinates[:, 1]):
-                plt.annotate(label, 
+                plt.annotate(label,
                              xy = (x, y), xytext = (x+val, y+val),
                              textcoords = 'data', ha = 'right', va = 'bottom',fontsize=9,
                              bbox = dict(boxstyle = 'round,pad=0.3', fc = 'yellow', alpha = 0.3))
