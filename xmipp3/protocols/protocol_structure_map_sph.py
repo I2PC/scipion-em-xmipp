@@ -332,7 +332,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             # Round point to place them in a grid
             Xr1 = np.round(X1, decimals=3)
             Xr2 = np.round(X2, decimals=3)
-            size_grid = 1.2 * max((np.amax(Xr1), np.amax(Xr2)))
+            size_grid = 1.4 * max((np.amax(Xr1), np.amax(Xr2)))
 
             # Parameters needed for future convolution
             if i == 2:
@@ -343,7 +343,21 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                 R, C = np.meshgrid(grid_coords, grid_coords, indexing='ij')
             else:
                 R, C, D = np.meshgrid(grid_coords, grid_coords, grid_coords, indexing='ij')
-            sigma = R.shape[0] / (120 / 5)
+            sigma = R.shape[0] / (140 / 5)
+
+            # Create Gaussian Kernel
+            lbox = int(6 * sigma)
+            if lbox % 2 == 0:
+                lbox += 1
+            mid = int((lbox - 1) / 2 + 1)
+            if i == 2:
+                kernel = np.zeros((lbox, lbox))
+                kernel[mid, mid] = 1
+                kernel = gaussian_filter(kernel, sigma=sigma)
+            else:
+                kernel = np.zeros((lbox, lbox, lbox))
+                kernel[mid, mid, mid] = 1
+                kernel = gaussian_filter(kernel, sigma=sigma)
 
             # Consensus
             alpha_vect = np.arange(0, 1.01, 0.01)
@@ -365,18 +379,15 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                     if i == 2:
                         indx = np.argmin(np.abs(R[:, 0] - Xr[p, 0]))
                         indy = np.argmin(np.abs(C[0, :] - Xr[p, 1]))
-                        S[indx, indy] = 1.0
+                        S[indx-mid:indx+mid-1, indy-mid:indy+mid-1] += kernel
                     else:
                         indx = np.argmin(np.abs(R[:, 0, 0] - Xr[p, 0]))
                         indy = np.argmin(np.abs(C[0, :, 0] - Xr[p, 1]))
                         indz = np.argmin(np.abs(D[0, 0, :] - Xr[p, 2]))
-                        S[indx, indy, indz] = 1.0
-
-                # Convolve the grid with the Gaussian previously defined
-                X_gauss = gaussian_filter(S, sigma=sigma)
+                        S[indx-mid:indx+mid-1, indy-mid:indy+mid-1, indz-mid:indz+mid-1] += kernel
 
                 # Compute the Shannon entropy associated to the convolved grid
-                _, counts = np.unique(X_gauss, return_counts=True)
+                _, counts = np.unique(S, return_counts=True)
                 entropy_vect.append(entropy(counts, base=2))
 
             # Find optimal entropy value (minimum)
@@ -389,6 +400,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                 id_optimal = id_peaks[0]
             else:
                 id_optimal = 0
+
             X_optimal = X_matrices[id_optimal]
 
             np.savetxt(self._defineResultsName3(i), X_optimal)
