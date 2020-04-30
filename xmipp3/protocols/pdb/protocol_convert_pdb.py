@@ -67,9 +67,16 @@ class XmippProtConvertPdb(ProtInitialVolume):
                       label="Sampling rate (Å/px)",
                       help='Sampling rate (Angstroms/pixel)')
         form.addParam('setSize', params.BooleanParam, label='Set final size?', default=False)
-        form.addParam('size', params.IntParam, condition='setSize', allowsNull=True, 
-                      label="Final size (px)",
-                      help='Final size in pixels. If no value is provided, protocol will estimate it.')
+        form.addParam('size_x', params.IntParam, condition='setSize', allowsNull=True,
+                      label="Final size (px) X",
+                      help='Final size in X in pixels. If desired output size is x = y = z you can only fill this '
+                           'field. If no value is provided, protocol will estimate it.')
+        form.addParam('size_y', params.IntParam, condition='setSize', allowsNull=True,
+                      label="Final size (px) Y",
+                      help='Final size in Y in pixels. If no value is provided, protocol will estimate it.')
+        form.addParam('size_z', params.IntParam, condition='setSize', allowsNull=True,
+                      label="Final size (px) Z",
+                      help='Final size in Z in pixels. If no value is provided, protocol will estimate it.')
         form.addParam('centerPdb', params.BooleanParam, default=True, 
                       expertLevel=const.LEVEL_ADVANCED, 
                       label="Center PDB",
@@ -109,8 +116,11 @@ class XmippProtConvertPdb(ProtInitialVolume):
         if self.setSize:
             args += ' --size'
             
-        if self.size.hasValue():
-            args += ' %d' % self.size.get()
+        if self.size_x.hasValue():
+            args += ' %d' % self.size_x.get()
+
+        if self.size_y.hasValue() and self.size_z.hasValue():
+            args += ' %d %d' % (self.size_y.get(), self.size_z.get())
 
         self.info("Input file: " + pdbFn)
         self.info("Output file: " +outFile)
