@@ -81,11 +81,11 @@ class XmippProtVolSubtraction(ProtInitialVolume):
         if not hasattr(self, 'outputVolume'):
             summary.append("Output volume not ready yet.")
         else:
-            summary.append("Input vol 1: %s" % self.vol1.get())
-            summary.append("Input vol 2: %s" % self.vol1.get())
+            summary.append("Input vol 1: %s" % self.vol1.get().getFileName())
+            summary.append("Input vol 2: %s" % self.vol2.get().getFileName())
             if self.masks:
-                summary.append("Input mask 1: %s" % self.mask1.get())
-                summary.append("Input mask 2: %s" % self.mask2.get())
+                summary.append("Input mask 1: %s" % self.mask1.get().getFileName())
+                summary.append("Input mask 2: %s" % self.mask2.get().getFileName())
 
         return summary
 
@@ -93,4 +93,5 @@ class XmippProtVolSubtraction(ProtInitialVolume):
         if not hasattr(self, 'outputVolume'):
             return ["Output volume not ready yet."]
         else:
-            return ["Volume %s subtracted from volume %s." % self.vol1.get(), self.vol2.get()]
+            return ["Volume %s subtracted from volume %s." %
+                    (self.vol1.get().getFileName(), self.vol2.get().getFileName())]
