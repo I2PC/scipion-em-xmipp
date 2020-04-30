@@ -26,6 +26,8 @@
 # *
 # **************************************************************************
 
+from os.path import join
+from shutil import move
 from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pwem.objects import Volume
@@ -68,6 +70,14 @@ class XmippProtVolSubtraction(ProtInitialVolume):
         if self.masks:
             args += ' --mask1 %s --mask2 %s' % (self.mask1.get().getFileName(), self.mask2.get().getFileName())
         self.runJob(program, args)
+
+        if self.masks:
+            move('commonmask.mrc', join(self._getExtraPath(), 'common_mask.mrc'))
+            move('V1masked.mrc', join(self._getExtraPath(), 'V1_masked.mrc'))
+            move('V2masked.mrc', join(self._getExtraPath(), 'V2_masked.mrc'))
+        move('V2masked_Amp1.mrc', join(self._getExtraPath(), 'V2_Amp1.mrc'))
+        move('V2masked_Amp1_ph2.mrc', join(self._getExtraPath(), 'V2_Amp1_ph2.mrc'))
+        move('V2masked_Amp1_ph2_nonneg.mrc', join(self._getExtraPath(), 'V2_Amp1_ph2_nonneg.mrc'))
 
     def createOutputStep(self):
         volume = Volume()
