@@ -324,7 +324,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
                         row.setValue(md.MDL_REF, j+1)
                         row.setValue(md.MDL_IMAGE, projRef)
                         row.addToMd(mdRef)
-                    mdRef.write(mdRefName, xmippLib.MD_APPEND)
+                    mdRef.write(mdRefName, emlib.MD_APPEND)
                 else:
                     mdRefName = join(fnDir,"level_%02d"%(i-1), "class_classes.xmd")
                 if not exists(join(fnDir,"level_%02d"%i)):
@@ -599,7 +599,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         # print(self.numberOfThreads.get())
 
         fails = 0
-        for i in range(self.Nrec):
+        for i in range(self.Nrec.get()):
             fnRoot = self._getExtraPath("split%06d"%i)
             args = "-i %s --oroot %s --Niter %d --sym %s --mpiCommand '%s'" % \
                    (self._getDirectionalClassesFn(), fnRoot,

@@ -436,7 +436,7 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
             p=self.pp[i]
             self.subsets.append(self._createSetOfParticles(str(i)))
             self.subsets[i].copyInfo(inputFullSet)
-            chosen = random.sample(xrange(len(self.input)), p)
+            chosen = random.sample(range(len(self.input)), p)
             for j in chosen:
                 id = self.input[j]
                 self.subsets[i].append(inputFullSet[id])
@@ -518,12 +518,12 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
 
             #Gaussian mixture models to distinguish sample populations
             from sklearn import mixture
-            clf1 = mixture.GMM(n_components=1)
+            clf1 = mixture.GaussianMixture(n_components=1)
             clf1.fit(ccArray)
             aic1 = clf1.aic(ccArray)
             bic1 = clf1.bic(ccArray)
 
-            clf2 = mixture.GMM(n_components=2)
+            clf2 = mixture.GaussianMixture(n_components=2)
             clf2.fit(ccArray)
             aic2 = clf2.aic(ccArray)
             bic2 = clf2.bic(ccArray)
@@ -583,8 +583,8 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                     p1 = clf2.weights_[idx1]/(clf2.weights_[idx0]+clf2.weights_[idx1])
                     mu0=clf2.means_[idx0,0]
                     mu1=clf2.means_[idx1,0]
-                    var0 = clf2.covars_[idx0,0]
-                    var1 = clf2.covars_[idx1,0]
+                    var0 = clf2.covariances_[idx0,0]
+                    var1 = clf2.covariances_[idx1,0]
                     std0 = math.sqrt(var0)
                     std1 = math.sqrt(var1)
                     termR = math.log(p0)-math.log(p1)-math.log(std0/std1)
