@@ -77,12 +77,6 @@ def rigidRegistration(X, Y):
     t = Ycm - R @ Xcm
     return R, t
 
-# def gauss2D(x, y, sigma, center):
-#     xc = center[0]
-#     yc = center[1]
-#     exponent = (((x - xc) ** 2) + ((y - yc) ** 2)) / (2 * sigma)
-#     return np.exp(-exponent)
-
 
 class XmippProtStructureMapSPH(ProtAnalysis3D):
     """ Protocol for structure mapping based on spherical harmonics. """
@@ -208,6 +202,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             distanceValue = np.loadtxt('./deformation.txt')
             self.distanceMatrix[i][j] = distanceValue
 
+    # TODO Pasar nombre txt a xmipp y guardar matriz al final
     def extraStep(self, nVoli, nVolj):
         self.distanceMatrix[nVoli - 1][nVolj - 1] = 0.0
 
