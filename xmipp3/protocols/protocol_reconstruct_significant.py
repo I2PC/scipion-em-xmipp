@@ -38,9 +38,8 @@ import pwem.emlib.metadata as metadata
 from pwem.protocols import ProtInitialVolume
 from pwem.constants import ALIGN_NONE
 from pwem.objects import SetOfClasses2D, Volume
-
 from pwem import emlib
-from xmipp3.base import XmippMdRow
+
 from xmipp3.convert import writeSetOfClasses2D, writeSetOfParticles, volumeToRow
 
 
@@ -392,7 +391,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
                 inputVolume.setSamplingRate(self.TsCurrent)
                 inputVolume.setObjId(self.refVolume.get().getObjId())
             fnVolumes = self._getExtraPath('input_volumes.xmd')
-            row = XmippMdRow()
+            row = metadata.Row()
             volumeToRow(inputVolume, row, alignType=ALIGN_NONE)
             md = emlib.MetaData()
             row.writeToMd(md, md.addObject())

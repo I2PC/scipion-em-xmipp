@@ -28,14 +28,13 @@
 
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.params import PointerParam, EnumParam, BooleanParam
+from pyworkflow.protocol.constants import STEPS_PARALLEL
 
 from pwem.protocols import ProtOperateParticles
-from pyworkflow.protocol.constants import STEPS_PARALLEL
 from pwem.emlib.image import ImageHandler
-
 from pwem import emlib
-from xmipp3.convert import (XmippMdRow, particleToRow,
-                            getImageLocation, geometryFromMatrix)
+
+from xmipp3.convert import particleToRow, getImageLocation, geometryFromMatrix
 
 
 class XmippProtSubtractProjection(ProtOperateParticles):
@@ -147,7 +146,7 @@ class XmippProtSubtractProjection(ProtOperateParticles):
 
         for index, part in enumerate(partSet):
             objId = md.addObject()
-            imgRow = XmippMdRow()
+            imgRow = emlib.metadata.Row()
             particleToRow(part, imgRow)
             shifts, angles = geometryFromMatrix(part.getTransform().getMatrix(), True)
 

@@ -40,7 +40,7 @@ except ImportError:
 import numpy as np
 
 from pyworkflow.utils import replaceBaseExt
-from pyworkflow.object import ObjectWrap, String, Float, Integer
+from pyworkflow.object import ObjectWrap, String, Float, Integer, Object
 from pwem.constants import (NO_INDEX, ALIGN_NONE, ALIGN_PROJ, ALIGN_2D,
                             ALIGN_3D)
 from pwem.objects import (Angles, Coordinate, Micrograph, Volume, Particle,
@@ -49,8 +49,7 @@ from pwem.objects import (Angles, Coordinate, Micrograph, Volume, Particle,
 from pwem.emlib.image import ImageHandler
 import pwem.emlib.metadata as md
 
-from xmipp3.base import XmippMdRow, getLabelPythonType
-from xmipp3.utils import iterMdRows
+from xmipp3.base import getLabelPythonType, iterMdRows
 
 from pwem import emlib
 
@@ -233,10 +232,10 @@ if not getattr(emlib, "GHOST_ACTIVATED", False):
 
 
 def objectToRow(obj, row, attrDict, extraLabels=[]):
-    """ This function will convert an EMObject into a XmippMdRow.
+    """ This function will convert an EMObject into a Row.
     Params:
         obj: the EMObject instance (input)
-        row: the XmippMdRow instance (output)
+        row: the Row instance (output)  -see emlib.metadata.utils.Row()-
         attrDict: dictionary with the map between obj attributes(keys) and
             row MDLabels in Xmipp (values).
         extraLabels: a list with extra labels that could be included
@@ -274,9 +273,9 @@ def objectToRow(obj, row, attrDict, extraLabels=[]):
 
 
 def rowToObject(row, obj, attrDict, extraLabels=[]):
-    """ This function will convert from a XmippMdRow to an EMObject.
+    """ This function will convert from a Row to an EMObject.
     Params:
-        row: the XmippMdRow instance (input)
+        row: the Row instance (input)  -see emlib.metadata.utils.Row()-
         obj: the EMObject instance (output)
         attrDict: dictionary with the map between obj attributes(keys) and
             row MDLabels in Xmipp (values).
@@ -320,17 +319,22 @@ def setXmippAttributes(obj, objRow, *labels, **kwargs):
             else:
                 value = defaults
 
-            if isinstance(value, int):
-                value = Integer(value)
-            elif isinstance(value, float):
-                value = Float(value)
-            elif isinstance(value, str):
-                value = String(value)
-            else:
-                value = None
+            value = getScipionObj(value)
 
         if value is not None:
             setXmippAttribute(obj, label, value)
+
+def getScipionObj(value):
+    if isinstance(value, Object):
+        return value
+    elif isinstance(value, int):
+        return Integer(value)
+    elif isinstance(value, float):
+        return Float(value)
+    elif isinstance(value, str):
+        return String(value)
+    else:
+        return None
 
 def setXmippAttribute(obj, label, value):
     """ Sets an attribute of an object prefixing it with xmipp"""
@@ -340,9 +344,9 @@ def getXmippAttribute(obj, label, default=None):
     """ Sets an attribute of an object prefixing it with xmipp"""
     return getattr(obj, prefixAttribute(emlib.label2Str(label)), default)
 
-def rowFromMd(md, objId):
-    row = XmippMdRow()
-    row.readFromMd(md, objId)
+def rowFromMd(mdIn, objId):
+    row = md.Row()
+    row.readFromMd(mdIn, objId)
     return row
 
 
@@ -435,13 +439,13 @@ def micrographToCTFParam(mic, ctfparam):
     if hasattr(ctf, '_xmippMd'):
         return ctf._xmippMd.get()
 
-    md = emlib.MetaData()
-    md.setColumnFormat(False)
-    row = XmippMdRow()
+    mdCtf = emlib.MetaData()
+    mdCtf.setColumnFormat(False)
+    row = md.Row()
     ctfModelToRow(ctf, row)
     acquisitionToRow(mic.getAcquisition(), row)
-    row.writeToMd(md, md.addObject())
-    md.write(ctfparam)
+    row.writeToMd(mdCtf, mdCtf.addObject())
+    mdCtf.write(ctfparam)
     return ctfparam
 
 
@@ -756,8 +760,8 @@ def writeSetOfVolumes(volSet, filename, blockName='Volumes', **kwargs):
     writeSetOfImages(volSet, filename, volumeToRow, blockName, **kwargs)
 
 
-def mdToCTFModel(md, mic):
-    ctfRow = rowFromMd(md, md.firstObject())
+def mdToCTFModel(mdIn, mic):
+    ctfRow = rowFromMd(mdIn, mdIn.firstObject())
     ctfObj = rowToCtfModel(ctfRow)
     setXmippAttributes(ctfObj, ctfRow,
                        emlib.MDL_CTF_CRIT_NONASTIGMATICVALIDITY,
@@ -769,8 +773,8 @@ def mdToCTFModel(md, mic):
 
 def readCTFModel(filename, mic):
     """ Read from Xmipp .ctfparam and create a CTFModel object. """
-    md = emlib.MetaData(filename)
-    return mdToCTFModel(md, mic)
+    mdCtf = emlib.MetaData(filename)
+    return mdToCTFModel(mdCtf, mic)
 
 
 def openMd(fn, state='Manual'):
@@ -866,12 +870,12 @@ def writeCoordsConfig(configFn, boxSize, state):
     """
     # Write config.xmd metadata
     print("writeCoordsConfig: state=", state)
-    md = emlib.MetaData()
+    mdCoord = emlib.MetaData()
     # Write properties block
-    objId = md.addObject()
-    md.setValue(emlib.MDL_PICKING_PARTICLE_SIZE, int(boxSize), objId)
-    md.setValue(emlib.MDL_PICKING_STATE, state, objId)
-    md.write('properties@%s' % configFn)
+    objId = mdCoord.addObject()
+    mdCoord.setValue(emlib.MDL_PICKING_PARTICLE_SIZE, int(boxSize), objId)
+    mdCoord.setValue(emlib.MDL_PICKING_STATE, state, objId)
+    mdCoord.write('properties@%s' % configFn)
 
 
 def writeMicCoordinates(mic, coordList, outputFn, isManual=True,
@@ -915,9 +919,9 @@ def readSetOfCoordinates(outputDir, micSet, coordSet, readDiscarded=False, scale
     # Read the boxSize from the config.xmd metadata
     configfile = join(outputDir, 'config.xmd')
     if exists(configfile):
-        md = emlib.MetaData('properties@' + join(outputDir, 'config.xmd'))
-        boxSize = md.getValue(emlib.MDL_PICKING_PARTICLE_SIZE,
-                              md.firstObject())
+        mdCoords = emlib.MetaData('properties@' + join(outputDir, 'config.xmd'))
+        boxSize = mdCoords.getValue(emlib.MDL_PICKING_PARTICLE_SIZE,
+                                    mdCoords.firstObject())
         coordSet.setBoxSize(int(boxSize)) #Only coordinates x,y are scaled, you are supposed to use an appropiate boxsize
     for mic in micSet:
         posFile = join(outputDir, replaceBaseExt(mic.getFileName(), 'pos'))
@@ -1012,11 +1016,11 @@ def readSetOfImages(filename, imgSet, rowToFunc, **kwargs):
         imgSet.setAlignment(kwargs['alignType'])
 
 
-def setOfImagesToMd(imgSet, md, imgToFunc, **kwargs):
+def setOfImagesToMd(imgSet, mdIn, imgToFunc, **kwargs):
     """ This function will fill Xmipp metadata from a SetOfMicrographs
     Params:
         imgSet: the set of images to be converted to metadata
-        md: metadata to be filled
+        mdIn: metadata to be filled
         rowFunc: this function can be used to setup the row before
             adding to metadata.
     """
@@ -1027,16 +1031,16 @@ def setOfImagesToMd(imgSet, md, imgToFunc, **kwargs):
     if 'where' in kwargs:
         where = kwargs['where']
         for img in imgSet.iterItems(where=where):
-            objId = md.addObject()
-            imgRow = XmippMdRow()
+            objId = mdIn.addObject()
+            imgRow = md.Row()
             imgToFunc(img, imgRow, **kwargs)
-            imgRow.writeToMd(md, objId)
+            imgRow.writeToMd(mdIn, objId)
     else:
         for img in imgSet:
-            objId = md.addObject()
-            imgRow = XmippMdRow()
+            objId = mdIn.addObject()
+            imgRow = md.Row()
             imgToFunc(img, imgRow, **kwargs)
-            imgRow.writeToMd(md, objId)
+            imgRow.writeToMd(mdIn, objId)
 
 
 def readAnglesFromMicrographs(micFile, anglesSet):
@@ -1066,10 +1070,10 @@ def writeSetOfImages(imgSet, filename, imgToFunc,
         rowFunc: this function can be used to setup the row before
             adding to metadata.
     """
-    md = emlib.MetaData()
+    mdSet = emlib.MetaData()
 
-    setOfImagesToMd(imgSet, md, imgToFunc, **kwargs)
-    md.write('%s@%s' % (blockName, filename))
+    setOfImagesToMd(imgSet, mdSet, imgToFunc, **kwargs)
+    mdSet.write('%s@%s' % (blockName, filename))
 
 
 def readSetOfParticles(filename, partSet, **kwargs):
@@ -1080,12 +1084,12 @@ def readSetOfMovieParticles(filename, partSet, **kwargs):
     readSetOfImages(filename, partSet, rowToMovieParticle, **kwargs)
 
 
-def setOfParticlesToMd(imgSet, md, **kwargs):
-    setOfImagesToMd(imgSet, md, particleToRow, **kwargs)
+def setOfParticlesToMd(imgSet, mdParts, **kwargs):
+    setOfImagesToMd(imgSet, mdParts, particleToRow, **kwargs)
 
 
-def setOfMicrographsToMd(imgSet, md, **kwargs):
-    setOfImagesToMd(imgSet, md, micrographToRow, **kwargs)
+def setOfMicrographsToMd(imgSet, mdMics, **kwargs):
+    setOfImagesToMd(imgSet, mdMics, micrographToRow, **kwargs)
 
 
 def writeSetOfParticles(imgSet, filename, blockName='Particles', **kwargs):
@@ -1095,15 +1099,15 @@ def writeSetOfParticles(imgSet, filename, blockName='Particles', **kwargs):
 def writeCTFModel(ctfModel, ctfFile):
     """ Given a CTFModel object write as Xmipp ctfparam
     """
-    md = emlib.MetaData()
+    mdCtf = emlib.MetaData()
 
-    objId = md.addObject()
-    ctfRow = XmippMdRow()
+    objId = mdCtf.addObject()
+    ctfRow = md.Row()
     ctfModelToRow(ctfModel, ctfRow)
-    ctfRow.writeToMd(md, objId)
+    ctfRow.writeToMd(mdCtf, objId)
 
-    md.setColumnFormat(False)
-    md.write(ctfFile)
+    mdCtf.setColumnFormat(False)
+    mdCtf.write(ctfFile)
 
 
 def writeSetOfCTFs(ctfSet, mdCTF):
@@ -1112,18 +1116,18 @@ def writeSetOfCTFs(ctfSet, mdCTF):
         ctfSet: the SetOfCTF that will be read.
         mdCTF: The file where metadata should be written.
     """
-    md = emlib.MetaData()
+    mdCtf = emlib.MetaData()
 
     for ctfModel in ctfSet:
-        objId = md.addObject()
-        ctfRow = XmippMdRow()
+        objId = mdCtf.addObject()
+        ctfRow = md.Row()
         ctfRow.setValue(emlib.MDL_MICROGRAPH, ctfModel.getMicFile())
         if ctfModel.getPsdFile():
             ctfRow.setValue(emlib.MDL_PSD, ctfModel.getPsdFile())
         ctfModelToRow(ctfModel, ctfRow)
-        ctfRow.writeToMd(md, objId)
+        ctfRow.writeToMd(mdCtf, objId)
 
-    md.write(mdCTF)
+    mdCtf.write(mdCTF)
     ctfSet._xmippMd = String(mdCTF)
 
 
@@ -1133,19 +1137,19 @@ def writeSetOfDefocusGroups(defocusGroupSet, fnDefocusGroup):  # also metadata
         defocusGroupSet: the SetOfDefocus that will be read.
         fnDefocusGroup: The file where defocusGroup should be written.
     """
-    md = emlib.MetaData()
+    mdDefGr = emlib.MetaData()
 
     for defocusGroup in defocusGroupSet:
-        objId = md.addObject()
-        defocusGroupRow = XmippMdRow()
+        objId = mdDefGr.addObject()
+        defocusGroupRow = md.Row()
         defocusGroupSetToRow(defocusGroup, defocusGroupRow)
         defocusGroupRow.setValue(emlib.MDL_CTF_GROUP, defocusGroup.getObjId())
         defocusGroupRow.setValue(emlib.MDL_MIN, defocusGroup.getDefocusMin())
         defocusGroupRow.setValue(emlib.MDL_MAX, defocusGroup.getDefocusMax())
         defocusGroupRow.setValue(emlib.MDL_AVG, defocusGroup.getDefocusAvg())
-        defocusGroupRow.writeToMd(md, objId)
+        defocusGroupRow.writeToMd(mdDefGr, objId)
 
-    md.write(fnDefocusGroup)
+    mdDefGr.write(fnDefocusGroup)
     defocusGroupSet._xmippMd = String(fnDefocusGroup)
 
 
@@ -1161,7 +1165,7 @@ def writeSetOfClasses2D(classes2DSet, filename,
     classMd.write(classFn)  # Empty write to ensure the classes is the first
     # block
 
-    classRow = XmippMdRow()
+    classRow = md.Row()
     for class2D in classes2DSet:
         class2DToRow(class2D, classRow)
         classRow.writeToMd(classMd, classMd.addObject())
@@ -1169,7 +1173,7 @@ def writeSetOfClasses2D(classes2DSet, filename,
             ref = class2D.getObjId()
             imagesFn = 'class%06d_images@%s' % (ref, filename)
             imagesMd = emlib.MetaData()
-            imgRow = XmippMdRow()
+            imgRow = md.Row()
             if class2D.getSize() > 0:
                 for img in class2D:
                     particleToRow(img, imgRow)
@@ -1187,17 +1191,17 @@ def writeSetOfMicrographsPairs(uSet, tSet, filename):
         tSet: the tilted set of micrographs to be written
         filename: the filename where to write the metadata.
     """
-    md = emlib.MetaData()
+    mdMics = emlib.MetaData()
 
     for micU, micT in izip(uSet, tSet):
-        objId = md.addObject()
-        pairRow = XmippMdRow()
+        objId = mdMics.addObject()
+        pairRow = md.Row()
         pairRow.setValue(emlib.MDL_ITEM_ID, int(micU.getObjId()))
         pairRow.setValue(emlib.MDL_MICROGRAPH, micU.getFileName())
         pairRow.setValue(emlib.MDL_MICROGRAPH_TILTED, micT.getFileName())
-        pairRow.writeToMd(md, objId)
+        pairRow.writeToMd(mdMics, objId)
 
-    md.write(filename)
+    mdMics.write(filename)
 
 
 def __readSetOfClasses(classBaseSet, readSetFunc,
@@ -1275,7 +1279,7 @@ def writeSetOfClassesVol(classesVolSet, filename, classesBlock='classes'):
     # block
     # FIXME: review implementation of this function since there are syntax
     # errors
-    classRow = XmippMdRow()
+    classRow = md.Row()
     for classVol in classesVolSet:
         # FIXME Where does this method come from
         classVolToRow(classVol, classRow)
@@ -1283,7 +1287,7 @@ def writeSetOfClassesVol(classesVolSet, filename, classesBlock='classes'):
         ref = Class3D.getObjId()
         imagesFn = 'class%06d_images@%s' % (ref, filename)
         imagesMd = emlib.MetaData()
-        imgRow = XmippMdRow()
+        imgRow = md.Row()
 
         for vol in classVol:
             volumeToRow(vol, imgRow)
@@ -1316,7 +1320,7 @@ def writeSetOfMovies(moviesSet, filename, moviesBlock='movies'):
         ref = movie.getObjId()
         micrographsFn = 'movie%06d_micrographs@%s' % (ref, filename)
         micrographsMd = emlib.MetaData()
-        micRow = XmippMdRow()
+        micRow = md.Row()
 
         for mic in movie:
             micrographToRow(mic, micRow)

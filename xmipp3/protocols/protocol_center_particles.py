@@ -262,6 +262,6 @@ class XmippProtCenterParticles(ProtClassify2D):
     def _summary(self):
         summary = []
         summary.append("Realignment of %s classes."
-                       % self.inputParticles.get().getSize())
+                       % self.inputClasses.get().getSize())
         return summary
 
