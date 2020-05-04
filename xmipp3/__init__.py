@@ -157,7 +157,7 @@ class Plugin(pwem.Plugin):
                       installVars['installedToken']]
 
         ## Linking bindings (removing installationToken)
-        bindingsAndLibsCmd = ("ln -srf {bindingsSrc} {bindingsDst} && "
+        bindingsAndLibsCmd = ("ln -srf {bindingsSrc} {bindingsDst} 2> /dev/null && "
                               "ln -srf {xmippLib} {libsDst} && "
                               "ln -srf {coreLib} {libsDst} && "
                               "touch {bindingsToken} && "
