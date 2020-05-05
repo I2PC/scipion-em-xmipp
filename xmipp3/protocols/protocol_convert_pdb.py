@@ -123,7 +123,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
             args += ' %d %d' % (self.size_y.get(), self.size_z.get())
 
         self.info("Input file: " + pdbFn)
-        self.info("Output file: " +outFile)
+        self.info("Output file: " + outFile)
         
         program = "xmipp_volume_from_pdb"
         self.runJob(program, args)

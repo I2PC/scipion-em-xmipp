@@ -121,5 +121,4 @@ from .protocol_local_ctf import XmippProtLocalCTF
 from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
 from .protocol_consensus_local_ctf import XmippProtConsensusLocalCTF
 from .protocol_particle_pick_remove_duplicates import XmippProtPickingRemoveDuplicates
-from .pdb.protocol_convert_pdb import XmippProtConvertPdb
 from .protocol_volume_subtraction import XmippProtVolSubtraction
