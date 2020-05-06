@@ -2,6 +2,7 @@
 # **************************************************************************
 # *
 # * Authors:     Amaya Jimenez Moreno (ajimenez@cnb.csic.es)
+# *              David Herreros Calero (dherreros@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -32,7 +33,7 @@ from scipy.stats import entropy
 from scipy.ndimage.filters import gaussian_filter
 import glob
 import os
-import ntpath
+import re
 
 from pwem.protocols import ProtAnalysis3D
 import pyworkflow.protocol.params as params
@@ -118,7 +119,6 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
     def _insertAllSteps(self):
 
         volList, dimList, srList = self._iterInputVolumes()
-        self.distanceMatrix = np.zeros((len(volList), len(volList)))
 
         nVoli = 1
         depsConvert = []
@@ -139,17 +139,15 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                                             volList[nVolj - 1], nVoli - 1,
                                             nVolj - 1, prerequisites=depsConvert)
                     deps.append(stepID)
-
-                else:
-                    stepID = self._insertFunctionStep("extraStep", nVoli, nVolj, prerequisites=depsConvert)
-                    deps.append(stepID)
                 nVolj += 1
             nVoli += 1
 
-        if self.computeDef.get():
-            self._insertFunctionStep('gatherResultsStepDef', volList, prerequisites=deps)
+        self._insertFunctionStep('deformationMatrix', volList, prerequisites=deps)
 
-        self._insertFunctionStep('computeCorr', prerequisites=deps)
+        if self.computeDef.get():
+            self._insertFunctionStep('gatherResultsStepDef', volList)
+
+        self._insertFunctionStep('computeCorr')
 
         self._insertFunctionStep('gatherResultsStepCorr', volList)
 
@@ -193,18 +191,21 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         self.runJob("xmipp_volume_align", params)
 
         if self.computeDef.get():
-            params = ' -i %s -r %s -o %s --depth %d --sigma "%s"' %\
-                     (fnOut, refVolFn, fnOut2, self.depth.get(), self.sigma.get())
+            params = ' -i %s -r %s -o %s --depth %d --sigma "%s" --oroot %s' %\
+                     (fnOut, refVolFn, fnOut2, self.depth.get(), self.sigma.get(), self._getExtraPath('Pair_%d_%d' % (i, j)))
             if self.newRmax != 0:
                 params = params + ' --Rmax %d' % self.newRmax
 
             self.runJob("xmipp_volume_deform_sph", params)
-            distanceValue = np.loadtxt('./deformation.txt')
-            self.distanceMatrix[i][j] = distanceValue
 
-    # TODO Pasar nombre txt a xmipp y guardar matriz al final
-    def extraStep(self, nVoli, nVolj):
-        self.distanceMatrix[nVoli - 1][nVolj - 1] = 0.0
+    def deformationMatrix(self, volList):
+        numVol = len(volList)
+        self.distanceMatrix = np.zeros((numVol, numVol))
+        for i in range(numVol):
+            for j in range(numVol):
+                if i != j:
+                    path = self._getExtraPath('Pair_%d_%d_deformation.txt' % (i,j))
+                    self.distanceMatrix[i,j] = np.loadtxt(path)
 
 
     def gatherResultsStepDef(self, volList):
@@ -237,29 +238,17 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
         import xmippLib
 
-        volSet = self.inputVolumes
-
         for item in volList:
             vol = xmippLib.Image(item)
             self.corrMatrix[ind][ind] = 0.0
-            #vol = ih.read(item.get().getFileName())
-            #vol = vol.getData()
-            #vol = np.asarray(vol)
             if self.computeDef.get():
                 path = self._getExtraPath("*DeformedTo%d.vol" % ind)
             else:
                 path = self._getExtraPath("*AlignedTo%d.vol" % ind)
             for fileVol in glob.glob(path):
-                base = ntpath.basename(fileVol)
-                import re
                 matches = re.findall("(\d+)", fileVol)
                 ind2 = int(matches[1])
-
-                #defVol = ih.read(file)
-                #defVol = defVol.getData()
-                #defVol = np.asarray(defVol)
                 defVol = xmippLib.Image(fileVol)
-                #corr = np.multiply(vol,defVol)
                 corr = vol.correlation(defVol)
                 self.corrMatrix[ind2][ind] = 1-corr
             ind += 1
