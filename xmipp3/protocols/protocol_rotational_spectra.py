@@ -51,7 +51,7 @@ class XmippProtRotSpectra(KendersomBaseClassify):
         form.addSection(label='Spectra')
         form.addParam('howCenter', EnumParam, 
                       choices=['Middle of the image', 'Minimize first harmonic'], 
-                      default=xmipp3.ROTSPECTRA_CENTER_FIRST_HARMONIC, 
+                      default=xmipp3.constants.ROTSPECTRA_CENTER_FIRST_HARMONIC,
                       display=EnumParam.DISPLAY_COMBO, 
                       label='How to find the center of rotation', important=True,  
                       help='Select how to find the center of rotation.')
@@ -87,7 +87,7 @@ class XmippProtRotSpectra(KendersomBaseClassify):
         imagesFn = self._params['imgsFn']
         centerFn = self._getExtraPath("center2d_center.xmd")
         # After any of this steps the file "center2d_center.xmd" should be produced
-        if self.howCenter == xmipp3.ROTSPECTRA_CENTER_MIDDLE:
+        if self.howCenter == xmipp3.constants.ROTSPECTRA_CENTER_MIDDLE:
             self._insertMiddleStep(imagesFn, centerFn)
         else:
             self._insertFunctionStep('centerFirstHarmonicStep', imagesFn, centerFn)

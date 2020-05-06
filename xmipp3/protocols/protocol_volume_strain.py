@@ -29,6 +29,8 @@ import os
 from pyworkflow.protocol.params import PointerParam, StringParam
 from pwem.protocols import ProtAnalysis3D
 
+import xmipp3
+
         
 class XmippProtVolumeStrain(ProtAnalysis3D):
     """Compare two states of a volume to analyze the local strains and rotations"""
@@ -67,11 +69,11 @@ class XmippProtVolumeStrain(ProtAnalysis3D):
     #--------------------------- STEPS functions ---------------------------------------------------
     def calculateStrain(self, fnVol0, fnVolF, fnMask):
         fnRoot=self._getExtraPath('result')
-        mirtDir = os.path.join(os.environ['XMIPP_HOME'], 'external', 'mirt')
+        mirtDir = xmipp3.base.getXmippPath('external', 'mirt')
         # -wait -nodesktop
-        args='''-r "diary('%s'); xmipp_calculate_strain('%s','%s','%s','%s'); exit"'''%(fnRoot+"_matlab.log",fnVolF,fnVol0,fnMask,fnRoot)
-        from xmipp3 import Plugin
-        self.runJob("matlab", args, env=Plugin.getMatlabEnviron(mirtDir))
+        args=('''-r "diary('%s'); xmipp_calculate_strain('%s','%s','%s','%s'); exit"'''
+              % (fnRoot+"_matlab.log",fnVolF,fnVol0,fnMask,fnRoot))
+        self.runJob("matlab", args, env=xmipp3.Plugin.getMatlabEnviron(mirtDir))
     
     def prepareOutput(self):
         volDim = self.inputVolume0.get().getDim()[0]

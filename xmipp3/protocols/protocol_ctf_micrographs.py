@@ -41,7 +41,7 @@ import pyworkflow.utils as pwutils
 from pwem.protocols import ProtCTFMicrographs
 import pwem.emlib.metadata as md
 
-from xmipp3.utils import isMdEmpty
+from xmipp3.base import isMdEmpty
 from xmipp3.convert import readCTFModel
 
 from pwem.emlib import Image
@@ -112,6 +112,9 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                       help='Choose some CTF estimation related to input '
                            'micrographs, in case you want to use the defocus '
                            'values found previously')
+        form.addParam('doOptimizeDefocus', params.BooleanParam, default=True, condition='doInitialCTF',
+                      label="Optimize defocus",
+                      help='If set to False, then the previous defocus is taken')
         form.addParam('findPhaseShift', params.BooleanParam, default=False,
                       label="Find additional phase shift?",
                       help='If the data was collected with phase plate, this '
@@ -210,7 +213,8 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
             prevValues = (self.ctfDict[micName] if micName in self.ctfDict
                           else self.getSinglePreviousParameters(mic.getObjId()))
 
-            localParams['defocusU'], localParams['phaseShift0'] = prevValues
+            localParams['defocusU'], localParams['defocusV'], localParams['defocusAngle'], localParams['phaseShift0'] = \
+                prevValues
             localParams['defocus_range'] = 0.1 * localParams['defocusU']
         else:
             ma = self._params['maxDefocus']
@@ -260,11 +264,17 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                 # CTF estimation with Xmipp
                 params = self._args % localParams
                 params += " --downSamplingPerformed %f" % downFactor
+
                 if not self.doInitialCTF:
                     params += " --selfEstimation "
+                else:
+                    if not self.doOptimizeDefocus:
+                        params += " --noDefocus --defocusV %(defocusV)f --azimuthal_angle %(defocusAngle)f" %\
+                                  localParams
 
                 if not self.skipBorders.get():
                     params += " --skipBorders 0"
+
                 self.runJob(self._program, params)
 
                 # Check the quality of the estimation and reject it necessary
@@ -347,9 +357,9 @@ class XmippProtCTFMicrographs(ProtCTFMicrographs):
                 phaseShift0 = ctf.getPhaseShift()
             else:
                 phaseShift0 = 1.57079  # pi/2
-            ctfValues = (ctf.getDefocusU(), phaseShift0)
+            ctfValues = (ctf.getDefocusU(), ctf.getDefocusV(), ctf.getDefocusAngle(), phaseShift0)
         else:
-            ctfValues = (ctf.getDefocusU(), phaseShift0)
+            ctfValues = (ctf.getDefocusU(), ctf.getDefocusV(), ctf.getDefocusAngle(), phaseShift0)
 
         return ctfValues
 

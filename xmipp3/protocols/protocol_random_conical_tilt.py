@@ -30,14 +30,13 @@ from os.path import exists
 from pyworkflow.object import String
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 import pyworkflow.protocol.params as params
+
 from pwem.protocols import ProtInitialVolume
 from pwem.objects import Volume, SetOfParticles
 from pwem.constants import ALIGN_2D
-
 from pwem import emlib
-from xmipp3.base import XmippMdRow
-from xmipp3.convert import getImageLocation, alignmentToRow
 
+from xmipp3.convert import getImageLocation, alignmentToRow
 
 
 class XmippProtRCT(ProtInitialVolume):
@@ -162,7 +161,7 @@ class XmippProtRCT(ProtInitialVolume):
                       "was not found. Ignored." % imgId)
             else:
                 objId = classMd.addObject()
-                pairRow = XmippMdRow()
+                pairRow = emlib.metadata.Row()
                 pairRow.setValue(emlib.MDL_IMAGE, getImageLocation(uImg))
                 uCoord = uImg.getCoordinate()
                 micId = uCoord.getMicId()

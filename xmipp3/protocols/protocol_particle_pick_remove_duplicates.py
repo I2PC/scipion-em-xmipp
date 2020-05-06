@@ -68,7 +68,7 @@ class XmippProtPickingRemoveDuplicates(XmippProtConsensusPicking):
         for micrograph in mics:
             stepId = self._insertFunctionStep("removeDuplicatesStep",
                                               micrograph.getObjId(),
-                                              micrograph.getFileName(),
+                                              micrograph.getMicName(),
                                               prerequisites=[])
             deps.append(stepId)
         return deps
@@ -105,7 +105,6 @@ class XmippProtPickingRemoveDuplicates(XmippProtConsensusPicking):
         self._defineTransformRelation(self.getMainInput(), outputSet)
 
     def removeDuplicatesStep(self, micId, micName):
-        
         print("Removing duplicates for micrograph %d: '%s'"
               % (micId, micName))
 
