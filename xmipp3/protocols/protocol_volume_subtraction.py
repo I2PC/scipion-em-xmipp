@@ -71,13 +71,13 @@ class XmippProtVolSubtraction(ProtInitialVolume):
             args += ' --mask1 %s --mask2 %s' % (self.mask1.get().getFileName(), self.mask2.get().getFileName())
         self.runJob(program, args)
 
-        if self.masks:
-            move('commonmask.mrc', join(self._getExtraPath(), 'common_mask.mrc'))
-            move('V1masked.mrc', join(self._getExtraPath(), 'V1_masked.mrc'))
-            move('V2masked.mrc', join(self._getExtraPath(), 'V2_masked.mrc'))
-        move('V2masked_Amp1.mrc', join(self._getExtraPath(), 'V2_Amp1.mrc'))
-        move('V2masked_Amp1_ph2.mrc', join(self._getExtraPath(), 'V2_Amp1_ph2.mrc'))
-        move('V2masked_Amp1_ph2_nonneg.mrc', join(self._getExtraPath(), 'V2_Amp1_ph2_nonneg.mrc'))
+        move('commonmask.mrc', join(self._getExtraPath(), 'common_mask.mrc'))
+        move('V1masked.mrc', join(self._getExtraPath(), 'V1_masked.mrc'))
+        move('V2masked.mrc', join(self._getExtraPath(), 'V2_masked.mrc'))
+        for n in range(self.iter.get()):
+            move('V2masked_Amp1_%d.mrc' % n, join(self._getExtraPath(), 'V2_Amp1_%d.mrc' % n))
+            move('V2masked_Amp1_ph2_%d.mrc' % n, join(self._getExtraPath(), 'V2_Amp1_ph2_%d.mrc' % n))
+            move('V2masked_Amp1_ph2_nonneg_%d.mrc' % n, join(self._getExtraPath(), 'V2_Amp1_ph2_nonneg_%d.mrc' % n))
 
     def createOutputStep(self):
         volume = Volume()

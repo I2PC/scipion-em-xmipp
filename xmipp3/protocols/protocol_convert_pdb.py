@@ -67,16 +67,16 @@ class XmippProtConvertPdb(ProtInitialVolume):
                       label="Sampling rate (Å/px)",
                       help='Sampling rate (Angstroms/pixel)')
         form.addParam('setSize', params.BooleanParam, label='Set final size?', default=False)
+        form.addParam('size_z', params.IntParam, condition='setSize', allowsNull=True,
+                      label="Final size (px) Z",
+                      help='Final size in Z in pixels. If no value is provided, protocol will estimate it.')
+        form.addParam('size_y', params.IntParam, condition='setSize', allowsNull=True,
+                      label="Final size (px) Y",
+                      help='Final size in Y in pixels. If no value is provided, protocol will estimate it.')
         form.addParam('size_x', params.IntParam, condition='setSize', allowsNull=True,
                       label="Final size (px) X",
                       help='Final size in X in pixels. If desired output size is x = y = z you can only fill this '
                            'field. If no value is provided, protocol will estimate it.')
-        form.addParam('size_y', params.IntParam, condition='setSize', allowsNull=True,
-                      label="Final size (px) Y",
-                      help='Final size in Y in pixels. If no value is provided, protocol will estimate it.')
-        form.addParam('size_z', params.IntParam, condition='setSize', allowsNull=True,
-                      label="Final size (px) Z",
-                      help='Final size in Z in pixels. If no value is provided, protocol will estimate it.')
         form.addParam('centerPdb', params.BooleanParam, default=True, 
                       expertLevel=const.LEVEL_ADVANCED, 
                       label="Center PDB",
