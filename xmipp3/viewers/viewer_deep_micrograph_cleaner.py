@@ -24,20 +24,17 @@
 # *
 # **************************************************************************
 
-import os
 
 import xmipp3
-from pyworkflow.em import SetOfCoordinates
-from pyworkflow.em.viewers import ObjectView, EmPlotter, DataView, DataViewer, CoordinatesObjectView
-from pyworkflow.em.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER, SORT_BY
+from pwem.objects import SetOfCoordinates
+from pwem.viewers import  EmPlotter,  CoordinatesObjectView
 from pyworkflow.protocol.params import IntParam, LabelParam, FloatParam
 from pyworkflow.utils import cleanPath, makePath
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 
-import xmippLib
+from pwem import emlib
 from xmipp3.convert import getXmippAttribute
 from xmipp3.protocols.protocol_deep_micrograph_screen import XmippProtDeepMicrographScreen
-from .plotter import XmippPlotter
 
 class XmippDeepMicrographViewer(ProtocolViewer):
     """         
@@ -77,7 +74,7 @@ class XmippDeepMicrographViewer(ProtocolViewer):
 
         coordsViewerFn = self.protocol._getTmpPath('coordsViewer.sqlite')
 
-        mdLabel = xmippLib.MDL_GOOD_REGION_SCORE
+        mdLabel = emlib.MDL_GOOD_REGION_SCORE
 
         if not getXmippAttribute(outCoords.getFirstItem(), mdLabel):
             print(" > outputCoordinates do NOT have 'MDL_GOOD_REGION_SCORE'!"); return
@@ -116,7 +113,7 @@ class XmippDeepMicrographViewer(ProtocolViewer):
 
         outCoords = self.protocol.getOutput()
         if outCoords:
-            mdLabel = xmippLib.MDL_GOOD_REGION_SCORE
+            mdLabel = emlib.MDL_GOOD_REGION_SCORE
             if getXmippAttribute(outCoords.getFirstItem(), mdLabel):
                 plotter = EmPlotter()
                 plotter.createSubPlot("Deep micrograph score",

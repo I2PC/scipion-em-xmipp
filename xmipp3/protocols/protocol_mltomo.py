@@ -27,18 +27,21 @@
 import re
 from glob import glob
 
-from pyworkflow.em import ProtClassify3D, ALIGN_PROJ, Float
-from pyworkflow.em.data import SetOfVolumes, SetOfClassesVol
-from pyworkflow.em.constants import ALIGN_NONE
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
-
-import pyworkflow.em.metadata as md
+from pyworkflow.protocol.params import Float
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
+from pyworkflow.protocol.constants import LEVEL_ADVANCED
+
+from pwem.protocols import ProtClassify3D
+from pwem.constants import ALIGN_PROJ
+from pwem.objects import SetOfVolumes, SetOfClassesVol
+from pwem.constants import ALIGN_NONE
+
+import pwem.emlib.metadata as md
 
 from xmipp3 import Plugin
 from xmipp3.convert import (readSetOfClassesVol, getImageLocation,
-                       writeSetOfVolumes, rowToAlignment)
+                            writeSetOfVolumes, rowToAlignment)
 
 
 MISSING_WEDGE_Y = 0
@@ -345,14 +348,14 @@ class XmippProtMLTomo(ProtClassify3D):
             for vol in vols:
                 imgId = vol.getObjId()
                 row = md.Row()
-                row.setValue(md.MDL_ITEM_ID, long(imgId))
+                row.setValue(md.MDL_ITEM_ID, int(imgId))
                 row.setValue(md.MDL_IMAGE, getImageLocation(vol))
                 row.setValue(md.MDL_ENABLED, 1)
                 row.addToMd(mdFn)
         else:
             imgId = vols.getObjId()
             row = md.Row()
-            row.setValue(md.MDL_ITEM_ID, long(imgId))
+            row.setValue(md.MDL_ITEM_ID, int(imgId))
             row.setValue(md.MDL_IMAGE, getImageLocation(vols))
             row.setValue(md.MDL_ENABLED, 1)
             row.addToMd(mdFn)

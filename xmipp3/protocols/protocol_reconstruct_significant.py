@@ -26,16 +26,20 @@
 # **************************************************************************
 
 import math
+import os
+from glob import glob
 from shutil import copy
 
-from pyworkflow.utils import Timer
-from pyworkflow.utils.path import cleanPattern, cleanPath
-from pyworkflow.em import *
-import pyworkflow.em.metadata as metadata
+from pyworkflow.utils import Timer, join
+from pyworkflow.utils.path import cleanPattern, cleanPath, makePath, moveFile
 from pyworkflow.protocol.params import *
 
-import xmippLib
-from xmipp3.base import XmippMdRow
+import pwem.emlib.metadata as metadata
+from pwem.protocols import ProtInitialVolume
+from pwem.constants import ALIGN_NONE
+from pwem.objects import SetOfClasses2D, Volume
+from pwem import emlib
+
 from xmipp3.convert import writeSetOfClasses2D, writeSetOfParticles, volumeToRow
 
 
@@ -211,7 +215,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
         # Convert input images if necessary
         self.imgsFn = self._getExtraPath('input_classes.xmd')
         self._insertFunctionStep('convertInputStep', self.imgsFn)
-        SL = xmippLib.SymList()
+        SL = emlib.SymList()
         SL.readSymmetryFile(self.symmetryGroup.get())
         self.trueSymsNo = SL.getTrueSymsNo()
         self.TsCurrent = self.inputSet.get().getSamplingRate()
@@ -288,11 +292,11 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
         reconsArgs += ' -o %s' % volFn
         reconsArgs += ' --weight -v 0  --sym %s ' % self.symmetryGroup
 
-        print "Number of images for reconstruction: ", metadata.getSize(
-            anglesFn)
+        print("Number of images for reconstruction: ", metadata.getSize(
+            anglesFn))
         t.tic()
         if self.useGpu.get():
-            cudaReconArgs = reconsArgs + ' --thr %s' %  self.numberOfThreads.get()
+            cudaReconArgs = reconsArgs + ' --thr %s' % self.numberOfThreads.get()
             cudaReconArgs += ' --device %(GPU)s'
             self.runJob("xmipp_cuda_reconstruct_fourier", cudaReconArgs, numberOfMpi=1)
         else:
@@ -348,9 +352,9 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
             self.TsCurrent = max([TsOrig, self.maxResolution.get(), TsRefVol])
             self.TsCurrent = self.TsCurrent / 3
             Xdim = self.inputSet.get().getDimensions()[0]
-            self.newXdim = long(round(Xdim * TsOrig / self.TsCurrent))
+            self.newXdim = int(round(Xdim * TsOrig / self.TsCurrent))
             if self.newXdim < 40:
-                self.newXdim = long(40)
+                self.newXdim = int(40)
                 self.TsCurrent = float(TsOrig) * (
                         float(Xdim) / float(self.newXdim))
             if self.newXdim != Xdim:
@@ -387,9 +391,9 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
                 inputVolume.setSamplingRate(self.TsCurrent)
                 inputVolume.setObjId(self.refVolume.get().getObjId())
             fnVolumes = self._getExtraPath('input_volumes.xmd')
-            row = XmippMdRow()
+            row = metadata.Row()
             volumeToRow(inputVolume, row, alignType=ALIGN_NONE)
-            md = xmippLib.MetaData()
+            md = emlib.MetaData()
             row.writeToMd(md, md.addObject())
             md.write(fnVolumes)
 
@@ -424,7 +428,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
             else:
                 errors.append("Please, enter a reference image")
 
-        SL = xmippLib.SymList()
+        SL = emlib.SymList()
         SL.readSymmetryFile(self.symmetryGroup.get())
         if (100 - self.alpha0.get()) / 100.0 * (SL.getTrueSymsNo() + 1) > 1:
             errors.append("Increase the initial significance it is too low "
@@ -458,11 +462,11 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
                       self.getObjectTag('inputSet')
             if self.thereisRefVolume:
                 retval += " We used %s volume " % self.getObjectTag('refVolume')
-                retval+="as a starting point of the reconstruction iterations."
+                retval += "as a starting point of the reconstruction iterations."
             else:
                 retval += " We started the iterations with 1 random volume."
             retval += " %d iterations were run going from a " % self.iter
-            retval+="starting significance of %f%% to a final one of %f%%." % \
+            retval += "starting significance of %f%% to a final one of %f%%." % \
                       (self.alpha0, self.alphaF)
             if self.useImed:
                 retval += " IMED weighting was used."
@@ -485,7 +489,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
     def getLastIteration(self, Nvolumes):
         lastIter = -1
         for n in range(1, self.iter.get() + 1):
-            NvolumesIter=len(glob(self._getExtraPath('volume_iter%03d*.vol'%n)))
+            NvolumesIter = len(glob(self._getExtraPath('volume_iter%03d*.vol' % n)))
             if NvolumesIter == 0:
                 continue
             elif NvolumesIter == Nvolumes:

@@ -30,13 +30,13 @@ import numpy as np
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
                                         LEVEL_ADVANCED)
-from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
+from pwem.protocols import ProtAnalysis3D
 from pyworkflow.object import Float
-from pyworkflow.em import ImageHandler
+from pwem.emlib.image import ImageHandler
 from pyworkflow.utils import getExt
-from pyworkflow.em.data import Volume
-import pyworkflow.em.metadata as md
-from pyworkflow.em.convert import Ccp4Header
+from pwem.objects import Volume
+import pwem.emlib.metadata as md
+from pwem.convert import Ccp4Header
 
 
 CHIMERA_RESOLUTION_VOL = 'MG_Chimera_resolution.mrc'
@@ -229,7 +229,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
             else:
                 self.maskFn = self.Mask.get().getFileName()
             
-            print self.maskFn
+            print(self.maskFn)
             
             self.inputVolume.set(None)
             self.inputVolume2.set(None)
@@ -434,7 +434,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
         self._store(self.max_res_init)
 
         if self.filterInput.get():
-            print 'Saving filtered map'
+            print('Saving filtered map')
             volume.setFileName(self._getFileName(FN_FILTERED_MAP))
             if (self.halfVolumes):
                 volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
@@ -450,18 +450,18 @@ class XmippProtMonoRes(ProtAnalysis3D):
         # viewer (otherwise since imageFile is not a Scipion object
         # no sampling/origin information can be transfered
 
-        Ccp4Header(imageFile).copyCCP4Header(
-            inputVolumeFileName, volume.getShiftsFromOrigin(),
-            volume.getSamplingRate(), originField=Ccp4Header.START)
+        Ccp4Header(imageFile).copyCCP4Header(volume.getShiftsFromOrigin(),
+                                             volume.getSamplingRate(),
+                                             originField=Ccp4Header.START)
 
         # also update the output volume header. This is not needed
         # since sampling and origin is in the database but
         # it may be usefull if other programs -outside scipion-
         # require  these data.
 
-        Ccp4Header(volume.getFileName()).copyCCP4Header(
-             inputVolumeFileName, volume.getShiftsFromOrigin(),
-             volume.getSamplingRate(), originField=Ccp4Header.START)
+        Ccp4Header(volume.getFileName()).copyCCP4Header(volume.getShiftsFromOrigin(),
+                                                        volume.getSamplingRate(),
+                                                        originField=Ccp4Header.START)
 
 
 

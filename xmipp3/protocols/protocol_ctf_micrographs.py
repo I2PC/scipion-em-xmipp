@@ -29,41 +29,56 @@
 import sys
 import os
 
-from pyworkflow.object import Set, String
-import pyworkflow.em as em
-import pyworkflow.em.metadata as md
+from pwem import RELATION_CTF
+from pwem.emlib.image import ImageHandler
+from pwem.objects import SetOfCTF, OrderedDict
+from pyworkflow.object import String
+
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as pwconst
 import pyworkflow.utils as pwutils
 
-from xmipp3.utils import isMdEmpty
-from xmipp3.convert import mdToCTFModel, readCTFModel
-from xmippLib import Image
+from pwem.protocols import ProtCTFMicrographs
+import pwem.emlib.metadata as md
 
-class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
+from xmipp3.base import isMdEmpty
+from xmipp3.convert import readCTFModel
+
+from pwem.emlib import Image
+
+class XmippProtCTFMicrographs(ProtCTFMicrographs):
     """ Protocol to estimate CTF on a set of micrographs using Xmipp. """
     _label = 'ctf estimation'
 
-    _criterion_psd = ("ctfCritIceness>1.03 OR ctfCritPsdCorr90<0.1")
+    _criterion_psd = ("ctfCritIceness>1.03")
 
-    _criterion_estimation = ("ctfCritFirstZero<5 OR ctfCritMaxFreq>20 OR "
-                             "ctfCritfirstZeroRatio<0.9 OR ctfCritfirstZeroRatio>1.1 OR "
-                             "ctfCritFirstMinFirstZeroRatio>10 OR ctfCritCorr13<0.27 OR "
-                             "ctfCritCtfMargin<1 OR ctfCritNonAstigmaticValidty<0 OR "
-                             "ctfCritNonAstigmaticValidty>6.5 ")
+    _criterion_estimation = ("ctfCritFirstZero<5 OR "
+                             "ctfCritMaxFreq>20 OR "
+                             "ctfCritfirstZeroRatio<0.9 OR "
+                             "ctfCritfirstZeroRatio>1.1 OR "
+                             "ctfCritFirstMinFirstZeroRatio>10 OR "
+                             "ctfCritCorr13<0.27 OR "
+                             "ctfCritCtfMargin<1 OR "
+                             "ctfCritNonAstigmaticValidty<0 OR "
+                             "ctfCritNonAstigmaticValidty>6.5 OR "
+                             "ctfCritPsdCorr90<0.1")
                              #"OR ctfBgGaussianSigmaU<1000")
 
-    _criterion_phaseplate = ("ctfCritFirstZero<5 OR ctfCritMaxFreq>20 OR "
-                             "ctfCritFirstMinFirstZeroRatio>50 AND "
-                             "ctfCritFirstMinFirstZeroRatio!=1000 "
-                             "OR ctfCritfirstZeroRatio<0.9 OR ctfCritfirstZeroRatio>1.1 OR "
-                             "ctfCritNonAstigmaticValidty<=0 OR ctfVPPphaseshift>140 OR "                   
-                             "ctfCritNonAstigmaticValidty>25") #ctfCritCorr13==0 OR "ctfCritFirstMinFirstZeroRatio>50 AND "
+    _criterion_phaseplate = ("ctfCritFirstZero<5 OR "
+                             "ctfCritMaxFreq>20 OR "
+                             "(ctfCritFirstMinFirstZeroRatio>50 AND "
+                             "ctfCritFirstMinFirstZeroRatio!=1000) OR "
+                             "ctfCritfirstZeroRatio<0.9 OR "
+                             "ctfCritfirstZeroRatio>1.1 OR "
+                             "ctfCritNonAstigmaticValidty<=0 OR "
+                             "ctfVPPphaseshift>140 OR "
+                             "ctfCritNonAstigmaticValidty>25")
+                             #ctfCritCorr13==0 OR "ctfCritFirstMinFirstZeroRatio>50 AND "
 
     _targetSamplingList = [1.75, 2.75]
 
     def __init__(self, **args):
-        em.ProtCTFMicrographs.__init__(self, **args)
+        ProtCTFMicrographs.__init__(self, **args)
 
     def _createFilenameTemplates(self):
         prefix = '%(root)s/%(micBase)s_xmipp_ctf'
@@ -91,12 +106,15 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                       label="Use defoci from a previous CTF estimation")
         form.addParam('ctfRelations',params.RelationParam, allowsNull=True,
                       condition='doInitialCTF',
-                      relationName=em.RELATION_CTF,
+                      relationName=RELATION_CTF,
                       attributeName='inputMicrographs',
                       label='Previous CTF estimation',
                       help='Choose some CTF estimation related to input '
                            'micrographs, in case you want to use the defocus '
                            'values found previously')
+        form.addParam('doOptimizeDefocus', params.BooleanParam, default=True, condition='doInitialCTF',
+                      label="Optimize defocus",
+                      help='If set to False, then the previous defocus is taken')
         form.addParam('findPhaseShift', params.BooleanParam, default=False,
                       label="Find additional phase shift?",
                       help='If the data was collected with phase plate, this '
@@ -118,6 +136,13 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                              'some experiments it has been found that refining it '
                              'might result in some improvement in the final FSC. '
                              'This is not a standard practice, and should be used with caution')
+        form.addParam('skipBorders',
+                      params.BooleanParam,
+                      default=False,
+                      expertLevel=pwconst.LEVEL_ADVANCED,
+                      help='Remove the borders of the micrograph. '
+                             'If True, two times the window size will be cropped.',
+                      label='Skip borders')
 
     def getInputMicrographs(self):
         return self.inputMicrographs.get()
@@ -134,13 +159,13 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         streamClosed = updatedSet.isStreamClosed()
         initCtfCheck = lambda idItem: True
         if self.doInitialCTF.get():
-            ctfSet = em.SetOfCTF(filename=self.ctfRelations.get().getFileName())
+            ctfSet = SetOfCTF(filename=self.ctfRelations.get().getFileName())
             ctfSet.loadAllProperties()
             streamClosed = streamClosed and ctfSet.isStreamClosed()
             if not streamClosed:
                 initCtfCheck = lambda idItem: idItem in ctfSet
 
-        newItemDict = em.OrderedDict()
+        newItemDict = OrderedDict()
         for item in updatedSet:
             micKey = item.getObjId()  # getKeyFunc(item)
             if micKey not in self.micDict and initCtfCheck(micKey):
@@ -188,7 +213,8 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
             prevValues = (self.ctfDict[micName] if micName in self.ctfDict
                           else self.getSinglePreviousParameters(mic.getObjId()))
 
-            localParams['defocusU'], localParams['phaseShift0'] = prevValues
+            localParams['defocusU'], localParams['defocusV'], localParams['defocusAngle'], localParams['phaseShift0'] = \
+                prevValues
             localParams['defocus_range'] = 0.1 * localParams['defocusU']
         else:
             ma = self._params['maxDefocus']
@@ -227,7 +253,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                                     % (micFn, finalName, 1.0/downFactor))
                     psd = Image(finalName)
                     psd = psd.getData()
-                    if psd.shape[0] < self.windowSize.get():
+                    if min(psd.shape) < self.windowSize.get():
                         localParams['pieceDim'] = self.windowSize.get()/2
                         localParams['ctfmodelSize'] = self.windowSize.get()/2
 
@@ -238,8 +264,17 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                 # CTF estimation with Xmipp
                 params = self._args % localParams
                 params += " --downSamplingPerformed %f" % downFactor
+
                 if not self.doInitialCTF:
                     params += " --selfEstimation "
+                else:
+                    if not self.doOptimizeDefocus:
+                        params += " --noDefocus --defocusV %(defocusV)f --azimuthal_angle %(defocusAngle)f" %\
+                                  localParams
+
+                if not self.skipBorders.get():
+                    params += " --skipBorders 0"
+
                 self.runJob(self._program, params)
 
                 # Check the quality of the estimation and reject it necessary
@@ -251,8 +286,8 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                 pwutils.moveFile(_getFn(key), self._getExtraPath())
 
         except Exception as ex:
-            print >> sys.stderr, "xmipp_ctf_estimate_from_micrograph has " \
-                     "failed with micrograph %s" % finalName
+            sys.stderr.write("xmipp_ctf_estimate_from_micrograph has " \
+                             "failed with micrograph %s" % finalName)
 
     def _reEstimateCTF(self, mic, ctfModel):
         """ Run the estimate CTF program """
@@ -272,13 +307,13 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
         if self.ctfDownFactor.get() < 1:
             validateMsgs.append('Downsampling factor must be >=1.')
         if self.doInitialCTF:
-            if not self.ctfRelations.hasValue():
+            if not self.ctfRelations.hasValue() or self.ctfRelations.get() is None:
                 validateMsgs.append('If you want to use a previous estimation '
                                     'of the CTF, the corresponding set of CTFs '
                                     'is needed')
 
     def _summary(self):
-        summary = em.ProtCTFMicrographs._summary(self)
+        summary = ProtCTFMicrographs._summary(self)
         if self.methodsVar.hasValue():
             summary.append(self.methodsVar.get())
         return summary
@@ -312,7 +347,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
             self._args += "--phase_shift %(phaseShift0)f --VPP_radius 0.005"
         if self.refineAmplitudeContrast:
             self._args += "--refine_amplitude_contrast"
-        for par, val in params.iteritems():
+        for par, val in params.items():
             self._args += " --%s %s" % (par, str(val))
 
     def getPreviousValues(self, ctf):
@@ -322,9 +357,9 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                 phaseShift0 = ctf.getPhaseShift()
             else:
                 phaseShift0 = 1.57079  # pi/2
-            ctfValues = (ctf.getDefocusU(), phaseShift0)
+            ctfValues = (ctf.getDefocusU(), ctf.getDefocusV(), ctf.getDefocusAngle(), phaseShift0)
         else:
-            ctfValues = (ctf.getDefocusU(), phaseShift0)
+            ctfValues = (ctf.getDefocusU(), ctf.getDefocusV(), ctf.getDefocusAngle(), phaseShift0)
 
         return ctfValues
 
@@ -344,7 +379,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
             self._params['phaseShift0'] = 1.57079
 
     def _defineCtfParamsDict(self):
-        em.ProtCTFMicrographs._defineCtfParamsDict(self)
+        ProtCTFMicrographs._defineCtfParamsDict(self)
 
         if not hasattr(self, "ctfDict"):
             self.getPreviousParameters()
@@ -376,8 +411,8 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
 
             # get the size and the image of psd
             imgPsd = ctfModel.getPsdFile()
-            psdFile = pwutils.path.basename(imgPsd)
-            imgh = em.ImageHandler()
+            psdFile = os.path.basename(imgPsd)
+            imgh = ImageHandler()
             size, _, _, _ = imgh.getDimensions(imgPsd)
 
             mic = ctfModel.getMicrograph()
@@ -386,6 +421,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
 
             params = dict(self.getCtfParamsDict())
             params.update(self.getRecalCtfParamsDict())
+            # FIXME Where does this variable come from
             params.update({'psdFn': fnPsd,
                            'defocusU': float(line[0])
                            })
@@ -412,7 +448,7 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
                 self.__params['VPP_radius'] = 0.005
                 self.__params['phase_shift'] = phase_shift
 
-            for par, val in self.__params.iteritems():
+            for par, val in self.__params.items():
                 self._args += " --%s %s" % (par, str(val))
 
     def _setPsdFiles(self, ctfModel):
@@ -484,8 +520,9 @@ class XmippProtCTFMicrographs(em.ProtCTFMicrographs):
             mdCTFparam.setValue(md.MDL_ENABLED, -1, mdCTFparam.firstObject())
             mdCTFparam.write(fnEval)
 
-        #Un-commment the method to see which criteria is rejecting the estimated CTF
-        #self.checkRejectedCriteria(fnEval, fnRejected)
+        """This method indicates which criteria is rejecting the estimated CTF"""
+        if pwutils.envVarOn('SCIPION_DEBUG'):
+            self.checkRejectedCriteria(fnEval, fnRejected)
 
         return retval
 

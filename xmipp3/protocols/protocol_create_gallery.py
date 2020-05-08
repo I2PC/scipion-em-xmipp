@@ -23,13 +23,15 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
-import pyworkflow
-import pyworkflow.object as pwobj
-from pyworkflow.em import *  
-from xmippLib import MetaData, MDL_ANGLE_ROT, MDL_ANGLE_TILT
+from pwem.emlib.image import ImageHandler
+from pyworkflow import VERSION_1_1
+from pyworkflow.protocol import PointerParam, StringParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
+from pwem.protocols import ProtAnalysis3D
+
+
+from pwem.emlib import MetaData, MDL_ANGLE_ROT, MDL_ANGLE_TILT
 from xmipp3.convert import readSetOfParticles
 
 
@@ -40,7 +42,7 @@ class XmippProtCreateGallery(ProtAnalysis3D):
     observed in the microscope.
     """
     _label = 'create gallery'
-    _version = pyworkflow.VERSION_1_1
+    _version = VERSION_1_1
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='General parameters')

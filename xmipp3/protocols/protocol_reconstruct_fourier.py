@@ -24,8 +24,8 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.data import Volume
-from pyworkflow.em.protocol import ProtReconstruct3D
+from pwem.objects import Volume
+from pwem.protocols import ProtReconstruct3D
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 from xmipp3.convert import writeSetOfParticles
@@ -125,6 +125,10 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
         params += ' --padding %0.3f %0.3f' % (self.pad_proj.get(), self.pad_vol.get())
         if self.useGpu.get():
             params += ' --thr %d' % self.numberOfThreads.get()
+            if self.numberOfMpi.get()>1:
+                N_GPUs = len((self.gpuList.get()).split(','))
+                params += ' -gpusPerNode %d' % N_GPUs
+                params += ' -threadsPerGPU %d' % self.numberOfThreads.get()
         params += ' --sampling %f' % self.inputParticles.get().getSamplingRate()
         params += ' %s' % self.extraParams.get()
         params += ' --fast' if self.approx.get() else ''

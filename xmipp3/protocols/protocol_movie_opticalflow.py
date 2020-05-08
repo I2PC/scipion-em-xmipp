@@ -31,13 +31,14 @@ from os.path import join, exists
 
 import pyworkflow.object as pwobj
 import pyworkflow.utils as pwutils
-import pyworkflow.em as em
 import pyworkflow.protocol.params as params
-import pyworkflow.em.metadata as md
+from pwem.objects import Image
 from pyworkflow import VERSION_1_1
 from pyworkflow.gui.project import ProjectWindow
-from pyworkflow.em.protocol import ProtAlignMovies
-from pyworkflow.em.protocol.protocol_align_movies import createAlignmentPlot
+
+import pwem.emlib.metadata as md
+from pwem.protocols.protocol_align_movies import (ProtAlignMovies,
+                                                  createAlignmentPlot)
 
 from xmipp3.convert import writeMovieMd
 from xmipp3 import Plugin
@@ -223,8 +224,8 @@ class XmippProtOFAlignment(ProtAlignMovies):
             self._saveAlignmentPlots(movie)
 
         except Exception as e:
-            print ("ERROR: %s failed for movie %s.\n  Exception: %s"
-                   % (program, movie.getFileName(), e))
+            print("ERROR: %s failed for movie %s.\n  Exception: %s"
+                  % (program, movie.getFileName(), e))
     
     #--------------------------- INFO functions -------------------------------
     def _validate(self):
@@ -255,9 +256,10 @@ class XmippProtOFAlignment(ProtAlignMovies):
         ofGpu = Plugin.getHome("bin", "xmipp_movie_optical_alignment_gpu")
         if not (exists(ofGpu) or exists(ofCpu)):
             errors.append("It seems that Xmipp Optical Alignment is not installed. "
-                          "OpenCV should be installed in the system to compile it.\n"
-                          "Please, install OpenCV in your system and, then, "
-                          "re-install Xmipp by running 'scipion installb xmippSrc'.")
+                          "Please make sure that _scipion/config/scipion.config_ "
+                          "contains *OPENCV=True* and OpenCV is in your system.\n"
+                          "Then, re-install Xmipp by running "
+                          "'scipion installb xmippSrc'.")
         else:
             if self.useGpu and not exists(ofGpu):
                 errors.append("It seems that Xmipp Optical Alignment has not been "
@@ -306,10 +308,10 @@ class XmippProtOFAlignment(ProtAlignMovies):
             movie: Pass the reference movie
             obj: should pass either the created micrograph or movie
         """
-        obj.plotCart = em.Image()
+        obj.plotCart = Image()
         obj.plotCart.setFileName(self._getPlotCart(movie))
         if self.doComputePSD:
-            obj.psdCorr = em.Image()
+            obj.psdCorr = Image()
             obj.psdCorr.setFileName(self._getPsdCorr(movie))
 
         meanX, meanY = self._loadMeanShifts(movie)
@@ -395,7 +397,6 @@ class XmippProtOFAlignment(ProtAlignMovies):
         return self._getMovieRoot(movie) + '_aligned_movie.mrcs'
 
 
-
 def showCartesianShiftsPlot(inputSet, itemId):
     item = inputSet[itemId]
     if item.hasAttribute('_xmipp_OFMeanX'):
@@ -404,7 +405,7 @@ def showCartesianShiftsPlot(inputSet, itemId):
         plotter = createAlignmentPlot(meanX, meanY)
         plotter.show()
     else:
-        print "These items do not have OF alignment set. "
+        print("These items do not have OF alignment set. ")
 
 
 ProjectWindow.registerObjectCommand(OBJCMD_MOVIE_ALIGNCARTESIAN,

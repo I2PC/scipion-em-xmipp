@@ -24,19 +24,18 @@
 # **************************************************************************
 
 
-from pyworkflow import VERSION_2_0
-from pyworkflow.em import Volume
-from pyworkflow.em.constants import (SYM_I222, SYM_I222r, SYM_In25, SYM_In25r,
-                                     SYM_CYCLIC, SYM_DIHEDRAL, SYM_TETRAHEDRAL,
-                                     SYM_OCTAHEDRAL, SCIPION_SYM_NAME)
-from pyworkflow.em.data import Transform
-from pyworkflow.em.convert import Ccp4Header
-from pyworkflow.em.protocol import EMProtocol
+from pyworkflow import VERSION_3_0
+from pwem.objects import Volume
+from pwem.constants import (SYM_DIHEDRAL_X,SCIPION_SYM_NAME)
+from pwem.objects import Transform
+from pwem.convert import Ccp4Header
+from pwem.protocols import EMProtocol
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         EnumParam, IntParam)
 
-from xmipp3.constants import XMIPP_SYM_NAME
-
+from xmipp3.constants import (XMIPP_SYM_NAME, XMIPP_TO_SCIPION, XMIPP_CYCLIC,
+                              XMIPP_DIHEDRAL_X, XMIPP_TETRAHEDRAL, XMIPP_OCTAHEDRAL,
+                              XMIPP_I222, XMIPP_I222r, XMIPP_In25, XMIPP_In25r)
 
 DEBUG = True
 
@@ -46,7 +45,7 @@ class XmippProtExtractUnit(EMProtocol):
     """
     _label = 'extract unit cell'
     _program = ""
-    _version = VERSION_2_0
+    _version = VERSION_3_0
 
     def __init__(self, **kwargs):
         EMProtocol.__init__(self, **kwargs)
@@ -59,23 +58,23 @@ class XmippProtExtractUnit(EMProtocol):
                       important=True, pointerClass='Volume',
                       help='This volume will be cropped')
         form.addParam('symmetryGroup', EnumParam,
-                      choices=[XMIPP_SYM_NAME[SYM_CYCLIC] +
-                               " (" + SCIPION_SYM_NAME[SYM_CYCLIC] + ")",
-                               XMIPP_SYM_NAME[SYM_DIHEDRAL] +
-                               " (" + SCIPION_SYM_NAME[SYM_DIHEDRAL] + ")",
-                               XMIPP_SYM_NAME[SYM_TETRAHEDRAL] +
-                               " (" + SCIPION_SYM_NAME[SYM_TETRAHEDRAL] + ")",
-                               XMIPP_SYM_NAME[SYM_OCTAHEDRAL] +
-                               " (" + SCIPION_SYM_NAME[SYM_OCTAHEDRAL] + ")",
-                               XMIPP_SYM_NAME[SYM_I222] +
-                               " (" + SCIPION_SYM_NAME[SYM_I222] + ")",
-                               XMIPP_SYM_NAME[SYM_I222r] +
-                               " (" + SCIPION_SYM_NAME[SYM_I222r] + ")",
-                               XMIPP_SYM_NAME[SYM_In25] +
-                               " (" + SCIPION_SYM_NAME[SYM_In25] + ")",
-                               XMIPP_SYM_NAME[SYM_In25r] +
-                               " (" + SCIPION_SYM_NAME[SYM_In25r] + ")"],
-                      default=SYM_I222r,
+                      choices=[XMIPP_SYM_NAME[XMIPP_CYCLIC] +
+                               " (" + SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_CYCLIC]] + ")",
+                               XMIPP_SYM_NAME[XMIPP_DIHEDRAL_X] +
+                               " (" + SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_DIHEDRAL_X]] + ")",
+                               XMIPP_SYM_NAME[XMIPP_TETRAHEDRAL] +
+                               " (" + SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_TETRAHEDRAL]] + ")",
+                               XMIPP_SYM_NAME[XMIPP_OCTAHEDRAL] +
+                               " (" + SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_OCTAHEDRAL]] + ")",
+                               XMIPP_SYM_NAME[XMIPP_I222] +
+                               " (" + SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_I222]] + ")",
+                               XMIPP_SYM_NAME[XMIPP_I222r] +
+                               " (" + SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_I222r]] + ")",
+                               XMIPP_SYM_NAME[XMIPP_In25] +
+                               " (" + SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_In25]] + ")",
+                               XMIPP_SYM_NAME[XMIPP_In25r] +
+                               " (" + SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_In25r]] + ")"],
+                      default=XMIPP_I222,
                       label="Symmetry",
                       help="See http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/"
                            "Symmetry for a description of the symmetry groups "
@@ -83,11 +82,11 @@ class XmippProtExtractUnit(EMProtocol):
                            "If no symmetry is present, use _c1_."
                       )
         form.addParam('symmetryOrder', IntParam, default=1,
-                      condition='symmetryGroup<=%d' % SYM_DIHEDRAL,
+                      condition='symmetryGroup<=%d' % SYM_DIHEDRAL_X,
                       label='Symmetry Order',
                       help='Order of cyclic symmetry.')
         form.addParam('offset', FloatParam, default=0.,
-                      condition='symmetryGroup<=%d' % SYM_DIHEDRAL,
+                      condition='symmetryGroup<=%d' % SYM_DIHEDRAL_X,
                       label="offset",
                       help="rotate unit cell around z-axis by offset degrees")
         form.addParam('innerRadius', FloatParam, default=-1,
@@ -111,17 +110,19 @@ class XmippProtExtractUnit(EMProtocol):
 
     def extractUnit(self):
         sym = self.symmetryGroup.get()
-        if sym == SYM_CYCLIC:
-            sym = "%s%d" % (XMIPP_SYM_NAME[SYM_CYCLIC][:1], self.symmetryOrder)
-        elif sym == SYM_DIHEDRAL:
-            sym = "%s%d" %\
-                  (XMIPP_SYM_NAME[SYM_DIHEDRAL][:1], self.symmetryOrder)
-        elif sym == SYM_TETRAHEDRAL:
-            sym = "%s" % (XMIPP_SYM_NAME[SYM_TETRAHEDRAL])
-        elif sym == SYM_OCTAHEDRAL:
-            sym = "%s" % (XMIPP_SYM_NAME[SYM_OCTAHEDRAL])
-        elif sym >= SYM_I222 and sym <= SYM_In25r:
-            sym = XMIPP_SYM_NAME[self.symmetryGroup.get()]
+        print("sym:_____________________________________________", sym)
+        if sym == XMIPP_CYCLIC:
+            sym = "%s%d" % (XMIPP_SYM_NAME[XMIPP_CYCLIC][:1], self.symmetryOrder)
+        elif sym == XMIPP_DIHEDRAL_X:
+            sym = "%s%d" % \
+                  (XMIPP_SYM_NAME[XMIPP_DIHEDRAL_X][:1], self.symmetryOrder)
+        elif sym == XMIPP_TETRAHEDRAL:
+            sym = "%s" % XMIPP_SYM_NAME[XMIPP_TETRAHEDRAL]
+        elif sym == XMIPP_OCTAHEDRAL:
+            sym = "%s" % XMIPP_SYM_NAME[XMIPP_OCTAHEDRAL]
+        elif sym >= XMIPP_I222 and sym <= XMIPP_In25r :
+            sym = XMIPP_SYM_NAME[sym]
+        
         inFileName = self.inputVolumes.get().getFileName()
         if inFileName.endswith('.mrc'):
             inFileName = inFileName + ":mrc"

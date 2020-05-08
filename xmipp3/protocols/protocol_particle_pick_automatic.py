@@ -24,11 +24,14 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+from os.path import exists, basename, join
 
-from pyworkflow.em import *  
-from pyworkflow.utils.path import *  
+from pyworkflow.protocol.params import STEPS_PARALLEL, PointerParam, EnumParam
+from pyworkflow.utils.path import *
 
-import xmippLib
+from pwem.protocols import ProtParticlePickingAuto
+
+from pwem import emlib
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import readSetOfCoordinates
 
@@ -113,11 +116,11 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
             basePos = replaceBaseExt(micPath, "pos")
             fnPos = self.particlePickingRun._getExtraPath(basePos)
             if exists(fnPos):
-                blocks = xmippLib.getBlocksInMetaDataFile(fnPos)
+                blocks = emlib.getBlocksInMetaDataFile(fnPos)
                 copy = True
                 if 'header' in blocks:
-                    mdheader = xmippLib.MetaData("header@" + fnPos)
-                    state = mdheader.getValue(xmippLib.MDL_PICKING_MICROGRAPH_STATE,
+                    mdheader = emlib.MetaData("header@" + fnPos)
+                    state = mdheader.getValue(emlib.MDL_PICKING_MICROGRAPH_STATE,
                                               mdheader.firstObject())
                     if state == "Available":
                         copy = False
@@ -161,19 +164,22 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
         if self.micsToPick.get() == MICS_OTHER:
             inputMics = self.inputMicrographs.get()
             manualMics = self.xmippParticlePicking.get().inputMicrographs.get()
-            pixsizeInput = inputMics.getSamplingRate()
+            # FIXME: manualMics is always None when scheduled...
+            #  it should be fixed in the update step at Scipion scheduler app
+            if manualMics is not None:
+                pixsizeInput = inputMics.getSamplingRate()
 
-            pixsizeMics = manualMics.getSamplingRate()
-            acq = manualMics.getAcquisition()
+                pixsizeMics = manualMics.getSamplingRate()
+                acq = manualMics.getAcquisition()
 
-            if pixsizeInput != pixsizeMics:
-                validateMsgs.append('New micrographs should have same sampling '
-                                    'rate as the ones already picked.')
+                if pixsizeInput != pixsizeMics:
+                    validateMsgs.append('New micrographs should have same sampling '
+                                        'rate as the ones already picked.')
 
-            if not inputMics.getAcquisition().equalAttributes(acq):
-                validateMsgs.append('New micrographs should have same '
-                                    'acquisition parameters as the ones '
-                                    'already picked.')
+                if not inputMics.getAcquisition().equalAttributes(acq):
+                    validateMsgs.append('New micrographs should have same '
+                                        'acquisition parameters as the ones '
+                                        'already picked.')
 
         return validateMsgs
     
@@ -184,16 +190,16 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
         configfile = join(self._getExtraPath(), 'config.xmd')
         existsConfig = exists(configfile)
         if existsConfig:
-            md = xmippLib.MetaData('properties@' + configfile)
+            md = emlib.MetaData('properties@' + configfile)
             configobj = md.firstObject()
             def _get(label):
                 return md.getValue(label, configobj)
-            pickingState = _get(xmippLib.MDL_PICKING_STATE)
-            particleSize = _get(xmippLib.MDL_PICKING_PARTICLE_SIZE)
-            activeMic = _get(xmippLib.MDL_MICROGRAPH)
+            pickingState = _get(emlib.MDL_PICKING_STATE)
+            particleSize = _get(emlib.MDL_PICKING_PARTICLE_SIZE)
+            activeMic = _get(emlib.MDL_MICROGRAPH)
             isAutopick = pickingState != "Manual"
-            manualParticlesSize = _get(xmippLib.MDL_PICKING_MANUALPARTICLES_SIZE)
-            autoParticlesSize = _get(xmippLib.MDL_PICKING_AUTOPARTICLES_SIZE)
+            manualParticlesSize = _get(emlib.MDL_PICKING_MANUALPARTICLES_SIZE)
+            autoParticlesSize = _get(emlib.MDL_PICKING_AUTOPARTICLES_SIZE)
             
             summary.append("Manual particles picked: %s" % manualParticlesSize)
             summary.append("Particle size:%d" %(particleSize))

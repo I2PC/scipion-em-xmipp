@@ -30,19 +30,19 @@ from datetime import datetime
 from os.path import exists
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.em import SetOfParticles, SetOfClasses2D, ALIGN_2D, ALIGN_NONE
-from pyworkflow.em.protocol import ProtAlign2D
-import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
-from pyworkflow.em.metadata.utils import iterRows
-from pyworkflow.utils import prettyTime
-from pyworkflow.object import Set
+from pyworkflow.object import Set, Float, String
 from pyworkflow.protocol.constants import STATUS_NEW
-from pyworkflow.em.data import Class2D
-from pyworkflow.object import Float, String
+from pyworkflow.utils import prettyTime
 import pyworkflow.protocol.constants as const
 
-from xmipp3.convert import writeSetOfParticles, rowToAlignment, writeSetOfClasses2D
+from pwem.objects import SetOfParticles, SetOfClasses2D, Class2D
+from pwem.constants import ALIGN_2D, ALIGN_NONE
+from pwem.protocols import ProtAlign2D
+import pwem.emlib.metadata as md
+
+from xmipp3.convert import (writeSetOfParticles, rowToAlignment,
+                            writeSetOfClasses2D)
 
 
 REF_CLASSES = 0
@@ -61,8 +61,6 @@ class HashTableDict:
         idxDict = idx % self.Ndict
         if not idx in self.dict[idxDict]:
             self.dict[idxDict][idx]=1
-
-
 
 class XmippProtStrGpuCrrSimple(ProtAlign2D):
     """ 2D alignment in semi streaming using Xmipp GPU Correlation.
@@ -97,7 +95,6 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
                       label='Number of best images:',
                       help='Number of the best images to keep for every class',
                       expertLevel=const.LEVEL_ADVANCED)
-        form.addParallelSection(threads=0, mpi=8)
 
 
     # --------------------------- INSERT steps functions -----------------------

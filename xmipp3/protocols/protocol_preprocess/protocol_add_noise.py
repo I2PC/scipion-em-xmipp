@@ -29,13 +29,14 @@ from os.path import basename
 
 from pyworkflow import VERSION_1_1
 from pyworkflow.utils import removeExt
-from pyworkflow.protocol.params import (PointerParam, EnumParam, FloatParam, LEVEL_ADVANCED)
-from pyworkflow.em.protocol.protocol_3d import ProtRefine3D
-from pyworkflow.em.data import Volume
-import pyworkflow.em as em
-from xmipp3.convert import writeSetOfParticles, xmippToLocation
-import pyworkflow.em.metadata as md
+from pyworkflow.protocol.params import (PointerParam, EnumParam, FloatParam,
+                                        LEVEL_ADVANCED)
 
+from pwem.protocols import ProtRefine3D
+from pwem.objects import Volume
+import pwem.emlib.metadata as md
+
+from xmipp3.convert import writeSetOfParticles, xmippToLocation
 
 
 class XmippProtAddNoise(ProtRefine3D):
@@ -192,7 +193,7 @@ class XmippProtAddNoiseVolumes(XmippProtAddNoise):
         kindNoise, noiseParams = self._getTypeOfNoise()
         
         inputSet = self.input.get()
-        if isinstance(inputSet, em.Volume):
+        if isinstance(inputSet, Volume):
             self._addNoisetoVolumeStep(kindNoise, noiseParams, inputSet)
         else:
             for vol in self.input.get():
@@ -285,5 +286,5 @@ class XmippProtAddNoiseParticles(XmippProtAddNoise):
         # particle.setFileName(fnOut)
         
         index, filename = xmippToLocation(row.getValue(md.MDL_IMAGE))
-	particle.setLocation(index, filename)
+        particle.setLocation(index, filename)
 

@@ -26,13 +26,13 @@
 
 from os.path import join
 import numpy as np
+from pwem.objects import Image
 
-import pyworkflow.em as em  
 from pyworkflow.utils.path import makePath
 from pyworkflow.gui.plotter import Plotter
 from pyworkflow.protocol.params import EnumParam, IntParam
 
-import xmippLib
+from pwem import emlib
 import xmipp3
 from xmipp3.convert import readSetOfClasses2D
 from .protocol_kerdensom import KendersomBaseClassify
@@ -51,7 +51,7 @@ class XmippProtRotSpectra(KendersomBaseClassify):
         form.addSection(label='Spectra')
         form.addParam('howCenter', EnumParam, 
                       choices=['Middle of the image', 'Minimize first harmonic'], 
-                      default=xmipp3.ROTSPECTRA_CENTER_FIRST_HARMONIC, 
+                      default=xmipp3.constants.ROTSPECTRA_CENTER_FIRST_HARMONIC,
                       display=EnumParam.DISPLAY_COMBO, 
                       label='How to find the center of rotation', important=True,  
                       help='Select how to find the center of rotation.')
@@ -87,7 +87,7 @@ class XmippProtRotSpectra(KendersomBaseClassify):
         imagesFn = self._params['imgsFn']
         centerFn = self._getExtraPath("center2d_center.xmd")
         # After any of this steps the file "center2d_center.xmd" should be produced
-        if self.howCenter == xmipp3.ROTSPECTRA_CENTER_MIDDLE:
+        if self.howCenter == xmipp3.constants.ROTSPECTRA_CENTER_MIDDLE:
             self._insertMiddleStep(imagesFn, centerFn)
         else:
             self._insertFunctionStep('centerFirstHarmonicStep', imagesFn, centerFn)
@@ -116,19 +116,19 @@ class XmippProtRotSpectra(KendersomBaseClassify):
     
     #--------------------------- STEPS functions ---------------------------------------------------
     def centerFirstHarmonicStep(self, imagesFn, outputCenter):
-        dims = xmippLib.MetaDataInfo(str(imagesFn))
-        md = xmippLib.MetaData()
+        dims = emlib.MetaDataInfo(str(imagesFn))
+        md = emlib.MetaData()
         objId = md.addObject()
-        md.setValue(xmippLib.MDL_X, float(dims[0] / 2), objId)
-        md.setValue(xmippLib.MDL_Y, float(dims[1] / 2), objId)
+        md.setValue(emlib.MDL_X, float(dims[0] / 2), objId)
+        md.setValue(emlib.MDL_Y, float(dims[1] / 2), objId)
         md.write(outputCenter)
         return [outputCenter] # this file should exists after the step
             
     def calculateSpectraStep(self, imagesFn, inputCenter, outputSpectra):     
-        md = xmippLib.MetaData(inputCenter)
+        md = emlib.MetaData(inputCenter)
         objId = md.firstObject()
-        self._params['xOffset'] = md.getValue(xmippLib.MDL_X, objId)
-        self._params['yOffset'] = md.getValue(xmippLib.MDL_Y, objId)
+        self._params['xOffset'] = md.getValue(emlib.MDL_X, objId)
+        self._params['yOffset'] = md.getValue(emlib.MDL_Y, objId)
         
         program = 'xmipp_image_rotational_spectra'
         args = "-i %s -o %s" % (imagesFn, outputSpectra)
@@ -163,15 +163,15 @@ class XmippProtRotSpectra(KendersomBaseClassify):
                 
     def _preprocessClass(self, classItem, classRow):
         KendersomBaseClassify._preprocessClass(self, classItem, classRow)
-        ref = classRow.getValue(xmippLib.MDL_REF) # get class number
-        classItem.spectraPlot = em.Image()
+        ref = classRow.getValue(emlib.MDL_REF) # get class number
+        classItem.spectraPlot = Image()
         classItem.spectraPlot.setFileName(self._createSpectraPlot('class', 
                                                                   self.classArray, 
                                                                   ref))
         
     def _postprocessImageRow(self, img, imgRow):
         self.imgCount += 1
-        img.spectraPlot = em.Image()
+        img.spectraPlot = Image()
         img.spectraPlot.setFileName(self._createSpectraPlot('image', 
                                                             self.imgArray, 
                                                             self.imgCount, 

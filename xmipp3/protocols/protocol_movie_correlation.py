@@ -31,14 +31,15 @@ import os
 from math import ceil
 
 import pyworkflow.utils as pwutils
+from pyworkflow.utils import yellowStr
 import pyworkflow.object as pwobj
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
-import pyworkflow.em as em
-import pyworkflow.em.metadata as md
+import pwem.emlib.metadata as md
+from pwem.objects import Image
+from pwem.protocols.protocol_align_movies import createAlignmentPlot
 from pyworkflow import VERSION_1_1
-from pyworkflow.em.protocol import ProtAlignMovies
-from pyworkflow.em.protocol.protocol_align_movies import createAlignmentPlot
+from pwem.protocols import ProtAlignMovies
 
 from xmipp3.convert import writeMovieMd
 
@@ -82,13 +83,9 @@ class XmippProtMovieCorr(ProtAlignMovies):
                        label="Choose GPU IDs",
                        help="Add a list of GPU devices that can be used")
 
-        form.addParam('maxFreq', params.FloatParam, default=4,
-                       label='Filter at (A)',
-                       help="For the calculation of the shifts with Xmipp, "
-                            "micrographs are filtered (and downsized "
-                            "accordingly) to this resolution. Then shifts are "
-                            "calculated, and they are applied to the original "
-                            "frames without any filtering and downsampling.")
+        form.addParam('maxResForCorrelation', params.FloatParam, default=30,
+                       label='Maximal resolution (A)',
+                       help="Maximal resolution in A that will be preserved during correlation.")
 
         form.addParam('doComputePSD', params.BooleanParam, default=True,
                       label="Compute PSD (before/after)?",
@@ -121,6 +118,17 @@ class XmippProtMovieCorr(ProtAlignMovies):
                       expertLevel=cons.LEVEL_ADVANCED,
                       condition='doLocalAlignment',
                       help="If on, protocol will automatically determine necessary number of control points.")
+        group.addParam('minLocalRes', params.FloatParam, default=500,
+                       expertLevel=cons.LEVEL_ADVANCED,
+                       label='Min size of the patch (A)',
+                       help="How many A should contain each patch?")
+
+        group.addParam('skipAutotuning', params.BooleanParam, default=False,
+                       expertLevel=cons.LEVEL_ADVANCED,
+                       label='Skip autotuning',
+                       help="We try to faster settings of for the FFT library. This takes some time, "
+                            "but consecutive executions will be faster and use less memory."
+                            "Set to True (autotuning will be turned off) if you process just few movies")
 
         line = group.addLine('Number of control points',
                     expertLevel=cons.LEVEL_ADVANCED,
@@ -129,14 +137,6 @@ class XmippProtMovieCorr(ProtAlignMovies):
         line.addParam('controlPointX', params.IntParam, default=6, label='X')
         line.addParam('controlPointY', params.IntParam, default=6, label='Y')
         line.addParam('controlPointT', params.IntParam, default=5, label='t')
-
-        line = group.addLine('Number of patches',
-                    expertLevel=cons.LEVEL_ADVANCED,
-                    help='Number of patches to be used. Depending on the size of the movie, they may \
-                        overlap.',
-                    condition='doLocalAlignment')
-        line.addParam('patchX', params.IntParam, default=10, label='X')
-        line.addParam('patchY', params.IntParam, default=10, label='Y')
 
         group.addParam('groupNFrames', params.IntParam, default=3,
                     expertLevel=cons.LEVEL_ADVANCED,
@@ -154,8 +154,14 @@ class XmippProtMovieCorr(ProtAlignMovies):
         form.addParallelSection(threads=1, mpi=1)
 
     #--------------------------- STEPS functions -------------------------------
-
     def _processMovie(self, movie):
+        try:
+            self.tryProcessMovie(movie)
+        except Exception as ex:
+            print(yellowStr("We cannot process %s" % movie.getFileName()))
+            print(ex)
+
+    def tryProcessMovie(self, movie):
         movieFolder = self._getOutputMovieFolder(movie)
 
         x, y, n = movie.getDim()
@@ -168,7 +174,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
         args = '-i "%s" ' % inputMd
         args += '-o "%s" ' % self._getShiftsFile(movie)
         args += '--sampling %f ' % movie.getSamplingRate()
-        args += '--max_freq %f ' % self.maxFreq
+        args += '--maxResForCorrelation %f ' % self.maxResForCorrelation
         args += '--Bspline %d ' % self.INTERP_MAP[self.splineOrder.get()]
 
         if self.binFactor > 1:
@@ -225,14 +231,17 @@ class XmippProtMovieCorr(ProtAlignMovies):
         if self.autoControlPoints.get():
             self._setControlPoints()
 
+        if self.minLocalRes.get():
+            args += ' --minLocalRes %f' % self.minLocalRes
+
         if self.useGpu.get():
             args += ' --device %(GPU)s'
             if self.doLocalAlignment.get():
                 args += ' --processLocalShifts '
+            if self.skipAutotuning.get():
+                args += " --skipAutotuning"
             args += ' --storage ' + self._getExtraPath("fftBenchmark.txt")
             args += ' --controlPoints %d %d %d' % (self.controlPointX, self.controlPointY, self.controlPointT)
-            args += ' --patches %d %d' % (self.patchX, self.patchY)
-            args += ' --locCorrDownscale 4 4'
             args += ' --patchesAvg %d' % self.groupNFrames
             self.runJob('xmipp_cuda_movie_alignment_correlation', args, numberOfMpi=1)
         else:
@@ -260,9 +269,11 @@ class XmippProtMovieCorr(ProtAlignMovies):
         self.inputMovies.get().close()
 
     def _setControlPoints(self):
-            _,_,frames = self.inputMovies.get().getDim()
-            self.controlPointX.set( int(self.patchX) / 3 + 2)
-            self.controlPointY.set(int(self.patchY) / 3 + 2)
+            x, y,frames = self.inputMovies.get().getDim()
+            Ts = self.inputMovies.get().getSamplingRate()
+            # one control point each 1000 A
+            self.controlPointX.set(int(x * Ts) / 1000 + 2)
+            self.controlPointY.set(int(y * Ts) / 1000 + 2)
             self.controlPointT.set(ceil(frames/7.) + 2)
 
     def _getMovieShifts(self, movie):
@@ -312,10 +323,10 @@ class XmippProtMovieCorr(ProtAlignMovies):
             movie: Pass the reference movie
             obj: should pass either the created micrograph or movie
         """
-        obj.plotCart = em.Image()
+        obj.plotCart = Image()
         obj.plotCart.setFileName(self._getPlotCart(movie))
         if self.doComputePSD:
-            obj.psdCorr = em.Image()
+            obj.psdCorr = Image()
             obj.psdCorr.setFileName(self._getPsdCorr(movie))
 
         meanX, meanY = self._loadMeanShifts(movie)
@@ -365,17 +376,4 @@ class XmippProtMovieCorr(ProtAlignMovies):
         if (self.controlPointT < 3):
             errors.append("You have to use at least 3 control points in T dim")
             return errors # to avoid possible division by zero later
-        _,_,frames = self.inputMovies.get().getDim()
-        tPointsRatio = frames / (int(self.controlPointT) - 2)
-        yPointsRatio = int(self.patchY) / (int(self.controlPointY) - 2)
-        xPointsRatio = int(self.patchX) / (int(self.controlPointX) - 2)
-        if (tPointsRatio < 2):
-            errors.append("You need at least 2 measurements per control point, "
-                "i.e. use movie with more frames or decrease number of control points in T dimension.")
-        if (yPointsRatio < 2):
-            errors.append("You need at least 2 measurements per control point, "
-                "i.e. use more patches in Y dimesion or decrease number of control points.")
-        if (xPointsRatio < 2):
-            errors.append("You need at least 2 measurements per control point, "
-                "i.e. use more patches in X dimesion or decrease number of control points.")
         return errors

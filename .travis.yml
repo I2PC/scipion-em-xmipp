@@ -1,0 +1,14 @@
+language: python
+os: linux
+dist: bionic
+python: 3.8
+git:
+    depth: false # to get blame information for SonarCloud
+addons:
+  sonarcloud:
+# See https://docs.travis-ci.com/user/sonarcloud/
+    organization: "i2pc"
+    token: $SONAR_TOKEN
+
+script:
+ - sonar-scanner

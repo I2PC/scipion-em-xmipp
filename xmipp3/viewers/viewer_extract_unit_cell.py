@@ -29,21 +29,20 @@ import os
 from distutils.spawn import find_executable
 from os.path import exists
 
-import pyworkflow.em as em
 import pyworkflow.protocol.params as params
-from pyworkflow.em.constants import SYM_I222
-from pyworkflow.em.convert import ImageHandler
-from pyworkflow.em.data import (SetOfVolumes)
-from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-from pyworkflow.em.viewers.viewer_chimera import Chimera, ChimeraView
+from pwem.constants import SYM_I222
+from pwem.emlib.image import ImageHandler
+from pwem.objects import (SetOfVolumes)
+from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
+from pwem.viewers import Chimera, ChimeraView, EmProtocolViewer
 from xmipp3.protocols.protocol_extract_unit_cell import XmippProtExtractUnit
-
+from xmipp3.constants import (XMIPP_TO_SCIPION, XMIPP_I222)
 
 VOLUME_SLICES = 1
 VOLUME_CHIMERA = 0
 
 
-class viewerXmippProtExtractUnit(ProtocolViewer):
+class viewerXmippProtExtractUnit(EmProtocolViewer):
     """ Visualize the input and output volumes of protocol XmippProtExtractUnit
         by choosing Chimera (3D) or Xmipp visualizer (2D).
         The axes of coordinates x, y, z will be shown by choosing Chimera"""
@@ -139,9 +138,9 @@ class viewerXmippProtExtractUnit(ProtocolViewer):
         d = {}
         d['outerRadius'] = self.protocol.outerRadius.get() * sampling
         d['innerRadius'] = self.protocol.innerRadius.get() * sampling
-        d['symmetry'] = Chimera.getSymmetry(self.protocol.symmetryGroup.get())
+        d['symmetry'] = Chimera.getSymmetry(XMIPP_TO_SCIPION[self.protocol.symmetryGroup.get()])
 
-        if self.protocol.symmetryGroup >= SYM_I222:
+        if self.protocol.symmetryGroup >= XMIPP_I222:
             f.write("shape icosahedron mesh true radius %(outerRadius)d "
                     "orientation %(symmetry)s\n" % d)
         step = (d['outerRadius'] - d['innerRadius']) / float(len(cMap) - 1)

@@ -24,14 +24,12 @@
 # *
 # **************************************************************************
 
-import unittest, sys
+from os.path import exists
 
-from pyworkflow.em import exists
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
-from pyworkflow.em.protocol import ProtImportVolumes
+from pwem.protocols import ProtImportVolumes
 
-from xmipp3.protocols import XmippProtMonoTomo, XmippProtCropResizeVolumes
-
+from xmipp3.protocols import XmippProtCropResizeVolumes, XmippProtMonoTomo
 
 class TestMonoTomoBase(BaseTest):
     @classmethod
@@ -49,13 +47,14 @@ class TestMonoTomoBase(BaseTest):
                                          samplingRate=samplingRate
                                          )
         cls.launchProtocol(cls.protImport)
-	cls.protResize = cls.newProtocol(XmippProtCropResizeVolumes,
-                                        inputVolumes = cls.protImport.outputVolume,
-					doResize = True,
-					resizeOption = 2,
-					resizeFactor = 5)
-	cls.launchProtocol(cls.protResize)
+        cls.protResize = cls.newProtocol(XmippProtCropResizeVolumes,
+                                         inputVolumes=cls.protImport.outputVolume,
+                                         doResize=True,
+                                         resizeOption=2,
+                                         resizeFactor=5)
+        cls.launchProtocol(cls.protResize)
         return cls.protResize
+
 
 class TestMonoTomo(TestMonoTomoBase):
     @classmethod
@@ -68,15 +67,15 @@ class TestMonoTomo(TestMonoTomoBase):
 
     def testMonoTomo(self):
         MonoTomo = self.newProtocol(XmippProtMonoTomo,
-                                   objLabel='two halves monores',
-                                   inputVolume=self.protImportHalf1.outputVol,
-                                   inputVolume2=self.protImportHalf2.outputVol,
-                                   provideMaskInHalves=True,
-                                   useMask=False,
-                                   minRes=1,
-                                   maxRes=25,
-                                   )
+                                    objLabel='two halves monores',
+                                    inputVolume=self.protImportHalf1.outputVol,
+                                    inputVolume2=self.protImportHalf2.outputVol,
+                                    provideMaskInHalves=True,
+                                    useMask=False,
+                                    minRes=1,
+                                    maxRes=25,
+                                    )
         self.launchProtocol(MonoTomo)
         self.assertTrue(exists(MonoTomo._getExtraPath('mgresolution.mrc')),
                         "MonoTomo has failed")
- 
+
