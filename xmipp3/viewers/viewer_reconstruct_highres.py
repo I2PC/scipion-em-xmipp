@@ -32,8 +32,8 @@ from os.path import exists, join
 from pyworkflow.protocol.params import (EnumParam, NumericRangeParam,
                                         LabelParam, IntParam, FloatParam)
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-from pwem.viewers import ObjectView, DataView, ChimeraClientView, showj
+from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
+from pwem.viewers import ObjectView, DataView, ChimeraClientView, showj, EmProtocolViewer
 
 from pwem.emlib import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
                    MDL_RESOLUTION_FREQ, MDL_RESOLUTION_FRC, MetaData)
@@ -49,7 +49,7 @@ ANGDIST_CHIMERA = 1
 VOLUME_SLICES = 0
 VOLUME_CHIMERA = 1
 
-class XmippReconstructHighResViewer(ProtocolViewer):
+class XmippReconstructHighResViewer(EmProtocolViewer):
     """ Visualize the output of protocol reconstruct highres """
     _label = 'viewer reconstruct highres'
     _targets = [XmippProtReconstructHighRes]
