@@ -333,7 +333,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                         numberOfMpi=1)
         self.parseSymList()
         listVolumesToProcess = self._readVolumesToProcess()
-        print("listVolumesToProcess", listVolumesToProcess)
+        #print("listVolumesToProcess", listVolumesToProcess)
         for i in range(1, self.getNumberOfReconstructedVolumes() + 1):
             if (listVolumesToProcess[i - 1] == False):
                 continue
@@ -446,8 +446,6 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
                         if (exists(fnAnglesSignificant) and getSize(
                                 fnAnglesSignificant) > 0):
-                            print("getSize(fnAnglesSignificant)",
-                                  getSize(fnAnglesSignificant))
                             moveFile(fnAnglesSignificant, fnAnglesGroup)
                             cleanPath(
                                 join(fnDirCurrent, "images_iter001_00.xmd"))
@@ -455,7 +453,6 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                                            "images_significant_iter001_00.xmd"))
                         else:
                             noAsignedGroups += 1
-                            print("noAsignedGroups", noAsignedGroups)
                             if noAsignedGroups == numberGroups:
                                 listVolumesToProcess[i - 1] = False
                                 self._saveVolumesToProcess(listVolumesToProcess)
@@ -535,7 +532,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         fnAnglesAll = join(fnDirCurrent, "anglesAll.xmd")
         mdVolumes = MetaData()
         listVolumesToProcess = self._readVolumesToProcess()
-        print("listVolumesToProcess", listVolumesToProcess)
+        #print("listVolumesToProcess", listVolumesToProcess)
         for i in range(1, self.getNumberOfReconstructedVolumes() + 1):
             if (listVolumesToProcess[i - 1] == False):
                 continue
@@ -575,7 +572,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
         self.parseSymList()
         listVolumesToProcess = self._readVolumesToProcess()
-        print("listVolumesToProcess", listVolumesToProcess)
+        #print("listVolumesToProcess", listVolumesToProcess)
         for i in range(1, self.getNumberOfReconstructedVolumes() + 1):
             if (listVolumesToProcess[i - 1] == False):
                 continue
@@ -798,7 +795,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                             numberOfMpi=1)
 
         # Align all volumes with respect to center
-        print("listVolumesToProcess", listVolumesToProcess)
+        #print("listVolumesToProcess", listVolumesToProcess)
         for i in range(1, self.getNumberOfReconstructedVolumes() + 1):
             if (listVolumesToProcess[i - 1] == False):
                 continue
@@ -878,7 +875,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
             sizeClasses = np.zeros((N, N))
             self.parseSymList()
             listVolumesToProcess = self._readVolumesToProcess()
-            print("listVolumesToProcess", listVolumesToProcess)
+            #print("listVolumesToProcess", listVolumesToProcess)
             for i in range(1, N + 1):
                 for j in range(1, N + 1):
                     if (listVolumesToProcess[i - 1] == False or
