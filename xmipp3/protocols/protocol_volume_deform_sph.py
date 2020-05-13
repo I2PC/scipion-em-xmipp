@@ -116,21 +116,13 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
 
 
     def deformStep(self):
-        fnInputVol = self._getFileName('fnInputVol')
         fnRefVol = self._getFileName('fnRefVol')
         fnOutVol = self._getFileName('fnOutVol')
 
-        self.alignSimulated()
+        self.alignMaps()
 
-        # Normalize the volumes to be passed to SPH program
-        # params = " -i %s --method Robust --mask circular 50 --clip -o %s" % (fnRefVol, fnRefVol)
-        # self.runJob("xmipp_transform_normalize", params)
-        #
-        # params = " -i %s --method Robust --mask circular 50 --clip -o %s" % (fnOutVol, fnOutVol)
-        # self.runJob("xmipp_transform_normalize", params)
-
-        params = ' -i %s -r %s -o %s --analyzeStrain --depth %d --sigma "%s"' % \
-                 (fnOutVol, fnRefVol, fnOutVol, self.depth.get(), self.sigma.get())
+        params = ' -i %s -r %s -o %s --analyzeStrain --depth %d --sigma "%s" --oroot %s' % \
+                 (fnOutVol, fnRefVol, fnOutVol, self.depth.get(), self.sigma.get(), self._getExtraPath('Volumes'))
         if self.newRmax != 0:
             params = params + ' --Rmax %d' % self.newRmax
         self.runJob("xmipp_volume_deform_sph", params)
@@ -143,7 +135,7 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
         self._defineOutputs(outputVolume=vol)
         self._defineSourceRelation(self.inputVolume, vol)
 
-    def alignSimulated(self):
+    def alignMaps(self):
         fnInputVol = self._getFileName('fnInputVol')
         fnInputFilt = self._getFileName('fnInputFilt')
         fnRefVol = self._getFileName('fnRefVol')
@@ -157,7 +149,7 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
         self.runJob("xmipp_transform_filter", params)
 
         # Find transformation needed to align the volumes
-        params = ' --i1 %s --i2 %s --apply residual.vol --local --dontScale ' \
+        params = ' --i1 %s --i2 %s --local --dontScale ' \
                  '--copyGeo %s' % \
                  (fnRefFilt, fnInputFilt, self._getExtraPath("geo.txt"))
         self.runJob("xmipp_volume_align", params)
@@ -165,5 +157,5 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
         # Apply transformation of filtered volume to original volume
         with open(self._getExtraPath("geo.txt"), 'r') as file:
             geo_str = file.read().replace('\n', ',')
-        params = " -i %s -o %s --matrix %s --dont_wrap" % (fnInputVol, fnOutVol, geo_str)
+        params = " -i %s -o %s --matrix %s" % (fnInputVol, fnOutVol, geo_str)
         self.runJob("xmipp_transform_geometry", params)

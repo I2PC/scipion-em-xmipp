@@ -316,7 +316,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             # Round point to place them in a grid
             Xr1 = np.round(X1, decimals=3)
             Xr2 = np.round(X2, decimals=3)
-            size_grid = 1.4 * max((np.amax(Xr1), np.amax(Xr2)))
+            size_grid = 2 * max((np.amax(Xr1), np.amax(Xr2)))
 
             # Parameters needed for future convolution
             if i == 2:
@@ -327,7 +327,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                 R, C = np.meshgrid(grid_coords, grid_coords, indexing='ij')
             else:
                 R, C, D = np.meshgrid(grid_coords, grid_coords, grid_coords, indexing='ij')
-            sigma = R.shape[0] / (140 / 5)
+            sigma = R.shape[0] / (200 / 5)
 
             # Create Gaussian Kernel
             lbox = int(6 * sigma)
