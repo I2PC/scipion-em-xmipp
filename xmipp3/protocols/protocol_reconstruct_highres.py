@@ -669,6 +669,9 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if newXdim<40:
             newXdim=int(40)
             TsCurrent=Xdim*(self.TsOrig/newXdim)
+        elif newXdim%2==1:
+            newXdim+=1
+            TsCurrent=Xdim*(self.TsOrig/newXdim)
         self.writeInfoField(fnDir,"sampling",emlib.MDL_SAMPLINGRATE,TsCurrent)
         self.writeInfoField(fnDir,"size",emlib.MDL_XSIZE,newXdim)
         
@@ -686,6 +689,11 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         R=min(round(R*self.TsOrig/TsCurrent*(1+self.angularMaxShift.get()*0.01)),newXdim/2)
         self.runJob("xmipp_transform_mask","-i %s --mask circular -%d"%(fnNewParticles,R),numberOfMpi=min(self.numberOfMpi.get(),24))
         fnSource=join(fnDir,"images.xmd")
+
+        if not self.inputParticles.get().isPhaseFlipped():
+            self.runJob("xmipp_ctf_correct_phase", "-i %s --sampling_rate %f" % (fnSource, TsCurrent),
+                        numberOfMpi=min(self.numberOfMpi.get(), 24))
+
         if self.splitMethod==self.SPLIT_STOCHASTIC:
             self.runJob('xmipp_metadata_utilities','-i %s --set intersection %s particleId particleId -o %s/all_images.xmd'%\
                         (fnSource,self._getExtraPath('images.xmd'),fnDir),numberOfMpi=1)
@@ -716,6 +724,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                             (fnImagesi,fnPreviousAngles,fnAux),numberOfMpi=1)
                 self.adaptShifts(fnAux, TsPrevious, fnImagesi, TsCurrent)
             cleanPath(fnAux)
+
         self.writeInfoField(fnDir,"count",emlib.MDL_COUNT,int(1))
 
     def prepareReferences(self,fnDirPrevious,fnDir,TsCurrent,targetResolution):
@@ -805,6 +814,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             # if iteration>1: # This causes images to be replicated
             #    getShiftsFrom=fnDirPrevious
             self.prepareImages(fnDirPrevious,fnGlobal,TsCurrent,getShiftsFrom)
+            TsCurrent=self.readInfoField(fnGlobal,"sampling",emlib.MDL_SAMPLINGRATE) # Prepare images may have changed it
             self.prepareReferences(fnDirPrevious,fnGlobal,TsCurrent,targetResolution)
 
             # Calculate angular step at this resolution
@@ -1006,6 +1016,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     produceNewReferences=False
             if produceNewReferences:
                 self.prepareImages(fnDirPrevious,fnDirLocal,TsCurrent,fnDirPrevious)
+                TsCurrent=self.readInfoField(fnDirLocal,"sampling",emlib.MDL_SAMPLINGRATE) # Prepare images may have changed it
                 self.prepareReferences(fnDirPrevious,fnDirLocal,TsCurrent,targetResolution)
             else:
                 newXdim=self.readInfoField(fnDirGlobal,"size",emlib.MDL_XSIZE)
@@ -1098,7 +1109,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     raise Exception("Angles for iteration "+str(iteration)+" not found")
             self.writeInfoField(fnDirCurrent,"sampling",emlib.MDL_SAMPLINGRATE,TsCurrent)
             self.writeInfoField(fnDirCurrent,"size",emlib.MDL_XSIZE,Xdim)
-                
+
             if self.weightSSNR:
                 row=getFirstRow(fnAngles)
                 if row.containsLabel(emlib.MDL_WEIGHT_SSNR):
@@ -1271,10 +1282,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         # was performed as a single iteration
         fnDirPrevious=self._getExtraPath("Iter%03d"%(iteration-1))
         fnCorrectedImages1=join(fnDirPrevious,"images_corrected01.stk")
-        if exists(fnCorrectedImages1):
+        if exists(fnCorrectedImages1) and self.saveSpace.get():
             cleanPath(fnCorrectedImages1)
         fnCorrectedImages2=join(fnDirPrevious,"images_corrected02.stk")
-        if exists(fnCorrectedImages2):
+        if exists(fnCorrectedImages2) and self.saveSpace.get():
             cleanPath(fnCorrectedImages2)
 
         grayAdjusted=False
@@ -1294,14 +1305,15 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     if self.inputParticles.get().isPhaseFlipped():
                         args+=" --phase_flipped"
                     self.runJob("xmipp_ctf_correct_wiener2d",args,numberOfMpi=min(self.numberOfMpi.get(),24))
-                    self.runJob("xmipp_image_eliminate_largeEnergy","-i %s.xmd --sigma2 9"%fnCorrectedImagesRoot,numberOfMpi=min(self.numberOfMpi.get(),12))
+                    self.runJob("xmipp_image_eliminate_byEnergy","-i %s.xmd --sigma2 9 --minSigma2 0.01"%\
+                                fnCorrectedImagesRoot,numberOfMpi=min(self.numberOfMpi.get(),12))
                     fnAnglesToUse = fnCorrectedImagesRoot+".xmd"
                     deleteStack = True
                     deletePattern = fnCorrectedImagesRoot+".*"
                     if self.alignmentMethod!=self.STOCHASTIC_ALIGNMENT:
-                        self.runJob('xmipp_metadata_utilities','-i %s --set intersection %s particleId particleId'%(fnAngles,fnAnglesToUse),numberOfMpi=1)
-                        # This is because eliminate_largeEnergy may have reduced the number of images in fnAngles
-
+                        self.runJob('xmipp_metadata_utilities','-i %s --set intersection %s particleId particleId'%(fnAngles,fnAnglesToUse),numberOfMpi=1) 
+                        # This is because eliminate_byEnergy may have reduced the number of images in fnAngles
+                
                 if self.contGrayValues or (self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT and iteration>=5):
                     grayAdjusted=True
                     R=self.particleRadius.get()
@@ -1583,15 +1595,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if not self.doContinue and self.inputParticles.hasValue() and \
            self.alignmentMethod.get()==self.LOCAL_ALIGNMENT and not self.inputParticles.get().hasAlignmentProj():
             errors.append("If the first iteration is local, then the input particles must have an alignment")
-        if not self.inputParticles.get().isPhaseFlipped():
-            errors.append("The input particles must be phase flipped")
         return errors
-
+    
     def _warnings(self):
         warnings = []
-        if not self.doContinue and self.inputParticles.hasValue() and not self.inputParticles.get().isPhaseFlipped():
-            warnings.append("Highres is designed to work on phase flipped particles. The input particles are not phase flipped. "
-                            "Unless you work with phantoms, you need to extract particles with phase flip.")
         return warnings
 
     def _summary(self):

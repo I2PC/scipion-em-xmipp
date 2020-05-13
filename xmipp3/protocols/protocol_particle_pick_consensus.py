@@ -226,9 +226,10 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             outputSet.setStreamState(outputSet.STREAM_OPEN)
             outputSet.setBoxSize(self.getMainInput().getBoxSize())
 
-        inMicsPointer = Pointer(self.getMapper().getParent(
-                                            self.getMainInput().getMicrographs()),
-                                            extended='outputMicrographs')
+        #inMicsPointer = Pointer(self.getMapper().getParent(
+        #                                    self.getMainInput().getMicrographs()),
+        #                                    extended='outputMicrographs')
+        inMicsPointer = Pointer(self.getMainInput().getMicrographs())
         outputSet.setMicrographs(inMicsPointer)
 
         return outputSet
