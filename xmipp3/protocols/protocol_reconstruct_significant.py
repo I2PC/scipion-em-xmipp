@@ -106,7 +106,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
                            'in the reconstruction of fibers from side views. '
                            '0 degrees is a top view, while 90 degrees is a  '
                            'side view.')
-        form.addParam('maxTilt', FloatParam, default=90,
+        form.addParam('maxTilt', FloatParam, default=180,
                       expertLevel=LEVEL_ADVANCED,
                       label='Maximum tilt (deg)',
                       help='Use the minimum and maximum tilts to limit the  '
@@ -187,7 +187,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
 
     def getSignificantArgs(self, imgsFn):
         """ Return the arguments needed to launch the program. """
-        # Prepare arguments to call program: xmipp_classify_CL2D
+        # Prepare arguments to call program
         self._params = {'imgsFn': imgsFn,
                         'extraDir': self._getExtraPath(),
                         'symmetryGroup': self.symmetryGroup.get(),
@@ -248,32 +248,46 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
             args = "-i %s -o %s.stk --sampling_rate %f --sym %s " \
                    "--compute_neighbors --angular_distance -1 " \
                    "--experimental_images %s --min_tilt_angle %f " \
-                   "--max_tilt_angle %f -v 0 --perturb %f" % \
-                   (prevVolFn, fnGalleryRoot, self.angularSampling,
+                   "--max_tilt_angle %f -v 0 --perturb %f " % \
+                   (prevVolFn, fnGalleryRoot, self.angularSampling.get(),
                     self.symmetryGroup, self.imgsFn, self.minTilt, self.maxTilt,
                     math.sin(self.angularSampling.get()) / 4)
-            self.runJob("xmipp_angular_project_library ", args)
+            self.runJob("xmipp_angular_project_library ", args, numberOfMpi=1)
 
-            # Align
-            # TODO check the alpha values for gpu
             if self.trueSymsNo != 0:
                 alphaApply = (alpha * self.trueSymsNo) / 2
             else:
                 alphaApply = alpha / 2
-            if self.maximumShift == -1:
-                maxShift = 10
+            from pwem.emlib.metadata import getSize
+            N = int(getSize(fnGalleryRoot+'.doc')*alphaApply*2)
+
+            count=0
+            GpuListCuda=''
+            if self.useQueueForSteps() or self.useQueue():
+                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                GpuList = GpuList.split(",")
+                for elem in GpuList:
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    count+=1
             else:
-                maxShift = self.maximumShift
-            args = '-i_ref %s.doc -i_exp %s -o %s --significance %f ' \
-                   '--maxShift %f' % \
-                   (fnGalleryRoot, self.imgsFn, anglesFn, alphaApply,
-                    maxShift)
-            self.runJob("xmipp_cuda_correlation", args, numberOfMpi=1)
+                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                GpuListAux = ''
+                for elem in self.getGpuList():
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListAux = GpuListAux+str(elem)+','
+                    count+=1
+                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
+            args = '-i %s -r %s.doc -o %s --keepBestN %f --dev %s ' % \
+                   (self.imgsFn, fnGalleryRoot, anglesFn, N, GpuListCuda)
+            self.runJob("xmipp_cuda_align_significant", args, numberOfMpi=1)
+
             cleanPattern(fnGalleryRoot + "*")
         else:
             args = self.getSignificantArgs(self.imgsFn)
             args += ' --odir %s' % iterDir
             args += ' --alpha0 %f --alphaF %f' % (alpha, alpha)
+            args += ' --dontCheckMirrors '
 
             if iterNumber == 1:
                 if self.thereisRefVolume:
@@ -296,9 +310,36 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
             anglesFn))
         t.tic()
         if self.useGpu.get():
-            cudaReconArgs = reconsArgs + ' --thr %s' % self.numberOfThreads.get()
-            cudaReconArgs += ' --device %(GPU)s'
-            self.runJob("xmipp_cuda_reconstruct_fourier", cudaReconArgs, numberOfMpi=1)
+            cudaReconsArgs = reconsArgs
+            #AJ to make it work with and without queue system
+            if self.numberOfMpi.get()>1:
+                N_GPUs = len((self.gpuList.get()).split(','))
+                cudaReconsArgs += ' -gpusPerNode %d' % N_GPUs
+                cudaReconsArgs += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+            count=0
+            GpuListCuda=''
+            if self.useQueueForSteps() or self.useQueue():
+                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                GpuList = GpuList.split(",")
+                for elem in GpuList:
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    count+=1
+            else:
+                GpuListAux = ''
+                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                for elem in self.getGpuList():
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListAux = GpuListAux+str(elem)+','
+                    count+=1
+                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
+            cudaReconsArgs += ' --thr %s' %  self.numberOfThreads.get()
+            if self.numberOfMpi.get()==1:
+                cudaReconsArgs += ' --device %s' %(GpuListCuda)
+            if self.numberOfMpi.get()>1:
+                self.runJob('xmipp_cuda_reconstruct_fourier', cudaReconsArgs, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+            else:
+                self.runJob('xmipp_cuda_reconstruct_fourier', cudaReconsArgs)
         else:
             self.runJob("xmipp_reconstruct_fourier_accel", reconsArgs)
         t.toc('Reconstruct fourier took: ')

@@ -266,10 +266,36 @@ class XmippProtRansac(ProtInitialVolume):
             if Nimages>0:
                 if self.useGpu.get():
                     # protocol will run several reconstructions at once, so execute each reconstruction separately
-                    args = "-i %s.xmd -o %s.vol --sym %s --thr 1 --fast"\
-                           % (fnRoot, fnRoot, self.symmetryGroup.get())
-                    args += " --device %(GPU)s"
-                    self.runJob("xmipp_cuda_reconstruct_fourier", args , numberOfMpi=1, numberOfThreads=1)
+                    args = "-i %s.xmd -o %s.vol --sym %s --thr %s --fast"\
+                           % (fnRoot, fnRoot, self.numberOfThreads.get(), self.symmetryGroup.get())
+
+                    #AJ to make it work with and without queue system
+                    if self.numberOfMpi.get()>1:
+                        N_GPUs = len((self.gpuList.get()).split(','))
+                        args += ' -gpusPerNode %d' % N_GPUs
+                        args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+                    count=0
+                    GpuListCuda=''
+                    if self.useQueueForSteps() or self.useQueue():
+                        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                        GpuList = GpuList.split(",")
+                        for elem in GpuList:
+                            GpuListCuda = GpuListCuda+str(count)+' '
+                            count+=1
+                    else:
+                        GpuListAux = ''
+                        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                        for elem in self.getGpuList():
+                            GpuListCuda = GpuListCuda+str(count)+' '
+                            GpuListAux = GpuListAux+str(elem)+','
+                            count+=1
+                        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                    if self.numberOfMpi.get()==1:
+                        args += " --device %s" %GpuListCuda
+                    if self.numberOfMpi.get()>1:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+                    else:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args)
                 else:
                     self.runJob("xmipp_reconstruct_fourier_accel","-i %s.xmd -o %s.vol --sym %s "
                                 %(fnRoot,fnRoot,self.symmetryGroup.get()))
