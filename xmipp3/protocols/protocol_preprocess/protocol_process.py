@@ -162,18 +162,9 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             volumes = volInput.create(self._getPath())
             volumes.copyInfo(volInput)
             self._preprocessOutput(volumes)
-            inputVolumes = self.inputVolumes.get()
-            numberOfVols = inputVolumes.getSize()
-            for i in range(1, numberOfVols + 1):
-                vol = inputVolumes.ITEM_TYPE()
-                vol.setLocation(i, self.outputStk)
-                if inputVolumes[i].hasAcquisition():
-                    vol.setAcquisition(inputVolumes[i].getAcquisition())
-                if inputVolumes[i].hasTransform():
-                    vol.setTransform(inputVolumes[i].getTransform())
-                if inputVolumes.ITEM_TYPE == "Subtomogram":
-                    if inputVolumes[i].hasCoordinate3D():
-                        vol.setCoordinate3D(inputVolumes[i].getCoordinate3D())
+            for i, obj in enumerate(volInput.iterItems()):
+                vol = obj
+                vol.setLocation(i+1, self.outputStk)
                 volumes.append(vol)
             self._postprocessOutput(volumes)
             self._defineOutputs(outputVol=volumes)
