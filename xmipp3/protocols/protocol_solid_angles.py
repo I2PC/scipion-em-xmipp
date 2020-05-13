@@ -38,7 +38,7 @@ from pwem.protocols import ProtAnalysis3D
 import pwem.emlib.metadata as md
 
 from pwem import emlib
-from xmipp3.base import findRow
+from xmipp3.base import findRow, readInfoField, writeInfoField
 from xmipp3.convert import (rowToAlignment, setXmippAttributes, xmippToLocation,
                             createItemMatrix, writeSetOfParticles)
 from xmipp3.constants import SYM_URL
@@ -186,19 +186,6 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         self._insertFunctionStep('createOutputStep')
 
     # --------------------------- STEPS functions -------------------------------
-
-    def readInfoField(self, fnDir, block, label):
-        mdInfo = emlib.MetaData(
-            "%s@%s" % (block, join(fnDir, "iterInfo.xmd")))
-        return mdInfo.getValue(label, mdInfo.firstObject())
-
-    def writeInfoField(self, fnDir, block, label, value):
-        mdInfo = emlib.MetaData()
-        objId = mdInfo.addObject()
-        mdInfo.setValue(label, value, objId)
-        mdInfo.write("%s@%s" % (block, join(fnDir, "iterInfo.xmd")),
-                     emlib.MD_APPEND)
-
     def convertInputStep(self, particlesId, volId):
         """ Write the input images as a Xmipp metadata file.
         particlesId: is only need to detect changes in
@@ -230,13 +217,11 @@ class XmippProtSolidAngles(ProtAnalysis3D):
             if Xdim != newXdim:
                 self.runJob("xmipp_image_resize", "-i %s --dim %d"
                             % (self._getInputVolFn(), newXdim), numberOfMpi=1)
-
-            Xdim = newXdim
-            Ts = newTs
-        self.writeInfoField(self._getExtraPath(), "sampling",
-                            emlib.MDL_SAMPLINGRATE, Ts)
-        self.writeInfoField(self._getExtraPath(), "size", emlib.MDL_XSIZE,
-                            int(Xdim))
+            
+            Xdim=newXdim
+            Ts=newTs
+        writeInfoField(self._getExtraPath(),"sampling",emlib.MDL_SAMPLINGRATE,Ts)
+        writeInfoField(self._getExtraPath(),"size",emlib.MDL_XSIZE,int(Xdim))
 
     def constructGroupsStep(self, particlesId, angularSampling,
                             angularDistance, symmetryGroup):
@@ -422,10 +407,8 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         fnTmpDir = self._getTmpPath()
         fnDirectional = self._getDirectionalClassesFn()
         inputParticles = self.inputParticles.get()
-        newTs = self.readInfoField(self._getExtraPath(), "sampling",
-                                   emlib.MDL_SAMPLINGRATE)
-        newXdim = self.readInfoField(self._getExtraPath(), "size",
-                                     emlib.MDL_XSIZE)
+        newTs = readInfoField(self._getExtraPath(),"sampling",emlib.MDL_SAMPLINGRATE)
+        newXdim = readInfoField(self._getExtraPath(),"size",emlib.MDL_XSIZE)
 
         # Generate projections
         fnGallery = join(fnTmpDir, "gallery.stk")
@@ -487,10 +470,8 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         cleanPattern(self._getExtraPath("direction_*"))
 
     def splitVolumeStep(self):
-        newTs = self.readInfoField(self._getExtraPath(), "sampling",
-                                   emlib.MDL_SAMPLINGRATE)
-        newXdim = self.readInfoField(self._getExtraPath(), "size",
-                                     emlib.MDL_XSIZE)
+        newTs = readInfoField(self._getExtraPath(),"sampling",emlib.MDL_SAMPLINGRATE)
+        newXdim = readInfoField(self._getExtraPath(),"size",emlib.MDL_XSIZE)
         fnMask = ""
         if self.mask.hasValue():
             fnMask = self._getExtraPath("mask.vol")
@@ -515,8 +496,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         if not self._useSeveralClasses():
             newTs = inputParticles.getSamplingRate()
         else:
-            newTs = self.readInfoField(self._getExtraPath(), "sampling",
-                                       emlib.MDL_SAMPLINGRATE)
+            newTs = readInfoField(self._getExtraPath(),"sampling",emlib.MDL_SAMPLINGRATE)
 
         self.mdClasses = emlib.MetaData(self._getDirectionalClassesFn())
         self.mdImages = emlib.MetaData(self._getDirectionalImagesFn())

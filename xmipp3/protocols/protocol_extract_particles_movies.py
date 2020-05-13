@@ -40,7 +40,6 @@ import pwem.emlib.metadata as md
 from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtExtractMovieParticles, ProtProcessMovies
 
-from xmipp3.base import XmippMdRow
 from xmipp3.convert import coordinateToRow
 from xmipp3.convert import readSetOfMovieParticles, xmippToLocation
 
@@ -416,7 +415,7 @@ class XmippProtExtractMovieParticles(ProtExtractMovieParticles):
         coordSet = self.getCoords()
         
         mData = md.MetaData()
-        coordRow = XmippMdRow()
+        coordRow = md.Row()
 
         for coord in coordSet.iterCoordinates(movie.getObjId()):
             coord.shiftX(int(round(float(shiftX))))

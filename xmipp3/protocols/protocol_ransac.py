@@ -40,7 +40,7 @@ from pwem.objects import SetOfClasses2D
 from pwem import emlib
 from xmipp3.convert import (writeSetOfClasses2D, readSetOfVolumes,
                             writeSetOfParticles)
-from xmipp3.utils import isMdEmpty
+from xmipp3.base import isMdEmpty
 
 
 class XmippProtRansac(ProtInitialVolume):
