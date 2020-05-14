@@ -47,8 +47,13 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
     NORMALIZATION_AUTO=0
     NORMALIZATION_STATS=1
     NORMALIZATION_MASK=2
-    NORMALIZATION_OPTIONS=["Automatic normalization", "Normalization from statistics", "Normalization from binary mask" ]
-    
+    NORMALIZATION_IQR_FULL=3
+    NORMALIZATION_OPTIONS=["Automatic normalization", "Normalization from statistics", "Normalization from binary mask", "Legacy normalization" ]
+
+    TIGHT_MODEL=0
+    WIDE_MODEL=1
+    MODEL_TARGET_OPTIONS=["tight target", "wide target"]
+
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
 
@@ -78,7 +83,10 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
                            'normalized according the statistics of the noise of the volume and thus, you will need to provide'
                            'the mean and standard deviation of the noise. Additionally, a binary mask (1 protein, 0 not protein) '
                            'for the protein can be used for normalization if you select *%s* . The mask should be as tight '
-                           'as possible.\nBad results may be obtained if normalization does not work'%tuple(self.NORMALIZATION_OPTIONS))
+                           'as possible.\nIf you select *%s* normalization will consider that all the volume is either noise or protein,'
+                           'but not empty This options is a legacy option for compatibility.\nBad results may be obtained if '
+                           'normalization does not work, so you may want to try '
+                           'different options'%tuple(self.NORMALIZATION_OPTIONS))
 
         form.addParam('inputMask', PointerParam, pointerClass='VolumeMask',
                       allowsNull=True,
@@ -98,6 +106,16 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
                       condition=" normalization==%s"%self.NORMALIZATION_STATS,
                       label="noise standard deviation",
                       help='The standard deviation of the noise used to normalize the input')
+
+
+        form.addParam('useTightModel', EnumParam,
+                      condition=" normalization in [%s, %s]"%(self.NORMALIZATION_STATS,self.NORMALIZATION_AUTO),
+                      choices=self.MODEL_TARGET_OPTIONS,
+                      default=self.WIDE_MODEL,
+                      label='Model power',
+                      help='Select the deep learning model to use.\nIf you select *%s* the postprocessing will be more sharpen,'
+                           ' but some regions of the protein could be masked out.\nIf you select *%s* input will be less sharpen'
+                           ' but most of the regions of the protein will be preserved '%tuple(self.MODEL_TARGET_OPTIONS))
 
 
         form.addParam('performCleaningStep', BooleanParam,
@@ -124,10 +142,12 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('createOutputStep')
 
     def _inputVol2Mrc(self, inputFname, outputFname):
+        inputFname= os.path.abspath(inputFname)
         if inputFname.endswith(".mrc"):
-          os.symlink(os.path.abspath(inputFname), outputFname)
+          if not os.path.exists(outputFname):
+            os.symlink(inputFname, outputFname)
         else:
-          self.runJob('xmipp_image_transform', " -i %s -o %s:mrc -t vol" % (inputFname, outputFname))
+          self.runJob('xmipp_image_convert', " -i %s -o %s:mrc -t vol" % (inputFname, outputFname))
 
     def convertInputStep(self):
         """ Read the input volume.
@@ -143,17 +163,28 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
         outputFname= os.path.abspath(self._getExtraPath(POSTPROCESS_VOL_BASENAME))
         if os.path.isfile(outputFname):
           return
-        params=" -i %s"%inputFname
-        params+=" -o %s"%outputFname
-        params+= " --sampling_rate %f"%self.inputVolume.get().getSamplingRate()
+        params=" -i %s "%inputFname
+        params+=" -o %s "%outputFname
+        params+= " --sampling_rate %f "%self.inputVolume.get().getSamplingRate()
 
         if self.normalization==self.NORMALIZATION_MASK:
-          params+= " --binaryMask %s"%(os.path.abspath(self._getTmpPath(INPUT_MASK_BASENAME)))
+          params+= " --binaryMask %s "%(os.path.abspath(self._getTmpPath(INPUT_MASK_BASENAME)))
         elif self.normalization==self.NORMALIZATION_STATS:
-          params+= " --noise_stats_mean %f --noise_stats_std %f"%(self.noiseMean, self.noiseStd)
+          params+= " --noise_stats_mean %f --noise_stats_std %f "%(self.noiseMean, self.noiseStd)
+
 
         if self.performCleaningStep:
-          params+= " --cleaningStrengh %f"%self.sizeFraction_CC.get()
+          params+= " --cleaningStrengh %f" %self.sizeFraction_CC.get()
+
+        if  self.normalization in [self.NORMALIZATION_AUTO, self.NORMALIZATION_STATS]:
+          if self.useTightModel == self.TIGHT_MODEL:
+            params+= " --checkpoint %s "%self.getModel("deepVolProc", "bestCheckpoint_locscale.hd5")
+          else:
+            params+= " --checkpoint  %s "%self.getModel("deepVolProc", "bestCheckpoint_locscale_wide.hd5")
+        elif self.normalization==self.NORMALIZATION_IQR_FULL:
+          params += " --checkpoint  %s " % self.getModel("deepVolProc", "bestCheckpoint_locscale_legacy.hd5")
+        else: #self.NORMALIZATION_MASK
+          params+= " --checkpoint  %s "%self.getModel("deepVolProc", "bestCheckpoint_locscale_masked.hd5")
 
         self.runJob("xmipp_deep_volume_postprocessing", params, numberOfMpi=1)
 
