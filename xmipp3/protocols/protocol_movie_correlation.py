@@ -61,6 +61,10 @@ class XmippProtMovieCorr(ProtAlignMovies):
     _label = 'correlation alignment'
     _lastUpdateVersion = VERSION_1_1
 
+    def __init__(self, **args):
+        ProtAlignMovies.__init__(self, **args)
+        self.stepsExecutionMode = cons.STEPS_PARALLEL
+
     #--------------------------- DEFINE param functions ------------------------
 
     def _defineAlignmentParams(self, form):
