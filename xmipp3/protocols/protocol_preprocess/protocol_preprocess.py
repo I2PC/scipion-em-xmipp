@@ -33,8 +33,9 @@ from pwem.objects import Volume, SetOfParticles, SetOfClasses2D
 
 from pwem import emlib
 from xmipp3.constants import *
-from xmipp3.convert import writeSetOfParticles
-from .protocol_process import XmippProcessParticles, XmippProcessVolumes
+from xmipp3.convert import  writeSetOfParticles
+from .protocol_process import XmippProcessParticles,\
+    XmippProcessVolumes
 
 
 class XmippPreprocessHelper:
@@ -46,6 +47,16 @@ class XmippPreprocessHelper:
     #--------------------------- DEFINE param functions ------------------------
     @classmethod
     def _defineProcessParams(cls, form):
+        form.addHidden(USE_GPU, BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       expertLevel=LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+
         # Invert Contrast
         form.addParam('doInvert', BooleanParam, default=False,
                       label='Invert contrast',
@@ -359,6 +370,7 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
 
 class XmippProtPreprocessVolumes(XmippProcessVolumes):
     """ Protocol for Xmipp-based preprocess for volumes """
+    import os
 
     _label = 'preprocess volumes'
     
@@ -548,16 +560,48 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
         writeSetOfParticles(newPartSet, imgsFn)
         
         if not partSet.hasAlignmentProj():
-            params = {'imgsFn': imgsFn,
-                      'dir': self._getTmpPath(),
-                      'vols': self.inputFn,
-                      'symmetryGroup': self.sigSymGroup.get(),
-                      }
-            sigArgs = '-i %(imgsFn)s --initvolumes %(vols)s --odir %(dir)s'\
-                      ' --sym %(symmetryGroup)s --alpha0 0.005 --dontReconstruct' \
-                      % params
-            self.runJob("xmipp_reconstruct_significant", sigArgs)
-    
+            if not self.useGpu.get():
+                params = {'imgsFn': imgsFn,
+                          'dir': self._getTmpPath(),
+                          'vols': self.inputFn,
+                          'symmetryGroup': self.sigSymGroup.get(),
+                          }
+                sigArgs = '-i %(imgsFn)s --initvolumes %(vols)s --odir %(dir)s' \
+                          ' --sym %(symmetryGroup)s --alpha0 0.005 --dontReconstruct ' \
+                          % params
+                self.runJob("xmipp_reconstruct_significant", sigArgs)
+            else:
+                fnGallery = self._getExtraPath('gallery.stk')
+                fnGalleryMd = self._getExtraPath('gallery.doc')
+                angleStep = 5
+                args = "-i %s -o %s --sampling_rate %f --sym %s --min_tilt_angle 0 --max_tilt_angle 180 " % \
+                       (self.inputFn, fnGallery, angleStep,
+                        self.sigSymGroup.get())
+                self.runJob("xmipp_angular_project_library", args,
+                            numberOfMpi=min(self.numberOfMpi.get(), 24))
+
+                count=0
+                GpuListCuda=''
+                if self.useQueueForSteps() or self.useQueue():
+                    GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                    GpuList = GpuList.split(",")
+                    for elem in GpuList:
+                        GpuListCuda = GpuListCuda+str(count)+' '
+                        count+=1
+                else:
+                    GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                    GpuListAux = ''
+                    for elem in self.getGpuList():
+                        GpuListCuda = GpuListCuda+str(count)+' '
+                        GpuListAux = GpuListAux+str(elem)+','
+                        count+=1
+                    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
+                fnAngles = 'images_iter001_00.xmd'
+                args = '-i %s -r %s -o %s --odir %s --keepBestN 1 --dev %s ' % (
+                imgsFn, fnGalleryMd, fnAngles, self._getTmpPath(), GpuListCuda)
+                self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+
     def adjustStep(self, isFirstStep, changeInserts):
         if isFirstStep:
             inputFn = self.inputFn

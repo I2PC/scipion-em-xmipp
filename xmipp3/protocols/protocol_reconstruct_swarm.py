@@ -32,19 +32,25 @@ try:
 except ImportError:
     izip = zip
 from os.path import join, exists
+import os
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
-                                        BooleanParam, IntParam,
+                                        BooleanParam, IntParam, EnumParam, NumericListParam,
                                         USE_GPU, GPU_LIST)
-from pyworkflow.utils.path import cleanPath, copyFile, moveFile
+from pyworkflow.utils.path import cleanPath, copyFile, moveFile, makePath, createLink
 from pwem.protocols import ProtRefine3D
-from pwem.objects import Volume
+from pwem.objects import Volume, SetOfVolumes
 from pwem.emlib.image import ImageHandler
+from pwem.emlib.metadata import getFirstRow, getSize
+from pyworkflow.utils import getFloatListFromValues
+import pwem.emlib.metadata as md
 
 from pwem import emlib
-from xmipp3.convert import (writeSetOfParticles, getImageLocation)
+from xmipp3.base import HelicalFinder
+from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
+                            setXmippAttributes, getImageLocation)
 
 
 class XmippProtReconstructSwarm(ProtRefine3D):
@@ -52,15 +58,15 @@ class XmippProtReconstructSwarm(ProtRefine3D):
        The set of particles has to be at full size (the finer sampling rate available), but
        the rest of inputs (reference volume and masks) can be at any downsampling factor.
        The protocol scales the input images and volumes to a size that depends on the target resolution.
-       
+
        The input set of volumes is considered to be a swarm of volumes and they try to optimize
        the correlation between the volumes and the set of particles. This is an stochastic maximization
        and only a fraction of the particles are used to update the volumes and evaluate them.
     """
     _label = 'swarm consensus'
     _version = VERSION_2_0
-    
-    #--------------------------- DEFINE param functions --------------------------------------------
+
+    # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addHidden(USE_GPU, BooleanParam, default=True,
                        label="Use GPU for execution",
@@ -185,13 +191,13 @@ class XmippProtReconstructSwarm(ProtRefine3D):
         TsOrig=self.inputParticles.get().getSamplingRate()
         TsCurrent = self.readInfoField(fnDir,"sampling",emlib.MDL_SAMPLINGRATE)
         fnMask = self._getExtraPath("mask.vol")
-        fnImages = join(fnDir,"images.xmd")
-        
-        maxShift=round(0.1*newXdim)
-        R=self.particleRadius.get()
-        if R<=0:
-            R=self.inputParticles.get().getDimensions()[0]/2
-        R=R*TsOrig/TsCurrent
+        fnImages = join(fnDir, "images.xmd")
+
+        maxShift = round(0.1 * newXdim)
+        R = self.particleRadius.get()
+        if R <= 0:
+            R = self.inputParticles.get().getDimensions()[0] / 2
+        R = R * TsOrig / TsCurrent
 
         bestWeightVol={}
         bestIterVol={}
@@ -232,12 +238,36 @@ class XmippProtReconstructSwarm(ProtRefine3D):
             self.runJob("xmipp_angular_project_library",args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
             
             # Assign angles
-            args='-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation 1'%\
-                 (fnTest,fnGalleryMd,maxShift,fnDir)
-            self.runJob('xmipp_reconstruct_significant',args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
-            
-            # Evaluate 
-            fnAngles = join(fnDir,"angles_iter001_00.xmd")
+            fnAngles = join(fnDir, "angles_iter001_00.xmd")
+            if not self.useGpu.get():
+                args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation 1' % \
+                       (fnTest, fnGalleryMd, maxShift, fnDir)
+                self.runJob('xmipp_reconstruct_significant', args,
+                            numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
+            else:
+                count=0
+                GpuListCuda=''
+                if self.useQueueForSteps() or self.useQueue():
+                    GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                    GpuList = GpuList.split(",")
+                    for elem in GpuList:
+                        GpuListCuda = GpuListCuda+str(count)+' '
+                        count+=1
+                else:
+                    GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                    GpuListAux = ''
+                    for elem in self.getGpuList():
+                        GpuListCuda = GpuListCuda+str(count)+' '
+                        GpuListAux = GpuListAux+str(elem)+','
+                        count+=1
+                    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
+                args = '-i %s -r %s -o %s --keepBestN 1 --dev %s ' % (
+                fnTest, fnGalleryMd, fnAngles, GpuListCuda)
+                self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+
+            # Evaluate
+            fnAngles = join(fnDir, "angles_iter001_00.xmd")
             if exists(fnAngles):
                 # Significant may decide not to write it if it is not significant
                 mdAngles = emlib.MetaData(fnAngles)
@@ -359,25 +389,75 @@ class XmippProtReconstructSwarm(ProtRefine3D):
             self.runJob("xmipp_angular_project_library",args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
             
             # Assign angles
-            args='-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation 1'%\
-                 (fnTrain,fnGalleryMd,maxShift,fnDir)
-            self.runJob('xmipp_reconstruct_significant',args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
-            fnAngles = join(fnDir,"angles_iter001_00.xmd")
+            fnAngles = join(fnDir, "angles_iter001_00.xmd")
+            if not self.useGpu.get():
+                args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation 1' % \
+                       (fnTrain, fnGalleryMd, maxShift, fnDir)
+                self.runJob('xmipp_reconstruct_significant', args,
+                            numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
+            else:
+                count=0
+                GpuListCuda=''
+                if self.useQueueForSteps() or self.useQueue():
+                    GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                    GpuList = GpuList.split(",")
+                    for elem in GpuList:
+                        GpuListCuda = GpuListCuda+str(count)+' '
+                        count+=1
+                else:
+                    GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                    GpuListAux = ''
+                    for elem in self.getGpuList():
+                        GpuListCuda = GpuListCuda+str(count)+' '
+                        GpuListAux = GpuListAux+str(elem)+','
+                        count+=1
+                    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
+                args = '-i %s -r %s -o %s --keepBestN 1 --dev %s ' % (
+                fnTrain, fnGalleryMd, fnAngles, GpuListCuda)
+                self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
 
             # Reconstruct
             if exists(fnAngles):
                 # Significant may decide not to write it if no image is significant
-                args="-i %s -o %s --sym %s --weight --fast" % (fnAngles,fnVol,self.symmetryGroup)
+                args = "-i %s -o %s --sym %s --weight --fast" % (
+                fnAngles, fnVol, self.symmetryGroup)
                 if self.useGpu.get():
+                    #AJ to make it work with and without queue system
+                    if self.numberOfMpi.get()>1:
+                        N_GPUs = len((self.gpuList.get()).split(','))
+                        args += ' -gpusPerNode %d' % N_GPUs
+                        args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+                    count=0
+                    GpuListCuda=''
+                    if self.useQueueForSteps() or self.useQueue():
+                        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                        GpuList = GpuList.split(",")
+                        for elem in GpuList:
+                            GpuListCuda = GpuListCuda+str(count)+' '
+                            count+=1
+                    else:
+                        GpuListAux = ''
+                        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                        for elem in self.getGpuList():
+                            GpuListCuda = GpuListCuda+str(count)+' '
+                            GpuListAux = GpuListAux+str(elem)+','
+                            count+=1
+                        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
                     args += " --thr %s" % self.numberOfThreads.get()
-                    args += " --device %(GPU)s"
-                    self.runJob("xmipp_cuda_reconstruct_fourier",args,numberOfMpi=1)
+                    if self.numberOfMpi.get()==1:
+                        args += " --device %s" % GpuListCuda
+                    if self.numberOfMpi.get()>1:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+                    else:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args)
                 else:
                     self.runJob('xmipp_reconstruct_fourier_accel', args)
-                args="-i %s --mask circular %f"%(fnVol,-R)
-                self.runJob("xmipp_transform_mask",args,numberOfMpi=1)
-                args="-i %s --select below 0 --substitute value 0"%fnVol
-                self.runJob("xmipp_transform_threshold",args,numberOfMpi=1)
+                args = "-i %s --mask circular %f" % (fnVol, -R)
+                self.runJob("xmipp_transform_mask", args, numberOfMpi=1)
+                args = "-i %s --select below 0 --substitute value 0" % fnVol
+                self.runJob("xmipp_transform_threshold", args, numberOfMpi=1)
 
             # Clean
             cleanPath(fnTrain)

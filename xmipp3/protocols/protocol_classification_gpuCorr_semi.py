@@ -28,6 +28,7 @@
 from os.path import getmtime
 from datetime import datetime
 from os.path import exists
+import os
 
 from pyworkflow import VERSION_2_0
 import pyworkflow.protocol.params as params
@@ -75,10 +76,7 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
         form.addHidden(params.GPU_LIST, params.StringParam, default='0',
                        expertLevel=const.LEVEL_ADVANCED,
                        label="Choose GPU IDs",
-                       help="GPU may have several cores. Set it to zero"
-                            " if you do not know what we are talking about."
-                            " First core index is 0, second 1 and so on."
-                            " In this protocol is not possible to use several GPUs.")
+                       help="Add a list of GPU devices that can be used")
         form.addParam('inputRefs', params.PointerParam,
                       pointerClass='SetOfClasses2D, SetOfAverages',
                       important=True,
@@ -90,10 +88,6 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
                       label='Maximum shift (px):',
                       help='Maximum shift allowed during the alignment as '
                            'percentage of the input set size',
-                      expertLevel=const.LEVEL_ADVANCED)
-        form.addParam('keepBest', params.IntParam, default=1,
-                      label='Number of best images:',
-                      help='Number of the best images to keep for every class',
                       expertLevel=const.LEVEL_ADVANCED)
 
 
@@ -151,7 +145,29 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
         self.lastDate = p.getObjCreation()
         self._saveCreationTimeFile(self.lastDate)
 
+        metadataRef = md.MetaData(self.imgsRef)
+        if metadataRef.containsLabel(md.MDL_REF) is False:
+            args = ('-i %s --fill ref lineal 1 1 -o %s')%(self.imgsRef, self.imgsRef)
+            self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
+
         # Calling program xmipp_cuda_correlation
+        count = 0
+        GpuListCuda = ''
+        if self.useQueueForSteps() or self.useQueue():
+            GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+            GpuList = GpuList.split(",")
+            for elem in GpuList:
+                GpuListCuda = GpuListCuda + str(count) + ' '
+                count += 1
+        else:
+            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+            GpuListAux = ''
+            for elem in self.getGpuList():
+                GpuListCuda = GpuListCuda + str(count) + ' '
+                GpuListAux = GpuListAux + str(elem) + ','
+                count += 1
+            os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
         outImgs, clasesOut = self._getOutputsFn()
         self._params = {'imgsRef': self.imgsRef,
                         'imgsExp': inputImgs,
@@ -159,13 +175,13 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
                         'keepBest': self.keepBest.get(),
                         'maxshift': self.maximumShift,
                         'outputClassesFile': clasesOut,
-                        'device': int(self.gpuList.get()),
+                        'device': GpuListCuda,
+                        'outputClassesFileNoExt': clasesOut[:-4],
                         }
 
-        args = ('-i_ref %(imgsRef)s -i_exp %(imgsExp)s -o %(outputFile)s '
-                '--keep_best %(keepBest)d --maxShift %(maxshift)d '
-                '--simplifiedMd --classify %(outputClassesFile)s --device %(device)d ')
-        self.runJob("xmipp_cuda_correlation", args % self._params)
+        args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \
+               '--keepBestN 1 --oUpdatedRefs %(outputClassesFileNoExt)s --dev %(device)s '
+        self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
 
 
     # ------ Methods for Streaming 2D Classification --------------
@@ -242,8 +258,6 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
         if x1 != x2 or y1 != y2 or z1 != z2:
             errors.append('The input images and the reference images '
                           'have different sizes')
-        if len(self.gpuList.get())>1:
-            errors.append("The GPU list only can have one value for this protocol.")
         return errors
 
     def _summary(self):

@@ -159,13 +159,12 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             self._defineOutputs(outputVol=vol)
         else:
             # ToDo: createSetOfVolumes not work properly when the protocol is resumed.
-            volumes = self._createSetOfVolumes()
+            volumes = volInput.create(self._getPath())
             volumes.copyInfo(volInput)
             self._preprocessOutput(volumes)
-            numberOfVols = self.inputVolumes.get().getSize()
-            for i in range(1, numberOfVols + 1):
-                vol = Volume()
-                vol.setLocation(i, self.outputStk)
+            for i, obj in enumerate(volInput.iterItems()):
+                vol = obj
+                vol.setLocation(i+1, self.outputStk)
                 volumes.append(vol)
             self._postprocessOutput(volumes)
             self._defineOutputs(outputVol=volumes)
@@ -185,4 +184,4 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             self.inputFn = self._getTmpPath('input_volumes.xmd')
             self.outputStk = self._getExtraPath("output_volumes.stk")
             self.outputMd = self._getExtraPath('output_volumes.xmd')
-   
+
