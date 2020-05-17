@@ -34,6 +34,9 @@ from pwem.objects import Volume
 import xmipp3
 
 INPUT_VOL_BASENAME="inputVol.mrc"
+INPUT_HALF1_BASENAME="inputHalf1.mrc"
+INPUT_HALF2_BASENAME="inputHalf1.mrc"
+
 INPUT_MASK_BASENAME="inputMask.mrc"
 POSTPROCESS_VOL_BASENAME= "deepPostProcess.mrc"
 
@@ -69,8 +72,25 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
                             " First core index is 0, second 1 and so on. Select "
                             "the GPU ID in which the protocol will run (select only 1 GPU)")
 
+
+        form.addParam('useHalfMapsInsteadVol', BooleanParam, default=False,
+                      label="Would you like to use half volumes?",
+                      help='Unmasked input required. Provide either unmasked unsharpened volume or half maps')
+
+
+        form.addParam('inputHalf1', PointerParam, pointerClass='Volume',
+                      label="Volume Half 1", important=True,
+                      condition='useHalfMapsInsteadVol',
+                      help='Select half map 1 to apply deep postprocessing. ')
+
+        form.addParam('inputHalf2', PointerParam, pointerClass='Volume',
+                      label="Volume Half 2", important=True,
+                      condition='useHalfMapsInsteadVol',
+                      help='Select half map 2 to apply deep postprocessing. ')
+        
         form.addParam('inputVolume', PointerParam, pointerClass='Volume',
-                      label="Input Volume", 
+                      label="Input Volume", important=True,
+                      condition='not useHalfMapsInsteadVol',
                       help='Select a volume to apply deep postprocessing. Unmasked input required')
 
 
@@ -151,19 +171,32 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
 
     def convertInputStep(self):
         """ Read the input volume.
-        """      
+        """
 
-        self._inputVol2Mrc(self.inputVolume.get().getFileName(), self._getTmpPath(INPUT_VOL_BASENAME))
+        if self.useHalfMapsInsteadVol.get():
+          self._inputVol2Mrc(self.inputHalf1.get().getFileName(), self._getTmpPath(INPUT_HALF1_BASENAME))
+          self._inputVol2Mrc(self.inputHalf2.get().getFileName(), self._getTmpPath(INPUT_HALF2_BASENAME))
+
+        else:
+          self._inputVol2Mrc(self.inputVolume.get().getFileName(), self._getTmpPath(INPUT_VOL_BASENAME))
+
         if  self.inputMask.get() is not None:
           self._inputVol2Mrc(self.inputMask.get().getFileName(), self._getTmpPath( INPUT_MASK_BASENAME))
 
 
     def deepVolPostProStep(self):
-        inputFname= os.path.abspath(self._getTmpPath(INPUT_VOL_BASENAME))
         outputFname= os.path.abspath(self._getExtraPath(POSTPROCESS_VOL_BASENAME))
         if os.path.isfile(outputFname):
           return
-        params=" -i %s "%inputFname
+
+        if self.useHalfMapsInsteadVol.get():
+          half1= os.path.abspath(self._getTmpPath(INPUT_HALF1_BASENAME))
+          half2= os.path.abspath(self._getTmpPath(INPUT_HALF1_BASENAME))
+          params=" -i %s -i2 %s"%(half1, half2)
+        else:
+          inputFname = os.path.abspath(self._getTmpPath(INPUT_VOL_BASENAME))
+          params=" -i %s "%inputFname
+
         params+=" -o %s "%outputFname
         params+= " --sampling_rate %f "%self.inputVolume.get().getSamplingRate()
 
@@ -175,6 +208,8 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
 
         if self.performCleaningStep:
           params+= " --cleaningStrengh %f" %self.sizeFraction_CC.get()
+        else:
+          params+= " --cleaningStrengh -1 "
 
         if  self.normalization in [self.NORMALIZATION_AUTO, self.NORMALIZATION_STATS]:
           if self.useTightModel == self.TIGHT_MODEL:
@@ -193,10 +228,15 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
 
         volume=Volume()
         volume.setFileName(self._getExtraPath(POSTPROCESS_VOL_BASENAME))
-
-        volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
         self._defineOutputs(postProcessed_Volume=volume)
-        self._defineTransformRelation(self.inputVolume, volume)
+
+        if self.useHalfMapsInsteadVol.get():
+          volume.setSamplingRate(self.inputHalf1.get().getSamplingRate())
+          self._defineTransformRelation(self.inputHalf1, volume)
+          self._defineTransformRelation(self.inputHalf2, volume)
+        else:
+          volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
+          self._defineTransformRelation(self.inputVolume, volume)
 
                 
     # --------------------------- INFO functions ------------------------------
