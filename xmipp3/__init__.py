@@ -84,13 +84,6 @@ class Plugin(pwem.Plugin):
         pwutils.runJob(None, program, args, env=cls.getEnviron())
 
     @classmethod
-    def getCondaPathInEnv(cls, condaEnv, condaSubDir):
-        if cls._condaRootPath is None:  # This is for performance reasons.
-            cls._condaRootPath = CondaEnvManager.getCondaRoot(cls.getEnviron())
-        condaRoot = cls._condaRootPath
-        return CondaEnvManager.getCondaPathInEnv(condaRoot, condaEnv, condaSubDir)
-
-    @classmethod
     def getMatlabEnviron(cls, *toolPaths):
         """ Return an Environment prepared for launching Matlab
         scripts using the Xmipp binding.

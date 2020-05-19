@@ -148,18 +148,13 @@ class XmippProtocol:
 
         # Trying to import keras to assert if DeepLearningToolkit works fine.
         kerasError = False
-        # condaEnvName preference: kwargs > protocol default > general default
-        condaEnvName = kwargs.get('_conda_env', getattr(self, "_conda_env",
-                                  CondaEnvManager.CONDA_DEFAULT_ENVIRON))
-        env = CondaEnvManager.modifyEnvToUseConda(xmipp3.Plugin.getEnviron(),
-                                                  condaEnvName)
         try:
             # subprocess.call('which python', shell=True, env=env)
-            subprocess.check_output('python -W ignore::FutureWarning '
-                                    '-c "import keras"', shell=True, env=env)
+            subprocess.check_output('python -c "import keras"', shell=True,
+                                    env=self.getCondaEnv())
         except subprocess.CalledProcessError as e:
-            errors.append("*Keras/Tensorflow not found*."
-                            "Required to run this protocol.")
+            errors.append("*Keras/Tensorflow not found*. "
+                          "Required to run this protocol.")
             kerasError = True
 
         # Asserting if the model exists only if the software is well installed
@@ -191,31 +186,27 @@ class XmippProtocol:
                           "package using the *plugin manager*.")
         return errors
 
-    def runCondaJob(self, program, arguments, **kwargs):
-        '''
-        Performs the same operation as self.runJob but preparing the environment to use conda instead.
-        It will use the CONDA_DEFAULT_ENVIRON except when the class have defined the _conda_env argument
-        :param program: string
-        :param arguments: string
-        :param kwargs: options
-        :return:
-        '''
-        if "_conda_env" in kwargs:
-            condaEnvName = kwargs.pop("_conda_env")
-        elif self.hasAttribute("_conda_env"):
-            condaEnvName = self._conda_env
-        else:
-            condaEnvName = CondaEnvManager.CONDA_DEFAULT_ENVIRON
+    @classmethod
+    def getCondaName(cls, **kwargs):
+        # condaEnvName preference: kwargs > protocol default > general default
+
+        condaEnv = kwargs.get('_conda_env', getattr(cls, '_conda_env', None))
+
+        if condaEnv is None:
+            condaEnv = CondaEnvManager.CONDA_DEFAULT_ENVIRON
             print("Warning: using default conda environment '%s'. "
                   "CondaJobs should be run under a specific environment to "
                   "avoid problems. Please, fix it or contact to the developer."
-                  % condaEnvName)
-        if "env" not in kwargs:
-            kwargs['env'] = xmipp3.Plugin.getEnviron()
-        program, arguments, kwargs = prepareRunConda(program, arguments,
-                                                     condaEnvName, **kwargs)
+                  % condaEnv)
 
-        super(type(self), self).runJob(program, arguments, **kwargs)
+    @classmethod
+    def getCondaEnv(cls, **kwargs):
+        '''
+        Performs the same operation as self.runJob but preparing the environment to use conda instead.
+        It will use the CONDA_DEFAULT_ENVIRON except when the class have defined the _conda_env argument
+        '''
+        env = kwargs.get('env', xmipp3.Plugin.getEnviron())
+        return CondaEnvManager.getCondaEnv(env, cls.getCondaName(**kwargs))
 
 
 # findRow() cannot go to xmipp_base (binding) because depends on emlib.metadata.Row()

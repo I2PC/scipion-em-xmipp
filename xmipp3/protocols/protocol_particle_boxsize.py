@@ -95,7 +95,7 @@ class XmippProtParticleBoxsize(ProtMicrographs, xmipp3.XmippProtocol):
         with open(micNamesPath, 'wb') as csvFile:
             csvFile.writelines(fileNames)
         params += ' --micrographs %s' % micNamesPath
-        self.runCondaJob('xmipp_particle_boxsize', params)
+        self.runJob('xmipp_particle_boxsize', params, env=self.getCondaEnv())
 
         with open(particleBoxSizeFn, 'r') as fp:
             self.particleBoxsize = int(fp.read().rstrip('\n'))
