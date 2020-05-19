@@ -187,26 +187,18 @@ class XmippProtocol:
         return errors
 
     @classmethod
-    def getCondaName(cls, **kwargs):
-        # condaEnvName preference: kwargs > protocol default > general default
-
-        condaEnv = kwargs.get('_conda_env', getattr(cls, '_conda_env', None))
-
-        if condaEnv is None:
-            condaEnv = CondaEnvManager.CONDA_DEFAULT_ENVIRON
-            print("Warning: using default conda environment '%s'. "
-                  "CondaJobs should be run under a specific environment to "
-                  "avoid problems. Please, fix it or contact to the developer."
-                  % condaEnv)
-
-    @classmethod
     def getCondaEnv(cls, **kwargs):
+        ''' Returns the environ corresponding to the condaEnv of the protocol.
+            kwargs can contain:
+               - 'env': Any environ (the xmipp one is the default)
+               - '_conda_env': An installed condaEnv name
+            > _conda_env preference: kwargs > protocol default > general default
         '''
-        Performs the same operation as self.runJob but preparing the environment to use conda instead.
-        It will use the CONDA_DEFAULT_ENVIRON except when the class have defined the _conda_env argument
-        '''
+        envName = kwargs.get('_conda_env',
+                             getattr(cls, '_conda_env',
+                                     CondaEnvManager.getDefaultEnv()))
         env = kwargs.get('env', xmipp3.Plugin.getEnviron())
-        return CondaEnvManager.getCondaEnv(env, cls.getCondaName(**kwargs))
+        return CondaEnvManager.getCondaEnv(env, envName)
 
 
 # findRow() cannot go to xmipp_base (binding) because depends on emlib.metadata.Row()
