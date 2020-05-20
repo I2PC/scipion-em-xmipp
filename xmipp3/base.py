@@ -32,6 +32,7 @@ from pyworkflow.protocol import Protocol
 from pyworkflow.utils.path import cleanPath
 from pwem import emlib
 import pwem
+from .constants import XMIPP_DLTK_NAME
 
 try:  # If binding is not already done, this will fail.
     from xmipp_base import *  # xmipp_base and xmippViz come from the binding and
@@ -146,10 +147,12 @@ class XmippProtocol:
         # initialize errors if needed
         errors = errors if errors is not None else []
 
-        # Trying to import keras to assert if DeepLearningToolkit works fine.
+        # Looking for the installation target for that conda environment.
         kerasError = False
         envName = CondaEnvManager.getCondaName(self, **kwargs)
-        if not os.path.isfile(getYmlTarget(envName)):
+        if not os.path.isfile(os.path.join(pwem.Config.EM_ROOT,
+                                           XMIPP_DLTK_NAME,
+                                           envName+'.yml')):
             errors.append("*%s environment not found*. "
                           "Required to run this protocol." % envName)
             kerasError = True
@@ -185,18 +188,15 @@ class XmippProtocol:
 
     @classmethod
     def getCondaEnv(cls, **kwargs):
-        ''' Returns the environ corresponding to the condaEnv of the protocol.
+        """ Returns the environ corresponding to the condaEnv of the protocol.
             kwargs can contain:
                - 'env': Any environ (the xmipp one is the default)
                - '_conda_env': An installed condaEnv name
             > _conda_env preference: kwargs > protocol default > general default
-        '''
+        """
         envName = CondaEnvManager.getCondaName(cls, **kwargs)
         env = kwargs.get('env', xmipp3.Plugin.getEnviron())
         return CondaEnvManager.getCondaEnv(env, envName)
-
-def getYmlTarget(envName):
-    return getXmippPath('models', envName+'.yml')
 
 # findRow() cannot go to xmipp_base (binding) because depends on emlib.metadata.Row()
 def findRow(md, label, value):

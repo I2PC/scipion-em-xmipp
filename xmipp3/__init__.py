@@ -34,7 +34,7 @@ import pwem
 import pyworkflow.utils as pwutils
 
 from .base import *
-from .constants import XMIPP_HOME, XMIPP_URL
+from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
@@ -244,8 +244,7 @@ def installDeepLearningToolkit(plugin, env):
         useGpu = False
 
     # commands  = [(command, target), (cmd, tgt), ...]
-    cmdsInstall = [(cmd+" && conda env export > "+getYmlTarget(envName),
-                    getYmlTarget(envName)) for cmd, envName in
+    cmdsInstall = [(cmd, envName + ".yml") for cmd, envName in
                    CondaEnvManager.yieldInstallAllCmds(useGpu=useGpu)]
 
     now = datetime.now()
@@ -276,6 +275,6 @@ def installDeepLearningToolkit(plugin, env):
                          " fi" % installDLvars,           # End of command
                          installDLvars['xmippLibToken'])  # Target
 
-    env.addPackage('deepLearningToolkit', version='0.2', urlSuffix='external',
+    env.addPackage(XMIPP_DLTK_NAME, version='0.2', urlSuffix='external',
                    commands=[xmippInstallCheck]+cmdsInstall+[modelsDownloadCmd],
-                   deps=[], tar='deepLearningToolkit.tgz')
+                   deps=[], tar=XMIPP_DLTK_NAME+'.tgz')
