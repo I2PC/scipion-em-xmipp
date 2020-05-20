@@ -150,7 +150,7 @@ class XmippProtocol:
         kerasError = False
         try:
             # subprocess.call('which python', shell=True, env=env)
-            subprocess.check_output('python -c "import keras"', shell=True,
+            subprocess.check_output('python -c "import tensorflow"', shell=True,
                                     env=self.getCondaEnv())
         except subprocess.CalledProcessError as e:
             errors.append("*Keras/Tensorflow not found*. "

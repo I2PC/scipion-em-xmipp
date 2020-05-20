@@ -93,7 +93,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
                            'will be mapped to the new micrographs and rescaled accordingly.')
 
 
-        form.addParam("threshold", params.FloatParam, default=-1,expertLevel=params.LEVEL_ADVANCED,
+        form.addParam("threshold", params.FloatParam, default=-1,
                       label="Threshold", help="Deep learning goodness score to select/discard coordinates. The bigger the threshold "+
                            "the more coordiantes will be ruled out. Ranges from 0 to 1. Use -1 to skip thresholding. "+
                            "Manual thresholding can be performed after execution through analyze results button. "+
