@@ -244,7 +244,8 @@ def installDeepLearningToolkit(plugin, env):
         useGpu = False
 
     # commands  = [(command, target), (cmd, tgt), ...]
-    cmdsInstall = [(cmd, envName + ".yml") for cmd, envName in
+    cmdsInstall = [(cmd+" && conda env export > "+getYmlTarget(envName),
+                    getYmlTarget(envName)) for cmd, envName in
                    CondaEnvManager.yieldInstallAllCmds(useGpu=useGpu)]
 
     now = datetime.now()

@@ -148,13 +148,10 @@ class XmippProtocol:
 
         # Trying to import keras to assert if DeepLearningToolkit works fine.
         kerasError = False
-        try:
-            # subprocess.call('which python', shell=True, env=env)
-            subprocess.check_output('python -c "import tensorflow"', shell=True,
-                                    env=self.getCondaEnv())
-        except subprocess.CalledProcessError as e:
-            errors.append("*Keras/Tensorflow not found*. "
-                          "Required to run this protocol.")
+        envName = CondaEnvManager.getCondaName(self, **kwargs)
+        if not os.path.isfile(getYmlTarget(envName)):
+            errors.append("*%s environment not found*. "
+                          "Required to run this protocol." % envName)
             kerasError = True
 
         # Asserting if the model exists only if the software is well installed
@@ -194,12 +191,12 @@ class XmippProtocol:
                - '_conda_env': An installed condaEnv name
             > _conda_env preference: kwargs > protocol default > general default
         '''
-        envName = kwargs.get('_conda_env',
-                             getattr(cls, '_conda_env',
-                                     CondaEnvManager.getDefaultEnv()))
+        envName = CondaEnvManager.getCondaName(cls, **kwargs)
         env = kwargs.get('env', xmipp3.Plugin.getEnviron())
         return CondaEnvManager.getCondaEnv(env, envName)
 
+def getYmlTarget(envName):
+    return getXmippPath('models', envName+'.yml')
 
 # findRow() cannot go to xmipp_base (binding) because depends on emlib.metadata.Row()
 def findRow(md, label, value):
