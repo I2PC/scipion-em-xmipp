@@ -198,7 +198,7 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
           params=" -i %s "%inputFname
 
         params+=" -o %s "%outputFname
-        params+= " --sampling_rate %f "%self.inputVolume.get().getSamplingRate()
+        params+= " --sampling_rate %f "%(self.inputVolume.get().getSamplingRate() if self.inputVolume.get() is not None else  self.inputHalf1.get().getSamplingRate())
 
         if self.normalization==self.NORMALIZATION_MASK:
           params+= " --binaryMask %s "%(os.path.abspath(self._getTmpPath(INPUT_MASK_BASENAME)))
