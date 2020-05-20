@@ -58,6 +58,9 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
                       label='Harmonical depth',
                       expertLevel=params.LEVEL_ADVANCED,
                       help='Harmonical depth of the deformation=1,2,3,...')
+        form.addParam('penalization', params.FloatParam, default=0.00025, label='Regularization',
+                      expertLevel=params.LEVEL_ADVANCED,
+                      help='Penalization to deformations (higher values penalize more the deformation).')
 
 
     def _createFilenameTemplates(self):
@@ -121,8 +124,9 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
 
         self.alignMaps()
 
-        params = ' -i %s -r %s -o %s --analyzeStrain --depth %d --sigma "%s" --oroot %s' % \
-                 (fnOutVol, fnRefVol, fnOutVol, self.depth.get(), self.sigma.get(), self._getExtraPath('Volumes'))
+        params = ' -i %s -r %s -o %s --analyzeStrain --depth %d --sigma "%s" --oroot %s --regularization %f' % \
+                 (fnOutVol, fnRefVol, fnOutVol, self.depth.get(), self.sigma.get(),
+                  self._getExtraPath('Volumes'), self.penalization.get())
         if self.newRmax != 0:
             params = params + ' --Rmax %d' % self.newRmax
         self.runJob("xmipp_volume_deform_sph", params)

@@ -113,6 +113,9 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                       label='Harmonical depth', condition='computeDef',
                       expertLevel=params.LEVEL_ADVANCED,
                       help='Harmonical depth of the deformation=1,2,3,...')
+        form.addParam('penalization', params.FloatParam, default=0.00025, label='Regularization',
+                      expertLevel=params.LEVEL_ADVANCED,
+                      help='Penalization to deformations (higher values penalize more the deformation).')
         form.addParallelSection(threads=1, mpi=1)
 
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -191,8 +194,9 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         self.runJob("xmipp_volume_align", params)
 
         if self.computeDef.get():
-            params = ' -i %s -r %s -o %s --depth %d --sigma "%s" --oroot %s' %\
-                     (fnOut, refVolFn, fnOut2, self.depth.get(), self.sigma.get(), self._getExtraPath('Pair_%d_%d' % (i, j)))
+            params = ' -i %s -r %s -o %s --depth %d --sigma "%s" --oroot %s --regularization %f' %\
+                     (fnOut, refVolFn, fnOut2, self.depth.get(), self.sigma.get(),
+                      self._getExtraPath('Pair_%d_%d' % (i, j)), self.penalization.get())
             if self.newRmax != 0:
                 params = params + ' --Rmax %d' % self.newRmax
 
