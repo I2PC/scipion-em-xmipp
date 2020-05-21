@@ -181,7 +181,7 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
           self._inputVol2Mrc(self.inputVolume.get().getFileName(), self._getTmpPath(INPUT_VOL_BASENAME))
 
         if  self.inputMask.get() is not None:
-          self._inputVol2Mrc(self.inputMask.get().getFileName(), self._getTmpPath( INPUT_MASK_BASENAME))
+          self._inputVol2Mrc(self.inputMask.get().getFileName(), self._getTmpPath(INPUT_MASK_BASENAME))
 
 
     def deepVolPostProStep(self):
@@ -191,7 +191,7 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
 
         if self.useHalfMapsInsteadVol.get():
           half1= os.path.abspath(self._getTmpPath(INPUT_HALF1_BASENAME))
-          half2= os.path.abspath(self._getTmpPath(INPUT_HALF1_BASENAME))
+          half2= os.path.abspath(self._getTmpPath(INPUT_HALF2_BASENAME))
           params=" -i %s -i2 %s"%(half1, half2)
         else:
           inputFname = os.path.abspath(self._getTmpPath(INPUT_VOL_BASENAME))
