@@ -388,7 +388,7 @@ class TestXmippDeepMicrographsCleaner(BaseTest):
         cls.protDown.inputMicrographs.set(cls.protImportMics.outputMicrographs)
         cls.proj.launchProtocol(cls.protDown, wait=True)
 
-        cls.fnameMaskGroundTruth_toMeanVal = {"%s/Falcon_2012_06_12-14_33_35_0.mrc": 0.03221564,
+        cls.fnameMaskGroundTruth_toMeanVal = {"%s/Falcon_2012_06_12-14_33_35_0.mrc": 0.022,
                                               "%s/Falcon_2012_06_12-17_26_54_0.mrc": 0.00686,
                                               "%s/Falcon_2012_06_12-17_23_32_0.mrc": 0.029,
                                               }
@@ -410,6 +410,17 @@ class TestXmippDeepMicrographsCleaner(BaseTest):
 
     def _compareCoorSetsBoxSizes(self, coordSet1, coordSet2, scale=1):
       self.assertEqual(coordSet1.getBoxSize(), coordSet2.getBoxSize()*scale)
+
+    def test_launchMicCleanFromCmd(self):
+
+      from xmipp3 import Plugin
+      import subprocess
+      xmippBinPath= Plugin.getHome("bin")
+      scipionPython= subprocess.check_output(["which", "python"]).strip()
+      scipionPath= (os.path.sep).join( scipionPython.split(os.path.sep)[:-3] )
+      cmd= [ os.path.join(scipionPath,"scipion"), "python", os.path.join(xmippBinPath,"xmipp_deep_micrograph_cleaner"), "-h" ]
+      print(" ".join(cmd))
+      subprocess.check_call( cmd, env=Plugin.getEnviron() )
 
     def test_noThreshold(self):
         print("Run cleanMics no thr")

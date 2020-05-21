@@ -27,6 +27,7 @@
 
 from math import sqrt
 import glob
+import os
 
 from pyworkflow import VERSION_1_1
 from pyworkflow.utils import getFloatListFromValues
@@ -208,7 +209,7 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
         fractionCounter = 0
         maxNumberOfParticles = 0.5 * self.inputParticles.get().getSize()
         for number in numberOfParticles:
-            if number <= maxNumberOfParticles:
+            if number <= numberOfParticles: #AJ before maxNumberOfParticles
                 for iteration in range(0, self.numberOfIterations.get()):
                     self._insertFunctionStep('reconstructionStep', number,
                                              fractionCounter, iteration,
@@ -250,9 +251,34 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
             params += ' --sampling %f' % Ts
 
             if self.useGpu.get():
+                #AJ to make it work with and without queue system
+                if self.numberOfMpi.get()>1:
+                    N_GPUs = len((self.gpuList.get()).split(','))
+                    params += ' -gpusPerNode %d' % N_GPUs
+                    params += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+                count=0
+                GpuListCuda=''
+                if self.useQueueForSteps() or self.useQueue():
+                    GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                    GpuList = GpuList.split(",")
+                    for elem in GpuList:
+                        GpuListCuda = GpuListCuda+str(count)+' '
+                        count+=1
+                else:
+                    GpuListAux = ''
+                    GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                    for elem in self.getGpuList():
+                        GpuListCuda = GpuListCuda+str(count)+' '
+                        GpuListAux = GpuListAux+str(elem)+','
+                        count+=1
+                    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                if self.numberOfMpi.get()==1:
+                    params += " --device %s" %(GpuListCuda)
                 params += ' --thr %d' % self.numberOfThreads.get()
-                params += ' --device %(GPU)s'
-                self.runJob('xmipp_cuda_reconstruct_fourier', params, numberOfMpi=1)
+                if self.numberOfMpi.get()>1:
+                    self.runJob('xmipp_cuda_reconstruct_fourier', params, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+                else:
+                    self.runJob('xmipp_cuda_reconstruct_fourier', params)
             else:
                 self.runJob('xmipp_reconstruct_fourier_accel', params)
 
@@ -304,11 +330,37 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                 # params += ' --thr %d' % self.numberOfThreads.get()
                 params += ' --sampling %f' % Ts
 
-                if not self.useGpu.get():
-                    self.runJob('xmipp_reconstruct_fourier', params)
-                else:
-                    params += ' --fftOnGPU '
-                    self.runJob('xmipp_cuda_reconstruct_fourier', params, numberOfMpi=1)
+                if self.useGpu.get():
+                    #AJ to make it work with and without queue system
+                    if self.numberOfMpi.get()>1:
+                        N_GPUs = len((self.gpuList.get()).split(','))
+                        params += ' -gpusPerNode %d' % N_GPUs
+                        params += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+                    count=0
+                    GpuListCuda=''
+                    if self.useQueueForSteps() or self.useQueue():
+                        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                        GpuList = GpuList.split(",")
+                        for elem in GpuList:
+                            GpuListCuda = GpuListCuda+str(count)+' '
+                            count+=1
+                    else:
+                        GpuListAux = ''
+                        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                        for elem in self.getGpuList():
+                            GpuListCuda = GpuListCuda+str(count)+' '
+                            GpuListAux = GpuListAux+str(elem)+','
+                            count+=1
+                        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                    if self.numberOfMpi.get()==1:
+                        params += " --device %s" %(GpuListCuda)
+                    params += ' --thr %d' % self.numberOfThreads.get()
+                    if self.numberOfMpi.get()>1:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', params, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+                    else:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', params)
+            else:
+                self.runJob('xmipp_reconstruct_fourier_accel', params)
 
 
         self.runJob('xmipp_resolution_fsc',

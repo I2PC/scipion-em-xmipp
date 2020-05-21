@@ -30,7 +30,8 @@ from os.path import join
 from shutil import move
 from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pwem.objects import Volume
+from pwem.convert.headers import Ccp4Header
+from pwem.objects import Volume, Transform
 from pwem.protocols import ProtInitialVolume
 
 
@@ -62,13 +63,28 @@ class XmippProtVolSubtraction(ProtInitialVolume):
 
     # --------------------------- STEPS functions --------------------------------------------
     def subtractionStep(self):
+        vol1 = self.vol1.get()
+        vol2 = self.vol2.get()
+        mask1 = self.mask1.get()
+        mask2 = self.mask2.get()
+        # ccp4header = Ccp4Header(vol1.getFileName(), readHeader=True)
+        # origin = Transform()
+        # shifts = ccp4header.getOrigin()
+        # origin.setShiftsTuple(shifts)
+        # vol2.setOrigin(origin)
+        # mask1.setOrigin(origin)
+        # mask2.setOrigin(origin)
+        # print("--------------------vol1---------------", vol1.getOrigin().getShifts())
+        # print("--------------------vol2---------------", vol2.getOrigin().getShifts())
+        # print("--------------------mask1---------------", mask1.getOrigin().getShifts())
+        # print("--------------------mask2---------------", mask2.getOrigin().getShifts())
         program = "xmipp_volume_subtraction"
-        args = '-i1 %s -i2 %s -o %s --iter %s' % (self.vol1.get().getFileName(), self.vol2.get().getFileName(),
+        args = '-i1 %s -i2 %s -o %s --iter %s' % (vol1.getFileName(), vol2.getFileName(),
                                                   self._getExtraPath("vol_diff.mrc"), self.iter.get())
         if self.pdb:
             args += ' --pdb'
         if self.masks:
-            args += ' --mask1 %s --mask2 %s' % (self.mask1.get().getFileName(), self.mask2.get().getFileName())
+            args += ' --mask1 %s --mask2 %s' % (mask1.getFileName(), mask2.getFileName())
         self.runJob(program, args)
 
         move('commonmask.mrc', join(self._getExtraPath(), 'common_mask.mrc'))

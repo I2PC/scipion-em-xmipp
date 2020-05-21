@@ -130,7 +130,9 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         deps = []
         for micrograph in mics:
             stepId = self._insertFunctionStep("calculateConsensusStep",
-                                              micrograph, prerequisites=[])
+                                              micrograph.getObjId(),
+                                              micrograph.getFileName(),
+                                              prerequisites=[])
             deps.append(stepId)
         return deps
 
@@ -234,10 +236,10 @@ class XmippProtConsensusPicking(ProtParticlePicking):
 
         return outputSet
 
-    def calculateConsensusStep(self, micrograph):
-        micId = micrograph.getObjId()
+    def calculateConsensusStep(self, micId, micName):
+
         print("Consensus calculation for micrograph %d: '%s'"
-              % (micId, micrograph.getMicName()))
+              % (micId, micName))
 
         # Take the sampling rates just once
         if not self.sampligRates:
