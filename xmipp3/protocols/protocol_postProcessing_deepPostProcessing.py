@@ -35,7 +35,7 @@ import xmipp3
 
 INPUT_VOL_BASENAME="inputVol.mrc"
 INPUT_HALF1_BASENAME="inputHalf1.mrc"
-INPUT_HALF2_BASENAME="inputHalf1.mrc"
+INPUT_HALF2_BASENAME="inputHalf2.mrc"
 
 INPUT_MASK_BASENAME="inputMask.mrc"
 POSTPROCESS_VOL_BASENAME= "deepPostProcess.mrc"
