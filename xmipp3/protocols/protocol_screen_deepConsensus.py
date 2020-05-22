@@ -734,7 +734,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             micIds = self.getMicsIds(filterOutNoCoords=True)
             samplingRate = self._getInputMicrographs().getSamplingRate()
             mics_ = self._getInputMicrographs()
-            micsFnameSet = { mics_[micId].getMicName(): mics_[micId].getFileName() for micId in micIds }
+            micsFnameSet = {mics_[micId].getMicName(): mics_[micId].getFileName() for micId in micIds
+                            if mics_[micId] is not None}  # to skip failed mics
             if self.ignoreCTF.get():
               preproMicsContent="#mics\n"
               for micName in micsFnameSet:
