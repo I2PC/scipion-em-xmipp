@@ -28,10 +28,9 @@
 
 from os.path import join
 from shutil import move
-from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam
+from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pwem.convert.headers import Ccp4Header
-from pwem.objects import Volume, Transform
+from pwem.objects import Volume
 from pwem.protocols import ProtInitialVolume
 
 
@@ -53,6 +52,8 @@ class XmippProtVolSubtraction(ProtInitialVolume):
                       condition='masks', help='Specify a mask for volume 1.')
         form.addParam('mask2', PointerParam, pointerClass='VolumeMask', label="Mask for volume 2",
                       condition='masks', help='Specify a mask for volume 1.')
+        form.addParam('resol', FloatParam, label="subtraction at resolution: ", default=0,
+                      help='Resolution (A) at which subtraction will be performed, filtering the input volumes.')
         form.addParam('iter', IntParam, label="Number of iterations: ", default=5, expertLevel=LEVEL_ADVANCED)
 
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -67,20 +68,14 @@ class XmippProtVolSubtraction(ProtInitialVolume):
         vol2 = self.vol2.get()
         mask1 = self.mask1.get()
         mask2 = self.mask2.get()
-        # ccp4header = Ccp4Header(vol1.getFileName(), readHeader=True)
-        # origin = Transform()
-        # shifts = ccp4header.getOrigin()
-        # origin.setShiftsTuple(shifts)
-        # vol2.setOrigin(origin)
-        # mask1.setOrigin(origin)
-        # mask2.setOrigin(origin)
-        # print("--------------------vol1---------------", vol1.getOrigin().getShifts())
-        # print("--------------------vol2---------------", vol2.getOrigin().getShifts())
-        # print("--------------------mask1---------------", mask1.getOrigin().getShifts())
-        # print("--------------------mask2---------------", mask2.getOrigin().getShifts())
+        resolution = self.resol.get()
+        if resolution != 0:
+            fc = vol1.getSamplingRate()/self.resol.get()
+        else:
+            fc = 0
         program = "xmipp_volume_subtraction"
-        args = '-i1 %s -i2 %s -o %s --iter %s' % (vol1.getFileName(), vol2.getFileName(),
-                                                  self._getExtraPath("vol_diff.mrc"), self.iter.get())
+        args = '-i1 %s -i2 %s -o %s -fc %d --iter %s' % (vol1.getFileName(), vol2.getFileName(),
+                                                  self._getExtraPath("vol_diff.mrc"), fc,self.iter.get())
         if self.pdb:
             args += ' --pdb'
         if self.masks:
@@ -112,12 +107,19 @@ class XmippProtVolSubtraction(ProtInitialVolume):
             if self.masks:
                 summary.append("Input mask 1: %s" % self.mask1.get().getFileName())
                 summary.append("Input mask 2: %s" % self.mask2.get().getFileName())
+            if self.resol.get() != 0:
+                summary.append("Subtraction at resolution %d A" % self.resol.get())
 
         return summary
 
     def _methods(self):
+        methods = []
         if not hasattr(self, 'outputVolume'):
-            return ["Output volume not ready yet."]
+            methods.append("Output volume not ready yet.")
         else:
-            return ["Volume %s subtracted from volume %s." %
-                    (self.vol1.get().getFileName(), self.vol2.get().getFileName())]
+            methods.append("Volume %s subtracted from volume %s." % (self.vol1.get().getFileName(),
+                                                                     self.vol2.get().getFileName()))
+            if self.resol.get() != 0:
+                methods.append("Subtraction at resolution %d A" % self.resol.get())
+
+        return methods
