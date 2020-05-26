@@ -113,13 +113,14 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             self.setInputMics()
         # Insert the selection/rejection step
         movieStepId = self._insertFunctionStep('_evaluateMovieAlign',
-                                               movie.clone(),
+                                               movie.getObjId(),
                                                prerequisites=[])
         return movieStepId
 
-    def _evaluateMovieAlign(self, movie):
+    def _evaluateMovieAlign(self, movieId):
         """ Fill the accepted or the rejected list with the movie.
         """
+        movie = self.inputMovies.get()[movieId].clone()
         alignment = movie.getAlignment()
         sampling = self.samplingRate
 
