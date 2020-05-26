@@ -324,7 +324,6 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         # readSetOfParticles(self._getExtraPath('VamosAVer.xmd'), outputSetOfParticles)
         # self._defineOutputs(outputParticles=outputSetOfParticles)
 
-
     def prepareImagesForTraining(self):
 
         fnCentersMd = self._getExtraPath("coneCenters.doc")
@@ -362,8 +361,9 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
                                                    counterCones + 1, False)
                     # AJ posiblemente con alrededor de 8000 podria valer...
             else: #AJ to check en general y con modelPretrain
-                #remove(self._getExtraPath('projections%d.xmd' % (counterCones + 1)))
-                moveFile(self._getExtraPath('projections%d.xmd' % (counterCones + 1)), self._getExtraPath('CONOVACIOprojections%d.xmd' % (counterCones + 1)))
+                remove(self._getExtraPath('projections%d.xmd' % (counterCones + 1)))
+                #moveFile(self._getExtraPath('projections%d.xmd' % (counterCones + 1)),
+                #         self._getExtraPath('CONOVACIOprojections%d.xmd' % (counterCones + 1)))
             counterCones = counterCones + 1
 
         if self.modelPretrain.get() is False:
