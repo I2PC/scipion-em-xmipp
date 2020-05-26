@@ -98,7 +98,7 @@ Examples:
                        help='Displays selected volume')
         group.addParam('showResolutionPlots', LabelParam, default=True,
                       label='Display resolution plots (FSC)')
-        group.addParam('resolutionThreshold', FloatParam, default=0.143,
+        group.addParam('resolutionThreshold', FloatParam, default=0.5, #0.143
                       expertLevel=LEVEL_ADVANCED,
                       label='Threshold in resolution plots')
 

@@ -1,6 +1,6 @@
 # **************************************************************************
 # *
-# * Authors:     Carlos Oscar Sorzano
+# * Authors:     Amaya Jimenez
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -68,6 +68,8 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         form.addSection(label='Input')
         form.addParam('inputSet', PointerParam, label="Input images",
                       pointerClass='SetOfParticles')
+        form.addParam('inputVolume', PointerParam, label="Volume",
+                      pointerClass='Volume')
 
         form.addParam('modelPretrain', BooleanParam, default=False,
                       label='Choose your if you want to use pretrained models',
@@ -80,9 +82,6 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
                       help='Choose the protocol where your models were trained. '
                            'Be careful with using proper models for your new prediction.')
 
-        form.addParam('inputVolume', PointerParam, label="Volume",
-                      pointerClass='Volume',
-                      condition='modelPretrain==False')
         form.addParam('inputTrainSet', PointerParam, label="Input training set",
                       pointerClass='SetOfParticles',
                       pointerCondition='hasAlignmentProj',
@@ -94,8 +93,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
                            "2/3 of the Fourier spectrum.")
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group',
-                      help='See http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
-                           'If no symmetry is present, give c1')
+                      help='If no symmetry is present, give c1')
         form.addParam('numEpochs', IntParam,
                       label="Number of epochs for training",
                       default=10,
@@ -108,7 +106,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
                       condition='modelPretrain==False')
         form.addParam('numConesSelected', IntParam,
                       label="Number of selected cones per image",
-                      default=1,
+                      default=2,
                       help="Number of selected cones per image.")
         form.addParam('gpuAlign', BooleanParam, label="Use GPU alignment", default=True,
                       help='Use GPU alignment algorithm to determine the final 3D alignment parameters')
@@ -134,21 +132,16 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         # Trainig steps
         firstStepId = self._insertFunctionStep("prepareImagesForTraining", prerequisites=[firstStepId])
 
-
-        #myStr = self.gpuList.get()
-        #import os
-        #print('os.environ["CUDA_VISIBLE_DEVICES"]',os.environ["CUDA_VISIBLE_DEVICES"])
-        #myStr = " "
         if self.useQueueForSteps() or self.useQueue():
             myStr = os.environ["CUDA_VISIBLE_DEVICES"]
         else:
             myStr = self.gpuList.get()
+            os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
 
-        print("AAAAA", myStr)
+        #print("AAAAA", myStr)
         numGPU = myStr.split(',')
-        print("GPUUUUU", myStr, numGPU)
         for idx, gpuId in enumerate(numGPU):
-            print("Bucle GPUUUUUUU", idx, gpuId)
+            #print("Bucle GPUUUUUUU", idx, gpuId)
             stepId = self._insertFunctionStep("trainNClassifiers2ClassesStep", idx, gpuId, len(numGPU), prerequisites=[firstStepId])
             deps.append(stepId)
 
@@ -159,7 +152,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         # Correlation step
         if self.gpuAlign:
             for idx, gpuId in enumerate(numGPU):
-                stepId = self._insertFunctionStep("correlationCudaStep", idx, gpuId, len(numGPU), prerequisites=[predictStepId])
+                stepId = self._insertFunctionStep("correlationCudaStep", idx, str(idx), len(numGPU), prerequisites=[predictStepId])
                 deps2.append(stepId)
         else:
             stepId = self._insertFunctionStep("correlationSignificantStep", prerequisites=[predictStepId])
@@ -175,6 +168,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         if self.modelPretrain.get() is True:
             fnPreProtocol = self.pretrainedModels.get()._getExtraPath()
             preXDim = readInfoField(fnPreProtocol, "size", xmippLib.MDL_XSIZE)
+            self.inputTrainSet = self.pretrainedModels.get().inputTrainSet
 
         from ..convert import writeSetOfParticles
         inputParticles = self.inputSet.get()
@@ -213,7 +207,6 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
                         "-i %s --fourier %d" % (fnVol, self.newXdim),
                         numberOfMpi=self.myMPI.get())
 
-        #if self.modelPretrain.get() is False:
         inputTrain = self.inputTrainSet.get()
         writeSetOfParticles(inputTrain, self.trainImgsFn)
         Xdim = inputTrain.getXDim()
@@ -299,7 +292,6 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
             #AJ FLIP
             if flip:
                 tilt=tilt+180
-
             if rot < 0:
                 rot = rot + 360
             if tilt < 0:
@@ -308,7 +300,7 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
             mdCone = mdList[numCone - 1]
             auxList.append(numCone - 1)
             row.addToMd(mdCone)
-        print("SELECTED CONES", auxList)
+        #print("SELECTED CONES", auxList)
         for i in range(totalCones):
             fnTrain = self._getExtraPath(nameTrain + "%d.xmd" % (i + 1))
             mdList[i].write(fnTrain)
@@ -332,7 +324,6 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
         # outputSetOfParticles.setAlignmentProj()
         # readSetOfParticles(self._getExtraPath('VamosAVer.xmd'), outputSetOfParticles)
         # self._defineOutputs(outputParticles=outputSetOfParticles)
-        # aaaaaaaaaaaaaaaaa
 
     def prepareImagesForTraining(self):
 
@@ -372,6 +363,8 @@ class XmippProtDeepCones3DGT_2(ProtRefine3D):
                     # AJ posiblemente con alrededor de 8000 podria valer...
             else: #AJ to check en general y con modelPretrain
                 remove(self._getExtraPath('projections%d.xmd' % (counterCones + 1)))
+                #moveFile(self._getExtraPath('projections%d.xmd' % (counterCones + 1)),
+                #         self._getExtraPath('CONOVACIOprojections%d.xmd' % (counterCones + 1)))
             counterCones = counterCones + 1
 
         if self.modelPretrain.get() is False:
@@ -410,6 +403,10 @@ _noiseCoord   '0'
         self.runJob("xmipp_phantom_project",
                     "-i %s -o %s --method fourier 1 0.5 "
                     "--params %s" % (fnVol, fnProjs, fnParams), numberOfMpi=1)
+
+        fnProjsXmd=fnProjs[:-3]+'xmd'
+        self.runJob("xmipp_metadata_utilities",
+                    "-i %s --fill ref lineal 1 1 " % (fnProjsXmd), numberOfMpi=1)
 
         cleanPattern(self._getExtraPath('uniformProjections*'))
 
@@ -537,10 +534,10 @@ _noiseCoord   '0'
                     try:
                         args = "%s %s %s %s %d %d %d %d " % (
                         expSet, fnLabels, self._getExtraPath(),
-                        modelFn, self.numEpochs, newXdim, 2, self.batchSize)
+                        modelFn+'_aux', self.numEpochs, newXdim, 2, self.batchSize)
                         #args += " %(GPU)s"
-                        #args += " %s " % (gpuId)
-                        args += " %s " %(int(idx % totalGpu))
+                        args += " %s " % (gpuId)
+                        #args += " %s " %(int(idx % totalGpu))
                         print("2 ARGS", args)
                         self.runJob("xmipp_cone_deepalign", args, numberOfMpi=1)
                     except Exception as e:
@@ -548,6 +545,7 @@ _noiseCoord   '0'
                             "ERROR: Please, if you are having memory problems, "
                             "check the target resolution to work with lower dimensions.")
 
+                    moveFile(self._getExtraPath(modelFn + '_aux.h5'), self._getExtraPath(modelFn + '.h5'))
                 # remove(expSet)
 
     def predictStep(self, gpuId):
@@ -580,9 +578,9 @@ _noiseCoord   '0'
             newXdim = readInfoField(self._getExtraPath(), "size",
                                 xmippLib.MDL_XSIZE)
             args = "%s %s %d %d %d " % (imgsOutXmd, self._getExtraPath(), newXdim, self.numCones, numMax)
-            args += " %(GPU)s"
+            #args += " %(GPU)s"
             #AJ dejar que se envie el trabajo de prediccion a todas las GPUs disponibles??
-            #args += " %s "%(gpuId)
+            args += " %s "%(gpuId)
             self.runJob("xmipp_cone_deepalign_predict", args, numberOfMpi=1)
 
 
@@ -631,6 +629,9 @@ _noiseCoord   '0'
                 mdConeList[i].write(fnExpCone)
 
                 fnProjCone = self._getExtraPath('projectionsCudaCorr%d.xmd' % (i + 1))
+
+                self.runJob("xmipp_metadata_utilities", "-i %s --fill ref lineal 1 1 " % (fnProjCone), numberOfMpi=1)
+
                 fnOutCone = 'outCone%d.xmd' % (i + 1)
 
                 if not exists(self._getExtraPath(fnOutCone)):
@@ -646,6 +647,7 @@ _noiseCoord   '0'
                     params = '  -i %s' % fnExpCone
                     params += ' -r  %s' % fnProjCone
                     params += ' -o  %s' % self._getExtraPath(fnOutCone)
+                    params += ' --dev %s ' % (gpuId)
                     self.runJob("xmipp_cuda_align_significant", params, numberOfMpi=1)
 
 
