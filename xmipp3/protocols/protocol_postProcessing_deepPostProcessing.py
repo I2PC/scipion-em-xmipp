@@ -42,7 +42,7 @@ POSTPROCESS_VOL_BASENAME= "deepPostProcess.mrc"
 
 class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
     """    
-    Given a map the protocol assigns local resolutions to each voxel of the map.
+    Given a map the protocol performs automatic post-processing to enhance visualization
     """
     _label = 'deep volPostProcessing'
     _lastUpdateVersion = VERSION_2_0
