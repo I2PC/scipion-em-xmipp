@@ -26,6 +26,7 @@
 
 from os.path import join, exists
 import math
+import os
 
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_1
@@ -37,7 +38,7 @@ from pwem.protocols import ProtAnalysis3D
 import pwem.emlib.metadata as md
 
 from pwem import emlib
-from xmipp3.base import findRow
+from xmipp3.base import findRow, readInfoField, writeInfoField
 from xmipp3.convert import (rowToAlignment, setXmippAttributes, xmippToLocation,
                             createItemMatrix, writeSetOfParticles)
 from xmipp3.constants import SYM_URL
@@ -51,27 +52,38 @@ class XmippProtSolidAngles(ProtAnalysis3D):
 
     _label = 'solid angles'
     _lastUpdateVersion = VERSION_1_1
-    
+
     def __init__(self, *args, **kwargs):
         ProtAnalysis3D.__init__(self, *args, **kwargs)
-        
-    #--------------------------- DEFINE param functions ------------------------
+
+    # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
+
+        form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
+                       expertLevel=params.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+
         form.addSection(label='Input')
-        
+
         form.addParam('inputVolume', params.PointerParam, pointerClass='Volume',
-                      label="Input volume",  
+                      label="Input volume",
                       help='Select the input volume.')
 
         form.addParam('inputParticles', params.PointerParam,
                       pointerClass='SetOfParticles',
                       pointerCondition='hasAlignmentProj',
-                      label="Input particles",  
+                      label="Input particles",
                       help='Select the input experimental images with an '
                            'angular assignment.')
 
         form.addParam('symmetryGroup', params.StringParam, default='c1',
-                      label="Symmetry group", 
+                      label="Symmetry group",
                       help='See %s page for a description of the symmetries '
                            'accepted by Xmipp' % SYM_URL)
 
@@ -100,7 +112,8 @@ class XmippProtSolidAngles(ProtAnalysis3D):
                            "split-volume. ")
 
         form.addParam('homogeneize', params.IntParam, default=-1,
-                      label='Homogeneize groups', condition="directionalClasses==1",
+                      label='Homogeneize groups',
+                      condition="directionalClasses==1",
                       help="Set to -1 for no homogeneization. Set to 0 for homogeneizing "
                            "to the minimum of class size. Set to any other number to "
                            "homogeneize to that particular number")
@@ -121,27 +134,35 @@ class XmippProtSolidAngles(ProtAnalysis3D):
                       label='Number of CL2D iterations')
 
         form.addSection("Split volume")
-        form.addParam('splitVolume', params.BooleanParam, label="Split volume", condition="directionalClasses > 1", default=False,
+        form.addParam('splitVolume', params.BooleanParam, label="Split volume",
+                      condition="directionalClasses > 1", default=False,
                       help='If desired, the protocol can use the directional classes calculated in this protocol to divide the input volume '
                            'into 2 distinct 3D classes as measured by PCA. If the PCA component is just noise, it means that the algorithm '
                            'does not find a difference between the 2D classes')
-        form.addParam('mask', params.PointerParam, label="Mask", pointerClass='VolumeMask', allowsNull=True, condition="splitVolume",
+        form.addParam('mask', params.PointerParam, label="Mask",
+                      pointerClass='VolumeMask', allowsNull=True,
+                      condition="splitVolume",
                       help='The mask values must be binary: 0 (remove these voxels) and 1 (let them pass).')
-        form.addParam('Nrec', params.IntParam, label="Number of reconstructions", default=5000, condition="splitVolume",
+        form.addParam('Nrec', params.IntParam,
+                      label="Number of reconstructions", default=5000,
+                      condition="splitVolume",
                       expertLevel=params.LEVEL_ADVANCED,
                       help="Number of random reconstructions to perform");
-        form.addParam('Nsamples', params.IntParam, label="Number of images/reconstruction", default=15, condition="splitVolume",
+        form.addParam('Nsamples', params.IntParam,
+                      label="Number of images/reconstruction", default=15,
+                      condition="splitVolume",
                       expertLevel=params.LEVEL_ADVANCED,
                       help="Number of images per reconstruction. Consider that reconstructions with symmetry c1 will be perfomed");
-        form.addParam('alpha', params.FloatParam, label="Confidence level", default=0.05, condition="splitVolume",
+        form.addParam('alpha', params.FloatParam, label="Confidence level",
+                      default=0.05, condition="splitVolume",
                       expertLevel=params.LEVEL_ADVANCED,
                       help="This parameter is alpha. Two volumes, one at alpha/2 and another one at 1-alpha/2, will be generated");
 
         form.addParallelSection(threads=0, mpi=8)
-    
-    #--------------------------- INSERT steps functions ------------------------
 
-    def _insertAllSteps(self):        
+    # --------------------------- INSERT steps functions ------------------------
+
+    def _insertAllSteps(self):
         self._insertFunctionStep('convertInputStep',
                                  self.inputParticles.get().getObjId(),
                                  self.inputVolume.get().getObjId())
@@ -153,31 +174,20 @@ class XmippProtSolidAngles(ProtAnalysis3D):
                                  self.symmetryGroup.get())
 
         self._insertFunctionStep('classifyGroupsStep')
-        if self.directionalClasses.get()==1 and self.homogeneize.get()>=0:
+        if self.directionalClasses.get() == 1 and self.homogeneize.get() >= 0:
             self._insertFunctionStep('homogeneizeStep')
 
         if self.refineAngles:
             self._insertFunctionStep('refineAnglesStep')
 
-        if self.splitVolume and self.directionalClasses.get()>1:
+        if self.splitVolume and self.directionalClasses.get() > 1:
             self._insertFunctionStep("splitVolumeStep")
 
         self._insertFunctionStep('createOutputStep')
-    
-    #--------------------------- STEPS functions -------------------------------
 
-    def readInfoField(self,fnDir,block,label):
-        mdInfo = emlib.MetaData("%s@%s"%(block,join(fnDir,"iterInfo.xmd")))
-        return mdInfo.getValue(label,mdInfo.firstObject())
-
-    def writeInfoField(self,fnDir,block,label, value):
-        mdInfo = emlib.MetaData()
-        objId=mdInfo.addObject()
-        mdInfo.setValue(label,value,objId)
-        mdInfo.write("%s@%s"%(block,join(fnDir,"iterInfo.xmd")),emlib.MD_APPEND)
-
+    # --------------------------- STEPS functions -------------------------------
     def convertInputStep(self, particlesId, volId):
-        """ Write the input images as a Xmipp metadata file. 
+        """ Write the input images as a Xmipp metadata file.
         particlesId: is only need to detect changes in
         input particles and cause restart from here.
         """
@@ -210,8 +220,8 @@ class XmippProtSolidAngles(ProtAnalysis3D):
             
             Xdim=newXdim
             Ts=newTs
-        self.writeInfoField(self._getExtraPath(),"sampling",emlib.MDL_SAMPLINGRATE,Ts)
-        self.writeInfoField(self._getExtraPath(),"size",emlib.MDL_XSIZE,int(Xdim))
+        writeInfoField(self._getExtraPath(),"sampling",emlib.MDL_SAMPLINGRATE,Ts)
+        writeInfoField(self._getExtraPath(),"size",emlib.MDL_XSIZE,int(Xdim))
 
     def constructGroupsStep(self, particlesId, angularSampling,
                             angularDistance, symmetryGroup):
@@ -259,7 +269,8 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         # Run CL2D classification for the images assigned to one direction
         args = "-i %s " % projMdBlock
         args += "--odir %s " % fnDir
-        args += "--ref0 %s --iter %d --nref %d " % (projRef, self.cl2dIterations, Nclasses)
+        args += "--ref0 %s --iter %d --nref %d " % (
+        projRef, self.cl2dIterations, Nclasses)
         args += "--distance correlation --classicalMultiref "
         args += "--maxShift %f " % self.maxShift
         try:
@@ -286,9 +297,9 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         args = "-i %s_alignment.xmd --apply_transform" % fnAlignRoot
         self.runJob("xmipp_transform_geometry", args, numberOfMpi=1)
 
-        for classNo in range(1, Nclasses+1):
+        for classNo in range(1, Nclasses + 1):
             localImagesMd = emlib.MetaData("class%06d_images@%s"
-                                           % (classNo, classesXmd))
+                                              % (classNo, classesXmd))
 
             # New class detected
             self.classCount += 1
@@ -301,7 +312,8 @@ class XmippProtSolidAngles(ProtAnalysis3D):
                     self.classImages.add(imgId)
                     newObjId = mdImages.addObject()
                     mdImages.setValue(emlib.MDL_ITEM_ID, imgId, newObjId)
-                    mdImages.setValue(emlib.MDL_REF2, self.classCount, newObjId)
+                    mdImages.setValue(emlib.MDL_REF2, self.classCount,
+                                      newObjId)
 
             newClassId = mdClasses.addObject()
             mdClasses.setValue(emlib.MDL_REF, projNumber, newClassId)
@@ -309,7 +321,8 @@ class XmippProtSolidAngles(ProtAnalysis3D):
             mdClasses.setValue(emlib.MDL_IMAGE, "%d@%s" %
                                (classNo, classesStk), newClassId)
             mdClasses.setValue(emlib.MDL_IMAGE1, projRef, newClassId)
-            mdClasses.setValue(emlib.MDL_CLASS_COUNT,localImagesMd.size(),newClassId)
+            mdClasses.setValue(emlib.MDL_CLASS_COUNT, localImagesMd.size(),
+                               newClassId)
 
     def classifyGroupsStep(self):
         # Create two metadatas, one for classes and another one for images
@@ -340,7 +353,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         mdJoined.join1(mdClasses, galleryMd, emlib.MDL_REF)
         # Remove unnecessary columns
         md.keepColumns(mdJoined, "ref", "ref2", "image", "image1",
-                    "classCount", "angleRot", "angleTilt")
+                       "classCount", "angleRot", "angleTilt")
 
         # Write both classes and images
         fnDirectional = self._getDirectionalClassesFn()
@@ -354,97 +367,136 @@ class XmippProtSolidAngles(ProtAnalysis3D):
     def homogeneizeStep(self):
         minClass = self.homogeneize.get()
         fnNeighbours = self._getExtraPath("neighbours.xmd")
-        
+
         # Look for the block with the minimum number of images
-        if minClass==0:
+        if minClass == 0:
             minClass = 1e38
             for block in emlib.getBlocksInMetaDataFile(fnNeighbours):
                 projNumber = int(block.split("_")[1])
-                fnDir=self._getExtraPath("direction_%d"%projNumber,"level_00","class_classes.xmd")
+                fnDir = self._getExtraPath("direction_%d" % projNumber,
+                                           "level_00", "class_classes.xmd")
                 if exists(fnDir):
-                    blockSize = md.getSize("class000001_images@"+fnDir)
-                    if blockSize<minClass:
-                        minClass=blockSize
-        
+                    blockSize = md.getSize("class000001_images@" + fnDir)
+                    if blockSize < minClass:
+                        minClass = blockSize
+
         # Construct the homogeneized metadata
         mdAll = emlib.MetaData()
-        mdSubset=emlib.MetaData()
-        mdRandom=emlib.MetaData()
+        mdSubset = emlib.MetaData()
+        mdRandom = emlib.MetaData()
         for block in emlib.getBlocksInMetaDataFile(fnNeighbours):
             projNumber = int(block.split("_")[1])
-            fnDir=self._getExtraPath("direction_%d"%projNumber,"level_00","class_classes.xmd")
+            fnDir = self._getExtraPath("direction_%d" % projNumber, "level_00",
+                                       "class_classes.xmd")
             if exists(fnDir):
-                mdDirection = emlib.MetaData("class000001_images@"+fnDir)
+                mdDirection = emlib.MetaData("class000001_images@" + fnDir)
                 mdRandom.randomize(mdDirection)
-                mdSubset.selectPart(mdRandom,0,min(mdRandom.size(),minClass))
+                mdSubset.selectPart(mdRandom, 0,
+                                    min(mdRandom.size(), minClass))
                 mdAll.unionAll(mdSubset)
         mdAll.removeDuplicates(md.MDL_ITEM_ID)
         mdAll.sort(md.MDL_ITEM_ID)
-        mdAll.fillConstant(md.MDL_PARTICLE_ID,1)
+        mdAll.fillConstant(md.MDL_PARTICLE_ID, 1)
         fnHomogeneous = self._getExtraPath("images_homogeneous.xmd")
-        mdAll.write(fnHomogeneous)    
-        self.runJob("xmipp_metadata_utilities",'-i %s --operate modify_values "particleId=itemId"'%fnHomogeneous,numberOfMpi=1)
+        mdAll.write(fnHomogeneous)
+        self.runJob("xmipp_metadata_utilities",
+                    '-i %s --operate modify_values "particleId=itemId"' % fnHomogeneous,
+                    numberOfMpi=1)
 
     def refineAnglesStep(self):
         fnTmpDir = self._getTmpPath()
         fnDirectional = self._getDirectionalClassesFn()
         inputParticles = self.inputParticles.get()
-        newTs = self.readInfoField(self._getExtraPath(),"sampling",emlib.MDL_SAMPLINGRATE)
-        newXdim = self.readInfoField(self._getExtraPath(),"size",emlib.MDL_XSIZE)
+        newTs = readInfoField(self._getExtraPath(),"sampling",emlib.MDL_SAMPLINGRATE)
+        newXdim = readInfoField(self._getExtraPath(),"size",emlib.MDL_XSIZE)
 
         # Generate projections
-        fnGallery=join(fnTmpDir,"gallery.stk")
-        fnGalleryMd=join(fnTmpDir,"gallery.doc")
+        fnGallery = join(fnTmpDir, "gallery.stk")
+        fnGalleryMd = join(fnTmpDir, "gallery.doc")
         fnVol = self._getInputVolFn()
-        args="-i %s -o %s --sampling_rate %f --sym %s"%\
-             (fnVol,fnGallery,5.0,self.symmetryGroup)
-        args+=" --compute_neighbors --angular_distance -1 --experimental_images %s"%fnDirectional
-        self.runJob("xmipp_angular_project_library",args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
+        args = "-i %s -o %s --sampling_rate %f --sym %s" % \
+               (fnVol, fnGallery, 5.0, self.symmetryGroup)
+        args += " --compute_neighbors --angular_distance -1 --experimental_images %s" % fnDirectional
+        self.runJob("xmipp_angular_project_library", args,
+                    numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
 
         # Global angular assignment
-        maxShift=0.15*newXdim
-        args='-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation 0'%\
-             (fnDirectional,fnGalleryMd,maxShift,fnTmpDir)
-        self.runJob('xmipp_reconstruct_significant',args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
-        fnAngles = join(fnTmpDir,"angles_iter001_00.xmd")
-        self.runJob("xmipp_metadata_utilities","-i %s --operate drop_column ref"%fnAngles,numberOfMpi=1)
-        self.runJob("xmipp_metadata_utilities","-i %s --set join %s ref2"%(fnAngles,fnDirectional),numberOfMpi=1)
+        maxShift = 0.15 * newXdim
+        fnAngles = join(fnTmpDir, "angles_iter001_00.xmd")
+        if not self.useGpu.get():
+            args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation 0' % \
+                   (fnDirectional, fnGalleryMd, maxShift, fnTmpDir)
+            self.runJob('xmipp_reconstruct_significant', args,
+                        numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
+        else:
+            count=0
+            GpuListCuda=''
+            if self.useQueueForSteps() or self.useQueue():
+                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                GpuList = GpuList.split(",")
+                for elem in GpuList:
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    count+=1
+            else:
+                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                GpuListAux = ''
+                for elem in self.getGpuList():
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListAux = GpuListAux+str(elem)+','
+                    count+=1
+                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
+            args = '-i %s -r %s -o %s --dev %s ' % (fnDirectional, fnGalleryMd, fnAngles, GpuListCuda)
+            self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+
+        self.runJob("xmipp_metadata_utilities",
+                    "-i %s --operate drop_column ref" % fnAngles, numberOfMpi=1)
+        self.runJob("xmipp_metadata_utilities",
+                    "-i %s --set join %s ref2" % (fnAngles, fnDirectional),
+                    numberOfMpi=1)
 
         # Local angular assignment
         fnAnglesLocalStk = self._getPath("directional_local_classes.stk")
-        args="-i %s -o %s --sampling %f --Rmax %d --padding %d --ref %s --max_resolution %f --applyTo image1 --Nsimultaneous %d"%\
-           (fnAngles,fnAnglesLocalStk,newTs,newXdim/2,2,fnVol,self.targetResolution,8)
-        args+=" --optimizeShift --max_shift %f"%maxShift
-        args+=" --optimizeAngles --max_angular_change %f"%self.angularDistance
-        self.runJob("xmipp_angular_continuous_assign2",args,numberOfMpi=self.numberOfMpi.get()*self.numberOfThreads.get())
-        moveFile(self._getPath("directional_local_classes.xmd"),self._getDirectionalClassesFn())
+        args = "-i %s -o %s --sampling %f --Rmax %d --padding %d --ref %s --max_resolution %f --applyTo image1 --Nsimultaneous %d" % \
+               (fnAngles, fnAnglesLocalStk, newTs, newXdim / 2, 2, fnVol,
+                self.targetResolution, 8)
+        args += " --optimizeShift --max_shift %f" % maxShift
+        args += " --optimizeAngles --max_angular_change %f" % self.angularDistance
+        self.runJob("xmipp_angular_continuous_assign2", args,
+                    numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
+        moveFile(self._getPath("directional_local_classes.xmd"),
+                 self._getDirectionalClassesFn())
 
         cleanPattern(self._getExtraPath("direction_*"))
 
     def splitVolumeStep(self):
-        newTs = self.readInfoField(self._getExtraPath(),"sampling",emlib.MDL_SAMPLINGRATE)
-        newXdim = self.readInfoField(self._getExtraPath(),"size",emlib.MDL_XSIZE)
+        newTs = readInfoField(self._getExtraPath(),"sampling",emlib.MDL_SAMPLINGRATE)
+        newXdim = readInfoField(self._getExtraPath(),"size",emlib.MDL_XSIZE)
         fnMask = ""
         if self.mask.hasValue():
             fnMask = self._getExtraPath("mask.vol")
-            img=ImageHandler()
+            img = ImageHandler()
             img.convert(self.mask.get(), fnMask)
-            self.runJob('xmipp_image_resize',"-i %s --dim %d"%(fnMask,newXdim),numberOfMpi=1)
-            self.runJob('xmipp_transform_threshold',"-i %s --select below 0.5 --substitute binarize"%fnMask,numberOfMpi=1)
+            self.runJob('xmipp_image_resize',
+                        "-i %s --dim %d" % (fnMask, newXdim), numberOfMpi=1)
+            self.runJob('xmipp_transform_threshold',
+                        "-i %s --select below 0.5 --substitute binarize" % fnMask,
+                        numberOfMpi=1)
 
-        args="-i %s --oroot %s --Nrec %d --Nsamples %d --sym %s --alpha %f"%\
-             (self._getDirectionalClassesFn(),self._getExtraPath("split"),self.Nrec.get(),self.Nsamples.get(),
-              self.symmetryGroup.get(), self.alpha.get())
-        if fnMask!="":
-            args+=" --mask binary_file %s"%fnMask
-        self.runJob("xmipp_classify_first_split",args,numberOfMpi=1)
+        args = "-i %s --oroot %s --Nrec %d --Nsamples %d --sym %s --alpha %f" % \
+               (self._getDirectionalClassesFn(), self._getExtraPath("split"),
+                self.Nrec.get(), self.Nsamples.get(),
+                self.symmetryGroup.get(), self.alpha.get())
+        if fnMask != "":
+            args += " --mask binary_file %s" % fnMask
+        self.runJob("xmipp_classify_first_split", args, numberOfMpi=1)
 
     def createOutputStep(self):
         inputParticles = self.inputParticles.get()
         if not self._useSeveralClasses():
             newTs = inputParticles.getSamplingRate()
         else:
-            newTs = self.readInfoField(self._getExtraPath(),"sampling",emlib.MDL_SAMPLINGRATE)
+            newTs = readInfoField(self._getExtraPath(),"sampling",emlib.MDL_SAMPLINGRATE)
 
         self.mdClasses = emlib.MetaData(self._getDirectionalClassesFn())
         self.mdImages = emlib.MetaData(self._getDirectionalImagesFn())
@@ -470,7 +522,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
             homogeneousSet.setSamplingRate(newTs)
             homogeneousSet.setAlignmentProj()
             self.iterMd = md.iterRows(fnHomogeneous, md.MDL_PARTICLE_ID)
-            self.lastRow = next(self.iterMd) 
+            self.lastRow = next(self.iterMd)
             homogeneousSet.copyItems(inputParticles,
                                      updateItemCallback=self._updateHomogeneousItem)
             self._defineOutputs(outputHomogeneous=homogeneousSet)
@@ -484,21 +536,22 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         self._defineSourceRelation(self.inputParticles, classes2D)
         self._defineSourceRelation(self.inputParticles, self.averageSet)
 
-        if self.splitVolume and self.directionalClasses.get()>1:
+        if self.splitVolume and self.directionalClasses.get() > 1:
             volumesSet = self._createSetOfVolumes()
             volumesSet.setSamplingRate(newTs)
             for i in range(2):
                 vol = Volume()
-                vol.setLocation(1, self._getExtraPath("split_v%d.vol"%(i+1)))
+                vol.setLocation(1,
+                                self._getExtraPath("split_v%d.vol" % (i + 1)))
                 volumesSet.append(vol)
 
             self._defineOutputs(outputVolumes=volumesSet)
             self._defineSourceRelation(inputParticles, volumesSet)
 
-
     def _updateHomogeneousItem(self, particle, row):
         count = 0
-        while self.lastRow and particle.getObjId() == self.lastRow.getValue(md.MDL_PARTICLE_ID):
+        while self.lastRow and particle.getObjId() == self.lastRow.getValue(
+                md.MDL_PARTICLE_ID):
             count += 1
             if count:
                 createItemMatrix(particle, self.lastRow, align=ALIGN_PROJ)
@@ -506,7 +559,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
                 self.lastRow = next(self.iterMd)
             except StopIteration:
                 self.lastRow = None
-                    
+
         particle._appendItem = count > 0
 
     def _updateParticle(self, item, row):
@@ -518,7 +571,8 @@ class XmippProtSolidAngles(ProtAnalysis3D):
 
         representative = item.getRepresentative()
         representative.setTransform(rowToAlignment(classRow, ALIGN_PROJ))
-        representative.setLocation(xmippToLocation(classRow.getValue(emlib.MDL_IMAGE)))
+        representative.setLocation(
+            xmippToLocation(classRow.getValue(emlib.MDL_IMAGE)))
         setXmippAttributes(representative, classRow, emlib.MDL_ANGLE_ROT)
         setXmippAttributes(representative, classRow, emlib.MDL_ANGLE_TILT)
         setXmippAttributes(representative, classRow, emlib.MDL_CLASS_COUNT)
@@ -526,7 +580,8 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         self.averageSet.append(representative)
 
         reprojection = Image()
-        reprojection.setLocation(xmippToLocation(classRow.getValue(emlib.MDL_IMAGE1)))
+        reprojection.setLocation(
+            xmippToLocation(classRow.getValue(emlib.MDL_IMAGE1)))
         item.reprojection = reprojection
 
     # --------------------------- INFO functions -------------------------------
@@ -537,14 +592,14 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         if self.inputVolume.get() and not self.inputVolume.hasValue():
             validateMsgs.append('Please provide an input reference volume.')
         if self.inputParticles.get() and not self.inputParticles.hasValue():
-            validateMsgs.append('Please provide input particles.')            
+            validateMsgs.append('Please provide input particles.')
         return validateMsgs
-    
+
     def _summary(self):
         summary = []
         return summary
 
-    #----------------------- UTILITY FUNCTIONS ---------------------------------
+    # ----------------------- UTILITY FUNCTIONS ---------------------------------
 
     def _useSeveralClasses(self):
         return self.directionalClasses > 1

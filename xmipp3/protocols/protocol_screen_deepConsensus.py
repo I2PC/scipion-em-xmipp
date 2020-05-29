@@ -44,14 +44,14 @@ import pyworkflow.utils as pwutils
 import pyworkflow.protocol.params as params
 import pwem.emlib.metadata as md
 
-from pwem import emlib as xmipp
+from pwem import emlib
 import xmipp3
 from xmipp3 import XmippProtocol
 from xmipp3.protocols.protocol_pick_noise import pickNoise_prepareInput
 from xmipp3.convert import (readSetOfParticles, setXmippAttributes,
                             micrographToCTFParam, writeSetOfParticles,
                             writeSetOfCoordinates, readSetOfCoordsFromPosFnames)
-from xmipp3.utils import validateDLtoolkit
+
 
 MIN_NUM_CONSENSUS_COORDS = 256
 
@@ -71,6 +71,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     """
     _label = 'deep consensus picking'
     _lastUpdateVersion = VERSION_2_0
+    _conda_env = 'xmipp_DLTK_v0.3'
 
     CONSENSUS_COOR_PATH_TEMPLATE="consensus_coords_%s"
     CONSENSUS_PARTS_PATH_TEMPLATE="consensus_parts_%s"
@@ -337,8 +338,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           errorMsg.append("Error, just one coordinate set provided but trained desired. Select pretrained "+
                           "model or previous run model and *No* continue training from previous trained model "+
                           " to score coordiantes directly or add another set of particles and continue training")
-        errorMsg = validateDLtoolkit(errorMsg, model="deepConsensus",
-                                     assertModel=self.addTrainingData.get()==self.ADD_DATA_TRAIN_PRECOMP)
+        errorMsg = self.validateDLtoolkit(errorMsg, model="deepConsensus",
+                                          assertModel=self.addTrainingData.get()==self.ADD_DATA_TRAIN_PRECOMP)
         return errorMsg
 
 #--------------------------- INSERT steps functions ---------------------------
@@ -449,7 +450,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         #We always work with inverted contrast particles
         modelType = "negativeTrain_%sPhaseFlip_Invert.mrcs" % (
                     prefixNO if self.ignoreCTF.get() else prefixYES) # mics will be always internally inverted if not done before
-        modelPath = xmipp3.Plugin.getModel("deepConsensus", modelType)
+        modelPath = self.getModel("deepConsensus", modelType)
         modelFn = self._getTmpPath(modelType)
         pwutils.createLink(modelPath, modelFn)
 
@@ -785,7 +786,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           effectiveSize=int(5e4)
         modelTypeDir= "keras_models/%sPhaseFlip_Invert/nnetData_%d/tfchkpoints_0" % (
                             "no" if self.ignoreCTF.get() else "", effectiveSize)
-        modelTypeDir= xmipp3.Plugin.getModel("deepConsensus", modelTypeDir)
+        modelTypeDir= self.getModel("deepConsensus", modelTypeDir)
         
         for i in range(self.nModels.get()):
           targetPath= os.path.join(netDataPath, "tfchkpoints_%d"%(i))
@@ -851,7 +852,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           args+= " -g %s"%(gpuToUse)
         if not numberOfThreads is None:
           args+= " -t %s"%(numberOfThreads)
-        self.runJob('xmipp_deep_consensus', args, numberOfMpi=1)
+        self.runCondaJob('xmipp_deep_consensus', args, numberOfMpi=1)
         
     def predictCNN(self):
 
@@ -891,7 +892,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           args+= " -g %s"%(gpuToUse)
         if not numberOfThreads is None:
           args+= " -t %s"%(numberOfThreads)
-        self.runJob('xmipp_deep_consensus', args, numberOfMpi=1)
+        self.runCondaJob('xmipp_deep_consensus', args, numberOfMpi=1)
                 
     def createOutputStep(self):
         # PARTICLES
@@ -917,7 +918,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         for part in partSet:
             coord = part.getCoordinate().clone()
             coord.scale(downFactor)
-            deepZscoreLabel = '_xmipp_%s' % xmipp.label2Str(md.MDL_ZSCORE_DEEPLEARNING1)
+            deepZscoreLabel = '_xmipp_%s' % emlib.label2Str(md.MDL_ZSCORE_DEEPLEARNING1)
             setattr(coord, deepZscoreLabel, getattr(part, deepZscoreLabel))
             part = part.clone()
             part.scaleCoordinate(downFactor)

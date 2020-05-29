@@ -41,7 +41,7 @@ import pyworkflow.utils as pwutils
 from pwem.protocols import ProtCTFMicrographs
 import pwem.emlib.metadata as md
 
-from xmipp3.utils import isMdEmpty
+from xmipp3.base import isMdEmpty
 from xmipp3.convert import readCTFModel
 
 from pwem.emlib import Image
