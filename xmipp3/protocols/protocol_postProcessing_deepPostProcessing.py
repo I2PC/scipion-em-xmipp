@@ -55,7 +55,8 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
 
     TIGHT_MODEL=0
     WIDE_MODEL=1
-    MODEL_TARGET_OPTIONS=["tight target", "wide target"]
+    HI_RES=2
+    MODEL_TARGET_OPTIONS=["tight target", "wide target", "highRes"]
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
@@ -128,14 +129,15 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
                       help='The standard deviation of the noise used to normalize the input')
 
 
-        form.addParam('useTightModel', EnumParam,
+        form.addParam('modelType', EnumParam,
                       condition=" normalization in [%s, %s]"%(self.NORMALIZATION_STATS,self.NORMALIZATION_AUTO),
                       choices=self.MODEL_TARGET_OPTIONS,
                       default=self.WIDE_MODEL,
                       label='Model power',
                       help='Select the deep learning model to use.\nIf you select *%s* the postprocessing will be more sharpen,'
                            ' but some regions of the protein could be masked out.\nIf you select *%s* input will be less sharpen'
-                           ' but most of the regions of the protein will be preserved '%tuple(self.MODEL_TARGET_OPTIONS))
+                           ' but most of the regions of the protein will be preserved\nOption *%s*,  is recommended for high'
+                           ' resolution volumes'%tuple(self.MODEL_TARGET_OPTIONS))
 
 
         form.addParam('performCleaningStep', BooleanParam,
@@ -167,7 +169,7 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
           if not os.path.exists(outputFname):
             os.symlink(inputFname, outputFname)
         else:
-          self.runJob('xmipp_image_convert', " -i %s -o %s:mrc -t vol" % (inputFname, outputFname))
+          self.runJob('xmipp_image_convert', " -i %s -o %s:mrc -t vol" % (inputFname, outputFname)) #TODO: Fix. Why sampling rate is set to 1?
 
     def convertInputStep(self):
         """ Read the input volume.
@@ -212,8 +214,10 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
           params+= " --cleaningStrengh -1 "
 
         if  self.normalization in [self.NORMALIZATION_AUTO, self.NORMALIZATION_STATS]:
-          if self.useTightModel == self.TIGHT_MODEL:
+          if self.modelType == self.TIGHT_MODEL:
             params+= " --checkpoint %s "%self.getModel("deepVolProc", "bestCheckpoint_locscale.hd5")
+          elif self.modelType == self.HI_RES:
+            params+= " --checkpoint  %s "%self.getModel("deepVolProc", "bestCheckpoint_locscale_hiRes.hd5")
           else:
             params+= " --checkpoint  %s "%self.getModel("deepVolProc", "bestCheckpoint_locscale_wide.hd5")
         elif self.normalization==self.NORMALIZATION_IQR_FULL:
