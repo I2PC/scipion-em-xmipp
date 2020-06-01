@@ -51,7 +51,10 @@ class XmippProtStructureMapSphViewer(ProtocolViewer):
                       label="Number of dimensions",
                       help='In normal practice, it should be 1, 2 or, at most, 3.')
         form.addParam('map', params.EnumParam, choices=['Deformation', 'Correlation', 'Consensus'],
-                      default=0, help='Choose the type of metric to display the coordinatess')
+                      default=0, help='Choose the type of metric to display the coordinates.')
+        form.addParam('twoSets', params.BooleanParam, default=False, label='Two set analysis',
+                      help='Activate if the analysis of the deformation included the option of analysing '
+                           'two sets of volumes independently.')
         form.addParam('doShowPlot', params.LabelParam,
                       label="Display the StructMap")
     
@@ -61,30 +64,42 @@ class XmippProtStructureMapSphViewer(ProtocolViewer):
         
     def _visualize(self, e=None):
         nDim = self.numberOfDimensions.get()
-        if self.map.get()==0:
-            fnOutput = self.protocol._defineResultsName(nDim)
-        elif self.map.get() == 1:
-            fnOutput = self.protocol._defineResultsName2(nDim)
+        if self.map.get()==0 and not self.twoSets:
+            fnOutput = [self.protocol._defineResultsName(nDim)]
+        elif self.map.get() == 1 and not self.twoSets:
+            fnOutput = [self.protocol._defineResultsName2(nDim)]
+        elif self.map.get()==0 and self.twoSets:
+            fnOutput = [self.protocol._defineResultsName(nDim, 'Sub_1_'),
+                        self.protocol._defineResultsName(nDim, 'Sub_2_')]
+        elif self.map.get()==1 and self.twoSets:
+            fnOutput = [self.protocol._defineResultsName2(nDim, 'Sub_1_'),
+                        self.protocol._defineResultsName2(nDim, 'Sub_2_')]
         elif self.map.get() == 2 and nDim != 1:
-            fnOutput = self.protocol._defineResultsName3(nDim)
+            fnOutput = [self.protocol._defineResultsName3(nDim)]
         elif self.map.get() == 2 and nDim == 1:
             return [self.errorMessage('Consensus in only avalaible for two and three dimensions\n',
                                       title='Functionality not supported')]
-        if not os.path.exists(fnOutput):
-            return [self.errorMessage('The necessary metadata was not produced\n'
-                                      'Execute again the protocol\n',
-                                      title='Missing result file')]
-        coordinates = np.loadtxt(fnOutput)
+
+        for file in fnOutput:
+            if not os.path.exists(file):
+                return [self.errorMessage('The necessary metadata was not produced\n'
+                                          'Execute again the protocol\n',
+                                          title='Missing result file')]
+
+        coordinates = (np.loadtxt(file) for file in fnOutput)
+        coordinates = np.vstack(coordinates)
         
         # Create labels
         count = 0
         labels = []
-        volList, _, _ = self.protocol._iterInputVolumes()
-        for voli in volList:
-            base=os.path.basename(voli)
-            fileName = os.path.splitext(base)[0]
-            count += 1
-            labels.append("vol_%02d"%count)
+        _, _, _, idList = self.protocol._iterInputVolumes(self.protocol.inputVolumes, [], [], [], [])
+        if self.protocol.secondSet:
+            _, _, _, idList = self.protocol._iterInputVolumes(self.protocol.secondSet, [], [], [], idList)
+        for idv in idList:
+            # base=os.path.basename(voli)
+            # fileName = os.path.splitext(base)[0]
+            # count += 1
+            labels.append("vol_%02d" % idv)
             #labels.append(fileName)
          
         val = 0

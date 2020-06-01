@@ -35,6 +35,8 @@ import glob
 import os
 import re
 
+import xmippLib
+
 from pwem.protocols import ProtAnalysis3D
 import pyworkflow.protocol.params as params
 from pwem.emlib.image import ImageHandler
@@ -96,6 +98,13 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                       label="Input volume(s)", important=True,
                       help='Select one or more volumes (Volume or SetOfVolumes)\n'
                            'for structure mapping.')
+        form.addParam('twoSets', params.BooleanParam, label='Compare two sets?', default=False,
+                      help='Useful when two Sets are intended to be compared independently (e.g. '
+                           'comparing EMDBS and Maps coming from PDBs).')
+        form.addParam('secondSet', params.MultiPointerParam, pointerClass='SetOfVolumes,Volume',
+                      condition='twoSets==True', label='Second set of volumes', allowsNull=True,
+                      help='Select one or more volumes (Volume or SetOfVolumes)\n'
+                           'to compare to the first set.')
         form.addParam('targetResolution', params.FloatParam, label="Target resolution",
                       default=8.0,
                       help="In Angstroms, the images and the volume are rescaled so that this resolution is at "
@@ -120,8 +129,13 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-
-        volList, dimList, srList = self._iterInputVolumes()
+        volList = []
+        dimList = []
+        srList = []
+        volList, dimList, srList, _ = self._iterInputVolumes(self.inputVolumes, volList, dimList, srList, [])
+        if self.twoSets.get():
+            volList, dimList, srList, _ = self._iterInputVolumes(self.secondSet, volList, dimList, srList, [])
+        # numVol = len(volList)
 
         nVoli = 1
         depsConvert = []
@@ -147,16 +161,15 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
         self._insertFunctionStep('deformationMatrix', volList, prerequisites=deps)
 
-        if self.computeDef.get():
-            self._insertFunctionStep('gatherResultsStepDef', volList)
+        self._insertFunctionStep('gatherResultsStepDef')
 
-        self._insertFunctionStep('computeCorr')
+        self._insertFunctionStep('computeCorr', volList)
 
-        self._insertFunctionStep('gatherResultsStepCorr', volList)
-
-        cleanPattern(self._getExtraPath('*.vol'))
+        self._insertFunctionStep('gatherResultsStepCorr')
 
         self._insertFunctionStep('entropyConsensus')
+
+        cleanPattern(self._getExtraPath('*.vol'))
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self, volFn, volDim, volSr, minDim, maxSr, nVoli):
@@ -212,35 +225,40 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                     self.distanceMatrix[i,j] = np.loadtxt(path)
 
 
-    def gatherResultsStepDef(self, volList):
-        fnRoot = self._getExtraPath("DistanceMatrix.txt")
-        nVoli = 1
-        for i in volList:
-            nVolj = 1
-            for j in volList:
-                fh = open(fnRoot, "a")
-                fh.write("%f\t" % self.distanceMatrix[(nVoli - 1)][(nVolj - 1)])
-                fh.close()
-                nVolj += 1
-            fh = open(fnRoot, "a")
-            fh.write("\n")
-            fh.close()
-            nVoli += 1
+    def gatherResultsStepDef(self):
+        if self.computeDef.get():
+            fnRoot = self._getExtraPath("DistanceMatrix.txt")
+            self.saveDeformation(self.distanceMatrix, fnRoot)
+            if self.twoSets.get():
+                half = int(self.distanceMatrix.shape[0] / 2)
+                subMatrixes = self.split(self.distanceMatrix, half, half)
+                for idm in range(4):
+                    fnRoot = self._getExtraPath("DistanceSubMatrix_%d.txt" % (idm + 1))
+                    self.saveDeformation(subMatrixes[idm], fnRoot, 'Sub_%d_' % (idm + 1))
 
-        distance = np.asarray(self.distanceMatrix)
+    def saveDeformation(self, matrix, fnRoot, label=''):
+        # for i in range(matrix.shape[0]):
+        #     for j in range(matrix.shape[1]):
+        #         fh = open(fnRoot, "a")
+        #         fh.write("%f\t" % matrix[i,j])
+        #         fh.close()
+        #     fh = open(fnRoot, "a")
+        #     fh.write("\n")
+        #     fh.close()
+
+        np.savetxt(fnRoot, matrix, "%f")
+        distance = np.asarray(matrix)
         for i in range(1, 4):
             embed = mds(distance, i)
             embedExtended = np.pad(embed, ((0, 0), (0, i - embed.shape[1])),
                                    "constant", constant_values=0)
-            np.savetxt(self._defineResultsName(i), embedExtended)
+            np.savetxt(self._defineResultsName(i, label), embedExtended)
 
-    def computeCorr(self):
+    def computeCorr(self, volList):
         ind = 0
-        volList, _, _ = self._iterInputVolumes()
-        self.corrMatrix = np.zeros((len(volList), len(volList)))
-        self.corrMatrix[len(volList)-1][len(volList)-1] = 0.0
-
-        import xmippLib
+        numVol = len(volList)
+        self.corrMatrix = np.zeros((numVol, numVol))
+        self.corrMatrix[numVol-1][numVol-1] = 0.0
 
         for item in volList:
             vol = xmippLib.Image(item)
@@ -257,27 +275,37 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                 self.corrMatrix[ind2][ind] = 1-corr
             ind += 1
 
-    def gatherResultsStepCorr(self, volList):
+    def gatherResultsStepCorr(self):
         fnRoot = self._getExtraPath("CorrMatrix.txt")
-        nVoli = 1
-        for i in volList:
-            nVolj = 1
-            for j in volList:
-                fh = open(fnRoot, "a")
-                fh.write("%f\t" % self.corrMatrix[(nVoli - 1)][(nVolj - 1)])
-                fh.close()
-                nVolj += 1
-            fh = open(fnRoot, "a")
-            fh.write("\n")
-            fh.close()
-            nVoli += 1
+        self.saveCorrelation(self.corrMatrix, fnRoot)
+        if self.twoSets.get():
+            half = int(self.distanceMatrix.shape[0] / 2)
+            subMatrixes = self.split(self.corrMatrix, half, half)
+            for idm in range(4):
+                fnRoot = self._getExtraPath("CorrSubMatrix_%d.txt" % (idm + 1))
+                self.saveCorrelation(subMatrixes[idm], fnRoot, 'Sub_%d_' % (idm + 1))
 
-        corr = np.asarray(self.corrMatrix)
+    def saveCorrelation(self, matrix, fnRoot, label=''):
+        # nVoli = 1
+        # for i in volList:
+        #     nVolj = 1
+        #     for j in volList:
+        #         fh = open(fnRoot, "a")
+        #         fh.write("%f\t" % self.corrMatrix[(nVoli - 1)][(nVolj - 1)])
+        #         fh.close()
+        #         nVolj += 1
+        #     fh = open(fnRoot, "a")
+        #     fh.write("\n")
+        #     fh.close()
+        #     nVoli += 1
+
+        np.savetxt(fnRoot, matrix, "%f")
+        corr = np.asarray(matrix)
         for i in range(1, 4):
             embed = mds(corr, i)
             embedExtended = np.pad(embed, ((0, 0), (0, i - embed.shape[1])),
                                    "constant", constant_values=0)
-            np.savetxt(self._defineResultsName2(i), embedExtended)
+            np.savetxt(self._defineResultsName2(i, label), embedExtended)
 
     def entropyConsensus(self):
         for i in range(2, 4):
@@ -394,12 +422,10 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             np.savetxt(self._defineResultsName3(i), X_optimal)
 
     # --------------------------- UTILS functions --------------------------------------------
-    def _iterInputVolumes(self):
+    def _iterInputVolumes(self, volumes, volList, dimList, srList, idList):
         """ Iterate over all the input volumes. """
-        volList = []
-        dimList = []
-        srList = []
-        for pointer in self.inputVolumes:
+        count = 1
+        for pointer in volumes:
             item = pointer.get()
             if item is None:
                 break
@@ -408,19 +434,29 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                 volList.append(item.getFileName())
                 dimList.append(item.getDim()[0])
                 srList.append(item.getSamplingRate())
+                idList.append(count)
             elif isinstance(item, SetOfVolumes):
                 for vol in item:
                     volList.append(vol.getFileName())
                     dimList.append(vol.getDim()[0])
                     srList.append(vol.getSamplingRate())
-        return volList, dimList, srList
+                    idList.append(count)
+                    count += 1
+            count += 1
+        return volList, dimList, srList, idList
 
+    def split(self, array, nrows, ncols):
+        """Split a matrix into sub-matrices."""
+        r, h = array.shape
+        return (array.reshape(h // nrows, nrows, -1, ncols)
+                .swapaxes(1, 2)
+                .reshape(-1, nrows, ncols))
 
-    def _defineResultsName(self, i):
-        return self._getExtraPath('CoordinateMatrix%d.txt' % i)
+    def _defineResultsName(self, i, label=''):
+        return self._getExtraPath('Coordinate%sMatrix%d.txt' % (label,i))
 
-    def _defineResultsName2(self, i):
-        return self._getExtraPath('CoordinateMatrixCorr%d.txt' % i)
+    def _defineResultsName2(self, i, label=''):
+        return self._getExtraPath('Coordinate%sMatrixCorr%d.txt' % (label,i))
 
     def _defineResultsName3(self, i):
         return self._getExtraPath('ConsensusMatrix%d.txt' % i)
