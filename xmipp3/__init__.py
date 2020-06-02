@@ -120,7 +120,7 @@ class Plugin(pwem.Plugin):
                        'verToken': verToken,
                        'nProcessors': env.getProcessors(),
                        'xmippHome': getXmippPath(),
-                       'bindingsSrc': getXmippPath('bindings', 'python', '*'),
+                       'bindingsSrc': getXmippPath('bindings', 'python'),
                        'bindingsDst': Config.getBindingsFolder(),
                        'xmippLib': getXmippPath('lib', 'libXmipp.so'),
                        'coreLib': getXmippPath('lib', 'libXmippCore.so'),
@@ -139,8 +139,8 @@ class Plugin(pwem.Plugin):
                       installVars['installedToken']]
 
         ## Linking bindings (removing installationToken)
-        bindingsAndLibsCmd = ("ln -srf {bindingsSrc} {bindingsDst} 2> /dev/null && "
-                              "ln -srf {xmippLib} {libsDst} && "
+        bindingsAndLibsCmd = ("find {bindingsSrc} -maxdepth 1 -mindepth 1 "
+                              "! -name __pycache__ -exec ln -srf {{}} {bindingsDst} \; && "
                               "ln -srf {coreLib} {libsDst} && "
                               "touch {bindingsToken} && "
                               "rm {installedToken} 2> /dev/null")
