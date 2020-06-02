@@ -35,7 +35,7 @@ from pyworkflow.project import Manager
 from pyworkflow.protocol import getProtocolFromDb
 import pyworkflow.object as pwobj
 
-from pwem.protocols import ProtMonitor
+from pwem.protocols import EMProtocol
 from pwem.objects import Volume
 
 from xmipp3.protocols import XmippProtSplitVolumeHierarchical
@@ -44,7 +44,7 @@ from xmipp3.protocols import XmippMetaProtCreateOutput
 from xmipp3.protocols import XmippMetaProtCreateSubset
 
 
-class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
+class XmippMetaProtDiscreteHeterogeneityScheduler(EMProtocol):
     """ Metaprotocol to run together all the protocols to discover discrete
     heterogeneity in a set of particles
      """
@@ -52,7 +52,7 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
     _lastUpdateVersion = VERSION_2_0
 
     def __init__(self, **kwargs):
-        ProtMonitor.__init__(self, **kwargs)
+        EMProtocol.__init__(self, **kwargs)
         self._runIds = pwobj.CsvList(pType=int)
         self.childs = []
 
@@ -62,7 +62,7 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                 # child.setAborted()
                 self.getProject().stopProtocol(child)
 
-        ProtMonitor.setAborted(self)
+        EMProtocol.setAborted(self)
 
     def setFailed(self, errorMsg):
         for child in self.childs:
@@ -70,7 +70,7 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(ProtMonitor):
                 # child.setFailed(errorMsg)
                 self.getProject().stopProtocol(child)
 
-        ProtMonitor.setFailed(self, errorMsg)
+        EMProtocol.setFailed(self, errorMsg)
 
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
