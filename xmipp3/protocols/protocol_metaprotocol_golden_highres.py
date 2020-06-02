@@ -39,14 +39,14 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
 from pyworkflow.project import Manager
 import pyworkflow.object as pwobj
 from pyworkflow.protocol import getProtocolFromDb
-from pwem.protocols import ProtMonitor
+from pwem.protocols import EMProtocol
 from pwem.objects import Volume
 from xmipp3.convert import readSetOfParticles
 from pwem import emlib
 from xmipp3.protocols import XmippProtReconstructHighRes
 
 
-class XmippMetaProtGoldenHighRes(ProtMonitor):
+class XmippMetaProtGoldenHighRes(EMProtocol):
     """ Metaprotocol to run golden version of highres"""
     _label = 'metaprotocol golden highres'
     _lastUpdateVersion = VERSION_2_0
@@ -55,7 +55,7 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
     SPLIT_OTSU = 1
 
     def __init__(self, **kwargs):
-        ProtMonitor.__init__(self, **kwargs)
+        EMProtocol.__init__(self, **kwargs)
         self._runIds = pwobj.CsvList(pType=int)
         self.childs=[]
 
@@ -65,7 +65,7 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 #child.setAborted()
                 self.getProject().stopProtocol(child)
 
-        ProtMonitor.setAborted(self)
+        EMProtocol.setAborted(self)
 
 
     def setFailed(self, errorMsg):
@@ -74,7 +74,7 @@ class XmippMetaProtGoldenHighRes(ProtMonitor):
                 #child.setFailed(errorMsg)
                 self.getProject().stopProtocol(child)
 
-        ProtMonitor.setFailed(self, errorMsg)
+        EMProtocol.setFailed(self, errorMsg)
 
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
