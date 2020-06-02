@@ -61,6 +61,10 @@ class XmippProtMovieCorr(ProtAlignMovies):
     _label = 'correlation alignment'
     _lastUpdateVersion = VERSION_1_1
 
+    def __init__(self, **args):
+        ProtAlignMovies.__init__(self, **args)
+        self.stepsExecutionMode = cons.STEPS_PARALLEL
+
     #--------------------------- DEFINE param functions ------------------------
 
     def _defineAlignmentParams(self, form):
@@ -359,9 +363,20 @@ class XmippProtMovieCorr(ProtAlignMovies):
             elif not self.useGpu.get():
                 errors.append("GPU is needed to do local alignment.")
                 return errors
-            if self.numberOfMpi.get() * self.numberOfThreads.get() > 1:
-                errors.append("Multiple threads and/or mpi is incompatible with"
-                              " useGPU.")
+
+        nGpus = len(self.gpuList.get().split())
+        nMPI = self.numberOfMpi.get()
+        nThreads = self.numberOfThreads.get()
+        validThreads = nGpus if nGpus == 1 else nGpus + 1
+        if self.useGpu and nMPI * nThreads != validThreads:
+            coreStr = ('threads' if nThreads > 1 else
+                       'MPI' if nMPI > 1 else
+                       'threads or MPI')
+            errors.append("The number of threads/mpi must be one more than "
+                          "the number of GPUs to use (single threading is also "
+                          "valid for one single GPU)\n"
+                          "i.e. *%s = %d* , when using *%d GPUs*"
+                          % (coreStr, validThreads, nGpus))
         else:
             cpuBinaryFn = getXmippHome('bin', 'xmipp_movie_alignment_correlation')
             if not os.path.isfile(cpuBinaryFn):
