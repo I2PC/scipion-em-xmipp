@@ -33,7 +33,7 @@ import pwem.emlib.metadata as md
 from pwem.emlib.metadata import (MDL_VOLUME_SCORE1, MDL_VOLUME_SCORE2)
 from pwem.protocols import ProtAnalysis3D
 from pyworkflow.utils import getExt
-from pyworkflow.object import Float
+from pyworkflow.object import (Float, Integer)
 from pwem.objects import Volume
 from pwem.convert import Ccp4Header
 
@@ -65,8 +65,6 @@ class XmippProtValFit(ProtAnalysis3D):
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
         self.stepsExecutionMode = 1
-        self.mean_init = Float()
-        self.meanA_init = Float()
     
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -351,13 +349,49 @@ class XmippProtValFit(ProtAnalysis3D):
         mtd = md.MetaData()
         mtd.read(self._getFileName(MD_MEANS))
             
-        self.mean = mtd.getValue(MDL_VOLUME_SCORE1,1)
-        self.meanA = mtd.getValue(MDL_VOLUME_SCORE2,1)
+        mean = mtd.getValue(MDL_VOLUME_SCORE1,1)
+        meanA = mtd.getValue(MDL_VOLUME_SCORE2,1)  
+              
         #Setting the mean fsc-q for the summary
-        self.mean_init.set(round(self.mean*100)/100) 
-        self.meanA_init.set(round(self.meanA*100)/100)             
-        self._store(self.mean_init)
-        self._store(self.meanA_init)
+        self.mean = Float(mean)
+        self._store(self) 
+        self.meanA = Float(meanA)
+        self._store(self) 
+
+        
+        #statistic from fnal pdb with fsc-q
+        #Number of atoms greater or less than 0.5
+        total_atom=0
+        fscq_greater=0
+        fscq_less=0
+        with open(self._getFileName(PDB_VALUE_FILE)) as f:
+            lines_data = f.readlines()
+            for j,lin in enumerate(lines_data):
+                
+                if ( lin.startswith('ATOM') or lin.startswith('HETATM') ):
+                    
+                    total_atom=total_atom+1
+                    fscq_atom = float(lin[54:60])
+                    
+                    if (fscq_atom>0.5):
+                        fscq_greater=fscq_greater+1
+                        
+                    if (fscq_atom<-0.5):
+                        fscq_less=fscq_less+1
+                        
+        porc_greater=(fscq_greater*100)/total_atom
+        porc_less=(fscq_less*100)/total_atom
+ 
+        self.total_atom = Integer(total_atom)
+        self._store(self)
+        self.fscq_greater=Integer(fscq_greater)
+        self._store(self)
+        self.fscq_less=Integer(fscq_less)
+        self._store(self)        
+        self.porc_greater=Float(porc_greater)
+        self._store(self)
+        self.porc_less=Float(porc_less)
+        self._store(self)           
 
     # --------------------------- INFO functions ------------------------------
 
@@ -370,9 +404,21 @@ class XmippProtValFit(ProtAnalysis3D):
     
     def _summary(self):
         summary = []
-        summary.append("Mean deviation from the signal of the Half Maps")
-        summary.append("Mean FSC-Q: %.2f" % (self.mean_init))  
-        summary.append("Absotute Mean FSC-Q: %.2f" % (self.meanA_init))  
+        summary.append("Deviation from the signal of the Half Maps")
+        if self.hasAttribute('mean'):
+            summary.append("Mean FSC-Q: %.2f" % (self.mean.get()))
+        if self.hasAttribute('meanA'):    
+            summary.append("Absotute Mean FSC-Q: %.2f" % (self.meanA.get()))  
+             
+        summary.append("------------------------------------------")   
+        if self.hasAttribute('total_atom'):                    
+            summary.append("Total number of atoms analyzed: %d" % (self.total_atom.get()))
+        if (self.hasAttribute('fscq_greater') and self.hasAttribute('porc_greater')):            
+            summary.append("Number of atoms with FSC-Q>0.5: %d.  Percentage of total: %.2f." 
+                       % (self.fscq_greater.get(), self.porc_greater.get()))
+        if (self.hasAttribute('fscq_less') and self.hasAttribute('porc_less')):             
+            summary.append("Number of atoms with FSC-Q<-0.5: %d.  Percentage of total: %.2f." 
+                       % (self.fscq_less.get(), self.porc_less.get()))
         return summary
 
     def _validate(self):
