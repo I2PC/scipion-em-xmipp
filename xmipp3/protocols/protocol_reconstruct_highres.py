@@ -55,6 +55,11 @@ from pwem import emlib
 from xmipp3.base import HelicalFinder
 from xmipp3.convert import createItemMatrix, setXmippAttributes, writeSetOfParticles
 
+def getPreviousQuality(img, imgRow):
+    if hasattr(img,"_xmipp_cost"):
+        imgRow.setValue(md.MDL_COST,img._xmipp_cost.get())
+    if hasattr(img,"_xmipp_maxCC"):
+        imgRow.setValue(md.MDL_MAXCC,img._xmipp_cost.get())
 
 class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
     """This is a 3D refinement protocol whose main input is a volume and a set of particles.
@@ -87,6 +92,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
     LOCAL_ALIGNMENT = 1
     AUTOMATIC_ALIGNMENT = 2
     STOCHASTIC_ALIGNMENT = 3
+    NO_ALIGNMENT = 4
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
@@ -171,10 +177,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                       help="Side views are around 90 degrees, top views around 0")
         line.addParam('angularMaxTilt', FloatParam, label="Max.", default=180, expertLevel=LEVEL_ADVANCED,
                       help="You may generate redudant galleries by setting this angle to 180, this may help if c1 symmetry is considered")
-        form.addParam('alignmentMethod', EnumParam, label='Image alignment', choices=['Global','Local','Automatic','Stochastic'],
+        form.addParam('alignmentMethod', EnumParam, label='Image alignment', choices=['Global','Local','Automatic','Stochastic','No alignment'],
                       default=self.GLOBAL_ALIGNMENT)
 
-        form.addParam('numberOfIterations', IntParam, default=3, label='Number of iterations', condition='alignmentMethod!=2')
+        form.addParam('numberOfIterations', IntParam, default=3, label='Number of iterations', condition='alignmentMethod!=2 and alignmentMethod!=4')
         form.addParam('NimgsSGD', IntParam, default=250, label='Random subset size', condition='alignmentMethod==3',
                       expertLevel=LEVEL_ADVANCED, help="Stochastic alignment is performed by taking random subsets of images of this size")
         form.addParam('alphaSGD', FloatParam, default=0.1, label='Step size', condition='alignmentMethod==3',
@@ -195,9 +201,9 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                       condition='multiresolution',
                       help="In Angstroms. The actual maximum resolution will be the maximum between this number of 0.5 * previousResolution, meaning that"
                       "in a single step you cannot increase the resolution more than 1/2")
-        form.addParam('numberOfPerturbations', IntParam, label="Number of Perturbations", default=1, condition='alignmentMethod!=1',
+        form.addHidden('numberOfPerturbations', IntParam, label="Number of Perturbations", default=1, condition='alignmentMethod!=1',
                   expertLevel=LEVEL_ADVANCED, help="The gallery of reprojections is randomly perturbed this number of times")
-        form.addParam('numberOfReplicates', IntParam, label="Max. Number of Replicates", default=1, condition='alignmentMethod!=1',
+        form.addHidden('numberOfReplicates', IntParam, label="Max. Number of Replicates", default=1, condition='alignmentMethod!=1',
                   expertLevel=LEVEL_ADVANCED, help="Significant alignment is allowed to replicate each image up to this number of times")
 
         form.addParam('contShift', BooleanParam, label="Optimize shifts?", default=True, condition='alignmentMethod==1',
@@ -233,8 +239,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         form.addParam('weightCC', BooleanParam, label="Weight by CC percentile?", default=True, expertLevel=LEVEL_ADVANCED,
                       help='Weight input images by their fitness (cross correlation) percentile in their defocus group')
         form.addParam('weightCCmin', FloatParam, label="Minimum CC weight", default=0.1, expertLevel=LEVEL_ADVANCED,
-                      help='Weights are between this value and 1')
-
+                      help='Weights are between this value and 1. If most of the particles are good, this value should be high (e.g., 0.9)')
         form.addSection(label='Post-processing')
         form.addParam('postAdHocMask', PointerParam, label="Mask", pointerClass='VolumeMask', allowsNull=True,
                       help='The mask values must be between 0 (remove these pixels) and 1 (let them pass). Smooth masks are recommended.')
@@ -296,6 +301,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             self.firstIteration=1
         self.TsOrig=self.inputParticles.get().getSamplingRate()
         numberOfIterations = self.numberOfIterations.get() if self.alignmentMethod.get()!=self.AUTOMATIC_ALIGNMENT else 5
+        if self.alignmentMethod.get()==self.NO_ALIGNMENT:
+            numberOfIterations = 1
         self._maximumTargetResolution = getFloatListFromValues(self.maximumTargetResolution.get(),self.firstIteration+numberOfIterations-1)
         for self.iteration in range(self.firstIteration,self.firstIteration+numberOfIterations):
             self.insertIteration(self.iteration)
@@ -306,6 +313,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
            self.alignmentMethod==self.STOCHASTIC_ALIGNMENT or \
            (self.alignmentMethod==self.AUTOMATIC_ALIGNMENT and iteration<=3):
             self._insertFunctionStep('globalAssignment',iteration)
+        elif self.alignmentMethod==self.NO_ALIGNMENT:
+            self._insertFunctionStep('noAssignment', iteration)
         else:
             self._insertFunctionStep('localAssignment',iteration)
         self._insertFunctionStep('weightParticles',iteration)
@@ -317,7 +326,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def convertInputStep(self, inputParticlesId):
-        writeSetOfParticles(self.inputParticles.get(),self.imgsFn)
+        if self.alignmentMethod==self.NO_ALIGNMENT:
+            writeSetOfParticles(self.inputParticles.get(),self.imgsFn, postprocessImageRow=getPreviousQuality)
+        else:
+            writeSetOfParticles(self.inputParticles.get(), self.imgsFn)
         self.runJob('xmipp_metadata_utilities','-i %s --fill image1 constant noImage'%self.imgsFn,numberOfMpi=1)
         self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "image1=image"'%self.imgsFn,numberOfMpi=1)
         self.runJob('xmipp_metadata_utilities','-i %s --fill particleId constant 1'%self.imgsFn,numberOfMpi=1)
@@ -336,8 +348,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             volume=Volume()
             volume.setFileName(fnLastVol)
             volume.setSamplingRate(Ts)
-            halfMap1=fnLastVol=join(fnLastDir,"volume01.vol")
-            halfMap2=fnLastVol=join(fnLastDir,"volume02.vol")
+            halfMap1=join(fnLastDir,"volume01.vol")
+            halfMap2=join(fnLastDir,"volume02.vol")
             volume.setHalfMaps([halfMap1, halfMap2])
             self._defineOutputs(outputVolume=volume)
             self._defineSourceRelation(self.inputParticles.get(),volume)
@@ -1086,6 +1098,34 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 self.runJob("xmipp_transform_mask","-i %s --mask circular -%d"%(fnLocalStk,R),numberOfMpi=min(self.numberOfMpi.get(),24))
                 self.writeInfoField(fnDirLocal,"count",emlib.MDL_COUNT,int(2+i))
 
+    def noAssignment(self, iteration):
+        fnDirPrevious = self._getExtraPath("Iter%03d" % (iteration - 1))
+        fnDirCurrent = self._getExtraPath("Iter%03d" % iteration)
+        fnDirLocal = join(fnDirCurrent, "noAssignment")
+        makePath(fnDirLocal)
+
+        previousResolution = self.readInfoField(fnDirPrevious, "resolution", emlib.MDL_RESOLUTION_FREQREAL)
+        targetResolution = max(previousResolution * 0.8, self._maximumTargetResolution[iteration - 1])
+        if self.multiresolution:
+            TsCurrent = max(self.TsOrig, targetResolution / 3)
+        else:
+            TsCurrent = self.TsOrig
+        self.writeInfoField(fnDirLocal, "sampling", emlib.MDL_SAMPLINGRATE, TsCurrent)
+        TsCurrent = self.readInfoField(fnDirLocal, "sampling",
+                                       emlib.MDL_SAMPLINGRATE)  # Write and read to guarantee consistency with previous directories
+
+        # Prepare images and references
+        self.prepareImages(fnDirPrevious, fnDirLocal, TsCurrent)
+
+        for i in range(1, 3):
+            fnLocalImages = join(fnDirLocal, "images%02d.xmd" % i)
+            fnAssignment = join(fnDirLocal, "anglesNoAssignment%02d.xmd" % i)
+            TsPrevious = self.readInfoField(fnDirPrevious, "sampling", emlib.MDL_SAMPLINGRATE)
+            self.adaptShifts(fnLocalImages, TsPrevious, fnAssignment, TsCurrent)
+            row = md.getFirstRow(fnAssignment)
+            if not row.hasLabel(md.MDL_MAXCC) and not row.hasLabel(md.MDL_COST):
+                self.runJob("xmipp_metadata_utilities", "-i %s --fill maxCC constant 1"% fnAssignment, numberOfMpi=1)
+
     def weightParticles(self, iteration):
         fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
         from math import exp
@@ -1093,13 +1133,21 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             # Grab file
             fnDirGlobal=join(fnDirCurrent,"globalAssignment")
             fnDirLocal=join(fnDirCurrent,"localAssignment")
+            fnDirNo=join(fnDirCurrent,"noAssignment")
+
             fnAnglesCont=join(fnDirLocal,"anglesCont%02d.xmd"%i)
             fnAnglesDisc=join(fnDirGlobal,"anglesDisc%02d.xmd"%i)
+            fnAnglesNo=join(fnDirNo,"anglesNoAssignment%02d.xmd"%i)
+
             fnAngles=join(fnDirCurrent,"angles%02d.xmd"%i)
             if exists(fnAnglesCont):
                 copyFile(fnAnglesCont, fnAngles)
                 TsCurrent=self.readInfoField(fnDirLocal,"sampling",emlib.MDL_SAMPLINGRATE)
                 Xdim=self.readInfoField(fnDirLocal,"size",emlib.MDL_XSIZE)
+            elif exists(fnAnglesNo):
+                copyFile(fnAnglesNo, fnAngles)
+                TsCurrent = self.readInfoField(fnDirNo, "sampling", emlib.MDL_SAMPLINGRATE)
+                Xdim = self.readInfoField(fnDirNo, "size", emlib.MDL_XSIZE)
             else:
                 if exists(fnAnglesDisc):
                     copyFile(fnAnglesDisc, fnAngles)
@@ -1231,11 +1279,16 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if self.weightCC:
             mdAngles=emlib.MetaData(fnAngles)
             weightCCmin=float(self.weightCCmin.get())
+            hasCost = mdAngles.containsLabel(md.MDL_COST_PERCENTILE)
+            hasCC = mdAngles.containsLabel(md.MDL_MAXCC_PERCENTILE)
             for objId in mdAngles:
-                if self.alignmentMethod==self.LOCAL_ALIGNMENT:
+                if self.alignmentMethod==self.LOCAL_ALIGNMENT or \
+                        (self.alignmentMethod==self.NO_ALIGNMENT and hasCost):
                     w=mdAngles.getValue(emlib.MDL_COST_PERCENTILE,objId)
-                else:
+                elif hasCC:
                     w=mdAngles.getValue(emlib.MDL_MAXCC_PERCENTILE,objId)
+                else:
+                    w=1
                 weight=mdAngles.getValue(emlib.MDL_WEIGHT,objId)
                 weight*=weightCCmin+w*(1-weightCCmin)
                 mdAngles.setValue(emlib.MDL_WEIGHT,weight,objId)
@@ -1314,7 +1367,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         self.runJob('xmipp_metadata_utilities','-i %s --set intersection %s particleId particleId'%(fnAngles,fnAnglesToUse),numberOfMpi=1) 
                         # This is because eliminate_byEnergy may have reduced the number of images in fnAngles
                 
-                if self.contGrayValues or (self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT and iteration>=5):
+                if (self.contGrayValues and self.alignmentMethod.get()==self.LOCAL_ALIGNMENT) or \
+                        (self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT and iteration>=5):
                     grayAdjusted=True
                     R=self.particleRadius.get()
                     if R<=0:
