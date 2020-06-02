@@ -109,32 +109,21 @@ class Plugin(pwem.Plugin):
             by using its name as string.
         """
 
-        # scons = tryAddPipModule(env, 'scons', '3.0.4')
-        # joblib = tryAddPipModule(env, 'joblib', '0.11', target='joblib*')
-        #
-        # # scikit
-        # scipy = tryAddPipModule(env, 'scipy', '1.4.1', default=True)
-        # cython = tryAddPipModule(env, 'cython', '0.29.14', target='Cython-0.29*',
-        #                          default=True)
-        # scikit_learn = tryAddPipModule(env, 'scikit-learn', '0.22',
-        #                                target='scikit_learn*',
-        #                                default=True)
-
         ## XMIPP SOFTWARE ##
         xmippDeps = []  # Deps should be at requirements.txt (old: scons, joblib, scikit_learn)
 
         # Installation vars for commands formating
-        verToken = cls.getHome('v%s' % _currentVersion)
-        confToken = cls.getHome("xmipp.conf")
+        verToken = getXmippPath('v%s' % _currentVersion)
+        confToken = getXmippPath("xmipp.conf")
         installVars = {'installedToken': "installation_finished",
                        'bindingsToken': "bindings_linked",
                        'verToken': verToken,
                        'nProcessors': env.getProcessors(),
-                       'xmippHome': cls.getHome(),
-                       'bindingsSrc': cls.getHome('bindings', 'python', '*'),
+                       'xmippHome': getXmippPath(),
+                       'bindingsSrc': getXmippPath('bindings', 'python', '*'),
                        'bindingsDst': Config.getBindingsFolder(),
-                       'xmippLib': cls.getHome('lib', 'libXmipp.so'),
-                       'coreLib': cls.getHome('lib', 'libXmippCore.so'),
+                       'xmippLib': getXmippPath('lib', 'libXmipp.so'),
+                       'coreLib': getXmippPath('lib', 'libXmippCore.so'),
                        'libsDst': Config.getLibFolder(),
                        'confToken': confToken,
                        'strPlaceHolder': '%s',  # to be replaced in the future
@@ -145,8 +134,8 @@ class Plugin(pwem.Plugin):
         installCmd = ("cd {cwd} && ./xmipp all N={nProcessors:d} && "
                       "ln -srf build {xmippHome} && cd - && "
                       "touch {installedToken} && rm {bindingsToken} 2> /dev/null")
-        installTgt = [cls.getHome('bin', 'xmipp_reconstruct_significant'),
-                      cls.getHome("lib/libXmippJNI.so"),
+        installTgt = [getXmippPath('bin', 'xmipp_reconstruct_significant'),
+                      getXmippPath("lib/libXmippJNI.so"),
                       installVars['installedToken']]
 
         ## Linking bindings (removing installationToken)
@@ -160,7 +149,7 @@ class Plugin(pwem.Plugin):
                               os.path.join(Config.getLibFolder(), 'libXmipp.so'),
                               installVars['bindingsToken']]
 
-        sourceTgt = [cls.getHome('xmipp.bashrc')]  # Target for xmippSrc and xmippDev
+        sourceTgt = [getXmippPath('xmipp.bashrc')]  # Target for xmippSrc and xmippDev
         ## Allowing xmippDev if devel mode detected
         # plugin  = scipion-em-xmipp  <--  xmipp3    <--     __init__.py
         pluginDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
