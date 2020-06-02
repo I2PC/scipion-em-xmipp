@@ -52,7 +52,7 @@ class XmippProtVolSubtraction(ProtInitialVolume):
                       condition='masks', help='Specify a mask for volume 1.')
         form.addParam('mask2', PointerParam, pointerClass='VolumeMask', label="Mask for volume 2",
                       condition='masks', help='Specify a mask for volume 1.')
-        form.addParam('resol', FloatParam, label="subtraction at resolution: ", default=0,
+        form.addParam('resol', FloatParam, label="Subtraction at resolution: ", default=0, allowsNull=True,
                       help='Resolution (A) at which subtraction will be performed, filtering the input volumes.')
         form.addParam('iter', IntParam, label="Number of iterations: ", default=5, expertLevel=LEVEL_ADVANCED)
 
@@ -68,14 +68,15 @@ class XmippProtVolSubtraction(ProtInitialVolume):
         vol2 = self.vol2.get()
         mask1 = self.mask1.get()
         mask2 = self.mask2.get()
-        resolution = self.resol.get()
-        if resolution != 0:
-            fc = vol1.getSamplingRate()/self.resol.get()
-        else:
-            fc = 0
+        resol = self.resol.get()
+        iter = self.iter.get()
+
         program = "xmipp_volume_subtraction"
-        args = '-i1 %s -i2 %s -o %s -fc %d --iter %s' % (vol1.getFileName(), vol2.getFileName(),
-                                                  self._getExtraPath("vol_diff.mrc"), fc,self.iter.get())
+        args = '-i1 %s -i2 %s -o %s --iter %s' % (vol1.getFileName(), vol2.getFileName(),
+                                                  self._getExtraPath("vol_diff.mrc"), iter)
+        if resol:
+            fc = vol1.getSamplingRate()/resol
+            args += ' --cutFreq %f' % fc
         if self.pdb:
             args += ' --pdb'
         if self.masks:
@@ -85,7 +86,11 @@ class XmippProtVolSubtraction(ProtInitialVolume):
         move('commonmask.mrc', join(self._getExtraPath(), 'common_mask.mrc'))
         move('V1masked.mrc', join(self._getExtraPath(), 'V1_masked.mrc'))
         move('V2masked.mrc', join(self._getExtraPath(), 'V2_masked.mrc'))
-        for n in range(self.iter.get()):
+        move('maskfilter.mrc', join(self._getExtraPath(), 'maskfilter.mrc'))
+        if resol:
+            move('V1filter.mrc', join(self._getExtraPath(), 'V1filter.mrc'))
+            move('V2filter.mrc', join(self._getExtraPath(), 'V2filter.mrc'))
+        for n in range(iter):
             move('V2masked_Amp1_%d.mrc' % n, join(self._getExtraPath(), 'V2_Amp1_%d.mrc' % n))
             move('V2masked_Amp1_ph2_%d.mrc' % n, join(self._getExtraPath(), 'V2_Amp1_ph2_%d.mrc' % n))
             move('V2masked_Amp1_ph2_nonneg_%d.mrc' % n, join(self._getExtraPath(), 'V2_Amp1_ph2_nonneg_%d.mrc' % n))
