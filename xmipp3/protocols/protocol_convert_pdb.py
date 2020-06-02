@@ -124,7 +124,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
             size = vol.getDim()
             ccp4header = headers.Ccp4Header(vol.getFileName(), readHeader=True)
             shifts = ccp4header.getOrigin()
-            args += ' --size %d %d %d --orig %d %d %d' % (size[2], size[1], size[0], shifts[0] - size[2]/2, shifts[1] - size[1]/2, shifts[2]- size[0]/2)
+            args += ' --size %d %d %d --orig %d %d %d' % (size[2], size[1], size[0], shifts[2]-(size[2]/2),  shifts[1]-(size[1]/2),  shifts[0]-(size[0]/2))
 
         if self.setSize:
             args += ' --size'
