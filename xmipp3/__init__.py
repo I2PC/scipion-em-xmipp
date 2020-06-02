@@ -38,7 +38,7 @@ from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.19.04'
+_currentVersion = '3.20.07a0'
 
 
 class Plugin(pwem.Plugin):
@@ -131,7 +131,7 @@ class Plugin(pwem.Plugin):
                        }
 
         ## Installation commands (removing bindingsToken)
-        installCmd = ("cd {cwd} && ./xmipp all N={nProcessors:d} && "
+        installCmd = ("cd {cwd} && {configCmd} && {compileCmd} N={nProcessors:d} && "
                       "ln -srf build {xmippHome} && cd - && "
                       "touch {installedToken} && rm {bindingsToken} 2> /dev/null")
         installTgt = [getXmippPath('bin', 'xmipp_reconstruct_significant'),
@@ -162,7 +162,10 @@ class Plugin(pwem.Plugin):
         develMode = isPypiDev and isXmippBu
         if develMode:
             env.addPackage('xmippDev', tar='void.tgz',
-                           commands=[(installCmd.format(**installVars, cwd=bundleDir),
+                           commands=[(installCmd.format(**installVars,
+                                                        cwd=bundleDir,
+                                                        configCmd='pwd',
+                                                        compileCmd='./xmipp all'),
                                       installTgt+sourceTgt),
                                      (bindingsAndLibsCmd.format(**installVars),
                                       bindingsAndLibsTgt)],
@@ -172,7 +175,10 @@ class Plugin(pwem.Plugin):
         env.addPackage('xmippSrc', version=_currentVersion,
                        # adding 'v' before version to fix a package target (post-link)
                        tar='xmippSrc-v'+_currentVersion+'.tgz',
-                       commands=[(installCmd.format(**installVars, cwd='.'),
+                       commands=[(installCmd.format(**installVars, cwd='.',
+                                                    configCmd='./xmipp config &&'
+                                                              './xmipp check_config',
+                                                    compileCmd='./xmipp compileAndInstall'),
                                   installTgt + sourceTgt),
                                  (bindingsAndLibsCmd.format(**installVars),
                                   bindingsAndLibsTgt)],
