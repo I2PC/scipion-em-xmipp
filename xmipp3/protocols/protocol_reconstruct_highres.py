@@ -2037,8 +2037,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 self.alignmentMethod.get() == self.LOCAL_ALIGNMENT and not self.inputParticles.get().hasAlignmentProj():
             errors.append(
                 "If the first iteration is local, then the input particles must have an alignment")
-        if not self.inputParticles.get().isPhaseFlipped():
-            errors.append("The input particles must be phase flipped")
+        #if not self.inputParticles.get().isPhaseFlipped():
+        #    errors.append("The input particles must be phase flipped")
         return errors
 
     def _warnings(self):
