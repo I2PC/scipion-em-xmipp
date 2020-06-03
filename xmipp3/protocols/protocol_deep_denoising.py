@@ -318,7 +318,8 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections, XmippProtocol):
         if os.path.isfile(dataPathEmpty):
           args+=" --empty_particles %s"%dataPathEmpty
 
-        self.runCondaJob("xmipp_deep_denoising", args, numberOfMpi=1)
+        self.runJob("xmipp_deep_denoising", args, numberOfMpi=1,
+                    env=self.getCondaEnv())
 
 
     def _getModelFname(self):
@@ -361,7 +362,8 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections, XmippProtocol):
       elif self.checkIfInputIsCompareReprojection():
         args += " -p %s" % self._getExtraPath('resizedProjections.stk')
 
-      self.runCondaJob("xmipp_deep_denoising", args, numberOfMpi=1)
+      self.runJob("xmipp_deep_denoising", args, numberOfMpi=1,
+                  env=self.getCondaEnv())
 
     def createOutputStep(self):
         imgSet = self.inputParticles.get()
