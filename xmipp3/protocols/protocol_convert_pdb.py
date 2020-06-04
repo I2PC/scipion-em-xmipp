@@ -114,7 +114,9 @@ class XmippProtConvertPdb(ProtInitialVolume):
             cifToPdb(pdbFn, pdbFn2)
             pdbFn = pdbFn2
 
-        args = '-i %s --sampling %f -o %s' % (pdbFn, self.sampling.get(), outFile)
+        samplingR = self.sampling.get()
+
+        args = '-i %s --sampling %f -o %s' % (pdbFn, samplingR, outFile)
         
         if self.centerPdb:
             args += ' --centerPDB'
@@ -124,7 +126,8 @@ class XmippProtConvertPdb(ProtInitialVolume):
             size = vol.getDim()
             ccp4header = headers.Ccp4Header(vol.getFileName(), readHeader=True)
             shifts = ccp4header.getOrigin()
-            args += ' --size %d %d %d --orig %d %d %d' % (size[2], size[1], size[0], shifts[2]-(size[2]/2),  shifts[1]-(size[1]/2),  shifts[0]-(size[0]/2))
+            args += ' --size %d %d %d --orig %d %d %d' % (size[2], size[1], size[0],
+                                                          shifts[0]/samplingR, shifts[1]/samplingR, shifts[2]/samplingR)
 
         if self.setSize:
             args += ' --size'
