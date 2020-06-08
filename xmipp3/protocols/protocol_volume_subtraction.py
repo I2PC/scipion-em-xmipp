@@ -43,8 +43,8 @@ class XmippProtVolSubtraction(ProtInitialVolume):
     def _defineParams(self, form):
 
         form.addSection(label='Input')
-        form.addParam('vol1', PointerParam, pointerClass='Volume', label="Input volume 1 ", help='Specify a volume.')
-        form.addParam('vol2', PointerParam, pointerClass='Volume', label="Input volume 2 ", help='Specify a volume.')
+        form.addParam('vol1', PointerParam, pointerClass='Volume', label="Volume 1 ", help='Specify a volume.')
+        form.addParam('vol2', PointerParam, pointerClass='Volume', label="Volume 2 ", help='Specify a volume.')
         form.addParam('pdb', BooleanParam, label='Does volume 2 come from a PDB?', default=True)
         form.addParam('masks', BooleanParam, label='Mask volumes?', default=True,
                       help='The masks are not mandatory but highly recommendable.')
@@ -52,8 +52,11 @@ class XmippProtVolSubtraction(ProtInitialVolume):
                       condition='masks', help='Specify a mask for volume 1.')
         form.addParam('mask2', PointerParam, pointerClass='VolumeMask', label="Mask for volume 2",
                       condition='masks', help='Specify a mask for volume 1.')
-        form.addParam('resol', FloatParam, label="Subtraction at resolution: ", default=0, allowsNull=True,
+        form.addParam('resol', FloatParam, label="Subtraction at resolution: ", default=5, allowsNull=True,
                       help='Resolution (A) at which subtraction will be performed, filtering the input volumes.')
+        form.addParam('sigma', FloatParam, label="Decay of the filter (sigma): ", default=3, condition="resol",
+                      help='Decay of the filter (sigma parameter) to smooth the mask transition',
+                      expertLevel=LEVEL_ADVANCED)
         form.addParam('iter', IntParam, label="Number of iterations: ", default=5, expertLevel=LEVEL_ADVANCED)
 
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -76,7 +79,7 @@ class XmippProtVolSubtraction(ProtInitialVolume):
                                                   self._getExtraPath("vol_diff.mrc"), iter)
         if resol:
             fc = vol1.getSamplingRate()/resol
-            args += ' --cutFreq %f' % fc
+            args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
         if self.pdb:
             args += ' --pdb'
         if self.masks:
