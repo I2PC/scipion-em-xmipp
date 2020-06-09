@@ -305,7 +305,11 @@ class XmippProtProjMatch(ProtRefine3D, ProtClassify3D):
         desired resolution.
         """
         md = emlib.MetaData(self._getFileName('resolutionXmdMax', iter=iterN, ref=refN))
-        return md.getValue(emlib.MDL_RESOLUTION_FREQREAL, md.firstObject())
+        resol = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, md.firstObject())
+        if resol > 0:
+            return resol
+        sampling = md.getValue(emlib.MDL_SAMPLINGRATE, md.firstObject())
+        return 2*sampling
     
     def calculateDeviationsStep(self, it):
         """ Calculate both angles and shifts devitations for all iterations

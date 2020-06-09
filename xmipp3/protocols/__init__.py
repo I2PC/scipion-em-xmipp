@@ -102,6 +102,7 @@ from .protocol_split_volume import XmippProtSplitvolume
 from .protocol_trigger_data import XmippProtTriggerData
 from .protocol_validate_nontilt import XmippProtValidateNonTilt
 from .protocol_validate_overfitting import XmippProtValidateOverfitting
+from .protocol_validate_fscq import XmippProtValFit
 from .protocol_volume_strain import XmippProtVolumeStrain
 from .protocol_enrich import XmippProtEnrich
 from .protocol_write_testC import XmippProtWriteTestC
@@ -121,3 +122,4 @@ from .protocol_local_ctf import XmippProtLocalCTF
 from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
 from .protocol_consensus_local_ctf import XmippProtConsensusLocalCTF
 from .protocol_particle_pick_remove_duplicates import XmippProtPickingRemoveDuplicates
+from .protocol_metaprotocol_golden_highres import XmippMetaProtGoldenHighRes

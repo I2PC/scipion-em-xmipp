@@ -31,7 +31,8 @@ form definition, we have separated in this sub-module.
 """
 
 import math
-from os.path import exists
+from os.path import exists, join
+import os
 
 from pwem.objects import Volume, SetOfClasses3D
 from pyworkflow.utils import getMemoryAvailable, removeExt, cleanPath, makePath, copyFile
@@ -194,7 +195,7 @@ def insertAngularProjectLibraryStep(self, iterN, refN, **kwargs):
               }
 
     print("%s %s" % (self.maxChangeInAngles, type(self.maxChangeInAngles)))
-    if int(self.maxChangeInAngles) < 181:
+    if int(self.maxChangeInAngles.get()) < 181:
         args += ' --near_exp_data --angular_distance %(maxChangeInAngles)s'
     else:
         args += ' --angular_distance -1'
@@ -526,7 +527,28 @@ def insertReconstructionStep(self, iterN, refN, suffix='', **kwargs):
 
     replacedArgs = args % params
     if self.useGpu.get():
-        replacedArgs += " --device %(GPU)s"
+        #AJ to make it work with and without queue system
+        if self.numberOfMpi.get()>1:
+            N_GPUs = len((self.gpuList.get()).split(','))
+            replacedArgs += ' -gpusPerNode %d' % N_GPUs
+            replacedArgs += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+        count=0
+        GpuListCuda=''
+        if self.useQueueForSteps() or self.useQueue():
+            GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+            GpuList = GpuList.split(",")
+            for elem in GpuList:
+                GpuListCuda = GpuListCuda+str(count)+' '
+                count+=1
+        else:
+            GpuListAux = ''
+            for elem in self.getGpuList():
+                GpuListCuda = GpuListCuda+str(count)+' '
+                GpuListAux = GpuListAux+str(elem)+','
+                count+=1
+            os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+        if self.numberOfMpi.get()==1:
+            replacedArgs += " --device %s" %(GpuListCuda)
 
     self._insertFunctionStep('reconstructionStep', iterN, refN, program, method, replacedArgs, suffix, **kwargs)
 
@@ -543,6 +565,8 @@ def runReconstructionStep(self, iterN, refN, program, method, args, suffix, **kw
         threads = 1
     else:
         mpi = self.numberOfMpi.get()
+        if self.useGpu.get() and self.numberOfMpi.get()>1:
+            mpi = len((self.gpuList.get()).split(','))+1
         threads = self.numberOfThreads.get()
         args += ' --thr %d' % threads
     
