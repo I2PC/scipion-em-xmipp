@@ -196,7 +196,7 @@ class XmippProtValFitViewer(ProtocolViewer):
         
                         current_frag.append(fscq)
 
-                    
+        return overfitting_list, poorfitting_list 
 
 
 
