@@ -59,9 +59,9 @@ class XmippProtValFitViewer(ProtocolViewer):
     
     def _defineParams(self, form):
         self._env = os.environ.copy()
-        form.addSection(label='Visualization')
+        form.addSection(label='FSC-Q results')
         
-        group = form.addGroup('Visualization')
+        group = form.addGroup('Visualization in Chimera')
         
         group.addParam('displayVolume', LabelParam,
                       important=True,
@@ -73,12 +73,19 @@ class XmippProtValFitViewer(ProtocolViewer):
                       default=0, important=True,
                       display=EnumParam.DISPLAY_COMBO,
                       label='Display PDB Output')  
+        
+        group = form.addGroup('Statistics')
+        
+        group.addParam('calculateFscq', LabelParam,
+                      important=True,
+                      label='Amino acids with high FSC-Q')        
             
         
     def _getVisualizeDict(self):
         self.protocol._createFilenameTemplates()
         visualizeDict = {'displayVolume': self._visualize_vol,
-                         'displayPDB': self._visualize_pdb}
+                         'displayPDB': self._visualize_pdb,
+                         'calculateFscq':self._calculate_fscq}
         return visualizeDict    
 
     def _visualize_vol(self, obj, **args):
@@ -131,7 +138,65 @@ class XmippProtValFitViewer(ProtocolViewer):
         Chimera.runProgram(Chimera.getProgram(), fnCmd+"&")
         return []   
      
-   
+    def _calculate_fscq(self, obj, **args):  
+        
+        fnRoot = os.path.abspath(self.protocol._getExtraPath())
+        bool=0
+        overfitting_list = []
+        poorfitting_list = []
+        with open(fnRoot+'/'+PDB_VALUE_FILE) as f:
+            
+            lines_data = f.readlines()
+            for j,lin in enumerate(lines_data): 
+                
+                if ( lin.startswith('ATOM') or lin.startswith('HETATM') ):
+                                
+                    resnumber = int(lin[22:26])
+            
+                    if (bool==1 and resnumber == resnumber_ctl):
+
+                        resatomname = lin[12:16].strip()
+                        resname = lin[17:20].strip() 
+                        chain = lin[21]                     
+                        fscq = float(lin[54:60])
+                        current_frag.append(fscq)
+        
+                    elif (bool==1 and resnumber != resnumber_ctl):
+                        
+                        meanFscq = np.mean(current_frag)   
+                        current_frag.sort()
+                        
+                        if (current_frag[0] <= -1):
+                            overfitting_list.append( (resname, resnumber, chain, current_frag[0], meanFscq) )
+                        elif (current_frag[-1] >= 1): 
+                            poorfitting_list.append( (resname, resnumber, chain, current_frag[-1], meanFscq) )
+                        
+                        print (overfitting_list)      
+                        print (str(resname)+str(resnumber)+str(chain), meanFscq)
+        
+                        current_frag = []
+                        resnumber_ctl = resnumber
+                        resatomname = lin[12:16].strip()
+                        resname = lin[17:20].strip() 
+                        chain = lin[21] 
+                        fscq = float(lin[54:60])
+        
+                        current_frag.append(fscq)            
+        
+                    else:
+                        
+                        bool=1
+                        current_frag = []
+                        lines_aa = []
+                        resnumber_ctl = resnumber
+                        resatomname = lin[12:16].strip()
+                        resname = lin[17:20].strip() 
+                        chain = lin[21] 
+                        fscq = float(lin[54:60])
+        
+                        current_frag.append(fscq)
+
+                    
 
 
 
