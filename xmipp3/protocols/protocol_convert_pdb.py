@@ -33,7 +33,7 @@ import pyworkflow.protocol.constants as const
 from pyworkflow.utils import replaceBaseExt, removeExt, getExt
 
 from pwem.convert import cifToPdb, downloadPdb, headers
-from pwem.objects import Volume
+from pwem.objects import Volume, Transform
 from pwem.protocols import ProtInitialVolume
 
 
@@ -125,9 +125,11 @@ class XmippProtConvertPdb(ProtInitialVolume):
             vol = self.volObj.get()
             size = vol.getDim()
             ccp4header = headers.Ccp4Header(vol.getFileName(), readHeader=True)
-            shifts = ccp4header.getOrigin()
+            self.shifts = ccp4header.getOrigin()
             args += ' --size %d %d %d --orig %d %d %d' % (size[2], size[1], size[0],
-                                                          shifts[0]/samplingR, shifts[1]/samplingR, shifts[2]/samplingR)
+                                                          self.shifts[0]/samplingR,
+                                                          self.shifts[1]/samplingR,
+                                                          self.shifts[2]/samplingR)
 
         if self.setSize:
             args += ' --size'
@@ -148,6 +150,9 @@ class XmippProtConvertPdb(ProtInitialVolume):
         volume = Volume()
         volume.setSamplingRate(self.sampling.get())
         volume.setFileName(self._getVolName())
+        origin = Transform()
+        origin.setShiftsTuple(self.shifts)
+        volume.setOrigin(origin)
         self._defineOutputs(outputVolume=volume)
         if self.inputPdbData == self.IMPORT_OBJ:
             self._defineSourceRelation(self.pdbObj, volume)
