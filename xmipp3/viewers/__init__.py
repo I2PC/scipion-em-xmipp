@@ -59,6 +59,8 @@ from .viewer_structure_map_sph import XmippProtStructureMapSphViewer
 from .viewer_volume_deform_sph import XmippVolumeDeformSphViewer
 from .viewer_metaprotocol_golden_highres import XmippMetaprotocolGoldenHighResViewer
 
+from .viewer_pdb_deform_sph import XmippPDBDeformViewer
+
 # TODO: Import from continuousflex the modules needed to create clusters (soft dependency)
 from .viewer_angular_alignment_sph import XmippAngularAlignmentSphViewer
 
