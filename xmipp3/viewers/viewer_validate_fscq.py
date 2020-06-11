@@ -26,6 +26,8 @@
 # **************************************************************************
 
 import os
+from tkinter import Tk, CENTER, Scrollbar, TOP, BOTH, Y
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
@@ -33,6 +35,7 @@ import matplotlib.colors as mcolors
 from pyworkflow.utils import getExt, removeExt
 from os.path import abspath
 from pwem.viewers.viewer_chimera import (Chimera)
+from pyworkflow.gui import *
 from pyworkflow.protocol.params import (LabelParam, EnumParam)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 from xmipp3.protocols.protocol_validate_fscq import (XmippProtValFit, 
@@ -85,7 +88,7 @@ class XmippProtValFitViewer(ProtocolViewer):
         self.protocol._createFilenameTemplates()
         visualizeDict = {'displayVolume': self._visualize_vol,
                          'displayPDB': self._visualize_pdb,
-                         'calculateFscq':self._calculate_fscq}
+                         'calculateFscq': self._statistics}
         return visualizeDict    
 
     def _visualize_vol(self, obj, **args):
@@ -136,67 +139,161 @@ class XmippProtValFitViewer(ProtocolViewer):
         f.close()  
                      
         Chimera.runProgram(Chimera.getProgram(), fnCmd+"&")
-        return []   
-     
-    def _calculate_fscq(self, obj, **args):  
-        
+        return []
+
+    def _calculate_fscq(self, obj, **args):
+
         fnRoot = os.path.abspath(self.protocol._getExtraPath())
-        bool=0
+        bool = 0
         overfitting_list = []
         poorfitting_list = []
-        with open(fnRoot+'/'+PDB_VALUE_FILE) as f:
-            
-            lines_data = f.readlines()
-            for j,lin in enumerate(lines_data): 
-                
-                if ( lin.startswith('ATOM') or lin.startswith('HETATM') ):
-                                
-                    resnumber = int(lin[22:26])
-            
-                    if (bool==1 and resnumber == resnumber_ctl):
+        with open(fnRoot + '/' + PDB_VALUE_FILE) as f:
 
+            lines_data = f.readlines()
+            for j, lin in enumerate(lines_data):
+                if lin.startswith('ATOM') or lin.startswith('HETATM'):
+                    resnumber = int(lin[22:26])
+
+                    if bool == 1 and resnumber == resnumber_ctl:
                         resatomname = lin[12:16].strip()
-                        resname = lin[17:20].strip() 
-                        chain = lin[21]                     
+                        resname = lin[17:20].strip()
+                        chain = lin[21]
                         fscq = float(lin[54:60])
                         current_frag.append(fscq)
-        
-                    elif (bool==1 and resnumber != resnumber_ctl):
-                        
-                        meanFscq = np.mean(current_frag)   
+
+                    elif bool == 1 and resnumber != resnumber_ctl:
+                        meanFscq = np.mean(current_frag)
                         current_frag.sort()
-                        
-                        if (current_frag[0] <= -1):
-                            overfitting_list.append( (resname, resnumber, chain, current_frag[0], meanFscq) )
-                        elif (current_frag[-1] >= 1): 
-                            poorfitting_list.append( (resname, resnumber, chain, current_frag[-1], meanFscq) )
-                        
-                        print (overfitting_list)      
-                        print (str(resname)+str(resnumber)+str(chain), meanFscq)
-        
+
+                        if current_frag[0] <= -1:
+                            overfitting_list.append((resname, resnumber, chain,
+                                                     current_frag[0], meanFscq))
+
+                        elif current_frag[-1] >= 1:
+                            poorfitting_list.append((resname, resnumber, chain,
+                                                     current_frag[-1],
+                                                     meanFscq))
+
+                        print(overfitting_list)
+                        print(str(resname) + str(resnumber) + str(chain),
+                              meanFscq)
+
                         current_frag = []
                         resnumber_ctl = resnumber
                         resatomname = lin[12:16].strip()
-                        resname = lin[17:20].strip() 
-                        chain = lin[21] 
+                        resname = lin[17:20].strip()
+                        chain = lin[21]
                         fscq = float(lin[54:60])
-        
-                        current_frag.append(fscq)            
-        
+
+                        current_frag.append(fscq)
+
                     else:
-                        
-                        bool=1
+                        bool = 1
                         current_frag = []
                         lines_aa = []
                         resnumber_ctl = resnumber
                         resatomname = lin[12:16].strip()
-                        resname = lin[17:20].strip() 
-                        chain = lin[21] 
+                        resname = lin[17:20].strip()
+                        chain = lin[21]
                         fscq = float(lin[54:60])
-        
+
                         current_frag.append(fscq)
 
-        return overfitting_list, poorfitting_list 
+        return overfitting_list, poorfitting_list
 
+    def _statistics(self, obj, **args):
+        mainFrame = Tk()
+        statistics = Statistics('FSCQ Statistics', mainFrame,
+                   statistics=self._calculate_fscq(obj, **args))
+        statistics.mainloop()
+
+
+class Statistics(ttk.Frame):
+    """
+        Windows to hold a plugin manager help
+        """
+    def __init__(self, title, mainFrame, **kwargs):
+        super().__init__(mainFrame)
+        mainFrame.title(title)
+        mainFrame.configure(width=1500, height=400)
+        self.FrameTable = tk.PanedWindow(mainFrame, orient=tk.VERTICAL)
+        self.FrameTable.pack(side=TOP, fill=BOTH, expand=Y)
+        self.overfitting_list, self.poorfitting_list = kwargs['statistics']
+        self.fill_statistics()
+        self.FrameTable.rowconfigure(0, weight=1)
+        self.FrameTable.columnconfigure(0, weight=1)
+
+    def fill_statistics(self):
+        self.addStatisticsTable(0, 0)
+
+    def addStatisticsTable(self, row, column):
+        """
+        This methods shows some statistics values
+        """
+        def fill_table():
+            try:
+                Table.insert('', tk.END, text="Aminoacid",
+                             values=('FSCQ < -1', 'Mean FSCQ'),
+                             tags=('heading',))
+                # Overfitting data
+                for values in self.overfitting_list:
+
+                    if self.overfitting_list.index(values) % 2 == 0:
+                        Table.insert('', tk.END, text=(values[0] +
+                                                       str(values[1]) + "-" +
+                                                       values[2]),
+                                     values=(round(values[3]),
+                                             round(values[4])),
+                                     tags=('even',))
+                    else:
+                        Table.insert('', tk.END, text=(values[0] +
+                                                       str(values[1]) + "-" +
+                                                       values[2]),
+                                     values=(round(values[3], 2),
+                                             round(values[4], 2)),
+                                     tags=('odd',))
+
+                Table.insert('', tk.END)  # blank line
+
+                # Poorfitting data
+                Table.insert('', tk.END, text="Aminoacid",
+                             values=('FSCQ > 1', 'Mean FSCQ'),
+                             tags=('heading',))
+                for values in self.poorfitting_list:
+
+                    if self.poorfitting_list.index(values) % 2 == 0:
+                        Table.insert('', tk.END, text=(values[0] +
+                                                       str(values[1]) + "-" +
+                                                       values[2]),
+                                     values=(round(values[3]),
+                                             round(values[4])),
+                                     tags=('even',))
+                    else:
+                        Table.insert('', tk.END, text=(values[0] +
+                                                       str(values[1]) + "-" +
+                                                       values[2]),
+                                     values=(round(values[3], 2),
+                                             round(values[4], 2)),
+                                     tags=('odd',))
+
+            except Exception as e:
+                pass
+
+        Table = ttk.Treeview(self.FrameTable, columns=("fscq", "mean"))
+        Table.grid(row=row, column=column, sticky='news')
+        Table.tag_configure("heading", background='gray39', foreground='black',
+                            font=('Calibri', 10, 'bold'))
+        Table.tag_configure('even', background='white', foreground='black')
+        Table.tag_configure('odd', background='gainsboro', foreground='black')
+        Table.column('#0', anchor=CENTER)
+        Table.column('fscq', anchor=CENTER)
+        Table.column('mean', anchor=CENTER)
+
+        yscroll = Scrollbar(self.FrameTable, orient='vertical', command=Table.yview)
+        yscroll.grid(row=row, column=column + 1, sticky='news')
+        Table.configure(yscrollcommand=yscroll.set)
+        yscroll.configure(command=Table.yview)
+
+        fill_table()
 
 
