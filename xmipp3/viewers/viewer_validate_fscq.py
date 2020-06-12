@@ -79,16 +79,26 @@ class XmippProtValFitViewer(ProtocolViewer):
         
         group = form.addGroup('Statistics')
         
-        group.addParam('calculateFscq', LabelParam,
+        group.addParam('calculateFscqNeg', LabelParam,
                       important=True,
-                      label='Amino acids with high FSC-Q')        
+                      label='Amino acids with possible overfitting',   
+                      help='Amino acids that have atoms with FSC-Q < -1'
+                      ' are determined. It is suggested that these amino acids '
+                      ' be re-checked in order to improve the fit.') 
+        group.addParam('calculateFscqPos', LabelParam,
+                      important=True,
+                      label='Amino acids with low resolvability',   
+                      help='Amino acids that have atoms with FSC-Q > 1'
+                      ' are determined. It is suggested that these amino acids '
+                      ' be re-checked in order to improve the fit.')       
             
         
     def _getVisualizeDict(self):
         self.protocol._createFilenameTemplates()
         visualizeDict = {'displayVolume': self._visualize_vol,
                          'displayPDB': self._visualize_pdb,
-                         'calculateFscq': self._statistics}
+                         'calculateFscqNeg': self._statistics,
+                         'calculateFscqPos': self._statistics}
         return visualizeDict    
 
     def _visualize_vol(self, obj, **args):
@@ -166,18 +176,14 @@ class XmippProtValFitViewer(ProtocolViewer):
                         current_frag.sort()
 
                         if current_frag[0] <= -1:
-                            overfitting_list.append((resname, resnumber, chain,
+                            overfitting_list.append((resname, resnumber_ctl, chain,
                                                      current_frag[0], meanFscq))
 
-                        elif current_frag[-1] >= 1:
-                            poorfitting_list.append((resname, resnumber, chain,
+                        if current_frag[-1] >= 1:
+                            poorfitting_list.append((resname, resnumber_ctl, chain,
                                                      current_frag[-1],
                                                      meanFscq))
-
-                        print(overfitting_list)
-                        print(str(resname) + str(resnumber) + str(chain),
-                              meanFscq)
-
+                     
                         current_frag = []
                         resnumber_ctl = resnumber
                         resatomname = lin[12:16].strip()
@@ -198,12 +204,19 @@ class XmippProtValFitViewer(ProtocolViewer):
                         fscq = float(lin[54:60])
 
                         current_frag.append(fscq)
-
-        return overfitting_list, poorfitting_list
+                        
+        if (....):  
+            aminolist = overfitting_list  
+            print ('overfitting')           
+            return aminolist 
+        if (....):
+            aminolist = poorfitting_list
+            print ('poorfitting')
+            return aminolist
 
     def _statistics(self, obj, **args):
         mainFrame = Tk()
-        statistics = Statistics('FSCQ Statistics', mainFrame,
+        statistics = Statistics('FSC-Q Statistics', mainFrame,
                    statistics=self._calculate_fscq(obj, **args))
         statistics.mainloop()
 
@@ -218,10 +231,11 @@ class Statistics(ttk.Frame):
         mainFrame.configure(width=1500, height=400)
         self.FrameTable = tk.PanedWindow(mainFrame, orient=tk.VERTICAL)
         self.FrameTable.pack(side=TOP, fill=BOTH, expand=Y)
-        self.overfitting_list, self.poorfitting_list = kwargs['statistics']
+        self.aminolist = kwargs['statistics']
         self.fill_statistics()
         self.FrameTable.rowconfigure(0, weight=1)
         self.FrameTable.columnconfigure(0, weight=1)
+        self.flag=False
 
     def fill_statistics(self):
         self.addStatisticsTable(0, 0)
@@ -232,68 +246,67 @@ class Statistics(ttk.Frame):
         """
         def fill_table():
             try:
-                Table.insert('', tk.END, text="Aminoacid",
-                             values=('FSCQ < -1', 'Mean FSCQ'),
-                             tags=('heading',))
-                # Overfitting data
-                for values in self.overfitting_list:
+#                 self.Table.insert('', tk.END, text="Amino acids",
+#                              values=('FSC-Q < -1', 'Mean FSC-Q'),
+#                              tags=('heading',))
+                # Data
+                for values in self.aminolist:
 
-                    if self.overfitting_list.index(values) % 2 == 0:
-                        Table.insert('', tk.END, text=(values[0] +
+                    if self.aminolist.index(values) % 2 == 0:
+                        self.Table.insert('', tk.END, text=(values[0] +
                                                        str(values[1]) + "-" +
                                                        values[2]),
-                                     values=(round(values[3]),
-                                             round(values[4])),
+                                     values=(round(values[3], 2),
+                                             round(values[4], 2)),
                                      tags=('even',))
                     else:
-                        Table.insert('', tk.END, text=(values[0] +
+                        self.Table.insert('', tk.END, text=(values[0] +
                                                        str(values[1]) + "-" +
                                                        values[2]),
                                      values=(round(values[3], 2),
                                              round(values[4], 2)),
                                      tags=('odd',))
 
-                Table.insert('', tk.END)  # blank line
-
-                # Poorfitting data
-                Table.insert('', tk.END, text="Aminoacid",
-                             values=('FSCQ > 1', 'Mean FSCQ'),
-                             tags=('heading',))
-                for values in self.poorfitting_list:
-
-                    if self.poorfitting_list.index(values) % 2 == 0:
-                        Table.insert('', tk.END, text=(values[0] +
-                                                       str(values[1]) + "-" +
-                                                       values[2]),
-                                     values=(round(values[3]),
-                                             round(values[4])),
-                                     tags=('even',))
-                    else:
-                        Table.insert('', tk.END, text=(values[0] +
-                                                       str(values[1]) + "-" +
-                                                       values[2]),
-                                     values=(round(values[3], 2),
-                                             round(values[4], 2)),
-                                     tags=('odd',))
+#                 self.Table.insert('', tk.END)  # blank line
 
             except Exception as e:
                 pass
-
-        Table = ttk.Treeview(self.FrameTable, columns=("fscq", "mean"))
-        Table.grid(row=row, column=column, sticky='news')
-        Table.tag_configure("heading", background='gray39', foreground='black',
+            
+        columns=("fscq", "mean")
+        self.Table = ttk.Treeview(self.FrameTable, columns=columns)
+        self.Table.grid(row=row, column=column, sticky='news')
+        self.Table.tag_configure("heading", background='sky blue', foreground='black',
                             font=('Calibri', 10, 'bold'))
-        Table.tag_configure('even', background='white', foreground='black')
-        Table.tag_configure('odd', background='gainsboro', foreground='black')
-        Table.column('#0', anchor=CENTER)
-        Table.column('fscq', anchor=CENTER)
-        Table.column('mean', anchor=CENTER)
+        self.Table.tag_configure('even', background='white', foreground='black')
+        self.Table.tag_configure('odd', background='gainsboro', foreground='black')
+        self.Table.column('#0', anchor=CENTER)
+        self.Table.column('fscq', anchor=CENTER)
+        self.Table.column('mean', anchor=CENTER)
 
-        yscroll = Scrollbar(self.FrameTable, orient='vertical', command=Table.yview)
+        yscroll = Scrollbar(self.FrameTable, orient='vertical', command=self.Table.yview)
         yscroll.grid(row=row, column=column + 1, sticky='news')
-        Table.configure(yscrollcommand=yscroll.set)
-        yscroll.configure(command=Table.yview)
+        self.Table.configure(yscrollcommand=yscroll.set)
+        yscroll.configure(command=self.Table.yview)
 
         fill_table()
+        
+        for col in columns:
+               self.Table.heading(col, text=col, command=lambda: \
+                                self.treeview_sort_column(col, self.flag))
+    
+    def treeview_sort_column(self, col, reverse):
+        l = [(self.Table.set(k, col), k) for k in self.Table.get_children('')]
+        l.sort(reverse=reverse)
 
+        for index, (_, k) in enumerate(l):
+            self.Table.move(k, '', index)
+
+        self.Table.heading(col,
+            command=lambda: self.treeview_sort_column(col, not reverse)
+            )
+
+        self.flag = not self.flag
+        
+    def clear(self):
+        self._tree.delete(*self._tree.get_children())    
 
