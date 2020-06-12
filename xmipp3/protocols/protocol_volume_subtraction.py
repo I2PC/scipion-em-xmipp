@@ -34,11 +34,10 @@ from pyworkflow.utils import replaceBaseExt, removeExt, getExt
 
 from pwem.convert import headers, downloadPdb, cifToPdb
 from pwem.objects import Volume, Transform
-from pwem.protocols import ProtInitialVolume
+from pwem.protocols import EMProtocol
 
 
-
-class XmippProtVolSubtraction(ProtInitialVolume):
+class XmippProtVolSubtraction(EMProtocol):
     """ This protocol scales a volume in order to assimilate it to another one. Then, it can calculate the subtraction
     of the two volumes. Second input can be a pdb. The volumes should be aligned previously and they have to
     be equal in size"""
@@ -52,7 +51,10 @@ class XmippProtVolSubtraction(ProtInitialVolume):
 
         form.addSection(label='Input')
         form.addParam('vol1', PointerParam, pointerClass='Volume', label="Volume 1 ", help='Specify a volume.')
-        form.addParam('pdb', BooleanParam, label='Is the second input a PDB?', default=False)
+        form.addParam('pdb', BooleanParam, label='Is the second input a PDB?', default=False,
+                      help='If yes, the protocol will generate and store in folder "extra" of this protocol '
+                           'a volume and a mask from the pdb. If not, a second volume has to be input and optionally '
+                           '(but highly recomendable), a mask for it')
         form.addParam('inputPdbData', EnumParam, choices=['object', 'file'], condition='pdb',
                       label="Retrieve PDB from", default=self.IMPORT_OBJ,
                       display=EnumParam.DISPLAY_HLIST,
@@ -104,17 +106,26 @@ class XmippProtVolSubtraction(ProtInitialVolume):
         size = vol1.getDim()
         ccp4header = headers.Ccp4Header(vol1.getFileName(), readHeader=True)
         self.shifts = ccp4header.getOrigin()
+        # convert pdb to volume with the size and origin of the input volume
         args = ' -i %s --sampling %f -o %s --size %d %d %d --orig %d %d %d' % \
-                (pdbFn, samplingR, removeExt(self.outFile), size[2], size[1], size[0], self.shifts[0]/samplingR,
-                 self.shifts[1]/samplingR, self.shifts[2]/samplingR)
+               (pdbFn, samplingR, removeExt(self.outFile), size[2], size[1], size[0], self.shifts[0]/samplingR,
+                self.shifts[1]/samplingR, self.shifts[2]/samplingR)
         program = "xmipp_volume_from_pdb"
         self.runJob(program, args)
+        volpdbmrc = "%s.mrc" % removeExt(self.outFile)
+        # convert volume from pdb to .mrc in order to store the origin in the mrc header
+        args2 = ' -i %s -o %s -t vol' % (self.outFile, volpdbmrc)
+        program2 = "xmipp_image_convert"
+        self.runJob(program2, args2)
+        # write origin in mrc header of volume from pdb
+        ccp4headerOut = headers.Ccp4Header(volpdbmrc, readHeader=True)
+        ccp4headerOut.setOrigin(self.shifts)
 
     def generateMask2Step(self):
-        args = ' -i %s -o %s --select below 0.010000 --substitute binarize' % (self.outFile, self._getExtraPath("mask2.mrc"))
+        args = ' -i %s -o %s --select below 0.010000 --substitute binarize' % (self.outFile,
+                                                                               self._getExtraPath("mask2.mrc"))
         program = "xmipp_transform_threshold"
         self.runJob(program, args)
-
         args2 = ' -i %s --binaryOperation dilation --size 1' % (self._getExtraPath("mask2.mrc"))
         program2 = "xmipp_transform_morphology"
         self.runJob(program2, args2)
@@ -143,6 +154,7 @@ class XmippProtVolSubtraction(ProtInitialVolume):
             args += ' --mask1 %s --mask2 %s' % (self.mask1.get().getFileName(), mask2)
         self.runJob(program, args)
 
+        # INTERMEDIATE RESULTS (now they are not generated)
         # move('commonmask.mrc', join(self._getExtraPath(), 'common_mask.mrc'))
         # move('V1masked.mrc', join(self._getExtraPath(), 'V1_masked.mrc'))
         # move('V2masked.mrc', join(self._getExtraPath(), 'V2_masked.mrc'))
