@@ -150,9 +150,10 @@ class XmippProtConvertPdb(ProtInitialVolume):
         volume = Volume()
         volume.setSamplingRate(self.sampling.get())
         volume.setFileName(self._getVolName())
-        origin = Transform()
-        origin.setShiftsTuple(self.shifts)
-        volume.setOrigin(origin)
+        if self.vol:
+            origin = Transform()
+            origin.setShiftsTuple(self.shifts)
+            volume.setOrigin(origin)
         self._defineOutputs(outputVolume=volume)
         if self.inputPdbData == self.IMPORT_OBJ:
             self._defineSourceRelation(self.pdbObj, volume)
