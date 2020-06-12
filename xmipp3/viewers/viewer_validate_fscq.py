@@ -261,7 +261,7 @@ class Statistics(ttk.Frame):
                 pass
             
         self.columns = ("aminoacid", "fscq", "mean")
-        self.columsText = ("Aminoacid", "FSCQ", "Mean")
+        self.columsText = ("Aminoacids", "atom FSC-Q", "Mean FSC-Q aminoacid")
 
         self.Table = ttk.Treeview(self.FrameTable, columns=self.columns)
         self.Table.grid(row=row, column=column, sticky='news')
