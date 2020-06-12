@@ -205,14 +205,10 @@ class XmippProtValFitViewer(ProtocolViewer):
 
                         current_frag.append(fscq)
                         
-        if (....):  
-            aminolist = overfitting_list  
-            print ('overfitting')           
-            return aminolist 
-        if (....):
-            aminolist = poorfitting_list
-            print ('poorfitting')
-            return aminolist
+        if obj == 'calculateFscqNeg':
+            return overfitting_list
+        else:
+            return poorfitting_list
 
     def _statistics(self, obj, **args):
         mainFrame = Tk()
@@ -246,67 +242,72 @@ class Statistics(ttk.Frame):
         """
         def fill_table():
             try:
-#                 self.Table.insert('', tk.END, text="Amino acids",
-#                              values=('FSC-Q < -1', 'Mean FSC-Q'),
-#                              tags=('heading',))
-                # Data
                 for values in self.aminolist:
 
                     if self.aminolist.index(values) % 2 == 0:
-                        self.Table.insert('', tk.END, text=(values[0] +
-                                                       str(values[1]) + "-" +
-                                                       values[2]),
-                                     values=(round(values[3], 2),
+                        self.Table.insert('', tk.END, text='',
+                                     values=(values[0] + str(values[1]) + "-" + values[2],
+                                             round(values[3], 2),
                                              round(values[4], 2)),
                                      tags=('even',))
                     else:
-                        self.Table.insert('', tk.END, text=(values[0] +
-                                                       str(values[1]) + "-" +
-                                                       values[2]),
-                                     values=(round(values[3], 2),
+                        self.Table.insert('', tk.END, text='',
+                                     values=(values[0] + str(values[1]) + "-" + values[2],
+                                             round(values[3], 2),
                                              round(values[4], 2)),
                                      tags=('odd',))
-
-#                 self.Table.insert('', tk.END)  # blank line
 
             except Exception as e:
                 pass
             
-        columns=("fscq", "mean")
-        self.Table = ttk.Treeview(self.FrameTable, columns=columns)
+        self.columns = ("aminoacid", "fscq", "mean")
+        self.columsText = ("Aminoacid", "FSCQ", "Mean")
+
+        self.Table = ttk.Treeview(self.FrameTable, columns=self.columns)
         self.Table.grid(row=row, column=column, sticky='news')
         self.Table.tag_configure("heading", background='sky blue', foreground='black',
                             font=('Calibri', 10, 'bold'))
         self.Table.tag_configure('even', background='white', foreground='black')
         self.Table.tag_configure('odd', background='gainsboro', foreground='black')
-        self.Table.column('#0', anchor=CENTER)
-        self.Table.column('fscq', anchor=CENTER)
-        self.Table.column('mean', anchor=CENTER)
-
+        self.Table.heading(self.columns[0], text=self.columsText[0])
+        self.Table.heading(self.columns[1], text=self.columsText[1])
+        self.Table.heading(self.columns[2], text=self.columsText[2])
+        self.Table.column("#0", width=0, minwidth=0, stretch=False)
+        self.Table.column(self.columns[0], anchor=CENTER)
+        self.Table.column(self.columns[1], anchor=CENTER)
+        self.Table.column(self.columns[2], anchor=CENTER)
         yscroll = Scrollbar(self.FrameTable, orient='vertical', command=self.Table.yview)
         yscroll.grid(row=row, column=column + 1, sticky='news')
         self.Table.configure(yscrollcommand=yscroll.set)
         yscroll.configure(command=self.Table.yview)
+        self.Table.bind("<Button-1>", self._orderTable, True)
 
         fill_table()
-        
-        for col in columns:
-               self.Table.heading(col, text=col, command=lambda: \
-                                self.treeview_sort_column(col, self.flag))
+
+    def _orderTable(self, event):
+        x, y, widget = event.x, event.y, event.widget
+        column = self.Table.identify_column(x)
+        row = self.Table.identify_column(y)
+        if row == '#1':  # click over heading
+            col = 0
+            if column == '#2':
+                col = 1
+            elif column == '#3':
+                col = 2
+            self.Table.heading(self.columns[col], text=self.columsText[col], command=lambda: \
+                            self.treeview_sort_column(col, self.flag))
     
     def treeview_sort_column(self, col, reverse):
-        l = [(self.Table.set(k, col), k) for k in self.Table.get_children('')]
+        if col == 0:
+            l = [(self.Table.set(k, col), k) for k in self.Table.get_children('')]
+        else:
+            l = [(float(self.Table.set(k, col)), k) for k in
+                 self.Table.get_children('')]
         l.sort(reverse=reverse)
 
         for index, (_, k) in enumerate(l):
             self.Table.move(k, '', index)
 
         self.Table.heading(col,
-            command=lambda: self.treeview_sort_column(col, not reverse)
-            )
-
+            command=lambda: self.treeview_sort_column(col, not reverse))
         self.flag = not self.flag
-        
-    def clear(self):
-        self._tree.delete(*self._tree.get_children())    
-
