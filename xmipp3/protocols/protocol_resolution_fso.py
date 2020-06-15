@@ -112,43 +112,26 @@ class XmippProtFSO(ProtAnalysis3D):
         self._insertFunctionStep('resolutionDirectionalFSCStep')
         self._insertFunctionStep('createOutputStep')
 
+    def mrc_convert(self, fileName, outputFileName):
+        """Check if the extension is .mrc, if not then uses xmipp to convert it
+        """
+        ext = getExt(fileName)
+        if (extVol1 !='.mrc'):
+            params = ' -i %s' % fileName
+            params += ' -o %s' % outputFileName
+            self.runJob('xmipp_image_convert', params)
+        outputFileName = outputFileName+':mrc'
+        return outputFileName
+
     def convertInputStep(self):
         """ Read the input volume.
         """
-        self.vol1Fn = self.half1.get().getFileName()
-        self.vol2Fn = self.half2.get().getFileName()
-        
-        extVol1 = getExt(self.vol1Fn)
-        extVol2 = getExt(self.vol2Fn)
-
-        if (extVol1 =='.vol'):
-            self.vol1Fn = self.half1.get().getFileName()
-            params = ' -i %s' % self.vol1Fn
-            params += ' -o %s' % self._getTmpPath('half1.mrc')
-            self.runJob(' xmipp_image_convert', params)
-            self.vol1Fn = self._getTmpPath('half1.mrc')
-        if (extVol1 =='.vol'):	    
-            params = ' -i %s' % self.vol2Fn
-            params += ' -o %s' % self._getTmpPath('half2.mrc')
-            self.runJob(' xmipp_image_convert', params)
-            self.vol2Fn = self._getTmpPath('half2.mrc')
-       
-        extVol1 = getExt(self.vol1Fn)
-        extVol2 = getExt(self.vol2Fn)
-
-        if (extVol1 == '.mrc') or (extVol1 == '.map'):
-            self.vol1Fn = self.vol1Fn + ':mrc'
-        if (extVol2 == '.mrc') or (extVol2 == '.map'):
-            self.vol2Fn = self.vol2Fn + ':mrc'
-        
-        if self.mask.hasValue():
-            self.maskFn = self.mask.get().getFileName()
-            if (getExt(self.maskFn) == '.vol'):
-               params = ' -i %s' % self.maskFn
-               params += ' -o %s' % self._getExtraPath('mask.mrc')
-               self.runJob(' xmipp_image_convert', params)
-               self.maskFn = self._getExtraPath('mask.mrc'+':mrc')
-
+        self.vol1Fn = mrc_convert(self.half1.get().getFileName(),
+                                  self._getTmpPath('half1.mrc'))
+        self.vol2Fn = mrc_convert(self.half2.get().getFileName(), 
+                                  self._getTmpPath('half2.mrc'))
+        self.maskFn = mrc_convert(self.mask.get().getFileName(), 
+                                  self._getExtraPath('mask.mrc'))
 
     def resolutionDirectionalFSCStep(self):
         import os
@@ -169,7 +152,7 @@ class XmippProtFSO(ProtAnalysis3D):
         params += ' --fscfolder %s' % (fndir+'/')
         params += ' --anisotropy %s' % self._getExtraPath("fso.xmd")
         
-        self.runJob(' xmipp_resolution_fso', params)
+        self.runJob('xmipp_resolution_fso', params)
       
      
     def createOutputStep(self):

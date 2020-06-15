@@ -29,6 +29,8 @@ from xmipp3.viewers.plotter import XmippPlotter
 from pyworkflow.protocol.params import LabelParam, StringParam, EnumParam, IntParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 from pwem.viewers import ChimeraView, DataView, LocalResolutionViewer
+from matplotlib.ticker import FuncFormatter
+from matplotlib.pyplot import hlines
 from xmipp3.protocols.protocol_resolution_fso import \
         XmippProtFSO, OUTPUT_3DFSC, OUTPUT_SPHERE, OUTPUT_DIRECTIONAL_FILTER
 from pwem.emlib.metadata import MetaData
@@ -197,8 +199,6 @@ class XmippProtFSOViewer(ProtocolViewer):
 	
         return plt.show(xplotter)
 
-        self._plotCurve(fnmd, title, xTitle, yTitle, mdLabelX, mdLabelY)
-
     def _show3DFSCcolorSlices(self, param=None):
         self._showColorSlices(OUTPUT_3DFSC, 1, '3DFSC Color Slices', 1, 1)
 
@@ -275,8 +275,7 @@ class XmippProtFSOViewer(ProtocolViewer):
 	
         a = xplotter.createSubPlot(title, xTitle, yTitle, 1, 1)
         xplotter.plotMdFile(md, mdLabelX, mdLabelY, 'g')
-        from matplotlib.ticker import FuncFormatter
-        from matplotlib.pyplot import hlines
+
         a.xaxis.set_major_formatter(FuncFormatter(self._formatFreq))
         xx, yy = self._prepareDataForPlot( md, mdLabelX, mdLabelY)
         a.hlines(0.143, xx[0], xx[-1], colors = 'k', linestyles = 'dashed')
@@ -291,8 +290,7 @@ class XmippProtFSOViewer(ProtocolViewer):
 	
         a = xplotter.createSubPlot(title, xTitle, yTitle, 1, 1)
         xplotter.plotMdFile(md, mdLabelX, mdLabelY, 'g')
-        from matplotlib.ticker import FuncFormatter
-        from matplotlib.pyplot import hlines
+
         a.xaxis.set_major_formatter(FuncFormatter(self._formatFreq))
         xx, yy = self._prepareDataForPlot( md, mdLabelX, mdLabelY)
         a.hlines(0.9, xx[0], xx[-1], colors = 'k', linestyles = 'dashed')

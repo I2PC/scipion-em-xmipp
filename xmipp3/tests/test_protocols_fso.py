@@ -85,32 +85,3 @@ class Testfso(TestfsoBase):
         self.launchProtocol(fso)
         self.assertTrue(exists(fso._getExtraPath("fso.xmd")), "fso without mask has failed")
         
-
-        
-        
-"""
-
-    def testfso2(self):
-        fso = self.newProtocol(XmippProtFSO,
-                                   objLabel='fsoMask,
-                                   half1=self.protImportHalf1.outputVolume,
-                                   half2=self.protImportHalf2.outputVolume,
-                                   mask=self.protCreateMask.outputMask,
-                                   )
-        self.launchProtocol(fso)
-        self.assertTrue(exists(fso._getExtraPath("fso.xmd")),
-                        "fso masked has failed")
-
-    def testfso3(self):
-        fso = self.newProtocol(XmippProtFSO,
-                                   objLabel='fso fixed cone angle,
-                                   half1=self.protImportHalf1.outputVolume,
-                                   half2=self.protImportHalf2.outputVolume,
-                                   Mask=self.protCreateMask.outputMask,
-                                   bestAngle = False,
-                                   coneAngle = 20,
-                                   )
-        self.launchProtocol(fso)
-        self.assertTrue(exists(fso._getExtraPath("fso.xmd")),
-                        "fso fixed cone angle has failed")
-"""

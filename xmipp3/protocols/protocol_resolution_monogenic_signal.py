@@ -97,9 +97,8 @@ class XmippProtMonoRes(ProtAnalysis3D):
                       help='The mask determines which points are specimen'
                       ' and which are not')
 
-        form.addParam('MaskExcl', PointerParam, pointerClass='VolumeMask',
+        form.addParam('maskExcl', PointerParam, pointerClass='VolumeMask',
 		      expertLevel=LEVEL_ADVANCED,
-                      condition='(halfVolumes) or (not halfVolumes)',
                       allowsNull=True,
                       label="Exclude Area", 
                       help='The mask determines the area of the protein to be'
@@ -283,8 +282,8 @@ class XmippProtMonoRes(ProtAnalysis3D):
         
         params += ' --mask %s' % self._getFileName(BINARY_MASK)
         
-        if self.MaskExcl.hasValue():
-            params += ' --maskExcl %s' % self.MaskExcl.get().getFileName()
+        if self.maskExcl.hasValue():
+            params += ' --maskExcl %s' % self.maskExcl.get().getFileName()
 
         params += ' --minRes %f' % self.minRes.get()
         params += ' --maxRes %f' % self.maxRes.get()
