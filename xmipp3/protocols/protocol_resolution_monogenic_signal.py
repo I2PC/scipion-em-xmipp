@@ -240,29 +240,6 @@ class XmippProtMonoRes(ProtAnalysis3D):
         
         self.maskFn = self._getFileName(BINARY_MASK)
 
-    def maskRadius(self, halfmaps, premaskedmap):
-        if halfmaps:
-            if premaskedmap:
-                if self.volumeRadiusHalf == -1:
-                    xdim, _ydim, _zdim = self.inputVolume.get().getDim()
-                    xdim = xdim*0.5
-                else:
-                    xdim = self.volumeRadiusHalf.get()
-            else:
-                xdim, _ydim, _zdim = self.inputVolume.get().getDim()
-                xdim = xdim*0.5
-        else:
-            if premaskedmap:
-                if self.volumeRadius == -1:
-                    xdim, _ydim, _zdim = self.inputVolumes.get().getDim()
-                    xdim = xdim*0.5
-                else:
-                    xdim = self.volumeRadius.get()
-            else:
-                xdim, _ydim, _zdim = self.inputVolumes.get().getDim()
-                xdim = xdim*0.5
-        return xdim
-
 
     def resolutionMonogenicSignalStep(self):
         if self.stepSize.hasValue():
