@@ -22,16 +22,18 @@
 # *  All comments concerning this program package may be sent to the
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
-# ******************************************************************************
-
-import pyworkflow.em as em
-import pyworkflow.em.metadata as md
+# ******************************************************************************w
 import pyworkflow.protocol.params as params
+
+import pwem.emlib.metadata as md
+from pwem.objects import Particle
+from pwem.protocols import ProtAlign2D
+from pwem import ALIGN_NONE, ALIGN_2D
 
 from xmipp3.convert import createItemMatrix, writeSetOfParticles, getImageLocation
 
 
-class XmippProtCL2DAlign(em.ProtAlign2D):
+class XmippProtCL2DAlign(ProtAlign2D):
     """ Aligns a set of particles using the CL2D algorithm. """
     _label = 'align with cl2d'
     
@@ -84,7 +86,7 @@ class XmippProtCL2DAlign(em.ProtAlign2D):
     # --------------------------- STEPS functions --------------------------
     def convertInputStep(self):
         writeSetOfParticles(self.inputParticles.get(), self.imgsFn,
-                            alignType=em.ALIGN_NONE)
+                            alignType=ALIGN_NONE)
     
     def createOutputStep(self):
         """ Store the setOfParticles object
@@ -93,7 +95,7 @@ class XmippProtCL2DAlign(em.ProtAlign2D):
         particles = self.inputParticles.get()
         # Define the output average
         avgFile = self._getExtraPath('level_00', 'class_classes.stk')
-        avg = em.Particle()
+        avg = Particle()
         avg.setLocation(1, avgFile)
         avg.copyInfo(particles)
         self._defineOutputs(outputAverage=avg)
@@ -107,7 +109,7 @@ class XmippProtCL2DAlign(em.ProtAlign2D):
                              updateItemCallback=self._createItemMatrix,
                              itemDataIterator=md.iterRows(self.imgsFn,
                                                           sortByLabel=md.MDL_ITEM_ID))
-        alignedSet.setAlignment(em.ALIGN_2D)
+        alignedSet.setAlignment(ALIGN_2D)
         self._defineOutputs(outputParticles=alignedSet)
         self._defineSourceRelation(self.inputParticles, alignedSet)
     
@@ -165,4 +167,4 @@ class XmippProtCL2DAlign(em.ProtAlign2D):
         return methods
     
     def _createItemMatrix(self, item, row):
-        createItemMatrix(item, row, align=em.ALIGN_2D)
+        createItemMatrix(item, row, align=ALIGN_2D)

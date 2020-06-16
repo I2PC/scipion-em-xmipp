@@ -28,9 +28,10 @@ This modules contains constants related to Xmipp3 protocols
 """
 
 # ------------------ Constants values --------------------------------------
-
+XMIPP_URL = 'https://github.com/i2pc/scipion-em-xmipp'
 XMIPP_HOME = 'XMIPP_HOME'
 NMA_HOME = 'NMA_HOME'
+XMIPP_DLTK_NAME = 'deepLearningToolkit'  # consider to change it to xmipp_DLTK to make short it
 
 MASK_FILL_VALUE = 0
 MASK_FILL_MIN = 1
@@ -99,8 +100,8 @@ SYM_URL = "[[http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry][Symmetry]]"
 
 # symmetry dictionary
 #FIXME: This should not be imported here and exposed as this module constants
-from pyworkflow.em.constants import (
-    SYM_CYCLIC, SYM_DIHEDRAL, SYM_TETRAHEDRAL, SYM_OCTAHEDRAL, SYM_I222,
+from pwem.constants import (
+    SYM_CYCLIC, SYM_DIHEDRAL_X, SYM_TETRAHEDRAL, SYM_OCTAHEDRAL, SYM_I222,
     SYM_I222r, SYM_In25, SYM_In25r)
 
 
@@ -115,7 +116,7 @@ XMIPP_In25 = 6
 XMIPP_In25r = 7
 
 XMIPP_TO_SCIPION[XMIPP_CYCLIC] = SYM_CYCLIC
-XMIPP_TO_SCIPION[XMIPP_DIHEDRAL_X] = SYM_DIHEDRAL
+XMIPP_TO_SCIPION[XMIPP_DIHEDRAL_X] = SYM_DIHEDRAL_X
 XMIPP_TO_SCIPION[XMIPP_TETRAHEDRAL] = SYM_TETRAHEDRAL
 XMIPP_TO_SCIPION[XMIPP_OCTAHEDRAL] = SYM_OCTAHEDRAL
 XMIPP_TO_SCIPION[XMIPP_I222] = SYM_I222

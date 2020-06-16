@@ -33,33 +33,43 @@ This module contains converter functions that will serve to:
 import os
 from os.path import join, exists
 from collections import OrderedDict
-from itertools import izip
-import numpy
+try:
+    from itertools import izip
+except ImportError:
+    izip = zip
+import numpy as np
 
-from pyworkflow.em import Angles
 from pyworkflow.utils import replaceBaseExt
-from pyworkflow.em.data import *
-from pyworkflow.em.convert import ImageHandler
-import pyworkflow.em.metadata as md
+from pyworkflow.object import ObjectWrap, String, Float, Integer, Object
+from pwem.constants import (NO_INDEX, ALIGN_NONE, ALIGN_PROJ, ALIGN_2D,
+                            ALIGN_3D)
+from pwem.objects import (Angles, Coordinate, Micrograph, Volume, Particle,
+                          MovieParticle, CTFModel, Acquisition, SetOfParticles,
+                          Class3D, SetOfVolumes, Transform)
+from pwem.emlib.image import ImageHandler
+import pwem.emlib.metadata as md
 
-import xmippLib
-from xmipp3.base import XmippMdRow, getLabelPythonType, RowMetaData
-from xmipp3.utils import iterMdRows
+from xmipp3.base import getLabelPythonType, iterMdRows
 
-if not getattr(xmippLib, "GHOST_ACTIVATED", False):
+from pwem import emlib
+
+def prefixAttribute(attribute):
+    return '_xmipp_%s' % attribute
+
+if not getattr(emlib, "GHOST_ACTIVATED", False):
     """ Some of MDL may not exist when Ghost is activated
     """
     # This dictionary will be used to map
     # between CTFModel properties and Xmipp labels
     ACQUISITION_DICT = OrderedDict([
-           ("_amplitudeContrast", xmippLib.MDL_CTF_Q0),
-           ("_sphericalAberration", xmippLib.MDL_CTF_CS),
-           ("_voltage", xmippLib.MDL_CTF_VOLTAGE)
+           ("_amplitudeContrast", emlib.MDL_CTF_Q0),
+           ("_sphericalAberration", emlib.MDL_CTF_CS),
+           ("_voltage", emlib.MDL_CTF_VOLTAGE)
            ])
 
     COOR_DICT = OrderedDict([
-                 ("_x", xmippLib.MDL_XCOOR),
-                 ("_y", xmippLib.MDL_YCOOR)
+                 ("_x", emlib.MDL_XCOOR),
+                 ("_y", emlib.MDL_YCOOR)
                  ])
 
     COOR_EXTRA_LABELS = [
@@ -67,165 +77,165 @@ if not getattr(xmippLib, "GHOST_ACTIVATED", False):
         md.RLN_PARTICLE_AUTOPICK_FOM,
         md.RLN_PARTICLE_CLASS,
         md.RLN_ORIENT_PSI,
-        xmippLib.MDL_GOOD_REGION_SCORE
+        emlib.MDL_GOOD_REGION_SCORE
         ]
 
     CTF_DICT = OrderedDict([
-           ("_defocusU", xmippLib.MDL_CTF_DEFOCUSU),
-           ("_defocusV", xmippLib.MDL_CTF_DEFOCUSV),
-           ("_defocusAngle", xmippLib.MDL_CTF_DEFOCUS_ANGLE),
-           ("_resolution", xmippLib.MDL_CTF_CRIT_MAXFREQ),
-           ("_fitQuality", xmippLib.MDL_CTF_CRIT_FITTINGSCORE)
+           ("_defocusU", emlib.MDL_CTF_DEFOCUSU),
+           ("_defocusV", emlib.MDL_CTF_DEFOCUSV),
+           ("_defocusAngle", emlib.MDL_CTF_DEFOCUS_ANGLE),
+           ("_resolution", emlib.MDL_CTF_CRIT_MAXFREQ),
+           ("_fitQuality", emlib.MDL_CTF_CRIT_FITTINGSCORE)
            ])
 
     # TODO: remove next dictionary when all
     # cTFmodel has resolution and fitQuality
     CTF_DICT_NORESOLUTION = OrderedDict([
-            ("_defocusU", xmippLib.MDL_CTF_DEFOCUSU),
-            ("_defocusV", xmippLib.MDL_CTF_DEFOCUSV),
-            ("_defocusAngle", xmippLib.MDL_CTF_DEFOCUS_ANGLE)
+            ("_defocusU", emlib.MDL_CTF_DEFOCUSU),
+            ("_defocusV", emlib.MDL_CTF_DEFOCUSV),
+            ("_defocusAngle", emlib.MDL_CTF_DEFOCUS_ANGLE)
             ])
 
     CTF_PSD_DICT = OrderedDict([
-           ("_psdFile", xmippLib.MDL_PSD),
-           ("_xmipp_enhanced_psd", xmippLib.MDL_PSD_ENHANCED),
-           ("_xmipp_ctfmodel_quadrant", xmippLib.MDL_IMAGE1),
-           ("_xmipp_ctfmodel_halfplane", xmippLib.MDL_IMAGE1)
+           ("_psdFile", emlib.MDL_PSD),
+           (prefixAttribute("enhanced_psd"), emlib.MDL_PSD_ENHANCED),
+           (prefixAttribute("ctfmodel_quadrant"), emlib.MDL_IMAGE1),
+           (prefixAttribute("ctfmodel_halfplane"), emlib.MDL_IMAGE1)
            ])
 
     CTF_EXTRA_LABELS = [
-        xmippLib.MDL_CTF_CA,
-        xmippLib.MDL_CTF_ENERGY_LOSS,
-        xmippLib.MDL_CTF_LENS_STABILITY,
-        xmippLib.MDL_CTF_CONVERGENCE_CONE,
-        xmippLib.MDL_CTF_LONGITUDINAL_DISPLACEMENT,
-        xmippLib.MDL_CTF_TRANSVERSAL_DISPLACEMENT,
-        xmippLib.MDL_CTF_K,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_K,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAU,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAV,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_CU,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_CV,
-        xmippLib.MDL_CTF_BG_SQRT_K,
-        xmippLib.MDL_CTF_BG_SQRT_U,
-        xmippLib.MDL_CTF_BG_SQRT_V,
-        xmippLib.MDL_CTF_BG_SQRT_ANGLE,
-        xmippLib.MDL_CTF_BG_BASELINE,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_K,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAU,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAV,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_CU,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_CV,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_ANGLE,
-        xmippLib.MDL_CTF_CRIT_FITTINGCORR13,
-        xmippLib.MDL_CTF_CRIT_ICENESS,
-        xmippLib.MDL_CTF_VPP_RADIUS,
-        xmippLib.MDL_CTF_DOWNSAMPLE_PERFORMED,
-        xmippLib.MDL_CTF_CRIT_PSDVARIANCE,
-        xmippLib.MDL_CTF_CRIT_PSDPCA1VARIANCE,
-        xmippLib.MDL_CTF_CRIT_PSDPCARUNSTEST,
-        xmippLib.MDL_CTF_CRIT_FIRSTZEROAVG,
-        xmippLib.MDL_CTF_CRIT_DAMPING,
-        xmippLib.MDL_CTF_CRIT_FIRSTZERORATIO,
-        xmippLib.MDL_CTF_CRIT_PSDCORRELATION90,
-        xmippLib.MDL_CTF_CRIT_PSDRADIALINTEGRAL,
-        xmippLib.MDL_CTF_CRIT_NORMALITY,
+        emlib.MDL_CTF_CA,
+        emlib.MDL_CTF_ENERGY_LOSS,
+        emlib.MDL_CTF_LENS_STABILITY,
+        emlib.MDL_CTF_CONVERGENCE_CONE,
+        emlib.MDL_CTF_LONGITUDINAL_DISPLACEMENT,
+        emlib.MDL_CTF_TRANSVERSAL_DISPLACEMENT,
+        emlib.MDL_CTF_K,
+        emlib.MDL_CTF_BG_GAUSSIAN_K,
+        emlib.MDL_CTF_BG_GAUSSIAN_SIGMAU,
+        emlib.MDL_CTF_BG_GAUSSIAN_SIGMAV,
+        emlib.MDL_CTF_BG_GAUSSIAN_CU,
+        emlib.MDL_CTF_BG_GAUSSIAN_CV,
+        emlib.MDL_CTF_BG_SQRT_K,
+        emlib.MDL_CTF_BG_SQRT_U,
+        emlib.MDL_CTF_BG_SQRT_V,
+        emlib.MDL_CTF_BG_SQRT_ANGLE,
+        emlib.MDL_CTF_BG_BASELINE,
+        emlib.MDL_CTF_BG_GAUSSIAN2_K,
+        emlib.MDL_CTF_BG_GAUSSIAN2_SIGMAU,
+        emlib.MDL_CTF_BG_GAUSSIAN2_SIGMAV,
+        emlib.MDL_CTF_BG_GAUSSIAN2_CU,
+        emlib.MDL_CTF_BG_GAUSSIAN2_CV,
+        emlib.MDL_CTF_BG_GAUSSIAN2_ANGLE,
+        emlib.MDL_CTF_CRIT_FITTINGCORR13,
+        emlib.MDL_CTF_CRIT_ICENESS,
+        emlib.MDL_CTF_VPP_RADIUS,
+        emlib.MDL_CTF_DOWNSAMPLE_PERFORMED,
+        emlib.MDL_CTF_CRIT_PSDVARIANCE,
+        emlib.MDL_CTF_CRIT_PSDPCA1VARIANCE,
+        emlib.MDL_CTF_CRIT_PSDPCARUNSTEST,
+        emlib.MDL_CTF_CRIT_FIRSTZEROAVG,
+        emlib.MDL_CTF_CRIT_DAMPING,
+        emlib.MDL_CTF_CRIT_FIRSTZERORATIO,
+        emlib.MDL_CTF_CRIT_PSDCORRELATION90,
+        emlib.MDL_CTF_CRIT_PSDRADIALINTEGRAL,
+        emlib.MDL_CTF_CRIT_NORMALITY,
         # In xmipp the ctf also contains acquisition information
-        xmippLib.MDL_CTF_Q0,
-        xmippLib.MDL_CTF_CS,
-        xmippLib.MDL_CTF_VOLTAGE,
-        xmippLib.MDL_CTF_SAMPLING_RATE
+        emlib.MDL_CTF_Q0,
+        emlib.MDL_CTF_CS,
+        emlib.MDL_CTF_VOLTAGE,
+        emlib.MDL_CTF_SAMPLING_RATE
         ]
 
     # TODO: remove next dictionary when all
     # cTFmodel has resolution and fitquality
     CTF_EXTRA_LABELS_PLUS_RESOLUTION = [
-        xmippLib.MDL_CTF_CA,
-        xmippLib.MDL_CTF_ENERGY_LOSS,
-        xmippLib.MDL_CTF_LENS_STABILITY,
-        xmippLib.MDL_CTF_CONVERGENCE_CONE,
-        xmippLib.MDL_CTF_LONGITUDINAL_DISPLACEMENT,
-        xmippLib.MDL_CTF_TRANSVERSAL_DISPLACEMENT,
-        xmippLib.MDL_CTF_K,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_K,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAU,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_SIGMAV,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_CU,
-        xmippLib.MDL_CTF_BG_GAUSSIAN_CV,
-        xmippLib.MDL_CTF_BG_SQRT_K,
-        xmippLib.MDL_CTF_BG_SQRT_U,
-        xmippLib.MDL_CTF_BG_SQRT_V,
-        xmippLib.MDL_CTF_BG_SQRT_ANGLE,
-        xmippLib.MDL_CTF_BG_BASELINE,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_K,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAU,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_SIGMAV,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_CU,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_CV,
-        xmippLib.MDL_CTF_BG_GAUSSIAN2_ANGLE,
-        xmippLib.MDL_CTF_CRIT_MAXFREQ,  # ###
-        xmippLib.MDL_CTF_CRIT_FITTINGSCORE,  # ###
-        xmippLib.MDL_CTF_CRIT_FITTINGCORR13,
-        xmippLib.MDL_CTF_CRIT_ICENESS,
-        xmippLib.MDL_CTF_DOWNSAMPLE_PERFORMED,
-        xmippLib.MDL_CTF_CRIT_PSDVARIANCE,
-        xmippLib.MDL_CTF_CRIT_PSDPCA1VARIANCE,
-        xmippLib.MDL_CTF_CRIT_PSDPCARUNSTEST,
-        xmippLib.MDL_CTF_CRIT_FIRSTZEROAVG,
-        xmippLib.MDL_CTF_CRIT_DAMPING,
-        xmippLib.MDL_CTF_CRIT_FIRSTZERORATIO,
-        xmippLib.MDL_CTF_CRIT_PSDCORRELATION90,
-        xmippLib.MDL_CTF_CRIT_PSDRADIALINTEGRAL,
-        xmippLib.MDL_CTF_CRIT_NORMALITY,
+        emlib.MDL_CTF_CA,
+        emlib.MDL_CTF_ENERGY_LOSS,
+        emlib.MDL_CTF_LENS_STABILITY,
+        emlib.MDL_CTF_CONVERGENCE_CONE,
+        emlib.MDL_CTF_LONGITUDINAL_DISPLACEMENT,
+        emlib.MDL_CTF_TRANSVERSAL_DISPLACEMENT,
+        emlib.MDL_CTF_K,
+        emlib.MDL_CTF_BG_GAUSSIAN_K,
+        emlib.MDL_CTF_BG_GAUSSIAN_SIGMAU,
+        emlib.MDL_CTF_BG_GAUSSIAN_SIGMAV,
+        emlib.MDL_CTF_BG_GAUSSIAN_CU,
+        emlib.MDL_CTF_BG_GAUSSIAN_CV,
+        emlib.MDL_CTF_BG_SQRT_K,
+        emlib.MDL_CTF_BG_SQRT_U,
+        emlib.MDL_CTF_BG_SQRT_V,
+        emlib.MDL_CTF_BG_SQRT_ANGLE,
+        emlib.MDL_CTF_BG_BASELINE,
+        emlib.MDL_CTF_BG_GAUSSIAN2_K,
+        emlib.MDL_CTF_BG_GAUSSIAN2_SIGMAU,
+        emlib.MDL_CTF_BG_GAUSSIAN2_SIGMAV,
+        emlib.MDL_CTF_BG_GAUSSIAN2_CU,
+        emlib.MDL_CTF_BG_GAUSSIAN2_CV,
+        emlib.MDL_CTF_BG_GAUSSIAN2_ANGLE,
+        emlib.MDL_CTF_CRIT_MAXFREQ,  # ###
+        emlib.MDL_CTF_CRIT_FITTINGSCORE,  # ###
+        emlib.MDL_CTF_CRIT_FITTINGCORR13,
+        emlib.MDL_CTF_CRIT_ICENESS,
+        emlib.MDL_CTF_DOWNSAMPLE_PERFORMED,
+        emlib.MDL_CTF_CRIT_PSDVARIANCE,
+        emlib.MDL_CTF_CRIT_PSDPCA1VARIANCE,
+        emlib.MDL_CTF_CRIT_PSDPCARUNSTEST,
+        emlib.MDL_CTF_CRIT_FIRSTZEROAVG,
+        emlib.MDL_CTF_CRIT_DAMPING,
+        emlib.MDL_CTF_CRIT_FIRSTZERORATIO,
+        emlib.MDL_CTF_CRIT_PSDCORRELATION90,
+        emlib.MDL_CTF_CRIT_PSDRADIALINTEGRAL,
+        emlib.MDL_CTF_CRIT_NORMALITY,
         # In xmipp the ctf also contains acquisition information
-        xmippLib.MDL_CTF_Q0,
-        xmippLib.MDL_CTF_CS,
-        xmippLib.MDL_CTF_VOLTAGE,
-        xmippLib.MDL_CTF_SAMPLING_RATE,
-        xmippLib.MDL_CTF_VPP_RADIUS,
+        emlib.MDL_CTF_Q0,
+        emlib.MDL_CTF_CS,
+        emlib.MDL_CTF_VOLTAGE,
+        emlib.MDL_CTF_SAMPLING_RATE,
+        emlib.MDL_CTF_VPP_RADIUS,
         ]
 
     # Some extra labels to take into account the zscore
     IMAGE_EXTRA_LABELS = [
-        xmippLib.MDL_ZSCORE,
-        xmippLib.MDL_ZSCORE_HISTOGRAM,
-        xmippLib.MDL_ZSCORE_RESMEAN,
-        xmippLib.MDL_ZSCORE_RESVAR,
-        xmippLib.MDL_ZSCORE_RESCOV,
-        xmippLib.MDL_ZSCORE_SHAPE1,
-        xmippLib.MDL_ZSCORE_SHAPE2,
-        xmippLib.MDL_ZSCORE_SNR1,
-        xmippLib.MDL_ZSCORE_SNR2,
-        xmippLib.MDL_CUMULATIVE_SSNR,
-        xmippLib.MDL_PARTICLE_ID,
-        xmippLib.MDL_FRAME_ID,
-        xmippLib.MDL_SCORE_BY_VAR,
-        xmippLib.MDL_SCORE_BY_GINI,
-        xmippLib.MDL_ZSCORE_DEEPLEARNING1
+        emlib.MDL_ZSCORE,
+        emlib.MDL_ZSCORE_HISTOGRAM,
+        emlib.MDL_ZSCORE_RESMEAN,
+        emlib.MDL_ZSCORE_RESVAR,
+        emlib.MDL_ZSCORE_RESCOV,
+        emlib.MDL_ZSCORE_SHAPE1,
+        emlib.MDL_ZSCORE_SHAPE2,
+        emlib.MDL_ZSCORE_SNR1,
+        emlib.MDL_ZSCORE_SNR2,
+        emlib.MDL_CUMULATIVE_SSNR,
+        emlib.MDL_PARTICLE_ID,
+        emlib.MDL_FRAME_ID,
+        emlib.MDL_SCORE_BY_VAR,
+        emlib.MDL_SCORE_BY_GINI,
+        emlib.MDL_ZSCORE_DEEPLEARNING1
         ]
 
     ANGLES_DICT = OrderedDict([
-           ("_angleY", xmippLib.MDL_ANGLE_Y),
-           ("_angleY2", xmippLib.MDL_ANGLE_Y2),
-           ("_angleTilt", xmippLib.MDL_ANGLE_TILT)
+           ("_angleY", emlib.MDL_ANGLE_Y),
+           ("_angleY2", emlib.MDL_ANGLE_Y2),
+           ("_angleTilt", emlib.MDL_ANGLE_TILT)
            ])
 
     ALIGNMENT_DICT = OrderedDict([
-           ("_xmipp_shiftX", xmippLib.MDL_SHIFT_X),
-           ("_xmipp_shiftY", xmippLib.MDL_SHIFT_Y),
-           ("_xmipp_shiftZ", xmippLib.MDL_SHIFT_Z),
-           ("_xmipp_flip", xmippLib.MDL_FLIP),
-           ("_xmipp_anglePsi", xmippLib.MDL_ANGLE_PSI),
-           ("_xmipp_angleRot", xmippLib.MDL_ANGLE_ROT),
-           ("_xmipp_angleTilt", xmippLib.MDL_ANGLE_TILT),
+           (prefixAttribute("shiftX"), emlib.MDL_SHIFT_X),
+           (prefixAttribute("shiftY"), emlib.MDL_SHIFT_Y),
+           (prefixAttribute("shiftZ"), emlib.MDL_SHIFT_Z),
+           (prefixAttribute("flip"), emlib.MDL_FLIP),
+           (prefixAttribute("anglePsi"), emlib.MDL_ANGLE_PSI),
+           (prefixAttribute("angleRot"), emlib.MDL_ANGLE_ROT),
+           (prefixAttribute("angleTilt"), emlib.MDL_ANGLE_TILT),
            ])
 
 
 def objectToRow(obj, row, attrDict, extraLabels=[]):
-    """ This function will convert an EMObject into a XmippMdRow.
+    """ This function will convert an EMObject into a Row.
     Params:
         obj: the EMObject instance (input)
-        row: the XmippMdRow instance (output)
+        row: the Row instance (output)  -see emlib.metadata.utils.Row()-
         attrDict: dictionary with the map between obj attributes(keys) and
             row MDLabels in Xmipp (values).
         extraLabels: a list with extra labels that could be included
@@ -235,46 +245,46 @@ def objectToRow(obj, row, attrDict, extraLabels=[]):
         enabled = 1
     else:
         enabled = -1
-    row.setValue(xmippLib.MDL_ENABLED, enabled)
+    row.setValue(emlib.MDL_ENABLED, enabled)
 
-    for attr, label in attrDict.iteritems():
+    for attr, label in attrDict.items():
         if hasattr(obj, attr):
             valueType = getLabelPythonType(label)
             value = getattr(obj, attr).get()
             try:
                 row.setValue(label, valueType(value))
             except Exception as e:
-                print e
-                print "Problems found converting metadata: "
-                print "Label id = %s" % label
-                print "Attribute = %s" % attr
-                print "Value = %s" % value
-                print "Value type = %s" % valueType
+                print(e)
+                print("Problems found converting metadata: ")
+                print("Label id = %s" % label)
+                print("Attribute = %s" % attr)
+                print("Value = %s" % value)
+                print("Value type = %s" % valueType)
                 raise e
             row.setValue(label, valueType(getattr(obj, attr).get()))
             
     attrLabels = attrDict.values()
 
     for label in extraLabels:
-        attrName = prefixAttribute(xmippLib.label2Str(label))
+        attrName = prefixAttribute(emlib.label2Str(label))
         if label not in attrLabels and hasattr(obj, attrName):
             value = obj.getAttributeValue(attrName)
             row.setValue(label, value)
 
 
 def rowToObject(row, obj, attrDict, extraLabels=[]):
-    """ This function will convert from a XmippMdRow to an EMObject.
+    """ This function will convert from a Row to an EMObject.
     Params:
-        row: the XmippMdRow instance (input)
+        row: the Row instance (input)  -see emlib.metadata.utils.Row()-
         obj: the EMObject instance (output)
         attrDict: dictionary with the map between obj attributes(keys) and
             row MDLabels in Xmipp (values).
         extraLabels: a list with extra labels that could be included
             as _xmipp_labelName
     """
-    obj.setEnabled(row.getValue(xmippLib.MDL_ENABLED, 1) > 0)
+    obj.setEnabled(row.getValue(emlib.MDL_ENABLED, 1) > 0)
 
-    for attr, label in attrDict.iteritems():
+    for attr, label in attrDict.items():
         value = row.getValue(label)
         if not hasattr(obj, attr):
             setattr(obj, attr, ObjectWrap(value))
@@ -285,7 +295,7 @@ def rowToObject(row, obj, attrDict, extraLabels=[]):
 
     for label in extraLabels:
         if label not in attrLabels and row.hasLabel(label):
-            labelStr = xmippLib.label2Str(label)
+            labelStr = emlib.label2Str(label)
             setattr(obj, prefixAttribute(labelStr), row.getValueAsObject(label))
 
 def setXmippAttributes(obj, objRow, *labels, **kwargs):
@@ -309,32 +319,34 @@ def setXmippAttributes(obj, objRow, *labels, **kwargs):
             else:
                 value = defaults
 
-            if isinstance(value, int):
-                value = Integer(value)
-            elif isinstance(value, float):
-                value = Float(value)
-            elif isinstance(value, basestring):
-                value = String(value)
-            else:
-                value = None
+            value = getScipionObj(value)
 
         if value is not None:
             setXmippAttribute(obj, label, value)
 
+def getScipionObj(value):
+    if isinstance(value, Object):
+        return value
+    elif isinstance(value, int):
+        return Integer(value)
+    elif isinstance(value, float):
+        return Float(value)
+    elif isinstance(value, str):
+        return String(value)
+    else:
+        return None
+
 def setXmippAttribute(obj, label, value):
     """ Sets an attribute of an object prefixing it with xmipp"""
-    setattr(obj, prefixAttribute(xmippLib.label2Str(label)), value)
+    setattr(obj, prefixAttribute(emlib.label2Str(label)), value)
 
-def getXmippAttribute(obj, label):
+def getXmippAttribute(obj, label, default=None):
     """ Sets an attribute of an object prefixing it with xmipp"""
-    return getattr(obj, prefixAttribute(xmippLib.label2Str(label)), None)
+    return getattr(obj, prefixAttribute(emlib.label2Str(label)), default)
 
-def prefixAttribute(attribute):
-    return '_xmipp_%s' % attribute
-
-def rowFromMd(md, objId):
-    row = XmippMdRow()
-    row.readFromMd(md, objId)
+def rowFromMd(mdIn, objId):
+    row = md.Row()
+    row.readFromMd(mdIn, objId)
     return row
 
 
@@ -400,20 +412,20 @@ def xmippToLocation(xmippFilename):
     """ Return a location (index, filename) given
     a Xmipp filename with the index@filename structure. """
     if '@' in xmippFilename:
-        return xmippLib.FileName(xmippFilename).decompose()
+        return emlib.FileName(xmippFilename).decompose()
     else:
         return NO_INDEX, str(xmippFilename)
 
 
-def setObjId(obj, mdRow, label=xmippLib.MDL_ITEM_ID):
+def setObjId(obj, mdRow, label=emlib.MDL_ITEM_ID):
     if mdRow.containsLabel(label):
         obj.setObjId(mdRow.getValue(label))
     else:
         obj.setObjId(None)
 
 
-def setRowId(mdRow, obj, label=xmippLib.MDL_ITEM_ID):
-    mdRow.setValue(label, long(obj.getObjId()))
+def setRowId(mdRow, obj, label=emlib.MDL_ITEM_ID):
+    mdRow.setValue(label, int(obj.getObjId()))
 
 
 def micrographToCTFParam(mic, ctfparam):
@@ -427,13 +439,13 @@ def micrographToCTFParam(mic, ctfparam):
     if hasattr(ctf, '_xmippMd'):
         return ctf._xmippMd.get()
 
-    md = xmippLib.MetaData()
-    md.setColumnFormat(False)
-    row = XmippMdRow()
+    mdCtf = emlib.MetaData()
+    mdCtf.setColumnFormat(False)
+    row = md.Row()
     ctfModelToRow(ctf, row)
     acquisitionToRow(mic.getAcquisition(), row)
-    row.writeToMd(md, md.addObject())
-    md.write(ctfparam)
+    row.writeToMd(mdCtf, mdCtf.addObject())
+    mdCtf.write(ctfparam)
     return ctfparam
 
 
@@ -486,10 +498,10 @@ def rowToImage(imgRow, imgLabel, imgClass, **kwargs):
     index, filename = xmippToLocation(imgRow.getValue(imgLabel))
     img.setLocation(index, filename)
 
-    if imgRow.containsLabel(xmippLib.MDL_REF):
-        img.setClassId(imgRow.getValue(xmippLib.MDL_REF))
-    elif imgRow.containsLabel(xmippLib.MDL_REF3D):
-        img.setClassId(imgRow.getValue(xmippLib.MDL_REF3D))
+    if imgRow.containsLabel(emlib.MDL_REF):
+        img.setClassId(imgRow.getValue(emlib.MDL_REF))
+    elif imgRow.containsLabel(emlib.MDL_REF3D):
+        img.setClassId(imgRow.getValue(emlib.MDL_REF3D))
 
     if kwargs.get('readCtf', True):
         img.setCTF(rowToCtfModel(imgRow))
@@ -523,23 +535,23 @@ def rowToImage(imgRow, imgLabel, imgClass, **kwargs):
 
 def micrographToRow(mic, micRow, **kwargs):
     """ Set labels values from Micrograph mic to md row. """
-    imageToRow(mic, micRow, imgLabel=xmippLib.MDL_MICROGRAPH, **kwargs)
+    imageToRow(mic, micRow, imgLabel=emlib.MDL_MICROGRAPH, **kwargs)
 
 
 def rowToMicrograph(micRow, **kwargs):
     """ Create a Micrograph object from a row of Xmipp metadata. """
-    return rowToImage(micRow, xmippLib.MDL_MICROGRAPH, Micrograph, **kwargs)
+    return rowToImage(micRow, emlib.MDL_MICROGRAPH, Micrograph, **kwargs)
 
 
 def volumeToRow(vol, volRow, **kwargs):
     """ Set labels values from Micrograph mic to md row. """
-    imageToRow(vol, volRow, imgLabel=xmippLib.MDL_IMAGE,
+    imageToRow(vol, volRow, imgLabel=emlib.MDL_IMAGE,
                writeAcquisition=False, **kwargs)
 
 
 def rowToVolume(volRow, **kwargs):
     """ Create a Volume object from a row of Xmipp metadata. """
-    return rowToImage(volRow, xmippLib.MDL_IMAGE, Volume, **kwargs)
+    return rowToImage(volRow, emlib.MDL_IMAGE, Volume, **kwargs)
 
 
 def coordinateToRow(coord, coordRow, copyId=True):
@@ -548,7 +560,7 @@ def coordinateToRow(coord, coordRow, copyId=True):
         setRowId(coordRow, coord)
     objectToRow(coord, coordRow, COOR_DICT, extraLabels=COOR_EXTRA_LABELS)
     if coord.getMicId():
-        coordRow.setValue(xmippLib.MDL_MICROGRAPH, str(coord.getMicId()))
+        coordRow.setValue(emlib.MDL_MICROGRAPH, str(coord.getMicId()))
 
 
 def rowToCoordinate(coordRow):
@@ -560,7 +572,7 @@ def rowToCoordinate(coordRow):
 
         # Setup the micId if is integer value
         try:
-            coord.setMicId(int(coordRow.getValue(xmippLib.MDL_MICROGRAPH_ID)))
+            coord.setMicId(int(coordRow.getValue(emlib.MDL_MICROGRAPH_ID)))
         except Exception:
             pass
     else:
@@ -577,22 +589,22 @@ def _rowToParticle(partRow, particleClass, **kwargs):
     if postprocessImageRow:
         del kwargs['postprocessImageRow']
 
-    img = rowToImage(partRow, xmippLib.MDL_IMAGE, particleClass, **kwargs)
+    img = rowToImage(partRow, emlib.MDL_IMAGE, particleClass, **kwargs)
     img.setCoordinate(rowToCoordinate(partRow))
     # copy micId if available
     # if not copy micrograph name if available
     try:
-        if partRow.hasLabel(xmippLib.MDL_MICROGRAPH_ID):
-            img.setMicId(partRow.getValue(xmippLib.MDL_MICROGRAPH_ID))
-#        elif partRow.hasLabel(xmippLib.MDL_MICROGRAPH):
-#            micName = partRow.getValue(xmippLib.MDL_MICROGRAPH)
+        if partRow.hasLabel(emlib.MDL_MICROGRAPH_ID):
+            img.setMicId(partRow.getValue(emlib.MDL_MICROGRAPH_ID))
+#        elif partRow.hasLabel(emlib.MDL_MICROGRAPH):
+#            micName = partRow.getValue(emlib.MDL_MICROGRAPH)
 #            img._micrograph = micName
-#            print "setting micname as", micName
+#            print("setting micname as %s" % micName)
 #            img.printAll()
-#            print "getAttributes1", img._micrograph
-#            print "getAttributes2", getattr(img,"_micrograph",'kk')
+#            print("getAttributes1 %s" % img._micrograph)
+#            print("getAttributes2 %s" % getattr(img, "_micrograph", 'kk')
 #        else:
-#            print "WARNING: No micname"
+#            print("WARNING: No micname")
     except Exception as e:
         print("Warning:", e.message)
 
@@ -612,23 +624,23 @@ def rowToMovieParticle(partRow, **kwargs):
 
 def particleToRow(part, partRow, **kwargs):
     """ Set labels values from Particle to md row. """
-    imageToRow(part, partRow, xmippLib.MDL_IMAGE, **kwargs)
+    imageToRow(part, partRow, emlib.MDL_IMAGE, **kwargs)
     coord = part.getCoordinate()
     if coord is not None:
         coordinateToRow(coord, partRow, copyId=False)
     if part.hasMicId():
-        partRow.setValue(xmippLib.MDL_MICROGRAPH_ID, long(part.getMicId()))
-        partRow.setValue(xmippLib.MDL_MICROGRAPH, str(part.getMicId()))
+        partRow.setValue(emlib.MDL_MICROGRAPH_ID, int(part.getMicId()))
+        partRow.setValue(emlib.MDL_MICROGRAPH, str(part.getMicId()))
 
 
 def rowToClass(classRow, classItem):
     """ Method base to create a class2D, class3D or classVol from
     a row of a metadata
     """
-    setObjId(classItem, classRow, label=xmippLib.MDL_REF)
+    setObjId(classItem, classRow, label=emlib.MDL_REF)
 
-    if classRow.containsLabel(xmippLib.MDL_IMAGE):
-        index, filename = xmippToLocation(classRow.getValue(xmippLib.MDL_IMAGE))
+    if classRow.containsLabel(emlib.MDL_IMAGE):
+        index, filename = xmippToLocation(classRow.getValue(emlib.MDL_IMAGE))
         img = classItem.REP_TYPE()
         # class id should be set previously from MDL_REF
 #         classItem.setObjId(classRow.getObjId())
@@ -646,11 +658,11 @@ def class2DToRow(class2D, classRow):
     if class2D.hasRepresentative():
         index, filename = class2D.getRepresentative().getLocation()
         fn = locationToXmipp(index, filename)
-        classRow.setValue(xmippLib.MDL_IMAGE, fn)
-    n = long(len(class2D))
-    classRow.setValue(xmippLib.MDL_CLASS_COUNT, n)
-    classRow.setValue(xmippLib.MDL_REF, int(class2D.getObjId()))
-    classRow.setValue(xmippLib.MDL_ITEM_ID, long(class2D.getObjId()))
+        classRow.setValue(emlib.MDL_IMAGE, fn)
+    n = int(len(class2D))
+    classRow.setValue(emlib.MDL_CLASS_COUNT, n)
+    classRow.setValue(emlib.MDL_REF, int(class2D.getObjId()))
+    classRow.setValue(emlib.MDL_ITEM_ID, int(class2D.getObjId()))
 
 
 def ctfModelToRow(ctfModel, ctfRow):
@@ -660,7 +672,7 @@ def ctfModelToRow(ctfModel, ctfRow):
         objectToRow(ctfModel, ctfRow, CTF_DICT,
                     extraLabels=CTF_EXTRA_LABELS)
         if ctfModel.hasPhaseShift():
-            ctfRow.setValue(xmippLib.MDL_CTF_PHASE_SHIFT,
+            ctfRow.setValue(emlib.MDL_CTF_PHASE_SHIFT,
                             ctfModel.getPhaseShift())
     else:
         objectToRow(ctfModel, ctfRow, CTF_DICT_NORESOLUTION,
@@ -677,7 +689,7 @@ def setPsdFiles(ctfModel, ctfRow):
     to this ctfModel. The values will be read from
     the ctfRow if present.
     """
-    for attr, label in CTF_PSD_DICT.iteritems():
+    for attr, label in CTF_PSD_DICT.items():
         if ctfRow.containsLabel(label):
             setattr(ctfModel, attr, String(ctfRow.getValue(label)))
 
@@ -697,7 +709,7 @@ def rowToCtfModel(ctfRow):
         # plus extra labels
         if ctfRow.hasLabel(md.MDL_CTF_PHASE_SHIFT):
             ctfModel.setPhaseShift(ctfRow.getValue(md.MDL_CTF_PHASE_SHIFT, 0))
-        if ctfRow.containsLabel(xmippLib.label2Str(xmippLib.MDL_CTF_CRIT_MAXFREQ)):
+        if ctfRow.containsLabel(emlib.label2Str(emlib.MDL_CTF_CRIT_MAXFREQ)):
             rowToObject(ctfRow, ctfModel, CTF_DICT,
                         extraLabels=CTF_EXTRA_LABELS)
         else:
@@ -748,12 +760,12 @@ def writeSetOfVolumes(volSet, filename, blockName='Volumes', **kwargs):
     writeSetOfImages(volSet, filename, volumeToRow, blockName, **kwargs)
 
 
-def mdToCTFModel(md, mic):
-    ctfRow = rowFromMd(md, md.firstObject())
+def mdToCTFModel(mdIn, mic):
+    ctfRow = rowFromMd(mdIn, mdIn.firstObject())
     ctfObj = rowToCtfModel(ctfRow)
     setXmippAttributes(ctfObj, ctfRow,
-                       xmippLib.MDL_CTF_CRIT_NONASTIGMATICVALIDITY,
-                       xmippLib.MDL_CTF_CRIT_FIRSTMINIMUM_FIRSTZERO_DIFF_RATIO)
+                       emlib.MDL_CTF_CRIT_NONASTIGMATICVALIDITY,
+                       emlib.MDL_CTF_CRIT_FIRSTMINIMUM_FIRSTZERO_DIFF_RATIO)
     ctfObj.setMicrograph(mic)
 
     return ctfObj
@@ -761,8 +773,8 @@ def mdToCTFModel(md, mic):
 
 def readCTFModel(filename, mic):
     """ Read from Xmipp .ctfparam and create a CTFModel object. """
-    md = xmippLib.MetaData(filename)
-    return mdToCTFModel(md, mic)
+    mdCtf = emlib.MetaData(filename)
+    return mdToCTFModel(mdCtf, mic)
 
 
 def openMd(fn, state='Manual'):
@@ -858,12 +870,12 @@ def writeCoordsConfig(configFn, boxSize, state):
     """
     # Write config.xmd metadata
     print("writeCoordsConfig: state=", state)
-    md = xmippLib.MetaData()
+    mdCoord = emlib.MetaData()
     # Write properties block
-    objId = md.addObject()
-    md.setValue(xmippLib.MDL_PICKING_PARTICLE_SIZE, int(boxSize), objId)
-    md.setValue(xmippLib.MDL_PICKING_STATE, state, objId)
-    md.write('properties@%s' % configFn)
+    objId = mdCoord.addObject()
+    mdCoord.setValue(emlib.MDL_PICKING_PARTICLE_SIZE, int(boxSize), objId)
+    mdCoord.setValue(emlib.MDL_PICKING_STATE, state, objId)
+    mdCoord.write('properties@%s' % configFn)
 
 
 def writeMicCoordinates(mic, coordList, outputFn, isManual=True,
@@ -907,9 +919,9 @@ def readSetOfCoordinates(outputDir, micSet, coordSet, readDiscarded=False, scale
     # Read the boxSize from the config.xmd metadata
     configfile = join(outputDir, 'config.xmd')
     if exists(configfile):
-        md = xmippLib.MetaData('properties@' + join(outputDir, 'config.xmd'))
-        boxSize = md.getValue(xmippLib.MDL_PICKING_PARTICLE_SIZE,
-                              md.firstObject())
+        mdCoords = emlib.MetaData('properties@' + join(outputDir, 'config.xmd'))
+        boxSize = mdCoords.getValue(emlib.MDL_PICKING_PARTICLE_SIZE,
+                                    mdCoords.firstObject())
         coordSet.setBoxSize(int(boxSize)) #Only coordinates x,y are scaled, you are supposed to use an appropiate boxsize
     for mic in micSet:
         posFile = join(outputDir, replaceBaseExt(mic.getFileName(), 'pos'))
@@ -936,7 +948,7 @@ def readCoordinates(mic, fileName, coordsSet, outputDir, readDiscarded=False, sc
             coord.setX(int(coord.getX()*scale))
             coord.setY(int(coord.getY()*scale))
             coordsSet.append(coord)
-            posMd.setValue(md.MDL_ITEM_ID, long(coord.getObjId()), objId)
+            posMd.setValue(md.MDL_ITEM_ID, int(coord.getObjId()), objId)
 
 
 def readPosCoordinates(posFile, readDiscarded=False):
@@ -975,7 +987,7 @@ def readSetOfImages(filename, imgSet, rowToFunc, **kwargs):
         imgSet: the SetOfParticles that will be populated.
         rowToFunc: this function will be used to convert the row to Object
     """
-    imgMd = xmippLib.MetaData(filename)
+    imgMd = emlib.MetaData(filename)
 
     # By default remove disabled items from metadata
     # be careful if you need to preserve the original number of items
@@ -987,7 +999,7 @@ def readSetOfImages(filename, imgSet, rowToFunc, **kwargs):
     if 'alignType' not in kwargs:
         imgRow = rowFromMd(imgMd, imgMd.firstObject())
         if _containsAny(imgRow, ALIGNMENT_DICT):
-            if imgRow.containsLabel(xmippLib.MDL_ANGLE_TILT):
+            if imgRow.containsLabel(emlib.MDL_ANGLE_TILT):
                 kwargs['alignType'] = ALIGN_PROJ
             else:
                 kwargs['alignType'] = ALIGN_2D
@@ -1004,11 +1016,11 @@ def readSetOfImages(filename, imgSet, rowToFunc, **kwargs):
         imgSet.setAlignment(kwargs['alignType'])
 
 
-def setOfImagesToMd(imgSet, md, imgToFunc, **kwargs):
+def setOfImagesToMd(imgSet, mdIn, imgToFunc, **kwargs):
     """ This function will fill Xmipp metadata from a SetOfMicrographs
     Params:
         imgSet: the set of images to be converted to metadata
-        md: metadata to be filled
+        mdIn: metadata to be filled
         rowFunc: this function can be used to setup the row before
             adding to metadata.
     """
@@ -1019,22 +1031,22 @@ def setOfImagesToMd(imgSet, md, imgToFunc, **kwargs):
     if 'where' in kwargs:
         where = kwargs['where']
         for img in imgSet.iterItems(where=where):
-            objId = md.addObject()
-            imgRow = XmippMdRow()
+            objId = mdIn.addObject()
+            imgRow = md.Row()
             imgToFunc(img, imgRow, **kwargs)
-            imgRow.writeToMd(md, objId)
+            imgRow.writeToMd(mdIn, objId)
     else:
         for img in imgSet:
-            objId = md.addObject()
-            imgRow = XmippMdRow()
+            objId = mdIn.addObject()
+            imgRow = md.Row()
             imgToFunc(img, imgRow, **kwargs)
-            imgRow.writeToMd(md, objId)
+            imgRow.writeToMd(mdIn, objId)
 
 
 def readAnglesFromMicrographs(micFile, anglesSet):
     """ Read the angles from a micrographs Metadata.
     """
-    micMd = xmippLib.MetaData(micFile)
+    micMd = emlib.MetaData(micFile)
 #    micMd.removeDisabled()
 
     for objId in micMd:
@@ -1044,7 +1056,7 @@ def readAnglesFromMicrographs(micFile, anglesSet):
         angles = Angles()
         row = rowFromMd(micMd, objId)
         rowToObject(row, angles, ANGLES_DICT)
-        angles.setObjId(micMd.getValue(xmippLib.MDL_ITEM_ID, objId))
+        angles.setObjId(micMd.getValue(emlib.MDL_ITEM_ID, objId))
         anglesSet.append(angles)
 
 
@@ -1058,10 +1070,10 @@ def writeSetOfImages(imgSet, filename, imgToFunc,
         rowFunc: this function can be used to setup the row before
             adding to metadata.
     """
-    md = xmippLib.MetaData()
+    mdSet = emlib.MetaData()
 
-    setOfImagesToMd(imgSet, md, imgToFunc, **kwargs)
-    md.write('%s@%s' % (blockName, filename))
+    setOfImagesToMd(imgSet, mdSet, imgToFunc, **kwargs)
+    mdSet.write('%s@%s' % (blockName, filename))
 
 
 def readSetOfParticles(filename, partSet, **kwargs):
@@ -1072,12 +1084,12 @@ def readSetOfMovieParticles(filename, partSet, **kwargs):
     readSetOfImages(filename, partSet, rowToMovieParticle, **kwargs)
 
 
-def setOfParticlesToMd(imgSet, md, **kwargs):
-    setOfImagesToMd(imgSet, md, particleToRow, **kwargs)
+def setOfParticlesToMd(imgSet, mdParts, **kwargs):
+    setOfImagesToMd(imgSet, mdParts, particleToRow, **kwargs)
 
 
-def setOfMicrographsToMd(imgSet, md, **kwargs):
-    setOfImagesToMd(imgSet, md, micrographToRow, **kwargs)
+def setOfMicrographsToMd(imgSet, mdMics, **kwargs):
+    setOfImagesToMd(imgSet, mdMics, micrographToRow, **kwargs)
 
 
 def writeSetOfParticles(imgSet, filename, blockName='Particles', **kwargs):
@@ -1087,15 +1099,15 @@ def writeSetOfParticles(imgSet, filename, blockName='Particles', **kwargs):
 def writeCTFModel(ctfModel, ctfFile):
     """ Given a CTFModel object write as Xmipp ctfparam
     """
-    md = xmippLib.MetaData()
+    mdCtf = emlib.MetaData()
 
-    objId = md.addObject()
-    ctfRow = XmippMdRow()
+    objId = mdCtf.addObject()
+    ctfRow = md.Row()
     ctfModelToRow(ctfModel, ctfRow)
-    ctfRow.writeToMd(md, objId)
+    ctfRow.writeToMd(mdCtf, objId)
 
-    md.setColumnFormat(False)
-    md.write(ctfFile)
+    mdCtf.setColumnFormat(False)
+    mdCtf.write(ctfFile)
 
 
 def writeSetOfCTFs(ctfSet, mdCTF):
@@ -1104,18 +1116,18 @@ def writeSetOfCTFs(ctfSet, mdCTF):
         ctfSet: the SetOfCTF that will be read.
         mdCTF: The file where metadata should be written.
     """
-    md = xmippLib.MetaData()
+    mdCtf = emlib.MetaData()
 
     for ctfModel in ctfSet:
-        objId = md.addObject()
-        ctfRow = XmippMdRow()
-        ctfRow.setValue(xmippLib.MDL_MICROGRAPH, ctfModel.getMicFile())
+        objId = mdCtf.addObject()
+        ctfRow = md.Row()
+        ctfRow.setValue(emlib.MDL_MICROGRAPH, ctfModel.getMicFile())
         if ctfModel.getPsdFile():
-            ctfRow.setValue(xmippLib.MDL_PSD, ctfModel.getPsdFile())
+            ctfRow.setValue(emlib.MDL_PSD, ctfModel.getPsdFile())
         ctfModelToRow(ctfModel, ctfRow)
-        ctfRow.writeToMd(md, objId)
+        ctfRow.writeToMd(mdCtf, objId)
 
-    md.write(mdCTF)
+    mdCtf.write(mdCTF)
     ctfSet._xmippMd = String(mdCTF)
 
 
@@ -1125,19 +1137,19 @@ def writeSetOfDefocusGroups(defocusGroupSet, fnDefocusGroup):  # also metadata
         defocusGroupSet: the SetOfDefocus that will be read.
         fnDefocusGroup: The file where defocusGroup should be written.
     """
-    md = xmippLib.MetaData()
+    mdDefGr = emlib.MetaData()
 
     for defocusGroup in defocusGroupSet:
-        objId = md.addObject()
-        defocusGroupRow = XmippMdRow()
+        objId = mdDefGr.addObject()
+        defocusGroupRow = md.Row()
         defocusGroupSetToRow(defocusGroup, defocusGroupRow)
-        defocusGroupRow.setValue(xmippLib.MDL_CTF_GROUP, defocusGroup.getObjId())
-        defocusGroupRow.setValue(xmippLib.MDL_MIN, defocusGroup.getDefocusMin())
-        defocusGroupRow.setValue(xmippLib.MDL_MAX, defocusGroup.getDefocusMax())
-        defocusGroupRow.setValue(xmippLib.MDL_AVG, defocusGroup.getDefocusAvg())
-        defocusGroupRow.writeToMd(md, objId)
+        defocusGroupRow.setValue(emlib.MDL_CTF_GROUP, defocusGroup.getObjId())
+        defocusGroupRow.setValue(emlib.MDL_MIN, defocusGroup.getDefocusMin())
+        defocusGroupRow.setValue(emlib.MDL_MAX, defocusGroup.getDefocusMax())
+        defocusGroupRow.setValue(emlib.MDL_AVG, defocusGroup.getDefocusAvg())
+        defocusGroupRow.writeToMd(mdDefGr, objId)
 
-    md.write(fnDefocusGroup)
+    mdDefGr.write(fnDefocusGroup)
     defocusGroupSet._xmippMd = String(fnDefocusGroup)
 
 
@@ -1149,27 +1161,27 @@ def writeSetOfClasses2D(classes2DSet, filename,
         filename: the filename where to write the metadata.
     """
     classFn = '%s@%s' % (classesBlock, filename)
-    classMd = xmippLib.MetaData()
+    classMd = emlib.MetaData()
     classMd.write(classFn)  # Empty write to ensure the classes is the first
     # block
 
-    classRow = XmippMdRow()
+    classRow = md.Row()
     for class2D in classes2DSet:
         class2DToRow(class2D, classRow)
         classRow.writeToMd(classMd, classMd.addObject())
         if writeParticles:
             ref = class2D.getObjId()
             imagesFn = 'class%06d_images@%s' % (ref, filename)
-            imagesMd = xmippLib.MetaData()
-            imgRow = XmippMdRow()
+            imagesMd = emlib.MetaData()
+            imgRow = md.Row()
             if class2D.getSize() > 0:
                 for img in class2D:
                     particleToRow(img, imgRow)
                     imgRow.writeToMd(imagesMd, imagesMd.addObject())
-            imagesMd.write(imagesFn, xmippLib.MD_APPEND)
+            imagesMd.write(imagesFn, emlib.MD_APPEND)
 
     # Empty write to ensure the classes is the first block
-    classMd.write(classFn, xmippLib.MD_APPEND)
+    classMd.write(classFn, emlib.MD_APPEND)
 
 
 def writeSetOfMicrographsPairs(uSet, tSet, filename):
@@ -1179,17 +1191,17 @@ def writeSetOfMicrographsPairs(uSet, tSet, filename):
         tSet: the tilted set of micrographs to be written
         filename: the filename where to write the metadata.
     """
-    md = xmippLib.MetaData()
+    mdMics = emlib.MetaData()
 
     for micU, micT in izip(uSet, tSet):
-        objId = md.addObject()
-        pairRow = XmippMdRow()
-        pairRow.setValue(xmippLib.MDL_ITEM_ID, long(micU.getObjId()))
-        pairRow.setValue(xmippLib.MDL_MICROGRAPH, micU.getFileName())
-        pairRow.setValue(xmippLib.MDL_MICROGRAPH_TILTED, micT.getFileName())
-        pairRow.writeToMd(md, objId)
+        objId = mdMics.addObject()
+        pairRow = md.Row()
+        pairRow.setValue(emlib.MDL_ITEM_ID, int(micU.getObjId()))
+        pairRow.setValue(emlib.MDL_MICROGRAPH, micU.getFileName())
+        pairRow.setValue(emlib.MDL_MICROGRAPH_TILTED, micT.getFileName())
+        pairRow.writeToMd(mdMics, objId)
 
-    md.write(filename)
+    mdMics.write(filename)
 
 
 def __readSetOfClasses(classBaseSet, readSetFunc,
@@ -1203,9 +1215,9 @@ def __readSetOfClasses(classBaseSet, readSetFunc,
         classesBlock (by default 'classes'):
             the block name of the classes group in the metadata.
     """
-    blocks = xmippLib.getBlocksInMetaDataFile(filename)
+    blocks = emlib.getBlocksInMetaDataFile(filename)
 
-    classesMd = xmippLib.MetaData('%s@%s' % (classesBlock, filename))
+    classesMd = emlib.MetaData('%s@%s' % (classesBlock, filename))
 
     # Provide a hook to be used if something is needed to be
     # done for special cases before converting row to class
@@ -1262,27 +1274,28 @@ def writeSetOfClassesVol(classesVolSet, filename, classesBlock='classes'):
         filename: the filename where to write the metadata.
     """
     classFn = '%s@%s' % (classesBlock, filename)
-    classMd = xmippLib.MetaData()
+    classMd = emlib.MetaData()
     classMd.write(classFn)  # Empty write to ensure the classes is the first
     # block
     # FIXME: review implementation of this function since there are syntax
     # errors
-    classRow = XmippMdRow()
+    classRow = md.Row()
     for classVol in classesVolSet:
+        # FIXME Where does this method come from
         classVolToRow(classVol, classRow)
         classRow.writeToMd(classMd, classMd.addObject())
-        ref = class3D.getObjId()
+        ref = Class3D.getObjId()
         imagesFn = 'class%06d_images@%s' % (ref, filename)
-        imagesMd = xmippLib.MetaData()
-        imgRow = XmippMdRow()
+        imagesMd = emlib.MetaData()
+        imgRow = md.Row()
 
         for vol in classVol:
             volumeToRow(vol, imgRow)
             imgRow.writeToMd(imagesMd, imagesMd.addObject())
-        imagesMd.write(imagesFn, xmippLib.MD_APPEND)
+        imagesMd.write(imagesFn, emlib.MD_APPEND)
 
     # Empty write to ensure the classes is the first block
-    classMd.write(classFn, xmippLib.MD_APPEND)
+    classMd.write(classFn, emlib.MD_APPEND)
 
 
 def readSetOfClassesVol(classesVolSet, filename,
@@ -1306,23 +1319,23 @@ def writeSetOfMovies(moviesSet, filename, moviesBlock='movies'):
 
         ref = movie.getObjId()
         micrographsFn = 'movie%06d_micrographs@%s' % (ref, filename)
-        micrographsMd = xmippLib.MetaData()
-        micRow = XmippMdRow()
+        micrographsMd = emlib.MetaData()
+        micRow = md.Row()
 
         for mic in movie:
             micrographToRow(mic, micRow)
             micRow.writeToMd(micrographsMd, micrographsMd.addObject())
-        micrographsMd.write(micrographsFn, xmippLib.MD_APPEND)
+        micrographsMd.write(micrographsFn, emlib.MD_APPEND)
 
 def geometryFromMatrix(matrix, inverseTransform):
-    from pyworkflow.em.convert.transformations import  \
-        translation_from_matrix, euler_from_matrix
+    from pwem.convert.transformations import (translation_from_matrix,
+                                              euler_from_matrix)
     if inverseTransform:
-        matrix = numpy.linalg.inv(matrix)
+        matrix = np.linalg.inv(matrix)
         shifts = -translation_from_matrix(matrix)
     else:
         shifts = translation_from_matrix(matrix)
-    angles = -numpy.rad2deg(euler_from_matrix(matrix, axes='szyz'))
+    angles = -np.rad2deg(euler_from_matrix(matrix, axes='szyz'))
     return shifts, angles
 
 
@@ -1330,13 +1343,13 @@ def matrixFromGeometry(shifts, angles, inverseTransform):
     """ Create the transformation matrix from a given
     2D shifts in X and Y...and the 3 euler angles.
     """
-    from pyworkflow.em.convert.transformations import  euler_matrix
-    radAngles = -numpy.deg2rad(angles)
+    from pwem.convert import euler_matrix
+    radAngles = -np.deg2rad(angles)
 
     M = euler_matrix(radAngles[0], radAngles[1], radAngles[2], 'szyz')
     if inverseTransform:
         M[:3, 3] = -shifts[:3]
-        M = numpy.linalg.inv(M)
+        M = np.linalg.inv(M)
     else:
         M[:3, 3] = shifts[:3]
 
@@ -1354,29 +1367,29 @@ def rowToAlignment(alignmentRow, alignType):
 
     if _containsAny(alignmentRow, ALIGNMENT_DICT):
         alignment = Transform()
-        angles = numpy.zeros(3)
-        shifts = numpy.zeros(3)
-        flip = alignmentRow.getValue(xmippLib.MDL_FLIP)
+        angles = np.zeros(3)
+        shifts = np.zeros(3)
+        flip = alignmentRow.getValue(emlib.MDL_FLIP)
 
-        shifts[0] = alignmentRow.getValue(xmippLib.MDL_SHIFT_X, 0.)
-        shifts[1] = alignmentRow.getValue(xmippLib.MDL_SHIFT_Y, 0.)
+        shifts[0] = alignmentRow.getValue(emlib.MDL_SHIFT_X, 0.)
+        shifts[1] = alignmentRow.getValue(emlib.MDL_SHIFT_Y, 0.)
         if not is2D:
-            angles[0] = alignmentRow.getValue(xmippLib.MDL_ANGLE_ROT, 0.)
-            angles[1] = alignmentRow.getValue(xmippLib.MDL_ANGLE_TILT, 0.)
-            shifts[2] = alignmentRow.getValue(xmippLib.MDL_SHIFT_Z, 0.)
-            angles[2] = alignmentRow.getValue(xmippLib.MDL_ANGLE_PSI, 0.)
+            angles[0] = alignmentRow.getValue(emlib.MDL_ANGLE_ROT, 0.)
+            angles[1] = alignmentRow.getValue(emlib.MDL_ANGLE_TILT, 0.)
+            shifts[2] = alignmentRow.getValue(emlib.MDL_SHIFT_Z, 0.)
+            angles[2] = alignmentRow.getValue(emlib.MDL_ANGLE_PSI, 0.)
             if flip:
                 angles[1] = angles[1]+180  # tilt + 180
                 angles[2] = - angles[2]    # - psi, COSS: this is mirroring X
                 shifts[0] = -shifts[0]     # -x
         else:
-            psi = alignmentRow.getValue(xmippLib.MDL_ANGLE_PSI, 0.)
-            rot = alignmentRow.getValue(xmippLib.MDL_ANGLE_ROT, 0.)
+            psi = alignmentRow.getValue(emlib.MDL_ANGLE_PSI, 0.)
+            rot = alignmentRow.getValue(emlib.MDL_ANGLE_ROT, 0.)
             if rot != 0. and psi != 0:
-                print "HORROR rot and psi are different from zero in 2D case"
+                print("HORROR rot and psi are different from zero in 2D case")
             angles[0] = \
-                alignmentRow.getValue(xmippLib.MDL_ANGLE_PSI, 0.)\
-                + alignmentRow.getValue(xmippLib.MDL_ANGLE_ROT, 0.)
+                alignmentRow.getValue(emlib.MDL_ANGLE_PSI, 0.)\
+                + alignmentRow.getValue(emlib.MDL_ANGLE_ROT, 0.)
 
         matrix = matrixFromGeometry(shifts, angles, inverseTransform)
 
@@ -1397,7 +1410,7 @@ def rowToAlignment(alignmentRow, alignType):
         # the conversions to the Transform matrix have not been extensively
         # tested.
         # After this, we should only keep the matrix
-        # for paramName, label in ALIGNMENT_DICT.iteritems():
+        # for paramName, label in ALIGNMENT_DICT.iter():
         #    if alignmentRow.hasLabel(label):
         #        setattr(alignment, paramName,
         #                alignmentRow.getValueAsObject(label))
@@ -1425,7 +1438,7 @@ def alignmentToRow(alignment, alignmentRow, alignType):
     matrix = alignment.getMatrix()
     if alignType == ALIGN_2D:
         # get 2x2 matrix and check if negative
-        flip = bool(numpy.linalg.det(matrix[0:2, 0:2]) < 0)
+        flip = bool(np.linalg.det(matrix[0:2, 0:2]) < 0)
         if flip:
             matrix[0, :2] *= -1.  # invert only the first two columns keep x
             matrix[2, 2] = 1.  # set 3D rot
@@ -1433,7 +1446,7 @@ def alignmentToRow(alignment, alignmentRow, alignType):
             pass
 
     elif alignType == ALIGN_3D:
-        flip = bool(numpy.linalg.det(matrix[0:3, 0:3]) < 0)
+        flip = bool(np.linalg.det(matrix[0:3, 0:3]) < 0)
         if flip:
             matrix[0, :4] *= -1.  # now, invert first line including x
             matrix[3, 3] = 1.  # set 3D rot
@@ -1441,25 +1454,25 @@ def alignmentToRow(alignment, alignmentRow, alignType):
             pass
 
     else:
-        flip = bool(numpy.linalg.det(matrix[0:3, 0:3]) < 0)
+        flip = bool(np.linalg.det(matrix[0:3, 0:3]) < 0)
         if flip:
             raise Exception("the det of the transformation matrix is "
                             "negative. This is not a valid transformation "
                             "matrix for Scipion.")
     shifts, angles = geometryFromMatrix(matrix, inverseTransform)
-    alignmentRow.setValue(xmippLib.MDL_SHIFT_X, shifts[0])
-    alignmentRow.setValue(xmippLib.MDL_SHIFT_Y, shifts[1])
+    alignmentRow.setValue(emlib.MDL_SHIFT_X, shifts[0])
+    alignmentRow.setValue(emlib.MDL_SHIFT_Y, shifts[1])
 
     if is2D:
         angle = angles[0] + angles[2]
-        alignmentRow.setValue(xmippLib.MDL_ANGLE_PSI,  angle)
+        alignmentRow.setValue(emlib.MDL_ANGLE_PSI,  angle)
     else:
         # if alignType == ALIGN_3D:
-        alignmentRow.setValue(xmippLib.MDL_SHIFT_Z, shifts[2])
-        alignmentRow.setValue(xmippLib.MDL_ANGLE_ROT,  angles[0])
-        alignmentRow.setValue(xmippLib.MDL_ANGLE_TILT, angles[1])
-        alignmentRow.setValue(xmippLib.MDL_ANGLE_PSI,  angles[2])
-    alignmentRow.setValue(xmippLib.MDL_FLIP, flip)
+        alignmentRow.setValue(emlib.MDL_SHIFT_Z, shifts[2])
+        alignmentRow.setValue(emlib.MDL_ANGLE_ROT,  angles[0])
+        alignmentRow.setValue(emlib.MDL_ANGLE_TILT, angles[1])
+        alignmentRow.setValue(emlib.MDL_ANGLE_PSI,  angles[2])
+    alignmentRow.setValue(emlib.MDL_FLIP, flip)
 
 
 def fillClasses(clsSet, updateClassCallback=None):
@@ -1520,7 +1533,7 @@ def createClassesFromImages2(inputImages, inputMd,
     sampling = inputImages.getSamplingRate()
 
     for img, row in izip(inputImages, mdIter):
-        ref = row.getValue(xmippLib.MDL_REF)
+        ref = row.getValue(emlib.MDL_REF)
         if ref is None:
             raise Exception('MDL_REF not found in metadata: %s' % inputMd)
 
@@ -1608,33 +1621,33 @@ def writeShiftsMovieAlignment(movie, xmdFn, s0, sN):
     shiftListX, shiftListY = movieAlignment.getShifts()
     # Generating metadata for global shifts
     a0, aN = movieAlignment.getRange()
-    globalShiftsMD = xmippLib.MetaData()
+    globalShiftsMD = emlib.MetaData()
     alFrame = a0
 
     if s0 < a0:
         for i in range(s0, a0):
             objId = globalShiftsMD.addObject()
             imgFn = locationToXmipp(i, getMovieFileName(movie))
-            globalShiftsMD.setValue(xmippLib.MDL_IMAGE, imgFn, objId)
-            globalShiftsMD.setValue(xmippLib.MDL_SHIFT_X, 0.0, objId)
-            globalShiftsMD.setValue(xmippLib.MDL_SHIFT_Y, 0.0, objId)
+            globalShiftsMD.setValue(emlib.MDL_IMAGE, imgFn, objId)
+            globalShiftsMD.setValue(emlib.MDL_SHIFT_X, 0.0, objId)
+            globalShiftsMD.setValue(emlib.MDL_SHIFT_Y, 0.0, objId)
 
     for shiftX, shiftY in izip(shiftListX, shiftListY):
         if alFrame >= s0 and alFrame <= sN:
             objId = globalShiftsMD.addObject()
             imgFn = locationToXmipp(alFrame, getMovieFileName(movie))
-            globalShiftsMD.setValue(xmippLib.MDL_IMAGE, imgFn, objId)
-            globalShiftsMD.setValue(xmippLib.MDL_SHIFT_X, shiftX, objId)
-            globalShiftsMD.setValue(xmippLib.MDL_SHIFT_Y, shiftY, objId)
+            globalShiftsMD.setValue(emlib.MDL_IMAGE, imgFn, objId)
+            globalShiftsMD.setValue(emlib.MDL_SHIFT_X, shiftX, objId)
+            globalShiftsMD.setValue(emlib.MDL_SHIFT_Y, shiftY, objId)
         alFrame += 1
 
     if sN > aN:
         for j in range(aN, sN):
             objId = globalShiftsMD.addObject()
             imgFn = locationToXmipp(j+1, getMovieFileName(movie))
-            globalShiftsMD.setValue(xmippLib.MDL_IMAGE, imgFn, objId)
-            globalShiftsMD.setValue(xmippLib.MDL_SHIFT_X, 0.0, objId)
-            globalShiftsMD.setValue(xmippLib.MDL_SHIFT_Y, 0.0, objId)
+            globalShiftsMD.setValue(emlib.MDL_IMAGE, imgFn, objId)
+            globalShiftsMD.setValue(emlib.MDL_SHIFT_X, 0.0, objId)
+            globalShiftsMD.setValue(emlib.MDL_SHIFT_Y, 0.0, objId)
 
     globalShiftsMD.write(xmdFn)
 
@@ -1678,8 +1691,8 @@ def writeMovieMd(movie, outXmd, f1, fN, useAlignment=False):
 
         if useAlignment:
             shiftIndex = i - firstFrame
-            row.setValue(xmippLib.MDL_SHIFT_X, shiftListX[shiftIndex])
-            row.setValue(xmippLib.MDL_SHIFT_Y, shiftListY[shiftIndex])
+            row.setValue(emlib.MDL_SHIFT_X, shiftListX[shiftIndex])
+            row.setValue(emlib.MDL_SHIFT_Y, shiftListY[shiftIndex])
 
         row.addToMd(movieMd)
         stackIndex += 1

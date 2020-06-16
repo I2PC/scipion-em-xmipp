@@ -28,14 +28,15 @@ from os.path import exists
 import numpy as np
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.em.protocol.protocol_movies import ProtProcessMovies
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Set
 from pyworkflow.protocol.constants import STATUS_NEW
 from pyworkflow.protocol.params import PointerParam
 from pyworkflow.utils.properties import Message
-from pyworkflow.em.data import SetOfMovies, SetOfMicrographs
+
+from pwem.protocols import ProtProcessMovies
+from pwem.objects import SetOfMicrographs, SetOfMovies
 
 
 class XmippProtMovieMaxShift(ProtProcessMovies):
@@ -112,13 +113,14 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             self.setInputMics()
         # Insert the selection/rejection step
         movieStepId = self._insertFunctionStep('_evaluateMovieAlign',
-                                               movie.clone(),
+                                               movie.getObjId(),
                                                prerequisites=[])
         return movieStepId
 
-    def _evaluateMovieAlign(self, movie):
+    def _evaluateMovieAlign(self, movieId):
         """ Fill the accepted or the rejected list with the movie.
         """
+        movie = self.inputMovies.get()[movieId].clone()
         alignment = movie.getAlignment()
         sampling = self.samplingRate
 
@@ -230,7 +232,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                         tryToAppend(outSet, micOut, tries+1)
                     else:
                         labelStr = ' '.join([labelPrefix, micOut.getMicName()])
-                        self.warning("The %s seems corrupted. Skkiping it...\n "
+                        self.warning("The %s seems corrupted. Skipping it...\n "
                                      " > %s" % (labelStr, ex))
 
             for movie in newDoneList:

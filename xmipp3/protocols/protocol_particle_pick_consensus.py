@@ -35,9 +35,9 @@ import numpy as np
 
 from pyworkflow.object import Set, String, Pointer
 import pyworkflow.protocol.params as params
-from pyworkflow.em.protocol import ProtParticlePicking
+from pwem.protocols import ProtParticlePicking
 from pyworkflow.protocol.constants import *
-from pyworkflow.em.data import SetOfCoordinates, Coordinate
+from pwem.objects import SetOfCoordinates, Coordinate
 from pyworkflow.utils import getFiles, removeBaseExt, moveFile
 
 
@@ -130,7 +130,9 @@ class XmippProtConsensusPicking(ProtParticlePicking):
         deps = []
         for micrograph in mics:
             stepId = self._insertFunctionStep("calculateConsensusStep",
-                                              micrograph, prerequisites=[])
+                                              micrograph.getObjId(),
+                                              micrograph.getFileName(),
+                                              prerequisites=[])
             deps.append(stepId)
         return deps
 
@@ -226,17 +228,18 @@ class XmippProtConsensusPicking(ProtParticlePicking):
             outputSet.setStreamState(outputSet.STREAM_OPEN)
             outputSet.setBoxSize(self.getMainInput().getBoxSize())
 
-        inMicsPointer = Pointer(self.getMapper().getParent(
-                                            self.getMainInput().getMicrographs()),
-                                            extended='outputMicrographs')
+        #inMicsPointer = Pointer(self.getMapper().getParent(
+        #                                    self.getMainInput().getMicrographs()),
+        #                                    extended='outputMicrographs')
+        inMicsPointer = Pointer(self.getMainInput().getMicrographs())
         outputSet.setMicrographs(inMicsPointer)
 
         return outputSet
 
-    def calculateConsensusStep(self, micrograph):
-        micId = micrograph.getObjId()
+    def calculateConsensusStep(self, micId, micName):
+
         print("Consensus calculation for micrograph %d: '%s'"
-              % (micId, micrograph.getMicName()))
+              % (micId, micName))
 
         # Take the sampling rates just once
         if not self.sampligRates:

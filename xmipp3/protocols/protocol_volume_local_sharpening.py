@@ -26,19 +26,18 @@
 # *
 # **************************************************************************
 from pyworkflow import VERSION_1_1
-from pyworkflow.protocol.params import (PointerParam, StringParam, 
-                                        BooleanParam, FloatParam, IntParam, LEVEL_ADVANCED)
-from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
-from pyworkflow.object import Float
-from pyworkflow.em import ImageHandler
+from pyworkflow.protocol.params import (PointerParam, FloatParam,
+                                        LEVEL_ADVANCED)
+from pwem.protocols import ProtAnalysis3D
+from pwem.emlib.image import ImageHandler
 from pyworkflow.utils import getExt
-from pyworkflow.em.data import Volume
+from pwem.objects import Volume
 import numpy as np
 import os
-import pyworkflow.em.metadata as md
-from pyworkflow.em.metadata.constants import (MDL_COST, MDL_ITER, MDL_SCALE)
+import pwem.emlib.metadata as md
+from pwem.emlib.metadata import (MDL_COST, MDL_ITER, MDL_SCALE)
 from ntpath import dirname
-from os.path import exists, lexists
+from os.path import exists
 
 LOCALDEBLUR_METHOD_URL='http://github.com/I2PC/scipion/wiki/XmippProtLocSharp' 
 
@@ -128,7 +127,7 @@ class XmippProtLocSharp(ProtAnalysis3D):
         imgData = img.getData()
         max_value = np.amax(imgData)
         min_value = np.amin(imgData) 
-        #print ("minvalue %s  y maxvalue  %s"  % (min_value, max_value)) 
+        # print("minvalue %s  y maxvalue  %s"  % (min_value, max_value))
         
         if (min_value > 0.01):
             params = ' -i %s' % self.resFn  
@@ -227,9 +226,9 @@ class XmippProtLocSharp(ProtAnalysis3D):
 
         while nextIter is True:
             self.iteration = self.iteration + 1
-            #print iteration
-            print ('\n====================\n'
-                'Iteration  %s'  % (self.iteration))
+            # print("iteration")
+            print('\n====================\n'
+                  'Iteration  %s'  % (self.iteration))
             self.sharpenStep(self.iteration)           
             mtd = md.MetaData()
             mtd.read(self._getFileName('METADATA_PARAMS_SHARPENING'))
@@ -257,7 +256,7 @@ class XmippProtLocSharp(ProtAnalysis3D):
             max_res = np.amax(imgData)
             min_res = 2*self.inputVolume.get().getSamplingRate()
             
-            #print ("minres %s  y maxres  %s"  % (min_res, max_res))          
+            # print("minres %s  y maxres  %s"  % (min_res, max_res))
         
             if (max_res-min_res<0.75):
                 nextIter = False
@@ -272,11 +271,11 @@ class XmippProtLocSharp(ProtAnalysis3D):
         pathres=dirname(resFile)
         if  not exists(os.path.join(pathres,'mask_data.xmd')):     
 
-            print ('\n====================\n' 
-                   ' WARNING---This is not the ideal case because resolution map has been imported.'
-                   ' The ideal case is to calculate it previously' 
-                   ' in the same project using MonoRes.'
-                   '\n====================\n')           
+            print('\n====================\n' 
+                  ' WARNING---This is not the ideal case because resolution map has been imported.'
+                  ' The ideal case is to calculate it previously' 
+                  ' in the same project using MonoRes.'
+                  '\n====================\n')
   
              
     def createOutputStep(self):

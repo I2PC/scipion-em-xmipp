@@ -25,19 +25,21 @@
 # *
 # ******************************************************************************
 
-from pyworkflow.em import *
-from pyworkflow.utils import *  
+import os
+from pyworkflow.utils import *
 from pyworkflow.protocol.params import *
 from pyworkflow.utils.path import cleanPath
-from pyworkflow.em import Volume
-import xmippLib
+
+from pwem.objects import Volume, SetOfParticles, SetOfClasses2D
+
+from pwem import emlib
 from xmipp3.constants import *
 from xmipp3.convert import  writeSetOfParticles
 from .protocol_process import XmippProcessParticles,\
     XmippProcessVolumes
 
 
-class XmippPreprocessHelper():
+class XmippPreprocessHelper:
     """ 
     Helper class that contains some Protocol utilities methods
     used by both  XmippProtPreprocessParticles and XmippProtPreprocessVolumes.
@@ -46,6 +48,16 @@ class XmippPreprocessHelper():
     #--------------------------- DEFINE param functions ------------------------
     @classmethod
     def _defineProcessParams(cls, form):
+        form.addHidden(USE_GPU, BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       expertLevel=LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+
         # Invert Contrast
         form.addParam('doInvert', BooleanParam, default=False,
                       label='Invert contrast',
@@ -159,14 +171,16 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
                            'If this value is 0, then half the box size is used.')
         form.addParam('doCenter', BooleanParam, default=False,
                       label='Center images')
+        form.addParam('doPhaseFlip', BooleanParam, default=False,
+                      label='Phase flip images')
         XmippPreprocessHelper._defineProcessParams(form)
     
     #--------------------------- INSERT steps functions ------------------------
     def _insertProcessStep(self):
         self.isFirstStep = True
         # this is for when the options selected has changed and the protocol is resumed
-        changeInserts = [self.doRemoveDust, self.doNormalize, self.doInvert,
-                         self.doThreshold, self.doCenter]
+        changeInserts = [self.doRemoveDust.get(), self.doNormalize.get(), self.doInvert.get(),
+                         self.doThreshold.get(), self.doCenter.get(), self.doPhaseFlip.get()]
         
         if self.doRemoveDust:
             args = self._argsRemoveDust()
@@ -183,7 +197,11 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
         if self.doCenter:
             args = self._argsCenter()
             self._insertFunctionStep("centerStep", args, changeInserts)
-        
+
+        if self.doPhaseFlip:
+            args = self._argsPhaseFlip()
+            self._insertFunctionStep("phaseFlipStep", args, changeInserts)
+
         XmippPreprocessHelper._insertCommonSteps(self, changeInserts)
         
     #--------------------------- STEPS functions -------------------------------
@@ -204,7 +222,10 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
     
     def centerStep(self, args, changeInserts):
         self.runJob("xmipp_transform_center_image", args % locals())
-    
+
+    def phaseFlipStep(self, args, changeInserts):
+        self.runJob("xmipp_ctf_correct_phase", args % locals())
+
     def sortImages(self, outputFn, outputMd):
         pass
 
@@ -322,7 +343,17 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
         else:
             args = "-i %s" % self.outputStk
         return args
-    
+
+    def _argsPhaseFlip(self):
+        if self.isFirstStep:
+            args = "-i %s -o %s --save_metadata_stack %s" \
+                   % (self.inputFn, self.outputStk, self.outputMd)
+            self._setFalseFirstStep()
+        else:
+            args = "-i %s" % self.outputMd
+        args+=" --sampling_rate %f"%self.inputParticles.get().getSamplingRate()
+        return args
+
     def _getSize(self):
         """ get the size of SetOfParticles object"""
         Xdim = self.inputParticles.get().getDimensions()[0]
@@ -333,11 +364,13 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
         if self.isFirstStep:
                 self.isFirstStep = False
 
+    def _postprocessOutput(self, outputSet):
+        if self.doPhaseFlip.get():
+            outputSet.setIsPhaseFlipped(not self.inputParticles.get().isPhaseFlipped())
+
 
 class XmippProtPreprocessVolumes(XmippProcessVolumes):
     """ Protocol for Xmipp-based preprocess for volumes """
-    import pyworkflow.em.metadata as md
-    
     _label = 'preprocess volumes'
     
     # Aggregation constants
@@ -526,16 +559,47 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
         writeSetOfParticles(newPartSet, imgsFn)
         
         if not partSet.hasAlignmentProj():
-            params = {'imgsFn': imgsFn,
-                      'dir': self._getTmpPath(),
-                      'vols': self.inputFn,
-                      'symmetryGroup': self.sigSymGroup.get(),
-                      }
-            sigArgs = '-i %(imgsFn)s --initvolumes %(vols)s --odir %(dir)s'\
-                      ' --sym %(symmetryGroup)s --alpha0 0.005 --dontReconstruct' \
-                      % params
-            self.runJob("xmipp_reconstruct_significant", sigArgs)
-    
+            if not self.useGpu.get():
+                params = {'imgsFn': imgsFn,
+                          'dir': self._getTmpPath(),
+                          'vols': self.inputFn,
+                          'symmetryGroup': self.sigSymGroup.get(),
+                          }
+                sigArgs = '-i %(imgsFn)s --initvolumes %(vols)s --odir %(dir)s' \
+                          ' --sym %(symmetryGroup)s --alpha0 0.005 --dontReconstruct ' \
+                          % params
+                self.runJob("xmipp_reconstruct_significant", sigArgs)
+            else:
+                fnGallery = self._getExtraPath('gallery.stk')
+                fnGalleryMd = self._getExtraPath('gallery.doc')
+                angleStep = 5
+                args = "-i %s -o %s --sampling_rate %f --sym %s --min_tilt_angle 0 --max_tilt_angle 180 " % \
+                       (self.inputFn, fnGallery, angleStep,
+                        self.sigSymGroup.get())
+                self.runJob("xmipp_angular_project_library", args,
+                            numberOfMpi=min(self.numberOfMpi.get(), 24))
+
+                count=0
+                GpuListCuda=''
+                if self.useQueueForSteps() or self.useQueue():
+                    GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                    GpuList = GpuList.split(",")
+                    for elem in GpuList:
+                        GpuListCuda = GpuListCuda+str(count)+' '
+                        count+=1
+                else:
+                    GpuListAux = ''
+                    for elem in self.getGpuList():
+                        GpuListCuda = GpuListCuda+str(count)+' '
+                        GpuListAux = GpuListAux+str(elem)+','
+                        count+=1
+                    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
+                fnAngles = 'images_iter001_00.xmd'
+                args = '-i %s -r %s -o %s --odir %s --keepBestN 1 --dev %s ' % (
+                imgsFn, fnGalleryMd, fnAngles, self._getTmpPath(), GpuListCuda)
+                self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+
     def adjustStep(self, isFirstStep, changeInserts):
         if isFirstStep:
             inputFn = self.inputFn
@@ -550,12 +614,12 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
             localArgs = self._adjustLocalArgs(inputFn, self.outputStk, args)
             self.runJob("xmipp_transform_adjust_volume_grey_levels", localArgs)
         else:
-            volMd = xmippLib.MetaData(self.inputFn)
-            outVolMd = xmippLib.MetaData(self.outputMd)
+            volMd = emlib.MetaData(self.inputFn)
+            outVolMd = emlib.MetaData(self.outputMd)
             for objId in volMd:
                 args = self._argsAdjust(objId-1)
-                inputVol = volMd.getValue(xmippLib.MDL_IMAGE, objId)
-                outputVol = outVolMd.getValue(xmippLib.MDL_IMAGE, objId)
+                inputVol = volMd.getValue(emlib.MDL_IMAGE, objId)
+                outputVol = outVolMd.getValue(emlib.MDL_IMAGE, objId)
                 localArgs = self._adjustLocalArgs(inputVol, outputVol, args)
                 self.runJob("xmipp_transform_adjust_volume_grey_levels", localArgs)
     
@@ -574,11 +638,11 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
             maskArgs = self._segMentMaskArgs(inputFn, self.outputStk, fnMask)
             self._segmentVolume(localArgs, maskArgs, fnMask)
         else:
-            volMd = xmippLib.MetaData(inputFn)
-            outVolMd = xmippLib.MetaData(self.outputMd)
+            volMd = emlib.MetaData(inputFn)
+            outVolMd = emlib.MetaData(self.outputMd)
             for objId in volMd:
-                inputVol = volMd.getValue(xmippLib.MDL_IMAGE, objId)
-                outputVol = outVolMd.getValue(xmippLib.MDL_IMAGE, objId)
+                inputVol = volMd.getValue(emlib.MDL_IMAGE, objId)
+                outputVol = outVolMd.getValue(emlib.MDL_IMAGE, objId)
                 localArgs = self._segmentLocalArgs(inputVol, fnMask, args)
                 maskArgs = self._segMentMaskArgs(inputVol, outputVol, fnMask)
                 self._segmentVolume(localArgs, maskArgs, fnMask)
@@ -719,7 +783,7 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
         return "-i %s -o %s " % (inputVol, fnMask) + args
     
     def _segMentMaskArgs(self, inputVol, outputVol, fnMask):
-        print "self.isFirstStep, ", self.isFirstStep
+        print("self.isFirstStep, ", self.isFirstStep)
         if self.isFirstStep:
             maskArgs = "-i %s -o %s" % (inputVol, outputVol)
             self._setFalseFirstStep()

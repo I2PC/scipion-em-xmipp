@@ -66,7 +66,7 @@ def createFilenameTemplates(self):
                     'ctfGroupSubsetFileName': "ctf_images.sel",
                     }
     # Also setup as protocol attributes
-    for k, v in self._params.iteritems():
+    for k, v in self._params.items():
         setattr(self, k, v)
                           
     Iter = 'iter_%(iter)03d'
@@ -146,7 +146,7 @@ def initializeLists(self):
     """
     # Construct special filename list with zero special case
     self.docFileInputAngles = [self._getFileName('inputParticlesDoc')] + [self._getFileName('docfileInputAnglesIters', iter=i) for i in self.allIters()]
-    #print 'self.docFileInputAngles: ', self.docFileInputAngles
+    # print('self.docFileInputAngles: %s' % self.docFileInputAngles)
     self.reconstructedFileNamesIters = [[None] + self.referenceFileNames]
     for iterN in self.allIters():
         self.reconstructedFileNamesIters.append([None] + [self._getFileName('reconstructedFileNamesIters', iter=iterN, ref=r) for r in self.allRefs()])

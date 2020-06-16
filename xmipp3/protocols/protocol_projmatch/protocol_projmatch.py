@@ -27,11 +27,10 @@
 # **************************************************************************
 
 from pyworkflow.object import Integer
-from pyworkflow.utils.path import makePath, copyFile
-from pyworkflow.utils import getFloatListFromValues, getBoolListFromValues, getStringListFromValues
-from pyworkflow.em import ProtRefine3D, ProtClassify3D
-
-import xmippLib
+from pyworkflow.utils import (getFloatListFromValues, getBoolListFromValues,
+                              getStringListFromValues)
+from pwem.protocols import ProtRefine3D, ProtClassify3D
+from pwem import emlib
 from .projmatch_initialize import *
 from .projmatch_form import _defineProjectionMatchingParams
 from .projmatch_steps import *
@@ -305,55 +304,59 @@ class XmippProtProjMatch(ProtRefine3D, ProtClassify3D):
         """ Read the corresponding resolution metadata and return the
         desired resolution.
         """
-        md = xmippLib.MetaData(self._getFileName('resolutionXmdMax', iter=iterN, ref=refN))
-        return md.getValue(xmippLib.MDL_RESOLUTION_FREQREAL, md.firstObject())
+        md = emlib.MetaData(self._getFileName('resolutionXmdMax', iter=iterN, ref=refN))
+        resol = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, md.firstObject())
+        if resol > 0:
+            return resol
+        sampling = md.getValue(emlib.MDL_SAMPLINGRATE, md.firstObject())
+        return 2*sampling
     
     def calculateDeviationsStep(self, it):
         """ Calculate both angles and shifts devitations for all iterations
         """
     
-        SL = xmippLib.SymList()
-        mdIter = xmippLib.MetaData()
+        SL = emlib.SymList()
+        mdIter = emlib.MetaData()
         #for it in self.allIters():
         mdIter.clear()
         SL.readSymmetryFile(self._symmetry[it])
-        md1 = xmippLib.MetaData(self.docFileInputAngles[it])
-        md2 = xmippLib.MetaData(self.docFileInputAngles[it-1])
+        md1 = emlib.MetaData(self.docFileInputAngles[it])
+        md2 = emlib.MetaData(self.docFileInputAngles[it-1])
         #ignore disabled,
         md1.removeDisabled()
         md2.removeDisabled()
 
         #first metadata file may not have shiftx and shifty
-        if not md2.containsLabel(xmippLib.MDL_SHIFT_X):
-            md2.addLabel(xmippLib.MDL_SHIFT_X)
-            md2.addLabel(xmippLib.MDL_SHIFT_Y)
-            md2.fillConstant(xmippLib.MDL_SHIFT_X,0.)
-            md2.fillConstant(xmippLib.MDL_SHIFT_Y,0.)
-        oldLabels=[xmippLib.MDL_ANGLE_ROT,
-                   xmippLib.MDL_ANGLE_TILT,
-                   xmippLib.MDL_ANGLE_PSI,
-                   xmippLib.MDL_SHIFT_X,
-                   xmippLib.MDL_SHIFT_Y]
-        newLabels=[xmippLib.MDL_ANGLE_ROT2,
-                   xmippLib.MDL_ANGLE_TILT2,
-                   xmippLib.MDL_ANGLE_PSI2,
-                   xmippLib.MDL_SHIFT_X2,
-                   xmippLib.MDL_SHIFT_Y2]
+        if not md2.containsLabel(emlib.MDL_SHIFT_X):
+            md2.addLabel(emlib.MDL_SHIFT_X)
+            md2.addLabel(emlib.MDL_SHIFT_Y)
+            md2.fillConstant(emlib.MDL_SHIFT_X,0.)
+            md2.fillConstant(emlib.MDL_SHIFT_Y,0.)
+        oldLabels=[emlib.MDL_ANGLE_ROT,
+                   emlib.MDL_ANGLE_TILT,
+                   emlib.MDL_ANGLE_PSI,
+                   emlib.MDL_SHIFT_X,
+                   emlib.MDL_SHIFT_Y]
+        newLabels=[emlib.MDL_ANGLE_ROT2,
+                   emlib.MDL_ANGLE_TILT2,
+                   emlib.MDL_ANGLE_PSI2,
+                   emlib.MDL_SHIFT_X2,
+                   emlib.MDL_SHIFT_Y2]
         md2.renameColumn(oldLabels,newLabels)
-        md2.addLabel(xmippLib.MDL_SHIFT_X_DIFF)
-        md2.addLabel(xmippLib.MDL_SHIFT_Y_DIFF)
-        md2.addLabel(xmippLib.MDL_SHIFT_DIFF)
-        mdIter.join1(md1, md2, xmippLib.MDL_IMAGE, xmippLib.INNER_JOIN)
+        md2.addLabel(emlib.MDL_SHIFT_X_DIFF)
+        md2.addLabel(emlib.MDL_SHIFT_Y_DIFF)
+        md2.addLabel(emlib.MDL_SHIFT_DIFF)
+        mdIter.join1(md1, md2, emlib.MDL_IMAGE, emlib.INNER_JOIN)
         SL.computeDistance(mdIter,False,False,False)
-        xmippLib.activateMathExtensions()
+        emlib.activateMathExtensions()
         #operate in sqlite
-        shiftXLabel     = xmippLib.label2Str(xmippLib.MDL_SHIFT_X)
-        shiftX2Label    = xmippLib.label2Str(xmippLib.MDL_SHIFT_X2)
-        shiftXDiff      = xmippLib.label2Str(xmippLib.MDL_SHIFT_X_DIFF)
-        shiftYLabel     = xmippLib.label2Str(xmippLib.MDL_SHIFT_Y)
-        shiftY2Label    = xmippLib.label2Str(xmippLib.MDL_SHIFT_Y2)
-        shiftYDiff      = xmippLib.label2Str(xmippLib.MDL_SHIFT_Y_DIFF)
-        shiftDiff       = xmippLib.label2Str(xmippLib.MDL_SHIFT_DIFF)
+        shiftXLabel     = emlib.label2Str(emlib.MDL_SHIFT_X)
+        shiftX2Label    = emlib.label2Str(emlib.MDL_SHIFT_X2)
+        shiftXDiff      = emlib.label2Str(emlib.MDL_SHIFT_X_DIFF)
+        shiftYLabel     = emlib.label2Str(emlib.MDL_SHIFT_Y)
+        shiftY2Label    = emlib.label2Str(emlib.MDL_SHIFT_Y2)
+        shiftYDiff      = emlib.label2Str(emlib.MDL_SHIFT_Y_DIFF)
+        shiftDiff       = emlib.label2Str(emlib.MDL_SHIFT_DIFF)
         #timeStr = str(dtBegin)
         operateString   =       shiftXDiff+"="+shiftXLabel+"-"+shiftX2Label
         operateString  += "," + shiftYDiff+"="+shiftYLabel+"-"+shiftY2Label
@@ -363,7 +366,7 @@ class XmippProtProjMatch(ProtRefine3D, ProtClassify3D):
                           +shiftYDiff+"*"+shiftYDiff+");"
         mdIter.operate(operateString)
         iterFile = self._mdDevitationsFn(it)
-        mdIter.write(iterFile,xmippLib.MD_APPEND)
+        mdIter.write(iterFile,emlib.MD_APPEND)
 
         self._setLastIter(it)
 
@@ -381,7 +384,7 @@ class XmippProtProjMatch(ProtRefine3D, ProtClassify3D):
     
     def _fillParticlesFromIter(self, partSet, iteration):
         print("_fillParticlesFromIter")
-        import pyworkflow.em.metadata as md
+        import pwem.emlib.metadata as md
         
         imgSet = self.inputParticles.get()
         imgFn = "all_exp_images@" + self._getFileName('docfileInputAnglesIters', iter=iteration, ref=1)
@@ -394,12 +397,12 @@ class XmippProtProjMatch(ProtRefine3D, ProtClassify3D):
     
     def _createItemMatrix(self, item, row):
         from ...convert import createItemMatrix
-        import pyworkflow.em as em
+        from pwem.constants import ALIGN_PROJ
         
-        createItemMatrix(item, row, align=em.ALIGN_PROJ)
+        createItemMatrix(item, row, align=ALIGN_PROJ)
     
     def _getIterParticles(self, it, clean=False):
-        import pyworkflow.em as em
+        import pwem.objects as em
         """ Return a classes .sqlite file for this iteration.
         If the file doesn't exists, it will be created by 
         converting from this iteration data.star file.

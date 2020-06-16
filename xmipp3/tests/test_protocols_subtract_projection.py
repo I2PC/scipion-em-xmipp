@@ -28,20 +28,19 @@ import random
 import numpy as np
 
 from pyworkflow.tests import BaseTest, setupTestProject
-from pyworkflow.utils import importFromPlugin
-from pyworkflow.em.data import SetOfParticles
-from pyworkflow.em.constants import ALIGN_PROJ
-from pyworkflow.em.data import Acquisition, Particle, Transform
-from pyworkflow.em.data import CTFModel
-from pyworkflow.em.protocol import ProtImportParticles, ProtImportMask, ProtImportVolumes
-from pyworkflow.em.data import  VolumeMask
+from pyworkflow.plugin import Domain
+from pwem.objects import (SetOfParticles, Acquisition, Particle, Transform,
+                          CTFModel, VolumeMask)
+from pwem.constants import ALIGN_PROJ
+from pwem.protocols import ProtImportParticles, ProtImportMask, ProtImportVolumes
 
-import xmippLib
+from pwem import emlib
 from xmipp3 import Plugin
 from xmipp3.convert import writeSetOfParticles
 from xmipp3.protocols import XmippProtSubtractProjection
 
-ProtRelionSubtract = importFromPlugin('relion.protocols', 'ProtRelionSubtract', doRaise=True)
+ProtRelionSubtract = Domain.importFromPlugin('relion.protocols',
+                                             'ProtRelionSubtract', doRaise=True)
 
 
 proj1 = [(0, 0, 53, 55, 0.5), (0, 0, 53, 56, 1.0), (0, 0, 53, 57, 0.5), (0, 0, 53, 63, 0.5), (0, 0, 53, 64, 1.0),
@@ -403,11 +402,11 @@ class TestSubProj(BaseTest):
         self.partSet.write()
 
     def createProjection(self, proj, num, baseName):
-        img = xmippLib.Image()
-        img.setDataType(xmippLib.DT_FLOAT)
+        img = emlib.Image()
+        img.setDataType(emlib.DT_FLOAT)
         img.resize(projSize, projSize)
 
-        #img.initRandom(0., 1., xmippLib.XMIPP_RND_GAUSSIAN)
+        #img.initRandom(0., 1., emlib.XMIPP_RND_GAUSSIAN)
         img.initConstant(0.)
         for coor in proj:
             value = img.getPixel(coor[0], coor[1], coor[2], coor[3])
@@ -415,19 +414,19 @@ class TestSubProj(BaseTest):
         img.write("%d@"%num + baseName)
 
     def createVol(self, volume):
-        vol = xmippLib.Image()
-        vol.setDataType(xmippLib.DT_FLOAT)
+        vol = emlib.Image()
+        vol.setDataType(emlib.DT_FLOAT)
         vol.resize(projSize, projSize, projSize)
 
-        #vol.initRandom(0., .5, xmippLib.XMIPP_RND_UNIFORM)
+        #vol.initRandom(0., .5, emlib.XMIPP_RND_UNIFORM)
         vol.initConstant(0.)
         for coor in volume:
             vol.setPixel(coor[0], coor[1], coor[2], coor[3], coor[4])  # coor4 is the pixel value
         vol.write(self.volBaseFn)
 
     def createMask(self, _maskName):
-        vol = xmippLib.Image()
-        vol.setDataType(xmippLib.DT_FLOAT)
+        vol = emlib.Image()
+        vol.setDataType(emlib.DT_FLOAT)
         vol.resize(projSize, projSize, projSize)
 
         vol.initConstant(0.0)#ROB: not sure this is needed
@@ -443,25 +442,25 @@ class TestSubProj(BaseTest):
     def applyCTF(self, setPartMd):
 
         writeSetOfParticles(self.partSet,setPartMd)
-        md1 = xmippLib.MetaData()
+        md1 = emlib.MetaData()
         md1.setColumnFormat(False)
         idctf = md1.addObject()
         _acquisition = self.partSet.getAcquisition()
         for part in self.partSet:
             baseFnCtf = self.proj.getTmpPath("kk")#self._getTmpPath("ctf_%d.param"%mic)
 
-            md1.setValue(xmippLib.MDL_CTF_SAMPLING_RATE, samplingRate, idctf)
-            md1.setValue(xmippLib.MDL_CTF_VOLTAGE, 200., idctf);
+            md1.setValue(emlib.MDL_CTF_SAMPLING_RATE, samplingRate, idctf)
+            md1.setValue(emlib.MDL_CTF_VOLTAGE, 200., idctf);
             ctf = part.getCTF()
             udefocus = ctf.getDefocusU()
             vdefocus = ctf.getDefocusV()
             angle = ctf.getDefocusAngle()
-            md1.setValue(xmippLib.MDL_CTF_DEFOCUSU, udefocus, idctf);
-            md1.setValue(xmippLib.MDL_CTF_DEFOCUSV, vdefocus, idctf);
-            md1.setValue(xmippLib.MDL_CTF_DEFOCUS_ANGLE, 180.0 * random.random(), idctf);
-            md1.setValue(xmippLib.MDL_CTF_CS, 2., idctf);
-            md1.setValue(xmippLib.MDL_CTF_Q0, 0.07, idctf);
-            md1.setValue(xmippLib.MDL_CTF_K, 1., idctf);
+            md1.setValue(emlib.MDL_CTF_DEFOCUSU, udefocus, idctf);
+            md1.setValue(emlib.MDL_CTF_DEFOCUSV, vdefocus, idctf);
+            md1.setValue(emlib.MDL_CTF_DEFOCUS_ANGLE, 180.0 * random.random(), idctf);
+            md1.setValue(emlib.MDL_CTF_CS, 2., idctf);
+            md1.setValue(emlib.MDL_CTF_Q0, 0.07, idctf);
+            md1.setValue(emlib.MDL_CTF_K, 1., idctf);
 
             md1.write(baseFnCtf)
         ##writeSetOfParticles(self.partSet, setPartMd)

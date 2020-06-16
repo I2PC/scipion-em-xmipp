@@ -27,8 +27,8 @@
 # *
 # **************************************************************************
 
-from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.em.viewers import DataView, ChimeraView
+from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
+from pwem.viewers import ChimeraView
 
 from .viewer import XmippViewer
 from xmipp3.protocols.protocol_volume_strain import XmippProtVolumeStrain
