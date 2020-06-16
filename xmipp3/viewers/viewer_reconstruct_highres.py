@@ -45,6 +45,7 @@ ITER_SELECTION = 1
 
 ANGDIST_2DPLOT = 0
 ANGDIST_CHIMERA = 1
+ANGDIST_HEATMAP = 2
 
 VOLUME_SLICES = 0
 VOLUME_CHIMERA = 1
@@ -75,8 +76,8 @@ Examples:
   
         group = form.addGroup('Particles')
         group.addParam('showOutputParticles', LabelParam, default=False, label='Display output particles')
-        group.addParam('showAngDist', EnumParam, choices=['2D plot', 'chimera'],
-                       display=EnumParam.DISPLAY_HLIST, default=ANGDIST_2DPLOT,
+        group.addParam('showAngDist', EnumParam, choices=['2D plot', 'chimera', 'heatmap'],
+                       display=EnumParam.DISPLAY_HLIST, default=ANGDIST_HEATMAP,
                        label='Display angular distribution',
                        help='*2D plot*: display angular distribution as interative 2D in matplotlib.\n'
                             '*chimera*: display angular distribution using Chimera with red spheres.')
@@ -221,9 +222,9 @@ Examples:
                 if angDist is not None:
                     views.append(angDist)
                         
-        elif self.showAngDist == ANGDIST_2DPLOT:
+        elif self.showAngDist == ANGDIST_2DPLOT or self.showAngDist == ANGDIST_HEATMAP:
             for it in self._iterations:
-                angDist = self._createAngDist2D(it)
+                angDist = self._createAngDist2D(it, heatmap=self.showAngDist == ANGDIST_HEATMAP)
                 if angDist is not None:
                     views.append(angDist)
         return views
@@ -246,7 +247,7 @@ Examples:
             view = ChimeraClientView(join(fnDir,"volumeAvg.mrc"), showProjection=True, angularDistFile=fnAnglesSqLite, spheresDistance=self.spheresScale.get())
         return view
     
-    def _createAngDist2D(self, it):
+    def _createAngDist2D(self, it, heatmap):
         fnDir = self.protocol._getExtraPath("Iter%03d"%it)
         fnAngles = join(fnDir,"angles.xmd")
         view=None
@@ -257,6 +258,10 @@ Examples:
                 from pwem.emlib.metadata import getSize
                 self.createAngDistributionSqlite(fnAnglesSqLite, getSize(fnAngles), itemDataIterator=self._iterAngles(fnAngles))
             view = EmPlotter(x=1, y=1, mainTitle="Iteration %d" % it, windowTitle="Angular distribution")
-            view.plotAngularDistributionFromMd(fnAnglesSqLite, 'iter %d' % it)
+            if heatmap:
+                axis = view.plotAngularDistributionFromMd(fnAnglesSqLite, '', histogram=True)
+                view.getFigure().colorbar(axis)
+            else:
+                view.plotAngularDistributionFromMd(fnAnglesSqLite, '')
         return view
     
