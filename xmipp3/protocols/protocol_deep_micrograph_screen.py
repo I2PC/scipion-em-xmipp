@@ -25,32 +25,25 @@
 # *
 # **************************************************************************
 
-from glob import glob
 import os
-from os.path import exists, basename
 
-import pyworkflow.em.metadata as md
 import pyworkflow.utils as pwutils
-from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
-                                           STATUS_FINISHED, STATUS_NEW)
+from pyworkflow.protocol.constants import (STEPS_PARALLEL, STATUS_NEW)
 import pyworkflow.protocol.params as params
-from pyworkflow.em.protocol import ProtExtractParticles
-from pyworkflow.em.data import Particle
+from pwem.protocols import ProtExtractParticles
 from pyworkflow.object import Set, Pointer
-from pyworkflow.em.constants import RELATION_CTF
 
-from xmipp3 import Plugin
-from xmipp3.base import XmippProtocol, createMetaDataFromPattern
-from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
-                            xmippToLocation, setXmippAttributes, readSetOfCoordinates)
+from xmipp3.base import XmippProtocol
+from xmipp_base import createMetaDataFromPattern
+from xmipp3.convert import (writeMicCoordinates, readSetOfCoordinates)
 from xmipp3.constants import SAME_AS_PICKING, OTHER
-from xmipp3.utils import validateDLtoolkit
 
 
 class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
     """Protocol to remove coordinates in carbon zones or large impurities"""
     _label = 'deep micrograph cleaner'
-    
+    _conda_env= "xmipp_MicCleaner"
+
     def __init__(self, **kwargs):
         ProtExtractParticles.__init__(self, **kwargs)
         self.stepsExecutionMode = STEPS_PARALLEL
@@ -100,20 +93,20 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
                            'will be mapped to the new micrographs and rescaled accordingly.')
 
 
-        form.addParam("threshold", params.FloatParam, default=-1,expertLevel=params.LEVEL_ADVANCED,
+        form.addParam("threshold", params.FloatParam, default=-1,
                       label="Threshold", help="Deep learning goodness score to select/discard coordinates. The bigger the threshold "+
                            "the more coordiantes will be ruled out. Ranges from 0 to 1. Use -1 to skip thresholding. "+
                            "Manual thresholding can be performed after execution through analyze results button. "+
                            "\n0.75 <= Recommended threshold <= 0.9")
 
-        form.addParam("streamingBatchSize", params.IntParam, default=50,
+        form.addParam("streamingBatchSize", params.IntParam, default=-1,
                       label="Batch size", expertLevel=params.LEVEL_ADVANCED,
                       help="This value allows to group several items to be "
                            "processed inside the same protocol step. You can "
                            "use the following values: \n"
                            "*0*    Put in the same step all the items  available.\n "
                            "*>1*   The number of items that will be grouped into "
-                           "a step.")
+                           "a step. -1, automatic decission")
 
         form.addParam("saveMasks", params.BooleanParam, default=False,expertLevel=params.LEVEL_ADVANCED,
                       label="saveMasks", help="Save predicted masks?")
@@ -206,7 +199,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
           args += ' -o %s' % self._getExtraPath('outputCoords')
           args += ' -b %d' % self.getBoxSize()
           args += ' -s 1' #Downsampling is automatically managed by scipion
-          args += ' -d %s' % Plugin.getModel('deepMicrographCleaner', 'defaultModel.keras')
+          args += ' -d %s' % self.getModel('deepMicrographCleaner', 'defaultModel.keras')
 
           if self.threshold.get() > 0:
               args += ' --deepThr %f ' % (1-self.threshold.get())
@@ -223,7 +216,6 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
               args += ' -g -1'
 
           self.runJob('xmipp_deep_micrograph_cleaner', args)
-
 
 
     def _checkNewOutput(self):
@@ -330,13 +322,46 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
 
     #--------------------------- INFO functions --------------------------------
-    def _validate(self):
-        # errors =[]
-        errors = validateDLtoolkit(assertModel=True,
-                                   model=('deepMicrographCleaner', 'defaultModel.keras'))
 
-        if self.streamingBatchSize.get() == 1:
+    def _getStreamingBatchSize(self):
+      self.firstBatch=True
+      if self.streamingBatchSize.get()==-1:
+        if not hasattr(self, "actualBatchSize"):
+          if self.isInStreaming():
+            self.actualBatchSize= 16
+          else:
+            if self.firstBatch:
+              self.firstBatch=False
+              batchSize= 4
+            else:
+              nPickMics = self._getNumPickedMics()
+              self.actualBatchSize= min(50, nPickMics)
+              batchSize= self.actualBatchSize
+      else:
+        batchSize= self.streamingBatchSize.get()
+      return batchSize
+
+    def _getNumPickedMics(self):
+      nPickMics = 0
+      lastId=None
+      for coord in self.inputCoordinates.get():
+        curId=coord.getMicId()
+        if lastId!=curId:
+          lastId=curId
+          nPickMics+=1
+      return nPickMics
+
+    def _validate(self):
+        errors = self.validateDLtoolkit(assertModel=True,
+                                        model=('deepMicrographCleaner', 'defaultModel.keras'))
+
+        batchSize = self.streamingBatchSize.get()
+        if batchSize == 1:
             errors.append('Batch size must be 0 (all at once) or larger than 1.')
+        elif not self.isInStreaming() and batchSize > len(self.inputCoordinates.get().getMicrographs()):
+            errors.append('Batch size (%d) must be <= that the number of micrographs '
+                          '(%d) in static mode. Set it to 0 to use only one batch'
+                          %(batchSize, self._getNumPickedMics()))
 
         return errors
 

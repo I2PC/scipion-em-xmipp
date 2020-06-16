@@ -23,17 +23,14 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-from ..convert import readSetOfClasses
 """
 This module implement the wrappers aroung Xmipp CL2D protocol
 visualization program.
 """
+from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
+from pyworkflow.utils import exists
 
-import glob
-
-from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.em import *
-from pyworkflow.em.viewers import DataView
+from pwem.viewers import DataView
 
 from xmipp3.viewers import XmippViewer
 from xmipp3.protocols.protocol_split_volume import XmippProtSplitvolume

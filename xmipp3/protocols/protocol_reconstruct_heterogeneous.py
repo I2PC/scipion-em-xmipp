@@ -25,25 +25,28 @@
 # **************************************************************************
 
 from glob import glob
+from functools import reduce
 import math
 import numpy as np
 from os.path import join, exists
+import os
 
+from pwem import ALIGN_PROJ
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, \
-    BooleanParam, IntParam, GE, USE_GPU, GPU_LIST
+from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
+                                        BooleanParam, IntParam, GE, USE_GPU,
+                                        GPU_LIST)
 from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile
-from pyworkflow.em.protocol import ProtClassify3D
-from pyworkflow.em.metadata.utils import getFirstRow, getSize
-from pyworkflow.em.convert import ImageHandler
-import pyworkflow.em.metadata as md
-import pyworkflow.em as em
+from pwem.protocols import ProtClassify3D
+from pwem.emlib.metadata import getFirstRow, getSize
+from pwem.emlib.image import ImageHandler
+import pwem.emlib.metadata as md
 
-import xmippLib
-from xmippLib import MetaData, MD_APPEND, MDL_CLASS_COUNT
-from xmipp3.convert import createItemMatrix, setXmippAttributes, \
-    writeSetOfParticles, readSetOfParticles
+from pwem import emlib
+from pwem.emlib import MetaData, MD_APPEND, MDL_CLASS_COUNT
+from xmipp3.convert import (createItemMatrix, setXmippAttributes,
+                            writeSetOfParticles, readSetOfParticles)
 
 
 class XmippProtReconstructHeterogeneous(ProtClassify3D):
@@ -103,7 +106,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                             expertLevel=LEVEL_ADVANCED)
         line.addParam('angularMinTilt', FloatParam, label="Min.", default=0,
                       expertLevel=LEVEL_ADVANCED)
-        line.addParam('angularMaxTilt', FloatParam, label="Max.", default=90,
+        line.addParam('angularMaxTilt', FloatParam, label="Max.", default=180,
                       expertLevel=LEVEL_ADVANCED)
         form.addParam('numberOfReplicates', IntParam,
                       label="Max. Number of Replicates", default=1,
@@ -164,15 +167,15 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
             self._insertFunctionStep('evaluateConvergence', iteration)
 
     def readInfoField(self, fnDir, block, label):
-        mdInfo = xmippLib.MetaData("%s@%s" % (block, join(fnDir, "info.xmd")))
+        mdInfo = emlib.MetaData("%s@%s" % (block, join(fnDir, "info.xmd")))
         return mdInfo.getValue(label, mdInfo.firstObject())
 
     def writeInfoField(self, fnDir, block, label, value):
-        mdInfo = xmippLib.MetaData()
+        mdInfo = emlib.MetaData()
         objId = mdInfo.addObject()
         mdInfo.setValue(label, value, objId)
         mdInfo.write("%s@%s" % (block, join(fnDir, "info.xmd")),
-                     xmippLib.MD_APPEND)
+                     emlib.MD_APPEND)
 
     def convertInputStep(self, inputParticlesId):
         writeSetOfParticles(self.inputParticles.get(), self.imgsFn)
@@ -195,17 +198,17 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
         TsCurrent = max(self.TsOrig, self.targetResolution.get() / 3)
         Xdim = self.inputParticles.get().getDimensions()[0]
-        newXdim = long(round(Xdim * self.TsOrig / TsCurrent))
+        newXdim = int(round(Xdim * self.TsOrig / TsCurrent))
         if newXdim < 40:
-            newXdim = long(40)
+            newXdim = int(40)
             TsCurrent = Xdim * (self.TsOrig / newXdim)
         fnDir = self._getExtraPath()
-        self.writeInfoField(fnDir, "sampling", xmippLib.MDL_SAMPLINGRATE,
+        self.writeInfoField(fnDir, "sampling", emlib.MDL_SAMPLINGRATE,
                             TsCurrent)
-        self.writeInfoField(fnDir, "size", xmippLib.MDL_XSIZE, newXdim)
+        self.writeInfoField(fnDir, "size", emlib.MDL_XSIZE, newXdim)
 
         # Prepare images
-        print "Preparing images to sampling rate=", TsCurrent
+        print("Preparing images to sampling rate=", TsCurrent)
         fnNewParticles = join(fnDir, "imagesResized.stk")
         fnNewMetadata = join(fnDir, "imagesResized.xmd")
         if newXdim != Xdim:
@@ -281,7 +284,6 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                         (
                         fnReferenceVol, self.targetResolution.get(), TsCurrent),
                         numberOfMpi=1)
-            # AJ duda: se filtra dos veces??
             R = self.particleRadius.get()
             if R <= 0:
                 R = self.inputParticles.get().getDimensions()[
@@ -307,16 +309,16 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         makePath(fnDirCurrent)
 
         TsCurrent = self.readInfoField(self._getExtraPath(), "sampling",
-                                       xmippLib.MDL_SAMPLINGRATE)
+                                       emlib.MDL_SAMPLINGRATE)
         newXdim = self.readInfoField(self._getExtraPath(), "size",
-                                     xmippLib.MDL_XSIZE)
+                                     emlib.MDL_XSIZE)
         self.prepareReferences(fnDirPrevious, fnDirCurrent, TsCurrent, newXdim)
 
         # Calculate angular step at this resolution
         angleStep = self.calculateAngStep(newXdim, TsCurrent,
                                           self.targetResolution.get())
         angleStep = max(angleStep, 5.0)
-        self.writeInfoField(fnDirCurrent, "angleStep", xmippLib.MDL_ANGLE_DIFF,
+        self.writeInfoField(fnDirCurrent, "angleStep", emlib.MDL_ANGLE_DIFF,
                             float(angleStep))
 
         # Generate projections
@@ -331,7 +333,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                         numberOfMpi=1)
         self.parseSymList()
         listVolumesToProcess = self._readVolumesToProcess()
-        print("listVolumesToProcess", listVolumesToProcess)
+        #print("listVolumesToProcess", listVolumesToProcess)
         for i in range(1, self.getNumberOfReconstructedVolumes() + 1):
             if (listVolumesToProcess[i - 1] == False):
                 continue
@@ -340,8 +342,8 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
             if not exists(fnLocalStk):
                 # Create defocus groups
                 row = getFirstRow(fnImgsToUse)
-                if row.containsLabel(xmippLib.MDL_CTF_MODEL) or row.containsLabel(
-                        xmippLib.MDL_CTF_DEFOCUSU):
+                if row.containsLabel(emlib.MDL_CTF_MODEL) or row.containsLabel(
+                        emlib.MDL_CTF_DEFOCUSU):
                     self.runJob("xmipp_ctf_group",
                                 "--ctfdat %s -o %s/ctf:stk --pad 1.0 --sampling_rate %f --phase_flipped  --error 0.1 --resol %f" % \
                                 (fnImgsToUse, fnDirCurrent, TsCurrent,
@@ -349,10 +351,10 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                     moveFile("%s/ctf_images.sel" % fnDirCurrent,
                              "%s/ctf_groups.xmd" % fnDirCurrent)
                     cleanPath("%s/ctf_split.doc" % fnDirCurrent)
-                    mdInfo = xmippLib.MetaData(
+                    mdInfo = emlib.MetaData(
                         "numberGroups@%s" % join(fnDirCurrent, "ctfInfo.xmd"))
                     fnCTFs = "%s/ctf_ctf.stk" % fnDirCurrent
-                    numberGroups = mdInfo.getValue(xmippLib.MDL_COUNT,
+                    numberGroups = mdInfo.getValue(emlib.MDL_COUNT,
                                                    mdInfo.firstObject())
                     ctfPresent = True
                 else:
@@ -409,32 +411,48 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                         fnAnglesSignificant = join(fnDirCurrent,
                                                    "angles_iter001_00.xmd")
                         if not self.useGpu.get():
-                            args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d --dontApplyFisher' % \
+
+                            #TODO
+                            #AJ: consider if we can simply leave out this part of the code in case of local alignment
+                            args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d --dontApplyFisher --dontCheckMirrors ' % \
                                    (fnGroup, fnGalleryGroupMd, maxShift,
                                     fnDirCurrent,
                                     self.numberOfReplicates.get() - 1)
                             self.runJob('xmipp_reconstruct_significant', args,
                                         numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
-                        else:  # AJ use gpu
-                            args = '-i_exp %s -i_ref %s --maxShift %d -o %s --keep_best %d' % \
-                                   (fnGroup, fnGalleryGroupMd, maxShift,
-                                    fnAnglesSignificant,
-                                    self.numberOfReplicates.get())
-                            self.runJob('xmipp_cuda_correlation', args,
+                        else:  # To use gpu
+                            count=0
+                            GpuListCuda=''
+                            if self.useQueueForSteps() or self.useQueue():
+                                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                                GpuList = GpuList.split(",")
+                                for elem in GpuList:
+                                    GpuListCuda = GpuListCuda+str(count)+' '
+                                    count+=1
+                            else:
+                                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                                GpuListAux = ''
+                                for elem in self.getGpuList():
+                                    GpuListCuda = GpuListCuda+str(count)+' '
+                                    GpuListAux = GpuListAux+str(elem)+','
+                                    count+=1
+                                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
+                            args = '-i %s -r %s -o %s --keepBestN %d --dev %s ' % \
+                                   (fnGroup, fnGalleryGroupMd, fnAnglesSignificant,
+                                    self.numberOfReplicates.get(), GpuListCuda)
+                            self.runJob('xmipp_cuda_align_significant', args,
                                         numberOfMpi=1)
 
                         if (exists(fnAnglesSignificant) and getSize(
                                 fnAnglesSignificant) > 0):
-                            print("getSize(fnAnglesSignificant)",
-                                  getSize(fnAnglesSignificant))
                             moveFile(fnAnglesSignificant, fnAnglesGroup)
                             cleanPath(
                                 join(fnDirCurrent, "images_iter001_00.xmd"))
                             cleanPath(join(fnDirCurrent,
                                            "images_significant_iter001_00.xmd"))
-                        else:  # AJ que pasa cuando no se asignan imagenes a ese volumen
+                        else:
                             noAsignedGroups += 1
-                            print("noAsignedGroups", noAsignedGroups)
                             if noAsignedGroups == numberGroups:
                                 listVolumesToProcess[i - 1] = False
                                 self._saveVolumesToProcess(listVolumesToProcess)
@@ -514,7 +532,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         fnAnglesAll = join(fnDirCurrent, "anglesAll.xmd")
         mdVolumes = MetaData()
         listVolumesToProcess = self._readVolumesToProcess()
-        print("listVolumesToProcess", listVolumesToProcess)
+        #print("listVolumesToProcess", listVolumesToProcess)
         for i in range(1, self.getNumberOfReconstructedVolumes() + 1):
             if (listVolumesToProcess[i - 1] == False):
                 continue
@@ -526,18 +544,15 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
             else:
                 md = MetaData()
             objId = mdVolumes.addObject()
-            mdVolumes.setValue(xmippLib.MDL_IMAGE, fnReferenceVol, objId)
-            md.write(fnOut, xmippLib.MD_APPEND)
+            mdVolumes.setValue(emlib.MDL_IMAGE, fnReferenceVol, objId)
+            md.write(fnOut, emlib.MD_APPEND)
         fnVols = join(fnDirCurrent, "referenceVolumes.xmd")
         mdVolumes.write(fnVols)
 
         # Classify the images
-        # AJ busca el maximo de correlacion entre todos los volumenes a los que se ha asigando cada particula??
         fnImgsId = self._getExtraPath("imagesId.xmd")
         fnOut = join(fnDirCurrent, "classes.xmd")
-        print("A correr",
-              "xmipp_classify_significant --id %s --angles %s --ref %s -o %s" % (
-              fnImgsId, fnAnglesAll, fnVols, fnOut))
+
 
         self.runJob("xmipp_classify_significant",
                     "--id %s --angles %s --ref %s -o %s --votes %d" % (
@@ -545,8 +560,6 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         # cleanPath(fnVols)
         # cleanPath(fnAnglesAll)
 
-        #AJ testing
-        #copyFile("./correlations.txt", join(fnDirCurrent, "correlations.txt"))
 
 
     def reconstruct(self, iteration):
@@ -555,11 +568,11 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         fnOut = join(fnDirCurrent, "classes.xmd")
         fnRootVol = join(fnDirCurrent, "class_")
         TsCurrent = self.readInfoField(self._getExtraPath(), "sampling",
-                                       xmippLib.MDL_SAMPLINGRATE)
+                                       emlib.MDL_SAMPLINGRATE)
 
         self.parseSymList()
         listVolumesToProcess = self._readVolumesToProcess()
-        print("listVolumesToProcess", listVolumesToProcess)
+        #print("listVolumesToProcess", listVolumesToProcess)
         for i in range(1, self.getNumberOfReconstructedVolumes() + 1):
             if (listVolumesToProcess[i - 1] == False):
                 continue
@@ -576,8 +589,8 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
                 row = getFirstRow(fnAnglesToUse)
                 hasCTF = row.containsLabel(
-                    xmippLib.MDL_CTF_DEFOCUSU) or row.containsLabel(
-                    xmippLib.MDL_CTF_MODEL)
+                    emlib.MDL_CTF_DEFOCUSU) or row.containsLabel(
+                    emlib.MDL_CTF_MODEL)
                 fnCorrectedImagesRoot = join(fnDirCurrent,
                                              "images_corrected%02d" % i)
                 deleteStack = False
@@ -601,11 +614,34 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                     args = "-i %s -o %s --sym %s --weight --thr %d" % (
                         fnAnglesToUse, fnOutVol, self.symList[i - 1],
                         self.numberOfThreads.get())
-                    args += " --device %(GPU)s"
+                    if self.numberOfMpi.get()>1:
+                        N_GPUs = len((self.gpuList.get()).split(','))
+                        args += ' -gpusPerNode %d' % N_GPUs
+                        args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+                    count=0
+                    GpuListCuda=''
+                    if self.useQueueForSteps() or self.useQueue():
+                        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                        GpuList = GpuList.split(",")
+                        for elem in GpuList:
+                            GpuListCuda = GpuListCuda+str(count)+' '
+                            count+=1
+                    else:
+                        GpuListAux = ''
+                        for elem in self.getGpuList():
+                            GpuListCuda = GpuListCuda+str(count)+' '
+                            GpuListAux = GpuListAux+str(elem)+','
+                            count+=1
+                        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                    if self.numberOfMpi.get()==1:
+                        args += " --device %s" %GpuListCuda
                     if self.approx:
                         args += " --fast"
-                    self.runJob("xmipp_cuda_reconstruct_fourier", args,
-                                numberOfMpi=self.fr_gpu_mpi.get())
+                    if self.numberOfMpi.get()>1:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+                    else:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args)
+
                 else:
                     args = "-i %s -o %s --sym %s --weight" % (
                         fnAnglesToUse, fnOutVol, self.symList[i - 1])
@@ -638,7 +674,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
         fnDirCurrent = self._getExtraPath("Iter%03d" % iteration)
         TsCurrent = self.readInfoField(self._getExtraPath(), "sampling",
-                                       xmippLib.MDL_SAMPLINGRATE)
+                                       emlib.MDL_SAMPLINGRATE)
         fnRootVol = join(fnDirCurrent, "class_")
 
         fnMask = ''
@@ -758,7 +794,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                             numberOfMpi=1)
 
         # Align all volumes with respect to center
-        print("listVolumesToProcess", listVolumesToProcess)
+        #print("listVolumesToProcess", listVolumesToProcess)
         for i in range(1, self.getNumberOfReconstructedVolumes() + 1):
             if (listVolumesToProcess[i - 1] == False):
                 continue
@@ -770,7 +806,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
         # Align all volumes with respect to the first one taking care of the mirror
         fnVol1 = join(fnDirCurrent, "volume%02d.mrc" % 1)
-        I1 = xmippLib.Image(fnVol1)
+        I1 = emlib.Image(fnVol1)
         for i in range(2, self.getNumberOfReconstructedVolumes() + 1):
             if (listVolumesToProcess[i - 1] == False):
                 continue
@@ -780,7 +816,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
             self.runJob("xmipp_volume_align",
                         "--i1 %s --i2 %s --frm --apply" % (fnVol1, fnVoliAux1),
                         numberOfMpi=1)
-            Iaux = xmippLib.Image(fnVoliAux1)
+            Iaux = emlib.Image(fnVoliAux1)
             corr1 = I1.correlation(Iaux)
 
             fnVoliAux2 = join(fnDirCurrent, "volume%02d_aux2.mrc" % i)
@@ -790,7 +826,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
             self.runJob("xmipp_volume_align",
                         "--i1 %s --i2 %s --frm --apply" % (fnVol1, fnVoliAux2),
                         numberOfMpi=1)
-            Iaux = xmippLib.Image(fnVoliAux2)
+            Iaux = emlib.Image(fnVoliAux2)
             corr2 = I1.correlation(Iaux)
 
             if corr1 > corr2:
@@ -838,7 +874,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
             sizeClasses = np.zeros((N, N))
             self.parseSymList()
             listVolumesToProcess = self._readVolumesToProcess()
-            print("listVolumesToProcess", listVolumesToProcess)
+            #print("listVolumesToProcess", listVolumesToProcess)
             for i in range(1, N + 1):
                 for j in range(1, N + 1):
                     if (listVolumesToProcess[i - 1] == False or
@@ -902,7 +938,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
             raise Exception("The file %s does not exist" % fnLastImages)
         partSet = self.inputParticles.get()
         self.Ts = self.readInfoField(self._getExtraPath(), "sampling",
-                                     xmippLib.MDL_SAMPLINGRATE)
+                                     emlib.MDL_SAMPLINGRATE)
         self.scaleFactor = self.Ts / partSet.getSamplingRate()
 
         classes3D = self._createSetOfClasses3D(partSet)
@@ -944,18 +980,18 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
     def _updateParticle(self, particle, row):
         particle.setClassId(row.getValue(md.MDL_REF3D))
-        if row.containsLabel(xmippLib.MDL_CONTINUOUS_X):
-            row.setValue(xmippLib.MDL_SHIFT_X, row.getValue(xmippLib.MDL_CONTINUOUS_X) * self.scaleFactor)
-            row.setValue(xmippLib.MDL_SHIFT_Y, row.getValue(xmippLib.MDL_CONTINUOUS_Y) * self.scaleFactor)
-            row.setValue(xmippLib.MDL_FLIP, row.getValue(xmippLib.MDL_CONTINUOUS_FLIP))
+        if row.containsLabel(emlib.MDL_CONTINUOUS_X):
+            row.setValue(emlib.MDL_SHIFT_X, row.getValue(emlib.MDL_CONTINUOUS_X) * self.scaleFactor)
+            row.setValue(emlib.MDL_SHIFT_Y, row.getValue(emlib.MDL_CONTINUOUS_Y) * self.scaleFactor)
+            row.setValue(emlib.MDL_FLIP, row.getValue(emlib.MDL_CONTINUOUS_FLIP))
         else:
-            row.setValue(xmippLib.MDL_SHIFT_X, row.getValue(xmippLib.MDL_SHIFT_X) * self.scaleFactor)
-            row.setValue(xmippLib.MDL_SHIFT_Y, row.getValue(xmippLib.MDL_SHIFT_Y) * self.scaleFactor)
-        setXmippAttributes(particle, row, xmippLib.MDL_SHIFT_X,
-                           xmippLib.MDL_SHIFT_Y, xmippLib.MDL_ANGLE_ROT,
-                           xmippLib.MDL_ANGLE_TILT, xmippLib.MDL_ANGLE_PSI,
-                           xmippLib.MDL_MAXCC, xmippLib.MDL_WEIGHT)
-        createItemMatrix(particle, row, align=em.ALIGN_PROJ)
+            row.setValue(emlib.MDL_SHIFT_X, row.getValue(emlib.MDL_SHIFT_X) * self.scaleFactor)
+            row.setValue(emlib.MDL_SHIFT_Y, row.getValue(emlib.MDL_SHIFT_Y) * self.scaleFactor)
+        setXmippAttributes(particle, row, emlib.MDL_SHIFT_X,
+                           emlib.MDL_SHIFT_Y, emlib.MDL_ANGLE_ROT,
+                           emlib.MDL_ANGLE_TILT, emlib.MDL_ANGLE_PSI,
+                           emlib.MDL_MAXCC, emlib.MDL_WEIGHT)
+        createItemMatrix(particle, row, align=ALIGN_PROJ)
 
     def _updateClass(self, item):
         classId = item.getObjId()

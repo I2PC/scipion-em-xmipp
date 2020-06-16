@@ -24,11 +24,10 @@
 # *
 # **************************************************************************
 
-import unittest, sys
+from os.path import exists
 
-from pyworkflow.em import exists
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
-from pyworkflow.em.protocol import ProtImportVolumes
+from pwem.protocols import ProtImportVolumes
 
 from xmipp3.protocols import XmippProtCropResizeVolumes, XmippProtMonoTomo
 
@@ -64,6 +63,7 @@ class TestMonoTomo(TestMonoTomoBase):
         TestMonoTomoBase.setData()
         cls.protImportHalf1 = cls.runImportVolumes(cls.half1, 3.54)
         cls.protImportHalf2 = cls.runImportVolumes(cls.half2, 3.54)
+
 
     def testMonoTomo(self):
         MonoTomo = self.newProtocol(XmippProtMonoTomo,

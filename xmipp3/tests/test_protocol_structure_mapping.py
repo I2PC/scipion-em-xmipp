@@ -22,9 +22,7 @@
 # ***************************************************************************/
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
-from pyworkflow.em.protocol import ProtImportVolumes
-
-from xmipp3.protocols import XmippProtStructureMapping
+from pwem.protocols import ProtImportVolumes
 
     
 class TestStructureMapping(BaseTest):
@@ -46,8 +44,9 @@ class TestStructureMapping(BaseTest):
     def testStructureMapping(self):
         """ 
             Test protocol structure mapping
-        """             
-        protStrucMap = self.newProtocol(XmippProtStructureMapping,
+        """
+        from continuousflex.protocols import FlexProtStructureMapping
+        protStrucMap = self.newProtocol(FlexProtStructureMapping,
                                 objLabel='structure mapping',
                                 numberOfMpi=1, numberOfThreads=4)
         protStrucMap.inputVolumes.append(self.protImport1.outputVolume)

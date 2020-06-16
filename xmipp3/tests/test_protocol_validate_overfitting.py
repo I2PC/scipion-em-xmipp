@@ -22,7 +22,7 @@
 # ***************************************************************************/
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
-from pyworkflow.em.protocol import ProtImportParticles, ProtImportVolumes
+from pwem.protocols import ProtImportParticles, ProtImportVolumes
 
 from xmipp3.protocols import XmippProtValidateOverfitting
        

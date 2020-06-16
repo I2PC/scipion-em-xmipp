@@ -31,7 +31,8 @@ import os
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_1
 from pyworkflow.utils import getExt
-from pyworkflow.em.protocol import ProtAlignMovies
+
+from pwem.protocols import ProtAlignMovies
 
 from xmipp3.convert import writeMovieMd
 

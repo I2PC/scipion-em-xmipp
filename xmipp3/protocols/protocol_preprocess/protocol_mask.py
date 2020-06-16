@@ -25,9 +25,9 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em import *
-from pyworkflow.utils import *
-from pyworkflow.em.constants import *
+from pwem.emlib.image import ImageHandler
+from pwem.protocols import ProtMaskParticles, ProtMaskVolumes
+from pyworkflow.protocol.params import EnumParam, PointerParam, IntParam
 
 from xmipp3.convert import getImageLocation
 from xmipp3.constants import *
@@ -35,7 +35,8 @@ from .geometrical_mask import XmippGeometricalMask3D, XmippGeometricalMask2D
 from .protocol_process import XmippProcessParticles, XmippProcessVolumes
 from .protocol_create_mask3d import XmippProtCreateMask3D
 
-class XmippProtMask():
+
+class XmippProtMask:
     """ This class implement the common features for applying a mask with Xmipp either SetOfParticles, Volume or SetOfVolumes objects.
     """
     
@@ -176,7 +177,8 @@ class XmippProtMask():
         return errors        
         
         
-class XmippProtMaskParticles(ProtMaskParticles, XmippProcessParticles, XmippProtMask, XmippGeometricalMask2D):
+class XmippProtMaskParticles(ProtMaskParticles, XmippProcessParticles,
+                             XmippProtMask, XmippGeometricalMask2D):
     """ Apply mask to a set of particles """
     _label = 'apply 2d mask'
     

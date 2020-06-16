@@ -26,11 +26,9 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.constants import *
-from pyworkflow.em.wizard import *
-from pyworkflow.em.protocol import ProtImportCoordinates
-
-from .constants import *
+from pwem.constants import *
+from pwem.wizards import *
+from pyworkflow.wizard import Wizard
 from .protocols.protocol_cl2d import IMAGES_PER_CLASS
 
 from .protocols import (
@@ -167,22 +165,6 @@ class XmippParticleConsensusRadiusWizard(Wizard):
     def show(self, form):
         form.setVar('consensusRadius', self._getRadius(form.protocol))
 
-class XmippParticleRemoveDuplicatesRadiusWizard(Wizard):
-    _targets = [(XmippProtPickingRemoveDuplicates, ['consensusRadius'])]
-
-    def _getRadius(self, protocol):
-        if protocol.inputCoordinates.hasValue():
-            boxSize=protocol.inputCoordinates.get().getBoxSize()
-            radius = int(boxSize*0.25)
-            if radius<10:
-                radius=10
-        else:
-            radius = 10
-        return radius
-
-    def show(self, form):
-        form.setVar('consensusRadius', self._getRadius(form.protocol))
-
 #===============================================================================
 # NUMBER OF CLASSES
 #===============================================================================
@@ -232,7 +214,6 @@ class XmippParticleMaskRadiusWizard(ParticleMaskRadiusWizard):
         _value = params['value']
         _label = params['label']
         ParticleMaskRadiusWizard.show(self, form, _value, _label, UNIT_PIXEL)
-
 
 
 class XmippParticleMaskRadiiWizard(ParticlesMaskRadiiWizard):
@@ -513,4 +494,6 @@ class XmippGaussianVolumesWizard(GaussianVolumesWizard):
         _value = params['value']
         _label = params['label']
         GaussianVolumesWizard.show(self, form, _value, _label, UNIT_PIXEL_FOURIER)
+
+
 

@@ -26,21 +26,16 @@
 # **************************************************************************
 
 import os
-from shutil import copy
-from math import floor
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.em.constants import ALIGN_PROJ
+from pyworkflow.protocol.params import PointerParam
 from pyworkflow.utils.path import cleanPath
-from pyworkflow.em.protocol import ProtAnalysis3D
-from pyworkflow.em.data import SetOfClasses2D, Image, SetOfAverages, SetOfParticles, Class2D
-import pyworkflow.em.metadata as md
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
+from pwem.protocols import ProtAnalysis3D
+from pwem.objects import Image
+import pwem.emlib.metadata as md
 
-import xmippLib
-from xmipp3.convert import setXmippAttributes, xmippToLocation, rowToAlignment
+from pwem import emlib
+from xmipp3.convert import setXmippAttributes, xmippToLocation
 
         
 class XmippProtGenerateReprojections(ProtAnalysis3D):
@@ -87,7 +82,7 @@ class XmippProtGenerateReprojections(ProtAnalysis3D):
         imgSet = self.inputSet.get()
         writeSetOfParticles(imgSet, self.imgsFn)
 
-        from pyworkflow.em.convert import ImageHandler
+        from pwem.emlib.image import ImageHandler
         img = ImageHandler()
         fnVol = self._getTmpPath("volume.vol")
         img.convert(self.inputVolume.get(), fnVol)
@@ -177,7 +172,7 @@ class XmippProtGenerateReprojections(ProtAnalysis3D):
 
     def _processRow(self, particle, row):
         def __setXmippImage(label):
-            attr = '_xmipp_' + xmippLib.label2Str(label)
+            attr = '_xmipp_' + emlib.label2Str(label)
             if not hasattr(particle, attr):
                 img = Image()
                 setattr(particle, attr, img)
@@ -186,16 +181,16 @@ class XmippProtGenerateReprojections(ProtAnalysis3D):
                 img = getattr(particle, attr)
             img.setLocation(xmippToLocation(row.getValue(label)))
 
-        particle.setLocation(xmippToLocation(row.getValue(xmippLib.MDL_IMAGE)))
-        #__setXmippImage(xmippLib.MDL_IMAGE)
-        #__setXmippImage(xmippLib.MDL_IMAGE_REF)
+        particle.setLocation(xmippToLocation(row.getValue(emlib.MDL_IMAGE)))
+        #__setXmippImage(emlib.MDL_IMAGE)
+        #__setXmippImage(emlib.MDL_IMAGE_REF)
 
-        setXmippAttributes(particle, row, xmippLib.MDL_IMAGE_ORIGINAL,
-                           xmippLib.MDL_IMAGE_REF)
+        setXmippAttributes(particle, row, emlib.MDL_IMAGE_ORIGINAL,
+                           emlib.MDL_IMAGE_REF)
 
     def _processRow2(self, particle, row):
         def __setXmippImage(label):
-            attr = '_xmipp_' + xmippLib.label2Str(label)
+            attr = '_xmipp_' + emlib.label2Str(label)
             if not hasattr(particle, attr):
                 img = Image()
                 setattr(particle, attr, img)
@@ -205,12 +200,12 @@ class XmippProtGenerateReprojections(ProtAnalysis3D):
             img.setLocation(xmippToLocation(row.getValue(label)))
 
         particle.setLocation(xmippToLocation(row.getValue(
-            xmippLib.MDL_IMAGE_REF)))
-        #__setXmippImage(xmippLib.MDL_IMAGE)
-        #__setXmippImage(xmippLib.MDL_IMAGE_REF)
+            emlib.MDL_IMAGE_REF)))
+        #__setXmippImage(emlib.MDL_IMAGE)
+        #__setXmippImage(emlib.MDL_IMAGE_REF)
 
-        setXmippAttributes(particle, row, xmippLib.MDL_IMAGE_ORIGINAL,
-                           xmippLib.MDL_IMAGE_REF)
+        setXmippAttributes(particle, row, emlib.MDL_IMAGE_ORIGINAL,
+                           emlib.MDL_IMAGE_REF)
 
 
     #--------------------------- INFO functions --------------------------------------------

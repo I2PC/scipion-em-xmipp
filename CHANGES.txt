@@ -1,3 +1,11 @@
+
+## September 30, 2019, Migration to python3 -
+
+- Change the plugin to the new Scipion structure
+- Migrating the code to python3
+
+
+
 ## devel
 
 - Randomize phases also available for images
