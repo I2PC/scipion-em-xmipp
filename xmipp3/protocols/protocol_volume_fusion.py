@@ -26,8 +26,11 @@
 # *
 # **************************************************************************
 
+import sys, shutil
 import numpy as np
-# import pywt
+import mrcfile
+import pywt
+import pywt.data
 from pyworkflow.protocol.params import MultiPointerParam
 from pwem.objects import Volume, Transform
 from pwem.protocols import ProtInitialVolume
@@ -52,17 +55,20 @@ class XmippProtVolFusion(ProtInitialVolume):
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def fusionStep(self):
-        vol1 = self.vols[0]
-        vol2 = self.vols[1]
+        vol1 = self.vols[0].get()
+        vol2 = self.vols[1].get()
+        vol1Fn = vol1.getFileName()
+        outVolData = self.computeVolumeConsensus(self.loadVol(vol1Fn), self.loadVol(vol2.getFileName()))
+        outVolFn = self._getExtraPath("fusion_volume.mrc")
+        self.saveVol(outVolData, outVolFn, vol1Fn)
         outVol = Volume()
-        # outVol = self.computeVolumeConsensus(vol1, vol2)
         outVol.setSamplingRate(vol1.getSamplingRate())
+        outVol.setFileName(self._getExtraPath("fusion_volume.mrc"))
         # origin = Transform()
         # ccp4header = headers.Ccp4Header(vol1.getFileName(), readHeader=True)
         # shifts = ccp4header.getOrigin()
         # origin.setShiftsTuple(shifts)
         # volume.setOrigin(origin)
-        outVol.setFileName(self._getExtraPath("fusion_volume.mrc"))
         self._defineOutputs(outputVolume=outVol)
 
     # --------------------------- INFO functions --------------------------------------------
@@ -71,7 +77,7 @@ class XmippProtVolFusion(ProtInitialVolume):
         if not hasattr(self, 'outputVolume'):
             summary.append("Output volume not ready yet.")
         else:
-            summary.append("Input vol 1: %s" % self.vol1.get().getFileName())
+            summary.append("Input vol 1: %s" % self.vols[0].get().getFileName())
         return summary
 
     def _methods(self):
@@ -79,19 +85,25 @@ class XmippProtVolFusion(ProtInitialVolume):
         if not hasattr(self, 'outputVolume'):
             methods.append("Output volume not ready yet.")
         else:
-            methods.append("Volume %s subtracted from volume %s" % (self.vol1.get().getFileName(), self.vol1.get().getFileName()))
+            methods.append("Volumes %s and %s fusioned" % (self.vols[0].get().getFileName(),
+                                                           self.vols[1].get().getFileName()))
         return methods
 
     # --------------------------- UTLIS functions --------------------------------------------
-    # def computeVolumeConsensus(vol1, vol2, wavelet='sym11'):
-
-        # coeffDict1 = pywt.dwtn(vol1, wavelet)
-        # coeffDict2 = pywt.dwtn(vol2, wavelet)
-
+    def computeVolumeConsensus(self, vol1, vol2, wavelet='sym11'):
+        coeffDict1 = pywt.dwtn(vol1, wavelet)
+        coeffDict2 = pywt.dwtn(vol2, wavelet)
         newDict={}
-        # for key in coeffDict1:
-        #      newDict[key]= np.where( np.abs(coeffDict1[key])>np.abs(coeffDict2[key]), coeffDict1[key], coeffDict2[key])
+        for key in coeffDict1:
+            newDict[key] = np.where(np.abs(coeffDict1[key]) > np.abs(coeffDict2[key]), coeffDict1[key], coeffDict2[key])
+        consensus = pywt.idwtn(newDict, wavelet)
+        return consensus
 
-        # consensus = pywt.idwtn(newDict, wavelet)
-        # return consensus
+    def saveVol(self, data, fname, fnameToCopyHeader):
+        shutil.copyfile(fnameToCopyHeader, fname)
+        with mrcfile.open(fname, "r+", permissive=True) as f:
+            f.data[:] = data
 
+    def loadVol(self, fname):
+        with mrcfile.open(fname, permissive=True) as f:
+            return f.data.astype(np.float32)

@@ -3,3 +3,5 @@ joblib
 peppercorn
 plotter
 scons
+PyWavelets
+mrcfile
