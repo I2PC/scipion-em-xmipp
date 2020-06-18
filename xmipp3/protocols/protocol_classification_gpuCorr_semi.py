@@ -172,7 +172,6 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
         self._params = {'imgsRef': self.imgsRef,
                         'imgsExp': inputImgs,
                         'outputFile': outImgs,
-                        'keepBest': self.keepBest.get(),
                         'maxshift': self.maximumShift,
                         'outputClassesFile': clasesOut,
                         'device': GpuListCuda,
@@ -255,9 +254,9 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
         refImage = self.inputRefs.get()
         [x1, y1, z1] = refImage.getDimensions()
         [x2, y2, z2] = self.inputParticles.get().getDim()
-        if x1 != x2 or y1 != y2 or z1 != z2:
-            errors.append('The input images and the reference images '
-                          'have different sizes')
+        if x1 != x2 or y1 != y2:
+            errors.append('The input images (%s, %s) and the reference images (%s, %s) '
+                          'have different sizes' % (x1, y1, x2, y2))
         return errors
 
     def _summary(self):

@@ -33,7 +33,7 @@ from xmipp3.protocols import XmippProtPreprocessMicrographs
 from xmipp3.protocols.protocol_extract_particles import *
 from xmipp3.protocols.protocol_classification_gpuCorr_full import *
 
-ProtCTFFind = Domain.importFromPlugin('grigoriefflab.protocols', 'ProtCTFFind',
+ProtCTFFind = Domain.importFromPlugin('cistem.protocols', 'CistemProtCTFFind',
                                       doRaise=True)
 
 SparxGaussianProtPicking = Domain.importFromPlugin('eman2.protocols',
@@ -85,9 +85,9 @@ class TestGpuCorrFullStreaming(BaseTest):
     def calculateCtf(self, inputMics):
         protCTF = ProtCTFFind(useCftfind4=True)
         protCTF.inputMicrographs.set(inputMics)
-        protCTF.ctfDownFactor.set(1.0)
-        protCTF.lowRes.set(0.05)
-        protCTF.highRes.set(0.5)
+        # Gone in new version: protCTF.ctfDownFactor.set(1.0)
+        protCTF.lowRes.set(44)
+        protCTF.highRes.set(15)
         self.proj.launchProtocol(protCTF, wait=False)
 
         return protCTF

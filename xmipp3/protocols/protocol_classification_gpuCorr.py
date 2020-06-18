@@ -798,11 +798,11 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                 errors.append('The number of classes must be equal or greater'
                               ' than the number of references')
             if self.referenceImages.hasValue():
-                [x1, y1, z1] = self.referenceImages.get().getDimensions()
-                [x2, y2, z2] = self.inputParticles.get().getDim()
-                if x1 != x2 or y1 != y2 or z1 != z2:
-                    errors.append('The input images and the reference images '
-                                  'have different sizes')
+                [x1, y1, _] = self.referenceImages.get().getDimensions()
+                [x2, y2, _] = self.inputParticles.get().getDim()
+                if x1 != x2 or y1 != y2:
+                    errors.append('The input images (%s, %s) and the reference images (%s, %s) '
+                                  'have different sizes' % (x2, y2, x1, y1))
             else:
                 errors.append("Please, enter the reference images")
         return errors
