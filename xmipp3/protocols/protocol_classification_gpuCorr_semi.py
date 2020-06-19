@@ -416,7 +416,7 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
 
                     outputClasses.update(newClass)
 
-            for imgRow in iterRows(mdImages, sortByLabel=md.MDL_REF):
+            for imgRow in md.iterRows(mdImages, sortByLabel=md.MDL_REF):
                 #Just in case of having repeated ids, this must not happen
                 #self.lastId+=1
                 imgClassId = imgRow.getValue(md.MDL_REF)
