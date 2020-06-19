@@ -29,7 +29,7 @@ from xmipp3.protocols.protocol_extract_particles import *
 from xmipp3.protocols.protocol_cl2d import *
 from xmipp3.protocols.protocol_center_particles import *
 
-ProtCTFFind = Domain.importFromPlugin('grigoriefflab.protocols', 'ProtCTFFind',
+ProtCTFFind = Domain.importFromPlugin('cistem.protocols', 'CistemProtCTFFind',
                                       doRaise=True)
 SparxGaussianProtPicking = Domain.importFromPlugin('eman2.protocols',
                                                    'SparxGaussianProtPicking',
@@ -69,11 +69,8 @@ class TestCenterParticles(BaseTest):
 
 
     def calculateCtf(self, inputMics):
-        protCTF = ProtCTFFind(useCftfind4=True)
+        protCTF = ProtCTFFind()
         protCTF.inputMicrographs.set(inputMics)
-        protCTF.ctfDownFactor.set(1.0)
-        protCTF.lowRes.set(0.05)
-        protCTF.highRes.set(0.5)
         self.launchProtocol(protCTF)
 
         return protCTF
