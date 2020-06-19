@@ -195,7 +195,9 @@ def insertAngularProjectLibraryStep(self, iterN, refN, **kwargs):
               }
 
     print("%s %s" % (self.maxChangeInAngles, type(self.maxChangeInAngles)))
-    if int(self.maxChangeInAngles.get()) < 181:
+    maxChangeInAngle = self.maxChangeInAngles.get().split(' ')[iterN - 1]
+    if int(maxChangeInAngle) < 181:
+        params['maxChangeInAngles'] = maxChangeInAngle
         args += ' --near_exp_data --angular_distance %(maxChangeInAngles)s'
     else:
         args += ' --angular_distance -1'
