@@ -25,7 +25,7 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
+import json
 import subprocess
 from datetime import datetime
 
@@ -57,11 +57,16 @@ class Plugin(pwem.Plugin):
         """ Create the needed environment for Xmipp programs. """
         environ = pwutils.Environ(os.environ)
         pos = pwutils.Environ.BEGIN if xmippFirst else pwutils.Environ.END
+
+        if os.path.isfile(getXmippPath('xmippEnv.json')):
+            with open(getXmippPath('xmippEnv.json'), 'r') as f:
+                compilationEnv = json.load(f)
+            environ.update(compilationEnv)
+
         environ.update({
             'PATH': getXmippPath('bin'),
             'LD_LIBRARY_PATH': getXmippPath('lib'),
-            'PYTHONPATH': getXmippPath('pylib')  # FIXME: Only pylib should be enough
-                          # +":"+getXmippPath(os.path.join('pylib', 'xmippPyModules'))
+            'PYTHONPATH': getXmippPath('pylib')
                              }, position=pos)
         environ['XMIPP_HOME'] = getXmippPath()
 
@@ -73,7 +78,7 @@ class Plugin(pwem.Plugin):
             environ.update({
                 'PATH': os.environ.get('CUDA_BIN', ''),
                 'LD_LIBRARY_PATH': os.environ.get('NVCC_LIBDIR', '')
-            }, position=pos)
+            }, position=pwutils.Environ.END)
 
         return environ
 
