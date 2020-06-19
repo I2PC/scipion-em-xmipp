@@ -209,7 +209,7 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
         fractionCounter = 0
         maxNumberOfParticles = 0.5 * self.inputParticles.get().getSize()
         for number in numberOfParticles:
-            if number <= numberOfParticles: #AJ before maxNumberOfParticles
+            if number <= maxNumberOfParticles: #AJ before maxNumberOfParticles
                 for iteration in range(0, self.numberOfIterations.get()):
                     self._insertFunctionStep('reconstructionStep', number,
                                              fractionCounter, iteration,
