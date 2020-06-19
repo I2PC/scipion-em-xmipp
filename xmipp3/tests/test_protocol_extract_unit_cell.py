@@ -31,8 +31,10 @@ import math
 import os
 from tempfile import mkstemp
 
+from pwem.emlib.image import ImageHandler
+from pwem import Domain
 from pwem.objects import Transform
-from pwem.convert import Ccp4Header, ImageHandler
+from pwem.convert import Ccp4Header
 from pwem.protocols import ProtImportVolumes
 from pwem.convert.symmetry import Icosahedron
 from pyworkflow.tests import BaseTest, setupTestProject
@@ -464,9 +466,12 @@ class TestProtModelBuilding(BaseTest):
 
     # general function to extract the unit cell
     def extractunitCell(self, sym, offset=0, cropZ=False):
-        from continuousflex.protocols import FlexProtConvertToPseudoAtoms
-        from continuousflex.protocols.pdb.protocol_pseudoatoms_base import NMA_MASK_THRE
-
+        FlexProtConvertToPseudoAtoms = Domain.importFromPlugin("continuousflex.protocols",
+                                                               "FlexProtConvertToPseudoAtoms",
+                                                                doRaise=True)
+        NMA_MASK_THRE = Domain.importFromPlugin("continuousflex.protocols.pdb.protocol_pseudoatoms_base",
+                                                "NMA_MASK_THRE",
+                                                doRaise=True)
         """ extract unit cell from icosahedral phantom
             using xmipp_i2 symmetry
         """
