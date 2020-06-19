@@ -416,11 +416,11 @@ class TestXmippDeepMicrographsCleaner(BaseTest):
       from xmipp3 import Plugin
       import subprocess
       xmippBinPath= Plugin.getHome("bin")
-      scipionPython= subprocess.check_output(["which", "python"]).strip()
-      scipionPath= (os.path.sep).join( scipionPython.split(os.path.sep)[:-3] )
-      cmd= [ os.path.join(scipionPath,"scipion"), "python", os.path.join(xmippBinPath,"xmipp_deep_micrograph_cleaner"), "-h" ]
+      scipionPython= subprocess.check_output(["which", "python"]).strip().decode("utf8")
+      scipionPath= (os.path.sep).join(scipionPython.split(os.path.sep)[:-3])
+      cmd= [os.path.join(scipionPath, "scipion3"), "python", os.path.join(xmippBinPath,"xmipp_deep_micrograph_cleaner"), "-h" ]
       print(" ".join(cmd))
-      subprocess.check_call( cmd, env=Plugin.getEnviron() )
+      subprocess.check_call(cmd, env=Plugin.getEnviron())
 
     def test_noThreshold(self):
         print("Run cleanMics no thr")
