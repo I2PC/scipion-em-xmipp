@@ -100,7 +100,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                       expertLevel=const.LEVEL_ADVANCED,)
         form.addParam('useCL2D', params.BooleanParam, default=True,
                       label='Use CL2D',
-                      help='If you set to *Yes*, you will use CL2D (CPU) '
+                      help='If you set to *No*, you will use Cuda Correlation (GPU) '
                            'to make the split process',
                       expertLevel=const.LEVEL_ADVANCED,)
         form.addParallelSection(threads=0, mpi=8)
@@ -381,13 +381,6 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
             self.runJob("xmipp_metadata_utilities", args % self._params,
                         numberOfMpi=1)
 
-            if not self.useCL2D:
-                metadataRef = md.MetaData(refSet)
-                if metadataRef.containsLabel(md.MDL_REF) is False:
-                    args = ('-i %(outputMd)s --fill ref lineal 1 1 -o %(outputMd)s')
-                    self.runJob("xmipp_metadata_utilities", args % self._params,
-                                numberOfMpi=1)
-
         # Fourth step: calling program xmipp_cuda_correlation
         count = 0
         GpuListCuda = ''
@@ -398,7 +391,6 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                 GpuListCuda = GpuListCuda + str(count) + ' '
                 count += 1
         else:
-            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
             GpuListAux = ''
             for elem in self.getGpuList():
                 GpuListCuda = GpuListCuda + str(count) + ' '
@@ -416,7 +408,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                             'keepBest': self.keepBest.get(),
                             'maxshift': self.maximumShift,
                             'outputClassesFile': filename,
-                            'device': GpuListCuda,
+                            'device': int(GpuListCuda[0]),
                             }
         else:
             filename = 'general_level%03d' % level + '_classes.xmd'
@@ -429,15 +421,17 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                             'keepBest': self.keepBest.get(),
                             'maxshift': self.maximumShift,
                             'outputClassesFile': filename,
-                            'device': GpuListCuda,
+                            'device': int(GpuListCuda[0]),
                             'outputClassesFileNoExt': 'general_level%03d' % level + '_classes',
                             }
         Nrefs = getSize(refSet)
         if Nrefs>2:
-            args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \
-                   '--keepBestN 1 --oUpdatedRefs %(outputClassesFileNoExt)s ' \
-                   '--odir %(tmpDir)s --dev %(device)s'
-            self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
+            args = '-i_ref %(imgsRef)s -i_exp %(imgsExp)s -o %(outputFile)s ' \
+                   '--odir %(tmpDir)s --keep_best %(keepBest)d ' \
+                   '--maxShift %(maxshift)d --classify %(outputClassesFile)s ' \
+                   '--simplifiedMd --device %(device)d '
+            self.runJob("xmipp_cuda_correlation", args % self._params,
+                        numberOfMpi=1)
         else:
             self._params['Nrefs'] = Nrefs
             self._params['cl2dDir'] = self._getExtraPath(join('level%03d' % level))
@@ -454,10 +448,10 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
             else:
                 if not exists(self._getExtraPath(join('level%03d' % level, "level_00"))):
                     mkdir(self._getExtraPath(join('level%03d' % level, "level_00")))
-                args = '-i %(imgsExp)s -r %(imgsRef)s -o images.xmd ' \
-                      '--keepBestN 1 --oUpdatedRefs class_classes ' \
-                      '--odir %(cl2dDirNew)s --dev %(device)s'
-                self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
+                args = '-i_exp %(imgsExp)s -i_ref %(imgsRef)s -o images.xmd ' \
+                      '--keep_best %(keepBest)d --classify class_classes.xmd ' \
+                      '--odir %(cl2dDirNew)s --simplifiedMd --device %(device)d'
+                self.runJob("xmipp_cuda_correlation", args % self._params, numberOfMpi=1)
                 copy(self._getExtraPath(join('level%03d' % level,
                                              "level_00",
                                              "images.xmd")),

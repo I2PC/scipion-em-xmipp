@@ -121,7 +121,7 @@ class TestGpuCorrClassifier(BaseTest):
 
     def runClassify(self, inputParts):
         numClasses = int(inputParts.getSize()/1000)
-        if numClasses<2:
+        if numClasses<=2:
             numClasses=4
         protClassify = self.newProtocol(XmippProtGpuCrrCL2D,
                                         useReferenceImages=False,
@@ -133,7 +133,7 @@ class TestGpuCorrClassifier(BaseTest):
 
     def runClassify2(self, inputParts, inputRefs):
         numClasses = int(inputParts.getSize()/1000)
-        if numClasses<inputRefs.getSize():
+        if numClasses<=inputRefs.getSize():
             numClasses=inputRefs.getSize()
         protClassify = self.newProtocol(XmippProtGpuCrrCL2D,
                                         useReferenceImages=True,
@@ -152,6 +152,19 @@ class TestGpuCorrClassifier(BaseTest):
         protClassify.inputParticles.set(inputParts)
         protClassify.referenceImages.set(inputRefs)
         protClassify.useAttraction.set(False)
+        self.launchProtocol(protClassify)
+
+        return protClassify, numClasses
+
+    def runClassify4(self, inputParts):
+        numClasses = int(inputParts.getSize()/1000)
+        if numClasses<=2:
+            numClasses=4
+        protClassify = self.newProtocol(XmippProtGpuCrrCL2D,
+                                        useReferenceImages=False,
+                                        numberOfClasses=numClasses,
+                                        useCL2D=False)
+        protClassify.inputParticles.set(inputParts)
         self.launchProtocol(protClassify)
 
         return protClassify, numClasses
@@ -206,3 +219,11 @@ class TestGpuCorrClassifier(BaseTest):
                         'GL2D (3) has no outputClasses.')
         self.assertEqual(protClassify3.outputClasses.getSize(), numClasses3,
                          'GL2D (3) returned a wrong number of classes.')
+
+        protClassify4, numClasses4 = self.runClassify4(
+            protExtract.outputParticles)
+        self.assertFalse(protClassify4.isFailed(), 'GL2D (3) has failed.')
+        self.assertTrue(protClassify4.hasAttribute('outputClasses'),
+                        'GL2D (4) has no outputClasses.')
+        self.assertEqual(protClassify4.outputClasses.getSize(), numClasses4,
+                         'GL2D (4) returned a wrong number of classes.')
