@@ -1267,7 +1267,7 @@ class TestXmippCorrectWiener2D(TestXmippBase):
     
     def test_CorrectWiener(self):
         prot1 = self.newProtocol(emprot.ProtImportParticles,
-                                 importFrom=emprot.ProtImportCTF.IMPORT_FROM_XMIPP3,
+                                 importFrom=emprot.ProtImportParticles.IMPORT_FROM_XMIPP3,
                                  mdFile=self.dataset.getFile('particles/sphere_128.xmd'),
                                  magnification=10000,
                                  samplingRate=1,
