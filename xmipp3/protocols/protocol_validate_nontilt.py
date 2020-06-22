@@ -213,7 +213,7 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
         else:
             args = '-i %(inputParts)s -r %(gallery)s -o %(output)s --keepBestN %(orientations)f '
             args += '--odir %(outDir)s --dev %(device)s '
-            self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+            self.runJob('xmipp_cuda_align_significant', args % params, numberOfMpi=1)
 
     def projectionMatchingStep(self, volId):
         params = {"inputParts": self._getMdParticles(),
