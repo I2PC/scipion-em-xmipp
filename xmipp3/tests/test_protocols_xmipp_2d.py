@@ -1149,7 +1149,8 @@ class TestXmippCompareReprojections(TestXmippBase):
                                             outerRadius=50,
                                             angSamplingRateDeg=5,
                                             symmetry="d6",
-                                            numberOfMpi=4)
+                                            numberOfMpi=4,
+                                            useGpu=False)
         cls.protProjMatch.inputParticles.set(cls.protImportAvgs.outputAverages)
         cls.protProjMatch.input3DReferences.set(cls.protImportVol.outputVolume)
         cls.launchProtocol(cls.protProjMatch)
@@ -1267,7 +1268,7 @@ class TestXmippCorrectWiener2D(TestXmippBase):
     
     def test_CorrectWiener(self):
         prot1 = self.newProtocol(emprot.ProtImportParticles,
-                                 importFrom=emprot.ProtImportCTF.IMPORT_FROM_XMIPP3,
+                                 importFrom=emprot.ProtImportParticles.IMPORT_FROM_XMIPP3,
                                  mdFile=self.dataset.getFile('particles/sphere_128.xmd'),
                                  magnification=10000,
                                  samplingRate=1,

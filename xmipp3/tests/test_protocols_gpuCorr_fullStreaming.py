@@ -33,7 +33,7 @@ from xmipp3.protocols import XmippProtPreprocessMicrographs
 from xmipp3.protocols.protocol_extract_particles import *
 from xmipp3.protocols.protocol_classification_gpuCorr_full import *
 
-ProtCTFFind = Domain.importFromPlugin('grigoriefflab.protocols', 'ProtCTFFind',
+ProtCTFFind = Domain.importFromPlugin('cistem.protocols', 'CistemProtCTFFind',
                                       doRaise=True)
 
 SparxGaussianProtPicking = Domain.importFromPlugin('eman2.protocols',
@@ -85,9 +85,9 @@ class TestGpuCorrFullStreaming(BaseTest):
     def calculateCtf(self, inputMics):
         protCTF = ProtCTFFind(useCftfind4=True)
         protCTF.inputMicrographs.set(inputMics)
-        protCTF.ctfDownFactor.set(1.0)
-        protCTF.lowRes.set(0.05)
-        protCTF.highRes.set(0.5)
+        # Gone in new version: protCTF.ctfDownFactor.set(1.0)
+        protCTF.lowRes.set(44)
+        protCTF.highRes.set(15)
         self.proj.launchProtocol(protCTF, wait=False)
 
         return protCTF
@@ -116,6 +116,14 @@ class TestGpuCorrFullStreaming(BaseTest):
 
     def runClassify(self, inputParts):
         protClassify = self.newProtocol(XmippProtStrGpuCrrCL2D)
+
+        protClassify.inputParticles.set(inputParts)
+        self.proj.launchProtocol(protClassify, wait=False)
+
+        return protClassify
+
+    def runClassify2(self, inputParts):
+        protClassify = self.newProtocol(XmippProtStrGpuCrrCL2D, useCL2D=False)
 
         protClassify.inputParticles.set(inputParts)
         self.proj.launchProtocol(protClassify, wait=False)
@@ -207,6 +215,7 @@ class TestGpuCorrFullStreaming(BaseTest):
             time.sleep(2)
             protClassify = self._updateProtocol(protClassify)
             self.assertFalse(protClassify.isFailed(), 'GL2D-streaming has failed.')
+
             if counter > 100:
                 self.assertTrue(protClassify.hasAttribute('outputAverages'),
                                 'GL2D-streaming has no outputAverages in more than 3min.')
@@ -215,5 +224,23 @@ class TestGpuCorrFullStreaming(BaseTest):
         self.assertTrue(protClassify.hasAttribute('outputAverages'),
                         'GL2D-streaming has no outputAverages at the end.')
         self.assertTrue(protClassify.hasAttribute('outputClasses'),
+                        'GL2D-streaming has no outputClasses at the end.')
+
+        protClassify2 = self.runClassify2(protExtract.outputParticles)
+        counter = 1
+        while protClassify2.getStatus() != STATUS_FINISHED:
+            time.sleep(2)
+            protClassify2 = self._updateProtocol(protClassify2)
+            self.assertFalse(protClassify2.isFailed(), 'GL2D-streaming has failed.')
+
+            if counter > 100:
+                self.assertTrue(protClassify2.hasAttribute('outputAverages'),
+                                'GL2D-streaming has no outputAverages in more than 3min.')
+            counter += 1
+
+        self.assertFalse(protClassify2.isFailed(), 'GL2D-streaming has failed.')
+        self.assertTrue(protClassify2.hasAttribute('outputAverages'),
+                        'GL2D-streaming has no outputAverages at the end.')
+        self.assertTrue(protClassify2.hasAttribute('outputClasses'),
                         'GL2D-streaming has no outputClasses at the end.')
 
