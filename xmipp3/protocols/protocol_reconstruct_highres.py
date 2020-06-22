@@ -59,7 +59,7 @@ def getPreviousQuality(img, imgRow):
     if hasattr(img,"_xmipp_cost"):
         imgRow.setValue(md.MDL_COST,img._xmipp_cost.get())
     if hasattr(img,"_xmipp_maxCC"):
-        imgRow.setValue(md.MDL_MAXCC,img._xmipp_cost.get())
+        imgRow.setValue(md.MDL_MAXCC,img._xmipp_maxCC.get())
 
 class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
     """This is a 3D refinement protocol whose main input is a volume and a set of particles.
