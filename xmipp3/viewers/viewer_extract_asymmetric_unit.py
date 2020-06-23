@@ -35,7 +35,7 @@ from pwem.emlib.image import ImageHandler
 from pwem.objects import (SetOfVolumes)
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
 from pwem.viewers import Chimera, ChimeraView, EmProtocolViewer
-from xmipp3.protocols.protocol_extract_unit_cell import XmippProtExtractUnit
+from xmipp3.protocols.protocol_extract_asymmetric_unit import XmippProtExtractUnit
 from xmipp3.constants import (XMIPP_TO_SCIPION, XMIPP_I222)
 
 VOLUME_SLICES = 1

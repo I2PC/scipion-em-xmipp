@@ -32,7 +32,8 @@ import os
 from tempfile import mkstemp
 
 from pwem.objects import Transform
-from pwem.convert import Ccp4Header, ImageHandler
+from pwem.convert import Ccp4Header
+from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtImportVolumes
 from pwem.convert.symmetry import Icosahedron
 from pyworkflow.tests import BaseTest, setupTestProject
@@ -226,6 +227,29 @@ def generate_tetrahedral(mode, f, ):
                         else:
                             f.write('.sphere %.3f %.3f %.3f .05\n' %
                                     (edge[0], edge[1], edge[2]))
+    barycentresPlus = []
+    for i in range(len(vertices)):
+        for j in range(len(vertices)):
+            for k in range(len(vertices)):
+                if i != j != k:
+                    x = (1/3) * \
+                        (vertices[i][0] + vertices[j][0] + vertices[k][0])
+                    y = (1/3) * \
+                        (vertices[i][1] + vertices[j][1] + vertices[k][1])
+                    z = (1/3) * \
+                        (vertices[i][2] + vertices[j][2] + vertices[k][2])
+                    point = [x, y, z]
+                    if (x, y, z) != (0., 0., 0.):
+                        if point not in barycentresPlus:
+                            barycentresPlus.append(point)
+                            if mode == 'xmipp':
+                                f.write(
+                                    "sph  + 1. %.3f %.3f %.3f .05\n" %
+                                    (point[0], point[1], point[2]))
+                            else:
+                                f.write(
+                                    '.sphere %.3f %.3f %.3f .05\n' %
+                                    (point[0], point[1], point[2]))
 
 # function to write the coordinates of a phantom (3D map) for octahedral
 # symmetry in a text file
@@ -269,7 +293,7 @@ def generate_octahedral(mode, f, ):
                         else:
                             f.write('.sphere %.3f %.3f %.3f .10\n' %
                                     (edge[0], edge[1], edge[2]))
-    baricentres = [[(1./3.)*rmax, (1./3.)*rmax, (1./3.)*rmax],
+    barycentres = [[(1./3.)*rmax, (1./3.)*rmax, (1./3.)*rmax],
                    [(1./3.)*rmax, (1./3.)*rmax, (-1./3.)*rmax],
                    [(1./3.)*rmax, (-1./3.)*rmax, (1./3.)*rmax],
                    [(1./3.)*rmax, (-1./3.)*rmax, (-1./3.)*rmax],
@@ -277,13 +301,13 @@ def generate_octahedral(mode, f, ):
                    [(-1./3.)*rmax, (1./3.)*rmax, (-1./3.)*rmax],
                    [(-1./3.)*rmax, (-1./3.)*rmax, (1./3.)*rmax],
                    [(-1./3.)*rmax, (-1./3.)*rmax, (-1./3.)*rmax]]
-    for baricentre in baricentres:
+    for barycentre in barycentres:
         if mode == 'xmipp':
             f.write("sph  + 1. %.3f %.3f %.3f .05\n" %
-                    (baricentre[0], baricentre[1], baricentre[2]))
+                    (barycentre[0], barycentre[1], barycentre[2]))
         else:
             f.write('.sphere %.3f %.3f %.3f .05\n' %
-                    (baricentre[0], baricentre[1], baricentre[2]))
+                    (barycentre[0], barycentre[1], barycentre[2]))
 
 # general function to generate the coordinates files for phantoms (3D map)
 # for every symmetry
@@ -362,6 +386,8 @@ class TestProtModelBuilding(BaseTest):
         self.filename[XMIPP_CYCLIC] = generate(
             SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_CYCLIC]][:1]+str(self.symOrder),
             'xmipp', XMIPP_SYM_NAME[XMIPP_CYCLIC][:1]+str(self.symOrder))
+        // dimensions of the output volume
+        // due to rounding the  actual size may be slighly greater
         self.box[XMIPP_CYCLIC] = (50, 45, 81)
         self.extractunitCell(XMIPP_CYCLIC)
 
@@ -415,7 +441,7 @@ class TestProtModelBuilding(BaseTest):
         self.filename[XMIPP_TETRAHEDRAL] = generate(
             SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_TETRAHEDRAL]],
             'xmipp', XMIPP_SYM_NAME[XMIPP_TETRAHEDRAL])
-        self.box[XMIPP_TETRAHEDRAL] = (80, 140, 181)
+        self.box[XMIPP_TETRAHEDRAL] = (43, 75, 190)
         self.extractunitCell(XMIPP_TETRAHEDRAL)
 
     # function to extract the unit cell of octahedral symmetry
