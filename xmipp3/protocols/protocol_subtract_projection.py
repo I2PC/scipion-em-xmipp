@@ -88,6 +88,8 @@ class XmippProtSubtractProjection(ProtOperateParticles):
         numberOfThreads = self.numberOfThreads.get()-1
         if numberOfThreads == 0:
             numberOfThreads = 1
+        import time
+        time.sleep(15)
         partSet = self.inputParticles.get()
         nPart = len(partSet)
         numberOfThreads = min(numberOfThreads, nPart)
@@ -102,7 +104,7 @@ class XmippProtSubtractProjection(ProtOperateParticles):
         # Create xmipp metadata
         # partSet
         #writeSetOfParticles(partSet, mdFn, blockName="images")
-        groupSize = nPart/numberOfThreads
+        groupSize = int(nPart/numberOfThreads)
         groupRemainder = nPart%numberOfThreads
 
         depsOutPut=[]
@@ -137,7 +139,7 @@ class XmippProtSubtractProjection(ProtOperateParticles):
         partSet = self.inputParticles.get()
         nPart = len(partSet)
         numberOfTasks = min(nPart, max(self.numberOfThreads.get()-1, 1))
-        taskSize = nPart / numberOfTasks
+        taskSize = int(nPart / numberOfTasks)
         md = emlib.MetaData()
 
         # Convert angles and shifts from volume system of coordinates to
