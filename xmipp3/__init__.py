@@ -26,6 +26,7 @@
 # *
 # **************************************************************************
 
+import json
 import subprocess
 from datetime import datetime
 
@@ -58,6 +59,11 @@ class Plugin(pwem.Plugin):
         environ = pwutils.Environ(os.environ)
         pos = pwutils.Environ.BEGIN if xmippFirst else pwutils.Environ.END
 
+        environ.update({
+            'PATH': pwem.Config.CUDA_BIN,
+            'LD_LIBRARY_PATH': pwem.Config.CUDA_LIB
+        }, position=pwutils.Environ.END)
+
         if os.path.isfile(getXmippPath('xmippEnv.json')):
             with open(getXmippPath('xmippEnv.json'), 'r') as f:
                 compilationEnv = json.load(f)
@@ -72,12 +78,6 @@ class Plugin(pwem.Plugin):
 
         # Add path to python lib folder
         environ.addLibrary(Config.getPythonLibFolder())
-
-        # environ variables are strings not booleans
-        environ.update({
-                'PATH': pwem.Config.CUDA_BIN,
-                'LD_LIBRARY_PATH': pwem.Config.CUDA_LIB
-            }, position=pos)
 
         return environ
 
