@@ -98,8 +98,8 @@ class XmippProtVolSubtraction(EMProtocol):
         vol1 = self.vol1.get()
         pdbFn = self._getPdbFileName()
         self.outFile = self._getVolName()
-        if getExt(pdbFn)==".cif":
-            pdbFn2=replaceBaseExt(pdbFn, 'pdb')
+        if getExt(pdbFn) == ".cif":
+            pdbFn2 = replaceBaseExt(pdbFn, 'pdb')
             cifToPdb(pdbFn, pdbFn2)
             pdbFn = pdbFn2
         samplingR = vol1.getSamplingRate()
@@ -143,7 +143,7 @@ class XmippProtVolSubtraction(EMProtocol):
         sub = self.sub.get()
         iter = self.iter.get()
         program = "xmipp_volume_subtraction"
-        args = '-i1 %s -i2 %s -o %s --iter %s' % (vol1.getFileName(), vol2,
+        args = '--i1 %s --i2 %s -o %s --iter %s' % (vol1.getFileName(), vol2,
                                                   self._getExtraPath("output_volume.mrc"), iter)
         if resol:
             fc = vol1.getSamplingRate()/resol
@@ -177,6 +177,9 @@ class XmippProtVolSubtraction(EMProtocol):
         origin.setShiftsTuple(shifts)
         volume.setOrigin(origin)
         volume.setFileName(self._getExtraPath("output_volume.mrc"))
+        filename = volume.getFileName()
+        if filename.endswith('.mrc') or filename.endswith('.map'):
+            volume.setFileName(filename + ':mrc')
         self._defineOutputs(outputVolume=volume)
 
     # --------------------------- INFO functions --------------------------------------------
