@@ -88,8 +88,6 @@ class XmippProtSubtractProjection(ProtOperateParticles):
         numberOfThreads = self.numberOfThreads.get()-1
         if numberOfThreads == 0:
             numberOfThreads = 1
-        import time
-        time.sleep(15)
         partSet = self.inputParticles.get()
         nPart = len(partSet)
         numberOfThreads = min(numberOfThreads, nPart)
