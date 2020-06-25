@@ -26,12 +26,8 @@
 # *
 # **************************************************************************
 
-import sys, shutil
-import numpy as np
-import mrcfile
-import pywt
-import pywt.data
 from pyworkflow.protocol.params import MultiPointerParam
+from pwem.convert import headers
 from pwem.objects import Volume, Transform
 from pwem.protocols import ProtInitialVolume
 
@@ -56,26 +52,24 @@ class XmippProtVolConsensus(ProtInitialVolume):
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def fusionStep(self):
-        vol1 = self.vols[0].get()
-        vol2 = self.vols[1].get()
-        vol1Fn = vol1.getFileName()
-        vol2Fn = vol2.getFileName()
-        # outVolData = self.computeVolumeConsensus(self.loadVol(vol1Fn), self.loadVol(vol2.getFileName()))
+        inputVols = self._getExtraPath("input_volumes.txt")
+        fhInputVols = open(inputVols, 'w')
+        for vol in self.vols:
+            fhInputVols.write(vol.get().getFileName() + '\n')
+        fhInputVols.close()
         outVolFn = self._getExtraPath("consensus_volume.mrc")
-        # self.saveVol(outVolData, outVolFn, vol1Fn)
-
-        args = " --i1 %s --i2 %s -o %s" % (vol1Fn, vol2Fn, outVolFn)
+        args = " -i %s -o %s" % (inputVols, outVolFn)
         self.runJob("xmipp_volume_consensus", args)
 
     def createOutputStep(self):
         outVol = Volume()
         outVol.setSamplingRate(self.vols[0].get().getSamplingRate())
         outVol.setFileName(self._getExtraPath("consensus_volume.mrc"))
-        # origin = Transform()
-        # ccp4header = headers.Ccp4Header(vol1.getFileName(), readHeader=True)
-        # shifts = ccp4header.getOrigin()
-        # origin.setShiftsTuple(shifts)
-        # volume.setOrigin(origin)
+        origin = Transform()
+        ccp4header = headers.Ccp4Header(self.vols[0].get().getFileName(), readHeader=True)
+        shifts = ccp4header.getOrigin()
+        origin.setShiftsTuple(shifts)
+        outVol.setOrigin(origin)
         self._defineOutputs(outputVolume=outVol)
 
     # --------------------------- INFO functions --------------------------------------------
@@ -84,9 +78,8 @@ class XmippProtVolConsensus(ProtInitialVolume):
         if not hasattr(self, 'outputVolume'):
             summary.append("Output volume not ready yet.")
         else:
-            summary.append("Volume 1: %s\nVolume 2: %s\n Sampling rate: %f A/px" %
-                           (self.vols[0].get().getFileName(), self.vols[1].get().getFileName(),
-                            self.vols[0].get().getSamplingRate()))
+            for i, vol in enumerate(self.vols):
+                summary.append("Volume %d: %s" % (i+1, vol.get().getFileName()))
         return summary
 
     def _methods(self):
@@ -94,25 +87,6 @@ class XmippProtVolConsensus(ProtInitialVolume):
         if not hasattr(self, 'outputVolume'):
             methods.append("Output volume not ready yet.")
         else:
-            methods.append("Consensus of volumes %s and %s" % (self.vols[0].get().getFileName(),
-                                                               self.vols[1].get().getFileName()))
+            methods.append("We compute a consensus volume from %d input volumes at %f A/px" %
+                           (self.vols.getSize(), self.vols[0].get().getSamplingRate()))
         return methods
-
-    # --------------------------- UTLIS functions --------------------------------------------
-    # def computeVolumeConsensus(self, vol1, vol2, wavelet='sym11'):
-    #     coeffDict1 = pywt.dwtn(vol1, wavelet)
-    #     coeffDict2 = pywt.dwtn(vol2, wavelet)
-    #     newDict={}
-    #     for key in coeffDict1:
-    #         newDict[key] = np.where(np.abs(coeffDict1[key]) > np.abs(coeffDict2[key]), coeffDict1[key], coeffDict2[key])
-    #     consensus = pywt.idwtn(newDict, wavelet)
-    #     return consensus
-    #
-    # def saveVol(self, data, fname, fnameToCopyHeader):
-    #     shutil.copyfile(fnameToCopyHeader, fname)
-    #     with mrcfile.open(fname, "r+", permissive=True) as f:
-    #         f.data[:] = data
-    #
-    # def loadVol(self, fname):
-    #     with mrcfile.open(fname, permissive=True) as f:
-    #         return f.data.astype(np.float32)
