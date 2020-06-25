@@ -180,7 +180,7 @@ class Plugin(pwem.Plugin):
                        # adding 'v' before version to fix a package target (post-link)
                        tar='xmippSrc-v'+_currentVersion+'.tgz',
                        commands=[(installCmd.format(**installVars, cwd='.',
-                                                    configCmd='./xmipp config &&'
+                                                    configCmd='./xmipp config noAsk &&'
                                                               './xmipp check_config',
                                                     compileCmd='./xmipp compileAndInstall'),
                                   installTgt + sourceTgt),
