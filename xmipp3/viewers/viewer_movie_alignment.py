@@ -24,9 +24,10 @@
 # *
 # **************************************************************************
 
-from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-import pwem.viewers.showj as showj
+from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import LabelParam
+from pwem.viewers import showj, EmProtocolViewer, ObjectView
+from pwem.objects import SetOfMicrographs, SetOfMovies
 
 from xmipp3.protocols.protocol_movie_opticalflow import (XmippProtOFAlignment,
                                                  OBJCMD_MOVIE_ALIGNCARTESIAN)
@@ -44,11 +45,13 @@ class XmippMovieAlignViewer(Viewer):
         views = []
 
         if obj.hasAttribute('outputMicrographs'):
-            views.append(self.objectView(obj.outputMicrographs,
-                                         viewParams=getViewParams()))
+            views.append(ObjectView(self._project, obj.strId(),
+                                    obj.outputMicrographs.getFileName(),
+                                    viewParams=getViewParams()))
         elif obj.hasAttribute('outputMovies'):
-            views.append(self.objectView(obj.outputMovies,
-                                         viewParams=getViewParams()))
+            views.append(ObjectView(self._project, obj.strId(),
+                                    obj.outputMovies.getFileName(),
+                                    viewParams=getViewParams()))
         else:
             views.append(self.infoMessage("Output (micrographs or movies) has "
                                           "not been produced yet."))
@@ -56,10 +59,9 @@ class XmippMovieAlignViewer(Viewer):
         return views
 
 
-class XmippMovieMaxShiftViewer(ProtocolViewer):
-    """ This protocol computes the maximum resolution up to which two
-     CTF estimations would be ``equivalent'', defining ``equivalent'' as having
-      a wave aberration function shift smaller than 90 degrees
+class XmippMovieMaxShiftViewer(EmProtocolViewer):
+    """ This viewer is intendet to visualize the selection made by
+        the Xmipp - Movie max shift protocol.
     """
     _label = 'viewer Movie Max Shift'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
@@ -79,15 +81,15 @@ class XmippMovieMaxShiftViewer(ProtocolViewer):
                         help="Visualize discarded micrographs.")
 
     def _getVisualizeDict(self):
-        return {
-                 'visualizeMics': self._visualizeMics,
-                 'visualizeMicsDiscarded': self._visualizeMicsDiscarded
-                }
+        return {'visualizeMics': self._visualizeMics,
+                'visualizeMicsDiscarded': self._visualizeMicsDiscarded}
 
     def _visualizeAny(self, outNameCondition):
         views = []
-
-        for outName, outObj in self.protocol.iterOutputAttributes():
+        # to show micrographs is prior than movies
+        objs = [x for x in self.protocol.iterOutputAttributes(SetOfMicrographs)]
+        objs += [x for x in self.protocol.iterOutputAttributes(SetOfMovies)]
+        for outName, outObj in objs:
             if outNameCondition(outName):
                 views.append(self.objectView(outObj, viewParams=getViewParams()))
                 break

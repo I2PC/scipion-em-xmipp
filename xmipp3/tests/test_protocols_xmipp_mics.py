@@ -388,7 +388,7 @@ class TestXmippDeepMicrographsCleaner(BaseTest):
         cls.protDown.inputMicrographs.set(cls.protImportMics.outputMicrographs)
         cls.proj.launchProtocol(cls.protDown, wait=True)
 
-        cls.fnameMaskGroundTruth_toMeanVal = {"%s/Falcon_2012_06_12-14_33_35_0.mrc": 0.03221564,
+        cls.fnameMaskGroundTruth_toMeanVal = {"%s/Falcon_2012_06_12-14_33_35_0.mrc": 0.022,
                                               "%s/Falcon_2012_06_12-17_26_54_0.mrc": 0.00686,
                                               "%s/Falcon_2012_06_12-17_23_32_0.mrc": 0.029,
                                               }
@@ -410,6 +410,17 @@ class TestXmippDeepMicrographsCleaner(BaseTest):
 
     def _compareCoorSetsBoxSizes(self, coordSet1, coordSet2, scale=1):
       self.assertEqual(coordSet1.getBoxSize(), coordSet2.getBoxSize()*scale)
+
+    def test_launchMicCleanFromCmd(self):
+
+      from xmipp3 import Plugin
+      import subprocess
+      xmippBinPath= Plugin.getHome("bin")
+      scipionPython= subprocess.check_output(["which", "python"]).strip()
+      scipionPath= (os.path.sep).join( scipionPython.split(os.path.sep)[:-3] )
+      cmd= [ os.path.join(scipionPath,"scipion"), "python", os.path.join(xmippBinPath,"xmipp_deep_micrograph_cleaner"), "-h" ]
+      print(" ".join(cmd))
+      subprocess.check_call( cmd, env=Plugin.getEnviron() )
 
     def test_noThreshold(self):
         print("Run cleanMics no thr")
@@ -894,8 +905,7 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
         elimSet = SetOfParticles(
             filename=protElimination1._getPath('eliminatedParticles.sqlite'))
 
-        self.assertTrue(outSet.getSize() + elimSet.getSize() ==
-                        protExtract.outputParticles.getSize(),
+        self.assertSetSize(protExtract.outputParticles, outSet.getSize() + elimSet.getSize(),
                         "Output sets size does not much the input set size.")
 
         kwargs = {'nDim': 20,  # 20 objects/particles
@@ -975,8 +985,8 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         self.launchProtocol(protCons1)
 
         self.assertTrue(protCons1.isFinished(), "Consensus failed")
-        self.assertTrue(protCons1.consensusCoordinates.getSize() == 390,
-                        "Output coordinates size does not is wrong.")
+        self.assertSetSize(protCons1.consensusCoordinates,383,
+                        "Output coordinates size for AND consensus is wrong.")
 
         protConsOr = self.newProtocol(XmippProtConsensusPicking,
                                       objLabel="Xmipp - consensus pick OR",
@@ -987,8 +997,8 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         self.launchProtocol(protConsOr)
 
         self.assertTrue(protConsOr.isFinished(), "Consensus failed")
-        self.assertTrue(protConsOr.consensusCoordinates.getSize() == 422,
-                        "Output coordinates size does not is wrong.")
+        self.assertSetSize(protConsOr.consensusCoordinates, 432,
+                        "Output coordinates size for OR consensus is wrong.")
 
 
         # STREAMING tests
@@ -1038,10 +1048,10 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
 
         time.sleep(3)  # protDupl2 should be as long as protCons2, but just in case
         protCons2 = self._updateProtocol(protCons2)
-        self.assertTrue(protCons2.consensusCoordinates.getSize() == 390,
+        self.assertSetSize(protCons2.consensusCoordinates, 383,
                         "Output coordinates size does not is wrong.")
         protDupl2 = self._updateProtocol(protDupl2)
-        self.assertTrue(protDupl2.outputCoordinates.getSize() == 249,
+        self.assertSetSize(protDupl2.outputCoordinates, 245,
                         "Output coordinates size does not is wrong.")
 
 
