@@ -26,9 +26,9 @@
 # **************************************************************************
 
 import os
-from pyworkflow import VERSION_2_0
+from pyworkflow import VERSION_3_0
 from pyworkflow.protocol.params import (PointerParam, FloatParam, EnumParam, LEVEL_ADVANCED,
-                                        StringParam, GPU_LIST, BooleanParam)
+                                        StringParam, GPU_LIST, BooleanParam, IntParam)
 from pwem.protocols import ProtAnalysis3D
 from pwem.objects import Volume
 import xmipp3
@@ -44,14 +44,14 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
     """    
     Given a map the protocol performs automatic post-processing to enhance visualization
     """
-    _label = 'deep volPostProcessing'
-    _lastUpdateVersion = VERSION_2_0
+    _label = 'deepEMhancer'
+    _conda_env = 'xmipp_deepEMhancer'
+    _lastUpdateVersion = VERSION_3_0
 
     NORMALIZATION_AUTO=0
     NORMALIZATION_STATS=1
     NORMALIZATION_MASK=2
-    NORMALIZATION_IQR_FULL=3
-    NORMALIZATION_OPTIONS=["Automatic normalization", "Normalization from statistics", "Normalization from binary mask", "Legacy normalization" ]
+    NORMALIZATION_OPTIONS=["Automatic normalization", "Normalization from statistics", "Normalization from binary mask"]
 
     TIGHT_MODEL=0
     WIDE_MODEL=1
@@ -75,24 +75,31 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
 
 
         form.addParam('useHalfMapsInsteadVol', BooleanParam, default=False,
-                      label="Would you like to use half volumes?",
-                      help='Unmasked input required. Provide either unmasked unsharpened volume or half maps')
+                      label="Would you like to use half maps?",
+                      help='Unmasked input required. Provide always unmasked, unsharpened volumes or half maps')
+
+        form.addParam('halfMapsAttached', BooleanParam, default=True,
+                      condition='useHalfMapsInsteadVol',
+                      label="Are the half maps included in the volume?",
+                      help='When you import a map, you can associate half maps to it. Select *yes* if the half maps are associated'
+                           'to the input volume. If half maps are not associated, select *No* and'
+                           'you will be able to provide then as regular maps')
 
 
         form.addParam('inputHalf1', PointerParam, pointerClass='Volume',
                       label="Volume Half 1", important=True,
-                      condition='useHalfMapsInsteadVol',
+                      condition='useHalfMapsInsteadVol and not halfMapsAttached',
                       help='Select half map 1 to apply deep postprocessing. ')
 
         form.addParam('inputHalf2', PointerParam, pointerClass='Volume',
                       label="Volume Half 2", important=True,
-                      condition='useHalfMapsInsteadVol',
+                      condition='useHalfMapsInsteadVol and not halfMapsAttached',
                       help='Select half map 2 to apply deep postprocessing. ')
         
         form.addParam('inputVolume', PointerParam, pointerClass='Volume',
                       label="Input Volume", important=True,
-                      condition='not useHalfMapsInsteadVol',
-                      help='Select a volume to apply deep postprocessing. Unmasked input required')
+                      condition='not useHalfMapsInsteadVol or halfMapsAttached',
+                      help='Select a volume to apply deep postprocessing. Unmasked, non-sharpened input required')
 
 
         form.addParam('normalization', EnumParam,
@@ -104,10 +111,8 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
                            'normalized according the statistics of the noise of the volume and thus, you will need to provide'
                            'the mean and standard deviation of the noise. Additionally, a binary mask (1 protein, 0 not protein) '
                            'for the protein can be used for normalization if you select *%s* . The mask should be as tight '
-                           'as possible.\nIf you select *%s* normalization will consider that all the volume is either noise or protein,'
-                           'but not empty This options is a legacy option for compatibility.\nBad results may be obtained if '
-                           'normalization does not work, so you may want to try '
-                           'different options'%tuple(self.NORMALIZATION_OPTIONS))
+                           'as possible.\nnBad results may be obtained if normalization does not work, so you may want to try '
+                           'different options if not good enough results are observerd'%tuple(self.NORMALIZATION_OPTIONS))
 
         form.addParam('inputMask', PointerParam, pointerClass='VolumeMask',
                       allowsNull=True,
@@ -147,12 +152,16 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
                            'that are likely noise. This step may remove protein in some unlikely situations, but generally, it'
                            'slighly improves results')
 
-        form.addParam('sizeFraction_CC', FloatParam, default=0.1,
+        form.addParam('sizeFraction_CC', FloatParam, default=0.05,
                       allowsNull=False,  expertLevel=LEVEL_ADVANCED,
                       condition=" performCleaningStep",
                       label="Relative size (0. to 1.) CC to remove",
                       help='The relative size of a small connected component to be removed, as the fraction of total voxels>0 ')
 
+        form.addParam('batch_size', IntParam, default=8,
+                      allowsNull=False,  expertLevel=LEVEL_ADVANCED,
+                      label="Batch size",
+                      help='Number of cubes to process simultaneously. Lower it if CUDA Out Of Memory error happens and increase it if low GPU performance observed')
 
     # --------------------------- INSERT steps functions --------------------------------------------
 
@@ -169,15 +178,20 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
           if not os.path.exists(outputFname):
             os.symlink(inputFname, outputFname)
         else:
-          self.runJob('xmipp_image_convert', " -i %s -o %s:mrc -t vol" % (inputFname, outputFname)) #TODO: Fix. Why sampling rate is set to 1?
+          self.runJob('xmipp_image_convert', " -i %s -o %s:mrc -t vol" % (inputFname, outputFname))
 
     def convertInputStep(self):
         """ Read the input volume.
         """
 
         if self.useHalfMapsInsteadVol.get():
-          self._inputVol2Mrc(self.inputHalf1.get().getFileName(), self._getTmpPath(INPUT_HALF1_BASENAME))
-          self._inputVol2Mrc(self.inputHalf2.get().getFileName(), self._getTmpPath(INPUT_HALF2_BASENAME))
+          if self.halfMapsAttached.get():
+            half1Fname, half2Fname = self.inputVolume.get().getHalfMaps().split(',')
+          else:
+            half1Fname, half2Fname =self.inputHalf1.get().getFileName(), self.inputHalf2.get().getFileName()
+
+          self._inputVol2Mrc(half1Fname, self._getTmpPath(INPUT_HALF1_BASENAME))
+          self._inputVol2Mrc(half2Fname, self._getTmpPath(INPUT_HALF2_BASENAME))
 
         else:
           self._inputVol2Mrc(self.inputVolume.get().getFileName(), self._getTmpPath(INPUT_VOL_BASENAME))
@@ -201,6 +215,12 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
 
         params+=" -o %s "%outputFname
         params+= " --sampling_rate %f "%(self.inputVolume.get().getSamplingRate() if self.inputVolume.get() is not None else  self.inputHalf1.get().getSamplingRate())
+        params+= " -b %s " %(self.batch_size)
+
+        if self.useQueueForSteps() or self.useQueue():
+          params += ' -g all '
+        else:
+          params += ' -g %s' % (",".join([str(elem) for elem in self.getGpuList()]))
 
         if self.normalization==self.NORMALIZATION_MASK:
           params+= " --binaryMask %s "%(os.path.abspath(self._getTmpPath(INPUT_MASK_BASENAME)))
@@ -215,15 +235,13 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
 
         if  self.normalization in [self.NORMALIZATION_AUTO, self.NORMALIZATION_STATS]:
           if self.modelType == self.TIGHT_MODEL:
-            params+= " --checkpoint %s "%self.getModel("deepVolProc", "bestCheckpoint_locscale.hd5")
+            params+= " --checkpoint %s "%self.getModel("deepEMhancer", "production_checkpoints/deepEMhancer_tightTarget.hd5")
           elif self.modelType == self.HI_RES:
-            params+= " --checkpoint  %s "%self.getModel("deepVolProc", "bestCheckpoint_locscale_hiRes.hd5")
+            params+= " --checkpoint  %s "%self.getModel("deepEMhancer", "production_checkpoints/deepEMhancer_highRes.hd5")
           else:
-            params+= " --checkpoint  %s "%self.getModel("deepVolProc", "bestCheckpoint_locscale_wide.hd5")
-        elif self.normalization==self.NORMALIZATION_IQR_FULL:
-          params += " --checkpoint  %s " % self.getModel("deepVolProc", "bestCheckpoint_locscale_legacy.hd5")
+            params+= " --checkpoint  %s "%self.getModel("deepEMhancer", "production_checkpoints/deepEMhancer_wideTarget.hd5")
         else: #self.NORMALIZATION_MASK
-          params+= " --checkpoint  %s "%self.getModel("deepVolProc", "bestCheckpoint_locscale_masked.hd5")
+          params+= " --checkpoint  %s "%self.getModel("deepEMhancer", "production_checkpoints/deepEMhancer_masked.hd5")
 
         self.runJob("xmipp_deep_volume_postprocessing", params, numberOfMpi=1)
 
@@ -232,8 +250,12 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
 
         volume=Volume()
         volume.setFileName(self._getExtraPath(POSTPROCESS_VOL_BASENAME))
+
         if self.useHalfMapsInsteadVol.get():
-          volume.setSamplingRate(self.inputHalf1.get().getSamplingRate())
+          if self.halfMapsAttached.get():
+            volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
+          else:
+            volume.setSamplingRate(self.inputHalf1.get().getSamplingRate())
           self._defineOutputs(postProcessed_Volume=volume)
           self._defineTransformRelation(self.inputHalf1, volume)
           self._defineTransformRelation(self.inputHalf2, volume)
@@ -264,10 +286,10 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
         and there are not errors. If some errors are found, a list with
         the error messages will be returned.
         """
-        # error=self.validateDLtoolkit(model="deepRes") #TODO: Change to deepVolPostPro
+        error=self.validateDLtoolkit(model="deepEMhancer")
         error=[]
         return error
     
     def _citations(self):
-        return ['XXXX']
+        return ['Sanchez-Garcia, 2020']
 
