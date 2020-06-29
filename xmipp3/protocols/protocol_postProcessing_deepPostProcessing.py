@@ -32,6 +32,7 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam, EnumParam, LEV
 from pwem.protocols import ProtAnalysis3D
 from pwem.objects import Volume
 import xmipp3
+from pyworkflow.utils import createLink
 
 INPUT_VOL_BASENAME="inputVol.mrc"
 INPUT_HALF1_BASENAME="inputHalf1.mrc"
@@ -172,10 +173,10 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('createOutputStep')
 
     def _inputVol2Mrc(self, inputFname, outputFname):
-        inputFname= os.path.abspath(inputFname)
+        inputFname= inputFname
         if inputFname.endswith(".mrc") or inputFname.endswith(".map"):
           if not os.path.exists(outputFname):
-            os.symlink(inputFname, outputFname)
+            createLink(inputFname, outputFname)
         else:
           self.runJob('xmipp_image_convert', " -i %s -o %s:mrc -t vol" % (inputFname, outputFname))
 
@@ -200,16 +201,16 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
 
 
     def deepVolPostProStep(self):
-        outputFname= os.path.abspath(self._getExtraPath(POSTPROCESS_VOL_BASENAME))
+        outputFname= self._getExtraPath(POSTPROCESS_VOL_BASENAME)
         if os.path.isfile(outputFname):
           return
 
         if self.useHalfMapsInsteadVol.get():
-          half1= os.path.abspath(self._getTmpPath(INPUT_HALF1_BASENAME))
-          half2= os.path.abspath(self._getTmpPath(INPUT_HALF2_BASENAME))
+          half1= self._getTmpPath(INPUT_HALF1_BASENAME)
+          half2= self._getTmpPath(INPUT_HALF2_BASENAME)
           params=" -i %s -i2 %s"%(half1, half2)
         else:
-          inputFname = os.path.abspath(self._getTmpPath(INPUT_VOL_BASENAME))
+          inputFname = self._getTmpPath(INPUT_VOL_BASENAME)
           params=" -i %s "%inputFname
 
         params+=" -o %s "%outputFname
@@ -223,7 +224,7 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
           params += ' -g %s' % (",".join([str(elem) for elem in self.getGpuList()]))
 
         if self.normalization==self.NORMALIZATION_MASK:
-          params+= " --binaryMask %s "%(os.path.abspath(self._getTmpPath(INPUT_MASK_BASENAME)))
+          params+= " --binaryMask %s "%(self._getTmpPath(INPUT_MASK_BASENAME))
         elif self.normalization==self.NORMALIZATION_STATS:
           params+= " --noise_stats_mean %f --noise_stats_std %f "%(self.noiseMean, self.noiseStd)
 
