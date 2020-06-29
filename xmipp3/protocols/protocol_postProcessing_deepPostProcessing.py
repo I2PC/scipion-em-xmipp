@@ -42,7 +42,7 @@ POSTPROCESS_VOL_BASENAME= "deepPostProcess.mrc"
 
 class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
     """    
-    Given a map the protocol performs automatic post-processing to enhance visualization
+    Given a map the protocol performs automatic deep post-processing to enhance visualization
     """
     _label = 'deepEMhancer'
     _conda_env = 'xmipp_deepEMhancer'
@@ -76,7 +76,7 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
 
         form.addParam('useHalfMapsInsteadVol', BooleanParam, default=False,
                       label="Would you like to use half maps?",
-                      help='Unmasked input required. Provide always unmasked, unsharpened volumes or half maps')
+                      help='DeepEMhancer uses either half maps or non-sharpened non-masked input volumes. Please, select the type of input map(s) you will provide')
 
         form.addParam('halfMapsAttached', BooleanParam, default=True,
                       condition='useHalfMapsInsteadVol',
@@ -118,8 +118,7 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
                       allowsNull=True,
                       condition=" normalization==%s"%self.NORMALIZATION_MASK,
                       label="binary mask",
-                      help='The mask determines which voxels are protein (1) and which are not (0)'
-                      ' and which are not')
+                      help='The mask determines which voxels are protein (1) and which are not (0)')
 
         form.addParam('noiseMean', FloatParam,
                       allowsNull=True,
@@ -137,7 +136,7 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
         form.addParam('modelType', EnumParam,
                       condition=" normalization in [%s, %s]"%(self.NORMALIZATION_STATS,self.NORMALIZATION_AUTO),
                       choices=self.MODEL_TARGET_OPTIONS,
-                      default=self.WIDE_MODEL,
+                      default=self.TIGHT_MODEL,
                       label='Model power',
                       help='Select the deep learning model to use.\nIf you select *%s* the postprocessing will be more sharpen,'
                            ' but some regions of the protein could be masked out.\nIf you select *%s* input will be less sharpen'
@@ -161,7 +160,7 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
         form.addParam('batch_size', IntParam, default=8,
                       allowsNull=False,  expertLevel=LEVEL_ADVANCED,
                       label="Batch size",
-                      help='Number of cubes to process simultaneously. Lower it if CUDA Out Of Memory error happens and increase it if low GPU performance observed')
+                      help='Number of cubes to process simultaneously. Make it lower if CUDA Out Of Memory error happens and increase it if low GPU performance observed')
 
     # --------------------------- INSERT steps functions --------------------------------------------
 
@@ -174,7 +173,7 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
 
     def _inputVol2Mrc(self, inputFname, outputFname):
         inputFname= os.path.abspath(inputFname)
-        if inputFname.endswith(".mrc"):
+        if inputFname.endswith(".mrc") or inputFname.endswith(".map"):
           if not os.path.exists(outputFname):
             os.symlink(inputFname, outputFname)
         else:
@@ -214,7 +213,8 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
           params=" -i %s "%inputFname
 
         params+=" -o %s "%outputFname
-        params+= " --sampling_rate %f "%(self.inputVolume.get().getSamplingRate() if self.inputVolume.get() is not None else  self.inputHalf1.get().getSamplingRate())
+        params+= " --sampling_rate %f "%(self.inputVolume.get().getSamplingRate() if self.inputVolume.get() is not None
+                                                                          else self.inputHalf1.get().getSamplingRate())
         params+= " -b %s " %(self.batch_size)
 
         if self.useQueueForSteps() or self.useQueue():
@@ -256,12 +256,12 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
             volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
           else:
             volume.setSamplingRate(self.inputHalf1.get().getSamplingRate())
-          self._defineOutputs(postProcessed_Volume=volume)
+          self._defineOutputs(Volume=volume)
           self._defineTransformRelation(self.inputHalf1, volume)
           self._defineTransformRelation(self.inputHalf2, volume)
         else:
           volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
-          self._defineOutputs(postProcessed_Volume=volume)
+          self._defineOutputs(Volume=volume)
           self._defineTransformRelation(self.inputVolume, volume)
 
 
@@ -270,13 +270,24 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
 
     def _methods(self):
         messages = []
-        if hasattr(self, 'postProcessed_Volume'):
-            messages.append(
-                'Information about the method/article in ' + "???")
+        messages.append(
+                "Information about the method in " + "Sanchez-Garcia et al., 2020 ( https://doi.org/10.1101/2020.06.12.148296 )")
         return messages
     
     def _summary(self):
         summary = []
+        if self.useHalfMapsInsteadVol.get():
+          summary.append("Input: half maps")
+        else:
+          summary.append("Input: raw data map")
+
+        if self.normalization == self.NORMALIZATION_AUTO:
+          summary.append("Normalization: auto")
+        elif self.normalization == self.NORMALIZATION_STATS:
+          summary.append("Normalization: manual statistics")
+        elif self.normalization == self.NORMALIZATION_MASK:
+          summary.append("Normalization: from mask")
+
         return summary
 
     def _validate(self):
@@ -287,7 +298,7 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
         the error messages will be returned.
         """
         error=self.validateDLtoolkit(model="deepEMhancer")
-        error=[]
+
         return error
     
     def _citations(self):
