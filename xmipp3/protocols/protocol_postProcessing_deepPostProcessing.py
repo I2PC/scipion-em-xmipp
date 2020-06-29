@@ -173,7 +173,6 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('createOutputStep')
 
     def _inputVol2Mrc(self, inputFname, outputFname):
-        inputFname= inputFname
         if inputFname.endswith(".mrc") or inputFname.endswith(".map"):
           if not os.path.exists(outputFname):
             createLink(inputFname, outputFname)
