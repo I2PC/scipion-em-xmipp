@@ -39,9 +39,9 @@ from xmipp3.convert import (writeMicCoordinates, readSetOfCoordinates)
 from xmipp3.constants import SAME_AS_PICKING, OTHER
 
 
-class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
+class XmippProtDeepDefocusMicrograph(ProtExtractParticles, XmippProtocol):
     """Protocol to remove coordinates in carbon zones or large impurities"""
-    _label = 'deep micrograph cleaner'
+    _label = 'deep micrograph defocus'
     _conda_env = "xmipp_MicCleaner"
 
     def __init__(self, **kwargs):
