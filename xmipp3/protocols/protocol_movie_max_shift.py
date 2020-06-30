@@ -141,6 +141,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                 rangeX = np.max(shiftArrayX) - np.min(shiftArrayX)
                 rangeY = np.max(shiftArrayY) - np.min(shiftArrayY)
                 rangeM = max(rangeX, rangeY) * sampling
+                print("rangeM: %s" % rangeM)
                 rejectedByMovie = rangeM > self.maxMovieShift.get()
 
             if self.rejType == self.REJ_FRAME or evalBoth:
@@ -149,6 +150,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                 maxShiftX = np.max(frameShiftX)
                 maxShiftY = np.max(frameShiftY)
                 maxShiftM = max(maxShiftX, maxShiftY) * sampling
+                print("maxShiftM: %s" % maxShiftM)
                 rejectedByFrame = maxShiftM > self.maxFrameShift.get()
 
             if self.rejType == self.REJ_AND:
@@ -292,21 +294,25 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         pass
 
     #--------------------------- UTILS functions -------------------------------
-    def _loadOutputSet(self, SetClass, baseName, fixSampling=True):
-        """ Load the output set if it exists or create a new one.
-        fixSampling: correct the output sampling rate if binning was used,
-        except for the case when the original movies are kept and shifts
-            refers to that one.
+    def _loadOutputSet(self, SetClass, baseName):
+        """ Load the output set if it exists or create a new one based on the inputs.
         """
         if SetClass == SetOfMicrographs:
             if 'dose-weighted' in baseName:
                 if self.inputDwMics is None:
                     # if no DwMics to do, do nothing and exit
                     return None
+                inputSet = self.inputDwMics
             else:
                 if self.inputMics is None:
                     # if no mics to do, do nothing and exit
                     return None
+                inputSet = self.inputMics
+        else:
+            inputSet = self.inputMovies.get()
+
+        print(">>>>>>>>", inputSet)
+
         setFile = self._getPath(baseName)
 
         if exists(setFile):
@@ -322,12 +328,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
 
-        inputMovies = self.inputMovies.get()
-        outputSet.copyInfo(inputMovies)
-
-        if fixSampling:
-            newSampling = inputMovies.getSamplingRate()
-            outputSet.setSamplingRate(newSampling)
+        outputSet.copyInfo(inputSet)
 
         return outputSet
 
