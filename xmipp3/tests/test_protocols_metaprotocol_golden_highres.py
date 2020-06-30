@@ -1,6 +1,6 @@
 # **************************************************************************
 # *
-# * Authors:    Carlos Oscar Sorzano (coss@cnb.csic.es)
+# * Authors:    Amaya Jimenez Moreno (ajimenez@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -25,15 +25,11 @@
 # **************************************************************************
 
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
-
-from pwem.protocols import (ProtImportVolumes, ProtImportParticles, ProtSubSet,
-                            exists)
-
-from pwem import emlib
-from xmipp3.protocols import XmippProtReconstructHighRes
+from pwem.protocols import (ProtImportVolumes, ProtImportParticles, exists)
+from xmipp3.protocols import XmippMetaProtGoldenHighRes
 
 
-class TestHighres(BaseTest):
+class TestGoldenHighres(BaseTest):
     @classmethod
     def runImportVolume(cls, pattern, samplingRate):
         """ Run an Import volumes protocol. """
@@ -77,28 +73,24 @@ class TestHighres(BaseTest):
         cls.protImportParts = cls.runImportParticles()
 
     def test(self):
-        subset = self.newProtocol(ProtSubSet,
-                                  inputFullSet=self.protImportParts.outputParticles,
-                                  chooseAtRandom=True,
-                                  nElements=400)
-        self.launchProtocol(subset)
-
-        highres = self.newProtocol(XmippProtReconstructHighRes,
-                                   inputParticles=subset.outputParticles,
+        goldenHighres = self.newProtocol(XmippMetaProtGoldenHighRes,
+                                   inputParticles=self.protImportParts.outputParticles,
                                    inputVolumes=self.protImportVol.outputVolume,
                                    particleRadius=180,
                                    symmetryGroup="i1",
-                                   alignmentMethod=XmippProtReconstructHighRes.AUTOMATIC_ALIGNMENT,
-                                   maximumTargetResolution="15 10 7",
+                                   discardParticles=True,
                                    numberOfMpi=8)
-        self.launchProtocol(highres)
-        self.assertIsNotNone(highres.outputParticles,
-                             "There was a problem with Highres")
+        self.launchProtocol(goldenHighres)
+        self.assertIsNotNone(goldenHighres.outputParticlesLocal1,
+                             "There was a problem with Golden Highres")
 
-        fnResolution = highres._getExtraPath("Iter005/iterInfo.xmd")
+        fnResolution = goldenHighres._getExtraPath('fnFSCs.txt')
         if not exists(fnResolution):
             self.assertTrue(False, fnResolution + " does not exist")
         else:
-            md = emlib.MetaData("resolution@" + fnResolution)
-            R = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, md.firstObject())
-            self.assertTrue(R < 10, "Resolution is not below 10A")
+            count = len(open(fnResolution).readlines())
+            count = count - 10
+            result = 'outputParticlesLocal%d' % (count)
+            o = getattr(goldenHighres, result, None)
+            locals()[result] = o
+            self.assertIsNotNone(o, "Output: %s is None" % result)

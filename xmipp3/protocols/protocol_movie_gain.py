@@ -43,6 +43,7 @@ from pwem.objects import SetOfMovies, Movie, SetOfImages, Image
 from pwem.protocols import EMProtocol, ProtProcessMovies
 
 from pwem import emlib
+from xmipp3.utils import normalize_array
 
 
 class XmippProtMovieGain(ProtProcessMovies):

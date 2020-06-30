@@ -25,6 +25,7 @@
 # *
 # ******************************************************************************
 
+import os
 from pyworkflow.utils import *
 from pyworkflow.protocol.params import *
 from pyworkflow.utils.path import cleanPath
@@ -370,8 +371,6 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
 
 class XmippProtPreprocessVolumes(XmippProcessVolumes):
     """ Protocol for Xmipp-based preprocess for volumes """
-    import os
-
     _label = 'preprocess volumes'
     
     # Aggregation constants
@@ -589,7 +588,6 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
                         GpuListCuda = GpuListCuda+str(count)+' '
                         count+=1
                 else:
-                    GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
                     GpuListAux = ''
                     for elem in self.getGpuList():
                         GpuListCuda = GpuListCuda+str(count)+' '

@@ -282,7 +282,8 @@ class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
           args+= " -g %s"%(gpuToUse)
         if not numberOfThreads is None:
           args+= " -t %s"%(numberOfThreads)
-        self.runCondaJob('xmipp_deep_consensus', args, numberOfMpi=1)
+        self.runJob('xmipp_deep_consensus', args, numberOfMpi=1,
+                    env=self.getCondaEnv())
 
     def predict(self, posTestDict, negTestDict, predictDict):
         """
@@ -314,7 +315,8 @@ class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
           args+= " -g %s"%(gpuToUse)
         if not numberOfThreads is None:
           args+= " -t %s"%(numberOfThreads)
-        self.runCondaJob('xmipp_deep_consensus', args, numberOfMpi=1)
+        self.runJob('xmipp_deep_consensus', args, numberOfMpi=1,
+                    env=self.getCondaEnv())
 
     def createOutputStep(self):
         imgSet = self.predictSetOfParticles.get()
