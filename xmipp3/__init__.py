@@ -175,7 +175,6 @@ class Plugin(pwem.Plugin):
                                       bindingsAndLibsTgt)],
                            deps=xmippDeps, default=False)
 
-        sourceTgt.append(verToken)
         env.addPackage('xmippSrc', version=_currentVersion,
                        # adding 'v' before version to fix a package target (post-link)
                        tar='xmippSrc-v'+_currentVersion+'.tgz',
