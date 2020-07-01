@@ -34,11 +34,11 @@ import pwem
 import pyworkflow.utils as pwutils
 
 from .base import *
-from .constants import XMIPP_HOME, XMIPP_URL
+from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.19.04'
+_currentVersion = '3.20.07a0'
 
 
 class Plugin(pwem.Plugin):
@@ -84,13 +84,6 @@ class Plugin(pwem.Plugin):
         pwutils.runJob(None, program, args, env=cls.getEnviron())
 
     @classmethod
-    def getCondaPathInEnv(cls, condaEnv, condaSubDir):
-        if cls._condaRootPath is None:  # This is for performance reasons.
-            cls._condaRootPath = CondaEnvManager.getCondaRoot(cls.getEnviron())
-        condaRoot = cls._condaRootPath
-        return CondaEnvManager.getCondaPathInEnv(condaRoot, condaEnv, condaSubDir)
-
-    @classmethod
     def getMatlabEnviron(cls, *toolPaths):
         """ Return an Environment prepared for launching Matlab
         scripts using the Xmipp binding.
@@ -116,32 +109,21 @@ class Plugin(pwem.Plugin):
             by using its name as string.
         """
 
-        # scons = tryAddPipModule(env, 'scons', '3.0.4')
-        # joblib = tryAddPipModule(env, 'joblib', '0.11', target='joblib*')
-        #
-        # # scikit
-        # scipy = tryAddPipModule(env, 'scipy', '1.4.1', default=True)
-        # cython = tryAddPipModule(env, 'cython', '0.29.14', target='Cython-0.29*',
-        #                          default=True)
-        # scikit_learn = tryAddPipModule(env, 'scikit-learn', '0.22',
-        #                                target='scikit_learn*',
-        #                                default=True)
-
         ## XMIPP SOFTWARE ##
         xmippDeps = []  # Deps should be at requirements.txt (old: scons, joblib, scikit_learn)
 
         # Installation vars for commands formating
-        verToken = cls.getHome('v%s' % _currentVersion)
-        confToken = cls.getHome("xmipp.conf")
+        verToken = getXmippPath('v%s' % _currentVersion)
+        confToken = getXmippPath("xmipp.conf")
         installVars = {'installedToken': "installation_finished",
                        'bindingsToken': "bindings_linked",
                        'verToken': verToken,
                        'nProcessors': env.getProcessors(),
-                       'xmippHome': cls.getHome(),
-                       'bindingsSrc': cls.getHome('bindings', 'python', '*'),
+                       'xmippHome': getXmippPath(),
+                       'bindingsSrc': getXmippPath('bindings', 'python'),
                        'bindingsDst': Config.getBindingsFolder(),
-                       'xmippLib': cls.getHome('lib', 'libXmipp.so'),
-                       'coreLib': cls.getHome('lib', 'libXmippCore.so'),
+                       'xmippLib': getXmippPath('lib', 'libXmipp.so'),
+                       'coreLib': getXmippPath('lib', 'libXmippCore.so'),
                        'libsDst': Config.getLibFolder(),
                        'confToken': confToken,
                        'strPlaceHolder': '%s',  # to be replaced in the future
@@ -149,16 +131,16 @@ class Plugin(pwem.Plugin):
                        }
 
         ## Installation commands (removing bindingsToken)
-        installCmd = ("cd {cwd} && ./xmipp all N={nProcessors:d} && "
+        installCmd = ("cd {cwd} && {configCmd} && {compileCmd} N={nProcessors:d} && "
                       "ln -srf build {xmippHome} && cd - && "
                       "touch {installedToken} && rm {bindingsToken} 2> /dev/null")
-        installTgt = [cls.getHome('bin', 'xmipp_reconstruct_significant'),
-                      cls.getHome("lib/libXmippJNI.so"),
+        installTgt = [getXmippPath('bin', 'xmipp_reconstruct_significant'),
+                      getXmippPath("lib/libXmippJNI.so"),
                       installVars['installedToken']]
 
         ## Linking bindings (removing installationToken)
-        bindingsAndLibsCmd = ("ln -srf {bindingsSrc} {bindingsDst} 2> /dev/null && "
-                              "ln -srf {xmippLib} {libsDst} && "
+        bindingsAndLibsCmd = ("find {bindingsSrc} -maxdepth 1 -mindepth 1 "
+                              "! -name __pycache__ -exec ln -srf {{}} {bindingsDst} \; && "
                               "ln -srf {coreLib} {libsDst} && "
                               "touch {bindingsToken} && "
                               "rm {installedToken} 2> /dev/null")
@@ -167,7 +149,7 @@ class Plugin(pwem.Plugin):
                               os.path.join(Config.getLibFolder(), 'libXmipp.so'),
                               installVars['bindingsToken']]
 
-        sourceTgt = [cls.getHome('xmipp.bashrc')]  # Target for xmippSrc and xmippDev
+        sourceTgt = [getXmippPath('xmipp.bashrc')]  # Target for xmippSrc and xmippDev
         ## Allowing xmippDev if devel mode detected
         # plugin  = scipion-em-xmipp  <--  xmipp3    <--     __init__.py
         pluginDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -180,7 +162,10 @@ class Plugin(pwem.Plugin):
         develMode = isPypiDev and isXmippBu
         if develMode:
             env.addPackage('xmippDev', tar='void.tgz',
-                           commands=[(installCmd.format(**installVars, cwd=bundleDir),
+                           commands=[(installCmd.format(**installVars,
+                                                        cwd=bundleDir,
+                                                        configCmd='pwd',
+                                                        compileCmd='./xmipp all'),
                                       installTgt+sourceTgt),
                                      (bindingsAndLibsCmd.format(**installVars),
                                       bindingsAndLibsTgt)],
@@ -190,7 +175,10 @@ class Plugin(pwem.Plugin):
         env.addPackage('xmippSrc', version=_currentVersion,
                        # adding 'v' before version to fix a package target (post-link)
                        tar='xmippSrc-v'+_currentVersion+'.tgz',
-                       commands=[(installCmd.format(**installVars, cwd='.'),
+                       commands=[(installCmd.format(**installVars, cwd='.',
+                                                    configCmd='./xmipp config &&'
+                                                              './xmipp check_config',
+                                                    compileCmd='./xmipp compileAndInstall'),
                                   installTgt + sourceTgt),
                                  (bindingsAndLibsCmd.format(**installVars),
                                   bindingsAndLibsTgt)],
@@ -282,6 +270,6 @@ def installDeepLearningToolkit(plugin, env):
                          " fi" % installDLvars,           # End of command
                          installDLvars['xmippLibToken'])  # Target
 
-    env.addPackage('deepLearningToolkit', version='0.2', urlSuffix='external',
+    env.addPackage(XMIPP_DLTK_NAME, version='0.2', urlSuffix='external',
                    commands=[xmippInstallCheck]+cmdsInstall+[modelsDownloadCmd],
-                   deps=[], tar='deepLearningToolkit.tgz')
+                   deps=[], tar=XMIPP_DLTK_NAME+'.tgz')

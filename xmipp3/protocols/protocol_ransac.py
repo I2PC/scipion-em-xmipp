@@ -267,7 +267,7 @@ class XmippProtRansac(ProtInitialVolume):
                 if self.useGpu.get():
                     # protocol will run several reconstructions at once, so execute each reconstruction separately
                     args = "-i %s.xmd -o %s.vol --sym %s --thr %s --fast"\
-                           % (fnRoot, fnRoot, self.numberOfThreads.get(), self.symmetryGroup.get())
+                           % (fnRoot, fnRoot, self.symmetryGroup.get(), self.numberOfThreads.get())
 
                     #AJ to make it work with and without queue system
                     if self.numberOfMpi.get()>1:
@@ -284,7 +284,6 @@ class XmippProtRansac(ProtInitialVolume):
                             count+=1
                     else:
                         GpuListAux = ''
-                        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
                         for elem in self.getGpuList():
                             GpuListCuda = GpuListCuda+str(count)+' '
                             GpuListAux = GpuListAux+str(elem)+','

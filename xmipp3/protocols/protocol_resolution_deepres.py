@@ -230,7 +230,8 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
         params += ' -s  %f' % self.inputVolume.get().getSamplingRate()            
         params += ' -o  %s' % self._getFileName(OUTPUT_RESOLUTION_FILE)
 
-        self.runCondaJob("xmipp_deepRes_resolution", params, numberOfMpi=1)
+        self.runJob("xmipp_deepRes_resolution", params, numberOfMpi=1,
+                    env=self.getCondaEnv())
         
 
     def createHistrogram(self):

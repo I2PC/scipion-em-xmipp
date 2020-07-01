@@ -195,7 +195,7 @@ def insertAngularProjectLibraryStep(self, iterN, refN, **kwargs):
               }
 
     print("%s %s" % (self.maxChangeInAngles, type(self.maxChangeInAngles)))
-    if int(self.maxChangeInAngles) < 181:
+    if int(self.maxChangeInAngles.get()) < 181:
         args += ' --near_exp_data --angular_distance %(maxChangeInAngles)s'
     else:
         args += ' --angular_distance -1'
@@ -542,7 +542,6 @@ def insertReconstructionStep(self, iterN, refN, suffix='', **kwargs):
                 count+=1
         else:
             GpuListAux = ''
-            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
             for elem in self.getGpuList():
                 GpuListCuda = GpuListCuda+str(count)+' '
                 GpuListAux = GpuListAux+str(elem)+','

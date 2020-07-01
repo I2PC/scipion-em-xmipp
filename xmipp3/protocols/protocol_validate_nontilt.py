@@ -189,7 +189,6 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
                     GpuListCuda = GpuListCuda+str(count)+' '
                     count+=1
             else:
-                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
                 GpuListAux = ''
                 for elem in self.getGpuList():
                     GpuListCuda = GpuListCuda+str(count)+' '
