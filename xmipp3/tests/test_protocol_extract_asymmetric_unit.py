@@ -386,8 +386,8 @@ class TestProtModelBuilding(BaseTest):
         self.filename[XMIPP_CYCLIC] = generate(
             SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_CYCLIC]][:1]+str(self.symOrder),
             'xmipp', XMIPP_SYM_NAME[XMIPP_CYCLIC][:1]+str(self.symOrder))
-        // dimensions of the output volume
-        // due to rounding the  actual size may be slighly greater
+        # dimensions of the output volume
+        # due to rounding the  actual size may be slighly greater
         self.box[XMIPP_CYCLIC] = (50, 45, 81)
         self.extractunitCell(XMIPP_CYCLIC)
 
