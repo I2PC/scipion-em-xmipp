@@ -107,12 +107,6 @@ class XmippProtocol:
         """
         return getattr(self, inputName + 'Xmipp', getattr(self, inputName))
 
-    @staticmethod
-    def isCudaInstalled():
-        """ Returns True if Xmipp was compiled with CUDA
-        """
-        return xmipp3.Plugin.getEnviron().get('CUDA', False)
-
     @classmethod
     def getModel(cls, *modelPath, **kwargs):
         """ Returns the path to the models folder followed by
