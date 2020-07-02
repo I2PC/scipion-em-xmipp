@@ -349,7 +349,8 @@ class XmippMonoDirViewer(ProtocolViewer):
         #    md.setValue(MDL_WEIGHT,w,objId)
         #md.write(path)
         #print(w)
-        return view.plotAngularDistributionFromMd(path, 'directional resolution distribution',  min_w=0)
+        view.plotAngularDistributionFromMd(path, 'directional resolution distribution',  min_w=0)
+        return view
 
     def _plotHistogram(self, fnhist, titlename, xname):
         md = MetaData()
