@@ -89,7 +89,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
                       label="Show resolution histogram")
         
         group = form.addGroup('Colored resolution Slices and Volumes')
-        group.addParam('colorMap', EnumParam, choices=COLOR_CHOICES,
+        group.addParam('colorMap', EnumParam, choices=list(COLOR_CHOICES.values()),
                       default=COLOR_JET,
                       label='Color map',
                       help='Select the color map to apply to the resolution map. '
@@ -135,7 +135,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
         return [cm]
     
     def _showOriginalVolumeSlices(self, param=None):
-        if self.protocol.halfVolumes.get():
+        if self.protocol.hasAttribute('halfVolumes'):
             cm = DataView(self.protocol.inputVolume.get().getFileName())
             cm2 = DataView(self.protocol.inputVolume2.get().getFileName())
             return [cm, cm2]
