@@ -147,12 +147,13 @@ class XmippProtTriggerData(EMProtocol):
         if getattr(self, 'finished', False):
             return
 
-        # If finished if:      - in non-streaming mode the output is released
-        self.finished = ( (not self.allImages and
-                           len(self.images) > self.outputSize)
-                          or # - in streaming if the input is closed and all done
-                          (self.allImages and self.streamClosed and
-                           len(self.images) == len(self.imsSet)) )
+        if self.streamClosed:
+            self.finished = True
+        elif not self.allImages.get():
+            self.finished = len(self.images) > self.outputSize
+        else:
+            self.finished = False
+
         outputStep = self._getFirstJoinStep()
         deps = []
         if self.finished:  # Unlock createOutputStep if finished all jobs
@@ -170,7 +171,7 @@ class XmippProtTriggerData(EMProtocol):
     def _fillingOutput(self):
         imsSqliteFn = '%s.sqlite' % self.getImagesType('lower')
         outputName = 'output%s' % self.getImagesType()
-        if len(self.images) >= self.outputSize:
+        if len(self.images) >= self.outputSize or self.finished:
             if self.allImages:  # Streaming and semi-streaming
                 if self.splitImages:  # Semi-streaming: Splitting the input
                     if len(self.splitedImages) >= self.outputSize or \
@@ -240,12 +241,41 @@ class XmippProtTriggerData(EMProtocol):
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
-        summary = []
-        imagesType = self.inputImages.get().getClassName().split("SetOf")[1]
-        if not hasattr(self, 'output%s'%imagesType):
-            summary.append("Not enough images for output yet.")
+
+        input = self.inputImages.get()
+        if input is None:
+            imagesType = "(or not ready)"
         else:
-            summary.append("Particles were send to output.")
+            imagesType = input.getClassName().split("SetOf")[1]
+        summary = []
+
+        if self.allImages.get() and not self.splitImages.get():
+            summary.append("MODE: *full streaming*.")
+            triggeredMsg = ("'output%s' released, it will be growing up "
+                            "as soon as the input does." % imagesType)
+        elif self.splitImages.get():
+            summary.append("MODE: *semi streaming (batches)*.")
+            triggeredMsg = ("%d 'output%s' are being released with %d items, "
+                            "each. A new batch will be created when ready."
+                            % (self.getOutputsSize(), imagesType, self.outputSize))
+        else:
+            summary.append("MODE: *static output*.")
+            triggeredMsg = ("'output%s' released and closed. Nothing else to do."
+                            % imagesType)
+
+        if self.getOutputsSize():
+            summary.append(triggeredMsg)
+        else:
+            summary.append("Not enough input %s to release an output, yet."
+                           % imagesType)
+            summary.append("At least, %d items are needed to trigger an output."
+                           % self.outputSize.get())
+
+        if (self.isFinished() and
+                self.outputSize.get() > [o for o in
+                                         self.iterOutputAttributes()][0][1].getSize()):
+            summary.append("Output released because streaming finished.")
+
         return summary
 
     def _validate(self):
