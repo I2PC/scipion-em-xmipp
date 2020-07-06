@@ -30,7 +30,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 import matplotlib.colors as mcolors
 from pyworkflow.utils import getExt, removeExt, replaceExt
-from os.path import abspath
+from os.path import abspath, exists
 import numpy as np
 
 from pyworkflow.protocol.params import (LabelParam, StringParam, EnumParam,
@@ -49,12 +49,11 @@ from pwem.emlib.metadata import MetaData, MDL_X, MDL_COUNT
 
 from xmipp3.protocols.protocol_resolution_monogenic_signal import (
         XmippProtMonoRes, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM,
-        OUTPUT_RESOLUTION_FILE_CHIMERA, CHIMERA_RESOLUTION_VOL)
+        OUTPUT_RESOLUTION_FILE_CHIMERA)
 from .plotter import XmippPlotter
 
 
 binaryCondition = ('(colorMap == %d) ' % (COLOR_OTHER))
-
 
 class XmippMonoResViewer(LocalResolutionViewer):
     """
@@ -76,6 +75,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
     def __init__(self, *args, **kwargs):
         ProtocolViewer.__init__(self, *args, **kwargs)
 
+
     def _defineParams(self, form):
         form.addSection(label='Visualization')
         
@@ -89,7 +89,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
                       label="Show resolution histogram")
         
         group = form.addGroup('Colored resolution Slices and Volumes')
-        group.addParam('colorMap', EnumParam, choices=COLOR_CHOICES,
+        group.addParam('colorMap', EnumParam, choices=list(COLOR_CHOICES.values()),
                       default=COLOR_JET,
                       label='Color map',
                       help='Select the color map to apply to the resolution map. '
@@ -135,7 +135,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
         return [cm]
     
     def _showOriginalVolumeSlices(self, param=None):
-        if self.protocol.halfVolumes.get():
+        if self.protocol.halfVolumes.get() is True:
             cm = DataView(self.protocol.inputVolume.get().getFileName())
             cm2 = DataView(self.protocol.inputVolume2.get().getFileName())
             return [cm, cm2]
@@ -144,9 +144,12 @@ class XmippMonoResViewer(LocalResolutionViewer):
             return [cm]
     
     def _showVolumeColorSlices(self, param=None):
-        imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE)
+        if (exists(self.protocol._getExtraPath("mgresolution.mrc"))):
+            imageFile = self.protocol._getExtraPath("mgresolution.mrc")
+        else:
+            imageFile = self.protocol._getExtraPath(OUTPUT_RESOLUTION_FILE)
         if not os.path.exists(imageFile):
-            imageFile = replaceExt(imageFile, 'vol')
+            imageFile = replaceExt(imageFile, 'mrc')
         imgData, min_Res, max_Res = self.getImgData(imageFile)
 
         xplotter = XmippPlotter(x=2, y=2, mainTitle="Local Resolution Slices "
@@ -154,7 +157,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
                                                      %self._getAxis())
         #The slices to be shown are close to the center. Volume size is divided in 
         # 9 segments, the fouth central ones are selected i.e. 3,4,5,6
-        for i in range(3, 7):
+        for i in range(3,7): 
             sliceNumber = self.getSlice(i, imgData)
             a = xplotter.createSubPlot("Slice %s" % (sliceNumber+1), '', '')
             matrix = self.getSliceImage(imgData, sliceNumber, self._getAxis())
@@ -165,9 +168,12 @@ class XmippMonoResViewer(LocalResolutionViewer):
         return [xplotter]
 
     def _showOneColorslice(self, param=None):
-        imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE)
+        if (exists(self.protocol._getExtraPath("mgresolution.mrc"))):
+            imageFile = self.protocol._getExtraPath("mgresolution.mrc")
+        else:
+            imageFile = self.protocol._getExtraPath(OUTPUT_RESOLUTION_FILE)
         if not os.path.exists(imageFile):
-            imageFile = replaceExt(imageFile, 'vol')
+            imageFile = replaceExt(imageFile, 'mrc')
         imgData, min_Res, max_Res = self.getImgData(imageFile)
 
         xplotter = XmippPlotter(x=1, y=1, mainTitle="Local Resolution Slices "
@@ -176,7 +182,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
         sliceNumber = self.sliceNumber.get()
         if sliceNumber < 0:
             x ,_ ,_ ,_ = ImageHandler().getDimensions(imageFile)
-            sliceNumber = int(x/2)
+            sliceNumber = x/2
         else:
             sliceNumber -= 1
         #sliceNumber has no sense to start in zero 
@@ -190,7 +196,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
     
     def _plotHistogram(self, param=None):
         md = MetaData()
-        md.read(self.protocol._getFileName(FN_METADATA_HISTOGRAM))
+        md.read(self.protocol._getExtraPath(FN_METADATA_HISTOGRAM))
         x_axis = []
         y_axis = []
 
@@ -230,9 +236,13 @@ class XmippMonoResViewer(LocalResolutionViewer):
         fnRoot = "extra/"
         scriptFile = self.protocol._getPath('Chimera_resolution.cmd')
         fhCmd = open(scriptFile, 'w')
-        imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
+        if (exists(self.protocol._getExtraPath("MG_Chimera_resolution.mrc"))):
+            imageFile = self.protocol._getExtraPath("MG_Chimera_resolution.mrc")
+        else:
+            imageFile = self.protocol._getExtraPath(OUTPUT_RESOLUTION_FILE_CHIMERA)
+
         if not os.path.exists(imageFile):
-            imageFile = replaceExt(imageFile, 'vol')
+            imageFile = replaceExt(imageFile, 'mrc')
         
         img = ImageHandler().read(imageFile)
         imgData = img.getData()
@@ -243,7 +253,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
         colors_labels = self.numberOfColors(min_Res, max_Res, numberOfColors)
         colorList = self.colorMapToColorList(colors_labels, self.getColorMap())
         
-        if self.protocol.halfVolumes.get():
+        if self.protocol.halfVolumes.get() is True:
             #fhCmd.write("open %s\n" % (fnRoot+FN_MEAN_VOL)) #Perhaps to check 
             #the use of mean volume is useful
             fnbase = removeExt(self.protocol.inputVolume.get().getFileName())
@@ -257,11 +267,14 @@ class XmippMonoResViewer(LocalResolutionViewer):
         fninput = abspath(fnbase + ext[0:4])
 
         dim = inputVolume.getDim()[0]
+        if (exists(self.protocol._getExtraPath("MG_Chimera_resolution.mrc"))):
+            imageFile = self.protocol._getExtraPath("MG_Chimera_resolution.mrc")
+        else:
+            imageFile = self.protocol._getExtraPath(OUTPUT_RESOLUTION_FILE_CHIMERA)
 
-        imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
 
         if not os.path.exists(imageFile):
-            if self.protocol.halfVolumes.get():
+            if self.protocol.halfVolumes.get() is True:
                 smprt = self.protocol.inputVolume.get().getSamplingRate()
             else:
                 smprt = self.protocol.inputVolumes.get().getSamplingRate()
@@ -272,20 +285,49 @@ class XmippMonoResViewer(LocalResolutionViewer):
             fhCmd.write("volume #0 voxelSize %s\n" % (str(smprt)))
             fhCmd.write("volume #1 voxelSize %s\n" % (str(smprt)))
             fhCmd.write("vol #1 hide\n")
+        
+            scolorStr = '%s,%s:' * numberOfColors
+            scolorStr = scolorStr[:-1]
 
-            linePrefix = "scolor #0 volume #1 perPixel false cmap "
+            line = ("scolor #0 volume #1 perPixel false cmap " 
+                + scolorStr + "\n") % colorList
+            fhCmd.write(line)
 
+            scolorStr = '%s %s ' * numberOfColors
+            str_colors = ()
+            for idx, elem in enumerate(colorList):
+                if (idx % 2 == 0):
+                    if ((idx % 8) == 0):
+                        str_colors +=  str(elem),
+                    else:
+                        str_colors += '" "',
+                else:
+                    str_colors += elem,
+        
+            line = ("colorkey 0.01,0.05 0.02,0.95 " + scolorStr + "\n") % str_colors
+            fhCmd.write(line)
+
+            fhCmd.close()
         else:
+
             tmpFileName = os.path.abspath(self.protocol._getTmpPath("axis.bild"))
             Chimera.createCoordinateAxisFile(dim,
-                                             bildFileName=tmpFileName,
-                                             sampling=inputSmprt)
+                                         bildFileName=tmpFileName,
+                                         sampling=inputSmprt)
+
+            if (exists(self.protocol._getExtraPath("MG_Chimera_resolution.mrc"))):
+                imageFileVolume = self.protocol._getExtraPath("MG_Chimera_resolution.mrc")
+            else:
+                imageFileVolume = self.protocol._getExtraPath(OUTPUT_RESOLUTION_FILE_CHIMERA)
+
+
             fhCmd.write("open %s\n" % tmpFileName)
             fhCmd.write("cofr 0,0,0\n")  # set center of coordinates
             fhCmd.write("open %s\n" % fninput)
-            fhCmd.write("open %s\n" % (fnRoot + CHIMERA_RESOLUTION_VOL))
-            imageFileVolume = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
+            fhCmd.write("open %s\n" % os.path.abspath(imageFileVolume))
+            
             header = Ccp4Header(imageFileVolume, readHeader=True)
+
 
             x, y, z = header.getSampling()
             imageFileSmprt = x
@@ -293,39 +335,40 @@ class XmippMonoResViewer(LocalResolutionViewer):
             # input vol(s) origin coordinates
             x_input, y_input, z_input = inputVolume.getShiftsFromOrigin()
             fhCmd.write("volume #1 voxelSize %f origin %0.2f,%0.2f,%0.2f\n"
-                        % (inputSmprt, x_input, y_input, z_input))
+                    % (inputSmprt, x_input, y_input, z_input))
 
             # image vol origin coordinates
             x_output, y_output, z_output = header.getOrigin()
             fhCmd.write("volume #2 voxelSize %f origin %0.2f,%0.2f,%0.2f\n"
-                        % (imageFileSmprt, x_output, y_output, z_output))
+                    % (imageFileSmprt, x_output, y_output, z_output))
 
             #### Check if the coordinate system works for a set of volumes
+
             fhCmd.write("volume #2 hide\n")
-
-            linePrefix = "scolor #1 volume #2 perPixel false cmap "
             
-        scolorStr = '%s,%s:' * numberOfColors
-        scolorStr = scolorStr[:-1]
+            scolorStr = '%s,%s:' * numberOfColors
+            scolorStr = scolorStr[:-1]
 
-        line = (linePrefix + scolorStr + "\n") % colorList
-        fhCmd.write(line)
+            line = ("scolor #1 volume #2 perPixel false cmap "
+                + scolorStr + "\n") % colorList
+            fhCmd.write(line)
 
-        scolorStr = '%s %s ' * numberOfColors
-        str_colors = ()
-        for idx, elem in enumerate(colorList):
-            if idx % 2 == 0:
-                if idx % 8 == 0:
-                    str_colors += elem,
+            scolorStr = '%s %s ' * numberOfColors
+            str_colors = ()
+            for idx, elem in enumerate(colorList):
+                if (idx % 2 == 0):
+                    if ((idx % 8) == 0):
+                        str_colors +=  str(elem),
+                    else:
+                        str_colors += '" "',
                 else:
-                    str_colors += '" "',
-            else:
-                str_colors += elem,
+                    str_colors += elem,
+        
+            line = ("colorkey 0.01,0.05 0.02,0.95 " + scolorStr + "\n") % str_colors
+            fhCmd.write(line)
 
-        line = ("colorkey 0.01,0.05 0.02,0.95 " + scolorStr + "\n") % str_colors
-        fhCmd.write(line)
+            fhCmd.close()
 
-        fhCmd.close()
 
     @staticmethod
     def colorMapToColorList(steps, colorMap):
@@ -345,7 +388,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
         return colors
     
     def getColorMap(self):
-        if (COLOR_CHOICES[self.colorMap.get()] == 'other'):
+        if (COLOR_CHOICES[self.colorMap.get()] is 'other'): 
             cmap = cm.get_cmap(self.otherColorMap.get())
         else:
             cmap = cm.get_cmap(COLOR_CHOICES[self.colorMap.get()])

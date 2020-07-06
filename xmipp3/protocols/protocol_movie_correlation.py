@@ -42,6 +42,7 @@ from pyworkflow import VERSION_1_1
 from pwem.protocols import ProtAlignMovies
 
 from xmipp3.convert import writeMovieMd
+from xmipp3.base import isXmippCudaPresent
 
 
 class XmippProtMovieCorr(ProtAlignMovies):
@@ -391,4 +392,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
         if (self.controlPointT < 3):
             errors.append("You have to use at least 3 control points in T dim")
             return errors # to avoid possible division by zero later
+        if self.useGpu and not isXmippCudaPresent("xmipp_cuda_movie_alignment_correlation"):
+            errors.append("I cannot find the Xmipp GPU programs in the path")
+
         return errors

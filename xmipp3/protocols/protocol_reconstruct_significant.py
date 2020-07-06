@@ -41,6 +41,7 @@ from pwem.objects import SetOfClasses2D, Volume
 from pwem import emlib
 
 from xmipp3.convert import writeSetOfClasses2D, writeSetOfParticles, volumeToRow
+from xmipp3.base import isXmippCudaPresent
 
 
 class XmippProtReconstructSignificant(ProtInitialVolume):
@@ -473,6 +474,9 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
         if (100 - self.alpha0.get()) / 100.0 * (SL.getTrueSymsNo() + 1) > 1:
             errors.append("Increase the initial significance it is too low "
                           "for this symmetry")
+
+        if self.useGpu and not isXmippCudaPresent():
+            errors.append("You have asked to use GPU, but I cannot find Xmipp GPU programs in the path")
         return errors
 
     def _summary(self):

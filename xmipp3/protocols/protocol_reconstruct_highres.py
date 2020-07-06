@@ -52,14 +52,14 @@ import pwem.emlib.metadata as md
 from pwem.constants import ALIGN_PROJ
 
 from pwem import emlib
-from xmipp3.base import HelicalFinder
+from xmipp3.base import HelicalFinder, isXmippCudaPresent
 from xmipp3.convert import createItemMatrix, setXmippAttributes, writeSetOfParticles
 
 def getPreviousQuality(img, imgRow):
     if hasattr(img,"_xmipp_cost"):
         imgRow.setValue(md.MDL_COST,img._xmipp_cost.get())
     if hasattr(img,"_xmipp_maxCC"):
-        imgRow.setValue(md.MDL_MAXCC,img._xmipp_cost.get())
+        imgRow.setValue(md.MDL_MAXCC,img._xmipp_maxCC.get())
 
 class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
     """This is a 3D refinement protocol whose main input is a volume and a set of particles.
@@ -1646,6 +1646,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if not self.doContinue and self.inputParticles.hasValue() and \
            self.alignmentMethod.get()==self.LOCAL_ALIGNMENT and not self.inputParticles.get().hasAlignmentProj():
             errors.append("If the first iteration is local, then the input particles must have an alignment")
+        if self.useGpu.get() and not isXmippCudaPresent():
+            errors.append("You have asked to use GPU, but I cannot find the Xmipp GPU programs in the path")
         return errors
     
     def _warnings(self):
