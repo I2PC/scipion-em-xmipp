@@ -35,6 +35,7 @@ from pwem.objects import Volume, SetOfParticles, SetOfClasses2D
 from pwem import emlib
 from xmipp3.constants import *
 from xmipp3.convert import  writeSetOfParticles
+from xmipp3.base import isXmippCudaPresent
 from .protocol_process import XmippProcessParticles,\
     XmippProcessVolumes
 
@@ -854,7 +855,10 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
                 validateMsgs.append('c1 is not a valid symmetry group.'
                                     'If you do not want to symmetrize set'
                                     'the field Symmetrize to not.')
-                
+
+        if self.useGpu and not isXmippCudaPresent("xmipp_cuda_align"):
+            validateMsgs.append("You asked to use GPU, but I cannot find Xmipp cuda programs in the path")
+
         return validateMsgs
     
     def _summary(self):

@@ -44,7 +44,7 @@ from pwem.protocols import ProtAnalysis3D
 
 from xmipp3.convert import writeSetOfParticles, writeSetOfVolumes, \
     getImageLocation
-
+from xmipp3.base import isXmippCudaPresent
 
 class XmippProtMultiRefAlignability(ProtAnalysis3D):
     """    
@@ -484,6 +484,8 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
             validateMsgs.append('Please provide an input reference volume.')
         if self.inputParticles.get() and not self.inputParticles.hasValue():
             validateMsgs.append('Please provide input particles.')
+        if self.useGpu and not isXmippCudaPresent("xmipp_cuda_align_significant"):
+            validateMsgs.append("You have asked to use GPU, but I cannot find the Xmipp GPU programs in the path")
         return validateMsgs
 
     def _summary(self):

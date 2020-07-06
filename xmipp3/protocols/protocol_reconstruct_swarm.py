@@ -43,14 +43,11 @@ from pyworkflow.utils.path import cleanPath, copyFile, moveFile, makePath, creat
 from pwem.protocols import ProtRefine3D
 from pwem.objects import Volume, SetOfVolumes
 from pwem.emlib.image import ImageHandler
-from pwem.emlib.metadata import getFirstRow, getSize
-from pyworkflow.utils import getFloatListFromValues
-import pwem.emlib.metadata as md
+
 
 from pwem import emlib
-from xmipp3.base import HelicalFinder
-from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
-                            setXmippAttributes, getImageLocation)
+from xmipp3.base import isXmippCudaPresent
+from xmipp3.convert import (writeSetOfParticles, getImageLocation)
 
 
 class XmippProtReconstructSwarm(ProtRefine3D):
@@ -563,3 +560,9 @@ class XmippProtReconstructSwarm(ProtRefine3D):
                 strline+="We imposed %s symmetry. "%self.symmetryGroup
             strline += "We performed %d iterations of "%self.numberOfIterations.get()
         return [strline]
+
+    def _validate(self):
+        errors = []
+        if self.useGpu and not isXmippCudaPresent():
+            errors.append("You have asked to use GPU, but I cannot find the Xmipp GPU programs")
+        return errors
