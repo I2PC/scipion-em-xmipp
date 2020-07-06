@@ -136,12 +136,10 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             shiftArrayY = np.asarray(shiftListY)
 
             evalBoth = self.rejType==self.REJ_AND or self.rejType==self.REJ_OR
-
             if self.rejType == self.REJ_MOVIE or evalBoth:
                 rangeX = np.max(shiftArrayX) - np.min(shiftArrayX)
                 rangeY = np.max(shiftArrayY) - np.min(shiftArrayY)
                 rangeM = max(rangeX, rangeY) * sampling
-                print("rangeM: %s" % rangeM)
                 rejectedByMovie = rangeM > self.maxMovieShift.get()
 
             if self.rejType == self.REJ_FRAME or evalBoth:
@@ -150,7 +148,6 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                 maxShiftX = np.max(frameShiftX)
                 maxShiftY = np.max(frameShiftY)
                 maxShiftM = max(maxShiftX, maxShiftY) * sampling
-                print("maxShiftM: %s" % maxShiftM)
                 rejectedByFrame = maxShiftM > self.maxFrameShift.get()
 
             if self.rejType == self.REJ_AND:
@@ -310,8 +307,6 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                 inputSet = self.inputMics
         else:
             inputSet = self.inputMovies.get()
-
-        print(">>>>>>>>", inputSet)
 
         setFile = self._getPath(baseName)
 
