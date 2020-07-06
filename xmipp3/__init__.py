@@ -39,7 +39,7 @@ from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.20.07a0'
+_currentVersion = '3.20.07b1'
 
 
 class Plugin(pwem.Plugin):
@@ -175,7 +175,6 @@ class Plugin(pwem.Plugin):
                                       bindingsAndLibsTgt)],
                            deps=xmippDeps, default=False)
 
-        sourceTgt.append(verToken)
         env.addPackage('xmippSrc', version=_currentVersion,
                        # adding 'v' before version to fix a package target (post-link)
                        tar='xmippSrc-v'+_currentVersion+'.tgz',
