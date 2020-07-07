@@ -163,13 +163,13 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                            "between the two estimations below this resolution, "
                            "it will be discarded.")
         form.addParam('averageDefocus', params.BooleanParam,
-                      condition="calculateConsensus", default=True,
+                      condition="calculateConsensus", default=False,
                       label='Average equivalent metadata?',
                       help='If *Yes*, making an average of those metadata present '
                            'in both CTF estimations (defocus, astigmatism angle...)\n '
                            'If *No*, the primary estimation metadata will persist.')
         form.addParam('includeSecondary', params.BooleanParam,
-                      condition="calculateConsensus", default=True,
+                      condition="calculateConsensus", default=False,
                       label='Include all secondary metadata?',
                       help='If *Yes*, all metadata in the *Secondary CTF* will '
                            'be included in the resulting CTF.\n '
