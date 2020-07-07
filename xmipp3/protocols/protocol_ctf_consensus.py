@@ -187,10 +187,11 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         self.allCtf1 = []
         self.allCtf2 = []
         self.initializeRejDict()
-        self.ctfFn1 = self.inputCTF.get().getFileName()
-        self.ctfFn2 = self.inputCTF2.get().getFileName()
         self.setSecondaryAttributes()
+
+        self.ctfFn1 = self.inputCTF.get().getFileName()
         if self.calculateConsensus:
+            self.inputCTF2.get().getFileName()
             ctfSteps = self._checkNewInput()
         else:
             ctfSteps = self._insertNewSelectionSteps(self.insertedDict,
@@ -485,6 +486,8 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             item = self.inputCTF2.get().getFirstItem()
             ctf2Attr = set(item.getObjDict().keys())
             self.secondaryAttributes = ctf2Attr - ctf1Attr
+        else:
+            self.secondaryAttributes = set()
 
 
     def _loadOutputSet(self, SetClass, baseName):
