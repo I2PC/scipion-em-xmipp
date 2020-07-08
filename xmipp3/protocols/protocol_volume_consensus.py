@@ -32,8 +32,10 @@ from pwem.protocols import ProtInitialVolume
 
 
 class XmippProtVolConsensus(ProtInitialVolume):
-    """ This protocol performs a fusion of all the input volumes, which should be preprocessed with protocol
-    "volume substraction" saving volume 2, in order to be as similar as possible before the fusion. """
+    """ This protocol performs a fusion of all the input volumes, which should be preprocessed with protocol 'volume
+    substraction' saving volume 2, in order to be as similar as possible before the fusion. The output of
+    this protocol is the consensus volume and another volume which indicates the maximun difference between input
+    volumes in each voxel."""
 
     _label = 'volume consensus'
 
