@@ -27,10 +27,8 @@
 # **************************************************************************
 
 from pyworkflow.protocol.params import MultiPointerParam
-from pwem.convert import headers
 from pwem.objects import Volume, Transform
 from pwem.protocols import ProtInitialVolume
-from pyworkflow.utils import removeExt
 
 
 class XmippProtVolConsensus(ProtInitialVolume):
@@ -48,15 +46,10 @@ class XmippProtVolConsensus(ProtInitialVolume):
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        self._insertFunctionStep('convertInputStep')
         self._insertFunctionStep('fusionStep')
         self._insertFunctionStep('createOutputStep')
 
     # --------------------------- STEPS functions ---------------------------------------------------
-    def convertInputStep(self):
-        pass
-
-
     def fusionStep(self):
         inputVols = self._getExtraPath("input_volumes.txt")
         fhInputVols = open(inputVols, 'w')
@@ -64,12 +57,6 @@ class XmippProtVolConsensus(ProtInitialVolume):
             fileName = vol.get().getFileName()
             if fileName.endswith(':mrc'):
                 fileName = fileName[:-4]
-            # if not fileName.endswith('.mrc'):
-            #     volmrc = self._getExtraPath('vol_%d.mrc' % i)
-            #     args = ' -i %s -o %s' % (fileName, volmrc)
-            #     program = "xmipp_image_convert"
-            #     self.runJob(program, args)
-            #     fileName = volmrc
             fhInputVols.write(fileName + '\n')
         fhInputVols.close()
         outVolFn = self._getExtraPath("consensus_volume.mrc")
@@ -80,12 +67,11 @@ class XmippProtVolConsensus(ProtInitialVolume):
         outVol = Volume()
         outVol.setSamplingRate(self.vols[0].get().getSamplingRate())
         outVol.setFileName(self._getExtraPath("consensus_volume.mrc"))
-        # origin = Transform()
-        # ccp4header = headers.Ccp4Header(self.vols[0].get().getFileName(), readHeader=True)
-        # shifts = ccp4header.getOrigin()
-        # origin.setShiftsTuple(shifts)
-        # outVol.setOrigin(origin)
+        outVol2 = Volume()
+        outVol2.setSamplingRate(self.vols[0].get().getSamplingRate())
+        outVol2.setFileName(self._getExtraPath("consensus_volume_diff.mrc"))
         self._defineOutputs(outputVolume=outVol)
+        self._defineOutputs(outputVolumeDiff=outVol2)
 
     # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
