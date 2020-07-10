@@ -171,11 +171,12 @@ class XmippProtVolSubtraction(EMProtocol):
         vol1 = self.vol1.get()
         volume = Volume()
         volume.setSamplingRate(vol1.getSamplingRate())
-        origin = Transform()
-        ccp4header = headers.Ccp4Header(vol1.getFileName(), readHeader=True)
-        shifts = ccp4header.getOrigin()
-        origin.setShiftsTuple(shifts)
-        volume.setOrigin(origin)
+        if vol1.getFileName().endswith('mrc'):
+            origin = Transform()
+            ccp4header = headers.Ccp4Header(vol1.getFileName(), readHeader=True)
+            shifts = ccp4header.getOrigin()
+            origin.setShiftsTuple(shifts)
+            volume.setOrigin(origin)
         volume.setFileName(self._getExtraPath("output_volume.mrc"))
         filename = volume.getFileName()
         if filename.endswith('.mrc') or filename.endswith('.map'):
