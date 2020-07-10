@@ -47,7 +47,7 @@ from pwem import emlib
 from pwem.emlib import Image, MD_APPEND, DT_DOUBLE
 from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
                             rowToAlignment, rowToParticle)
-
+from xmipp3.base import isXmippCudaPresent
 
 HASH_SIZE = 100
 
@@ -990,6 +990,8 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
         if newSize>x or newSize>y:
             errors.append('The image size must be smaller than the size of '
                           'the input images')
+        if not isXmippCudaPresent("xmipp_cuda_correlation"):
+            errors.append("I cannot find the Xmipp GPU programs in the path")
         return errors
 
     def _summary(self):

@@ -44,7 +44,7 @@ import pwem.emlib.metadata as md
 
 from xmipp3.convert import (writeSetOfParticles, rowToAlignment,
                             writeSetOfClasses2D)
-
+from xmipp3.base import isXmippCudaPresent
 
 REF_CLASSES = 0
 REF_AVERAGES = 1
@@ -256,6 +256,8 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
         if x1 != x2 or y1 != y2:
             errors.append('The input images (%s, %s) and the reference images (%s, %s) '
                           'have different sizes' % (x1, y1, x2, y2))
+        if not isXmippCudaPresent("xmipp_cuda_correlation"):
+            errors.append("I cannot find the Xmipp GPU programs in the path")
         return errors
 
     def _summary(self):

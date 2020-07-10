@@ -38,7 +38,7 @@ from pwem.protocols import ProtAnalysis3D
 import pwem.emlib.metadata as md
 
 from pwem import emlib
-from xmipp3.base import findRow, readInfoField, writeInfoField
+from xmipp3.base import findRow, readInfoField, writeInfoField, isXmippCudaPresent
 from xmipp3.convert import (rowToAlignment, setXmippAttributes, xmippToLocation,
                             createItemMatrix, writeSetOfParticles)
 from xmipp3.constants import SYM_URL
@@ -593,6 +593,8 @@ class XmippProtSolidAngles(ProtAnalysis3D):
             validateMsgs.append('Please provide an input reference volume.')
         if self.inputParticles.get() and not self.inputParticles.hasValue():
             validateMsgs.append('Please provide input particles.')
+        if self.useGpu and not isXmippCudaPresent():
+            validateMsgs.append("You have asked to use GPU, but I cannot find the Xmipp GPU programs")
         return validateMsgs
 
     def _summary(self):
