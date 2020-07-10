@@ -191,7 +191,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
         self.ctfFn1 = self.inputCTF.get().getFileName()
         if self.calculateConsensus:
-            self.inputCTF2.get().getFileName()
+            self.ctfFn2 = self.inputCTF2.get().getFileName()
             ctfSteps = self._checkNewInput()
         else:
             ctfSteps = self._insertNewSelectionSteps(self.insertedDict,
