@@ -2,7 +2,6 @@
 # **************************************************************************
 # *
 # * Authors:  Estrella Fernandez Gimenez (me.fernandez@cnb.csic.es)
-# *           Ruben Sanchez (rsanchez@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -50,6 +49,7 @@ class XmippProtVolConsensus(ProtInitialVolume):
     def _insertAllSteps(self):
         self._insertFunctionStep('fusionStep')
         self._insertFunctionStep('createOutputStep')
+        self._insertFunctionStep("createChimeraScript")
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def fusionStep(self):
@@ -74,6 +74,33 @@ class XmippProtVolConsensus(ProtInitialVolume):
         outVol2.setFileName(self._getExtraPath("consensus_volume_diff.mrc"))
         self._defineOutputs(outputVolume=outVol)
         self._defineOutputs(outputVolumeDiff=outVol2)
+
+    def createChimeraScript(self):
+        fnRoot = "extra/"
+        scriptFile = self._getPath('result') + '_fusion_chimera.cmd'
+        fhCmd = open(scriptFile, 'w')
+        fhCmd.write("open %s\n" % (fnRoot+"consensus_volume.mrc"))
+        fhCmd.write("open %s\n" % (fnRoot+"consensus_volume_diff.mrc"))
+        fhCmd.write("vol #1 hide\n")
+        fhCmd.write("scolor #0 volume #1 cmap rainbow reverseColors True\n")
+        fhCmd.close()
+
+        # scriptFile = self._getPath('result') + '_localrot_chimera.cmd'
+        # fhCmd = open(scriptFile, 'w')
+        # fhCmd.write("open %s\n" % (fnRoot+"_final.vol"))
+        # fhCmd.write("open %s\n" % (fnRoot+"_localrot.vol"))
+        # fhCmd.write("vol #1 hide\n")
+        # fhCmd.write("scolor #0 volume #1 cmap rainbow reverseColors True\n")
+        # fhCmd.close()
+        #
+        # scriptFile = self._getPath('result') + '_morph_chimera.cmd'
+        # fhCmd = open(scriptFile, 'w')
+        # fhCmd.write("open %s\n" % (fnRoot+"_initial.vol"))
+        # fhCmd.write("open %s\n" % (fnRoot+"_final.vol"))
+        # fhCmd.write("vol #0 hide\n")
+        # fhCmd.write("vol #1 hide\n")
+        # fhCmd.write("vop morph #0,1 frames 50\n")
+        # fhCmd.close()
 
     # --------------------------- INFO functions --------------------------------------------
     def _summary(self):

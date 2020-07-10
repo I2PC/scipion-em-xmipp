@@ -49,7 +49,7 @@ from .viewer_reconstruct_highres import XmippReconstructHighResViewer
 from .viewer_solid_angles import SolidAnglesViewer
 from .viewer_extract_unit_cell import viewerXmippProtExtractUnit
 from .viewer_volume_subtraction import viewerXmippProtVolSubtraction
-
+from .viewer_volume_consensus import XmippVolumeConsensusViewer
 
 #from .viewer_combine_pdb import XmippProtCombinePdbViewer
 
