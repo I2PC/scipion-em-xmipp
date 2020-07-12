@@ -593,7 +593,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
             args = '-i %(imgsExp)s --ref0 %(imgsRef)s --nref %(Nrefs)d ' \
                    '--iter 1 --distance correlation --classicalMultiref ' \
                    '--maxShift %(maxshift)d --odir %(outDir)s --oroot %(' \
-                   'rootFn)s '
+                   'rootFn)s --dontMirrorImages '
             self.runJob("xmipp_classify_CL2D",
                         args % self._params, numberOfMpi=self.numberOfMpi.get())
             copy(fileTocopy, classesOut)
