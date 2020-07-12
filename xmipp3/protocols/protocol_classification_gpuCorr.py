@@ -24,7 +24,7 @@
 # *
 # ******************************************************************************
 
-from shutil import copy
+from shutil import copy, rmtree
 from os.path import join, exists
 from os import mkdir, remove, listdir, environ
 
@@ -37,6 +37,7 @@ import pwem.emlib.metadata as md
 from pwem.emlib.metadata import iterRows, getSize
 from pwem.objects import SetOfClasses2D
 from pwem.constants import ALIGN_2D, ALIGN_NONE
+from pwem import emlib
 
 from pwem.emlib import MD_APPEND
 from xmipp3.convert import (rowToAlignment, xmippToLocation,
@@ -98,11 +99,6 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                            'with low number of images associated.\n'
                            'If *No*, all the generated classes will be '
                            'balanced',
-                      expertLevel=const.LEVEL_ADVANCED,)
-        form.addParam('useCL2D', params.BooleanParam, default=True,
-                      label='Use CL2D',
-                      help='If you set to *No*, you will use Cuda Correlation (GPU) '
-                           'to make the split process',
                       expertLevel=const.LEVEL_ADVANCED,)
         form.addParallelSection(threads=0, mpi=8)
 
@@ -382,6 +378,12 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
             self.runJob("xmipp_metadata_utilities", args % self._params,
                         numberOfMpi=1)
 
+            metadataRef = md.MetaData(refSet)
+            if metadataRef.containsLabel(md.MDL_REF) is False:
+                args = ('-i %(outputMd)s --fill ref lineal 1 1 -o %(outputMd)s')
+                self.runJob("xmipp_metadata_utilities", args % self._params,
+                            numberOfMpi=1)
+
         # Fourth step: calling program xmipp_cuda_correlation
         count = 0
         GpuListCuda = ''
@@ -409,7 +411,9 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                             'keepBest': self.keepBest.get(),
                             'maxshift': self.maximumShift,
                             'outputClassesFile': filename,
-                            'device': int(GpuListCuda[0]),
+                            'device': GpuListCuda,
+                            'auxOut': join(self._getExtraPath(), 'level%03d'
+                                           % level, 'flipReferences.xmd'),
                             }
         else:
             filename = 'general_level%03d' % level + '_classes.xmd'
@@ -422,41 +426,51 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                             'keepBest': self.keepBest.get(),
                             'maxshift': self.maximumShift,
                             'outputClassesFile': filename,
-                            'device': int(GpuListCuda[0]),
+                            'device': GpuListCuda,
                             'outputClassesFileNoExt': 'general_level%03d' % level + '_classes',
+                            'auxOut': join(self._getExtraPath(),'level%03d'
+                                           % level,'flipReferences.xmd'),
                             }
         Nrefs = getSize(refSet)
         if Nrefs>2:
-            args = '-i_ref %(imgsRef)s -i_exp %(imgsExp)s -o %(outputFile)s ' \
-                   '--odir %(tmpDir)s --keep_best %(keepBest)d ' \
-                   '--maxShift %(maxshift)d --classify %(outputClassesFile)s ' \
-                   '--simplifiedMd --device %(device)d '
-            self.runJob("xmipp_cuda_correlation", args % self._params,
-                        numberOfMpi=1)
+
+                #args = '-i %(imgsRef)s -o %(auxOut)s --flip --apply_transform'
+                #self.runJob("xmipp_transform_geometry", args % self._params,
+                #            numberOfMpi=1)
+
+                #args = ('-i %(imgsRef)s --set union_all %(auxOut)s -o %(imgsRef)s')
+                #self.runJob("xmipp_metadata_utilities", args % self._params,
+                #            numberOfMpi=1)
+
+                #args = ('-i %(imgsRef)s --fill ref lineal 1 1 -o %(imgsRef)s')
+                #self.runJob("xmipp_metadata_utilities", args % self._params,
+                #           numberOfMpi=1)
+
+                #args = ('-i %(imgsRef)s --fill enabled constant 1 -o %(imgsRef)s')
+                #self.runJob("xmipp_metadata_utilities", args % self._params,
+                #            numberOfMpi=1)
+
+                args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \
+                       '--keepBestN 1 --oUpdatedRefs %(outputClassesFileNoExt)s ' \
+                       '--odir %(tmpDir)s --dev %(device)s'
+                self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
+
+                #fnClasses = join(self._getExtraPath(), 'level%03d' % level, 'general_level%03d' % level + '_classes.xmd')
+                #fnImages = join(self._getExtraPath(), 'level%03d' % level, 'general_images_level%03d' % level + '.xmd')
+                #self.mergingFlipAndNonFlipReferences(fnClasses, fnImages)
+
         else:
             self._params['Nrefs'] = Nrefs
             self._params['cl2dDir'] = self._getExtraPath(join('level%03d' % level))
             self._params['cl2dDirNew'] = self._getExtraPath(join('level%03d' % level, "level_00"))
-            if self.useCL2D:
-                args='-i %(imgsExp)s --ref0 %(imgsRef)s --nref %(Nrefs)d '\
-                     '--iter 1 --distance correlation --classicalMultiref '\
-                     '--maxShift %(maxshift)d --odir %(cl2dDir)s --dontMirrorImages'
-                try:
-                    self.runJob("xmipp_classify_CL2D",
-                                args % self._params, numberOfMpi=self.numberOfMpi.get())
-                except:
-                    return
-            else:
-                if not exists(self._getExtraPath(join('level%03d' % level, "level_00"))):
-                    mkdir(self._getExtraPath(join('level%03d' % level, "level_00")))
-                args = '-i_exp %(imgsExp)s -i_ref %(imgsRef)s -o images.xmd ' \
-                      '--keep_best %(keepBest)d --classify class_classes.xmd ' \
-                      '--odir %(cl2dDirNew)s --simplifiedMd --device %(device)d'
-                self.runJob("xmipp_cuda_correlation", args % self._params, numberOfMpi=1)
-                copy(self._getExtraPath(join('level%03d' % level,
-                                             "level_00",
-                                             "images.xmd")),
-                     self._getExtraPath(join('level%03d' % level, "images.xmd")))
+            args='-i %(imgsExp)s --ref0 %(imgsRef)s --nref %(Nrefs)d '\
+                 '--iter 1 --distance correlation --classicalMultiref '\
+                 '--maxShift %(maxshift)d --odir %(cl2dDir)s --dontMirrorImages '
+            try:
+                self.runJob("xmipp_classify_CL2D",
+                            args % self._params, numberOfMpi=self.numberOfMpi.get())
+            except:
+                return
 
             if flag_split:
                 copy(self._getExtraPath(join('level%03d' % level,
@@ -547,6 +561,70 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
             __, __ = self.checkAttraction(level, True)
 
 
+    def mergingFlipAndNonFlipReferences(self, fnClasses, fnImages):
+
+        mdClass = md.MetaData("classes@" + fnClasses)
+        mdClass2 = md.MetaData("classes@" + fnClasses)
+        numRefs = getSize("classes@" + fnClasses)
+        mdOut = md.MetaData()
+        countRef = 1
+        for row1 in iterRows(mdClass):
+            fnImg1 = row1.getValue(emlib.MDL_IMAGE)
+            count1 = row1.getValue(emlib.MDL_REF)
+            cc1 = row1.getValue(emlib.MDL_CLASS_COUNT)
+            if count1 > numRefs / 2:
+                break
+            for row2 in iterRows(mdClass2):
+                fnImg2 = row2.getValue(emlib.MDL_IMAGE)
+                count2 = row2.getValue(emlib.MDL_REF)
+                cc2 = row2.getValue(emlib.MDL_CLASS_COUNT)
+                if count2 == count1 + numRefs / 2:
+                    args = '-i %s -o %s --flip --apply_transform' % (fnImg2, fnImg2)
+                    self.runJob("xmipp_transform_geometry", args, numberOfMpi=1)
+                    fnOut = '%06d@' % (countRef) + self._getExtraPath('auxiliar.stk')
+                    args = '-i %s --plus %s -o %s' % (fnImg1, fnImg2, fnOut)
+                    self.runJob("xmipp_image_operate", args, numberOfMpi=1)
+                    args = '-i %s --divide 2 -o %s' % (fnOut, fnOut)
+                    self.runJob("xmipp_image_operate", args, numberOfMpi=1)
+                    rowOut = row1
+                    rowOut.setValue(emlib.MDL_IMAGE, fnOut)
+                    rowOut.setValue(emlib.MDL_REF, countRef)
+                    rowOut.setValue(emlib.MDL_CLASS_COUNT, cc1 + cc2)
+                    rowOut.addToMd(mdOut)
+                    countRef += 1
+                    break
+        mdOut.write("classes@" + self._getExtraPath('auxiliar.xmd'))
+
+        args = '-i %s --operate modify_values \"image=replace(image, \'%s\', \'%s\')\" -o %s' \
+               %('classes@'+self._getExtraPath('auxiliar.xmd'), self._getExtraPath('auxiliar'), fnClasses[:-4], 'classes@'+self._getExtraPath('auxiliar.xmd'))
+        self.runJob("xmipp_metadata_utilities", args,numberOfMpi=1)
+
+        for i in range(int(numRefs / 2)):
+            fn1 = "class%06d_images@%s" % (i + 1,fnClasses)
+            fn2 = "class%06d_images@%s" % (i + 1 + numRefs / 2,fnClasses)
+            fnOut = "class%06d_images@%s" % ( i + 1, self._getExtraPath('auxiliar.xmd'))
+            try:
+                args = ('-i %s --fill ref constant %d -o %s --mode append' % (fn2, (i + 1), fn2))
+                self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
+                args = ('-i %s --set union_all %s -o %s --mode append' % (fn1, fn2, fnOut))
+                self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
+            except:
+                continue
+
+        copy(self._getExtraPath('auxiliar.xmd'), fnClasses)
+        copy(self._getExtraPath('auxiliar.stk'), fnClasses[:-3]+'stk')
+        remove(self._getExtraPath('auxiliar.xmd'))
+        remove(self._getExtraPath('auxiliar.stk'))
+
+        mdImgs = md.MetaData(fnImages)
+        mdOut = md.MetaData()
+        for row in iterRows(mdImgs):
+            myRef = row.getValue(emlib.MDL_REF)
+            if myRef > numRefs / 2:
+                row.setValue(emlib.MDL_REF, int(myRef - numRefs / 2))
+            row.addToMd(mdOut)
+        mdOut.write(fnImages)
+
 
     def attractionGeneralStep(self, level):
 
@@ -626,6 +704,9 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
 
         outSet = self._getExtraPath(join('level%03d' % level,
                                          'intermediate_classes.xmd'))
+        if level>0 and level%20==0:
+            self.cleaningFolder(outSet)
+
         metadataItem = md.MetaData(outSet)
         for item in metadataItem:
             nameImg = metadataItem.getValue(md.MDL_IMAGE, item)
@@ -651,6 +732,22 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                     numberOfMpi=1)
 
         return listAuxNum, listAuxString
+
+    def cleaningFolder(self, outSet):
+        metadataItem = md.MetaData(outSet)
+        for item in metadataItem:
+            nameImg = metadataItem.getValue(md.MDL_IMAGE, item)
+            break
+        aux=nameImg.split('/')
+        for item in aux:
+            if 'level' in item:
+                aux2=item
+                break
+        pos=int(aux2[5:])
+        for i in range(pos):
+            nameFolder = join(self._getExtraPath(),'level%03d'%i)
+            if exists(nameFolder):
+                rmtree(nameFolder)
 
 
     def generateMetadata(self, listNameImgs, listNumImgs, level):
@@ -714,8 +811,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
         else:
             count = len(listNumImgs)
         for newRef in range(getSize(outSet)):
-            mdImgsInClass = md.MetaData('class%06d_images@%s' % (newRef + 1,
-                                                                 outSet))
+            mdImgsInClass = md.MetaData('class%06d_images@%s' % (newRef + 1, outSet))
             mdImgsInClass.fillConstant(md.MDL_REF, count)
             mdImgsInClass.write('class%06d' % (count) + '_images@'
                                 + self._getExtraPath(join('level%03d' %
