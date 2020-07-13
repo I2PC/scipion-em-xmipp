@@ -196,7 +196,8 @@ class XmippProtValFit(ProtAnalysis3D):
         else:         
             """ Convert PDB to Map """           
             params = ' --centerPDB '
-            params += ' -v 0 '        
+#             params += ' --noHet ' #just test
+            params += ' -v 0 '    
             params += ' --sampling %f' % self.inputVolume.get().getSamplingRate()        
             params += ' --size %d' % self.inputVolume.get().getXDim()
             params += ' -i %s' % self.inputPDB.get()        
@@ -237,7 +238,7 @@ class XmippProtValFit(ProtAnalysis3D):
                             
                 params = ' -i %s' % self._getFileName(OUTPUT_PDBVOL_FILE)+'.vol'          
                 params += ' -o %s' % self.mask_xmipp
-                params += ' --select below 0.02 --substitute binarize'                    
+                params += ' --select below 0.02 --substitute binarize'                     
                 self.runJob('xmipp_transform_threshold', params) 
                  
                 params = ' -i %s' % self.mask_xmipp        
