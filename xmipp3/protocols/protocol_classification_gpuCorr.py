@@ -24,7 +24,7 @@
 # *
 # ******************************************************************************
 
-from shutil import copy, rmtree
+from shutil import copy
 from os.path import join, exists
 from os import mkdir, remove, listdir, environ
 
@@ -619,8 +619,6 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
 
         outSet = self._getExtraPath(join('level%03d' % level,
                                          'intermediate_classes.xmd'))
-        if level>0 and level%20==0:
-            self.cleaningFolder(outSet)
 
         metadataItem = md.MetaData(outSet)
         for item in metadataItem:
