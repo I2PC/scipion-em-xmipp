@@ -150,7 +150,7 @@ class XmippProtTriggerData(EMProtocol):
         if self.streamClosed:
             self.finished = True
         elif not self.allImages.get():
-            self.finished = len(self.images) > self.outputSize
+            self.finished = len(self.images) >= self.outputSize
         else:
             self.finished = False
 
@@ -170,7 +170,7 @@ class XmippProtTriggerData(EMProtocol):
 
     def _fillingOutput(self):
         imsSqliteFn = '%s.sqlite' % self.getImagesType('lower')
-        outputName = 'output%s' % self.getImagesType()
+        outputName = self.getOututName()
         if len(self.images) >= self.outputSize or self.finished:
             if self.allImages:  # Streaming and semi-streaming
                 if self.splitImages:  # Semi-streaming: Splitting the input
@@ -241,33 +241,30 @@ class XmippProtTriggerData(EMProtocol):
 
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
-
-        input = self.inputImages.get()
-        if input is None:
-            imagesType = "(or not ready)"
-        else:
-            imagesType = input.getClassName().split("SetOf")[1]
         summary = []
+
+        outputStr = self.getOututName()
 
         if self.allImages.get() and not self.splitImages.get():
             summary.append("MODE: *full streaming*.")
-            triggeredMsg = ("'output%s' released, it will be growing up "
-                            "as soon as the input does." % imagesType)
+            triggeredMsg = ("'%s' released, it will be growing up "
+                            "as soon as the input does." % outputStr)
         elif self.splitImages.get():
             summary.append("MODE: *semi streaming (batches)*.")
-            triggeredMsg = ("%d 'output%s' are being released with %d items, "
+            triggeredMsg = ("%d '%s' are being released with %d items, "
                             "each. A new batch will be created when ready."
-                            % (self.getOutputsSize(), imagesType, self.outputSize))
+                            % (self.getOutputsSize(), outputStr, self.outputSize))
         else:
             summary.append("MODE: *static output*.")
-            triggeredMsg = ("'output%s' released and closed. Nothing else to do."
-                            % imagesType)
+            triggeredMsg = ("'%s' released and closed. Nothing else to do."
+                            % outputStr)
 
         if self.getOutputsSize():
             summary.append(triggeredMsg)
         else:
+            inputStr = self.getImagesType() if self.inputImages.get() else '(or not ready)'
             summary.append("Not enough input %s to release an output, yet."
-                           % imagesType)
+                           % inputStr)
             summary.append("At least, %d items are needed to trigger an output."
                            % self.outputSize.get())
 
@@ -305,12 +302,21 @@ class XmippProtTriggerData(EMProtocol):
         return self._inputClass
 
     def setImagesType(self):
-        inputClassName = self.inputImages.get().getClassName()
-        self._inputType = inputClassName.split('SetOf')[1]
+        inputSet = self.inputImages.get()
+        if inputSet:
+            inputClassName = inputSet.getClassName()
+            self._inputType = inputClassName.split('SetOf')[1]
+        else:
+            self._inputType = None
 
     def getImagesType(self, letters='default'):
-        typeStr = self._inputType
+        if not self.hasAttribute('_inputType'):
+            self.setImagesType()
+        typeStr = str(self._inputType)
         if letters == 'lower':
             return typeStr.lower()
         else:
             return typeStr
+
+    def getOututName(self):
+        return 'output%s' % self.getImagesType()
