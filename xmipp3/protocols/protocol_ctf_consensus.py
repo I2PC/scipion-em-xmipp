@@ -163,13 +163,13 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                            "between the two estimations below this resolution, "
                            "it will be discarded.")
         form.addParam('averageDefocus', params.BooleanParam,
-                      condition="calculateConsensus", default=True,
+                      condition="calculateConsensus", default=False,
                       label='Average equivalent metadata?',
                       help='If *Yes*, making an average of those metadata present '
                            'in both CTF estimations (defocus, astigmatism angle...)\n '
                            'If *No*, the primary estimation metadata will persist.')
         form.addParam('includeSecondary', params.BooleanParam,
-                      condition="calculateConsensus", default=True,
+                      condition="calculateConsensus", default=False,
                       label='Include all secondary metadata?',
                       help='If *Yes*, all metadata in the *Secondary CTF* will '
                            'be included in the resulting CTF.\n '
@@ -187,10 +187,11 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         self.allCtf1 = []
         self.allCtf2 = []
         self.initializeRejDict()
-        self.ctfFn1 = self.inputCTF.get().getFileName()
-        self.ctfFn2 = self.inputCTF2.get().getFileName()
         self.setSecondaryAttributes()
+
+        self.ctfFn1 = self.inputCTF.get().getFileName()
         if self.calculateConsensus:
+            self.ctfFn2 = self.inputCTF2.get().getFileName()
             ctfSteps = self._checkNewInput()
         else:
             ctfSteps = self._insertNewSelectionSteps(self.insertedDict,
@@ -485,6 +486,8 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             item = self.inputCTF2.get().getFirstItem()
             ctf2Attr = set(item.getObjDict().keys())
             self.secondaryAttributes = ctf2Attr - ctf1Attr
+        else:
+            self.secondaryAttributes = set()
 
 
     def _loadOutputSet(self, SetClass, baseName):
