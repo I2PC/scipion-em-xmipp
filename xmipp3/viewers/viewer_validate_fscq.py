@@ -41,7 +41,9 @@ from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 from xmipp3.protocols.protocol_validate_fscq import (XmippProtValFit, 
                                                      RESTA_FILE_MRC, 
                                                      OUTPUT_PDBMRC_FILE, 
-                                                     PDB_VALUE_FILE)
+                                                     PDB_VALUE_FILE,
+                                                     RESTA_FILE_NORM,
+                                                     PDB_NORM_FILE)
 
 
 class XmippProtValFitViewer(ProtocolViewer):
@@ -69,13 +71,23 @@ class XmippProtValFitViewer(ProtocolViewer):
         group.addParam('displayVolume', LabelParam,
                       important=True,
                       label='Display Volume Output')
+        
+        group.addParam('displayNormVolume', LabelParam,
+               important=True,
+               label='Display Normalized Volume Output')
 
 
         group.addParam('displayPDB', EnumParam,
                       choices=['by residue', 'by atom'],
                       default=0, important=True,
                       display=EnumParam.DISPLAY_COMBO,
-                      label='Display PDB Output')  
+                      label='Display PDB Output') 
+        
+        group.addParam('displayNormPDB', EnumParam,
+              choices=['by residue', 'by atom'],
+              default=0, important=True,
+              display=EnumParam.DISPLAY_COMBO,
+              label='Display Normalized PDB Output') 
         
         group = form.addGroup('Statistics')
         
@@ -96,7 +108,9 @@ class XmippProtValFitViewer(ProtocolViewer):
     def _getVisualizeDict(self):
         self.protocol._createFilenameTemplates()
         visualizeDict = {'displayVolume': self._visualize_vol,
+                         'displayNormVolume': self._visualize_norm_vol,
                          'displayPDB': self._visualize_pdb,
+                         'displayNormPDB': self._visualize_norm_pdb,
                          'calculateFscqNeg': self._statistics,
                          'calculateFscqPos': self._statistics}
         return visualizeDict    
@@ -127,6 +141,32 @@ class XmippProtValFitViewer(ProtocolViewer):
         Chimera.runProgram(Chimera.getProgram(), fnCmd+"&")
         return []
     
+    def _visualize_norm_vol(self, obj, **args):
+          
+        fnRoot = os.path.abspath(self.protocol._getExtraPath())
+         
+        _inputVol = self.protocol.inputVolume.get()
+        fnCmd = self.protocol._getTmpPath("chimera_VOLoutput.cmd")
+        
+        f = open(fnCmd, 'w')
+ 
+        f.write("open %s\n" % (fnRoot+'/'+OUTPUT_PDBMRC_FILE))
+        f.write("open %s\n" % (fnRoot+'/'+RESTA_FILE_NORM))
+                   
+        f.write("volume #0 voxelSize %f step 1\n" % (_inputVol.getSamplingRate()))
+        f.write("volume #1 voxelSize %f\n" % (_inputVol.getSamplingRate()))
+        f.write("vol #1 hide\n")
+        f.write("scolor #0 volume #1 perPixel false cmap -3,#ff0000:"
+                "0,#ffff00:1,#00ff00:2,#00ffff:3,#0000ff\n")
+        f.write("colorkey 0.01,0.05 0.02,0.95 -3 #ff0000 -2 #ff4500 -1 #ff7f00 "
+                 "0 #ffff00 1  #00ff00 2 #00ffff 3 #0000ff\n")           
+ 
+        f.close()
+ 
+        # run in the background
+        Chimera.runProgram(Chimera.getProgram(), fnCmd+"&")
+        return []
+    
     
     def _visualize_pdb(self, obj, **args):
         
@@ -150,6 +190,29 @@ class XmippProtValFitViewer(ProtocolViewer):
                      
         Chimera.runProgram(Chimera.getProgram(), fnCmd+"&")
         return []
+    
+    def _visualize_norm_pdb(self, obj, **args):
+         
+        # show coordinate axis
+        fnRoot = os.path.abspath(self.protocol._getExtraPath())
+        fnCmd = self.protocol._getTmpPath("chimera_PDBoutput.cmd")
+        f = open(fnCmd, 'w')
+        #open PDB
+ 
+        if self.displayNormPDB == self.RESIDUE:
+            f.write("open %s\n" % (fnRoot+'/'+PDB_NORM_FILE))
+            f.write("rangecol occupancy,r -3 red 0 white 1 green 2 cyan 3 blue\n")
+        else:
+            f.write("open %s\n" % (fnRoot+'/'+PDB_NORM_FILE))
+            f.write("display\n")
+            f.write("~ribbon\n")
+            f.write("rangecol occupancy,a -3 red 0 white 1 green 2 cyan 3 blue\n")  
+        f.write("colorkey 0.01,0.05 0.02,0.95 -3 #ff0000 -2 #ff4500 -1 #ff7f00 "  
+                "0 white 1  #00ff00 2 #00ffff 3 #0000ff\n")    
+        f.close()  
+                      
+        Chimera.runProgram(Chimera.getProgram(), fnCmd+"&")
+        return [] 
 
     def _calculate_fscq(self, obj, **args):
 
