@@ -127,7 +127,7 @@ class XmippProtValFit(ProtAnalysis3D):
                  OUTPUT_PDBVOL_FILE: self._getTmpPath('pdb_volume'),
                  OUTPUT_PDBMRC_FILE: self._getExtraPath('pdb_volume.map'),
                  BLOCRES_AVG_FILE: self._getTmpPath('blocres_avg.map'),
-                 BLOCRES_HALF_FILE: self._getTmpPath('blocres_half.map'),
+                 BLOCRES_HALF_FILE: self._getExtraPath('blocres_half.map'),
                  RESTA_FILE: self._getTmpPath('diferencia.vol'),
                  RESTA_FILE_MRC: self._getExtraPath('diferencia.map'),
                  RESTA_FILE_NORM: self._getExtraPath('diferencia_norm.map'),
@@ -289,7 +289,7 @@ class XmippProtValFit(ProtAnalysis3D):
 
             params = ' -criterio FSC -nofill -smooth -pad 1 '
             params += ' -cutoff 0.67'
-            params += ' -maxresolution 1 '
+            params += ' -maxresolution 0.5 '
             params += ' -step 1 '
             params += ' -box %d ' % self.box.get()
             params += ' -sampling %f,%f,%f' % (self.inputVolume.get().getSamplingRate(),
@@ -308,7 +308,7 @@ class XmippProtValFit(ProtAnalysis3D):
 
             params = ' -criterio FSC -nofill -smooth -pad 1 '
             params += ' -cutoff 0.5'
-            params += ' -maxresolution 1 '
+            params += ' -maxresolution 0.5 '
             params += ' -step 1 '
             params += ' -box %d ' % self.box.get()
             params += ' -sampling %f,%f,%f' % (self.inputVolume.get().getSamplingRate(),
