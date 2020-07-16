@@ -1534,7 +1534,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             args='--i1 %s --i2 %s --oroot %s --denoising 1'%(fnVol1,fnVol2,fnRootRestored)
             if fnMask!="":
                 args+=" --mask binary_file %s"%fnMask
-            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            if self.useGpu:
+                self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
             moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
 
@@ -1544,7 +1547,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             args='--i1 %s --i2 %s --oroot %s --filterBank 0.01'%(fnVol1,fnVol2,fnRootRestored)
             if fnMask!="":
                 args+=" --mask binary_file %s"%fnMask
-            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            if self.useGpu:
+                self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
             moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
             cleanPath("%s_filterBank.vol"%fnRootRestored)
@@ -1564,7 +1570,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             args='--i1 %s --i2 %s --oroot %s --deconvolution 1'%(fnVol1,fnVol2,fnRootRestored)
             if fnMask!="":
                 args+=" --mask binary_file %s"%fnMask
-            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            if self.useGpu:
+                self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
             moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
             self.runJob("xmipp_image_convert","-i %s_convolved.vol -o %s -t vol"%(fnRootRestored,fnVolAvg),numberOfMpi=1)
@@ -1596,7 +1605,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             args='--i1 %s --i2 %s --oroot %s --difference 2 2'%(fnVol1,fnVol2,fnRootRestored)
             if fnMask!="":
                 args+=" --mask binary_file %s"%fnMask
-            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            if self.useGpu:
+                self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             self.runJob("xmipp_image_convert","-i %s_avgDiff.vol -o %s -t vol"%(fnRootRestored,fnVolAvg),numberOfMpi=1)
             cleanPath("%s_avgDiff.vol"%fnRootRestored)
             cleanPath("%s_restored1.vol"%fnRootRestored)
