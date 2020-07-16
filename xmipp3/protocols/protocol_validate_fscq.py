@@ -279,7 +279,7 @@ class XmippProtValFit(ProtAnalysis3D):
 
             params = ' -criterio FSC -nofill -smooth -pad 1 '
             params += ' -cutoff 0.67'
-            params += ' -maxresolution 2 '
+            params += ' -maxresolution 0.5 '
             params += ' -step 1 '
             params += ' -box %d ' % self.box.get()
             params += ' -sampling %f,%f,%f' % (self.inputVolume.get().getSamplingRate(),
@@ -298,7 +298,7 @@ class XmippProtValFit(ProtAnalysis3D):
 
             params = ' -criterio FSC -nofill -smooth -pad 1 '
             params += ' -cutoff 0.5'
-            params += ' -maxresolution 2 '
+            params += ' -maxresolution 0.5 '
             params += ' -step 1 '
             params += ' -box %d ' % self.box.get()
             params += ' -sampling %f,%f,%f' % (self.inputVolume.get().getSamplingRate(),
