@@ -26,14 +26,14 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
+import os
 from os.path import exists, join
 
 from pyworkflow.protocol.params import (EnumParam, NumericRangeParam,
                                         LabelParam, IntParam, FloatParam)
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
-from pwem.viewers import ObjectView, DataView, ChimeraClientView, showj, EmProtocolViewer
+from pwem.viewers import (ObjectView, showj, EmProtocolViewer, ChimeraAngDist)
 
 from pwem.emlib import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
                    MDL_RESOLUTION_FREQ, MDL_RESOLUTION_FRC, MetaData)
@@ -81,7 +81,7 @@ Examples:
                        label='Display angular distribution',
                        help='*2D plot*: display angular distribution as interative 2D in matplotlib.\n'
                             '*chimera*: display angular distribution using Chimera with red spheres.')
-        group.addParam('spheresScale', IntParam, default=50, 
+        group.addParam('spheresScale', IntParam, default=-1,
                        expertLevel=LEVEL_ADVANCED,
                        label='Spheres size')
         group.addParam('plotHistogramAngularMovement', LabelParam, default=False,
@@ -243,8 +243,19 @@ Examples:
         if exists(fnAngles):
             fnAnglesSqLite = join(fnDir,"angles.sqlite")
             from pwem.emlib.metadata import getSize
-            self.createAngDistributionSqlite(fnAnglesSqLite, getSize(fnAngles), itemDataIterator=self._iterAngles(fnAngles))
-            view = ChimeraClientView(join(fnDir,"volumeAvg.mrc"), showProjection=True, angularDistFile=fnAnglesSqLite, spheresDistance=self.spheresScale.get())
+            self.createAngDistributionSqlite(fnAnglesSqLite, getSize(fnAngles),
+                                             itemDataIterator=self._iterAngles(fnAngles))
+            vol = os.path.join(fnDir, "volumeAvg.mrc")
+            tmpFilesPath = self.protocol._getTmpPath()
+            volOrigin = self.protocol.outputVolume.getShiftsFromOrigin()
+            radius = self.spheresScale.get()
+            view = ChimeraAngDist(vol, tmpFilesPath,
+                                  angularDistFile=fnAngles,
+                                  spheresDistance=radius,
+                                  voxelSize=self.protocol.outputVolume.getSamplingRate(),
+                                  volOrigin=volOrigin,
+                                  showProjection=True)
+
         return view
     
     def _createAngDist2D(self, it, heatmap):
