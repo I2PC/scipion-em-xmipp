@@ -394,7 +394,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                 if first:
                     self._defineTransformRelation(self.inputCTF.get().getMicrographs(),
                                                   mSet)
-                    self._defineTransformRelation(cSet, mSet)
+                    # self._defineTransformRelation(cSet, mSet)
                     self._defineTransformRelation(self.inputCTF, cSet)
                     self._defineCtfRelation(mSet, cSet)
 
