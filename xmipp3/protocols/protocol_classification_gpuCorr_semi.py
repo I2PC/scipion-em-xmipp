@@ -27,7 +27,7 @@
 
 from os.path import getmtime
 from datetime import datetime
-from os.path import exists
+from os.path import exists, splitext
 import os
 
 from pyworkflow import VERSION_2_0
@@ -179,7 +179,7 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
                         'maxshift': self.maximumShift,
                         'outputClassesFile': clasesOut,
                         'device': GpuListCuda,
-                        'outputClassesFileNoExt': clasesOut[:-4],
+                        'outputClassesFileNoExt': splitext(clasesOut)[0],
                         }
 
         args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \

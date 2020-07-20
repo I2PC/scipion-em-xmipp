@@ -25,7 +25,7 @@
 # ******************************************************************************
 
 from shutil import copy
-from os.path import exists, getmtime
+from os.path import exists, getmtime, splitext
 from datetime import datetime
 from os import system, popen, mkdir, listdir, remove
 from os.path import join
@@ -516,7 +516,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
         else:
             outImgs, classesOut = self._getOutputClassFn()
 
-        outDirName = imgsExp[:-4]
+        outDirName = splitext(imgsExp)[0]
         if iter==0 and flag_split==True:
 
             # First step: divide the metadata input file to generate
@@ -553,7 +553,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
             self.runJob("xmipp_metadata_utilities", args % self._params,
                         numberOfMpi=1)
 
-        # Fourth step: calling program xmipp_cuda_correlation
+        # Fourth step: calling program xmipp_cuda_align_significant
         metadataRef = md.MetaData(refSet)
         if metadataRef.containsLabel(md.MDL_REF) is False:
             args = ('-i %(outputMd)s --fill ref lineal 1 1 -o %(outputMd)s')
@@ -607,7 +607,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
                             'maxshift': self.maximumShift,
                             'outputClassesFile': classesOut,
                             'device': GpuListCuda,
-                            'outputClassesFileNoExt': classesOut[:-4],
+                            'outputClassesFileNoExt': splitext(classesOut)[0],
                             'auxOut': self._getExtraPath('flipReferences%06d.xmd'%iter),
                             }
 

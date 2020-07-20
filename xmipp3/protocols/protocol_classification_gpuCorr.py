@@ -25,7 +25,7 @@
 # ******************************************************************************
 
 from shutil import copy
-from os.path import join, exists
+from os.path import join, exists, splitext
 from os import mkdir, remove, listdir, environ
 
 from pyworkflow import VERSION_2_0
@@ -37,8 +37,6 @@ import pwem.emlib.metadata as md
 from pwem.emlib.metadata import iterRows, getSize
 from pwem.objects import SetOfClasses2D
 from pwem.constants import ALIGN_2D, ALIGN_NONE
-from pwem import emlib
-
 from pwem.emlib import MD_APPEND
 from xmipp3.convert import (rowToAlignment, xmippToLocation,
                             writeSetOfParticles, writeSetOfClasses2D)
@@ -377,7 +375,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
             self.runJob("xmipp_metadata_utilities", args % self._params,
                         numberOfMpi=1)
 
-        # Fourth step: calling program xmipp_cuda_correlation
+        # Fourth step: calling program xmipp_cuda_align_significant
         metadataRef = md.MetaData(refSet)
         if metadataRef.containsLabel(md.MDL_REF) is False:
             args = ('-i %s --fill ref lineal 1 1 -o %s'%(refSet, refSet))
@@ -411,9 +409,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                             'maxshift': self.maximumShift,
                             'outputClassesFile': filename,
                             'device': GpuListCuda,
-                            'outputClassesFileNoExt': filename[:-4],
-                            'auxOut': join(self._getExtraPath(), 'level%03d'
-                                           % level, 'flipReferences.xmd'),
+                            'outputClassesFileNoExt': splitext(filename)[0],
                             }
         else:
             filename = 'general_level%03d' % level + '_classes.xmd'
@@ -427,9 +423,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                             'maxshift': self.maximumShift,
                             'outputClassesFile': filename,
                             'device': GpuListCuda,
-                            'outputClassesFileNoExt': filename[:-4],
-                            'auxOut': join(self._getExtraPath(),'level%03d'
-                                           % level,'flipReferences.xmd'),
+                            'outputClassesFileNoExt': splitext(filename)[0],
                             }
         Nrefs = getSize(refSet)
         if Nrefs>2:
@@ -446,11 +440,8 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
             args='-i %(imgsExp)s --ref0 %(imgsRef)s --nref %(Nrefs)d '\
                  '--iter 1 --distance correlation --classicalMultiref '\
                  '--maxShift %(maxshift)d --odir %(cl2dDir)s --dontMirrorImages '
-            try:
-                self.runJob("xmipp_classify_CL2D",
-                            args % self._params, numberOfMpi=self.numberOfMpi.get())
-            except:
-                return
+            self.runJob("xmipp_classify_CL2D",
+                        args % self._params, numberOfMpi=self.numberOfMpi.get())
 
             if flag_split:
                 copy(self._getExtraPath(join('level%03d' % level,
