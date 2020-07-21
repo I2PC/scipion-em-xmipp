@@ -159,15 +159,16 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                 nVolj += 1
             nVoli += 1
 
-        self._insertFunctionStep('deformationMatrix', volList, prerequisites=deps)
-
-        self._insertFunctionStep('gatherResultsStepDef')
+        if self.computeDef.get():
+            self._insertFunctionStep('deformationMatrix', volList, prerequisites=deps)
+            self._insertFunctionStep('gatherResultsStepDef')
 
         self._insertFunctionStep('computeCorr', volList)
 
         self._insertFunctionStep('gatherResultsStepCorr')
 
-        self._insertFunctionStep('entropyConsensus')
+        if self.computeDef.get():
+            self._insertFunctionStep('entropyConsensus')
 
         cleanPattern(self._getExtraPath('*.vol'))
 
@@ -216,26 +217,24 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             self.runJob("xmipp_volume_deform_sph", params)
 
     def deformationMatrix(self, volList):
-        if self.computeDef.get():
-            numVol = len(volList)
-            self.distanceMatrix = np.zeros((numVol, numVol))
-            for i in range(numVol):
-                for j in range(numVol):
-                    if i != j:
-                        path = self._getExtraPath('Pair_%d_%d_deformation.txt' % (i,j))
-                        self.distanceMatrix[i,j] = np.loadtxt(path)
+        numVol = len(volList)
+        self.distanceMatrix = np.zeros((numVol, numVol))
+        for i in range(numVol):
+            for j in range(numVol):
+                if i != j:
+                    path = self._getExtraPath('Pair_%d_%d_deformation.txt' % (i,j))
+                    self.distanceMatrix[i,j] = np.loadtxt(path)
 
 
     def gatherResultsStepDef(self):
-        if self.computeDef.get():
-            fnRoot = self._getExtraPath("DistanceMatrix.txt")
-            self.saveDeformation(self.distanceMatrix, fnRoot)
-            if self.twoSets.get():
-                half = int(self.distanceMatrix.shape[0] / 2)
-                subMatrixes = self.split(self.distanceMatrix, half, half)
-                for idm in range(4):
-                    fnRoot = self._getExtraPath("DistanceSubMatrix_%d.txt" % (idm + 1))
-                    self.saveDeformation(subMatrixes[idm], fnRoot, 'Sub_%d_' % (idm + 1))
+        fnRoot = self._getExtraPath("DistanceMatrix.txt")
+        self.saveDeformation(self.distanceMatrix, fnRoot)
+        if self.twoSets.get():
+            half = int(self.distanceMatrix.shape[0] / 2)
+            subMatrixes = self.split(self.distanceMatrix, half, half)
+            for idm in range(4):
+                fnRoot = self._getExtraPath("DistanceSubMatrix_%d.txt" % (idm + 1))
+                self.saveDeformation(subMatrixes[idm], fnRoot, 'Sub_%d_' % (idm + 1))
 
     def saveDeformation(self, matrix, fnRoot, label=''):
         # for i in range(matrix.shape[0]):
