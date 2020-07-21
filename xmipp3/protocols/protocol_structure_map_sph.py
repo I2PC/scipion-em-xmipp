@@ -216,13 +216,14 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             self.runJob("xmipp_volume_deform_sph", params)
 
     def deformationMatrix(self, volList):
-        numVol = len(volList)
-        self.distanceMatrix = np.zeros((numVol, numVol))
-        for i in range(numVol):
-            for j in range(numVol):
-                if i != j:
-                    path = self._getExtraPath('Pair_%d_%d_deformation.txt' % (i,j))
-                    self.distanceMatrix[i,j] = np.loadtxt(path)
+        if self.computeDef.get():
+            numVol = len(volList)
+            self.distanceMatrix = np.zeros((numVol, numVol))
+            for i in range(numVol):
+                for j in range(numVol):
+                    if i != j:
+                        path = self._getExtraPath('Pair_%d_%d_deformation.txt' % (i,j))
+                        self.distanceMatrix[i,j] = np.loadtxt(path)
 
 
     def gatherResultsStepDef(self):
