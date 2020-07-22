@@ -135,7 +135,6 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         volList, dimList, srList, _ = self._iterInputVolumes(self.inputVolumes, volList, dimList, srList, [])
         if self.twoSets.get():
             volList, dimList, srList, _ = self._iterInputVolumes(self.secondSet, volList, dimList, srList, [])
-        # numVol = len(volList)
 
         nVoli = 1
         depsConvert = []
@@ -237,15 +236,6 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                 self.saveDeformation(subMatrixes[idm], fnRoot, 'Sub_%d_' % (idm + 1))
 
     def saveDeformation(self, matrix, fnRoot, label=''):
-        # for i in range(matrix.shape[0]):
-        #     for j in range(matrix.shape[1]):
-        #         fh = open(fnRoot, "a")
-        #         fh.write("%f\t" % matrix[i,j])
-        #         fh.close()
-        #     fh = open(fnRoot, "a")
-        #     fh.write("\n")
-        #     fh.close()
-
         np.savetxt(fnRoot, matrix, "%f")
         distance = np.asarray(matrix)
         for i in range(1, 4):
@@ -286,19 +276,6 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                 self.saveCorrelation(subMatrixes[idm], fnRoot, 'Sub_%d_' % (idm + 1))
 
     def saveCorrelation(self, matrix, fnRoot, label=''):
-        # nVoli = 1
-        # for i in volList:
-        #     nVolj = 1
-        #     for j in volList:
-        #         fh = open(fnRoot, "a")
-        #         fh.write("%f\t" % self.corrMatrix[(nVoli - 1)][(nVolj - 1)])
-        #         fh.close()
-        #         nVolj += 1
-        #     fh = open(fnRoot, "a")
-        #     fh.write("\n")
-        #     fh.close()
-        #     nVoli += 1
-
         np.savetxt(fnRoot, matrix, "%f")
         corr = np.asarray(matrix)
         for i in range(1, 4):
