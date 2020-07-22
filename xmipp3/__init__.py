@@ -67,7 +67,7 @@ class Plugin(pwem.Plugin):
         if os.path.isfile(getXmippPath('xmippEnv.json')):
             with open(getXmippPath('xmippEnv.json'), 'r') as f:
                 compilationEnv = json.load(f)
-            environ.update(compilationEnv)
+            environ.update(compilationEnv, position=pos)
 
         environ.update({
             'PATH': getXmippPath('bin'),
@@ -179,7 +179,7 @@ class Plugin(pwem.Plugin):
                        # adding 'v' before version to fix a package target (post-link)
                        tar='xmippSrc-v'+_currentVersion+'.tgz',
                        commands=[(installCmd.format(**installVars, cwd='.',
-                                                    configCmd='./xmipp config noAsk &&'
+                                                    configCmd='./xmipp config noAsk && '
                                                               './xmipp check_config',
                                                     compileCmd='./xmipp compileAndInstall'),
                                   installTgt + sourceTgt),
