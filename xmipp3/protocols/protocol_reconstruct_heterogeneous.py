@@ -628,7 +628,6 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                             count+=1
                     else:
                         GpuListAux = ''
-                        GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
                         for elem in self.getGpuList():
                             GpuListCuda = GpuListCuda+str(count)+' '
                             GpuListAux = GpuListAux+str(elem)+','
