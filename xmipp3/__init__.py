@@ -250,7 +250,7 @@ def installDeepLearningToolkit(plugin, env):
                      'xmippLibToken': 'xmippLibToken',
                      'libXmipp': plugin.getHome('lib/libXmipp.so'),
                      'preMsgsStr': ' ; '.join(preMsgs),
-                     'afterMsgs': "\n > ".join(cudaMsgs)}
+                     'afterMsgs': ", > ".join(cudaMsgs)}
 
     installDLvars.update({'modelsTarget': "%s_%s_%s_%s"
                                           % (installDLvars['modelsPrefix'],
