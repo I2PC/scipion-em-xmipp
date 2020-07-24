@@ -186,27 +186,27 @@ class XmippProtVolSubtraction(EMProtocol):
     # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
         summary = []
-        if not hasattr(self, 'outputVolume'):
-            summary.append("Output volume not ready yet.")
+        # if not hasattr(self, 'outputVolume'):
+        #     summary.append("Output volume not ready yet.")
+        # else:
+        summary.append("Input vol 1: %s" % self.vol1.get().getFileName())
+        if self.pdb:
+            if self.inputPdbData == self.IMPORT_OBJ:
+                summary.append("Input PDB File: %s" % self.pdbObj.get().getFileName())
+            else:
+                summary.append("Input PDB File: %s" % self.pdbFile.get())
+            summary.append("Mask 2 generated")
         else:
-            summary.append("Input vol 1: %s" % self.vol1.get().getFileName())
-            if self.pdb:
-                if self.inputPdbData == self.IMPORT_OBJ:
-                    summary.append("Input PDB File: %s" % self.pdbObj.get().getFileName())
-                else:
-                    summary.append("Input PDB File: %s" % self.pdbFile.get())
-                summary.append("Mask 2 generated")
-            else:
-                summary.append("Input 2: volume %s" % self.vol2.get().getFileName())
-            if self.masks:
-                summary.append("Input mask 1: %s" % self.mask1.get().getFileName())
-                summary.append("Input mask 2: %s" % self.mask2.get().getFileName())
-            if self.resol.get() != 0:
-                summary.append("Subtraction at resolution %d A" % self.resol.get())
-            if self.sub:
-                summary.append("Output volume: difference")
-            else:
-                summary.append("Output volume: volume 2 modified")
+            summary.append("Input 2: volume %s" % self.vol2.get().getFileName())
+        if self.masks:
+            summary.append("Input mask 1: %s" % self.mask1.get().getFileName())
+            summary.append("Input mask 2: %s" % self.mask2.get().getFileName())
+        if self.resol.get() != 0:
+            summary.append("Subtraction at resolution %d A" % self.resol.get())
+        if self.sub:
+            summary.append("Output volume: difference")
+        else:
+            summary.append("Output volume: volume 2 modified")
 
         return summary
 

@@ -85,23 +85,6 @@ class XmippProtVolConsensus(ProtInitialVolume):
         fhCmd.write("scolor #0 volume #1 cmap rainbow reverseColors True\n")
         fhCmd.close()
 
-        # scriptFile = self._getPath('result') + '_localrot_chimera.cmd'
-        # fhCmd = open(scriptFile, 'w')
-        # fhCmd.write("open %s\n" % (fnRoot+"_final.vol"))
-        # fhCmd.write("open %s\n" % (fnRoot+"_localrot.vol"))
-        # fhCmd.write("vol #1 hide\n")
-        # fhCmd.write("scolor #0 volume #1 cmap rainbow reverseColors True\n")
-        # fhCmd.close()
-        #
-        # scriptFile = self._getPath('result') + '_morph_chimera.cmd'
-        # fhCmd = open(scriptFile, 'w')
-        # fhCmd.write("open %s\n" % (fnRoot+"_initial.vol"))
-        # fhCmd.write("open %s\n" % (fnRoot+"_final.vol"))
-        # fhCmd.write("vol #0 hide\n")
-        # fhCmd.write("vol #1 hide\n")
-        # fhCmd.write("vop morph #0,1 frames 50\n")
-        # fhCmd.close()
-
     # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
         summary = []
