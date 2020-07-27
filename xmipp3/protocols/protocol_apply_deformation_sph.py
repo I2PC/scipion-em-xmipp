@@ -25,9 +25,11 @@
 # **************************************************************************
 
 import os, glob
+import numpy as np
 
 from pwem.protocols import ProtAnalysis3D
 from pwem.objects import Volume
+import pwem.emlib.metadata as md
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 
@@ -43,18 +45,9 @@ class XmippProtApplySPH(ProtAnalysis3D):
         form.addParam('inputVol', params.PointerParam, label="Input volume",
                       pointerClass='Volume', important=True,
                       help='Select a Volume to be deformed.')
-        form.addParam('inputCoeff', params.PathParam, label="Input Coefficients",
+        form.addParam('inputCoeffs', params.PathParam, label="Input Coefficients",
                       important=True,
-                      help='Specify a path to the deformation coefficients file.')
-        form.addParam('filesPattern', params.StringParam,
-                      label='Pattern',
-                      help="Pattern of the files to be imported.\n\n"
-                           "The pattern can contain standard wildcards such as\n"
-                           "*, ?, etc, or special ones like ### to mark some\n"
-                           "digits in the filename as ID.\n\n"
-                           "NOTE: wildcards and special characters "
-                           "('*', '?', '#', ':', '%') cannot appear in the "
-                           "actual path.")
+                      help='Specify a path to the deformation coefficients metadata.')
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
@@ -63,7 +56,11 @@ class XmippProtApplySPH(ProtAnalysis3D):
 
     # --------------------------- STEPS functions ------------------------------
     def deformStep(self):
-        for idx, file in enumerate(self._iterFiles(self.filesPattern.get())):
+        mdCoeffs = md.MetaData(self.inputCoeffs.get())
+        for idx, row in enumerate(md.iterRows(mdCoeffs)):
+            coeffs = np.asarray(mdCoeffs.getValue(md.MDL_SPH_COEFFICIENTS, row.getObjId()))
+            file = self._getTmpPath('coeffs.txt')
+            np.savetxt(file, coeffs)
             outFile = pwutils.removeBaseExt(self.inputVol.get().getFileName()) + '_%d_deformed.vol' % idx
             params = ' -i %s --clnm %s -o %s' % \
                      (self.inputVol.get().getFileName(), file, self._getExtraPath(outFile))
@@ -88,11 +85,3 @@ class XmippProtApplySPH(ProtAnalysis3D):
                 outVolumes.append(outVol)
             self._defineOutputs(outputVolumes=outVolumes)
             self._defineSourceRelation(self.inputVol, outVolumes)
-
-
-    # --------------------------- UTILS functions ------------------------------
-    def _iterFiles(self, pattern):
-        filePath = self.inputCoeff.get()
-        filePaths = sorted(glob.glob(os.path.join(filePath, pattern)))
-        for fn in filePaths:
-            yield fn
