@@ -89,9 +89,8 @@ class XmippProtLocSharp(ProtAnalysis3D):
     def _createFilenameTemplates(self):
         """ Centralize how files are called """
         myDict= {           
-                'BINARY_MASK': self._getTmpPath('binaryMask.vol'),
-                'OUTPUT_RESOLUTION_FILE': self._getTmpPath('resolutionMonoRes.vol'),                
-                'OUTPUT_RESOLUTION_FILE_CHIMERA': self._getTmpPath('MonoResChimera.vol'),
+                'BINARY_MASK': self._getTmpPath('binaryMask.mrc'),
+                'OUTPUT_RESOLUTION_FILE': self._getTmpPath('monoresResolutionMap.mrc'),                
                 'METADATA_PARAMS_SHARPENING': self._getTmpPath('params.xmd'),                                                                                 
                 }
         self._updateFilenamesDict(myDict) 
@@ -177,14 +176,8 @@ class XmippProtLocSharp(ProtAnalysis3D):
         params += ' --minRes %f' % (2*sampling)
         params += ' --maxRes %f' % max_res           
         params += ' --step %f' % 0.25
-        params += ' --mask_out %s' % self._getTmpPath('refined_mask.vol')
-        params += ' -o %s' % self._getFileName('OUTPUT_RESOLUTION_FILE')
-        params += ' --volumeRadius %f' % radius
-        params += ' --exact'
-        params += ' --chimera_volume %s' % self._getFileName(
-                                                'OUTPUT_RESOLUTION_FILE_CHIMERA')
+        params += ' -o %s' % self._getTmpPath()
         params += ' --significance %f' % significance
-        params += ' --md_outputdata %s' % self._getTmpPath('mask_data.xmd')
         params += ' --threads %i' % self.numberOfThreads.get()
 
         self.runJob('xmipp_resolution_monogenic_signal', params)
@@ -255,8 +248,6 @@ class XmippProtLocSharp(ProtAnalysis3D):
             imgData = img.getData()
             max_res = np.amax(imgData)
             min_res = 2*self.inputVolume.get().getSamplingRate()
-            
-            # print("minres %s  y maxres  %s"  % (min_res, max_res))
         
             if (max_res-min_res<0.75):
                 nextIter = False
@@ -269,7 +260,7 @@ class XmippProtLocSharp(ProtAnalysis3D):
         
         resFile = self.resolutionVolume.get().getFileName()        
         pathres=dirname(resFile)
-        if  not exists(os.path.join(pathres,'mask_data.xmd')):     
+        if  not exists(self._getFileName('OUTPUT_RESOLUTION_FILE')):     
 
             print('\n====================\n' 
                   ' WARNING---This is not the ideal case because resolution map has been imported.'

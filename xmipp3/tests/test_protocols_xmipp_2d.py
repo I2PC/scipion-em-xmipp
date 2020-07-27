@@ -554,44 +554,83 @@ class TestXmippTriggerParticles(TestXmippBase):
     def test_triggerPart(self):
         print("Start Streaming Particles")
         protStream = self.newProtocol(emprot.ProtCreateStreamData, setof=3,
-                                      creationInterval=8, nDim=76, groups=10)
+                                      creationInterval=12, nDim=76, groups=10)
         protStream.inputParticles.set(self.protImport.outputParticles)
         self.proj.launchProtocol(protStream, wait=False)
 
 
         print("Run Trigger Particles")
         protTrigger = self.newProtocol(XmippProtTriggerData,
+                                       objLabel="Trigger - static output",
                                        allImages=False, outputSize=50,
-                                       checkInterval=2)
+                                       checkInterval=10)
         protTrigger.inputImages.set(protStream)
         protTrigger.inputImages.setExtended("outputParticles")
         self.proj.scheduleProtocol(protTrigger)
 
+        protTrigger1b = self.newProtocol(XmippProtTriggerData,
+                                         objLabel="Trigger - static output (at the end)",
+                                         allImages=False, outputSize=500,
+                                         checkInterval=10)
+        protTrigger1b.inputImages.set(protStream)
+        protTrigger1b.inputImages.setExtended("outputParticles")
+        self.proj.scheduleProtocol(protTrigger1b)
+
         protTrigger2 = self.newProtocol(XmippProtTriggerData,
-                                       allImages=True, outputSize=50,
-                                       checkInterval=2)
+                                        objLabel="Trigger - streaming",
+                                        allImages=True, outputSize=50,
+                                        checkInterval=10)
         protTrigger2.inputImages.set(protStream)
         protTrigger2.inputImages.setExtended("outputParticles")
         self.proj.scheduleProtocol(protTrigger2)
 
+        protTrigger2b = self.newProtocol(XmippProtTriggerData,
+                                         objLabel="Trigger - streaming (at the end)",
+                                         allImages=True, outputSize=500,
+                                         checkInterval=10)
+        protTrigger2b.inputImages.set(protStream)
+        protTrigger2b.inputImages.setExtended("outputParticles")
+        self.proj.scheduleProtocol(protTrigger2b)
+
         protTrigger3 = self.newProtocol(XmippProtTriggerData,
+                                        objLabel="Trigger - in batches",
                                         allImages=True, splitImages=True,
-                                        outputSize=50, checkInterval=2)
+                                        outputSize=50, checkInterval=10)
         protTrigger3.inputImages.set(protStream)
         protTrigger3.inputImages.setExtended("outputParticles")
         self.proj.scheduleProtocol(protTrigger3)
 
+        protTrigger3b = self.newProtocol(XmippProtTriggerData,
+                                         objLabel="Trigger - in batches (at the end)",
+                                        allImages=True, splitImages=True,
+                                        outputSize=500, checkInterval=10)
+        protTrigger3b.inputImages.set(protStream)
+        protTrigger3b.inputImages.setExtended("outputParticles")
+        self.proj.scheduleProtocol(protTrigger3b)
+
         # when first trigger (non-streaming mode) finishes must have 50 parts.
-        self.checkResults(protTrigger, 50)
+        self.checkResults(protTrigger, 50, "Static trigger fails")
         # when second trigger (full-streaming mode) finishes must have all parts.
-        self.checkResults(protTrigger2, 76)
+        self.checkResults(protTrigger2, 76, "Full streaming trigger fails")
 
         # When all have finished, the third (spliting mode) must have two outputs
         protTrigger3 = self._updateProtocol(protTrigger3)
-        self.assertSetSize(protTrigger3.outputParticles1, 50)
-        self.assertSetSize(protTrigger3.outputParticles2, 26)
+        self.assertSetSize(protTrigger3.outputParticles1, 50, "First batch fails")
+        self.assertSetSize(protTrigger3.outputParticles2, 26, "Final batch fails")
 
-    def checkResults(self, prot, size):
+        # When input closes, trigger must release what is in input.
+        self.checkFinalTrigger(protTrigger1b, msg="Final trigger in static mode fails")
+        self.checkFinalTrigger(protTrigger2b, msg="Final trigger in streaming mode fails")
+        self.checkFinalTrigger(protTrigger3b, "outputParticles1", "Final trigger in batches mode fails")
+
+    def checkFinalTrigger(self, prot, outputName="outputParticles", msg=''):
+        prot = self._updateProtocol(prot)
+        output = getattr(prot, outputName, None)
+        self.assertIsNotNone(output, msg)
+        self.assertSetSize(output, 76, msg)
+
+
+    def checkResults(self, prot, size, msg=''):
         t0 = time.time()
         while not prot.isFinished():
             # Time out 4 minutes, just in case
@@ -601,7 +640,7 @@ class TestXmippTriggerParticles(TestXmippBase):
             prot = self._updateProtocol(prot)
             time.sleep(2)
 
-        self.assertSetSize(prot.outputParticles, size)
+        self.assertSetSize(prot.outputParticles, size, msg)
 
 class TestXmippCropResizeParticles(TestXmippBase):
     """Check protocol crop/resize particles from Xmipp."""
@@ -1149,7 +1188,8 @@ class TestXmippCompareReprojections(TestXmippBase):
                                             outerRadius=50,
                                             angSamplingRateDeg=5,
                                             symmetry="d6",
-                                            numberOfMpi=4)
+                                            numberOfMpi=4,
+                                            useGpu=False)
         cls.protProjMatch.inputParticles.set(cls.protImportAvgs.outputAverages)
         cls.protProjMatch.input3DReferences.set(cls.protImportVol.outputVolume)
         cls.launchProtocol(cls.protProjMatch)
@@ -1267,7 +1307,7 @@ class TestXmippCorrectWiener2D(TestXmippBase):
     
     def test_CorrectWiener(self):
         prot1 = self.newProtocol(emprot.ProtImportParticles,
-                                 importFrom=emprot.ProtImportCTF.IMPORT_FROM_XMIPP3,
+                                 importFrom=emprot.ProtImportParticles.IMPORT_FROM_XMIPP3,
                                  mdFile=self.dataset.getFile('particles/sphere_128.xmd'),
                                  magnification=10000,
                                  samplingRate=1,

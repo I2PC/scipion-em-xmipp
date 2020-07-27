@@ -39,6 +39,7 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         LEVEL_ADVANCED, GPU_LIST, USE_GPU)
 from pwem import emlib
 from xmipp3.convert import writeSetOfParticles
+from xmipp3.base import isXmippCudaPresent
 
 
 class XmippProtValidateOverfitting(ProtReconstruct3D):
@@ -465,6 +466,8 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                 self.newSize.get() == self.inputParticles.get().getDim()[0]):
             errors.append("The new chosen size is equal to the "
                           "recent particles size")
+        if self.useGpu and not isXmippCudaPresent():
+            errors.append("You have asked to use GPU, but I cannot find the Xmipp GPU programs")
         return errors
 
         # --------------------------- UTILS functions --------------------------------------------

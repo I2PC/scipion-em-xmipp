@@ -1,6 +1,8 @@
 # **************************************************************************
 # *
 # * Authors:    Jose Luis Vilas Prieto (jlvilas@cnb.csic.es)
+# *                                    (joseluis.vilas-prieto@yale.edu)
+# *             Hemant. D. Tagare      (hemant.tagare@yale.edu)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -26,10 +28,10 @@
 from pwem.protocols import ProtImportVolumes, exists
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 
-from xmipp3.protocols import XmippProtMonoRes, XmippProtCreateMask3D
+from xmipp3.protocols import XmippProtMonoRes, XmippProtFSO, XmippProtCreateMask3D
 
 
-class TestMonoResBase(BaseTest):
+class TestfsoBase(BaseTest):
     @classmethod
     def setData(cls, dataProject='resmap'):
         cls.dataset = DataSet.getDataSet(dataProject)
@@ -68,42 +70,18 @@ class TestMonoResBase(BaseTest):
         return cls.msk
 
 
-class TestMonoRes(TestMonoResBase):
+class Testfso(TestfsoBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
-        TestMonoResBase.setData()
+        TestfsoBase.setData()
         cls.protImportVol = cls.runImportVolumes(cls.map3D, 3.54)
         cls.protImportHalf1 = cls.runImportVolumes(cls.half1, 3.54)
         cls.protImportHalf2 = cls.runImportVolumes(cls.half2, 3.54)
         cls.protCreateMask = cls.runCreateMask(cls.protImportVol.outputVolume, 0.02)
 
-    def testMonoRes1(self):
-        MonoRes = self.newProtocol(XmippProtMonoRes,
-                                   objLabel='single volume monores',
-                                   halfVolumes=False,
-                                   inputVolumes=self.protImportVol.outputVolume,
-                                   Mask=self.protCreateMask.outputMask,
-                                   minRes=1,
-                                   maxRes=25,
-                                   )
-        self.launchProtocol(MonoRes)
-        self.assertTrue(exists(MonoRes._getExtraPath('monoresResolutionMap.mrc')),
-                        "MonoRes (no split, no premasked) has failed")
- 
-    def testMonoRes2(self):
-        MonoRes = self.newProtocol(XmippProtMonoRes,
-                                   objLabel='two halves monores',
-                                   halfVolumes=True,
-                                   inputVolume=self.protImportHalf1.outputVolume,
-                                   inputVolume2=self.protImportHalf2.outputVolume,
-                                   provideMaskInHalves=True,
-                                   Mask=self.protCreateMask.outputMask,
-                                   minRes=1,
-                                   maxRes=25,
-                                   )
-        self.launchProtocol(MonoRes)
-        self.assertTrue(exists(MonoRes._getExtraPath('monoresResolutionMap.mrc')),
-                        "MonoRes (split, pre-masked, no filter) has failed")
- 
-
+    def testfso1(self):
+        fso = self.newProtocol(XmippProtFSO, half1=self.protImportHalf1.outputVolume, half2=self.protImportHalf2.outputVolume, mask=self.protCreateMask.outputMask, bestAngle=True)
+        self.launchProtocol(fso)
+        self.assertTrue(exists(fso._getExtraPath("fso.xmd")), "fso without mask has failed")
+        

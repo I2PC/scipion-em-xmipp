@@ -42,7 +42,7 @@ from xmipp3.convert import (createItemMatrix, writeSetOfParticles,
                             rowToAlignment, setXmippAttributes, xmippToLocation)
 
 from pwem import emlib
-from xmipp3.base import findRow, writeInfoField, readInfoField
+from xmipp3.base import findRow, writeInfoField, readInfoField, isXmippCudaPresent
 from xmipp3.constants import SYM_URL
 import numpy as np
 
@@ -827,6 +827,8 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
             validateMsgs.append('Please provide input particles.')
         if self.angularSampling.get()>40:
             validateMsgs.append("The angular sampling must be <= 40")
+        if self.useGpu and not isXmippCudaPresent():
+            validateMsgs.append("You have asked to use GPU, but I cannot find the Xmipp GPU programs")
         return validateMsgs
 
     def _summary(self):

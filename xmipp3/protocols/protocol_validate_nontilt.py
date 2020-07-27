@@ -38,6 +38,7 @@ from pyworkflow.utils.path import moveFile, makePath
 import pwem.emlib.metadata as md
 
 from xmipp3.convert import writeSetOfParticles
+from xmipp3.base import isXmippCudaPresent
 
 PROJECTION_MATCHING = 0
 SIGNIFICANT = 1
@@ -202,7 +203,7 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
                   "orientations": self.numOrientations.get(),
                   "gallery": self._getGalleryMd(volId),
                   "outDir": self._getVolDir(volId),
-                  "output": self._getAnglesMd(volId),
+                  "output": "angles_iter001_00.xmd",
                   "device": GpuListCuda,
                   }
 
@@ -278,6 +279,8 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
             validateMsgs.append('Please provide an input reference volume.')
         if self.inputParticles.get() and not self.inputParticles.hasValue():
             validateMsgs.append('Please provide input particles.')
+        if self.useGpu and not isXmippCudaPresent("xmipp_cuda_align_significant"):
+            validateMsgs.append("You have asked to use GPU, but I cannot find the Xmipp GPU programs")
         return validateMsgs
 
     def _summary(self):

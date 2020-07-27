@@ -42,6 +42,7 @@ from pyworkflow import VERSION_1_1
 from pwem.protocols import ProtAlignMovies
 
 from xmipp3.convert import writeMovieMd
+from xmipp3.base import isXmippCudaPresent
 
 
 class XmippProtMovieCorr(ProtAlignMovies):
@@ -58,7 +59,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
     # Map to xmipp interpolation values in command line
     INTERP_MAP = {INTERP_LINEAR: 1, INTERP_CUBIC: 3}
 
-    _label = 'correlation alignment'
+    _label = 'FlexAlign'
     _lastUpdateVersion = VERSION_1_1
 
     def __init__(self, **args):
@@ -391,4 +392,10 @@ class XmippProtMovieCorr(ProtAlignMovies):
         if (self.controlPointT < 3):
             errors.append("You have to use at least 3 control points in T dim")
             return errors # to avoid possible division by zero later
+        if self.useGpu and not isXmippCudaPresent("xmipp_cuda_movie_alignment_correlation"):
+            errors.append("I cannot find the Xmipp GPU programs in the path")
+
         return errors
+
+    def _citations(self):
+        return ['strelak2020flexalign']
