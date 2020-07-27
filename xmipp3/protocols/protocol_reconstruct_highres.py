@@ -94,6 +94,9 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
     STOCHASTIC_ALIGNMENT = 3
     NO_ALIGNMENT = 4
 
+    GLOBAL_SIGNIFICANT = 0
+    GLOBAL_DISCRETE2 = 1
+
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addHidden(USE_GPU, BooleanParam, default=True,
@@ -179,6 +182,9 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                       help="You may generate redudant galleries by setting this angle to 180, this may help if c1 symmetry is considered")
         form.addParam('alignmentMethod', EnumParam, label='Image alignment', choices=['Global','Local','Automatic','Stochastic','No alignment'],
                       default=self.GLOBAL_ALIGNMENT)
+
+        form.addParam('globalAlignmentMethod', EnumParam, label='Global Image alignment', choices=['Significant', 'Discrete2'],
+                      default=self.GLOBAL_SIGNIFICANT, condition='alignmentMethod==0 or alignmentMethod==2 or alignmentMethod==3')
 
         form.addParam('numberOfIterations', IntParam, default=3, label='Number of iterations', condition='alignmentMethod!=2 and alignmentMethod!=4')
         form.addParam('NimgsSGD', IntParam, default=250, label='Random subset size', condition='alignmentMethod==3',
@@ -310,7 +316,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if self.alignmentMethod==self.GLOBAL_ALIGNMENT or \
            self.alignmentMethod==self.STOCHASTIC_ALIGNMENT or \
            (self.alignmentMethod==self.AUTOMATIC_ALIGNMENT and iteration<=3):
-            self._insertFunctionStep('globalAssignment',iteration)
+            if self.globalAlignmentMethod==self.GLOBAL_SIGNIFICANT:
+                self._insertFunctionStep('globalAssignment',iteration)
+            else:
+                self._insertFunctionStep('globalAssignmentDiscrete2', iteration)
         elif self.alignmentMethod==self.NO_ALIGNMENT:
             self._insertFunctionStep('noAssignment', iteration)
         else:
@@ -988,6 +997,61 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         if exists(fnAngles1) and exists(fnOut+".xmd"):
                             self.runJob("xmipp_metadata_utilities",'-i %s --set union_all %s'%(fnOut+".xmd",fnAngles1),numberOfMpi=1)
         cleanPath(join(fnGlobal,"anglesDisc*_weights.xmd"))
+
+    def globalAssignmentDiscrete2(self, iteration):
+        fnDirPrevious = self._getExtraPath("Iter%03d" % (iteration - 1))
+        fnDirCurrent = self._getExtraPath("Iter%03d" % iteration)
+        makePath(fnDirCurrent)
+        previousResolution = self.readInfoField(fnDirPrevious, "resolution", emlib.MDL_RESOLUTION_FREQREAL)
+
+        if self.alignmentMethod == self.GLOBAL_ALIGNMENT or self.alignmentMethod == self.AUTOMATIC_ALIGNMENT or \
+                self.alignmentMethod == self.STOCHASTIC_ALIGNMENT:
+            fnGlobal = join(fnDirCurrent, "globalDiscrete2")
+            makePath(fnGlobal)
+
+            targetResolution = max(previousResolution * 0.5, self._maximumTargetResolution[iteration - 1])
+            if self.multiresolution:
+                TsCurrent = max(self.TsOrig, targetResolution / 3)
+            else:
+                TsCurrent = self.TsOrig
+            getShiftsFrom = ''
+            # if iteration>1: # This causes images to be replicated
+            #    getShiftsFrom=fnDirPrevious
+            self.prepareImages(fnDirPrevious, fnGlobal, TsCurrent, getShiftsFrom)
+            TsCurrent = self.readInfoField(fnGlobal, "sampling",
+                                           emlib.MDL_SAMPLINGRATE)  # Prepare images may have changed it
+            self.prepareReferences(fnDirPrevious, fnGlobal, TsCurrent, targetResolution)
+
+            # Calculate angular step at this resolution
+            ResolutionAlignment = previousResolution
+            if self.nextLowPass:
+                ResolutionAlignment += self.nextResolutionOffset.get()
+            newXdim = self.readInfoField(fnGlobal, "size", emlib.MDL_XSIZE)
+            angleStep = self.calculateAngStep(newXdim, TsCurrent, ResolutionAlignment)
+            angleStep = max(angleStep, 3.0)
+            self.writeInfoField(fnGlobal, "angleStep", emlib.MDL_ANGLE_DIFF, float(angleStep))
+
+            # Global alignment
+            for i in range(1, 3):
+                fnDirSignificant = join(fnGlobal, "fourier%02d" % i)
+                makePath(fnDirSignificant)
+
+                fnReferenceVol = join(fnGlobal, "volumeRef%02d.vol" % i)
+                fnImgs = join(fnGlobal, "images%02d.xmd" % i)
+                fnAngles = join(fnGlobal, "anglesDisc%02d.xmd" % i)
+
+                maxShift = round(self.angularMaxShift.get() * newXdim / 100)
+                shiftStep = max(1,round(maxShift/9))
+                R = self.particleRadius.get()
+                if R <= 0:
+                    R = self.inputParticles.get().getDimensions()[0] / 2
+                R = R * self.TsOrig / TsCurrent
+
+                args = "-i %s --ref %s --max_shift %d --shift_step %d --saveReprojection --Rmax %f -o %s --sym %s"%\
+                       (fnImgs, fnReferenceVol, maxShift, shiftStep, R, fnAngles, self.symmetryGroup)
+
+                self.runJob('xmipp_angular_discrete_assign2', args, numberOfMpi=self.numberOfMpi.get())
+        aaa
 
     def adaptShifts(self, fnSource, TsSource, fnDest, TsDest):
         K=TsSource/TsDest
