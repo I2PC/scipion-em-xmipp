@@ -24,10 +24,16 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import os
 
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from pwem.wizards import ColorScaleWizardBase
+import matplotlib.colors as mcolors
+from pwem.viewers.viewer_chimera import mapVolsWithColorkey
+from pyworkflow.gui import plotter
+from pyworkflow.utils import getExt, removeExt
+from os.path import abspath
 
 from pyworkflow.protocol.params import (LabelParam, EnumParam,
                                         IntParam, LEVEL_ADVANCED)
@@ -74,6 +80,11 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
                       label="Show resolution histogram")
 
         group = form.addGroup('Colored resolution Slices and Volumes')
+        group.addParam('colorMap', EnumParam, choices=COLOR_CHOICES,
+                       default=COLOR_JET,
+                       label='Color map',
+                       help='Select the color map to apply to the resolution map. '
+                            'http://matplotlib.org/1.3.0/examples/color/colormaps_reference.html.')
 
         group.addParam('sliceAxis', EnumParam, default=AX_Z,
                        choices=['x', 'y', 'z'],
