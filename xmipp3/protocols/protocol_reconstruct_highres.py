@@ -1033,25 +1033,27 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
 
             # Global alignment
             for i in range(1, 3):
-                fnDirSignificant = join(fnGlobal, "fourier%02d" % i)
-                makePath(fnDirSignificant)
+                if not os.path.exists(join(fnGlobal, "anglesDisc%02d.xmd" % i)):
+                    fnDirSignificant = join(fnGlobal, "fourier%02d" % i)
+                    makePath(fnDirSignificant)
 
-                fnReferenceVol = join(fnGlobal, "volumeRef%02d.vol" % i)
-                fnImgs = join(fnGlobal, "images%02d.xmd" % i)
-                fnAngles = join(fnGlobal, "anglesDisc%02d.xmd" % i)
+                    fnReferenceVol = join(fnGlobal, "volumeRef%02d.vol" % i)
+                    fnImgs = join(fnGlobal, "images%02d.xmd" % i)
+                    fnAngles = join(fnDirSignificant, "anglesDisc%02d.xmd" % i)
 
-                maxShift = round(self.angularMaxShift.get() * newXdim / 100)
-                shiftStep = max(1,round(maxShift/9))
-                R = self.particleRadius.get()
-                if R <= 0:
-                    R = self.inputParticles.get().getDimensions()[0] / 2
-                R = R * self.TsOrig / TsCurrent
+                    maxShift = round(self.angularMaxShift.get() * newXdim / 100)
+                    shiftStep = max(1,round(maxShift/9))
+                    R = self.particleRadius.get()
+                    if R <= 0:
+                        R = self.inputParticles.get().getDimensions()[0] / 2
+                    R = R * self.TsOrig / TsCurrent
 
-                args = "-i %s --ref %s --max_shift %d --shift_step %d --saveReprojection --Rmax %f -o %s --sym %s"%\
-                       (fnImgs, fnReferenceVol, maxShift, shiftStep, R, fnAngles, self.symmetryGroup)
+                    args = "-i %s --ref %s --max_shift %d --shift_step %d --saveReprojection --Rmax %f -o %s --sym %s"%\
+                           (fnImgs, fnReferenceVol, maxShift, shiftStep, R, fnAngles, self.symmetryGroup)
 
-                self.runJob('xmipp_angular_discrete_assign2', args, numberOfMpi=self.numberOfMpi.get())
-        aaa
+                    self.runJob('xmipp_angular_discrete_assign2', args, numberOfMpi=self.numberOfMpi.get())
+                    if os.path.exists(fnAngles):
+                        moveFile(fnAngles,join(fnGlobal, "anglesDisc%02d.xmd" % i))
 
     def adaptShifts(self, fnSource, TsSource, fnDest, TsDest):
         K=TsSource/TsDest
@@ -1193,7 +1195,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         from math import exp
         for i in range(1,3):
             # Grab file
-            fnDirGlobal=join(fnDirCurrent,"globalAssignment")
+            if self.globalAlignmentMethod==self.GLOBAL_SIGNIFICANT:
+                fnDirGlobal=join(fnDirCurrent,"globalAssignment")
+            else:
+                fnDirGlobal=join(fnDirCurrent,"globalDiscrete2")
             fnDirLocal=join(fnDirCurrent,"localAssignment")
             fnDirNo=join(fnDirCurrent,"noAssignment")
 
