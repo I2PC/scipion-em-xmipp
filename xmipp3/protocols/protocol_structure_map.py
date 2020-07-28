@@ -103,6 +103,19 @@ class XmippProtStructureMap(ProtAnalysis3D):
             depsConvert.append(convert)
             nVoli += 1
 
+        nVoli = 1
+        deps = []
+        for voli in volList:
+            nVolj = 1
+            for volj in volList:
+                if nVolj != nVoli:
+                    stepID = self._insertFunctionStep('alignStep', volList[nVoli - 1],
+                                            volList[nVolj - 1], nVoli - 1,
+                                            nVolj - 1, prerequisites=depsConvert)
+                    deps.append(stepID)
+                nVolj += 1
+            nVoli += 1
+
         self._insertFunctionStep('computeCorr', volList)
 
         self._insertFunctionStep('gatherResultsStepCorr')
@@ -116,8 +129,6 @@ class XmippProtStructureMap(ProtAnalysis3D):
         newTs = self.targetResolution.get() * 1.0 / 3.0
         newTs = max(maxSr, newTs)
         newXdim = Xdim * Ts / newTs
-        newRmax = self.Rmax.get() * Ts / newTs
-        self.newRmax = min(newRmax, self.Rmax.get())
         fnOut = os.path.splitext(volFn)[0]
         fnOut = self._getExtraPath(os.path.basename(fnOut + '_%d_crop.vol' % nVoli))
 
@@ -133,6 +144,16 @@ class XmippProtStructureMap(ProtAnalysis3D):
             self.runJob("xmipp_transform_window", " -i %s -o %s --crop %d" %
                         (fnOut, fnOut, (newXdim - minDim)))
 
+    def alignStep(self, inputVolFn, refVolFn, i, j):
+        inputVolFn = self._getExtraPath(os.path.basename(os.path.splitext(inputVolFn)[0] + '_%d_crop.vol' % (i + 1)))
+        refVolFn = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0] + '_%d_crop.vol' % (j + 1)))
+        fnOut = self._getExtraPath('vol%dAlignedTo%d.vol' % (i, j))
+
+        params = ' --i1 %s --i2 %s --apply %s --local --dontScale' % \
+                 (refVolFn, inputVolFn, fnOut)
+
+        self.runJob("xmipp_volume_align", params)
+
     def computeCorr(self, volList):
         ind = 0
         numVol = len(volList)
@@ -142,10 +163,7 @@ class XmippProtStructureMap(ProtAnalysis3D):
         for item in volList:
             vol = xmippLib.Image(item)
             self.corrMatrix[ind][ind] = 0.0
-            if self.computeDef.get():
-                path = self._getExtraPath("*DeformedTo%d.vol" % ind)
-            else:
-                path = self._getExtraPath("*AlignedTo%d.vol" % ind)
+            path = self._getExtraPath("*AlignedTo%d.vol" % ind)
             for fileVol in glob.glob(path):
                 matches = re.findall("(\d+)", fileVol)
                 ind2 = int(matches[1])
