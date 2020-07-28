@@ -175,12 +175,6 @@ class XmippProtStructureMap(ProtAnalysis3D):
     def gatherResultsStepCorr(self):
         fnRoot = self._getExtraPath("CorrMatrix.txt")
         self.saveCorrelation(self.corrMatrix, fnRoot)
-        if self.twoSets.get():
-            half = int(self.distanceMatrix.shape[0] / 2)
-            subMatrixes = self.split(self.corrMatrix, half, half)
-            for idm in range(4):
-                fnRoot = self._getExtraPath("CorrSubMatrix_%d.txt" % (idm + 1))
-                self.saveCorrelation(subMatrixes[idm], fnRoot, 'Sub_%d_' % (idm + 1))
 
     def saveCorrelation(self, matrix, fnRoot, label=''):
         np.savetxt(fnRoot, matrix, "%f")
