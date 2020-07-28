@@ -29,6 +29,7 @@ import os
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from pwem.wizards import ColorScaleWizardBase
+from pwem.viewers.viewer_chimera import mapVolsWithColorkey
 from pyworkflow.utils import replaceExt
 from os.path import exists
 
@@ -45,6 +46,7 @@ from xmipp3.protocols.protocol_resolution_monogenic_signal import (
         XmippProtMonoRes, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM,
         OUTPUT_RESOLUTION_FILE_CHIMERA)
 from .plotter import XmippPlotter
+from pyworkflow.gui import plotter
 
 class XmippMonoResViewer(LocalResolutionViewer):
     """
@@ -80,6 +82,18 @@ class XmippMonoResViewer(LocalResolutionViewer):
         
         group = form.addGroup('Colored resolution Slices and Volumes')
 
+        group.addParam('colorMap', EnumParam, choices=COLOR_CHOICES.values(),
+                      default=COLOR_JET,
+                      label='Color map',
+                      help='Select the color map to apply to the resolution map. '
+                            'http://matplotlib.org/1.3.0/examples/color/colormaps_reference.html.')
+
+        group.addParam('otherColorMap', StringParam, default='jet',
+                      condition = binaryCondition,
+                      label='Customized Color map',
+                      help='Name of a color map to apply to the resolution map.'
+                      ' Valid names can be found at '
+                      'http://matplotlib.org/1.3.0/examples/color/colormaps_reference.html')
         group.addParam('sliceAxis', EnumParam, default=AX_Z,
                        choices=['x', 'y', 'z'],
                        display=EnumParam.DISPLAY_HLIST,
