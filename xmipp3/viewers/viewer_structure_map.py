@@ -71,15 +71,13 @@ class XmippProtStructureMapViewer(ProtocolViewer):
                                       'Execute again the protocol\n',
                                       title='Missing result file')]
         coordinates = np.loadtxt(fnOutput)
-        
-        # Create labels        
-        count = 0
+
+        # Create labels
         labels = []
-        volList, _, _ = self.protocol._iterInputVolumes()
-        for voli in volList:
-            count+=1
-            labels.append("vol_%02d"%count)
-         
+        _, _, _, idList = self.protocol._iterInputVolumes(self.protocol.inputVolumes, [], [], [], [])
+        for idv in idList:
+            labels.append("vol_%02d" % idv)
+
         val = 0
         if nDim == 1:
             AX = plt.subplot(111)
