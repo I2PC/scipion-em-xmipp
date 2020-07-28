@@ -51,35 +51,42 @@ class XmippPDBDeformViewer(pwviewer.ProtocolViewer):
                 'doShowMorph': self._doShowMorph}
 
     def _doShowPDB(self, obj, **kwargs):
-        scriptFile = self.protocol._getPath('pdb_deform_chimera.cmd')
+        scriptFile = self.protocol._getPath('pdb_deform_chimera.cxc')
         fhCmd = open(scriptFile, 'w')
         inputFile = os.path.abspath(self.protocol.inputPDB.get().getFileName())
         outputFile = os.path.abspath(self.protocol.outputPDB.getFileName())
 
         fhCmd.write("open %s\n" % inputFile)
         fhCmd.write("open %s\n" % outputFile)
-        fhCmd.write("start Model Panel\n")
+        # fhCmd.write("start Model Panel\n")
+        fhCmd.write("show cartoons\n")
+        fhCmd.write("cartoon style width 1.5 thick 1.5\n")
+        fhCmd.write("style stick\n")
+        fhCmd.write("color bymodel\n")
         fhCmd.close()
 
         view = ChimeraView(scriptFile)
         return [view]
 
     def _doShowMorph(self, obj, **kwargs):
-        scriptFile = self.protocol._getPath('pdb_deform_chimera.cmd')
+        scriptFile = self.protocol._getPath('pdb_deform_chimera.cxc')
         fhCmd = open(scriptFile, 'w')
         inputFile = os.path.abspath(self.protocol.inputPDB.get().getFileName())
         outputFile = os.path.abspath(self.protocol.outputPDB.getFileName())
 
         fhCmd.write("open %s\n" % inputFile)
         fhCmd.write("open %s\n" % outputFile)
-        fhCmd.write("~modeldisp #0,1\n")
-        fhCmd.write("morph  start #0 frames 100\n")
-        fhCmd.write("morph interpolate #1\n")
-        fhCmd.write("morph movie\n")
-        fhCmd.write("start Model Panel\n")
-        fhCmd.write("coordset #2 1,100\n")
-        fhCmd.write("wait 100\n")
-        fhCmd.write("coordset #2 100,1,-1\n")
+        fhCmd.write("hide models\n")
+        # fhCmd.write("morph  start #0 frames 100\n")
+        # fhCmd.write("morph interpolate #1\n")
+        # fhCmd.write("morph movie\n")
+        fhCmd.write("morph #1,2 frames 50 play false\n")
+        # fhCmd.write("start Model Panel\n")
+        # fhCmd.write("coordset #2 1,100\n")
+        fhCmd.write("coordset #3 1,\n")
+        fhCmd.write("wait 50\n")
+        # fhCmd.write("coordset #2 100,1,-1\n")
+        fhCmd.write("coordset #3 50,1\n")
         fhCmd.close()
 
         view = ChimeraView(scriptFile)
