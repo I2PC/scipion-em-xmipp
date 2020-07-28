@@ -125,3 +125,4 @@ from .protocol_particle_pick_remove_duplicates import XmippProtPickingRemoveDupl
 from .protocol_metaprotocol_golden_highres import XmippMetaProtGoldenHighRes
 from .protocol_apply_deformation_sph import XmippProtApplySPH
 from .protocol_kmeans_sph import XmippProtKmeansSPH
+from .protocol_structure_map import XmippProtStructureMap
