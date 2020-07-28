@@ -26,6 +26,14 @@
 # **************************************************************************
 from pwem.objects import Volume
 from pwem.wizards import ColorScaleWizardBase
+import os
+
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import cm
+import matplotlib.colors as mcolors
+from pwem.viewers.viewer_chimera import mapVolsWithColorkey
+from pyworkflow.gui import plotter
 
 from pwem.viewers import (LocalResolutionViewer, EmPlotter, ChimeraView,
                           DataView)
@@ -54,6 +62,11 @@ class XmippResDeepResViewer(LocalResolutionViewer):
     _targets = [XmippProtDeepRes]      
     _environments = [DESKTOP_TKINTER]
 
+    
+    @staticmethod
+    def getColorMapChoices():
+        return plt.colormaps()
+   
     def __init__(self, *args, **kwargs):
         ProtocolViewer.__init__(self, *args, **kwargs)
 
@@ -71,7 +84,18 @@ class XmippResDeepResViewer(LocalResolutionViewer):
                       label="Show resolution histogram")
         
         group = form.addGroup('Colored resolution Slices and Volumes')
-
+        group.addParam('colorMap', EnumParam, choices=COLOR_CHOICES,
+                      default=COLOR_JET,
+                      label='Color map',
+                      help='Select the color map to apply to the resolution map. '
+                            'http://matplotlib.org/1.3.0/examples/color/colormaps_reference.html.')
+        
+        group.addParam('otherColorMap', StringParam, default='jet',
+                      condition = binaryCondition,
+                      label='Customized Color map',
+                      help='Name of a color map to apply to the resolution map.'
+                      ' Valid names can be found at '
+                      'http://matplotlib.org/1.3.0/examples/color/colormaps_reference.html')
         group.addParam('sliceAxis', EnumParam, default=AX_Z,
                        choices=['x', 'y', 'z'],
                        display=EnumParam.DISPLAY_HLIST,
@@ -176,6 +200,13 @@ class XmippResDeepResViewer(LocalResolutionViewer):
 
         return [plotter]
 
+    def _getStepColors(self, minRes, maxRes, numberOfColors=13):
+        inter = (maxRes - minRes) / (numberOfColors - 1)
+        rangeList = []
+        for step in range(0, numberOfColors):
+            rangeList.append(round(minRes + step * inter, 2))
+        return rangeList
+
     def _getAxis(self):
         return self.getEnumText('sliceAxis')
 
@@ -190,5 +221,79 @@ class XmippResDeepResViewer(LocalResolutionViewer):
                                  numColors=self.intervals.get(),
                                  lowResLimit=self.highest.get(),
                                  highResLimit=self.lowest.get())
+        cmdFile = os.path.abspath(self.protocol._getTmpPath('Chimera_resolution.py'))
+        self.createChimeraScript(cmdFile)
         view = ChimeraView(cmdFile)
         return [view]
+
+    def numberOfColors(self, min_Res, max_Res, numberOfColors):
+        inter = (max_Res - min_Res)/(numberOfColors-1)
+        colors_labels = ()
+        for step in range(0,numberOfColors):
+            colors_labels += round(min_Res + step*inter,2),
+        return colors_labels
+
+    def createChimeraScript(self, cmdFile):
+        #  chimera python script
+
+        imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
+        img = ImageHandler().read(imageFile)
+        imgData = img.getData()
+        imgData = imgData[imgData!=0]
+        min_Res = round(np.amin(imgData)*100)/100
+        max_Res = round(np.amax(imgData)*100)/100
+
+        numberOfColors = 21
+        voldim = (img.getDimensions())[:-1]
+
+        # The sampling of this volume is always
+        # 1 A pixel.
+        smprt = 1.0
+        stepColors = self._getStepColors(min_Res, max_Res, numberOfColors)
+        colorList = plotter.getHexColorList(stepColors, self.getColorMap())
+
+        mapVolsWithColorkey(
+            os.path.abspath(self.protocol._getExtraPath(RESIZE_VOL)),
+            os.path.abspath(
+                self.protocol._getExtraPath(OUTPUT_RESOLUTION_FILE_CHIMERA)),
+            stepColors,
+            colorList,
+            voldim,
+            volOrigin=None,
+            step = 1,
+            sampling=smprt,
+            scriptFileName=cmdFile,
+            bgColorImage='black',
+            showAxis=True)
+
+    @staticmethod
+    def ColorKeyReplacement():
+        pass
+
+
+    @staticmethod
+    def colorMapToColorList(steps, colorMap):
+        """ Returns a list of pairs resolution, hexColor to be used in chimera 
+        scripts for coloring the volume and the colorKey """
+
+        # Get the map used by DL2R
+        colors = ()
+        ratio = 255.0/(len(steps)-1)
+        for index, step in enumerate(steps):
+            colorPosition = int(round(index*ratio))
+            rgb = colorMap(colorPosition)[:3]
+            colors += step,
+            rgbColor = mcolors.rgb2hex(rgb)
+            colors += rgbColor,
+
+        return colors
+    
+    def getColorMap(self):
+        if (COLOR_CHOICES[self.colorMap.get()] == 'other'):
+            cmap = cm.get_cmap(self.otherColorMap.get())
+        else:
+            cmap = cm.get_cmap(COLOR_CHOICES[self.colorMap.get()])
+        if cmap is None:
+            cmap = cm.jet
+        return cmap
+
