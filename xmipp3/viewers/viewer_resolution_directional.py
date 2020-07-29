@@ -172,10 +172,10 @@ class XmippMonoDirViewer(ProtocolViewer):
                label="Show radial averages")
 
         group = form.addGroup('Choose a Color Map')
-        group.addParam('colorMap', EnumParam, choices=COLOR_CHOICES.values(),
+        group.addParam('colorMap', EnumParam, choices=list(COLOR_CHOICES.values()),
                       default=COLOR_JET,
                       label='Color map',
-                      help='Select the color map to be applied'
+                      help='Select the color map to be applied '
                             'http://matplotlib.org/1.3.0/examples/color/colormaps_reference.html.')
         
         group.addParam('otherColorMap', StringParam, default='jet',
@@ -287,7 +287,7 @@ class XmippMonoDirViewer(ProtocolViewer):
         return xplotter
         
     def _showOriginalVolumeSlices(self, param=None):
-        if self.protocol.halfVolumes.get() is True:
+        if self.protocol.hasAttribute('halfVolumes'):
             cm = DataView(self.protocol.inputVolume.get().getFileName())
             cm2 = DataView(self.protocol.inputVolume2.get().getFileName())
             return [cm, cm2]
@@ -349,7 +349,8 @@ class XmippMonoDirViewer(ProtocolViewer):
         #    md.setValue(MDL_WEIGHT,w,objId)
         #md.write(path)
         #print(w)
-        return view.plotAngularDistributionFromMd(path, 'directional resolution distribution',  min_w=0)
+        view.plotAngularDistributionFromMd(path, 'directional resolution distribution',  min_w=0)
+        return view.show()
 
     def _plotHistogram(self, fnhist, titlename, xname):
         md = MetaData()
