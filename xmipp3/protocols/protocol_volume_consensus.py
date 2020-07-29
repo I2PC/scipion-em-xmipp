@@ -77,12 +77,12 @@ class XmippProtVolConsensus(ProtInitialVolume):
 
     def createChimeraScript(self):
         fnRoot = "extra/"
-        scriptFile = self._getPath('result') + '_fusion_chimera.cmd'
+        scriptFile = self._getPath('result') + '_fusion_chimera.cxc'
         fhCmd = open(scriptFile, 'w')
         fhCmd.write("open %s\n" % (fnRoot+"consensus_volume.mrc"))
         fhCmd.write("open %s\n" % (fnRoot+"consensus_volume_diff.mrc"))
-        fhCmd.write("vol #1 hide\n")
-        fhCmd.write("scolor #0 volume #1 cmap rainbow reverseColors True\n")
+        fhCmd.write("vol #2 hide\n")
+        fhCmd.write("scolor #1 volume #2 cmap rainbow reverseColors True\n")
         fhCmd.close()
 
     # --------------------------- INFO functions --------------------------------------------

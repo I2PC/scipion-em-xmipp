@@ -93,7 +93,7 @@ class viewerXmippProtVolSubtraction(EmProtocolViewer):
         return setOfVolumes
 
     def _showVolumesChimera(self):
-        tmpFileNameCMD = self.protocol._getTmpPath("chimera.cmd")
+        tmpFileNameCMD = self.protocol._getTmpPath("chimera.cxc")
         f = open(tmpFileNameCMD, "w")
         dim = self.protocol.outputVolume.getDim()[0]
         sampling = self.protocol.outputVolume.getSamplingRate()
@@ -110,7 +110,7 @@ class viewerXmippProtVolSubtraction(EmProtocolViewer):
         # output vol origin coordinates
         x_output, y_output, z_output = self.protocol.outputVolume.getShiftsFromOrigin()
         f.write("open %s\n" % outputVolFileName)
-        f.write("volume #1 voxelSize %f origin "
+        f.write("volume #2 voxelSize %f origin "
                 "%0.2f,%0.2f,%0.2f\n"
                 % (_outputVol.getSamplingRate(), x_output/sampling, y_output/sampling, z_output/sampling))
         f.close()
