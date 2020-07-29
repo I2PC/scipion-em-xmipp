@@ -28,6 +28,7 @@ import os
 import numpy as np
 import math
 from mpl_toolkits.mplot3d import proj3d
+from scipy.ndimage.filters import gaussian_filter
 
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pyworkflow.gui.plotter import plt
@@ -51,11 +52,15 @@ class XmippProtStructureMapViewer(ProtocolViewer):
         form.addParam('numberOfDimensions', params.IntParam, default=2,
                       label="Number of dimensions",
                       help='In normal practice, it should be 1, 2 or, at most, 3.')
-        form.addParam('showHist', params.BooleanParam, default=False,
+        form.addParam('showMethod', params.EnumParam, default=0,
+                      choices=['scatter', 'contour', 'convolution'],
                       label="Show convolved cloud?",
-                      help="Convolved the structure map with a low pass filter and "
-                           "show a colorimage showing how many images where assigned "
-                           "to each region. This is only valid for two dimensions.")
+                      help="Specify how the strucutre mapping will be rendered (only "
+                           "valid for two dimensions)\n"
+                           "Scatter: scatter plot of each volume with its ID.\n"
+                           "Contour: draw contour lines and filled contours for each point.\n"
+                           "Convolution: Scatter convolved with a Gaussian whose height determines the "
+                           "importance of each volume.")
         form.addParam('doShowPlot', params.LabelParam,
                       label="Display the StructMap")
     
@@ -95,7 +100,7 @@ class XmippProtStructureMapViewer(ProtocolViewer):
             plt.show()
                          
         elif nDim == 2:
-            if not self.showHist:
+            if self.showMethod.get() == 0:
                 plot = plt.scatter(coordinates[:, 0], coordinates[:, 1], marker='o', c='g')
                 plt.xlabel('Dimension 1', fontsize=11)
                 plt.ylabel('Dimension 2', fontsize=11)
@@ -107,7 +112,7 @@ class XmippProtStructureMapViewer(ProtocolViewer):
                                  bbox = dict(boxstyle = 'round,pad=0.3', fc = 'yellow', alpha = 0.3))
                 plt.grid(True)
                 plt.show()
-            else:
+            elif self.showMethod.get() == 1:
                 x = coordinates[:, 0]
                 y = coordinates[:, 1]
 
@@ -122,11 +127,6 @@ class XmippProtStructureMapViewer(ProtocolViewer):
                 # define grid.
                 xi = np.linspace(min(x) - 0.1, max(x) + 0.1, 100)
                 yi = np.linspace(min(x) - 0.1, max(x) + 0.1, 100)
-
-                print(x.shape)
-                print(y.shape)
-                print(xi.shape)
-                print(yi.shape)
 
                 z = np.zeros((100, 100), float)
                 zSize = z.shape
@@ -145,7 +145,29 @@ class XmippProtStructureMapViewer(ProtocolViewer):
                 CS = plt.contour(xi, yi, z, 15, linewidths=0.5, colors='k')
                 CS = plt.contourf(xi, yi, z, 15, cmap=plt.cm.jet)
                 plt.colorbar()  # draw colorbar
-                plt.title('griddata test')
+                plt.title('Gridded Structure Map')
+                plt.show()
+            else:
+                Xr = np.round(coordinates, decimals=3)
+                size_grid = 2 * np.amax(Xr)
+                grid_coords = np.arange(-size_grid, size_grid, 0.001)
+                R, C = np.meshgrid(grid_coords, grid_coords, indexing='ij')
+                S = np.zeros(R.shape)
+                sigma = R.shape[0] / (200 / 5)
+                lbox = int(6 * sigma)
+                if lbox % 2 == 0:
+                    lbox += 1
+                mid = int((lbox - 1) / 2 + 1)
+                kernel = np.zeros((lbox, lbox))
+                kernel[mid, mid] = 1
+                kernel = gaussian_filter(kernel, sigma=sigma)
+                for p in range(Xr.shape[0]):
+                    indx = np.argmin(np.abs(R[:, 0] - Xr[p, 0]))
+                    indy = np.argmin(np.abs(C[0, :] - Xr[p, 1]))
+                    S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel
+                plt.colorbar()
+                plt.title('Convolved Structure Map')
+                plt.imshow(S)
                 plt.show()
                 
         else: 
