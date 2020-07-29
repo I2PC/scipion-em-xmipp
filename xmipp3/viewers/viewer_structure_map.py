@@ -165,9 +165,9 @@ class XmippProtStructureMapViewer(ProtocolViewer):
                     indx = np.argmin(np.abs(R[:, 0] - Xr[p, 0]))
                     indy = np.argmin(np.abs(C[0, :] - Xr[p, 1]))
                     S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel
+                plt.imshow(S)
                 plt.colorbar()
                 plt.title('Convolved Structure Map')
-                plt.imshow(S)
                 plt.show()
                 
         else: 
