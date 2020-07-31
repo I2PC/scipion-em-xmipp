@@ -56,7 +56,7 @@ class XmippProtApplySPH(ProtAnalysis3D):
 
     # --------------------------- STEPS functions ------------------------------
     def deformStep(self):
-        classes = self.inpuClasses.get()
+        classes = self.inputClasses.get()
         for idx, rep in enumerate(classes.iterRepresentatives()):
             coeffs = np.fromstring(rep.get(), sep=',')
             file = self._getTmpPath('coeffs.txt')
