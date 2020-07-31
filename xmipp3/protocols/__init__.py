@@ -124,5 +124,5 @@ from .protocol_consensus_local_ctf import XmippProtConsensusLocalCTF
 from .protocol_particle_pick_remove_duplicates import XmippProtPickingRemoveDuplicates
 from .protocol_metaprotocol_golden_highres import XmippMetaProtGoldenHighRes
 from .protocol_apply_deformation_sph import XmippProtApplySPH
-from .protocol_kmeans_sph import XmippProtKmeansSPH
+from .protocol_kmeans_clustering import XmippProtKmeansSPH
 from .protocol_structure_map import XmippProtStructureMap
