@@ -76,10 +76,10 @@ class XmippProtKmeansSPH(ProtClassify2D):
         elif colData == 1:
             mdLabel = md.MDL_NMA
         for particle in particles.iterItems():
-            coeffs.append(getXmippAttribute(particle, mdLabel).get())
+            coeffs.append(np.fromstring(getXmippAttribute(particle, mdLabel).get(), sep=','))
         kmeans = KMeans(n_clusters=self.clusters.get()).fit(np.asarray(coeffs))
         for idc, coeff in enumerate(kmeans):
-            line = {'classId': idc+1, 'coeff': coeff}
+            line = {'classId': idc+1, 'coeff': ','.join(['%f' % num for num in coeff])}
             self.kDict.append(line)
 
 
