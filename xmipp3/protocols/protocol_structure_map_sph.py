@@ -174,10 +174,15 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                 dimList.append(item.getDim()[0])
                 srList.append(item.getSamplingRate())
             elif isinstance(item, SetOfVolumes):
+                weight = []
                 for vol in item:
                     volList.append(vol.getFileName())
                     dimList.append(vol.getDim()[0])
                     srList.append(vol.getSamplingRate())
+                    if hasattr(vol, '_numberImages'):
+                        weight.append(vol._numberImages)
+                if weight:
+                    np.savetxt(self._getExtraPath('weigths.txt'), np.asarray(weight))
         return volList, dimList, srList
 
 

@@ -76,6 +76,8 @@ class XmippProtStructureMapViewer(ProtocolViewer):
                                       'Execute again the protocol\n',
                                       title='Missing result file')]
         coordinates = np.loadtxt(fnOutput)
+        if os.path.isfile(self._getExtraPath('weigths.txt')):
+            weights = np.loadtxt(self._getExtraPath('weigths.txt'))
 
         # Create labels
         labels = []
@@ -164,7 +166,10 @@ class XmippProtStructureMapViewer(ProtocolViewer):
                 for p in range(Xr.shape[0]):
                     indx = np.argmin(np.abs(R[:, 0] - Xr[p, 0]))
                     indy = np.argmin(np.abs(C[0, :] - Xr[p, 1]))
-                    S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel
+                    if 'weights' in locals():
+                        S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel * weights[p]
+                    else:
+                        S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel
                 plt.imshow(S)
                 plt.colorbar()
                 plt.title('Convolved Structure Map')
