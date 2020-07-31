@@ -57,8 +57,9 @@ class XmippProtApplySPH(ProtAnalysis3D):
     # --------------------------- STEPS functions ------------------------------
     def deformStep(self):
         classes = self.inputClasses.get()
-        for idx, rep in enumerate(classes.iterRepresentatives()):
-            coeffs = np.fromstring(rep.get(), sep=',')
+        for idx, rep in enumerate(classes.iterItems()):
+            coeffs = rep.getRepresentative().get()
+            coeffs = np.fromstring(coeffs, sep=',')
             file = self._getTmpPath('coeffs.txt')
             np.savetxt(file, coeffs)
             outFile = pwutils.removeBaseExt(self.inputVol.get().getFileName()) + '_%d_deformed.vol' % idx
