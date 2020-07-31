@@ -45,8 +45,8 @@ class XmippProtApplySPH(ProtAnalysis3D):
         form.addParam('inputVol', params.PointerParam, label="Input volume",
                       pointerClass='Volume', important=True,
                       help='Select a Volume to be deformed.')
-        form.addParam('inputCoeffs', params.PathParam, label="Input Coefficients",
-                      important=True,
+        form.addParam('inputClasses', params.PointerParam, pointerClass='SetOfClasses2D',
+                      label="Input Coefficients", important=True,
                       help='Specify a path to the deformation coefficients metadata.')
 
     # --------------------------- INSERT steps functions -----------------------
@@ -56,9 +56,9 @@ class XmippProtApplySPH(ProtAnalysis3D):
 
     # --------------------------- STEPS functions ------------------------------
     def deformStep(self):
-        mdCoeffs = md.MetaData(self.inputCoeffs.get())
-        for idx, row in enumerate(md.iterRows(mdCoeffs)):
-            coeffs = np.asarray(mdCoeffs.getValue(md.MDL_SPH_COEFFICIENTS, row.getObjId()))
+        classes = self.inpuClasses.get()
+        for idx, rep in enumerate(classes.iterRepresentatives()):
+            coeffs = np.fromstring(rep.get(), sep=',')
             file = self._getTmpPath('coeffs.txt')
             np.savetxt(file, coeffs)
             outFile = pwutils.removeBaseExt(self.inputVol.get().getFileName()) + '_%d_deformed.vol' % idx
