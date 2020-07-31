@@ -28,7 +28,7 @@ import os, glob
 import numpy as np
 
 from pwem.protocols import ProtAnalysis3D
-from pwem.objects import Volume
+from pwem.objects import Volume, Integer
 import pwem.emlib.metadata as md
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
@@ -56,6 +56,7 @@ class XmippProtApplySPH(ProtAnalysis3D):
 
     # --------------------------- STEPS functions ------------------------------
     def deformStep(self):
+        self.outParams = []
         classes = self.inputClasses.get()
         for idx, rep in enumerate(classes.iterItems()):
             coeffs = rep.getRepresentative().get()
@@ -66,23 +67,24 @@ class XmippProtApplySPH(ProtAnalysis3D):
             params = ' -i %s --clnm %s -o %s' % \
                      (self.inputVol.get().getFileName(), file, self._getExtraPath(outFile))
             self.runJob("xmipp_volume_apply_deform_sph", params)
+            self.outParams.append((outFile, rep.getSize()))
 
     def createOutputStep(self):
-        outFiles = sorted(glob.glob(self._getExtraPath('*.vol')))
         samplingRate = self.inputVol.get().getSamplingRate()
-        if len(outFiles) == 1:
+        if len(self.outParams) == 1:
             outVol = Volume()
-            outVol.setLocation(outFiles[0])
+            outVol.setLocation(self.outParams[0][0])
             outVol.setSamplingRate(samplingRate)
             self._defineOutputs(outputVolume=outVol)
             self._defineSourceRelation(self.inputVol, outVol)
         else:
             outVolumes = self._createSetOfVolumes()
             outVolumes.setSamplingRate(samplingRate)
-            for file in outFiles:
+            for outTuple in self.outParams:
                 outVol = Volume()
-                outVol.setLocation(file)
+                outVol.setLocation(outTuple[0])
                 outVol.setSamplingRate(samplingRate)
+                setattr(outVol, '_numberImages', Integer(outTuple[1]))
                 outVolumes.append(outVol)
             self._defineOutputs(outputVolumes=outVolumes)
             self._defineSourceRelation(self.inputVol, outVolumes)
