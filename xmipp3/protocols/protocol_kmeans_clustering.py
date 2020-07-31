@@ -77,29 +77,26 @@ class XmippProtKmeansSPH(ProtClassify2D):
             mdLabel = md.MDL_NMA
         for particle in particles.iterItems():
             coeffs.append(np.fromstring(getXmippAttribute(particle, mdLabel).get(), sep=','))
-        kmeans = KMeans(n_clusters=self.clusters.get()).fit(np.asarray(coeffs)).cluster_centers_
-        for idc, coeff in enumerate(kmeans):
-            line = {'classId': idc+1, 'coeff': ','.join(['%f' % num for num in coeff])}
-            self.kDict.append(line)
-
+        self.kmeans = KMeans(n_clusters=self.clusters.get()).fit(np.asarray(coeffs))
 
     def createOutputStep(self):
         classes2DSet = self._createSetOfClasses2D(self.inputParts.get())
         classes2DSet.classifyItems(updateItemCallback=self._updateParticle,
                                    updateClassCallback=self._updateClass,
-                                   itemDataIterator=iter(self.kDict))
+                                   itemDataIterator=iter(self.kmeans.labels_))
         result = {'outputClasses': classes2DSet}
         self._defineOutputs(**result)
         self._defineSourceRelation(self.inputParts, classes2DSet)
 
     # ------------------------------- UTILS functions -------------------------------
-    def _updateParticle(self, item, lineItem):
-        classNum = lineItem["classId"]
-        item.setClassId(classNum)
+    def _updateParticle(self, item, idc):
+        item.setClassId(idc)
 
     def _updateClass(self, item):
-        coeff = self.kDict[item.getClassId()-1]['coeff']
+        coeff = self.kmeans.cluster_centers_[item.getObjId()-1]
+        coeff = ','.join(['%f' % num for num in coeff])
         representative = pwobj.CsvList()
         representative.set(coeff)
-        setattr(representative, '_classID', pwobj.Integer(item.getClassId()))
+        setattr(representative, '_classID', pwobj.Integer(item.getObjId()))
+        # setattr(representative, '_objDoStore', pwobj.Boolean(True))
         item.setRepresentative(coeff)
