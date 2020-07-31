@@ -67,7 +67,7 @@ class XmippProtApplySPH(ProtAnalysis3D):
             params = ' -i %s --clnm %s -o %s' % \
                      (self.inputVol.get().getFileName(), file, self._getExtraPath(outFile))
             self.runJob("xmipp_volume_apply_deform_sph", params)
-            self.outParams.append((outFile, rep.getSize()))
+            self.outParams.append((self._getExtraPath(outFile), rep.getSize()))
 
     def createOutputStep(self):
         samplingRate = self.inputVol.get().getSamplingRate()

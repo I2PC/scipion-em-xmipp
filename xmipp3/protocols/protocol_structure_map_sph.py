@@ -157,8 +157,6 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             np.savetxt(self._defineResultsName(i), embedExtended)
 
     # --------------------------- UTILS functions --------------------------------------------
-
-
     def _iterInputVolumes(self):
         """ Iterate over all the input volumes. """
         volList = []
