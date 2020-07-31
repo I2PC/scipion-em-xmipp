@@ -97,6 +97,6 @@ class XmippProtKmeansSPH(ProtClassify2D):
         coeff = ','.join(['%f' % num for num in coeff])
         representative = pwobj.CsvList()
         representative.set(coeff)
-        setattr(representative, '_classID', pwobj.Integer(item.getObjId()))
-        setattr(representative, '_objDoStore', True)
+        # setattr(representative, '_classID', pwobj.Integer(item.getObjId()))
+        # setattr(representative, '_objDoStore', True)
         item.setRepresentative(representative)
