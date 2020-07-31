@@ -94,7 +94,7 @@ class XmippProtKmeansSPH(ProtClassify2D):
 
     # ------------------------------- UTILS functions -------------------------------
     def _updateParticle(self, item, lineItem):
-        classNum = lineItem["class"]
+        classNum = lineItem["classId"]
         item.setClassId(classNum)
 
     def _updateClass(self, item):
