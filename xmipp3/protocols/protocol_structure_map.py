@@ -211,7 +211,7 @@ class XmippProtStructureMap(ProtAnalysis3D):
                         weight.append(vol._numberImages.get())
             count += 1
         if weight:
-            np.savetxt(self._getExtraPath('weigths.txt'), np.asarray(weight))
+            np.savetxt(self._getExtraPath('weights.txt'), np.asarray(weight))
         return volList, dimList, srList, idList
 
     def split(self, array, nrows, ncols):
