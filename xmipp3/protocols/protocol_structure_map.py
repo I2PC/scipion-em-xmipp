@@ -200,12 +200,17 @@ class XmippProtStructureMap(ProtAnalysis3D):
                 srList.append(item.getSamplingRate())
                 idList.append(count)
             elif isinstance(item, SetOfVolumes):
+                weight = []
                 for vol in item:
                     volList.append(vol.getFileName())
                     dimList.append(vol.getDim()[0])
                     srList.append(vol.getSamplingRate())
                     idList.append(count)
                     count += 1
+                    if hasattr(vol, '_numberImages'):
+                        weight.append(vol._numberImages)
+                if weight:
+                    np.savetxt(self._getExtraPath('weigths.txt'), np.asarray(weight))
             count += 1
         return volList, dimList, srList, idList
 
