@@ -189,6 +189,7 @@ class XmippProtStructureMap(ProtAnalysis3D):
     def _iterInputVolumes(self, volumes, volList, dimList, srList, idList):
         """ Iterate over all the input volumes. """
         count = 1
+        weight = []
         for pointer in volumes:
             item = pointer.get()
             if item is None:
@@ -200,7 +201,6 @@ class XmippProtStructureMap(ProtAnalysis3D):
                 srList.append(item.getSamplingRate())
                 idList.append(count)
             elif isinstance(item, SetOfVolumes):
-                weight = []
                 for vol in item:
                     volList.append(vol.getFileName())
                     dimList.append(vol.getDim()[0])
@@ -208,10 +208,10 @@ class XmippProtStructureMap(ProtAnalysis3D):
                     idList.append(count)
                     count += 1
                     if hasattr(vol, '_numberImages'):
-                        weight.append(vol._numberImages)
-                if weight:
-                    np.savetxt(self._getExtraPath('weigths.txt'), np.asarray(weight))
+                        weight.append(vol._numberImages.get())
             count += 1
+        if weight:
+            np.savetxt(self._getExtraPath('weigths.txt'), np.asarray(weight))
         return volList, dimList, srList, idList
 
     def split(self, array, nrows, ncols):
