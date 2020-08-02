@@ -151,7 +151,7 @@ class XmippProtStructureMapViewer(ProtocolViewer):
                 plt.show()
             else:
                 Xr = np.round(coordinates, decimals=3)
-                size_grid = 1.2 * np.amax(Xr)
+                size_grid = 2 * np.amax(Xr)
                 grid_coords = np.arange(-size_grid, size_grid, 0.001)
                 R, C = np.meshgrid(grid_coords, grid_coords, indexing='ij')
                 S = np.zeros(R.shape)
@@ -170,6 +170,8 @@ class XmippProtStructureMapViewer(ProtocolViewer):
                         S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel * weights[p]
                     else:
                         S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel
+                S = S[~np.all(S == 0, axis=1)]
+                S = S[:, ~np.all(S == 0, axis=0)]
                 plt.imshow(S)
                 plt.colorbar()
                 plt.title('Convolved Structure Map')
