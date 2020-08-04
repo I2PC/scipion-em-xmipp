@@ -28,6 +28,9 @@ Protocol to perform high-resolution reconstructions
 """
 from glob import glob
 import math
+
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
+
 try:
     from itertools import izip
 except ImportError:
@@ -924,7 +927,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                     os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                                 args = '-i %s -r %s -o %s --keepBestN %f --dev %s ' % \
                                        (fnGroup, fnGalleryGroupMd, fnAnglesGroup,self.numberOfReplicates.get(), GpuListCuda)
-                                self.runJob("xmipp_cuda_align_significant",args, numberOfMpi=1)
+                                self.runJob(CUDA_ALIGN_SIGNIFICANT,args, numberOfMpi=1)
 
                             if exists(fnAnglesGroup):
                                 if not exists(fnAngles) and exists(fnAnglesGroup):
