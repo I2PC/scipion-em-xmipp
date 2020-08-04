@@ -77,6 +77,8 @@ class XmippProtVolSubtraction(EMProtocol):
                       help='"Yes": the output of the protocol is the difference between input volumes. '
                            '"No": the output of the protocol is the second volume modified in order to assimilate it to'
                            'the first volume.')
+        form.addParam('eq', BooleanParam, label='Histogram equalization', default=False, expertLevel=LEVEL_ADVANCED,
+                      help='This option performs histogram equalization of the second volume.')
         form.addParam('resol', FloatParam, label="Subtraction at resolution: ", default=5, allowsNull=True,
                       help='Resolution (A) at which subtraction will be performed, filtering the input volumes.'
                            'Value 0 implies no filtering.')
@@ -131,25 +133,31 @@ class XmippProtVolSubtraction(EMProtocol):
         self.runJob(program2, args2)
 
     def subtractionStep(self):
+        import time
+        time.sleep(10)
+        # vol1 = self.vol1.get().clone()
         vol1 = self.vol1.get()
         if self.pdb:
             vol2 = self.outFile
             mask2 = self._getExtraPath("mask2.mrc")
         else:
+            print("-------vol1--141--", vol1.getFileName())
             vol2 = self.vol2.get().getFileName()
+            print("-------vol1--143--", vol1.getFileName())
             if self.masks:
                 mask2 = self.mask2.get().getFileName()
         resol = self.resol.get()
-        sub = self.sub.get()
         iter = self.iter.get()
         program = "xmipp_volume_subtraction"
-        args = '--i1 %s --i2 %s -o %s --iter %s' % (vol1.getFileName(), vol2,
-                                                  self._getExtraPath("output_volume.mrc"), iter)
+        args = '--i1 %s --i2 %s -o %s --iter %s' % (vol1.getFileName(), vol2, self._getExtraPath("output_volume.mrc"),
+                                                    iter)
         if resol:
             fc = vol1.getSamplingRate()/resol
             args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
-        if sub:
+        if self.sub.get():
             args += ' --sub'
+        if self.eq.get():
+            args += ' --eq'
         if self.masks:
             args += ' --mask1 %s --mask2 %s' % (self.mask1.get().getFileName(), mask2)
         self.runJob(program, args)
