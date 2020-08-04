@@ -82,7 +82,7 @@ class XmippProtVolConsensus(ProtInitialVolume):
         fhCmd.write("open %s\n" % (fnRoot+"consensus_volume.mrc"))
         fhCmd.write("open %s\n" % (fnRoot+"consensus_volume_diff.mrc"))
         fhCmd.write("vol #2 hide\n")
-        fhCmd.write("scolor #1 volume #2 cmap rainbow reverseColors True\n")
+        fhCmd.write("color sample #1 map #2 palette rainbow\n")
         fhCmd.close()
 
     # --------------------------- INFO functions --------------------------------------------
