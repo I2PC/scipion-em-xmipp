@@ -116,21 +116,23 @@ class XmippProtFSO(ProtAnalysis3D):
         """Check if the extension is .mrc, if not then uses xmipp to convert it
         """
         ext = getExt(fileName)
-        if (extVol1 !='.mrc'):
+        if (ext !='.mrc'):
             params = ' -i %s' % fileName
             params += ' -o %s' % outputFileName
             self.runJob('xmipp_image_convert', params)
-        outputFileName = outputFileName+':mrc'
-        return outputFileName
+            #outputFileName = outputFileName # +':mrc'
+            return outputFileName
+        else:
+            return fileName
 
     def convertInputStep(self):
         """ Read the input volume.
         """
-        self.vol1Fn = mrc_convert(self.half1.get().getFileName(),
+        self.vol1Fn = self.mrc_convert(self.half1.get().getFileName(),
                                   self._getTmpPath('half1.mrc'))
-        self.vol2Fn = mrc_convert(self.half2.get().getFileName(), 
+        self.vol2Fn = self.mrc_convert(self.half2.get().getFileName(),
                                   self._getTmpPath('half2.mrc'))
-        self.maskFn = mrc_convert(self.mask.get().getFileName(), 
+        self.maskFn = self.mrc_convert(self.mask.get().getFileName(),
                                   self._getExtraPath('mask.mrc'))
 
     def resolutionDirectionalFSCStep(self):
