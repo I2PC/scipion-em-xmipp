@@ -43,7 +43,7 @@ from xmipp3.convert import (createItemMatrix, writeSetOfParticles,
 
 from pwem import emlib
 from xmipp3.base import findRow, writeInfoField, readInfoField, isXmippCudaPresent
-from xmipp3.constants import SYM_URL
+from xmipp3.constants import SYM_URL, CUDA_ALIGN_SIGNIFICANT
 import numpy as np
 
 
@@ -320,7 +320,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
                 args = '-i %s -r %s -o images.xmd --odir %s' \
                        ' --keepBestN 1 --oUpdatedRefs %s ' % (fnToUse, mdRefName, join(fnDir,"level_%02d"%i), 'class_classes')
                 args += ' --dev %s ' %GpuListCuda
-                self.runJob("xmipp_cuda_align_significant", args, numberOfMpi=1)
+                self.runJob(CUDA_ALIGN_SIGNIFICANT, args, numberOfMpi=1)
             copy(join(fnDir,"level_%02d"%(self.class2dIterations.get()-1), "images.xmd"), join(fnDir,"images.xmd"))
 
             # After classification the stk and xmd files should be produced
@@ -513,7 +513,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
                 os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
 
             args = '-i %s -r %s -o %s --dev %s ' % (fnDirectional, fnGalleryMd, fnAngles, GpuListCuda)
-            self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+            self.runJob(CUDA_ALIGN_SIGNIFICANT, args, numberOfMpi=1)
 
         self.runJob("xmipp_metadata_utilities",
                     "-i %s --operate drop_column ref" % fnAngles, numberOfMpi=1)

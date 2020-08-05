@@ -42,6 +42,7 @@ from pwem.constants import ALIGN_2D, ALIGN_NONE
 from pwem.protocols import ProtAlign2D
 import pwem.emlib.metadata as md
 
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
 from xmipp3.convert import (writeSetOfParticles, rowToAlignment,
                             writeSetOfClasses2D)
 from xmipp3.base import isXmippCudaPresent
@@ -184,7 +185,7 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
 
         args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \
                '--keepBestN 1 --oUpdatedRefs %(outputClassesFileNoExt)s --dev %(device)s '
-        self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
+        self.runJob(CUDA_ALIGN_SIGNIFICANT, args % self._params, numberOfMpi=1)
 
 
     # ------ Methods for Streaming 2D Classification --------------

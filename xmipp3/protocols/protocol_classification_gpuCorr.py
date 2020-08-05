@@ -38,6 +38,8 @@ from pwem.emlib.metadata import iterRows, getSize
 from pwem.objects import SetOfClasses2D
 from pwem.constants import ALIGN_2D, ALIGN_NONE
 from pwem.emlib import MD_APPEND
+
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
 from xmipp3.convert import (rowToAlignment, xmippToLocation,
                             writeSetOfParticles, writeSetOfClasses2D)
 from xmipp3.base import isXmippCudaPresent
@@ -432,7 +434,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                 args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \
                        '--keepBestN 1 --oUpdatedRefs %(outputClassesFileNoExt)s ' \
                        '--odir %(tmpDir)s --dev %(device)s'
-                self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
+                self.runJob(CUDA_ALIGN_SIGNIFICANT, args % self._params, numberOfMpi=1)
 
         else:
             self._params['Nrefs'] = Nrefs

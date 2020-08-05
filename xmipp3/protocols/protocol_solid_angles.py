@@ -41,7 +41,7 @@ from pwem import emlib
 from xmipp3.base import findRow, readInfoField, writeInfoField, isXmippCudaPresent
 from xmipp3.convert import (rowToAlignment, setXmippAttributes, xmippToLocation,
                             createItemMatrix, writeSetOfParticles)
-from xmipp3.constants import SYM_URL
+from xmipp3.constants import SYM_URL, CUDA_ALIGN_SIGNIFICANT
 
 
 class XmippProtSolidAngles(ProtAnalysis3D):
@@ -447,7 +447,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
                 os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
 
             args = '-i %s -r %s -o %s --dev %s ' % (fnDirectional, fnGalleryMd, fnAngles, GpuListCuda)
-            self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+            self.runJob(CUDA_ALIGN_SIGNIFICANT, args, numberOfMpi=1)
 
         self.runJob("xmipp_metadata_utilities",
                     "-i %s --operate drop_column ref" % fnAngles, numberOfMpi=1)

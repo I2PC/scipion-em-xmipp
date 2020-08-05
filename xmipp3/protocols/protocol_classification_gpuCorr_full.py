@@ -45,6 +45,8 @@ import pwem.emlib.metadata as md
 
 from pwem import emlib
 from pwem.emlib import Image, MD_APPEND, DT_DOUBLE
+
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
 from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
                             rowToAlignment, rowToParticle)
 from xmipp3.base import isXmippCudaPresent
@@ -613,7 +615,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
 
             args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \
                    '--keepBestN 1 --oUpdatedRefs %(outputClassesFileNoExt)s --dev %(device)s '
-            self.runJob("xmipp_cuda_align_significant", args % self._params,
+            self.runJob(CUDA_ALIGN_SIGNIFICANT, args % self._params,
                         numberOfMpi=1)
 
         if exists(outDirName + '000001.xmd'):

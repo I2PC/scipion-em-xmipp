@@ -599,7 +599,7 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
                 fnAngles = 'images_iter001_00.xmd'
                 args = '-i %s -r %s -o %s --odir %s --keepBestN 1 --dev %s ' % (
                 imgsFn, fnGalleryMd, fnAngles, self._getTmpPath(), GpuListCuda)
-                self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+                self.runJob(CUDA_ALIGN_SIGNIFICANT, args, numberOfMpi=1)
 
     def adjustStep(self, isFirstStep, changeInserts):
         if isFirstStep:
@@ -856,7 +856,7 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
                                     'If you do not want to symmetrize set'
                                     'the field Symmetrize to not.')
 
-        if self.useGpu and not isXmippCudaPresent("xmipp_cuda_align"):
+        if self.useGpu and not isXmippCudaPresent(CUDA_ALIGN_SIGNIFICANT):
             validateMsgs.append("You asked to use GPU, but I cannot find Xmipp cuda programs in the path")
 
         return validateMsgs

@@ -27,6 +27,9 @@
 from functools import reduce
 import math
 import random
+
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
+
 try:
     from itertools import izip
 except ImportError:
@@ -261,7 +264,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
 
                 args = '-i %s -r %s -o %s --keepBestN 1 --dev %s ' % (
                 fnTest, fnGalleryMd, fnAngles, GpuListCuda)
-                self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+                self.runJob(CUDA_ALIGN_SIGNIFICANT, args, numberOfMpi=1)
 
             # Evaluate
             fnAngles = join(fnDir, "angles_iter001_00.xmd")
@@ -412,7 +415,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
 
                 args = '-i %s -r %s -o %s --keepBestN 1 --dev %s ' % (
                 fnTrain, fnGalleryMd, fnAngles, GpuListCuda)
-                self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+                self.runJob(CUDA_ALIGN_SIGNIFICANT, args, numberOfMpi=1)
 
             # Reconstruct
             if exists(fnAngles):
