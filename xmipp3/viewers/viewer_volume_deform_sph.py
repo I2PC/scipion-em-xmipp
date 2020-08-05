@@ -61,7 +61,7 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
 
     def _doShowStrain(self, param=None):
 
-        scriptFile = self.protocol._getPath('strain_chimera.cmd')
+        scriptFile = self.protocol._getPath('strain_chimera.cxc')
         fhCmd = open(scriptFile, 'w')
         fnbase = removeExt(self.protocol._getFileName('fnInputVol'))
         ext = getExt(self.protocol._getFileName('fnInputVol'))
@@ -73,12 +73,13 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
 
         fhCmd.write("open %s\n" % fninput)
         fhCmd.write("open %s\n" % (fnStrain+"_strain.mrc"))
-
-        fhCmd.write("volume #0 voxelSize %s\n" % (str(smprt)))
-        fhCmd.write("volume #1 voxelSize %s\n" % (str(smprt)))
-        fhCmd.write("focus\n")
-        fhCmd.write("vol #1 hide\n")
-        fhCmd.write("scolor #0 volume #1 cmap rainbow reverseColors True\n")
+        counter = 1
+        fhCmd.write("volume #%d voxelSize %s\n" % (counter, str(smprt)))
+        counter += 1
+        fhCmd.write("volume #%d voxelSize %s\n" % (counter, str(smprt)))
+        fhCmd.write("vol #%d hide\n" % counter)
+        #fhCmd.write("focus\n")
+        fhCmd.write('color sample #%d map #%d palette ^rainbow\n' % (counter -1, counter))
         fhCmd.close()
 
         view = ChimeraView(scriptFile)
@@ -87,7 +88,7 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
 
     def _doShowRotation(self, param=None):
 
-        scriptFile = self.protocol._getPath('rotation_chimera.cmd')
+        scriptFile = self.protocol._getPath('rotation_chimera.cxc')
         fhCmd = open(scriptFile, 'w')
         fnbase = removeExt(self.protocol._getFileName('fnInputVol'))
         ext = getExt(self.protocol._getFileName('fnInputVol'))
@@ -99,12 +100,14 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
 
         fhCmd.write("open %s\n" % fninput)
         fhCmd.write("open %s\n" % (fnStrain+"_rotation.mrc"))
-
-        fhCmd.write("volume #0 voxelSize %s\n" % (str(smprt)))
-        fhCmd.write("volume #1 voxelSize %s\n" % (str(smprt)))
-        fhCmd.write("focus\n")
-        fhCmd.write("vol #1 hide\n")
-        fhCmd.write("scolor #0 volume #1 cmap rainbow reverseColors True\n")
+        counter = 1
+        fhCmd.write("volume #%d voxelSize %s\n" % (counter, str(smprt)))
+        counter += 1
+        fhCmd.write("volume #%d voxelSize %s\n" % (counter, str(smprt)))
+        #fhCmd.write("focus\n")
+        fhCmd.write("vol #%d hide\n" % (counter))
+        fhCmd.write('color sample #%d map #%d palette ^rainbow\n' % (counter -1, counter))
+        # fhCmd.write("scolor #0 volume #1 cmap rainbow reverseColors True\n")
         fhCmd.close()
 
         view = ChimeraView(scriptFile)
@@ -112,7 +115,7 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
 
     def _doShowMorphOrigRef(self, param=None):
 
-        scriptFile = self.protocol._getPath('morph_orig_ref_chimera.cmd')
+        scriptFile = self.protocol._getPath('morph_orig_ref_chimera.cxc')
         fhCmd = open(scriptFile, 'w')
         fnbase = removeExt(self.protocol._getFileName('fnInputVol'))
         ext = getExt(self.protocol._getFileName('fnInputVol'))
@@ -126,12 +129,14 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
         fhCmd.write("open %s\n" % fninput)
         fhCmd.write("open %s\n" % fnref)
 
-        fhCmd.write("volume #0 voxelSize %s\n" % (str(smprt)))
-        fhCmd.write("volume #1 voxelSize %s\n" % (str(smprt)))
-        fhCmd.write("focus\n")
-        fhCmd.write("vol #0 hide\n")
-        fhCmd.write("vol #1 hide\n")
-        fhCmd.write("vop morph #0,1 frames 500\n")
+        counter = 1
+        fhCmd.write("volume #%d voxelSize %s\n" % (counter, str(smprt)))
+        fhCmd.write("vol #%d hide\n" % (counter))
+        counter += 1
+        fhCmd.write("volume #%d voxelSize %s\n" % (counter, str(smprt)))
+        fhCmd.write("vol #%d hide\n" % (counter))
+        #fhCmd.write("focus\n")
+        fhCmd.write("volume morph #%d,%d frames 500\n" % (counter - 1, counter))
         fhCmd.close()
 
         view = ChimeraView(scriptFile)
@@ -139,7 +144,7 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
 
     def _doShowDeformedOrigRef(self, param=None):
 
-        scriptFile = self.protocol._getPath('morph_deformed_ref_chimera.cmd')
+        scriptFile = self.protocol._getPath('morph_deformed_ref_chimera.cxc')
         fhCmd = open(scriptFile, 'w')
         fnbase = removeExt(self.protocol._getFileName('fnOutVol'))
         ext = getExt(self.protocol._getFileName('fnOutVol'))
@@ -152,13 +157,14 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
 
         fhCmd.write("open %s\n" % fninput)
         fhCmd.write("open %s\n" % fnref)
-
-        fhCmd.write("volume #0 voxelSize %s\n" % (str(smprt)))
-        fhCmd.write("volume #1 voxelSize %s\n" % (str(smprt)))
-        fhCmd.write("focus\n")
-        fhCmd.write("vol #0 hide\n")
-        fhCmd.write("vol #1 hide\n")
-        fhCmd.write("vop morph #0,1 frames 500\n")
+        counter = 1
+        fhCmd.write("volume #%d voxelSize %s\n" % (counter, str(smprt)))
+        fhCmd.write("vol #%d hide\n" % counter)
+        counter += 1
+        fhCmd.write("volume #%d voxelSize %s\n" % (counter, str(smprt)))
+        # fhCmd.write("focus\n")
+        fhCmd.write("vol #%d hide\n" % counter)
+        fhCmd.write("volume morph #%d,%d frames 500\n" %  (counter-1, counter))
         fhCmd.close()
 
         view = ChimeraView(scriptFile)

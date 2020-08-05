@@ -31,9 +31,9 @@ visualization program.
 """
 
 from pyworkflow.protocol.executor import StepExecutor
-from pyworkflow.viewer import  ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
+from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pwem.viewers import (DataView, EmPlotter, showj, ChimeraClientView,
-                          ChimeraView, ObjectView)
+                          ChimeraView, ObjectView, ChimeraAngDist)
 from pyworkflow.utils import createUniqueFileName, cleanPattern
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (LabelParam, IntParam, FloatParam,
@@ -140,7 +140,7 @@ Examples:
                           default=1, display=EnumParam.DISPLAY_COMBO,
                           label='Display volume',
                           help='Displays selected volume')
-        group.addParam('spheresScale', IntParam, default=100, 
+        group.addParam('spheresScale', IntParam, default=-1,
               expertLevel=LEVEL_ADVANCED,
               label='Spheres size',
               help='')
@@ -295,7 +295,7 @@ Examples:
     def _showVolumesChimera(self, volumes):
         """ Create a chimera script to visualize selected volumes. """
         if len(volumes) > 1:
-            cmdFile = self.protocol._getTmpPath('chimera_volumes.cmd')
+            cmdFile = self.protocol._getTmpPath('chimera_volumes.cxc')
             cleanPath(cmdFile)
             f = open(cmdFile, 'w+')
             f.write('windowsize 800 600\n')
@@ -659,7 +659,14 @@ Examples:
             classesFn = self.protocol._getFileName('outClassesXmd', iter=it, ref=ref3d)
             vol = self.protocol._getFileName('reconstructedFilteredFileNamesIters', iter=it, ref=ref3d)
             if exists(classesFn):
-                return ChimeraClientView(vol, showProjection=True, angularDistFile=classesFn, spheresDistance=radius)
+                tmpFilesPath = self.protocol._getTmpPath()
+                volOrigin = self.protocol.outputVolume.getShiftsFromOrigin()
+                return ChimeraAngDist(vol, tmpFilesPath,
+                                      angularDistFile=classesFn,
+                                      spheresDistance=radius,
+                                      voxelSize=self.protocol.outputVolume.getSamplingRate(),
+                                      volOrigin=volOrigin)
+
             else:
                 print("File %s does not exist" % classesFn)
                 return None

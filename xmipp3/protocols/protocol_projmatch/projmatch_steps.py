@@ -194,12 +194,18 @@ def insertAngularProjectLibraryStep(self, iterN, refN, **kwargs):
               'symmetry' : self._symmetry[iterN],
               }
 
-    print("%s %s" % (self.maxChangeInAngles, type(self.maxChangeInAngles)))
-    if int(self.maxChangeInAngles.get()) < 181:
+    tokens = self.maxChangeInAngles.get().strip().split()
+    if len(tokens)==0:
+        maxChangeInAngles = 181
+    elif iterN>=len(tokens):
+        maxChangeInAngles = int(tokens[-1])
+    else:
+        maxChangeInAngles = int(tokens[iterN-1])
+    if maxChangeInAngles < 181:
         args += ' --near_exp_data --angular_distance %(maxChangeInAngles)s'
     else:
         args += ' --angular_distance -1'
-    
+
     if self._perturbProjectionDirections[iterN]:
         args +=' --perturb %(perturb)s'
         params['perturb'] = math.sin(math.radians(self._angSamplingRateDeg[iterN])) / 4.

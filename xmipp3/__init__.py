@@ -69,10 +69,9 @@ class Plugin(pwem.Plugin):
         environ.addLibrary(Config.getPythonLibFolder())
 
         # environ variables are strings not booleans
-        if os.environ.get('CUDA', 'False') != 'False':
-            environ.update({
-                'PATH': os.environ.get('CUDA_BIN', ''),
-                'LD_LIBRARY_PATH': os.environ.get('NVCC_LIBDIR', '')
+        environ.update({
+                'PATH': pwem.Config.CUDA_BIN,
+                'LD_LIBRARY_PATH': pwem.Config.CUDA_LIB
             }, position=pos)
 
         return environ
