@@ -133,10 +133,7 @@ class XmippProtVolSubtraction(EMProtocol):
         self.runJob(program2, args2)
 
     def subtractionStep(self):
-        import time
-        time.sleep(10)
-        # vol1 = self.vol1.get().clone()
-        vol1 = self.vol1.get()
+        vol1 = self.vol1.get().clone()
         if self.pdb:
             vol2 = self.outFile
             mask2 = self._getExtraPath("mask2.mrc")
