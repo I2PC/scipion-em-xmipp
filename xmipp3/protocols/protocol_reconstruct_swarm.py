@@ -443,7 +443,6 @@ class XmippProtReconstructSwarm(ProtRefine3D):
                             GpuListAux = GpuListAux+str(elem)+','
                             count+=1
                         os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
-
                     args += " --thr %s" % self.numberOfThreads.get()
                     if self.numberOfMpi.get()==1:
                         args += " --device %s" % GpuListCuda

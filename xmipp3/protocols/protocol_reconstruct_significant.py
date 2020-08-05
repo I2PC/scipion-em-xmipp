@@ -333,7 +333,6 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
                     GpuListAux = GpuListAux+str(elem)+','
                     count+=1
                 os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
-
             cudaReconsArgs += ' --thr %s' %  self.numberOfThreads.get()
             if self.numberOfMpi.get()==1:
                 cudaReconsArgs += ' --device %s' %(GpuListCuda)
