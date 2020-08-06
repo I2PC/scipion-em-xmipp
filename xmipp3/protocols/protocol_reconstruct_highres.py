@@ -244,6 +244,11 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                       help='Weight input images by their fitness (cross correlation) percentile in their defocus group')
         form.addParam('weightCCmin', FloatParam, label="Minimum CC weight", default=0.1, expertLevel=LEVEL_ADVANCED,
                       help='Weights are between this value and 1. If most of the particles are good, this value should be high (e.g., 0.9)')
+        form.addParam('weightQFg', BooleanParam, label="Weight by Q foreground?", default=True, expertLevel=LEVEL_ADVANCED,
+                      help='Weight input images by their quality of the foreground')
+        form.addParam('weightQFourier', BooleanParam, label="Weight by Q Fourier?", default=True, expertLevel=LEVEL_ADVANCED,
+                      help='Weight input images by their quality of the foreground')
+
         form.addSection(label='Post-processing')
         form.addParam('postAdHocMask', PointerParam, label="Mask", pointerClass='VolumeMask', allowsNull=True,
                       help='The mask values must be between 0 (remove these pixels) and 1 (let them pass). Smooth masks are recommended.')
@@ -1225,6 +1230,17 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             self.writeInfoField(fnDirCurrent,"sampling",emlib.MDL_SAMPLINGRATE,TsCurrent)
             self.writeInfoField(fnDirCurrent,"size",emlib.MDL_XSIZE,Xdim)
 
+            if self.weightQFourier or self.weightQFg:
+                if exists(fnDirGlobal):
+                    fnRef = join(fnDirGlobal,"volumeRef%02d.vol"%i)
+                else:
+                    fnRef = join(fnDirLocal, "volumeRef%02d.vol" % i)
+                fnOut = join(fnDirCurrent,"validation%02d.stk"%i)
+                args = "-i %s --ref %s -o %s --onlyEvaluate"%(fnAngles,fnRef, fnOut)
+                # args+=" --saveReprojection --saveResidual"
+                self.runJob("xmipp_angular_discrete_assign2", args)
+                moveFile(join(fnDirCurrent,"validation%02d.xmd"%i),fnAngles)
+
             if self.weightSSNR:
                 row=getFirstRow(fnAngles)
                 if row.containsLabel(emlib.MDL_WEIGHT_SSNR):
@@ -1358,6 +1374,18 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     w=1
                 weight=mdAngles.getValue(emlib.MDL_WEIGHT,objId)
                 weight*=weightCCmin+w*(1-weightCCmin)
+                mdAngles.setValue(emlib.MDL_WEIGHT,weight,objId)
+            mdAngles.write(fnAngles)
+
+        if self.weightQFourier or self.weightQFg:
+            mdAngles=emlib.MetaData(fnAngles)
+            for objId in mdAngles:
+                weight=mdAngles.getValue(emlib.MDL_WEIGHT,objId)
+                if self.weightQFg:
+                    weight *= mdAngles.getValue(emlib.MDL_QFOREGROUND,objId)
+                    weight *= mdAngles.getValue(emlib.MDL_QCCREAL, objId)
+                if self.weightQFourier:
+                    weight *= mdAngles.getValue(emlib.MDL_QFOURIER,objId)
                 mdAngles.setValue(emlib.MDL_WEIGHT,weight,objId)
             mdAngles.write(fnAngles)
 
