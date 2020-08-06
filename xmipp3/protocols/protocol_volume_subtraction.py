@@ -77,8 +77,8 @@ class XmippProtVolSubtraction(EMProtocol):
                       help='"Yes": the output of the protocol is the difference between input volumes. '
                            '"No": the output of the protocol is the second volume modified in order to assimilate it to'
                            'the first volume.')
-        form.addParam('eq', BooleanParam, label='Histogram equalization', default=False, expertLevel=LEVEL_ADVANCED,
-                      help='This option performs histogram equalization of the second volume.')
+        # form.addParam('eq', BooleanParam, label='Histogram equalization', default=False, expertLevel=LEVEL_ADVANCED,
+        #               help='This option performs histogram equalization of the second volume.')
         form.addParam('resol', FloatParam, label="Subtraction at resolution: ", default=5, allowsNull=True,
                       help='Resolution (A) at which subtraction will be performed, filtering the input volumes.'
                            'Value 0 implies no filtering.')
@@ -138,9 +138,7 @@ class XmippProtVolSubtraction(EMProtocol):
             vol2 = self.outFile
             mask2 = self._getExtraPath("mask2.mrc")
         else:
-            print("-------vol1--141--", vol1.getFileName())
             vol2 = self.vol2.get().getFileName()
-            print("-------vol1--143--", vol1.getFileName())
             if self.masks:
                 mask2 = self.mask2.get().getFileName()
         resol = self.resol.get()
@@ -153,8 +151,8 @@ class XmippProtVolSubtraction(EMProtocol):
             args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
         if self.sub.get():
             args += ' --sub'
-        if self.eq.get():
-            args += ' --eq'
+        # if self.eq.get():
+        #     args += ' --eq'
         if self.masks:
             args += ' --mask1 %s --mask2 %s' % (self.mask1.get().getFileName(), mask2)
         self.runJob(program, args)
@@ -190,11 +188,7 @@ class XmippProtVolSubtraction(EMProtocol):
 
     # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
-        summary = []
-        # if not hasattr(self, 'outputVolume'):
-        #     summary.append("Output volume not ready yet.")
-        # else:
-        summary.append("Input vol 1: %s" % self.vol1.get().getFileName())
+        summary = "Volume 1: %s" % self.vol1.get().getFileName()
         if self.pdb:
             if self.inputPdbData == self.IMPORT_OBJ:
                 summary.append("Input PDB File: %s" % self.pdbObj.get().getFileName())
@@ -202,7 +196,7 @@ class XmippProtVolSubtraction(EMProtocol):
                 summary.append("Input PDB File: %s" % self.pdbFile.get())
             summary.append("Mask 2 generated")
         else:
-            summary.append("Input 2: volume %s" % self.vol2.get().getFileName())
+            summary.append("Volume 2: %s" % self.vol2.get().getFileName())
         if self.masks:
             summary.append("Input mask 1: %s" % self.mask1.get().getFileName())
             summary.append("Input mask 2: %s" % self.mask2.get().getFileName())
