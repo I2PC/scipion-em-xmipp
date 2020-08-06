@@ -1230,16 +1230,16 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             self.writeInfoField(fnDirCurrent,"sampling",emlib.MDL_SAMPLINGRATE,TsCurrent)
             self.writeInfoField(fnDirCurrent,"size",emlib.MDL_XSIZE,Xdim)
 
-            if self.weightQFourier or self.weightQFg:
-                if exists(fnDirGlobal):
-                    fnRef = join(fnDirGlobal,"volumeRef%02d.vol"%i)
-                else:
-                    fnRef = join(fnDirLocal, "volumeRef%02d.vol" % i)
-                fnOut = join(fnDirCurrent,"validation%02d.stk"%i)
-                args = "-i %s --ref %s -o %s --onlyEvaluate"%(fnAngles,fnRef, fnOut)
-                # args+=" --saveReprojection --saveResidual"
-                self.runJob("xmipp_angular_discrete_assign2", args)
-                moveFile(join(fnDirCurrent,"validation%02d.xmd"%i),fnAngles)
+            if exists(fnDirGlobal):
+                fnRef = join(fnDirGlobal,"volumeRef%02d.vol"%i)
+            else:
+                fnRef = join(fnDirLocal, "volumeRef%02d.vol" % i)
+            fnOut = join(fnDirCurrent,"validation%02d.stk"%i)
+            args = "-i %s --ref %s -o %s --onlyEvaluate"%(fnAngles,fnRef, fnOut)
+            # args+=" --saveReprojection --saveResidual"
+            self.runJob("xmipp_angular_discrete_assign2", args)
+            moveFile(join(fnDirCurrent,"validation%02d.xmd"%i),fnAngles)
+            cleanPath(join(fnDirCurrent,"validation%02d.stk"%i))
 
             if self.weightSSNR:
                 row=getFirstRow(fnAngles)
@@ -1459,9 +1459,19 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     deleteStack = True
                     deletePattern = fnCorrectedImagesRoot+".*"
                     if self.alignmentMethod!=self.STOCHASTIC_ALIGNMENT:
-                        self.runJob('xmipp_metadata_utilities','-i %s --set intersection %s particleId particleId'%(fnAngles,fnAnglesToUse),numberOfMpi=1) 
+                        self.runJob('xmipp_metadata_utilities','-i %s --set intersection %s particleId particleId'%(fnAngles,fnAnglesToUse),numberOfMpi=1)
                         # This is because eliminate_byEnergy may have reduced the number of images in fnAngles
-                
+
+                # Apply the mask created by discrete2
+                if fnAngles==fnAnglesToUse:
+                    fnAnglesToUse = fnCorrectedImagesRoot+".xmd"
+                    deleteStack = True
+                    deletePattern = fnCorrectedImagesRoot+".*"
+                    self.runJob('xmipp_transform_mask', '-i %s -o %s.stk --save_metadata_stack %s.xmd --apply_ImageMask'\
+                                % (fnAngles, fnCorrectedImagesRoot, fnCorrectedImagesRoot))
+                else:
+                    self.runJob('xmipp_transform_mask', '-i %s --apply_ImageMask' % fnAnglesToUse)
+
                 if (self.contGrayValues and self.alignmentMethod.get()==self.LOCAL_ALIGNMENT) or \
                         (self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT and iteration>=5):
                     grayAdjusted=True
@@ -1563,6 +1573,9 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             self.runJob("xmipp_metadata_utilities",'-i %s --set merge %s'%(fnAngles,fnAnglesAux),numberOfMpi=1)
             cleanPath(fnAnglesAux)
             cleanPath(fnAnglesAuxId)
+
+        if self.alignmentMethod==self.GLOBAL_DISCRETE2:
+            cleanPattern(join(fnDirCurrent,"validation*.stk"))
 
     def postProcessing(self, iteration):
         fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
