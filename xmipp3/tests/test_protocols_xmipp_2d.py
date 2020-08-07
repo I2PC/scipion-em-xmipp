@@ -614,6 +614,7 @@ class TestXmippTriggerParticles(TestXmippBase):
         self.checkResults(protTrigger2, 76, "Full streaming trigger fails")
 
         # When all have finished, the third (spliting mode) must have two outputs
+        time.sleep(10)  # sometimes is not ready yet
         protTrigger3 = self._updateProtocol(protTrigger3)
         self.assertSetSize(protTrigger3.outputParticles1, 50, "First batch fails")
         self.assertSetSize(protTrigger3.outputParticles2, 26, "Final batch fails")
