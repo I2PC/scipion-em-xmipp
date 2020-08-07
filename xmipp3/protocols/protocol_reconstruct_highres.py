@@ -518,7 +518,6 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                     if self.numberOfMpi.get()==1:
                         args += " --device %s" %(GpuListCuda)
-
                     args += ' --thr %s' % self.numberOfThreads.get()
                     if self.numberOfMpi.get()>1:
                         self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)

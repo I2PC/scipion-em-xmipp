@@ -529,7 +529,7 @@ def insertReconstructionStep(self, iterN, refN, suffix='', **kwargs):
         program =  'xmipp_reconstruct_fourier_accel'
         if self.useGpu.get():
             program = 'xmipp_cuda_reconstruct_fourier'
-            args += " --thr %d" % self.numberOfThreads.get()
+            #args += " --thr %d" % self.numberOfThreads.get()
         args += ' --weight --padding %(pad)s %(pad)s'
         params['pad'] = self.paddingFactor.get()
 
@@ -568,7 +568,7 @@ def runReconstructionStep(self, iterN, refN, program, method, args, suffix, **kw
     mdFn = self._getFileName(reconsXmd, iter=iterN, ref=refN)
     volFn = self._getFileName(reconsVol, iter=iterN, ref=refN)
     maskFn = self._getFileName('maskedFileNamesIters', iter=iterN, ref=refN)
-    if method=="art" or method == 'fourier':
+    if method=="art": #or method == 'fourier':
         mpi = 1
         threads = 1
     else:
@@ -576,7 +576,8 @@ def runReconstructionStep(self, iterN, refN, program, method, args, suffix, **kw
         if self.useGpu.get() and self.numberOfMpi.get()>1:
             mpi = len((self.gpuList.get()).split(','))+1
         threads = self.numberOfThreads.get()
-        args += ' --thr %d' % threads
+        if self.useGpu.get():
+            args += ' --thr %d' % threads
     
     if isMdEmpty(mdFn):
         img = emlib.Image()

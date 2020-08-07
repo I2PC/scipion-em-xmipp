@@ -523,9 +523,9 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
 
         # Local angular assignment
         fnAnglesLocalStk = self._getPath("directional_local_classes.stk")
-        args = "-i %s -o %s --sampling %f --Rmax %d --padding %d --ref %s --max_resolution %f --applyTo image1 --Nsimultaneous %d" % \
+        args = "-i %s -o %s --sampling %f --Rmax %d --padding %d --ref %s --max_resolution %f --applyTo image1 " % \
                (fnAngles, fnAnglesLocalStk, newTs, newXdim / 2, 2, fnVol,
-                self.targetResolution, 8)
+                self.targetResolution)
         args += " --optimizeShift --max_shift %f" % maxShift
         args += " --optimizeAngles --max_angular_change %f" % self.angularDistance
         self.runJob("xmipp_angular_continuous_assign2", args,
@@ -563,7 +563,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
                 os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
             if self.numberOfMpi.get()==1:
                 args += ' --device %s' % GpuListCuda
-                args += ' --thr %d' % self.fr_gpu_threads.get()
+            args += ' --thr %d' % self.fr_gpu_threads.get()
             if self.numberOfMpi.get()>1:
                 self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
             else:
