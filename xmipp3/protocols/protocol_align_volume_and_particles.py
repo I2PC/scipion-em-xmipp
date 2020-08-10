@@ -35,6 +35,8 @@ import pwem.emlib.metadata as md
 from pwem.objects import Transform, Volume
 from pwem.constants import ALIGN_PROJ
 
+from pyworkflow.utils.path import cleanPath
+
 from xmipp3.convert import (rowToAlignment, alignmentToRow, writeSetOfParticles,
                             readSetOfParticles)
 from xmipp3.constants import SYM_URL
@@ -151,7 +153,8 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
         args += " --frm "
         args += " --copyGeo %s" % fhInputTranMat        
         self.runJob("xmipp_volume_align", args)
-
+        cleanPath(self.fnRefVol)
+        cleanPath(self.fnInputVol)
 
     def alignParticlesStep(self):
 
@@ -176,6 +179,7 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
             alignmentToRow(resultMat, rowOut, ALIGN_PROJ)
             rowOut.addToMd(outputParts)
         outputParts.write(outParticlesFn)
+        cleanPath(self.imgsInputFn)
 
 
     def createOutputStep(self):   
