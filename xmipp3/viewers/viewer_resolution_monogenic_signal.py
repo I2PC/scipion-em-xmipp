@@ -150,7 +150,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
             imageFile = self.protocol._getExtraPath(OUTPUT_RESOLUTION_FILE)
         if not os.path.exists(imageFile):
             imageFile = replaceExt(imageFile, 'mrc')
-        imgData, min_Res, max_Res = self.getImgData(imageFile)
+        imgData, min_Res, max_Res, voldim = self.getImgData(imageFile)
 
         xplotter = XmippPlotter(x=2, y=2, mainTitle="Local Resolution Slices "
                                                      "along %s-axis."
@@ -174,7 +174,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
             imageFile = self.protocol._getExtraPath(OUTPUT_RESOLUTION_FILE)
         if not os.path.exists(imageFile):
             imageFile = replaceExt(imageFile, 'mrc')
-        imgData, min_Res, max_Res = self.getImgData(imageFile)
+        imgData, min_Res, max_Res, voldim = self.getImgData(imageFile)
 
         xplotter = XmippPlotter(x=1, y=1, mainTitle="Local Resolution Slices "
                                                      "along %s-axis."
