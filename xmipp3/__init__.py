@@ -175,12 +175,13 @@ class Plugin(pwem.Plugin):
                                       bindingsAndLibsTgt)],
                            deps=xmippDeps, default=False)
 
+        configSrc = ('pwd' if os.environ.get('XMIPP_NOCONFIG', 'False')=='True'
+                     else './xmipp config noAsk && ./xmipp check_config')
         env.addPackage('xmippSrc', version=_currentVersion,
                        # adding 'v' before version to fix a package target (post-link)
                        tar='xmippSrc-v'+_currentVersion+'.tgz',
                        commands=[(installCmd.format(**installVars, cwd='.',
-                                                    configCmd='./xmipp config noAsk && '
-                                                              './xmipp check_config',
+                                                    configCmd=configSrc,
                                                     compileCmd='./xmipp compileAndInstall'),
                                   installTgt + sourceTgt),
                                  (bindingsAndLibsCmd.format(**installVars),
