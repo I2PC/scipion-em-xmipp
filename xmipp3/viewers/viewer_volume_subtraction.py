@@ -35,6 +35,7 @@ from pwem.objects import (SetOfVolumes)
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
 from pwem.viewers import Chimera, ChimeraView, EmProtocolViewer
 from xmipp3.protocols.protocol_volume_subtraction import XmippProtVolSubtraction
+from xmipp3.protocols.protocol_volume_adjust import XmippProtVolAdjust
 
 VOLUME_SLICES = 1
 VOLUME_CHIMERA = 0
@@ -46,7 +47,7 @@ class viewerXmippProtVolSubtraction(EmProtocolViewer):
         The axes of coordinates x, y, z will be shown by choosing Chimera"""
 
     _label = 'viewer volumes subtraction'
-    _targets = [XmippProtVolSubtraction]
+    _targets = [XmippProtVolSubtraction, XmippProtVolAdjust]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
 
     def _defineParams(self, form):

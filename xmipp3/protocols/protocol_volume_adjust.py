@@ -35,12 +35,12 @@ from pwem.objects import Volume, Transform
 from pwem.protocols import EMProtocol
 
 
-class XmippProtVolSubtraction(EMProtocol):
-    """ This protocol scales a volume in order to adjust it to another one. Then, it can calculate the subtraction
-    of the two volumes. Second input can be a pdb. The volumes should be aligned previously and they have to
-    be equal in size"""
+class XmippProtVolAdjust(EMProtocol):
+    """ This protocol scales a volume in order to assimilate it to another one.
+    The volume with the best resolution should be the first one.
+    The volumes should be aligned previously and they have to be equal in size"""
 
-    _label = 'volumes subtraction'
+    _label = 'volumes adjust'
     IMPORT_OBJ = 0
     IMPORT_FROM_FILES = 1
 
@@ -71,9 +71,8 @@ class XmippProtVolSubtraction(EMProtocol):
                       condition='masks', help='Specify a mask for volume 1.')
         form.addParam('mask2', PointerParam, pointerClass='VolumeMask', label="Mask for volume 2",
                       condition='masks and pdb==False', help='Specify a mask for volume 1.')
-        form.addParam('resol', FloatParam, label="Subtraction at resolution: ", default=3, allowsNull=True,
-                      help='Resolution (A) at which subtraction will be performed, filtering the input volumes.'
-                           'Value 0 implies no filtering.')
+        form.addParam('resol', FloatParam, label="Resolution of volume 2: ",
+                      help='Resolution of volume 2 for filtering. ')
         form.addParam('sigma', FloatParam, label="Decay of the filter (sigma): ", default=3, condition='resol',
                       help='Decay of the filter (sigma parameter) to smooth the mask transition',
                       expertLevel=LEVEL_ADVANCED)
@@ -84,7 +83,7 @@ class XmippProtVolSubtraction(EMProtocol):
         if self.pdb:
             self._insertFunctionStep('convertPdbStep')
             self._insertFunctionStep('generateMask2Step')
-        self._insertFunctionStep('subtractionStep')
+        self._insertFunctionStep('adjustStep')
         self._insertFunctionStep('createOutputStep')
 
     # --------------------------- STEPS functions --------------------------------------------
@@ -124,7 +123,7 @@ class XmippProtVolSubtraction(EMProtocol):
         program2 = "xmipp_transform_morphology"
         self.runJob(program2, args2)
 
-    def subtractionStep(self):
+    def adjustStep(self):
         vol1 = self.vol1.get().clone()
         if self.pdb:
             vol2 = self.outFile
@@ -136,12 +135,11 @@ class XmippProtVolSubtraction(EMProtocol):
         resol = self.resol.get()
         iter = self.iter.get()
         program = "xmipp_volume_subtraction"
-        args = '--i1 %s --i2 %s -o %s --iter %s --sub' % (vol1.getFileName(), vol2,
-                                                          self._getExtraPath("output_volume.mrc"), iter)
+        args = '--i1 %s --i2 %s -o %s --iter %s' % (vol1.getFileName(), vol2, self._getExtraPath("output_volume.mrc"),
+                                                    iter)
         if resol:
             fc = vol1.getSamplingRate()/resol
             args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
-
         if self.masks:
             args += ' --mask1 %s --mask2 %s' % (self.mask1.get().getFileName(), mask2)
         self.runJob(program, args)
@@ -177,7 +175,7 @@ class XmippProtVolSubtraction(EMProtocol):
             summary.append("Input mask 1: %s" % self.mask1.get().getFileName())
             summary.append("Input mask 2: %s" % self.mask2.get().getFileName())
         if self.resol.get() != 0:
-            summary.append("Subtraction at resolution %f A" % self.resol.get())
+            summary.append("Filter at resolution %f A" % self.resol.get())
         return summary
 
     def _methods(self):
@@ -185,10 +183,11 @@ class XmippProtVolSubtraction(EMProtocol):
         if not hasattr(self, 'outputVolume'):
             methods.append("Output volume not ready yet.")
         else:
-            methods.append("Volume %s subtracted from volume %s" % (self.vol2.get().getFileName(),
-                                                                    self.vol1.get().getFileName()))
+            methods.append("Volume %s adjusted to volume %s" % (self.vol2.get().getFileName(),
+                                                                self.vol1.get().getFileName()))
             if self.resol.get() != 0:
                 methods.append(" at resolution %f A" % self.resol.get())
+
         return methods
 
     # --------------------------- UTLIS functions --------------------------------------------
