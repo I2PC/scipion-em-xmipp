@@ -224,7 +224,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
             fnInitial = os.path.join(movieFolder, "initialMic.mrc")
             args  += ' --oavgInitial %s' % fnInitial
 
-        if self.doSaveMovie:
+        if self.doSaveMovie or getattr(self, 'tomographySplitFrames', False):
             args += ' --oaligned %s' % self._getExtraPath(self._getOutputMovieName(movie))
 
         if self.inputMovies.get().getDark():
