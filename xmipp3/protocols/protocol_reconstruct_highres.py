@@ -1235,7 +1235,11 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             else:
                 fnRef = join(fnDirLocal, "volumeRef%02d.vol" % i)
             fnOut = join(fnDirCurrent,"validation%02d.stk"%i)
-            args = "-i %s --ref %s -o %s --onlyEvaluate"%(fnAngles,fnRef, fnOut)
+            fnProfile = join(fnDirCurrent,"volumeAdjustmentProfile%02d.txt"%i)
+            args = "-i %s --ref %s -o %s --onlyEvaluate --adjustProfile %s"%(fnAngles,fnRef, fnOut, fnProfile)
+            self.runJob("xmipp_angular_discrete_assign2", args)
+
+            args = "-i %s --ref %s -o %s --onlyEvaluate --profile %s"%(fnAngles,fnRef, fnOut, fnProfile)
             # args+=" --saveReprojection --saveResidual"
             self.runJob("xmipp_angular_discrete_assign2", args)
             moveFile(join(fnDirCurrent,"validation%02d.xmd"%i),fnAngles)
