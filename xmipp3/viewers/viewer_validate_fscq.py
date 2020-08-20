@@ -156,10 +156,10 @@ class XmippProtValFitViewer(ProtocolViewer):
         f.write("volume #0 voxelSize %f step 1\n" % (_inputVol.getSamplingRate()))
         f.write("volume #1 voxelSize %f\n" % (_inputVol.getSamplingRate()))
         f.write("vol #1 hide\n")
-        f.write("scolor #0 volume #1 perPixel false cmap -3,#ff0000:"
-                "0,#ffff00:1,#00ff00:2,#00ffff:3,#0000ff\n")
-        f.write("colorkey 0.01,0.05 0.02,0.95 -3 #ff0000 -2 #ff4500 -1 #ff7f00 "
-                 "0 #ffff00 1  #00ff00 2 #00ffff 3 #0000ff\n")           
+        f.write("scolor #0 volume #1 perPixel false cmap -1.5,#ff0000:"
+                "0,#ffff00:0.5,#00ff00:1,#00ffff:1.5,#0000ff\n")
+        f.write("colorkey 0.01,0.05 0.02,0.95 -1.5 #ff0000 -1 #ff4500 -0.5 #ff7f00 "
+                 "0 #ffff00 0.5  #00ff00 1 #00ffff 1.5 #0000ff\n")           
  
         f.close()
  
@@ -206,9 +206,9 @@ class XmippProtValFitViewer(ProtocolViewer):
             f.write("open %s\n" % (fnRoot+'/'+PDB_NORM_FILE))
             f.write("display\n")
             f.write("~ribbon\n")
-            f.write("rangecol occupancy,a -3 red 0 white 1 green 2 cyan 3 blue\n")  
-        f.write("colorkey 0.01,0.05 0.02,0.95 -3 #ff0000 -2 #ff4500 -1 #ff7f00 "  
-                "0 white 1  #00ff00 2 #00ffff 3 #0000ff\n")    
+            f.write("rangecol occupancy,a -1.5 red 0 white 0.5 green 1 cyan 1.5 blue\n")  
+        f.write("colorkey 0.01,0.05 0.02,0.95 -1.5 #ff0000 -1 #ff4500 -0.5 #ff7f00 "  
+                "0 white 0.5  #00ff00 1 #00ffff 1.5 #0000ff\n")    
         f.close()  
                       
         Chimera.runProgram(Chimera.getProgram(), fnCmd+"&")

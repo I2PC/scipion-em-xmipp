@@ -127,7 +127,7 @@ class XmippProtValFit(ProtAnalysis3D):
                  OUTPUT_PDBVOL_FILE: self._getTmpPath('pdb_volume'),
                  OUTPUT_PDBMRC_FILE: self._getExtraPath('pdb_volume.map'),
                  BLOCRES_AVG_FILE: self._getTmpPath('blocres_avg.map'),
-                 BLOCRES_HALF_FILE: self._getExtraPath('blocres_half.map'),
+                 BLOCRES_HALF_FILE: self._getTmpPath('blocres_half.map'),
                  RESTA_FILE: self._getTmpPath('diferencia.vol'),
                  RESTA_FILE_MRC: self._getExtraPath('diferencia.map'),
                  RESTA_FILE_NORM: self._getExtraPath('diferencia_norm.map'),
@@ -204,7 +204,7 @@ class XmippProtValFit(ProtAnalysis3D):
         else:         
             """ Convert PDB to Map """           
             params = ' --centerPDB '
-#            params += ' --intensityColumn Bfactor ' #just test
+#             params += ' --poor_Gaussian ' #just test
 #             params += ' --noHet ' #just test
             params += ' -v 0 '    
             params += ' --sampling %f' % self.inputVolume.get().getSamplingRate()        
@@ -247,7 +247,7 @@ class XmippProtValFit(ProtAnalysis3D):
                             
                 params = ' -i %s' % self._getFileName(OUTPUT_PDBVOL_FILE)+'.vol'          
                 params += ' -o %s' % self.mask_xmipp
-                params += ' --select below 0.02 --substitute binarize'                     
+                params += ' --select below 0.02 --substitute binarize'  #0.02                   
                 self.runJob('xmipp_transform_threshold', params) 
                  
                 params = ' -i %s' % self.mask_xmipp        
@@ -335,7 +335,7 @@ class XmippProtValFit(ProtAnalysis3D):
         """Diveded by resolution"""       
         Vx = xmipp3.Image(self._getFileName(RESTA_FILE))
         V=Vx.getData()
-        Vmask = xmipp3.Image(self._getFileName(MASK_FILE)).getData()
+        Vmask = xmipp3.Image(self._getFileName(MASK_FILE_MRC)+':mrc').getData()
         Vres = xmipp3.Image(self._getFileName(BLOCRES_HALF_FILE)+':mrc').getData()
         Vt = V
         Zdim, Ydim, Xdim = V.shape
