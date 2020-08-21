@@ -1467,14 +1467,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         # This is because eliminate_byEnergy may have reduced the number of images in fnAngles
 
                 # Apply the mask created by discrete2
-                if fnAngles==fnAnglesToUse:
-                    fnAnglesToUse = fnCorrectedImagesRoot+".xmd"
-                    deleteStack = True
-                    deletePattern = fnCorrectedImagesRoot+".*"
-                    self.runJob('xmipp_transform_mask', '-i %s -o %s.stk --save_metadata_stack %s.xmd --apply_ImageMask'\
-                                % (fnAngles, fnCorrectedImagesRoot, fnCorrectedImagesRoot))
-                else:
-                    self.runJob('xmipp_transform_mask', '-i %s --apply_ImageMask' % fnAnglesToUse)
+                self.runJob('xmipp_transform_mask', '-i %s --apply_ImageMask' % fnAnglesToUse)
 
                 if (self.contGrayValues and self.alignmentMethod.get()==self.LOCAL_ALIGNMENT) or \
                         (self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT and iteration>=5):
