@@ -24,10 +24,15 @@
 # *
 # **************************************************************************
 
-import os
+import os, matplotlib, math
+from scipy import ndimage
+import tkinter as tk
+matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib.widgets import RadioButtons
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import numpy as np
-import math
-from mpl_toolkits.mplot3d import proj3d
 from scipy.ndimage.filters import gaussian_filter
 
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
@@ -49,18 +54,6 @@ class XmippProtStructureMapViewer(ProtocolViewer):
 
     def _defineParams(self, form):
         form.addSection(label='Show StructMap')
-        form.addParam('numberOfDimensions', params.IntParam, default=2,
-                      label="Number of dimensions",
-                      help='In normal practice, it should be 1, 2 or, at most, 3.')
-        form.addParam('showMethod', params.EnumParam, default=0,
-                      choices=['scatter', 'contour', 'convolution'],
-                      label="Show convolved cloud?",
-                      help="Specify how the strucutre mapping will be rendered (only "
-                           "valid for two dimensions)\n"
-                           "Scatter: scatter plot of each volume with its ID.\n"
-                           "Contour: draw contour lines and filled contours for each point.\n"
-                           "Convolution: Scatter convolved with a Gaussian whose height determines the "
-                           "importance of each volume.")
         form.addParam('doShowPlot', params.LabelParam,
                       label="Display the StructMap")
     
@@ -69,8 +62,7 @@ class XmippProtStructureMapViewer(ProtocolViewer):
     
         
     def _visualize(self, e=None):
-        nDim = self.numberOfDimensions.get()
-        fnOutput = self.protocol._defineResultsName(nDim)
+        fnOutput = self.protocol._defineResultsName(3)
         if not os.path.exists(fnOutput):
             return [self.errorMessage('The necessary metadata was not produced\n'
                                       'Execute again the protocol\n',
@@ -78,147 +70,137 @@ class XmippProtStructureMapViewer(ProtocolViewer):
         coordinates = np.loadtxt(fnOutput)
         if os.path.isfile(self._getExtraPath('weigths.txt')):
             weights = np.loadtxt(self._getExtraPath('weigths.txt'))
-
-        # Create labels
-        labels = []
-        _, _, _, idList = self.protocol._iterInputVolumes(self.protocol.inputVolumes, [], [], [], [])
-        for idv in idList:
-            labels.append("vol_%02d" % idv)
-
-        val = 0
-        if nDim == 1:
-            AX = plt.subplot(111)
-            plot = plt.plot(coordinates, np.zeros_like(coordinates) + val, 'o', c='g')
-            plt.xlabel('Dimension 1', fontsize=11)
-            AX.set_yticks([1])
-            plt.title('StructMap')
-             
-            for label, x, y in zip(labels, coordinates, np.zeros_like(coordinates)):
-                plt.annotate(label, 
-                             xy = (x, y), xytext = (x+val, y+val),
-                             textcoords = 'data', ha = 'right', va = 'bottom',fontsize=9,
-                             bbox = dict(boxstyle = 'round,pad=0.3', fc = 'yellow', alpha = 0.3))
-            plt.grid(True)
-            plt.show()
-                         
-        elif nDim == 2:
-            if self.showMethod.get() == 0:
-                plot = plt.scatter(coordinates[:, 0], coordinates[:, 1], marker='o', c='g')
-                plt.xlabel('Dimension 1', fontsize=11)
-                plt.ylabel('Dimension 2', fontsize=11)
-                plt.title('StructMap')
-                for label, x, y in zip(labels, coordinates[:, 0], coordinates[:, 1]):
-                    plt.annotate(label,
-                                 xy = (x, y), xytext = (x+val, y+val),
-                                 textcoords = 'data', ha = 'right', va = 'bottom',fontsize=9,
-                                 bbox = dict(boxstyle = 'round,pad=0.3', fc = 'yellow', alpha = 0.3))
-                plt.grid(True)
-                plt.show()
-            elif self.showMethod.get() == 1:
-                x = coordinates[:, 0]
-                y = coordinates[:, 1]
-
-                rangeX = np.max(x) - np.min(x)
-                rangeY = np.max(y) - np.min(y)
-                if rangeX > rangeY:
-                    sigma = rangeX / 50
-                else:
-                    sigma = rangeY / 50
-                print("sigma", sigma)
-
-                # define grid.
-                xi = np.linspace(min(x) - 0.1, max(x) + 0.1, 100)
-                yi = np.linspace(min(x) - 0.1, max(x) + 0.1, 100)
-
-                z = np.zeros((100, 100), float)
-                zSize = z.shape
-                N = len(x)
-                for c in range(zSize[1]):
-                    for r in range(zSize[0]):
-                        for d in range(N):
-                            z[r, c] = z[r, c] + (1.0 / N) * (1.0 / ((2 * math.pi) * sigma ** 2)) * math.exp(
-                                -((xi[c] - x[d]) ** 2 + (yi[r] - y[d]) ** 2) / (2 * sigma ** 2))
-
-                # grid the data
-                zMax = np.max(z)
-                z = z / zMax
-
-                # contour the gridded data, plotting dots at the randomly spaced data points.
-                CS = plt.contour(xi, yi, z, 15, linewidths=0.5, colors='k')
-                CS = plt.contourf(xi, yi, z, 15, cmap=plt.cm.jet)
-                plt.colorbar()  # draw colorbar
-                plt.title('Gridded Structure Map')
-                plt.show()
-            else:
-                Xr = np.round(coordinates, decimals=3)
-                size_grid = 2 * np.amax(Xr)
-                grid_coords = np.arange(-size_grid, size_grid, 0.001)
-                R, C = np.meshgrid(grid_coords, grid_coords, indexing='ij')
-                S = np.zeros(R.shape)
-                sigma = R.shape[0] / (200 / 5)
-                lbox = int(6 * sigma)
-                if lbox % 2 == 0:
-                    lbox += 1
-                mid = int((lbox - 1) / 2 + 1)
-                kernel = np.zeros((lbox, lbox))
-                kernel[mid, mid] = 1
-                kernel = gaussian_filter(kernel, sigma=sigma)
-                for p in range(Xr.shape[0]):
-                    indx = np.argmin(np.abs(R[:, 0] - Xr[p, 0]))
-                    indy = np.argmin(np.abs(C[0, :] - Xr[p, 1]))
-                    if 'weights' in locals():
-                        S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel * weights[p]
-                    else:
-                        S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel
-                S = S[~np.all(S == 0, axis=1)]
-                S = S[:, ~np.all(S == 0, axis=0)]
-                plt.imshow(S)
-                plt.colorbar()
-                plt.title('Convolved Structure Map')
-                plt.show()
-                
-        else: 
-                         
-            fig = plt.figure()
-            ax = fig.add_subplot(111, projection = '3d')
-            
-            ax.scatter(coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], marker = 'o', c='g')
-            ax.set_xlabel('Dimension 1', fontsize=11)
-            ax.set_ylabel('Dimension 2', fontsize=11)
-            ax.set_zlabel('Dimension 3', fontsize=11)
-            ax.text2D(0.05, 0.95, "StructMap", transform=ax.transAxes)
-                         
-            x2, y2, _ = proj3d.proj_transform(coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], ax.get_proj())
-            Labels = []
-            for i in range(len(coordinates[:, 0])):
-                text = labels[i]
-                label = ax.annotate(text,
-                                    xycoords='data',
-                                    xy = (x2[i], y2[i]), xytext = (x2[i]+val, y2[i]+val),
-                                    textcoords = 'data', ha = 'right',
-                                     va = 'bottom', fontsize=9,
-                                    bbox = dict(boxstyle = 'round,pad=0.3',
-                                                 fc = 'yellow', alpha = 0.3))
-                                     
-                Labels.append(label)
-                
-            def update_position(e):
-                x2, y2, _ = proj3d.proj_transform(coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], ax.get_proj())
-                for i in range(len(coordinates[:, 0])):
-                    label = Labels[i]
-                    label.xytext = (x2[i],y2[i])
-                    label.update_positions(fig.canvas.get_renderer())
-                fig.canvas.draw()
-            fig.canvas.mpl_connect('button_release_event', update_position)
-            plt.show()
-        
+        else:
+            weights = None
+        plot = projectionPlot(coordinates, weights)
+        plot.initializePlot()
         return plot
         
     def _validate(self):
         errors = []
-        
-        numberOfDimensions=self.numberOfDimensions.get()
-        if numberOfDimensions > 3 or numberOfDimensions < 1:
-            errors.append("The number of dimensions should be 1, 2 or, at most, 3.")
-        
         return errors
+
+
+class projectionPlot(object):
+
+    def __init__(self, coords, weights=None):
+        self.coords = coords
+        self.weights = weights
+        self.proj_coords = None
+        self.radio = None
+        self.cb = None
+        self.prevlabel = 'Scatter'
+        self.root = tk.Tk()
+        self.fig = plt.Figure(figsize=(10, 4))
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
+        self.ax_3d = self.fig.add_subplot(121, projection="3d")
+        self.ax_3d.set_title("3D Scatter Plot")
+        self.fig.canvas.mpl_connect('button_release_event', self.onRelease)
+        self.ax_2d = self.fig.add_subplot(122)
+        self.ax_2d.set_title("Projection Scatter Plot")
+
+    def projectMatrix(self, M, coords):
+        proj_coords = []
+        for coord in coords:
+            coord = np.append(coord, 1.0)
+            proj_coord = M.dot(coord)
+            proj_coords.append(proj_coord)
+        return np.asarray(proj_coords)
+
+    def onRelease(self, event):
+        if event.inaxes == self.ax_3d:
+            M = event.inaxes.get_proj()
+            self.proj_coords = self.projectMatrix(M, self.coords)
+            self.plotType(self.prevlabel)
+
+    def plotType(self, label):
+        self.prevlabel = label
+        x = self.proj_coords[:, 0]
+        y = self.proj_coords[:, 1]
+        if self.cb != None:
+            self.cb.remove()
+            self.cb = None
+        if label == 'Scatter':
+            self.ax_2d.clear()
+            self.ax_2d.scatter(x, y, color="green")
+            self.ax_2d.set_title("Projection Scatter Plot")
+            self.fig.canvas.draw()
+        elif label == 'Contour':
+            self.ax_2d.clear()
+            rangeX = np.max(x) - np.min(x)
+            rangeY = np.max(y) - np.min(y)
+            if rangeX > rangeY:
+                sigma = rangeX / 50
+            else:
+                sigma = rangeY / 50
+            xi = np.linspace(min(x) - 0.1, max(x) + 0.1, 100)
+            yi = np.linspace(min(x) - 0.1, max(x) + 0.1, 100)
+            z = np.zeros((100, 100), float)
+            zSize = z.shape
+            N = len(x)
+            for c in range(zSize[1]):
+                for r in range(zSize[0]):
+                    for d in range(N):
+                        z[r, c] = z[r, c] + (1.0 / N) * (1.0 / ((2 * math.pi) * sigma ** 2)) * math.exp(
+                            -((xi[c] - x[d]) ** 2 + (yi[r] - y[d]) ** 2) / (2 * sigma ** 2))
+            zMax = np.max(z)
+            z = z / zMax
+            self.ax_2d.contour(xi, yi, z, 15, linewidths=0.5, colors='k')
+            cf = self.ax_2d.contourf(xi, yi, z, 15, cmap=plt.cm.jet)
+            self.ax_2d.set_title("Projection Scatter Plot")
+            cbaxes = self.fig.add_axes([0.92, 0.1, 0.01, 0.8])
+            self.cb = self.fig.colorbar(mappable=cf, cax=cbaxes)
+            self.cb.set_ticks([])
+            self.fig.canvas.draw()
+        elif label == 'Convolution':
+            coordinates = np.stack((x, y), axis=1)
+            Xr = np.round(coordinates, decimals=3)
+            size_grid = 2 * np.amax(Xr)
+            grid_coords = np.arange(-size_grid, size_grid, 0.001)
+            R, C = np.meshgrid(grid_coords, grid_coords, indexing='ij')
+            S = np.zeros(R.shape)
+            sigma = R.shape[0] / (200 / 5)
+            lbox = int(6 * sigma)
+            if lbox % 2 == 0:
+                lbox += 1
+            mid = int((lbox - 1) / 2 + 1)
+            kernel = np.zeros((lbox, lbox))
+            kernel[mid, mid] = 1
+            kernel = gaussian_filter(kernel, sigma=sigma)
+            for p in range(Xr.shape[0]):
+                indx = np.argmin(np.abs(R[:, 0] - Xr[p, 0]))
+                indy = np.argmin(np.abs(C[0, :] - Xr[p, 1]))
+                if self.weights != None:
+                    S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel * self.weights[p]
+                else:
+                    S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel
+            S = S[~np.all(S == 0, axis=1)]
+            S = S[:, ~np.all(S == 0, axis=0)]
+            S = ndimage.rotate(S, 90)
+            cf = self.ax_2d.imshow(S)
+            cbaxes = self.fig.add_axes([0.92, 0.1, 0.01, 0.8])
+            self.ax_2d.set_title('Projection Scatter Plot')
+            self.cb = self.fig.colorbar(mappable=cf, cax=cbaxes)
+            self.cb.set_ticks([])
+            self.fig.canvas.draw()
+
+    def initializePlot(self):
+        self.ax_3d.scatter3D(self.coords[:, 0], self.coords[:, 1], self.coords[:, 2], color="green")
+        M = self.ax_3d.get_proj()
+        self.proj_coords = self.projectMatrix(M, self.coords)
+        self.ax_2d.scatter(self.proj_coords[:, 0], self.proj_coords[:, 1], color="green")
+
+        # Buttons
+        axcolor = 'silver'
+        rax = self.fig.add_axes([0.01, 0.4, 0.12, 0.25], facecolor=axcolor)
+        self.radio = RadioButtons(rax, ('Scatter', 'Contour', 'Convolution'))
+        self.radio.on_clicked(self.plotType)
+        self.canvas.get_tk_widget().pack(side=tk.BOTTOM, fill=tk.BOTH, expand=1)
+        self.canvas._tkcanvas.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=1)
+
+        # Toolbar
+        toolbar = NavigationToolbar2Tk(self.canvas, self.root)
+        toolbar.update()
+        self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+        tk.mainloop()
