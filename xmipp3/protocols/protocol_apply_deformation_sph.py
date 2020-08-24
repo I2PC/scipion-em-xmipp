@@ -57,11 +57,13 @@ class XmippProtApplySPH(ProtAnalysis3D):
     # --------------------------- STEPS functions ------------------------------
     def deformStep(self):
         self.outParams = []
+        self.classesId = []
         classes = self.inputClasses.get()
         for rep in classes.iterItems():
             coeffs = rep.getRepresentative().get()
             coeffs = np.fromstring(coeffs, sep=',')
             idx = rep.getObjId()
+            self.classesId.append(idx)
             file = self._getTmpPath('coeffs.txt')
             np.savetxt(file, coeffs)
             outFile = pwutils.removeBaseExt(self.inputVol.get().getFileName()) + '_%d_deformed.vol' % idx
@@ -72,10 +74,10 @@ class XmippProtApplySPH(ProtAnalysis3D):
 
     def createOutputStep(self):
         self.samplingRate = self.inputVol.get().getSamplingRate()
-        classes3DSet = self._createSetOfClasses3D(self.inputClasses.get())
+        classes3DSet = self._createSetOfClasses3D(self.inputClasses.get().getImages())
         classes3DSet.classifyItems(updateItemCallback=self._updateParticle,
                                    updateClassCallback=self._updateClass,
-                                   itemDataIterator=self.iterClassItems(self.inputClasses.get()))
+                                   itemDataIterator=iter(self.classesId))
         result = {'outputClasses': classes3DSet}
         self._defineOutputs(**result)
         self._defineSourceRelation(self.inputClasses, classes3DSet)
@@ -99,17 +101,10 @@ class XmippProtApplySPH(ProtAnalysis3D):
 
     # ------------------------------- UTILS functions -------------------------------
     def _updateParticle(self, item, idc):
-        pass
+        item.setClassId(idc)
 
     def _updateClass(self, item):
         representative = item.getRepresentative()
-        volumeFile = self._getExtraPath('volume_state%02d.mrc' % item.getObjId())
+        volumeFile = self._getExtraPath('volume_state%02d.mrc' % item.getClassId())
         representative.setSamplingRate(self.samplingRate)
-        representative.setLocation(item.getObjId(), volumeFile)
-
-    def iterClassItems(self, set):
-        for cls in set.iterItems():
-            if cls.isEnabled():
-                for img in cls:
-                    if img.isEnabled():
-                        yield img
+        representative.setLocation(item.getClassId(), volumeFile)
