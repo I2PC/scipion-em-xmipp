@@ -89,10 +89,10 @@ class XmippProtApplySPH(ProtAnalysis3D):
     def _updateClass(self, item):
         representative = item.getRepresentative()
         volumeFile = pwutils.removeBaseExt(self.inputVol.get().getFileName()) + '_%d_deformed.vol' \
-                     % item.getObjId() + 1
+                     % (item.getObjId() + 1)
         volumeFile = self._getExtraPath(volumeFile)
         representative.setSamplingRate(self.samplingRate)
-        representative.setLocation(item.getObjId() + 1, volumeFile)
+        representative.setLocation(volumeFile)
 
     def iterClassesId(self):
         for img in self.inputClasses.get().iterClassItems():
