@@ -58,9 +58,10 @@ class XmippProtApplySPH(ProtAnalysis3D):
     def deformStep(self):
         self.outParams = []
         classes = self.inputClasses.get()
-        for idx, rep in enumerate(classes.iterItems()):
+        for rep in classes.iterItems():
             coeffs = rep.getRepresentative().get()
             coeffs = np.fromstring(coeffs, sep=',')
+            idx = rep.getRepresentative().getObjId()
             file = self._getTmpPath('coeffs.txt')
             np.savetxt(file, coeffs)
             outFile = pwutils.removeBaseExt(self.inputVol.get().getFileName()) + '_%d_deformed.vol' % idx
@@ -70,21 +71,38 @@ class XmippProtApplySPH(ProtAnalysis3D):
             self.outParams.append((self._getExtraPath(outFile), rep.getSize()))
 
     def createOutputStep(self):
-        samplingRate = self.inputVol.get().getSamplingRate()
-        if len(self.outParams) == 1:
-            outVol = Volume()
-            outVol.setLocation(self.outParams[0][0])
-            outVol.setSamplingRate(samplingRate)
-            self._defineOutputs(outputVolume=outVol)
-            self._defineSourceRelation(self.inputVol, outVol)
-        else:
-            outVolumes = self._createSetOfVolumes()
-            outVolumes.setSamplingRate(samplingRate)
-            for outTuple in self.outParams:
-                outVol = Volume()
-                outVol.setLocation(outTuple[0])
-                outVol.setSamplingRate(samplingRate)
-                setattr(outVol, '_numberImages', Integer(outTuple[1]))
-                outVolumes.append(outVol)
-            self._defineOutputs(outputVolumes=outVolumes)
-            self._defineSourceRelation(self.inputVol, outVolumes)
+        self.samplingRate = self.inputVol.get().getSamplingRate()
+        classes3DSet = self._createSetOfClasses3D(self.inputClasses.get())
+        classes3DSet.classifyItems(updateItemCallback=self._updateParticle,
+                                   updateClassCallback=self._updateClass,
+                                   itemDataIterator=self.inputClasses.get().iterItems())
+        result = {'outputClasses': classes3DSet}
+        self._defineOutputs(**result)
+        self._defineSourceRelation(self.inputClasses, classes3DSet)
+        # if len(self.outParams) == 1:
+        #     outVol = Volume()
+        #     outVol.setLocation(self.outParams[0][0])
+        #     outVol.setSamplingRate(samplingRate)
+        #     self._defineOutputs(outputVolume=outVol)
+        #     self._defineSourceRelation(self.inputVol, outVol)
+        # else:
+        #     outVolumes = self._createSetOfVolumes()
+        #     outVolumes.setSamplingRate(samplingRate)
+        #     for outTuple in self.outParams:
+        #         outVol = Volume()
+        #         outVol.setLocation(outTuple[0])
+        #         outVol.setSamplingRate(samplingRate)
+        #         setattr(outVol, '_numberImages', Integer(outTuple[1]))
+        #         outVolumes.append(outVol)
+        self._defineOutputs(**result)
+        self._defineSourceRelation(self.inputVol, classes3DSet)
+
+    # ------------------------------- UTILS functions -------------------------------
+    def _updateParticle(self, item, idc):
+        item.setClassId(idc.getRepresentative().getObjId())
+
+    def _updateClass(self, item):
+        representative = item.getRepresentative()
+        volumeFile = self._getExtraPath('volume_state%02d.mrc' % representative.getObjId())
+        representative.setSamplingRate(self.samplingRate)
+        representative.setLocation(representative.getObjId(), volumeFile)
