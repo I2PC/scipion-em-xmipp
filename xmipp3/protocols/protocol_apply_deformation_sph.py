@@ -107,6 +107,6 @@ class XmippProtApplySPH(ProtAnalysis3D):
         representative.setSamplingRate(self.samplingRate)
         representative.setLocation(item.getObjId(), volumeFile)
 
-    def iterClassesId(self, set):
-        for img in set.iterClassItems():
+    def iterClassesId(self):
+        for img in self.inputClasses.get().iterClassItems():
             yield img.getClassId()
