@@ -79,21 +79,6 @@ class XmippProtApplySPH(ProtAnalysis3D):
         result = {'outputClasses': classes3DSet}
         self._defineOutputs(**result)
         self._defineSourceRelation(self.inputClasses, classes3DSet)
-        # if len(self.outParams) == 1:
-        #     outVol = Volume()
-        #     outVol.setLocation(self.outParams[0][0])
-        #     outVol.setSamplingRate(samplingRate)
-        #     self._defineOutputs(outputVolume=outVol)
-        #     self._defineSourceRelation(self.inputVol, outVol)
-        # else:
-        #     outVolumes = self._createSetOfVolumes()
-        #     outVolumes.setSamplingRate(samplingRate)
-        #     for outTuple in self.outParams:
-        #         outVol = Volume()
-        #         outVol.setLocation(outTuple[0])
-        #         outVol.setSamplingRate(samplingRate)
-        #         setattr(outVol, '_numberImages', Integer(outTuple[1]))
-        #         outVolumes.append(outVol)
         self._defineOutputs(**result)
         self._defineSourceRelation(self.inputVol, classes3DSet)
 
@@ -103,7 +88,9 @@ class XmippProtApplySPH(ProtAnalysis3D):
 
     def _updateClass(self, item):
         representative = item.getRepresentative()
-        volumeFile = self._getExtraPath('volume_state%02d.mrc' % item.getObjId())
+        volumeFile = pwutils.removeBaseExt(self.inputVol.get().getFileName()) + '_%d_deformed.vol' \
+                     % item.getObjId()
+        volumeFile = self._getExtraPath(volumeFile)
         representative.setSamplingRate(self.samplingRate)
         representative.setLocation(item.getObjId(), volumeFile)
 
