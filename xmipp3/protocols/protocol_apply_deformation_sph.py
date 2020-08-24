@@ -57,13 +57,11 @@ class XmippProtApplySPH(ProtAnalysis3D):
     # --------------------------- STEPS functions ------------------------------
     def deformStep(self):
         self.outParams = []
-        self.classesId = []
         classes = self.inputClasses.get()
         for rep in classes.iterItems():
             coeffs = rep.getRepresentative().get()
             coeffs = np.fromstring(coeffs, sep=',')
             idx = rep.getObjId()
-            self.classesId.append(idx)
             file = self._getTmpPath('coeffs.txt')
             np.savetxt(file, coeffs)
             outFile = pwutils.removeBaseExt(self.inputVol.get().getFileName()) + '_%d_deformed.vol' % idx
@@ -77,7 +75,7 @@ class XmippProtApplySPH(ProtAnalysis3D):
         classes3DSet = self._createSetOfClasses3D(self.inputClasses.get().getImages())
         classes3DSet.classifyItems(updateItemCallback=self._updateParticle,
                                    updateClassCallback=self._updateClass,
-                                   itemDataIterator=iter(self.classesId))
+                                   itemDataIterator=self.iterClassesId())
         result = {'outputClasses': classes3DSet}
         self._defineOutputs(**result)
         self._defineSourceRelation(self.inputClasses, classes3DSet)
@@ -105,6 +103,10 @@ class XmippProtApplySPH(ProtAnalysis3D):
 
     def _updateClass(self, item):
         representative = item.getRepresentative()
-        volumeFile = self._getExtraPath('volume_state%02d.mrc' % item.getClassId())
+        volumeFile = self._getExtraPath('volume_state%02d.mrc' % item.getObjId())
         representative.setSamplingRate(self.samplingRate)
-        representative.setLocation(item.getClassId(), volumeFile)
+        representative.setLocation(item.getObjId(), volumeFile)
+
+    def iterClassesId(self, set):
+        for img in set.iterClassItems():
+            yield img.getClassId()
