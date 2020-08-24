@@ -126,11 +126,16 @@ class XmippProtVolSubtraction(EMProtocol):
 
     def subtractionStep(self):
         vol1 = self.vol1.get().clone()
+        fileName1 = vol1.getFileName()
+        if fileName1.endswith('.mrc'):
+            fileName1 += ':mrc'
         if self.pdb:
             vol2 = self.outFile
             mask2 = self._getExtraPath("mask2.mrc")
         else:
             vol2 = self.vol2.get().getFileName()
+            if vol2.endswith('.mrc'):
+                vol2 += ':mrc'
             if self.masks:
                 mask2 = self.mask2.get().getFileName()
         resol = self.resol.get()
