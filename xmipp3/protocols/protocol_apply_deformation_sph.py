@@ -61,7 +61,7 @@ class XmippProtApplySPH(ProtAnalysis3D):
         for rep in classes.iterItems():
             coeffs = rep.getRepresentative().get()
             coeffs = np.fromstring(coeffs, sep=',')
-            idx = rep.getRepresentative().getObjId()
+            idx = rep.getObjId()
             file = self._getTmpPath('coeffs.txt')
             np.savetxt(file, coeffs)
             outFile = pwutils.removeBaseExt(self.inputVol.get().getFileName()) + '_%d_deformed.vol' % idx
@@ -99,10 +99,10 @@ class XmippProtApplySPH(ProtAnalysis3D):
 
     # ------------------------------- UTILS functions -------------------------------
     def _updateParticle(self, item, idc):
-        item.setClassId(idc.getRepresentative().getObjId())
+        item.setClassId(idc.getObjId())
 
     def _updateClass(self, item):
         representative = item.getRepresentative()
-        volumeFile = self._getExtraPath('volume_state%02d.mrc' % representative.getObjId())
+        volumeFile = self._getExtraPath('volume_state%02d.mrc' % item.getObjId())
         representative.setSamplingRate(self.samplingRate)
-        representative.setLocation(representative.getObjId(), volumeFile)
+        representative.setLocation(item.getObjId(), volumeFile)
