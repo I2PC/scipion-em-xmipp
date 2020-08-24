@@ -75,7 +75,7 @@ class XmippProtApplySPH(ProtAnalysis3D):
         classes3DSet = self._createSetOfClasses3D(self.inputClasses.get())
         classes3DSet.classifyItems(updateItemCallback=self._updateParticle,
                                    updateClassCallback=self._updateClass,
-                                   itemDataIterator=self.inputClasses.get().iterItems())
+                                   itemDataIterator=self.iterClassItems(self.inputClasses.get()))
         result = {'outputClasses': classes3DSet}
         self._defineOutputs(**result)
         self._defineSourceRelation(self.inputClasses, classes3DSet)
@@ -99,10 +99,17 @@ class XmippProtApplySPH(ProtAnalysis3D):
 
     # ------------------------------- UTILS functions -------------------------------
     def _updateParticle(self, item, idc):
-        item.setClassId(idc.getObjId())
+        pass
 
     def _updateClass(self, item):
         representative = item.getRepresentative()
         volumeFile = self._getExtraPath('volume_state%02d.mrc' % item.getObjId())
         representative.setSamplingRate(self.samplingRate)
         representative.setLocation(item.getObjId(), volumeFile)
+
+    def iterClassItems(self, set):
+        for cls in set.iterItems():
+            if cls.isEnabled():
+                for img in cls:
+                    if img.isEnabled():
+                        yield img
