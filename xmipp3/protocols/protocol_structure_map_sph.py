@@ -301,6 +301,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                     cost = np.sum(pdist(X1 - X2))
                 elif idf == 1:
                     X1_attempt = np.fliplr(X1)
+                    R, t = rigidRegistration(X1_attempt, X2)
                     X1_attempt = t + np.transpose(R @ X1_attempt.T)
                     cost_attempt = np.sum(pdist(X1_attempt - X2))
                     if cost_attempt < cost:
@@ -308,6 +309,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                         X1 = X1_attempt
                 elif idf == 2:
                     X1_attempt = np.flipud(X1)
+                    R, t = rigidRegistration(X1_attempt, X2)
                     X1_attempt = t + np.transpose(R @ X1_attempt.T)
                     cost_attempt = np.sum(pdist(X1_attempt - X2))
                     if cost_attempt < cost:
@@ -316,6 +318,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                 elif idf == 3:
                     X1_attempt = np.fliplr(X1)
                     X1_attempt = np.flipud(X1_attempt)
+                    R, t = rigidRegistration(X1_attempt, X2)
                     X1_attempt = t + np.transpose(R @ X1_attempt.T)
                     cost_attempt = np.sum(pdist(X1_attempt - X2))
                     if cost_attempt < cost:
