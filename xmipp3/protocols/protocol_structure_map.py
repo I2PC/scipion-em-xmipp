@@ -77,7 +77,7 @@ class XmippProtStructureMap(ProtAnalysis3D):
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('inputVolumes', params.MultiPointerParam,
+        form.addParam('inputVolumes', params.PointerParam,
                       pointerClass='SetOfClasses3D',
                       label="Input volume(s)", important=True,
                       help='Select one or more volumes (SetOfClasses3D)\n'
