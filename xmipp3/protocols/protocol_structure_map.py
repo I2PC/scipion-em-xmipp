@@ -78,9 +78,9 @@ class XmippProtStructureMap(ProtAnalysis3D):
     def _defineParams(self, form):
         form.addSection(label='Input')
         form.addParam('inputVolumes', params.MultiPointerParam,
-                      pointerClass='SetOfVolumes,Volume',
+                      pointerClass='SetOfClasses3D',
                       label="Input volume(s)", important=True,
-                      help='Select one or more volumes (Volume or SetOfVolumes)\n'
+                      help='Select one or more volumes (SetOfClasses3D)\n'
                            'for structure mapping.')
         form.addParam('targetResolution', params.FloatParam, label="Target resolution",
                       default=8.0,
@@ -93,7 +93,7 @@ class XmippProtStructureMap(ProtAnalysis3D):
         volList = []
         dimList = []
         srList = []
-        volList, dimList, srList, _ = self._iterInputVolumes(self.inputVolumes, volList, dimList, srList, [])
+        volList, dimList, srList, _ = self._iterInputVolumes(volList, dimList, srList, [])
         nVoli = 1
         depsConvert = []
         for voli in volList:
@@ -186,32 +186,18 @@ class XmippProtStructureMap(ProtAnalysis3D):
             np.savetxt(self._defineResultsName(i, label), embedExtended)
 
     # --------------------------- UTILS functions --------------------------------------------
-    def _iterInputVolumes(self, volumes, volList, dimList, srList, idList):
+    def _iterInputVolumes(self, volList, dimList, srList, idList):
         """ Iterate over all the input volumes. """
         count = 1
         weight = []
-        for pointer in volumes:
-            item = pointer.get()
-            if item is None:
-                break
-            itemId = item.getObjId()
-            if isinstance(item, Volume):
-                volList.append(item.getFileName())
-                dimList.append(item.getDim()[0])
-                srList.append(item.getSamplingRate())
-                idList.append(count)
-            elif isinstance(item, SetOfVolumes):
-                for vol in item:
-                    volList.append(vol.getFileName())
-                    dimList.append(vol.getDim()[0])
-                    srList.append(vol.getSamplingRate())
-                    idList.append(count)
-                    count += 1
-                    if hasattr(vol, '_numberImages'):
-                        weight.append(vol._numberImages.get())
+        for vol in self.inputVolumes.get().iterRepresentatives():
+            volList.append(vol.getFileName())
+            dimList.append(vol.getDim()[0])
+            srList.append(vol.getSamplingRate())
+            idList.append(count)
+            weight.append(vol.getSize())
             count += 1
-        if weight:
-            np.savetxt(self._getExtraPath('weights.txt'), np.asarray(weight))
+        np.savetxt(self._getExtraPath('weights.txt'), np.asarray(weight))
         return volList, dimList, srList, idList
 
     def split(self, array, nrows, ncols):
