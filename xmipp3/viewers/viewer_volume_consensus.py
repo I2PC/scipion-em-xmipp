@@ -45,10 +45,4 @@ class XmippVolumeConsensusViewer(XmippViewer):
         fnCmd = self.protocol._getPath('result_fusion_chimera.cxc')
         if os.path.exists(fnCmd):
             self._views.append(ChimeraView(fnCmd))
-        # fnCmd = self.protocol._getPath('result_localrot_chimera.cmd')
-        # if os.path.exists(fnCmd):
-        #     self._views.append(ChimeraView(fnCmd))
-        # fnCmd = self.protocol._getPath('result_morph_chimera.cmd')
-        # if os.path.exists(fnCmd):
-        #     self._views.append(ChimeraView(fnCmd))
         return self._views
