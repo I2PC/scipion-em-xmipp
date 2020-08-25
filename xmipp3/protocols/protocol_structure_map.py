@@ -190,12 +190,13 @@ class XmippProtStructureMap(ProtAnalysis3D):
         """ Iterate over all the input volumes. """
         count = 1
         weight = []
-        for vol in self.inputVolumes.get().iterRepresentatives():
+        for cls in self.inputVolumes.get().iterItems():
+            vol = cls.get()
             volList.append(vol.getFileName())
             dimList.append(vol.getDim()[0])
             srList.append(vol.getSamplingRate())
             idList.append(count)
-            weight.append(vol.getSize())
+            weight.append(cls.getSize())
             count += 1
         np.savetxt(self._getExtraPath('weights.txt'), np.asarray(weight))
         return volList, dimList, srList, idList
