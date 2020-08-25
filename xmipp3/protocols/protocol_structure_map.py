@@ -191,7 +191,7 @@ class XmippProtStructureMap(ProtAnalysis3D):
         count = 1
         weight = []
         for cls in self.inputVolumes.get().iterItems():
-            vol = cls.get()
+            vol = cls.getRepresentative()
             volList.append(vol.getFileName())
             dimList.append(vol.getDim()[0])
             srList.append(vol.getSamplingRate())
