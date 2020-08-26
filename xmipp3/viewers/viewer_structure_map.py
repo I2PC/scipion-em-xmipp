@@ -177,7 +177,7 @@ class projectionPlot(object):
             S = S[~np.all(S == 0, axis=1)]
             S = S[:, ~np.all(S == 0, axis=0)]
             S = ndimage.rotate(S, 90)
-            cf = self.ax_2d.imshow(S)
+            cf = self.ax_2d.imshow(S, cmap=matplotlib.cm.jet)
             cbaxes = self.fig.add_axes([0.92, 0.1, 0.01, 0.8])
             self.ax_2d.set_title('Projection Scatter Plot')
             self.cb = self.fig.colorbar(mappable=cf, cax=cbaxes)
