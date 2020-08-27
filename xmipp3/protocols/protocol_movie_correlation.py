@@ -71,6 +71,17 @@ class XmippProtMovieCorr(ProtAlignMovies):
     def _defineAlignmentParams(self, form):
         ProtAlignMovies._defineAlignmentParams(self, form)
 
+        form.addHidden('tomographySplitFrames', params.BooleanParam,
+                       default=getattr(self, 'tomographySplitFrames', False))
+
+        form.addParam('splitEvenOdd', params.BooleanParam,
+                      default=False,
+                      label='Split & sum odd/even frames?',
+                      condition='tomographySplitFrames',
+                      expertLevel=cons.LEVEL_ADVANCED,
+                      help='(Used for cryoCARE denoising data preparation). If set to Yes, 2 additional tilt series '
+                           'will be generated, one generated from the even frames and the other from the odd ones.')
+
         form.addParam('splineOrder', params.EnumParam, condition="doSaveAveMic or doSaveMovie",
                       default=self.INTERP_CUBIC, choices=['linear', 'cubic'],
                       expertLevel=cons.LEVEL_ADVANCED,
