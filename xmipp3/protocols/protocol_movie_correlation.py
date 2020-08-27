@@ -62,6 +62,9 @@ class XmippProtMovieCorr(ProtAlignMovies):
     _label = 'FlexAlign'
     _lastUpdateVersion = VERSION_1_1
 
+    # Split frames option display flag
+    _splitEvenOddFrames = False
+
     def __init__(self, **args):
         ProtAlignMovies.__init__(self, **args)
         self.stepsExecutionMode = cons.STEPS_PARALLEL
@@ -71,16 +74,14 @@ class XmippProtMovieCorr(ProtAlignMovies):
     def _defineAlignmentParams(self, form):
         ProtAlignMovies._defineAlignmentParams(self, form)
 
-        form.addHidden('tomographySplitFrames', params.BooleanParam,
-                       default=getattr(self, 'tomographySplitFrames', False))
-
-        form.addParam('splitEvenOdd', params.BooleanParam,
-                      default=False,
-                      label='Split & sum odd/even frames?',
-                      condition='tomographySplitFrames',
-                      expertLevel=cons.LEVEL_ADVANCED,
-                      help='(Used for cryoCARE denoising data preparation). If set to Yes, 2 additional tilt series '
-                           'will be generated, one generated from the even frames and the other from the odd ones.')
+        if self._splitEvenOddFrames:
+            form.addParam('splitEvenOdd', params.BooleanParam,
+                          default=False,
+                          label='Split & sum odd/even frames?',
+                          expertLevel=cons.LEVEL_ADVANCED,
+                          help='(Used for denoising data preparation). If set to Yes, 2 additional movies/tilt '
+                               'series will be generated, one generated from the even frames and the other from the '
+                               'odd ones using the same alignment for the whole stack of frames.')
 
         form.addParam('splineOrder', params.EnumParam, condition="doSaveAveMic or doSaveMovie",
                       default=self.INTERP_CUBIC, choices=['linear', 'cubic'],
@@ -235,7 +236,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
             fnInitial = os.path.join(movieFolder, "initialMic.mrc")
             args  += ' --oavgInitial %s' % fnInitial
 
-        if self.doSaveMovie or getattr(self, 'tomographySplitFrames', False):
+        if self.doSaveMovie or self._doSplitEvenOdd():
             args += ' --oaligned %s' % self._getExtraPath(self._getOutputMovieName(movie))
 
         if self.inputMovies.get().getDark():
@@ -274,6 +275,10 @@ class XmippProtMovieCorr(ProtAlignMovies):
         self._saveAlignmentPlots(movie)
 
     #--------------------------- UTILS functions ------------------------------
+
+    def _doSplitEvenOdd(self):
+        return getattr(self, 'splitEvenOdd', False)
+
     def _getShiftsFile(self, movie):
         return self._getExtraPath(self._getMovieRoot(movie) + '_shifts.xmd')
 
