@@ -78,6 +78,10 @@ class XmippProtVolSubtraction(EMProtocol):
                       help='Decay of the filter (sigma parameter) to smooth the mask transition',
                       expertLevel=LEVEL_ADVANCED)
         form.addParam('iter', IntParam, label="Number of iterations: ", default=5, expertLevel=LEVEL_ADVANCED)
+        form.addParam('rfactor', FloatParam, label="Relaxation factor (lambda): ", default=0.5,
+                      expertLevel=LEVEL_ADVANCED,
+                      help='Relaxation factor for Fourier amplitude projector (POCS), it should be between 0 and 1, '
+                           'being 0 no relaxation and 1 no modification of volume 2 amplitudes')
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -141,8 +145,8 @@ class XmippProtVolSubtraction(EMProtocol):
         resol = self.resol.get()
         iter = self.iter.get()
         program = "xmipp_volume_subtraction"
-        args = '--i1 %s --i2 %s -o %s --iter %s --sub' % (vol1.getFileName(), vol2,
-                                                          self._getExtraPath("output_volume.mrc"), iter)
+        args = '--i1 %s --i2 %s -o %s --iter %s --lambda %s --sub' % \
+               (vol1.getFileName(), vol2, self._getExtraPath("output_volume.mrc"), iter, self.rfactor.get())
         if resol:
             fc = vol1.getSamplingRate()/resol
             args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
@@ -196,6 +200,12 @@ class XmippProtVolSubtraction(EMProtocol):
                 methods.append(" at resolution %f A" % self.resol.get())
         return methods
 
+    def _validate(self):
+        errors = []
+        rfactor = self.rfactor.get()
+        if rfactor < 0 or rfactor > 1:
+            errors.append('Relaxation factor (lambda) must be between 0 and 1')
+        return errors
     # --------------------------- UTLIS functions --------------------------------------------
     def _getPdbFileName(self):
         if self.inputPdbData == self.IMPORT_OBJ:
