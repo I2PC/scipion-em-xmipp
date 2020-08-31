@@ -27,6 +27,7 @@ from pwem.protocols import ProtImportVolumes, exists
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 
 from xmipp3.protocols import XmippProtDeepVolPostProc, XmippProtCreateMask3D
+from xmipp3.protocols.protocol_postProcessing_deepPostProcessing import POSTPROCESS_VOL_BASENAME
 
 
 class TestDeepVolPostProcessingBase(BaseTest):
@@ -88,5 +89,5 @@ class TestDeepVolPostProcessing(TestDeepVolPostProcessingBase):
                                    normalization= XmippProtDeepVolPostProc.NORMALIZATION_AUTO
                                    )
         self.launchProtocol(deepPostProc)
-        self.assertTrue(exists(deepPostProc._getExtraPath('deepPostProcVol.mrc')),
+        self.assertTrue(exists(deepPostProc._getExtraPath(POSTPROCESS_VOL_BASENAME)),
                         "Deep Volume Postprocessing has failed")
