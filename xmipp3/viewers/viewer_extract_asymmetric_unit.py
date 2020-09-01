@@ -35,7 +35,7 @@ from pwem.emlib.image import ImageHandler
 from pwem.objects import (SetOfVolumes)
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
 from pwem.viewers import Chimera, ChimeraView, EmProtocolViewer
-from xmipp3.protocols.protocol_extract_unit_cell import XmippProtExtractUnit
+from xmipp3.protocols.protocol_extract_asymmetric_unit import XmippProtExtractUnit
 from xmipp3.constants import (XMIPP_TO_SCIPION, XMIPP_I222)
 
 VOLUME_SLICES = 1
@@ -101,7 +101,7 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
         return setOfVolumes
 
     def _showVolumesChimera(self):
-        tmpFileNameCMD = self.protocol._getTmpPath("chimera.cmd")
+        tmpFileNameCMD = self.protocol._getTmpPath("chimera.cxc")
         f = open(tmpFileNameCMD, "w")
         dim = self.protocol.inputVolumes.get().getDim()[0]
         sampling = self.protocol.inputVolumes.get().getSamplingRate()
@@ -120,7 +120,7 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
         # input vol origin coordinates
         x_input, y_input, z_input = _inputVol.getShiftsFromOrigin()
         f.write("open %s\n" % inputVolFileName)
-        f.write("volume #1 style mesh level 0.001 voxelSize %f origin "
+        f.write("volume #2 style mesh level 0.001 voxelSize %f origin "
                 "%0.2f,%0.2f,%0.2f\n"
                 % (_inputVol.getSamplingRate(), x_input, y_input, z_input))
 
@@ -130,7 +130,7 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
         # output vol origin coordinates
         x_output, y_output, z_output = _outputVol.getShiftsFromOrigin()
         f.write("open %s\n" % outputVolFileName)
-        f.write("volume #2 style surface level 0.001 voxelSize %f origin "
+        f.write("volume #3 style surface level 0.001 voxelSize %f origin "
                 "%0.2f,%0.2f,%0.2f\n"
                 % (_outputVol.getSamplingRate(), x_output, y_output, z_output))
 
@@ -144,7 +144,7 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
             f.write("shape icosahedron mesh true radius %(outerRadius)d "
                     "orientation %(symmetry)s\n" % d)
         step = (d['outerRadius'] - d['innerRadius']) / float(len(cMap) - 1)
-        f.write("scolor #2  geom radial center 0,0,0 cmap ")
+        f.write("color radial #3 center 0,0,0 palette -")
         counter = 0
         s = ""
         for color in cMap:

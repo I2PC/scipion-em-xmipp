@@ -26,6 +26,8 @@
 
 from os.path import join, exists
 import math
+import os
+from shutil import copy
 
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_2_0
@@ -40,7 +42,7 @@ from xmipp3.convert import (createItemMatrix, writeSetOfParticles,
                             rowToAlignment, setXmippAttributes, xmippToLocation)
 
 from pwem import emlib
-from xmipp3.base import findRow
+from xmipp3.base import findRow, writeInfoField, readInfoField
 from xmipp3.constants import SYM_URL
 import numpy as np
 
@@ -123,10 +125,10 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
                       condition="directionalClasses > 1",
                       label='Target resolution (A)')
 
-        form.addParam('cl2dIterations', params.IntParam, default=5,
+        form.addParam('class2dIterations', params.IntParam, default=5,
                       expertLevel=params.LEVEL_ADVANCED,
                       condition="directionalClasses > 1",
-                      label='Number of CL2D iterations')
+                      label='Number of 2D classification iterations')
 
         form.addParam('maxCLimgs', params.IntParam, default=5000,
                       condition="directionalClasses > 1",
@@ -197,18 +199,6 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         self._insertFunctionStep('createOutputStep')
 
     # --------------------------- STEPS functions -------------------------------
-
-    def readInfoField(self, fnDir, block, label):
-        mdInfo = emlib.MetaData("%s@%s" % (block, join(fnDir, "iterInfo.xmd")))
-        return mdInfo.getValue(label, mdInfo.firstObject())
-
-    def writeInfoField(self, fnDir, block, label, value):
-        mdInfo = emlib.MetaData()
-        objId = mdInfo.addObject()
-        mdInfo.setValue(label, value, objId)
-        mdInfo.write("%s@%s" % (block, join(fnDir, "iterInfo.xmd")),
-                     emlib.MD_APPEND)
-
     def convertInputStep(self, particlesId, volId):
         """ Write the input images as a Xmipp metadata file.
         particlesId: is only need to detect changes in
@@ -229,10 +219,10 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
             newTs = self.targetResolution.get() * 0.4
             newTs = max(Ts, newTs)
             newXdim = int(Xdim * Ts / newTs)
-            self.writeInfoField(self._getExtraPath(), "sampling",
-                                emlib.MDL_SAMPLINGRATE, newTs)
-            self.writeInfoField(self._getExtraPath(), "size", emlib.MDL_XSIZE,
-                                newXdim)
+            writeInfoField(self._getExtraPath(), "sampling",
+                           emlib.MDL_SAMPLINGRATE, newTs)
+            writeInfoField(self._getExtraPath(), "size", emlib.MDL_XSIZE,
+                           newXdim)
             self.runJob("xmipp_image_resize",
                         "-i %s -o %s --save_metadata_stack %s --fourier %d" %
                         (self._getExpParticlesFn(),
@@ -291,25 +281,71 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         if blockSize / Nclasses < 10:
             return
 
-        fnDir = self._getExtraPath("direction_%s" % projNumber)
-        if not exists(join(fnDir,"level_00")):
-            makePath(fnDir)
+        if self.useGpu.get():
+            count=0
+            GpuListCuda=''
+            if self.useQueueForSteps() or self.useQueue():
+                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                GpuList = GpuList.split(",")
+                for elem in GpuList:
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    count+=1
+            else:
+                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                GpuListAux = ''
+                for elem in self.getGpuList():
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListAux = GpuListAux+str(elem)+','
+                    count+=1
+                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
 
-            # Run CL2D classification for the images assigned to one direction
-            args = "-i %s " % fnToUse
-            args += "--odir %s " % fnDir
-            args += "--ref0 %s --iter %d --nref %d " % (
-            projRef, self.cl2dIterations, Nclasses)
-            args += "--distance correlation --classicalMultiref "
-            args += "--maxShift %f " % self.maxShift
-            try:
-                self.runJob("xmipp_classify_CL2D", args, numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
-            except:
-                return
+            fnDir = self._getExtraPath("direction_%s" % projNumber)
+            if not exists(fnDir):
+                makePath(fnDir)
 
-        # After CL2D the stk and xmd files should be produced
-        classesXmd = join(fnDir, "level_%02d/class_classes.xmd" % Nlevels)
-        classesStk = join(fnDir, "level_%02d/class_classes.stk" % Nlevels)
+            for i in range(self.class2dIterations.get()):
+                mdRefName = join(fnDir, 'reference.xmd')
+                if i==0:
+                    mdRef = md.MetaData()
+                    for j in range(2):
+                        row = md.Row()
+                        row.setValue(md.MDL_REF, j+1)
+                        row.setValue(md.MDL_IMAGE, projRef)
+                        row.addToMd(mdRef)
+                    mdRef.write(mdRefName, emlib.MD_APPEND)
+                else:
+                    mdRefName = join(fnDir,"level_%02d"%(i-1), "class_classes.xmd")
+                if not exists(join(fnDir,"level_%02d"%i)):
+                    makePath(join(fnDir,"level_%02d"%i))
+                args = '-i %s -r %s -o images.xmd --odir %s' \
+                       ' --keepBestN 1 --oUpdatedRefs %s ' % (fnToUse, mdRefName, join(fnDir,"level_%02d"%i), 'class_classes')
+                args += ' --dev %s ' %GpuListCuda
+                self.runJob("xmipp_cuda_align_significant", args, numberOfMpi=1)
+            copy(join(fnDir,"level_%02d"%(self.class2dIterations.get()-1), "images.xmd"), join(fnDir,"images.xmd"))
+
+            # After classification the stk and xmd files should be produced
+            classesXmd = join(fnDir, "level_%02d/class_classes.xmd" % (self.class2dIterations.get()-1))
+            classesStk = join(fnDir, "level_%02d/class_classes.stk" % (self.class2dIterations.get()-1))
+
+        else:
+            fnDir = self._getExtraPath("direction_%s" % projNumber)
+            if not exists(join(fnDir,"level_00")):
+                makePath(fnDir)
+                # Run CL2D classification for the images assigned to one direction
+                args = "-i %s " % fnToUse
+                args += "--odir %s " % fnDir
+                args += "--ref0 %s --iter %d --nref %d " % \
+                        (projRef, self.class2dIterations, Nclasses)
+                args += "--distance correlation --classicalMultiref "
+                args += "--maxShift %f " % self.maxShift
+                try:
+                    self.runJob("xmipp_classify_CL2D", args, numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
+                except:
+                    return
+
+            # After CL2D the stk and xmd files should be produced
+            classesXmd = join(fnDir, "level_%02d/class_classes.xmd" % Nlevels)
+            classesStk = join(fnDir, "level_%02d/class_classes.stk" % Nlevels)
 
         # Let's check that the output was produced
         if not exists(classesStk):
@@ -435,10 +471,10 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         fnTmpDir = self._getTmpPath()
         fnDirectional = self._getDirectionalClassesFn()
         inputParticles = self.inputParticles.get()
-        newTs = self.readInfoField(self._getExtraPath(), "sampling",
-                                   emlib.MDL_SAMPLINGRATE)
-        newXdim = self.readInfoField(self._getExtraPath(), "size",
-                                     emlib.MDL_XSIZE)
+        newTs = readInfoField(self._getExtraPath(), "sampling",
+                              emlib.MDL_SAMPLINGRATE)
+        newXdim = readInfoField(self._getExtraPath(), "size",
+                                emlib.MDL_XSIZE)
 
         # Generate projections
         fnGallery = join(fnTmpDir, "gallery.stk")
@@ -452,11 +488,33 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
 
         # Global angular assignment
         maxShift = 0.15 * newXdim
-        args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation 0' % \
-               (fnDirectional, fnGalleryMd, maxShift, fnTmpDir)
-        self.runJob('xmipp_reconstruct_significant', args,
-                    numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
         fnAngles = join(fnTmpDir, "angles_iter001_00.xmd")
+        if not self.useGpu.get():
+            args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation 0' % \
+               (fnDirectional, fnGalleryMd, maxShift, fnTmpDir)
+            self.runJob('xmipp_reconstruct_significant', args,
+                    numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
+        else:
+            count=0
+            GpuListCuda=''
+            if self.useQueueForSteps() or self.useQueue():
+                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                GpuList = GpuList.split(",")
+                for elem in GpuList:
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    count+=1
+            else:
+                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                GpuListAux = ''
+                for elem in self.getGpuList():
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListAux = GpuListAux+str(elem)+','
+                    count+=1
+                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
+            args = '-i %s -r %s -o %s --dev %s ' % (fnDirectional, fnGalleryMd, fnAngles, GpuListCuda)
+            self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+
         self.runJob("xmipp_metadata_utilities",
                     "-i %s --operate drop_column ref" % fnAngles, numberOfMpi=1)
         self.runJob("xmipp_metadata_utilities",
@@ -483,13 +541,38 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         if self.fr_approx.get():
             args += " --fast"
         if self.useGpu.get():
-            args += ' --thr %d' % self.fr_gpu_threads.get()
-            args += ' --device %(GPU)s'
-            self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=self.fr_gpu_mpi.get())
+            #AJ to make it work with and without queue system
+            if self.numberOfMpi.get()>1:
+                N_GPUs = len((self.gpuList.get()).split(','))
+                args += ' -gpusPerNode %d' % N_GPUs
+                args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+            count=0
+            GpuListCuda=''
+            if self.useQueueForSteps() or self.useQueue():
+                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                GpuList = GpuList.split(",")
+                for elem in GpuList:
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    count+=1
+            else:
+                GpuListAux = ''
+                for elem in self.getGpuList():
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListAux = GpuListAux+str(elem)+','
+                    count+=1
+                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+            if self.numberOfMpi.get()==1:
+                args += ' --device %s' % GpuListCuda
+                args += ' --thr %d' % self.fr_gpu_threads.get()
+            if self.numberOfMpi.get()>1:
+                self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+            else:
+                self.runJob('xmipp_cuda_reconstruct_fourier', args)
         else:
             self.runJob('xmipp_reconstruct_fourier_accel', args)
 
     def splitVolumeStep(self):
+        # TODO: This should be in a dedicated job: self.runJob(myScript.py, args)
         mdDirectional = md.MetaData(self._getDirectionalClassesFn())
         ref2vals = mdDirectional.getColumnValues(emlib.MDL_REF2)
         ref2Max = max(ref2vals)
@@ -504,7 +587,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         # print(self.numberOfThreads.get())
 
         fails = 0
-        for i in range(self.Nrec):
+        for i in range(self.Nrec.get()):
             fnRoot = self._getExtraPath("split%06d"%i)
             args = "-i %s --oroot %s --Niter %d --sym %s --mpiCommand '%s'" % \
                    (self._getDirectionalClassesFn(), fnRoot,
@@ -585,15 +668,15 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
         # if not self._useSeveralClasses():
         #     newTs = inputParticles.getSamplingRate()
         # else:
-        #     newTs = self.readInfoField(self._getExtraPath(), "sampling",
-        #                                xmipp.MDL_SAMPLINGRATE)
+        #     newTs = readInfoField(self._getExtraPath(), "sampling",
+        #                           xmipp.MDL_SAMPLINGRATE)
 
         self.mdClasses = emlib.MetaData(self._getDirectionalClassesFn())
         self.mdImages = emlib.MetaData(self._getDirectionalImagesFn())
 
         origTs = inputParticles.getSamplingRate()
-        lastTs = self.readInfoField(self._getExtraPath(), "sampling",
-                                       emlib.MDL_SAMPLINGRATE)
+        lastTs = readInfoField(self._getExtraPath(), "sampling",
+                               emlib.MDL_SAMPLINGRATE)
 
         if origTs!=lastTs:
             newXdim=inputParticles.getXDim()

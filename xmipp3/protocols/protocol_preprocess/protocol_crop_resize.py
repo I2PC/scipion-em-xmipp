@@ -27,6 +27,7 @@
 # *
 # **************************************************************************
 
+import pyworkflow.protocol.constants as const
 from pyworkflow.protocol.params import (BooleanParam, EnumParam, FloatParam,
                                         IntParam)
 from pwem.objects import Volume
@@ -63,7 +64,10 @@ class XmippResizeHelper:
                       '_Sampling Rate_: Set the desire sampling rate to resize. \n'
                       '_Dimensions_: Set the output dimensions. Resize operation can be done in Fourier space.\n'
                       '_Factor_: Set a resize factor to resize. \n '
-                      '_Pyramid_: Use positive level value to expand and negative to reduce. \n')
+                      '_Pyramid_: Use positive level value to expand and negative to reduce. \n'
+                      'Pyramid uses spline pyramids for the interpolation. All the rest uses normally interpolation\n'
+                      '(cubic B-spline or bilinear interpolation). If you set the method to dimensions, you may choose\n'
+                      'between interpolation and Fourier cropping.')
         form.addParam('resizeSamplingRate', FloatParam, default=1.0,
                       condition='doResize and resizeOption==%d' % cls.RESIZE_SAMPLINGRATE,
                       label='Resize sampling rate (Å/px)',
@@ -84,6 +88,12 @@ class XmippResizeHelper:
                       condition='doResize and resizeOption==%d' % cls.RESIZE_PYRAMID,
                       label='Pyramid level',
                       help='Use positive value to expand and negative to reduce.')
+        form.addParam('hugeFile', BooleanParam, default=False, expertLevel=const.LEVEL_ADVANCED,
+                      label='Huge file',
+                      help='If the file is huge, very likely you may have problems doing the antialiasing filter '
+                           '(because there is no memory for the input and its Fourier tranform). This option '
+                           'removes the antialiasing filter (meaning you will get aliased results), and performs '
+                           'a bilinear interpolation (to avoid having to produce the B-spline coefficients).')
         # Window operation
         form.addParam('doWindow', BooleanParam, default=False,
                       label='Apply a window operation?',
@@ -117,7 +127,7 @@ class XmippResizeHelper:
         
         if protocol.doResize:
             args = protocol._resizeArgs()
-            if protocol.samplingRate>protocol.samplingRateOld:
+            if protocol.samplingRate>protocol.samplingRateOld and not protocol.hugeFile:
                 protocol._insertFunctionStep("filterStep", isFirstStep, protocol._filterArgs())
                 isFirstStep = False
             protocol._insertFunctionStep("resizeStep", isFirstStep, args)
@@ -174,7 +184,7 @@ class XmippResizeHelper:
             factor = float(size) / float(dim)
             newSamplingRate = samplingRate / factor
             
-            if protocol.doFourier:
+            if protocol.doFourier and not protocol.hugeFile:
                 args = " --fourier %(size)d"
             else:
                 args = " --dim %(size)d"
@@ -187,6 +197,8 @@ class XmippResizeHelper:
             factor = 2**level
             newSamplingRate = samplingRate / factor
             args = " --pyramid %(level)d"
+        if protocol.hugeFile:
+            args+=" --interp linear"
             
         protocol.samplingRate = newSamplingRate
         protocol.samplingRateOld = samplingRate

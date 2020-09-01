@@ -23,33 +23,35 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-from pwem.objects import SetOfNormalModes
+
 from pwem.viewers import showj, DataViewer, EmPlotter, CtfView, ObjectView
 from pyworkflow.utils import removeBaseExt
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
 from pwem.protocols import *
 
 from pwem.viewers.showj import *
-from pwem.viewers.viewer_monitors import MovieGainMonitorPlotter
-
 from pwem import emlib
+
 from xmipp3.convert import *
-from xmipp3.protocols.protocol_compare_reprojections import XmippProtCompareReprojections
-from xmipp3.protocols.protocol_compare_angles import XmippProtCompareAngles
-from xmipp3.protocols.protocol_extract_particles import XmippProtExtractParticles
-from xmipp3.protocols.protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
-from xmipp3.protocols.protocol_kerdensom import XmippProtKerdensom
-from xmipp3.protocols.protocol_particle_pick_automatic import XmippParticlePickingAutomatic
-from xmipp3.protocols.protocol_particle_pick_pairs import XmippProtParticlePickingPairs
-from xmipp3.protocols.protocol_rotational_spectra import XmippProtRotSpectra
-from xmipp3.protocols.protocol_screen_particles import XmippProtScreenParticles
-from xmipp3.protocols.protocol_ctf_micrographs import XmippProtCTFMicrographs
-from xmipp3.protocols.protocol_validate_nontilt import XmippProtValidateNonTilt
-from xmipp3.protocols.protocol_multireference_alignability import XmippProtMultiRefAlignability
-from xmipp3.protocols.protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
-from xmipp3.protocols.protocol_movie_gain import XmippProtMovieGain
-from xmipp3.protocols.protocol_deep_denoising import XmippProtDeepDenoising
-from xmipp3.protocols.protocol_particle_boxsize import XmippProtParticleBoxsize
+from xmipp3.protocols import XmippProtCompareReprojections
+from xmipp3.protocols import XmippProtCompareAngles
+from xmipp3.protocols import XmippProtConsensusLocalCTF
+from xmipp3.protocols import XmippProtExtractParticles
+from xmipp3.protocols import XmippProtExtractParticlesPairs
+from xmipp3.protocols import XmippProtKerdensom
+from xmipp3.protocols import XmippParticlePickingAutomatic
+from xmipp3.protocols import XmippProtParticlePickingPairs
+from xmipp3.protocols import XmippProtRotSpectra
+from xmipp3.protocols import XmippProtScreenParticles
+from xmipp3.protocols import XmippProtCTFMicrographs
+from xmipp3.protocols import XmippProtValidateNonTilt
+from xmipp3.protocols import XmippProtMultiRefAlignability
+from xmipp3.protocols import XmippProtAssignmentTiltPair
+from xmipp3.protocols import XmippProtMovieGain
+from xmipp3.protocols import XmippProtDeepDenoising
+from xmipp3.protocols import XmippProtParticleBoxsize
+from .plotter import XmippPlotter
+
 
 class XmippViewer(DataViewer):
     """ Wrapper to visualize different type of objects
@@ -59,6 +61,7 @@ class XmippViewer(DataViewer):
     _targets = [
                 XmippProtCompareReprojections,
                 XmippProtCompareAngles,
+                XmippProtConsensusLocalCTF,
                 XmippParticlePickingAutomatic,
                 XmippProtExtractParticles,
                 XmippProtExtractParticlesPairs,
@@ -74,6 +77,7 @@ class XmippViewer(DataViewer):
                 XmippProtDeepDenoising,
                 XmippProtParticleBoxsize
                 ]
+
     def __createTemporaryCtfs(self, obj, setOfMics):
         pwutils.cleanPath(obj._getPath("ctfs_temporary.sqlite"))
         self.protocol._createFilenameTemplates()
@@ -98,16 +102,8 @@ class XmippViewer(DataViewer):
 
     def _visualize(self, obj, **kwargs):
         cls = type(obj)
-        if issubclass(cls, SetOfNormalModes):
-            fn = obj.getFileName()
-            from .viewer_nma import OBJCMD_NMA_PLOTDIST, OBJCMD_NMA_VMD
-            objCommands = "'%s' '%s'" % (OBJCMD_NMA_PLOTDIST, OBJCMD_NMA_VMD)
-            self._views.append(ObjectView(self._project, self.protocol.strId(),
-                                          fn, obj.strId(),
-                                          viewParams={OBJCMDS: objCommands},
-                                          **kwargs))
 
-        elif issubclass(cls, XmippProtCTFMicrographs):
+        if issubclass(cls, XmippProtCTFMicrographs):
             if obj.hasAttribute('outputCTF'):
                 ctfSet = obj.outputCTF
             else:
@@ -118,7 +114,16 @@ class XmippViewer(DataViewer):
                 self._views.append(self.infoMessage("No CTF estimation has finished yet"))
             else:
                 self.getCTFViews(ctfSet)
-                                           
+
+        # elif issubclass(cls, SetOfNormalModes):
+        #     from .viewer_nma import OBJCMD_NMA_PLOTDIST, OBJCMD_NMA_VMD
+        #     fn = obj.getFileName()
+        #     objCommands = "'%s' '%s'" % (OBJCMD_NMA_PLOTDIST, OBJCMD_NMA_VMD)
+        #     self._views.append(ObjectView(self._project, self.protocol.strId(),
+        #                                   fn, obj.strId(),
+        #                                   viewParams={OBJCMDS: objCommands},
+        #                                   **kwargs))
+
         elif (issubclass(cls, XmippProtExtractParticles) or
               issubclass(cls, XmippProtScreenParticles)):
             particles = obj.outputParticles
@@ -129,14 +134,12 @@ class XmippViewer(DataViewer):
                 md = emlib.MetaData(fn)
                 # If Zscore on output images plot Zscore particle sorting
                 if md.containsLabel(emlib.MDL_ZSCORE):
-                    from plotter import XmippPlotter
                     xplotter = XmippPlotter(windowTitle="Zscore particles sorting")
                     xplotter.createSubPlot("Particle sorting", "Particle number", "Zscore")
                     xplotter.plotMd(md, False, mdLabelY=emlib.MDL_ZSCORE)
                     self._views.append(xplotter)
                 # If VARscore on output images plot VARscore particle sorting
                 if md.containsLabel(emlib.MDL_SCORE_BY_VAR):
-                    from plotter import XmippPlotter
                     xplotter = XmippPlotter(windowTitle="Variance particles sorting")
                     xplotter.createSubPlot("Variance Histogram", "Variance", "Number of particles")
                     xplotter.plotMd(md, False, mdLabelY=emlib.MDL_SCORE_BY_VAR, nbins=100)
@@ -145,53 +148,68 @@ class XmippViewer(DataViewer):
 
         elif issubclass(cls, XmippProtDeepDenoising):
             fn = obj.outputParticles.getFileName()
-            self._views.append(ObjectView(self._project, obj.outputParticles.strId(),
-                                          fn,
-                                          viewParams={VISIBLE:  'enabled id _filename '
-                                                  '_xmipp_corrDenoisedProjection '
-                                                  '_xmipp_corrDenoisedNoisy '
-                                                  '_xmipp_imageOriginal _xmipp_imageRef',
-                                          SORT_BY: 'id',
-                                          MODE: MODE_MD}))
+            self._views.append(ObjectView(self._project, obj.outputParticles.strId(), fn,
+                                          viewParams={VISIBLE: 'enabled id _filename '
+                                                               '_xmipp_corrDenoisedProjection '
+                                                               '_xmipp_corrDenoisedNoisy '
+                                                               '_xmipp_imageOriginal _xmipp_imageRef',
+                                                      RENDER: '_filename _xmipp_imageOriginal '
+                                                              '_xmipp_imageRef',
+                                                      SORT_BY: 'id',
+                                                      MODE: MODE_MD}))
 
-
+            md = emlib.MetaData(obj._getExtraPath('particlesDenoised.xmd'))
+            if (md.containsLabel(emlib.MDL_CORR_DENOISED_PROJECTION) and
+                md.containsLabel(emlib.MDL_CORR_DENOISED_NOISY)):
+                xplotter = XmippPlotter(windowTitle="denoised vs proj & denoised vs original")
+                xplotter.createSubPlot("Correlations", "corr_denoised_projection", "corr_denoised_original")
+                xplotter.plotScatterMd(md, mdLabelX=emlib.MDL_CORR_DENOISED_PROJECTION,
+                                mdLabelY=emlib.MDL_CORR_DENOISED_NOISY )
+                self._views.append(xplotter)
 
         elif issubclass(cls, XmippProtMovieGain):
-            self._visualize(obj.outputMovies)
-            movieGainMonitor = MonitorMovieGain(obj,
-                                                workingDir=obj.workingDir.get(),
-                                                samplingInterval=60,
-                                                monitorTime=300,
-                                                stddevValue=0.04,
-                                                ratio1Value=1.15,
-                                                ratio2Value=4.5)
-            self._views.append(MovieGainMonitorPlotter(movieGainMonitor))
+            if obj.hasAttribute('outputGains'):
+                self._visualize(obj.outputGains)
+            # movieGainMonitor = MonitorMovieGain(obj,
+            #                                     workingDir=obj.workingDir.get(),
+            #                                     samplingInterval=60,
+            #                                     monitorTime=300,
+            #                                     stddevValue=0.04,
+            #                                     ratio1Value=1.15,
+            #                                     ratio2Value=4.5)
+            # self._views.append(MovieGainMonitorPlotter(movieGainMonitor))
 
         elif issubclass(cls, XmippProtRotSpectra):
             self._visualize(obj.outputClasses,
                             viewParams={'columns': obj.SomXdim.get(),
                                         RENDER: ' spectraPlot._filename average._filename',
                                         ZOOM: 30,
-                                        VISIBLE:  'enabled id _size average._filename spectraPlot._filename',
+                                        VISIBLE: 'enabled id _size average._filename '
+                                                 'spectraPlot._filename',
                                         'labels': 'id _size',
                                         SORT_BY: 'id'})
 
         elif issubclass(cls, XmippProtKerdensom):
-            self._visualize(obj.outputClasses,
-                            viewParams={'columns': obj.SomXdim.get(),
-                                       'render': 'average._filename _representative._filename',
-                                       'labels': '_size',
-                                       'sortby': 'id'})
+            self._visualize(obj.outputClasses, viewParams={'columns': obj.SomXdim.get(),
+                                                           'render': 'average._filename '
+                                                                     '_representative._filename',
+                                                           'labels': '_size',
+                                                           'sortby': 'id'})
 
         elif issubclass(cls, XmippProtCompareReprojections):
                 fn = obj.outputParticles.getFileName()
-                labels = 'id enabled _index _xmipp_image._filename _xmipp_imageRef._filename _xmipp_imageResidual._filename _xmipp_imageCovariance._filename _xmipp_cost _xmipp_zScoreResCov _xmipp_zScoreResMean _xmipp_zScoreResVar _xmipp_continuousA _xmipp_continuousB _xmipp_continuousX _xmipp_continuousY'
-                labelRender = "_xmipp_image._filename _xmipp_imageRef._filename _xmipp_imageResidual._filename _xmipp_imageCovariance._filename"
+                labels = ('id enabled _index _xmipp_image._filename _xmipp_imageRef._filename '
+                          '_xmipp_imageResidual._filename _xmipp_imageCovariance._filename '
+                          '_xmipp_cost _xmipp_zScoreResCov _xmipp_zScoreResMean _xmipp_zScoreResVar '
+                          '_xmipp_continuousA _xmipp_continuousB _xmipp_continuousX _xmipp_continuousY')
+                labelRender = ("_xmipp_image._filename _xmipp_imageRef._filename "
+                              "_xmipp_imageResidual._filename _xmipp_imageCovariance._filename")
                 self._views.append(ObjectView(self._project, obj.outputParticles.strId(), fn,
                                               viewParams={ORDER: labels,
-                                                      VISIBLE: labels,
-                                                      SORT_BY: '_xmipp_cost asc', RENDER:labelRender,
-                                                      MODE: MODE_MD}))
+                                                          VISIBLE: labels,
+                                                          SORT_BY: '_xmipp_cost asc',
+                                                          RENDER: labelRender,
+                                                          MODE: MODE_MD}))
 
         elif issubclass(cls, XmippProtCompareAngles):
                 fn = obj.outputParticles.getFileName()
@@ -199,9 +217,22 @@ class XmippViewer(DataViewer):
                 labelRender = "_filename"
                 self._views.append(ObjectView(self._project, obj.outputParticles.strId(), fn,
                                               viewParams={ORDER: labels,
-                                                      VISIBLE: labels,
-                                                      SORT_BY: '_xmipp_angleDiff asc', RENDER:labelRender,
-                                                      MODE: MODE_MD}))
+                                                          VISIBLE: labels,
+                                                          SORT_BY: '_xmipp_angleDiff asc',
+                                                          RENDER: labelRender,
+                                                          MODE: MODE_MD}))
+
+        elif issubclass(cls, XmippProtConsensusLocalCTF):
+                fn = obj.outputParticles.getFileName()
+                labels = ('id enabled _index _filename _ctfModel._xmipp_ctfDefocusA '
+                          '_ctfModel._xmipp_ctfDefocusResidual')
+                labelRender = "_filename"
+                self._views.append(ObjectView(self._project, obj.outputParticles.strId(), fn,
+                                              viewParams={ORDER: labels,
+                                                          VISIBLE: labels,
+                                                          SORT_BY: '_ctfModel._xmipp_ctfDefocusResidual',
+                                                          RENDER: labelRender,
+                                                          MODE: MODE_MD}))
 
         elif issubclass(cls, XmippParticlePickingAutomatic):
             micSet = obj.getInputMicrographs()
@@ -216,7 +247,8 @@ class XmippViewer(DataViewer):
 
             posDir = obj._getExtraPath()
             memory = showj.getJvmMaxMemory()
-            launchSupervisedPickerGUI(micsfn, posDir, obj, mode='review', memory=memory, inTmpFolder=inTmpFolder)
+            launchSupervisedPickerGUI(micsfn, posDir, obj, mode='review',
+                                      memory=memory, inTmpFolder=inTmpFolder)
 
         elif issubclass(cls, XmippProtParticleBoxsize):
             """ Launching a Coordinates viewer with only one coord in the center
@@ -252,32 +284,44 @@ class XmippViewer(DataViewer):
         elif issubclass(cls, XmippProtValidateNonTilt):
             outputVols = obj.outputVolumes
             labels = 'id enabled comment _filename weight'
-            self._views.append(ObjectView(self._project, outputVols.strId(), outputVols.getFileName(),
-                                          viewParams={MODE: MODE_MD, VISIBLE:labels, ORDER: labels,
-                                                      SORT_BY: 'weight desc', RENDER: '_filename'}))
+            self._views.append(ObjectView(self._project, outputVols.strId(),
+                                          outputVols.getFileName(),
+                                          viewParams={MODE: MODE_MD,
+                                                      VISIBLE: labels,
+                                                      ORDER: labels,
+                                                      SORT_BY: 'weight desc',
+                                                      RENDER: '_filename'}))
 
         elif issubclass(cls, XmippProtMultiRefAlignability):
             outputVols = obj.outputVolumes
-            labels = 'id enabled comment _filename weightAlignabilityPrecision weightAlignabilityAccuracy'
-            self._views.append(ObjectView(self._project, outputVols.strId(), outputVols.getFileName(),
-                                          viewParams={MODE: MODE_MD, VISIBLE:labels, ORDER: labels,
-                                                      SORT_BY: 'weightAlignabilityAccuracy desc', RENDER: '_filename'}))
+            labels = ('id enabled comment _filename weightAlignabilityPrecision '
+                      'weightAlignabilityAccuracy')
+            self._views.append(ObjectView(self._project, outputVols.strId(),
+                                          outputVols.getFileName(),
+                                          viewParams={MODE: MODE_MD,
+                                                      VISIBLE: labels,
+                                                      ORDER: labels,
+                                                      SORT_BY: 'weightAlignabilityAccuracy desc',
+                                                      RENDER: '_filename'}))
 
             fn = obj.outputParticles.getFileName()
-            labels = 'id enabled _index _filename _xmipp_scoreAlignabilityAccuracy _xmipp_scoreAlignabilityPrecision'
+            labels = ('id enabled _index _filename _xmipp_scoreAlignabilityAccuracy '
+                      '_xmipp_scoreAlignabilityPrecision')
             labelRender = "_filename"
             self._views.append(ObjectView(self._project, obj.outputParticles.strId(), fn,
-                                            viewParams={ORDER: labels,
+                                          viewParams={ORDER: labels,
                                                       VISIBLE: labels,
-                                                      SORT_BY: '_xmipp_scoreAlignabilityAccuracy desc', RENDER:labelRender,
+                                                      SORT_BY: '_xmipp_scoreAlignabilityAccuracy desc',
+                                                      RENDER: labelRender,
                                                       MODE: MODE_MD}))
 
             fn = obj._getExtraPath('vol001_pruned_particles_alignability.xmd')
             md = emlib.MetaData(fn)
-            from .plotter import XmippPlotter
             plotter = XmippPlotter()
-            plotter.createSubPlot('Soft-alignment validation plot','Angular Precision', 'Angular Accuracy')
-            plotter.plotMdFile(md, emlib.MDL_SCORE_BY_ALIGNABILITY_PRECISION, emlib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY,
+            plotter.createSubPlot('Soft-alignment validation plot',
+                                  'Angular Precision', 'Angular Accuracy')
+            plotter.plotMdFile(md, emlib.MDL_SCORE_BY_ALIGNABILITY_PRECISION,
+                               emlib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY,
                                marker='.', markersize=.55, color='red', linestyle='')
             self._views.append(plotter)
 

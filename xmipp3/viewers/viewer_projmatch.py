@@ -31,9 +31,9 @@ visualization program.
 """
 
 from pyworkflow.protocol.executor import StepExecutor
-from pyworkflow.viewer import  ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
+from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pwem.viewers import (DataView, EmPlotter, showj, ChimeraClientView,
-                          ChimeraView, ObjectView)
+                          ChimeraView, ObjectView, ChimeraAngDist)
 from pyworkflow.utils import createUniqueFileName, cleanPattern
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (LabelParam, IntParam, FloatParam,
@@ -140,7 +140,7 @@ Examples:
                           default=1, display=EnumParam.DISPLAY_COMBO,
                           label='Display volume',
                           help='Displays selected volume')
-        group.addParam('spheresScale', IntParam, default=100, 
+        group.addParam('spheresScale', IntParam, default=-1,
               expertLevel=LEVEL_ADVANCED,
               label='Spheres size',
               help='')
@@ -282,7 +282,7 @@ Examples:
             md.clear()
             md.setValue(emlib.MDL_IMAGE, volFn, md.addObject())
             blockName = volFn.split("/")[3]
-            #print "Volume: ", volFn, blockName
+            # print("Volume: %s %s" %(volFn, blockName))
             md.write("%s@%s"% (blockName, mdPath), emlib.MD_APPEND)
         return [self.createDataView(mdPath)]
 
@@ -295,7 +295,7 @@ Examples:
     def _showVolumesChimera(self, volumes):
         """ Create a chimera script to visualize selected volumes. """
         if len(volumes) > 1:
-            cmdFile = self.protocol._getTmpPath('chimera_volumes.cmd')
+            cmdFile = self.protocol._getTmpPath('chimera_volumes.cxc')
             cleanPath(cmdFile)
             f = open(cmdFile, 'w+')
             f.write('windowsize 800 600\n')
@@ -397,12 +397,12 @@ Examples:
                         convert_refno_to_stack_position[mdReferences.getValue(emlib.MDL_NEIGHBOR,id)]=id
                     file_nameAverages   = self.protocol._getFileName('outClassesXmd', iter=it, ref=ref3d)
                     if exists(file_nameAverages):
-                        #print "OutClassesXmd", OutClassesXmd
+                        # print("OutClassesXmd %s" % OutClassesXmd)
                         mdIn.read(file_nameAverages)
                         mdOut.clear()
                         for i in mdIn:
-                            #id1=mdOut.addObject()
-                            #mdOut.setValue(MDL_IMAGE,mdIn.getValue(MDL_IMAGE,i),id1)
+                            # id1=mdOut.addObject()
+                            # mdOut.setValue(MDL_IMAGE,mdIn.getValue(MDL_IMAGE,i),id1)
                             ref2D = mdIn.getValue(emlib.MDL_REF,i)
                             file_references = self.protocol._getFileName('projectLibraryStk', iter=it, ref=ref3d)
                             file_reference = emlib.FileName()
@@ -659,7 +659,14 @@ Examples:
             classesFn = self.protocol._getFileName('outClassesXmd', iter=it, ref=ref3d)
             vol = self.protocol._getFileName('reconstructedFilteredFileNamesIters', iter=it, ref=ref3d)
             if exists(classesFn):
-                return ChimeraClientView(vol, showProjection=True, angularDistFile=classesFn, spheresDistance=radius)
+                tmpFilesPath = self.protocol._getTmpPath()
+                volOrigin = self.protocol.outputVolume.getShiftsFromOrigin()
+                return ChimeraAngDist(vol, tmpFilesPath,
+                                      angularDistFile=classesFn,
+                                      spheresDistance=radius,
+                                      voxelSize=self.protocol.outputVolume.getSamplingRate(),
+                                      volOrigin=volOrigin)
+
             else:
                 print("File %s does not exist" % classesFn)
                 return None

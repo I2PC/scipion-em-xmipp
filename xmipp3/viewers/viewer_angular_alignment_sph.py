@@ -30,8 +30,6 @@ import pwem.emlib.metadata as md
 import numpy as np
 import math
 import matplotlib.pyplot as plt
-from .nma_gui import ClusteringWindow
-from xmipp3.protocols.nma.data import Point, Data
 from pyworkflow.utils.path import cleanPath
 from pwem.objects import SetOfParticles
 from xmipp3.protocols.protocol_angular_alignment_sph import XmippProtAngularAlignmentSPH
@@ -59,16 +57,16 @@ class XmippAngularAlignmentSphViewer(ProtocolViewer):
                       label="Display the coefficients histogram 1D")
         form.addParam('doShowHist2D', params.LabelParam,
                       label="Display the coefficients histogram 2D")
-        form.addParam('displayClustering', params.LabelParam,
-                      label='Open clustering tool?',
-                      help='Open a GUI to visualize the images as points'
-                           'and select some of them to create new clusters.')
+        # form.addParam('displayClustering', params.LabelParam,
+        #               label='Open clustering tool?',
+        #               help='Open a GUI to visualize the images as points'
+        #                    'and select some of them to create new clusters.')
 
     def _getVisualizeDict(self):
         self.protocol._createFilenameTemplates()
         return {'doShowHist1D': self._doShowHist1D,
-                'doShowHist2D': self._doShowHist2D,
-                'displayClustering': self._displayClustering
+                'doShowHist2D': self._doShowHist2D
+                # 'displayClustering': self._displayClustering
                 }
 
     def _doShowHist1D(self, param=None):
@@ -138,44 +136,44 @@ class XmippAngularAlignmentSphViewer(ProtocolViewer):
         plt.show()
 
 
-    def _displayClustering(self, paramName):
-        self.clusterWindow = self.tkWindow(ClusteringWindow,
-                                           title='Clustering Tool',
-                                           dim=2,
-                                           data=self.getData(),
-                                           callback=self._createCluster
-                                           )
-        return [self.clusterWindow]
+    # def _displayClustering(self, paramName):
+    #     self.clusterWindow = self.tkWindow(ClusteringWindow,
+    #                                        title='Clustering Tool',
+    #                                        dim=2,
+    #                                        data=self.getData(),
+    #                                        callback=self._createCluster
+    #                                        )
+    #     return [self.clusterWindow]
 
-    def _createCluster(self):
-        """ Create the cluster with the selected particles
-        from the cluster. This method will be called when
-        the button 'Create Cluster' is pressed.
-        """
-        # Write the particles
-        prot = self.protocol
-        project = prot.getProject()
-        inputSet = prot.getInputParticles()
-        fnSqlite = prot._getTmpPath('cluster_particles.sqlite')
-        cleanPath(fnSqlite)
-        partSet = SetOfParticles(filename=fnSqlite)
-        partSet.copyInfo(inputSet)
-        for point in self.getData():
-            if point.getState() == Point.SELECTED:
-                particle = inputSet[point.getId()]
-                partSet.append(particle)
-        partSet.write()
-        partSet.close()
-
-        from xmipp3.protocols.nma.protocol_batch_cluster import BatchProtNMACluster
-        newProt = project.newProtocol(BatchProtNMACluster)
-        clusterName = self.clusterWindow.getClusterName()
-        if clusterName:
-            newProt.setObjLabel(clusterName)
-        newProt.inputNmaDimred.set(prot)
-        newProt.sqliteFile.set(fnSqlite)
-
-        project.launchProtocol(newProt)
+    # def _createCluster(self):
+    #     """ Create the cluster with the selected particles
+    #     from the cluster. This method will be called when
+    #     the button 'Create Cluster' is pressed.
+    #     """
+    #     # Write the particles
+    #     prot = self.protocol
+    #     project = prot.getProject()
+    #     inputSet = prot.getInputParticles()
+    #     fnSqlite = prot._getTmpPath('cluster_particles.sqlite')
+    #     cleanPath(fnSqlite)
+    #     partSet = SetOfParticles(filename=fnSqlite)
+    #     partSet.copyInfo(inputSet)
+    #     for point in self.getData():
+    #         if point.getState() == Point.SELECTED:
+    #             particle = inputSet[point.getId()]
+    #             partSet.append(particle)
+    #     partSet.write()
+    #     partSet.close()
+    #
+    #     from xmipp3.protocols.nma.protocol_batch_cluster import BatchProtNMACluster
+    #     newProt = project.newProtocol(BatchProtNMACluster)
+    #     clusterName = self.clusterWindow.getClusterName()
+    #     if clusterName:
+    #         newProt.setObjLabel(clusterName)
+    #     newProt.inputNmaDimred.set(prot)
+    #     newProt.sqliteFile.set(fnSqlite)
+    #
+    #     project.launchProtocol(newProt)
 
     def loadData1D(self):
         fnOut = self.protocol._getFileName('fnOut')
@@ -203,16 +201,16 @@ class XmippAngularAlignmentSphViewer(ProtocolViewer):
             i+=1
         return tsne2D
 
-    def loadData(self):
-        """ Iterate over the images and the output matrix txt file
-        and create a Data object with theirs Points.
-        """
-        matrix = self.loadData2D()
-        particles = self.protocol.getInputParticles()
-        data = Data()
-        for i, particle in enumerate(particles):
-            data.addPoint(Point(pointId=particle.getObjId(),
-                                data=matrix[i, :],
-                                weight=1))
-        return data
+    # def loadData(self):
+    #     """ Iterate over the images and the output matrix txt file
+    #     and create a Data object with theirs Points.
+    #     """
+    #     matrix = self.loadData2D()
+    #     particles = self.protocol.getInputParticles()
+    #     data = Data()
+    #     for i, particle in enumerate(particles):
+    #         data.addPoint(Point(pointId=particle.getObjId(),
+    #                             data=matrix[i, :],
+    #                             weight=1))
+    #     return data
 

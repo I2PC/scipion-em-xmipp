@@ -36,7 +36,6 @@ from pwem.emlib.image import ImageHandler
 from pyworkflow.utils import getExt
 from pwem.objects import Volume
 import xmipp3
-from xmipp3.utils import validateDLtoolkit
 
 def updateEnviron(gpuNum):
     """ Create the needed environment for TensorFlow programs. """
@@ -58,12 +57,13 @@ METADATA_MASK_FILE = 'metadataresolutions'
 FN_METADATA_HISTOGRAM = 'mdhist'
 
 
-class XmippProtDeepRes(ProtAnalysis3D):
+class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
     """    
     Given a map the protocol assigns local resolutions to each voxel of the map.
     """
     _label = 'local deepRes'
     _lastUpdateVersion = VERSION_2_0
+    _conda_env = 'xmipp_DLTK_v0.3'
     
     #RESOLUTION RANGE
     LOW_RESOL = 0
@@ -219,18 +219,19 @@ class XmippProtDeepRes(ProtAnalysis3D):
 
         if self.range == self.LOW_RESOL:
 #             sampling_new = 1.0
-            MODEL_DEEP_1=xmipp3.Plugin.getModel("deepRes", "model_w13.h5")
+            MODEL_DEEP_1=self.getModel("deepRes", "model_w13.h5")
             params  = ' -dl %s' % MODEL_DEEP_1
         else:
 #             sampling_new = 0.5
-            MODEL_DEEP_2=xmipp3.Plugin.getModel("deepRes", "model_w7.h5")
+            MODEL_DEEP_2=self.getModel("deepRes", "model_w7.h5")
             params  = ' -dl %s' % MODEL_DEEP_2               
         params += ' -i  %s' % self._getFileName(RESIZE_VOL)
         params += ' -m  %s' % self._getFileName(RESIZE_MASK)
         params += ' -s  %f' % self.inputVolume.get().getSamplingRate()            
         params += ' -o  %s' % self._getFileName(OUTPUT_RESOLUTION_FILE)
 
-        self.runJob("xmipp_deepRes_resolution", params)
+        self.runJob("xmipp_deepRes_resolution", params, numberOfMpi=1,
+                    env=self.getCondaEnv())
         
 
     def createHistrogram(self):
@@ -333,7 +334,7 @@ class XmippProtDeepRes(ProtAnalysis3D):
         and there are not errors. If some errors are found, a list with
         the error messages will be returned.
         """
-        error=validateDLtoolkit(model="deepRes")
+        error=self.validateDLtoolkit(model="deepRes")
         return error
     
     def _citations(self):

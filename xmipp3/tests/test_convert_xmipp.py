@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # **************************************************************************
 # *
 # * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
@@ -28,11 +28,12 @@
 
 import subprocess
 
-from pwem.objects import SetOfMicrographs
 from pyworkflow.tests import *
 from pyworkflow.utils.properties import colorText
 
+from pwem.objects import SetOfMicrographs
 from pwem import emlib
+from pwem.emlib import metadata
 
 import xmipp3
 from xmipp3.base import *
@@ -58,7 +59,7 @@ class TestBasic(BaseTest):
         return ctf
     
     def test_rowToCtfModel(self):
-        row = XmippMdRow()
+        row = metadata.Row()
         row.setValue(emlib.MDL_CTF_DEFOCUSU, 2520.)
         row.setValue(emlib.MDL_CTF_DEFOCUSV, 2510.)
         row.setValue(emlib.MDL_CTF_DEFOCUS_ANGLE, 45.)
@@ -77,7 +78,7 @@ class TestBasic(BaseTest):
         self.assertIsNone(ctf)
         
     def test_rowToImage(self):
-        row = XmippMdRow()
+        row = metadata.Row()
         index = 1
         filename = 'images.stk'
         row.setValue(emlib.MDL_ITEM_ID, 1)
@@ -227,13 +228,13 @@ class TestAlignment(TestConvertBase):
             matrix = np.array(matrix)
             a = Transform(matrix)
             
-            row = XmippMdRow()
+            row = metadata.Row()
             alignmentToRow(a, row, alignType=ALIGN_2D)
 
-            row2 = XmippMdRow()
+            row2 = metadata.Row()
             alignmentToRow(a, row2, alignType=ALIGN_3D)
 
-            row3 = XmippMdRow()
+            row3 = metadata.Row()
             alignmentToRow(a, row3, alignType=ALIGN_PROJ)
 
             return row, row2, row3
@@ -625,12 +626,12 @@ class TestReconstruct(TestConvertBase):
                 ]
 
         aList = [np.array(m) for m in mList]
-        rowa = XmippMdRow()
-        rowap = XmippMdRow()
-        rowb = XmippMdRow()
-        rowb1 = XmippMdRow()
-        rowb2 = XmippMdRow()
-        rowb3 = XmippMdRow()
+        rowa = metadata.Row()
+        rowap = metadata.Row()
+        rowb = metadata.Row()
+        rowb1 = metadata.Row()
+        rowb2 = metadata.Row()
+        rowb3 = metadata.Row()
         labelList=[emlib.MDL_ANGLE_ROT,
                    emlib.MDL_ANGLE_TILT,
                    emlib.MDL_ANGLE_PSI,
@@ -819,15 +820,15 @@ class TestSetConvert(BaseTest):
             self.assertTrue(img.hasCTF())
             
         mdIn = emlib.MetaData(fn)
-        #print mdIn
+        # print(mdIn)
         
         mdOut = emlib.MetaData()
         setOfParticlesToMd(partSet, mdOut)
-        #print mdOut
+        # print(mdOut)
         
         # Labels order is not the same
         # TODO: Implement a better way to compare two metadatas
-        #self.assertEqual(mdIn, mdOut)
+        # self.assertEqual(mdIn, mdOut)
         
     def test_micrographsToMd(self):
         """ Test the conversion of a SetOfMicrographs to Xmipp metadata. """
@@ -889,7 +890,7 @@ class TestSetConvert(BaseTest):
             self.assertTrue(particle.hasTransform())
             t = particle.getTransform()
             self.assertIsNotNone(t)
-            #print t
+            # print(t)
         
         # Read particles from the same metadata, but now
         # ignoring the alignment information explicitly
@@ -920,9 +921,9 @@ class TestSetConvert(BaseTest):
         # test that the metadata contains some geometry labels
         self.assertTrue(md.containsLabel(emlib.MDL_SHIFT_X))
         fn = self.getOutputPath("aligned_particles.xmd")
-        #print "Aligned particles written to: ", fn
-        #md.write(fn)
-        #self.assertEqual(mdScipion, mdXmipp, "metadata are not the same")
+        # print("Aligned particles written to: %s" % fn)
+        # md.write(fn)
+        # self.assertEqual(mdScipion, mdXmipp, "metadata are not the same")
         
     def test_particlesToMd(self):
         """ Test the conversion of a SetOfParticles to Xmipp metadata. """
@@ -1018,7 +1019,7 @@ class TestSetConvert(BaseTest):
         #reference metadata
         md = emlib.MetaData()
         objId = md.addObject()
-        defocusGroupRow = XmippMdRow()
+        defocusGroupRow = metadata.Row()
 
         defocusGroupRow.setValue(emlib.MDL_ENABLED, 1)
         defocusGroupRow.setValue(emlib.MDL_CTF_GROUP, 1)

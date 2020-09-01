@@ -464,12 +464,12 @@ class TestEstimateGain(BaseTest):
 
         frameImg = ih.createImage()
         xdim, ydim, zdim, ndim = ih.getDimensions(inputFn)
-        n = max(zdim, ndim) / 2 # also half of the frames
+        n = int(max(zdim, ndim) / 2)  # also half of the frames
         print("Scaling movie: %s -> %s" % (inputFn, outputFn))
         pwutils.cleanPath(outputFn)
         for i in range(1, n+1):
             frameImg.read((i, inputFn))
-            frameImg.scale(xdim/2, ydim/2)
+            frameImg.scale(int(xdim/2), int(ydim/2))
             frameImg.write((i, outputFn))
 
         args = cls.getArgs(outputFn)
@@ -489,7 +489,10 @@ class TestEstimateGain(BaseTest):
 
     def test_estimate(self):
         protGain = self.newProtocol(XmippProtMovieGain,
-                                    objLabel='estimate gain')
+                                    objLabel='estimate gain',
+                                    useExistingGainImage=False,
+                                    estimateOrientation=False,
+                                    normalizeGain=False)
         protGain.inputMovies.set(self.protImport.outputMovies)
         protGain.useExistingGainImage.set(False)
         self.launchProtocol(protGain)

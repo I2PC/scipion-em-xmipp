@@ -43,7 +43,7 @@ DEBUG = True
 class XmippProtExtractUnit(EMProtocol):
     """ generates files for volumes and FSCs to submit structures to EMDB
     """
-    _label = 'extract unit cell'
+    _label = 'extract asymmetric unit'
     _program = ""
     _version = VERSION_3_0
 
@@ -119,9 +119,9 @@ class XmippProtExtractUnit(EMProtocol):
             sym = "%s" % XMIPP_SYM_NAME[XMIPP_TETRAHEDRAL]
         elif sym == XMIPP_OCTAHEDRAL:
             sym = "%s" % XMIPP_SYM_NAME[XMIPP_OCTAHEDRAL]
-        elif sym >= XMIPP_I222 and sym <= XMIPP_In25r:
+        elif sym >= XMIPP_I222 and sym <= XMIPP_In25r :
             sym = XMIPP_SYM_NAME[sym]
-
+        
         inFileName = self.inputVolumes.get().getFileName()
         if inFileName.endswith('.mrc'):
             inFileName = inFileName + ":mrc"

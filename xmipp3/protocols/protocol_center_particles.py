@@ -35,7 +35,7 @@ import pyworkflow.protocol.params as params
 
 from pwem.emlib import MD_APPEND
 from xmipp3.convert import (rowToAlignment, alignmentToRow,
-                            rowToParticle, writeSetOfClasses2D)
+                            rowToParticle, writeSetOfClasses2D, xmippToLocation)
 
 
 class XmippProtCenterParticles(ProtClassify2D):
@@ -180,7 +180,8 @@ class XmippProtCenterParticles(ProtClassify2D):
 
         for row in md.iterRows(myRep):
             fn = row.getValue(md.MDL_IMAGE)
-            rep = Particle(fn)
+            rep = Particle()
+            rep.setLocation(xmippToLocation(fn))
             repId = row.getObjId()
             newClass = Class2D(objId=repId)
             newClass.setAlignment2D()
@@ -261,6 +262,6 @@ class XmippProtCenterParticles(ProtClassify2D):
     def _summary(self):
         summary = []
         summary.append("Realignment of %s classes."
-                       % self.inputParticles.get().getSize())
+                       % self.inputClasses.get().getSize())
         return summary
 

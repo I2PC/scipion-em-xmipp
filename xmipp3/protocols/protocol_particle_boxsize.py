@@ -24,28 +24,29 @@
 # *
 # **************************************************************************
 
+import random
+
 from pyworkflow import VERSION_2_0
 from pyworkflow.object import Integer
-from pyworkflow.protocol.params import PointerParam
+from pyworkflow.protocol.params import PointerParam, IntParam, LEVEL_ADVANCED
 
 from pwem.protocols import ProtMicrographs
 
-
 from xmipp3.convert import writeSetOfMicrographs
 import xmipp3
-from xmipp3.utils import validateDLtoolkit
 
 
-class XmippProtParticleBoxsize(ProtMicrographs):
+class XmippProtParticleBoxsize(ProtMicrographs, xmipp3.XmippProtocol):
     """ Given a set of micrographs, the protocol estimate the particle box size.
     """
     _label = 'particle boxsize'
     _lastUpdateVersion = VERSION_2_0
-    
+    _conda_env = 'xmipp_DLTK_v0.3'
+
     def __init__(self, **args):
         ProtMicrographs.__init__(self, **args)
         self.particleBoxsize = None
-    
+
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
@@ -53,6 +54,15 @@ class XmippProtParticleBoxsize(ProtMicrographs):
                       label="Input Micrographs", pointerClass='SetOfMicrographs',
                       help='Select a set of micrographs for determining the '
                            'particle boxsize.')
+
+        form.addParam('nMicsToAnalize', IntParam,
+                      label="Number of mics to use for estimation",
+                      default=10, expertLevel=LEVEL_ADVANCED,
+                      help='The boxsize estimation is the median of the boxsize '
+                           'estimations on different micrographs.'
+                           'This number selects a random subset of input '
+                           'micrographs to perform analysis. Use -1 to '
+                           'consider all micrographs')
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
@@ -67,23 +77,26 @@ class XmippProtParticleBoxsize(ProtMicrographs):
 
     def boxsizeStep(self):
         particleBoxSizeFn = self._getExtraPath('particle_boxsize.xmd')
-        imgSize = 300  # This should match the img_size used for training weights? Add as metada?
-        weights = xmipp3.Plugin.getModel('boxsize', 'weights.hdf5')
-        featureScaler = xmipp3.Plugin.getModel('boxsize', 'feature_scaler.pkl')
+        imgSize = 400  # This should match the img_size used for training weights? Add as metada?
+        weights = self.getModel('boxsize', 'weights.hdf5')
 
-        params  = ' --img_size %d' % imgSize
+        params = ' --img_size %d' % imgSize
         params += ' --weights %s' % weights
-        params += ' --feature_scaler %s' % featureScaler
         params += ' --output %s' % particleBoxSizeFn
 
-        fileNames = [mic.getFileName() + '\n' for mic in self.inputMicrographs.get()]
+        fileNames = [mic.getFileName().encode() + b'\n' for mic in self.inputMicrographs.get()]
+
+        nMicsToAnalize = self.nMicsToAnalize.get()
+        if nMicsToAnalize != -1:
+            random.shuffle(fileNames)
+            fileNames= fileNames[:min(len(fileNames), nMicsToAnalize)]
         # TODO: output name is hardcoded
         micNamesPath = self._getTmpPath('mic_names.csv')
         with open(micNamesPath, 'wb') as csvFile:
             csvFile.writelines(fileNames)
         params += ' --micrographs %s' % micNamesPath
-        self.runJob('xmipp_particle_boxsize', params)
-        
+        self.runJob('xmipp_particle_boxsize', params, env=self.getCondaEnv())
+
         with open(particleBoxSizeFn, 'r') as fp:
             self.particleBoxsize = int(fp.read().rstrip('\n'))
 
@@ -104,7 +117,7 @@ class XmippProtParticleBoxsize(ProtMicrographs):
         if hasattr(self, 'boxsize'):
             messages.append('Estimated box size: %s pixels' % self.boxsize)
         return messages
-    
+
     def _summary(self):
         messages = []
         if hasattr(self, 'boxsize'):
@@ -117,5 +130,4 @@ class XmippProtParticleBoxsize(ProtMicrographs):
         return ['']
 
     def _validate(self):
-        return validateDLtoolkit(model=[('boxsize', 'weights.hdf5'),
-                                        ('boxsize', 'feature_scaler.pkl')])
+        return self.validateDLtoolkit(model=('boxsize', 'weights.hdf5'))

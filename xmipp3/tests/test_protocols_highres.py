@@ -101,5 +101,4 @@ class TestHighres(BaseTest):
         else:
             md = emlib.MetaData("resolution@" + fnResolution)
             R = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, md.firstObject())
-            # FIXME: Review HighRes! Before pluginization under 8A is achieved
-            self.assertTrue(R < 9, "Resolution is not below 9A")
+            self.assertTrue(R < 10, "Resolution is not below 10A")

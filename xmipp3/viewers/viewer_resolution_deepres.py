@@ -24,12 +24,14 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import os
 
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 import matplotlib.colors as mcolors
-from pyworkflow.utils import removeExt
+from pwem.viewers.viewer_chimera import mapVolsWithColorkey
+from pyworkflow.gui import plotter
 
 from pwem.viewers import (LocalResolutionViewer, EmPlotter, ChimeraView,
                           DataView)
@@ -197,12 +199,19 @@ class XmippResDeepResViewer(LocalResolutionViewer):
 
         return [plotter]
 
+    def _getStepColors(self, minRes, maxRes, numberOfColors=13):
+        inter = (maxRes - minRes) / (numberOfColors - 1)
+        rangeList = []
+        for step in range(0, numberOfColors):
+            rangeList.append(round(minRes + step * inter, 2))
+        return rangeList
+
     def _getAxis(self):
         return self.getEnumText('sliceAxis')
 
     def _showChimera(self, param=None):
-        self.createChimeraScript()
-        cmdFile = self.protocol._getPath('Chimera_resolution.cmd')
+        cmdFile = os.path.abspath(self.protocol._getTmpPath('Chimera_resolution.py'))
+        self.createChimeraScript(cmdFile)
         view = ChimeraView(cmdFile)
         return [view]
 
@@ -213,12 +222,10 @@ class XmippResDeepResViewer(LocalResolutionViewer):
             colors_labels += round(min_Res + step*inter,2),
         return colors_labels
 
-    def createChimeraScript(self):
-        fnRoot = "extra/"
-        scriptFile = self.protocol._getPath('Chimera_resolution.cmd')
-        fhCmd = open(scriptFile, 'w')
+    def createChimeraScript(self, cmdFile):
+        #  chimera python script
+
         imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
-        #imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE)
         img = ImageHandler().read(imageFile)
         imgData = img.getData()
         imgData = imgData[imgData!=0]
@@ -226,47 +233,32 @@ class XmippResDeepResViewer(LocalResolutionViewer):
         max_Res = round(np.amax(imgData)*100)/100
 
         numberOfColors = 21
-        colors_labels = self.numberOfColors(min_Res, max_Res, numberOfColors)
-        colorList = self.colorMapToColorList(colors_labels, self.getColorMap())
-        
-        fnbase = removeExt(self.protocol.inputVolume.get().getFileName())
-#         ext = getExt(self.protocol.inputVolume.get().getFileName())
-#         fninput = abspath(fnbase + ext[0:4])
-#         fhCmd.write("open %s\n" % fninput)
-        fhCmd.write("open %s\n" % (fnRoot + RESIZE_VOL))
-        
-        fhCmd.write("open %s\n" % (fnRoot + OUTPUT_RESOLUTION_FILE_CHIMERA))
-#        fhCmd.write("open %s\n" % (fnRoot + OUTPUT_RESOLUTION_FILE))        
+        voldim = (img.getDimensions())[:-1]
 
-#        smprt = self.protocol.inputVolume.get().getSamplingRate()        
+        # The sampling of this volume is always
+        # 1 A pixel.
         smprt = 1.0
-        
-        fhCmd.write("volume #0 voxelSize %s step 1\n" % (str(smprt)))
-        fhCmd.write("volume #1 voxelSize %s\n" % (str(smprt)))
-        fhCmd.write("vol #1 hide\n")
-        
-        scolorStr = '%s,%s:' * numberOfColors
-        scolorStr = scolorStr[:-1]
+        stepColors = self._getStepColors(min_Res, max_Res, numberOfColors)
+        colorList = plotter.getHexColorList(stepColors, self.getColorMap())
 
-        line = ("scolor #0 volume #1 perPixel false cmap " 
-                + scolorStr + "\n") % colorList
-        fhCmd.write(line)
+        mapVolsWithColorkey(
+            os.path.abspath(self.protocol._getExtraPath(RESIZE_VOL)),
+            os.path.abspath(
+                self.protocol._getExtraPath(OUTPUT_RESOLUTION_FILE_CHIMERA)),
+            stepColors,
+            colorList,
+            voldim,
+            volOrigin=None,
+            step = 1,
+            sampling=smprt,
+            scriptFileName=cmdFile,
+            bgColorImage='black',
+            showAxis=True)
 
-        scolorStr = '%s %s ' * numberOfColors
-        str_colors = ()
-        for idx, elem in enumerate(colorList):
-            if (idx % 2 == 0):
-                if ((idx % 8) == 0):
-                    str_colors +=  str(elem),
-                else:
-                    str_colors += '" "',
-            else:
-                str_colors += elem,
-        
-        line = ("colorkey 0.01,0.05 0.02,0.95 " + scolorStr + "\n") % str_colors
-        fhCmd.write(line)
+    @staticmethod
+    def ColorKeyReplacement():
+        pass
 
-        fhCmd.close()
 
     @staticmethod
     def colorMapToColorList(steps, colorMap):

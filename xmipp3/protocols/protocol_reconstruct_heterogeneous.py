@@ -29,6 +29,7 @@ from functools import reduce
 import math
 import numpy as np
 from os.path import join, exists
+import os
 
 from pwem import ALIGN_PROJ
 from pyworkflow import VERSION_2_0
@@ -105,7 +106,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                             expertLevel=LEVEL_ADVANCED)
         line.addParam('angularMinTilt', FloatParam, label="Min.", default=0,
                       expertLevel=LEVEL_ADVANCED)
-        line.addParam('angularMaxTilt', FloatParam, label="Max.", default=90,
+        line.addParam('angularMaxTilt', FloatParam, label="Max.", default=180,
                       expertLevel=LEVEL_ADVANCED)
         form.addParam('numberOfReplicates', IntParam,
                       label="Max. Number of Replicates", default=1,
@@ -283,7 +284,6 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                         (
                         fnReferenceVol, self.targetResolution.get(), TsCurrent),
                         numberOfMpi=1)
-            # AJ duda: se filtra dos veces??
             R = self.particleRadius.get()
             if R <= 0:
                 R = self.inputParticles.get().getDimensions()[
@@ -333,7 +333,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                         numberOfMpi=1)
         self.parseSymList()
         listVolumesToProcess = self._readVolumesToProcess()
-        print("listVolumesToProcess", listVolumesToProcess)
+        #print("listVolumesToProcess", listVolumesToProcess)
         for i in range(1, self.getNumberOfReconstructedVolumes() + 1):
             if (listVolumesToProcess[i - 1] == False):
                 continue
@@ -411,32 +411,48 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                         fnAnglesSignificant = join(fnDirCurrent,
                                                    "angles_iter001_00.xmd")
                         if not self.useGpu.get():
-                            args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d --dontApplyFisher' % \
+
+                            #TODO
+                            #AJ: consider if we can simply leave out this part of the code in case of local alignment
+                            args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d --dontApplyFisher --dontCheckMirrors ' % \
                                    (fnGroup, fnGalleryGroupMd, maxShift,
                                     fnDirCurrent,
                                     self.numberOfReplicates.get() - 1)
                             self.runJob('xmipp_reconstruct_significant', args,
                                         numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
-                        else:  # AJ use gpu
-                            args = '-i_exp %s -i_ref %s --maxShift %d -o %s --keep_best %d' % \
-                                   (fnGroup, fnGalleryGroupMd, maxShift,
-                                    fnAnglesSignificant,
-                                    self.numberOfReplicates.get())
-                            self.runJob('xmipp_cuda_correlation', args,
+                        else:  # To use gpu
+                            count=0
+                            GpuListCuda=''
+                            if self.useQueueForSteps() or self.useQueue():
+                                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                                GpuList = GpuList.split(",")
+                                for elem in GpuList:
+                                    GpuListCuda = GpuListCuda+str(count)+' '
+                                    count+=1
+                            else:
+                                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                                GpuListAux = ''
+                                for elem in self.getGpuList():
+                                    GpuListCuda = GpuListCuda+str(count)+' '
+                                    GpuListAux = GpuListAux+str(elem)+','
+                                    count+=1
+                                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
+                            args = '-i %s -r %s -o %s --keepBestN %d --dev %s ' % \
+                                   (fnGroup, fnGalleryGroupMd, fnAnglesSignificant,
+                                    self.numberOfReplicates.get(), GpuListCuda)
+                            self.runJob('xmipp_cuda_align_significant', args,
                                         numberOfMpi=1)
 
                         if (exists(fnAnglesSignificant) and getSize(
                                 fnAnglesSignificant) > 0):
-                            print("getSize(fnAnglesSignificant)",
-                                  getSize(fnAnglesSignificant))
                             moveFile(fnAnglesSignificant, fnAnglesGroup)
                             cleanPath(
                                 join(fnDirCurrent, "images_iter001_00.xmd"))
                             cleanPath(join(fnDirCurrent,
                                            "images_significant_iter001_00.xmd"))
-                        else:  # AJ que pasa cuando no se asignan imagenes a ese volumen
+                        else:
                             noAsignedGroups += 1
-                            print("noAsignedGroups", noAsignedGroups)
                             if noAsignedGroups == numberGroups:
                                 listVolumesToProcess[i - 1] = False
                                 self._saveVolumesToProcess(listVolumesToProcess)
@@ -516,7 +532,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         fnAnglesAll = join(fnDirCurrent, "anglesAll.xmd")
         mdVolumes = MetaData()
         listVolumesToProcess = self._readVolumesToProcess()
-        print("listVolumesToProcess", listVolumesToProcess)
+        #print("listVolumesToProcess", listVolumesToProcess)
         for i in range(1, self.getNumberOfReconstructedVolumes() + 1):
             if (listVolumesToProcess[i - 1] == False):
                 continue
@@ -534,12 +550,9 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         mdVolumes.write(fnVols)
 
         # Classify the images
-        # AJ busca el maximo de correlacion entre todos los volumenes a los que se ha asigando cada particula??
         fnImgsId = self._getExtraPath("imagesId.xmd")
         fnOut = join(fnDirCurrent, "classes.xmd")
-        print("A correr",
-              "xmipp_classify_significant --id %s --angles %s --ref %s -o %s" % (
-              fnImgsId, fnAnglesAll, fnVols, fnOut))
+
 
         self.runJob("xmipp_classify_significant",
                     "--id %s --angles %s --ref %s -o %s --votes %d" % (
@@ -547,8 +560,6 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
         # cleanPath(fnVols)
         # cleanPath(fnAnglesAll)
 
-        #AJ testing
-        #copyFile("./correlations.txt", join(fnDirCurrent, "correlations.txt"))
 
 
     def reconstruct(self, iteration):
@@ -561,7 +572,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
 
         self.parseSymList()
         listVolumesToProcess = self._readVolumesToProcess()
-        print("listVolumesToProcess", listVolumesToProcess)
+        #print("listVolumesToProcess", listVolumesToProcess)
         for i in range(1, self.getNumberOfReconstructedVolumes() + 1):
             if (listVolumesToProcess[i - 1] == False):
                 continue
@@ -603,11 +614,34 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                     args = "-i %s -o %s --sym %s --weight --thr %d" % (
                         fnAnglesToUse, fnOutVol, self.symList[i - 1],
                         self.numberOfThreads.get())
-                    args += " --device %(GPU)s"
+                    if self.numberOfMpi.get()>1:
+                        N_GPUs = len((self.gpuList.get()).split(','))
+                        args += ' -gpusPerNode %d' % N_GPUs
+                        args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+                    count=0
+                    GpuListCuda=''
+                    if self.useQueueForSteps() or self.useQueue():
+                        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                        GpuList = GpuList.split(",")
+                        for elem in GpuList:
+                            GpuListCuda = GpuListCuda+str(count)+' '
+                            count+=1
+                    else:
+                        GpuListAux = ''
+                        for elem in self.getGpuList():
+                            GpuListCuda = GpuListCuda+str(count)+' '
+                            GpuListAux = GpuListAux+str(elem)+','
+                            count+=1
+                        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                    if self.numberOfMpi.get()==1:
+                        args += " --device %s" %GpuListCuda
                     if self.approx:
                         args += " --fast"
-                    self.runJob("xmipp_cuda_reconstruct_fourier", args,
-                                numberOfMpi=self.fr_gpu_mpi.get())
+                    if self.numberOfMpi.get()>1:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+                    else:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args)
+
                 else:
                     args = "-i %s -o %s --sym %s --weight" % (
                         fnAnglesToUse, fnOutVol, self.symList[i - 1])
@@ -760,7 +794,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                             numberOfMpi=1)
 
         # Align all volumes with respect to center
-        print("listVolumesToProcess", listVolumesToProcess)
+        #print("listVolumesToProcess", listVolumesToProcess)
         for i in range(1, self.getNumberOfReconstructedVolumes() + 1):
             if (listVolumesToProcess[i - 1] == False):
                 continue
@@ -840,7 +874,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
             sizeClasses = np.zeros((N, N))
             self.parseSymList()
             listVolumesToProcess = self._readVolumesToProcess()
-            print("listVolumesToProcess", listVolumesToProcess)
+            #print("listVolumesToProcess", listVolumesToProcess)
             for i in range(1, N + 1):
                 for j in range(1, N + 1):
                     if (listVolumesToProcess[i - 1] == False or

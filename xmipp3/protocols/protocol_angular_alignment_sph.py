@@ -35,9 +35,8 @@ from pwem.constants import ALIGN_PROJ
 
 from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
                             setXmippAttributes)
-from xmipp3.utils import writeInfoField, readInfoField
+from xmipp3.base import writeInfoField, readInfoField
 import numpy as np
-from sklearn.manifold import TSNE
 
 from pyworkflow import VERSION_2_0
 
@@ -134,6 +133,7 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
 
 
     def createOutputStep(self):
+        from sklearn.manifold import TSNE
         fnOut = self._getFileName('fnOut')
         mdOut = md.MetaData(fnOut)
         i = 0

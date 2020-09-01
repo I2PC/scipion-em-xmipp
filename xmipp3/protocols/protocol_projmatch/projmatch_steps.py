@@ -31,14 +31,15 @@ form definition, we have separated in this sub-module.
 """
 
 import math
-from os.path import exists
+from os.path import exists, join
+import os
 
 from pwem.objects import Volume, SetOfClasses3D
 from pyworkflow.utils import getMemoryAvailable, removeExt, cleanPath, makePath, copyFile
 
 from pwem import emlib
 from xmipp3.convert import createClassesFromImages
-from xmipp3.utils import isMdEmpty
+from xmipp3.base import isMdEmpty
 
 
 ctfBlockName = 'ctfGroup'
@@ -192,12 +193,19 @@ def insertAngularProjectLibraryStep(self, iterN, refN, **kwargs):
               'samplingRate' : self._angSamplingRateDeg[iterN],
               'symmetry' : self._symmetry[iterN],
               }
-        
-    if self.maxChangeInAngles < 181:
+
+    tokens = self.maxChangeInAngles.get().strip().split()
+    if len(tokens)==0:
+        maxChangeInAngles = 181
+    elif iterN>=len(tokens):
+        maxChangeInAngles = int(tokens[-1])
+    else:
+        maxChangeInAngles = int(tokens[iterN-1])
+    if maxChangeInAngles < 181:
         args += ' --near_exp_data --angular_distance %(maxChangeInAngles)s'
     else:
         args += ' --angular_distance -1'
-    
+
     if self._perturbProjectionDirections[iterN]:
         args +=' --perturb %(perturb)s'
         params['perturb'] = math.sin(math.radians(self._angSamplingRateDeg[iterN])) / 4.
@@ -421,7 +429,7 @@ def runAssignImagesToReferences(self, iterN, **kwargs):
     #with the pairs ctf_group reference    
     for ctfN in self.allCtfGroups():
         ctfFilePrefix = self._getBlockFileName(ctfBlockName, ctfN, '')
-        #print 'read file: ', ctfFilePrefix+outputdocfile
+        # print('read file: %s' % ctfFilePrefix+outputdocfile)
         mdAux.read(ctfFilePrefix + outputdocfile)
         for refN in self.allRefs():
             auxOutputdocfile = self._getRefBlockFileName(ctfBlockName, ctfN, refBlockName, refN, '')
@@ -441,7 +449,7 @@ def insertAngularClassAverageStep(self, iterN, refN, **kwargs):
     outClasses = self._getFileName('outClasses', iter=iterN, ref=refN)
     # FIXME: Why is necessary ask if docFileInputAngles is empty. check if is a validation step
 #     if emlib.isMdEmpty(docFileInputAngles):
-#         print "Empty metadata file: %s" % docFileInputAngles
+#         print("Empty metadata file: %s" % docFileInputAngles)
 #         return
     
     params = {'docFileInputAngles' : docFileInputAngles,
@@ -525,7 +533,28 @@ def insertReconstructionStep(self, iterN, refN, suffix='', **kwargs):
 
     replacedArgs = args % params
     if self.useGpu.get():
-        replacedArgs += " --device %(GPU)s"
+        #AJ to make it work with and without queue system
+        if self.numberOfMpi.get()>1:
+            N_GPUs = len((self.gpuList.get()).split(','))
+            replacedArgs += ' -gpusPerNode %d' % N_GPUs
+            replacedArgs += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+        count=0
+        GpuListCuda=''
+        if self.useQueueForSteps() or self.useQueue():
+            GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+            GpuList = GpuList.split(",")
+            for elem in GpuList:
+                GpuListCuda = GpuListCuda+str(count)+' '
+                count+=1
+        else:
+            GpuListAux = ''
+            for elem in self.getGpuList():
+                GpuListCuda = GpuListCuda+str(count)+' '
+                GpuListAux = GpuListAux+str(elem)+','
+                count+=1
+            os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+        if self.numberOfMpi.get()==1:
+            replacedArgs += " --device %s" %(GpuListCuda)
 
     self._insertFunctionStep('reconstructionStep', iterN, refN, program, method, replacedArgs, suffix, **kwargs)
 
@@ -542,6 +571,8 @@ def runReconstructionStep(self, iterN, refN, program, method, args, suffix, **kw
         threads = 1
     else:
         mpi = self.numberOfMpi.get()
+        if self.useGpu.get() and self.numberOfMpi.get()>1:
+            mpi = len((self.gpuList.get()).split(','))+1
         threads = self.numberOfThreads.get()
         args += ' --thr %d' % threads
     
