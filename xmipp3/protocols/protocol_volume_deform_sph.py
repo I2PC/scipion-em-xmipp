@@ -54,10 +54,14 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
                       label='Sphere radius',
                       experLevel=params.LEVEL_ADVANCED,
                       help='Radius of the sphere where the spherical harmonics will be computed.')
-        form.addParam('depth', params.IntParam, default=3,
-                      label='Harmonical depth',
+        form.addParam('l1', params.IntParam, default=2,
+                      label='Zernike Degree',
                       expertLevel=params.LEVEL_ADVANCED,
-                      help='Harmonical depth of the deformation=1,2,3,...')
+                      help='Degree Zernike Polynomials of the deformation=1,2,3,...')
+        form.addParam('l2', params.IntParam, default=2,
+                      label='Harmonical Degree',
+                      expertLevel=params.LEVEL_ADVANCED,
+                      help='Degree Spherical Harmonics of the deformation=1,2,3,...')
         form.addParam('penalization', params.FloatParam, default=0.00025, label='Regularization',
                       expertLevel=params.LEVEL_ADVANCED,
                       help='Penalization to deformations (higher values penalize more the deformation).')
@@ -124,8 +128,8 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
 
         self.alignMaps()
 
-        params = ' -i %s -r %s -o %s --analyzeStrain --depth %d --sigma "%s" --oroot %s --regularization %f' % \
-                 (fnOutVol, fnRefVol, fnOutVol, self.depth.get(), self.sigma.get(),
+        params = ' -i %s -r %s -o %s --analyzeStrain --l1 %d --l2 %d --sigma "%s" --oroot %s --regularization %f' % \
+                 (fnOutVol, fnRefVol, fnOutVol, self.l1.get(), self.l2.get(), self.sigma.get(),
                   self._getExtraPath('Volumes'), self.penalization.get())
         if self.newRmax != 0:
             params = params + ' --Rmax %d' % self.newRmax
