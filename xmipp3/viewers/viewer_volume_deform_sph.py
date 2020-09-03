@@ -1,6 +1,7 @@
 # **************************************************************************
 # *
-# * Authors:  Amaya Jimenez Moreno (ajimenez@cnb.csic.es)
+# * Authors:  Amaya Jimenez Moreno  (ajimenez@cnb.csic.es)
+# *           David Herreros Calero (dherreros@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -77,6 +78,7 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
         fhCmd.write("volume #1 voxelSize %s\n" % (str(smprt)))
         fhCmd.write("volume #2 voxelSize %s\n" % (str(smprt)))
         fhCmd.write("vol #2 hide\n")
+        fhCmd.write("view\n")
         fhCmd.write("color sample #1 map #2 palette rainbow\n")
         fhCmd.close()
 
@@ -102,6 +104,7 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
         fhCmd.write("volume #1 voxelSize %s\n" % (str(smprt)))
         fhCmd.write("volume #2 voxelSize %s\n" % (str(smprt)))
         fhCmd.write("vol #2 hide\n")
+        fhCmd.write("view\n")
         fhCmd.write("color sample #1 map #2 palette rainbow\n")
         fhCmd.close()
 
@@ -128,7 +131,8 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
         fhCmd.write("volume #2 voxelSize %s\n" % (str(smprt)))
         fhCmd.write("vol #1 hide\n")
         fhCmd.write("vol #2 hide\n")
-        fhCmd.write("vop morph #1,2 frames 1000\n")
+        fhCmd.write("view\n")
+        fhCmd.write("vop morph #1,2 frames 1000 step 1\n")
         fhCmd.close()
 
         view = ChimeraView(scriptFile)
@@ -154,7 +158,8 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
         fhCmd.write("volume #2 voxelSize %s\n" % (str(smprt)))
         fhCmd.write("vol #1 hide\n")
         fhCmd.write("vol #2 hide\n")
-        fhCmd.write("vop morph #1,2 frames 1000\n")
+        fhCmd.write("view\n")
+        fhCmd.write("vop morph #1,2 frames 1000 step 1\n")
         fhCmd.close()
 
         view = ChimeraView(scriptFile)
