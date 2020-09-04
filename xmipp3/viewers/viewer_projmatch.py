@@ -295,7 +295,7 @@ Examples:
     def _showVolumesChimera(self, volumes):
         """ Create a chimera script to visualize selected volumes. """
         if len(volumes) > 1:
-            cmdFile = self.protocol._getTmpPath('chimera_volumes.cmd')
+            cmdFile = self.protocol._getTmpPath('chimera_volumes.cxc')
             cleanPath(cmdFile)
             f = open(cmdFile, 'w+')
             f.write('windowsize 800 600\n')

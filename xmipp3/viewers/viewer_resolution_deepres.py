@@ -24,6 +24,7 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import os
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -86,7 +87,7 @@ class XmippResDeepResViewer(LocalResolutionViewer):
                       label="Show resolution histogram")
         
         group = form.addGroup('Colored resolution Slices and Volumes')
-        group.addParam('colorMap', EnumParam, choices=list(COLOR_CHOICES.values()),
+        group.addParam('colorMap', EnumParam, choices=COLOR_CHOICES,
                       default=COLOR_JET,
                       label='Color map',
                       help='Select the color map to apply to the resolution map. '
@@ -169,7 +170,7 @@ class XmippResDeepResViewer(LocalResolutionViewer):
         else:
             sliceNumber -= 1
 
-        #sliceNumber has no sense to start in zero 
+        #sliceNumber has no sense to start in zero
         a = xplotter.createSubPlot("Slice %s" % (sliceNumber+1), '', '')
         matrix = self.getSliceImage(imgData, sliceNumber, self._getAxis())
         plot = xplotter.plotMatrix(a, matrix, self.lowest.get(), self.highest.get(),
@@ -199,6 +200,13 @@ class XmippResDeepResViewer(LocalResolutionViewer):
         plotter.plotDataBar(x_axis, y_axis, barwidth)
 
         return [plotter]
+
+    def _getStepColors(self, minRes, maxRes, numberOfColors=13):
+        inter = (maxRes - minRes) / (numberOfColors - 1)
+        rangeList = []
+        for step in range(0, numberOfColors):
+            rangeList.append(round(minRes + step * inter, 2))
+        return rangeList
 
     def _getAxis(self):
         return self.getEnumText('sliceAxis')

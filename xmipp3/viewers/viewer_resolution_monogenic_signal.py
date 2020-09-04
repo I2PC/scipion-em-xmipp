@@ -52,6 +52,7 @@ from xmipp3.protocols.protocol_resolution_monogenic_signal import (
         XmippProtMonoRes, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM,
         OUTPUT_RESOLUTION_FILE_CHIMERA)
 from .plotter import XmippPlotter
+from pyworkflow.gui import plotter
 
 
 binaryCondition = ('(colorMap == %d) ' % (COLOR_OTHER))
@@ -199,14 +200,14 @@ class XmippMonoResViewer(LocalResolutionViewer):
             x_axis.append(x_axis_)
             y_axis.append(y_axis_)
 
-        plotter = EmPlotter()
-        plotter.createSubPlot("Resolutions Histogram",
+        _plotter = EmPlotter()
+        _plotter.createSubPlot("Resolutions Histogram",
                               "Resolution (A)", "# of Counts")
         barwidth = (x_axis[-1] - x_axis[0])/len(x_axis)
 
-        plotter.plotDataBar(x_axis, y_axis, barwidth)
+        _plotter.plotDataBar(x_axis, y_axis, barwidth)
 
-        return [plotter]
+        return [_plotter]
 
     def _getAxis(self):
         return self.getEnumText('sliceAxis')

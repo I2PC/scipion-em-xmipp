@@ -107,7 +107,7 @@ class XmippProtValFitViewer(ProtocolViewer):
         fnRoot = os.path.abspath(self.protocol._getExtraPath())
         
         _inputVol = self.protocol.inputVolume.get()
-        fnCmd = self.protocol._getTmpPath("chimera_VOLoutput.cmd")
+        fnCmd = self.protocol._getTmpPath("chimera_VOLoutput.cxc")
         
         f = open(fnCmd, 'w')
 
