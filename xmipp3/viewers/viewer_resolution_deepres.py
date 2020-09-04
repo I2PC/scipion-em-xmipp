@@ -24,14 +24,9 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-import os
-
-import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
-import matplotlib.colors as mcolors
 from pwem.wizards import ColorScaleWizardBase
-from pyworkflow.utils import removeExt
 
 from pwem.viewers import (LocalResolutionViewer, EmPlotter, ChimeraView,
                           DataView)
@@ -40,14 +35,12 @@ from pyworkflow.protocol.params import (LabelParam, StringParam, EnumParam,
                                         IntParam, LEVEL_ADVANCED)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 from pwem.emlib.metadata import MetaData, MDL_X, MDL_COUNT
-from pwem.emlib.image import ImageHandler
 
 from .plotter import XmippPlotter
 from xmipp3.protocols.protocol_resolution_deepres import (XmippProtDeepRes,
                                                           OUTPUT_RESOLUTION_FILE,
                                                           FN_METADATA_HISTOGRAM,
-                                                          OUTPUT_RESOLUTION_FILE_CHIMERA,
-                                                          RESIZE_VOL)
+                                                          OUTPUT_RESOLUTION_FILE_CHIMERA)
 
 
 binaryCondition = ('(colorMap == %d) ' % (COLOR_OTHER))

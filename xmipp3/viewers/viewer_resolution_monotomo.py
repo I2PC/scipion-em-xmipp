@@ -41,8 +41,6 @@ from xmipp3.viewers.plotter import XmippPlotter
 from xmipp3.protocols.protocol_resolution_monotomo import (XmippProtMonoTomo,
                                                            OUTPUT_RESOLUTION_FILE,
                                                            FN_METADATA_HISTOGRAM)
-binaryCondition = ('(colorMap == %d) ' % COLOR_OTHER)
-
 
 class XmippMonoTomoViewer(LocalResolutionViewer):
     """

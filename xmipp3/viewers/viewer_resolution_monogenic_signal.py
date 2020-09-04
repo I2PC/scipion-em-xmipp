@@ -28,34 +28,25 @@ import os
 
 import matplotlib.pyplot as plt
 from matplotlib import cm
-import matplotlib.colors as mcolors
 from pwem.wizards import ColorScaleWizardBase
-from pyworkflow.utils import getExt, removeExt, replaceExt
-from os.path import abspath, exists
-import numpy as np
+from pyworkflow.utils import replaceExt
+from os.path import exists
 
-from pyworkflow.protocol.params import (LabelParam, StringParam, EnumParam,
+from pyworkflow.protocol.params import (LabelParam, EnumParam,
                                         IntParam, LEVEL_ADVANCED)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 
 from xmipp3.viewers.viewer_resolution_directional import (COLOR_OTHER,
-                                                          COLOR_CHOICES,
-                                                          COLOR_JET, AX_Z)
+                                                          AX_Z)
 
-from pwem.convert import Ccp4Header
-from pwem.emlib.image import ImageHandler
 from pwem.viewers import (LocalResolutionViewer, EmPlotter, ChimeraView,
-                          DataView, Chimera)
+                          DataView)
 from pwem.emlib.metadata import MetaData, MDL_X, MDL_COUNT
 
 from xmipp3.protocols.protocol_resolution_monogenic_signal import (
         XmippProtMonoRes, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM,
         OUTPUT_RESOLUTION_FILE_CHIMERA)
 from .plotter import XmippPlotter
-from pyworkflow.gui import plotter
-
-
-binaryCondition = ('(colorMap == %d) ' % (COLOR_OTHER))
 
 class XmippMonoResViewer(LocalResolutionViewer):
     """
