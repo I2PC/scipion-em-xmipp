@@ -303,7 +303,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         return all_us, ob_values
 
 #################################
-# COSS functions
+# COSS functions. See notes 8/4/2019
 def nc_similarity(n, c):
     '''Return the similarity of intersection subset (n) with class subset (c)
     '''
