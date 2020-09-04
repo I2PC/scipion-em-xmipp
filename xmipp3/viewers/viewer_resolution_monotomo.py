@@ -25,16 +25,11 @@
 # *
 # **************************************************************************
 
-import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
-import matplotlib.colors as mcolors
 from pwem.wizards import ColorScaleWizardBase
-from pyworkflow.utils import getExt, removeExt
-from os.path import abspath
 
-from pyworkflow.gui.plotter import Plotter
-from pyworkflow.protocol.params import (LabelParam, StringParam, EnumParam,
+from pyworkflow.protocol.params import (LabelParam, EnumParam,
                                         IntParam, LEVEL_ADVANCED)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 from pwem.viewers import ChimeraView, DataView, EmPlotter
@@ -45,10 +40,8 @@ from pwem.constants import COLOR_OTHER, AX_Z
 from xmipp3.viewers.plotter import XmippPlotter
 from xmipp3.protocols.protocol_resolution_monotomo import (XmippProtMonoTomo,
                                                            OUTPUT_RESOLUTION_FILE,
-                                                           FN_METADATA_HISTOGRAM,
-                                                           FN_FILTERED_MAP)
-
-binaryCondition = ('(colorMap == %d) ' % (COLOR_OTHER))
+                                                           FN_METADATA_HISTOGRAM)
+binaryCondition = ('(colorMap == %d) ' % COLOR_OTHER)
 
 
 class XmippMonoTomoViewer(LocalResolutionViewer):
@@ -102,7 +95,7 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
         group.addParam('doShowChimera', LabelParam,
                        label="Show Resolution map in Chimera")
 
-        ColorScaleWizardBase.defineColorScaleParams(group)
+        ColorScaleWizardBase.defineColorScaleParams(group, defaultHighest=self.protocol.max_res_init.get(), defaultLowest=self.protocol.min_res_init.get())
 
     def _getVisualizeDict(self):
         self.protocol._createFilenameTemplates()
