@@ -24,14 +24,12 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-import matplotlib.pyplot as plt
-from matplotlib import cm
 from pwem.wizards import ColorScaleWizardBase
 
 from pwem.viewers import (LocalResolutionViewer, EmPlotter, ChimeraView,
                           DataView)
-from pwem.constants import (COLOR_JET, COLOR_OTHER, COLOR_CHOICES, AX_Z)
-from pyworkflow.protocol.params import (LabelParam, StringParam, EnumParam,
+from pwem.constants import (COLOR_OTHER, AX_Z)
+from pyworkflow.protocol.params import (LabelParam, EnumParam,
                                         IntParam, LEVEL_ADVANCED)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 from pwem.emlib.metadata import MetaData, MDL_X, MDL_COUNT
@@ -58,11 +56,6 @@ class XmippResDeepResViewer(LocalResolutionViewer):
     _targets = [XmippProtDeepRes]      
     _environments = [DESKTOP_TKINTER]
 
-    
-    @staticmethod
-    def getColorMapChoices():
-        return plt.colormaps()
-   
     def __init__(self, *args, **kwargs):
         ProtocolViewer.__init__(self, *args, **kwargs)
 
@@ -80,18 +73,7 @@ class XmippResDeepResViewer(LocalResolutionViewer):
                       label="Show resolution histogram")
         
         group = form.addGroup('Colored resolution Slices and Volumes')
-        group.addParam('colorMap', EnumParam, choices=COLOR_CHOICES,
-                      default=COLOR_JET,
-                      label='Color map',
-                      help='Select the color map to apply to the resolution map. '
-                            'http://matplotlib.org/1.3.0/examples/color/colormaps_reference.html.')
-        
-        group.addParam('otherColorMap', StringParam, default='jet',
-                      condition = binaryCondition,
-                      label='Customized Color map',
-                      help='Name of a color map to apply to the resolution map.'
-                      ' Valid names can be found at '
-                      'http://matplotlib.org/1.3.0/examples/color/colormaps_reference.html')
+
         group.addParam('sliceAxis', EnumParam, default=AX_Z,
                        choices=['x', 'y', 'z'],
                        display=EnumParam.DISPLAY_HLIST,
@@ -110,7 +92,9 @@ class XmippResDeepResViewer(LocalResolutionViewer):
         group.addParam('doShowChimera', LabelParam,
                       label="Show Resolution map in Chimera")
 
-        ColorScaleWizardBase.defineColorScaleParams(group)
+        ColorScaleWizardBase.defineColorScaleParams(group,
+                                                    defaultHighest=self.protocol.max_res_init.get(),
+                                                    defaultLowest=self.protocol.min_res_init.get())
 
     def _getVisualizeDict(self):
         self.protocol._createFilenameTemplates()
@@ -133,7 +117,7 @@ class XmippResDeepResViewer(LocalResolutionViewer):
     
     def _showVolumeColorSlices(self, param=None):
         imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE)
-        imgData, min_Res, max_Res = self.getImgData(imageFile)
+        imgData, _, _, _ = self.getImgData(imageFile)
 
         xplotter = XmippPlotter(x=2, y=2, mainTitle="Local Resolution Slices "
                                                      "along %s-axis."
@@ -144,8 +128,8 @@ class XmippResDeepResViewer(LocalResolutionViewer):
             sliceNumber = self.getSlice(i, imgData)
             a = xplotter.createSubPlot("Slice %s" % (sliceNumber+1), '', '')
             matrix = self.getSliceImage(imgData, sliceNumber, self._getAxis())
-            plot = xplotter.plotMatrix(a, matrix, min_Res, max_Res,
-                                       cmap=self.getColorMap(),
+            plot = xplotter.plotMatrix(a, matrix, self.lowest.get(), self.highest.get(),
+                                       cmap=self._getColorName(),
                                        interpolation="nearest")
         xplotter.getColorBar(plot)
         return [xplotter]
@@ -167,7 +151,7 @@ class XmippResDeepResViewer(LocalResolutionViewer):
         a = xplotter.createSubPlot("Slice %s" % (sliceNumber+1), '', '')
         matrix = self.getSliceImage(imgData, sliceNumber, self._getAxis())
         plot = xplotter.plotMatrix(a, matrix, self.lowest.get(), self.highest.get(),
-                                       cmap=self.getColorMap(),
+                                       cmap=self._getColorName(),
                                        interpolation="nearest")
         xplotter.getColorBar(plot)
         return [xplotter]
@@ -194,20 +178,13 @@ class XmippResDeepResViewer(LocalResolutionViewer):
 
         return [plotter]
 
-    def _getStepColors(self, minRes, maxRes, numberOfColors=13):
-        inter = (maxRes - minRes) / (numberOfColors - 1)
-        rangeList = []
-        for step in range(0, numberOfColors):
-            rangeList.append(round(minRes + step * inter, 2))
-        return rangeList
-
     def _getAxis(self):
         return self.getEnumText('sliceAxis')
 
     def _showChimera(self, param=None):
         fnResVol = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
 
-        vol = self.protocol.inputVolumes.get()
+        vol = self.protocol.inputVolume.get()
 
         fnOrigMap = vol.getFileName()
         sampRate = vol.getSamplingRate()
@@ -219,10 +196,3 @@ class XmippResDeepResViewer(LocalResolutionViewer):
                                  highResLimit=self.lowest.get())
         view = ChimeraView(cmdFile)
         return [view]
-    
-    def getColorMap(self):
-        cmap = cm.get_cmap(self.colorMap.get())
-        if cmap is None:
-            cmap = cm.jet
-        return cmap
-
