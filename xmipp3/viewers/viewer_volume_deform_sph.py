@@ -62,7 +62,7 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
 
     def _doShowStrain(self, param=None):
 
-        scriptFile = self.protocol._getPath('strain_chimera.cmd')
+        scriptFile = self.protocol._getPath('strain_chimera.cxc')
         fhCmd = open(scriptFile, 'w')
         fnbase = removeExt(self.protocol._getFileName('fnInputVol'))
         ext = getExt(self.protocol._getFileName('fnInputVol'))
@@ -80,7 +80,8 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
         fhCmd.write("volume #%d voxelSize %s\n" % (counter, str(smprt)))
         fhCmd.write("vol #%d hide\n" % counter)
         #fhCmd.write("focus\n")
-        fhCmd.write('color sample #%d map #%d palette ^rainbow\n' % (counter -1, counter))
+        fhCmd.write('color sample #%d map #%d palette ^rainbow\n' % (counter - 1, counter))
+        fhCmd.write("view\n")
         fhCmd.close()
 
         view = ChimeraView(scriptFile)
@@ -107,7 +108,8 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
         fhCmd.write("volume #%d voxelSize %s\n" % (counter, str(smprt)))
         #fhCmd.write("focus\n")
         fhCmd.write("vol #%d hide\n" % (counter))
-        fhCmd.write('color sample #%d map #%d palette ^rainbow\n' % (counter -1, counter))
+        fhCmd.write('color sample #%d map #%d palette ^rainbow\n' % (counter - 1, counter))
+        fhCmd.write("view\n")
         # fhCmd.write("scolor #0 volume #1 cmap rainbow reverseColors True\n")
         fhCmd.close()
 
@@ -138,6 +140,7 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
         fhCmd.write("vol #%d hide\n" % (counter))
         #fhCmd.write("focus\n")
         fhCmd.write("volume morph #%d,%d frames 500\n" % (counter - 1, counter))
+        fhCmd.write("view\n")
         fhCmd.close()
 
         view = ChimeraView(scriptFile)
@@ -166,6 +169,7 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
         # fhCmd.write("focus\n")
         fhCmd.write("vol #%d hide\n" % counter)
         fhCmd.write("volume morph #%d,%d frames 500\n" %  (counter-1, counter))
+        fhCmd.write("view\n")
         fhCmd.close()
 
         view = ChimeraView(scriptFile)
