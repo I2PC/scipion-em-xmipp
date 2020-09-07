@@ -80,7 +80,7 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
         fhCmd.write("volume #%d voxelSize %s\n" % (counter, str(smprt)))
         fhCmd.write("vol #%d hide\n" % counter)
         #fhCmd.write("focus\n")
-        fhCmd.write('color sample #%d map #%d palette ^rainbow\n' % (counter - 1, counter))
+        fhCmd.write('color sample #%d map #%d palette rainbow\n' % (counter - 1, counter))
         fhCmd.write("view\n")
         fhCmd.close()
 
@@ -108,7 +108,7 @@ class XmippVolumeDeformSphViewer(ProtocolViewer):
         fhCmd.write("volume #%d voxelSize %s\n" % (counter, str(smprt)))
         #fhCmd.write("focus\n")
         fhCmd.write("vol #%d hide\n" % (counter))
-        fhCmd.write('color sample #%d map #%d palette ^rainbow\n' % (counter - 1, counter))
+        fhCmd.write('color sample #%d map #%d palette rainbow\n' % (counter - 1, counter))
         fhCmd.write("view\n")
         # fhCmd.write("scolor #0 volume #1 cmap rainbow reverseColors True\n")
         fhCmd.close()
