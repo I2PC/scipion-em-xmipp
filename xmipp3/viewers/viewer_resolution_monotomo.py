@@ -24,11 +24,14 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import os
 
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 import matplotlib.colors as mcolors
+from pwem.viewers.viewer_chimera import mapVolsWithColorkey
+from pyworkflow.gui import plotter
 from pyworkflow.utils import getExt, removeExt
 from os.path import abspath
 
@@ -245,8 +248,8 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
         return self.getEnumText('sliceAxis')
 
     def _showChimera(self, param=None):
-        self.createChimeraScript()
-        cmdFile = self.protocol._getPath('Chimera_resolution.cmd')
+        cmdFile = self.protocol._getPath('Chimera_resolution.py')
+        self.createChimeraScript(cmdFile)
         view = ChimeraView(cmdFile)
         return [view]
 
@@ -257,55 +260,33 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
             colors_labels += round(min_Res + step * inter, 2),
         return colors_labels
 
-    def createChimeraScript(self):
-        fnRoot = "extra/"
-        scriptFile = self.protocol._getPath('Chimera_resolution.cmd')
-        fhCmd = open(scriptFile, 'w')
+    def createChimeraScript(self, cmdFile):
         imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE)
         img = ImageHandler().read(imageFile)
         imgData = img.getData()
         min_Res = round(np.amin(imgData) * 100) / 100
         max_Res = round(np.amax(imgData) * 100) / 100
+        voldim = (img.getDimensions())[:-1]
 
         numberOfColors = 21
-        colors_labels = self.numberOfColors(min_Res, max_Res, numberOfColors)
-        colorList = self.colorMapToColorList(colors_labels, self.getColorMap())
+        stepColors = self._getStepColors(min_Res, max_Res, numberOfColors)
+        colorList = plotter.getHexColorList(stepColors, self.getColorMap())
 
-        # fhCmd.write("open %s\n" % (fnRoot+FN_MEAN_VOL)) #Perhaps to check
-        # the use of mean volume is useful
         fnbase = removeExt(self.protocol.inputVolume.get().getFileName())
         ext = getExt(self.protocol.inputVolume.get().getFileName())
         fninput = abspath(fnbase + ext[0:4])
-        fhCmd.write("open %s\n" % fninput)
-
-        fhCmd.write("open %s\n" % (abspath(self.protocol._getFileName(OUTPUT_RESOLUTION_FILE))))
         smprt = self.protocol.inputVolume.get().getSamplingRate()
-        fhCmd.write("volume #0 voxelSize %s\n" % (str(smprt)))
-        fhCmd.write("volume #1 voxelSize %s\n" % (str(smprt)))
-        fhCmd.write("vol #1 hide\n")
-
-        scolorStr = '%s,%s:' * numberOfColors
-        scolorStr = scolorStr[:-1]
-
-        line = ("scolor #0 volume #1 perPixel false cmap "
-                + scolorStr + "\n") % colorList
-        fhCmd.write(line)
-
-        scolorStr = '%s %s ' * numberOfColors
-        str_colors = ()
-        for idx, elem in enumerate(colorList):
-            if (idx % 2 == 0):
-                if ((idx % 8) == 0):
-                    str_colors += str(elem),
-                else:
-                    str_colors += '" "',
-            else:
-                str_colors += elem,
-
-        line = ("colorkey 0.01,0.05 0.02,0.95 " + scolorStr + "\n") % str_colors
-        fhCmd.write(line)
-
-        fhCmd.close()
+        mapVolsWithColorkey(fninput,
+            abspath(self.protocol._getFileName(OUTPUT_RESOLUTION_FILE)),
+            stepColors,
+            colorList,
+            voldim,
+            volOrigin=None,
+            step = 1,
+            sampling=smprt,
+            scriptFileName=cmdFile,
+            bgColorImage='black',
+            showAxis=True)
 
     @staticmethod
     def colorMapToColorList(steps, colorMap):

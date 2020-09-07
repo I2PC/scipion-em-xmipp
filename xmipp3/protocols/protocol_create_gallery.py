@@ -72,6 +72,9 @@ class XmippProtCreateGallery(ProtAnalysis3D):
         form.addParam('maxFreq',FloatParam, default=0.25,
                       expertLevel=LEVEL_ADVANCED,
                       label='Maximum frequency', help="Normalized to 0.5")
+        form.addParam('shiftSigma',FloatParam, default=0.0,
+                      expertLevel=LEVEL_ADVANCED,
+                      label='Shift sigma', help="In pixels")
 
     #--------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
@@ -98,7 +101,8 @@ _projTiltRange    '%f %f %d'
 _projTiltRandomness   even 
 _projPsiRange    '0 0 1'
 _projPsiRandomness   even 
-""" % (xdim, xdim, self.rot0, self.rotF,rotN, self.tilt0, self.tiltF, tiltN)
+_noiseCoord '%f 0'
+""" % (xdim, xdim, self.rot0, self.rotF,rotN, self.tilt0, self.tiltF, tiltN, self.shiftSigma)
         fhParam = open(self._getExtraPath("projectionParameters.xmd"), 'w')
         fhParam.write(paramContent)
         fhParam.close()

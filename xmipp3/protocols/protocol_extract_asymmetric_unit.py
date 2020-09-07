@@ -43,7 +43,7 @@ DEBUG = True
 class XmippProtExtractUnit(EMProtocol):
     """ generates files for volumes and FSCs to submit structures to EMDB
     """
-    _label = 'extract unit cell'
+    _label = 'extract asymmetric unit'
     _program = ""
     _version = VERSION_3_0
 
@@ -110,7 +110,6 @@ class XmippProtExtractUnit(EMProtocol):
 
     def extractUnit(self):
         sym = self.symmetryGroup.get()
-        print("sym:_____________________________________________", sym)
         if sym == XMIPP_CYCLIC:
             sym = "%s%d" % (XMIPP_SYM_NAME[XMIPP_CYCLIC][:1], self.symmetryOrder)
         elif sym == XMIPP_DIHEDRAL_X:
