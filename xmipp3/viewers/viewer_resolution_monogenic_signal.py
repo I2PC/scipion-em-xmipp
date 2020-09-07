@@ -28,32 +28,25 @@ import os
 
 import matplotlib.pyplot as plt
 from matplotlib import cm
-import matplotlib.colors as mcolors
-from pyworkflow.utils import getExt, removeExt, replaceExt
-from os.path import abspath, exists
-import numpy as np
+from pwem.wizards import ColorScaleWizardBase
+from pyworkflow.utils import replaceExt
+from os.path import exists
 
-from pyworkflow.protocol.params import (LabelParam, StringParam, EnumParam,
+from pyworkflow.protocol.params import (LabelParam, EnumParam,
                                         IntParam, LEVEL_ADVANCED)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 
 from xmipp3.viewers.viewer_resolution_directional import (COLOR_OTHER,
-                                                          COLOR_CHOICES,
-                                                          COLOR_JET, AX_Z)
+                                                          AX_Z)
 
-from pwem.convert import Ccp4Header
-from pwem.emlib.image import ImageHandler
 from pwem.viewers import (LocalResolutionViewer, EmPlotter, ChimeraView,
-                          DataView, Chimera)
+                          DataView)
 from pwem.emlib.metadata import MetaData, MDL_X, MDL_COUNT
 
 from xmipp3.protocols.protocol_resolution_monogenic_signal import (
         XmippProtMonoRes, OUTPUT_RESOLUTION_FILE, FN_METADATA_HISTOGRAM,
         OUTPUT_RESOLUTION_FILE_CHIMERA)
 from .plotter import XmippPlotter
-
-
-binaryCondition = ('(colorMap == %d) ' % (COLOR_OTHER))
 
 class XmippMonoResViewer(LocalResolutionViewer):
     """
@@ -75,7 +68,6 @@ class XmippMonoResViewer(LocalResolutionViewer):
     def __init__(self, *args, **kwargs):
         ProtocolViewer.__init__(self, *args, **kwargs)
 
-
     def _defineParams(self, form):
         form.addSection(label='Visualization')
         
@@ -89,18 +81,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
                       label="Show resolution histogram")
         
         group = form.addGroup('Colored resolution Slices and Volumes')
-        group.addParam('colorMap', EnumParam, choices=list(COLOR_CHOICES.values()),
-                      default=COLOR_JET,
-                      label='Color map',
-                      help='Select the color map to apply to the resolution map. '
-                            'http://matplotlib.org/1.3.0/examples/color/colormaps_reference.html.')
-        
-        group.addParam('otherColorMap', StringParam, default='jet',
-                      condition = binaryCondition,
-                      label='Customized Color map',
-                      help='Name of a color map to apply to the resolution map.'
-                      ' Valid names can be found at '
-                      'http://matplotlib.org/1.3.0/examples/color/colormaps_reference.html')
+
         group.addParam('sliceAxis', EnumParam, default=AX_Z,
                        choices=['x', 'y', 'z'],
                        display=EnumParam.DISPLAY_HLIST,
@@ -118,6 +99,10 @@ class XmippMonoResViewer(LocalResolutionViewer):
         
         group.addParam('doShowChimera', LabelParam,
                       label="Show Resolution map in Chimera")
+
+        ColorScaleWizardBase.defineColorScaleParams(group, defaultLowest=self.protocol.min_res_init,
+                                                    defaultHighest=self.protocol.max_res_init)
+
 
     def _getVisualizeDict(self):
         self.protocol._createFilenameTemplates()
@@ -157,11 +142,11 @@ class XmippMonoResViewer(LocalResolutionViewer):
                                                      %self._getAxis())
         #The slices to be shown are close to the center. Volume size is divided in 
         # 9 segments, the fouth central ones are selected i.e. 3,4,5,6
-        for i in range(3,7): 
+        for i in range(3,7):
             sliceNumber = self.getSlice(i, imgData)
             a = xplotter.createSubPlot("Slice %s" % (sliceNumber+1), '', '')
             matrix = self.getSliceImage(imgData, sliceNumber, self._getAxis())
-            plot = xplotter.plotMatrix(a, matrix, min_Res, max_Res,
+            plot = xplotter.plotMatrix(a, matrix, self.lowest.get(), self.highest.get(),
                                        cmap=self.getColorMap(),
                                        interpolation="nearest")
         xplotter.getColorBar(plot)
@@ -181,14 +166,13 @@ class XmippMonoResViewer(LocalResolutionViewer):
                                                      %self._getAxis())
         sliceNumber = self.sliceNumber.get()
         if sliceNumber < 0:
-            x ,_ ,_ ,_ = ImageHandler().getDimensions(imageFile)
-            sliceNumber = x/2
+            sliceNumber = int(voldim[0]/2)
         else:
             sliceNumber -= 1
         #sliceNumber has no sense to start in zero 
         a = xplotter.createSubPlot("Slice %s" % (sliceNumber+1), '', '')
         matrix = self.getSliceImage(imgData, sliceNumber, self._getAxis())
-        plot = xplotter.plotMatrix(a, matrix, min_Res, max_Res,
+        plot = xplotter.plotMatrix(a, matrix, self.lowest.get(), self.highest.get(),
                                        cmap=self.getColorMap(),
                                        interpolation="nearest")
         xplotter.getColorBar(plot)
@@ -207,191 +191,43 @@ class XmippMonoResViewer(LocalResolutionViewer):
             x_axis.append(x_axis_)
             y_axis.append(y_axis_)
 
-        plotter = EmPlotter()
-        plotter.createSubPlot("Resolutions Histogram",
+        _plotter = EmPlotter()
+        _plotter.createSubPlot("Resolutions Histogram",
                               "Resolution (A)", "# of Counts")
         barwidth = (x_axis[-1] - x_axis[0])/len(x_axis)
 
-        plotter.plotDataBar(x_axis, y_axis, barwidth)
+        _plotter.plotDataBar(x_axis, y_axis, barwidth)
 
-        return [plotter]
+        return [_plotter]
 
     def _getAxis(self):
         return self.getEnumText('sliceAxis')
 
     def _showChimera(self, param=None):
-        self.createChimeraScript()
-        cmdFile = self.protocol._getPath('Chimera_resolution.cmd')
+
+        if (exists(self.protocol._getExtraPath("MG_Chimera_resolution.mrc"))):
+            fnResVol = self.protocol._getExtraPath("MG_Chimera_resolution.mrc")
+        else:
+            fnResVol = self.protocol._getExtraPath(OUTPUT_RESOLUTION_FILE_CHIMERA)
+
+        if self.protocol.halfVolumes.get():
+            vol = self.protocol.inputVolume.get()
+        else:
+            vol = self.protocol.inputVolumes.get()
+
+        fnOrigMap = vol.getFileName()
+        sampRate = vol.getSamplingRate()
+
+        cmdFile = self.protocol._getExtraPath('chimera_resolution_map.py')
+        self.createChimeraScript(cmdFile, fnResVol, fnOrigMap, sampRate,
+                                 numColors=self.intervals.get(),
+                                 lowResLimit=self.highest.get(),
+                                 highResLimit=self.lowest.get())
         view = ChimeraView(cmdFile)
         return [view]
 
-    def numberOfColors(self, min_Res, max_Res, numberOfColors):
-        inter = (max_Res - min_Res)/(numberOfColors-1)
-        colors_labels = ()
-        for step in range(0,numberOfColors):
-            colors_labels += round(min_Res + step*inter,2),
-        return colors_labels
-
-    def createChimeraScript(self):
-        fnRoot = "extra/"
-        scriptFile = self.protocol._getPath('Chimera_resolution.cmd')
-        fhCmd = open(scriptFile, 'w')
-        if (exists(self.protocol._getExtraPath("MG_Chimera_resolution.mrc"))):
-            imageFile = self.protocol._getExtraPath("MG_Chimera_resolution.mrc")
-        else:
-            imageFile = self.protocol._getExtraPath(OUTPUT_RESOLUTION_FILE_CHIMERA)
-
-        if not os.path.exists(imageFile):
-            imageFile = replaceExt(imageFile, 'mrc')
-        
-        img = ImageHandler().read(imageFile)
-        imgData = img.getData()
-        min_Res = round(np.amin(imgData)*100)/100
-        max_Res = round(np.amax(imgData)*100)/100
-
-        numberOfColors = 21
-        colors_labels = self.numberOfColors(min_Res, max_Res, numberOfColors)
-        colorList = self.colorMapToColorList(colors_labels, self.getColorMap())
-        
-        if self.protocol.halfVolumes.get() is True:
-            #fhCmd.write("open %s\n" % (fnRoot+FN_MEAN_VOL)) #Perhaps to check 
-            #the use of mean volume is useful
-            fnbase = removeExt(self.protocol.inputVolume.get().getFileName())
-            inputVolume = self.protocol.inputVolume.get()
-        else:
-            fnbase = removeExt(self.protocol.inputVolumes.get().getFileName())
-            inputVolume = self.protocol.inputVolumes.get()
-
-        ext = getExt(inputVolume.getFileName())
-        inputSmprt = inputVolume.getSamplingRate()
-        fninput = abspath(fnbase + ext[0:4])
-
-        dim = inputVolume.getDim()[0]
-        if (exists(self.protocol._getExtraPath("MG_Chimera_resolution.mrc"))):
-            imageFile = self.protocol._getExtraPath("MG_Chimera_resolution.mrc")
-        else:
-            imageFile = self.protocol._getExtraPath(OUTPUT_RESOLUTION_FILE_CHIMERA)
-
-
-        if not os.path.exists(imageFile):
-            if self.protocol.halfVolumes.get() is True:
-                smprt = self.protocol.inputVolume.get().getSamplingRate()
-            else:
-                smprt = self.protocol.inputVolumes.get().getSamplingRate()
-
-            imageFile = replaceExt(imageFile, 'vol')
-            fhCmd.write("open %s\n" % fninput)
-            fhCmd.write("open %s\n" %  abspath(imageFile))
-            fhCmd.write("volume #0 voxelSize %s\n" % (str(smprt)))
-            fhCmd.write("volume #1 voxelSize %s\n" % (str(smprt)))
-            fhCmd.write("vol #1 hide\n")
-        
-            scolorStr = '%s,%s:' * numberOfColors
-            scolorStr = scolorStr[:-1]
-
-            line = ("scolor #0 volume #1 perPixel false cmap " 
-                + scolorStr + "\n") % colorList
-            fhCmd.write(line)
-
-            scolorStr = '%s %s ' * numberOfColors
-            str_colors = ()
-            for idx, elem in enumerate(colorList):
-                if (idx % 2 == 0):
-                    if ((idx % 8) == 0):
-                        str_colors +=  str(elem),
-                    else:
-                        str_colors += '" "',
-                else:
-                    str_colors += elem,
-        
-            line = ("colorkey 0.01,0.05 0.02,0.95 " + scolorStr + "\n") % str_colors
-            fhCmd.write(line)
-
-            fhCmd.close()
-        else:
-
-            tmpFileName = os.path.abspath(self.protocol._getTmpPath("axis.bild"))
-            Chimera.createCoordinateAxisFile(dim,
-                                         bildFileName=tmpFileName,
-                                         sampling=inputSmprt)
-
-            if (exists(self.protocol._getExtraPath("MG_Chimera_resolution.mrc"))):
-                imageFileVolume = self.protocol._getExtraPath("MG_Chimera_resolution.mrc")
-            else:
-                imageFileVolume = self.protocol._getExtraPath(OUTPUT_RESOLUTION_FILE_CHIMERA)
-
-
-            fhCmd.write("open %s\n" % tmpFileName)
-            fhCmd.write("cofr 0,0,0\n")  # set center of coordinates
-            fhCmd.write("open %s\n" % fninput)
-            fhCmd.write("open %s\n" % os.path.abspath(imageFileVolume))
-            
-            header = Ccp4Header(imageFileVolume, readHeader=True)
-
-
-            x, y, z = header.getSampling()
-            imageFileSmprt = x
-
-            # input vol(s) origin coordinates
-            x_input, y_input, z_input = inputVolume.getShiftsFromOrigin()
-            fhCmd.write("volume #1 voxelSize %f origin %0.2f,%0.2f,%0.2f\n"
-                    % (inputSmprt, x_input, y_input, z_input))
-
-            # image vol origin coordinates
-            x_output, y_output, z_output = header.getOrigin()
-            fhCmd.write("volume #2 voxelSize %f origin %0.2f,%0.2f,%0.2f\n"
-                    % (imageFileSmprt, x_output, y_output, z_output))
-
-            #### Check if the coordinate system works for a set of volumes
-
-            fhCmd.write("volume #2 hide\n")
-            
-            scolorStr = '%s,%s:' * numberOfColors
-            scolorStr = scolorStr[:-1]
-
-            line = ("scolor #1 volume #2 perPixel false cmap "
-                + scolorStr + "\n") % colorList
-            fhCmd.write(line)
-
-            scolorStr = '%s %s ' * numberOfColors
-            str_colors = ()
-            for idx, elem in enumerate(colorList):
-                if (idx % 2 == 0):
-                    if ((idx % 8) == 0):
-                        str_colors +=  str(elem),
-                    else:
-                        str_colors += '" "',
-                else:
-                    str_colors += elem,
-        
-            line = ("colorkey 0.01,0.05 0.02,0.95 " + scolorStr + "\n") % str_colors
-            fhCmd.write(line)
-
-            fhCmd.close()
-
-
-    @staticmethod
-    def colorMapToColorList(steps, colorMap):
-        """ Returns a list of pairs resolution, hexColor to be used in chimera 
-        scripts for coloring the volume and the colorKey """
-
-        # Get the map used by monoRes
-        colors = ()
-        ratio = 255.0/(len(steps)-1)
-        for index, step in enumerate(steps):
-            colorPosition = int(round(index*ratio))
-            rgb = colorMap(colorPosition)[:3]
-            colors += step,
-            rgbColor = mcolors.rgb2hex(rgb)
-            colors += rgbColor,
-
-        return colors
-    
     def getColorMap(self):
-        if (COLOR_CHOICES[self.colorMap.get()] is 'other'): 
-            cmap = cm.get_cmap(self.otherColorMap.get())
-        else:
-            cmap = cm.get_cmap(COLOR_CHOICES[self.colorMap.get()])
+        cmap = cm.get_cmap(self.colorMap.get())
         if cmap is None:
             cmap = cm.jet
         return cmap
