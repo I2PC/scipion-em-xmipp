@@ -36,9 +36,7 @@ from pyworkflow.protocol.params import (LabelParam, EnumParam,
                                         IntParam, LEVEL_ADVANCED)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 
-from xmipp3.viewers.viewer_resolution_directional import (COLOR_OTHER,
-                                                          AX_Z)
-
+from xmipp3.viewers.viewer_resolution_directional import AX_Z
 from pwem.viewers import (LocalResolutionViewer, EmPlotter, ChimeraView,
                           DataView)
 from pwem.emlib.metadata import MetaData, MDL_X, MDL_COUNT

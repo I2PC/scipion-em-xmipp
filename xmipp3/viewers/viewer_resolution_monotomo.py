@@ -35,7 +35,7 @@ from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 from pwem.viewers import ChimeraView, DataView, EmPlotter
 from pwem.emlib.metadata import MetaData, MDL_X, MDL_COUNT
 from pwem.viewers import LocalResolutionViewer
-from pwem.constants import COLOR_OTHER, AX_Z
+from pwem.constants import AX_Z
 
 from xmipp3.viewers.plotter import XmippPlotter
 from xmipp3.protocols.protocol_resolution_monotomo import (XmippProtMonoTomo,
