@@ -215,11 +215,11 @@ class XmippProtAlignVolume(ProtAlignVolume):
             outputArgs = {'outputVolumes': volSet}
         else:
             vols[0].setSamplingRate(self.inputReference.get().getSamplingRate())
-            outputArgs = {'outputVolumes': vols[0]}
+            outputArgs = {'outputVolume': vols[0]}
             
         self._defineOutputs(**outputArgs)
         for pointer in self.inputVolumes:
-            self._defineSourceRelation(pointer, outputArgs['outputVolumes'])
+            self._defineSourceRelation(pointer, list(outputArgs.values())[0])
     #--------------------------- INFO functions --------------------------------------------
     
     def _validate(self):
