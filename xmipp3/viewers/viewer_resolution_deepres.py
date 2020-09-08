@@ -24,6 +24,7 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+from pwem.objects import Volume
 from pwem.wizards import ColorScaleWizardBase
 
 from pwem.viewers import (LocalResolutionViewer, EmPlotter, ChimeraView,
@@ -38,7 +39,7 @@ from .plotter import XmippPlotter
 from xmipp3.protocols.protocol_resolution_deepres import (XmippProtDeepRes,
                                                           OUTPUT_RESOLUTION_FILE,
                                                           FN_METADATA_HISTOGRAM,
-                                                          OUTPUT_RESOLUTION_FILE_CHIMERA)
+                                                          OUTPUT_RESOLUTION_FILE_CHIMERA, RESIZE_VOL)
 
 
 class XmippResDeepResViewer(LocalResolutionViewer):
@@ -181,10 +182,8 @@ class XmippResDeepResViewer(LocalResolutionViewer):
     def _showChimera(self, param=None):
         fnResVol = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE_CHIMERA)
 
-        vol = self.protocol.inputVolume.get()
-
-        fnOrigMap = vol.getFileName()
-        sampRate = vol.getSamplingRate()
+        fnOrigMap = self.protocol._getFileName(RESIZE_VOL)
+        sampRate = 1.0 # Res volume and original volume are at different scales
 
         cmdFile = self.protocol._getExtraPath('chimera_resolution_map.py')
         self.createChimeraScript(cmdFile, fnResVol, fnOrigMap, sampRate,
