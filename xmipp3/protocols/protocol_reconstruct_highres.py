@@ -28,6 +28,9 @@ Protocol to perform high-resolution reconstructions
 """
 from glob import glob
 import math
+
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
+
 try:
     from itertools import izip
 except ImportError:
@@ -515,7 +518,6 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                     if self.numberOfMpi.get()==1:
                         args += " --device %s" %(GpuListCuda)
-
                     args += ' --thr %s' % self.numberOfThreads.get()
                     if self.numberOfMpi.get()>1:
                         self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
@@ -924,7 +926,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                     os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                                 args = '-i %s -r %s -o %s --keepBestN %f --dev %s ' % \
                                        (fnGroup, fnGalleryGroupMd, fnAnglesGroup,self.numberOfReplicates.get(), GpuListCuda)
-                                self.runJob("xmipp_cuda_align_significant",args, numberOfMpi=1)
+                                self.runJob(CUDA_ALIGN_SIGNIFICANT,args, numberOfMpi=1)
 
                             if exists(fnAnglesGroup):
                                 if not exists(fnAngles) and exists(fnAnglesGroup):
@@ -1534,7 +1536,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             args='--i1 %s --i2 %s --oroot %s --denoising 1'%(fnVol1,fnVol2,fnRootRestored)
             if fnMask!="":
                 args+=" --mask binary_file %s"%fnMask
-            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            if self.useGpu:
+                self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
             moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
 
@@ -1544,7 +1549,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             args='--i1 %s --i2 %s --oroot %s --filterBank 0.01'%(fnVol1,fnVol2,fnRootRestored)
             if fnMask!="":
                 args+=" --mask binary_file %s"%fnMask
-            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            if self.useGpu:
+                self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
             moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
             cleanPath("%s_filterBank.vol"%fnRootRestored)
@@ -1564,7 +1572,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             args='--i1 %s --i2 %s --oroot %s --deconvolution 1'%(fnVol1,fnVol2,fnRootRestored)
             if fnMask!="":
                 args+=" --mask binary_file %s"%fnMask
-            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            if self.useGpu:
+                self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
             moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
             self.runJob("xmipp_image_convert","-i %s_convolved.vol -o %s -t vol"%(fnRootRestored,fnVolAvg),numberOfMpi=1)
@@ -1596,7 +1607,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             args='--i1 %s --i2 %s --oroot %s --difference 2 2'%(fnVol1,fnVol2,fnRootRestored)
             if fnMask!="":
                 args+=" --mask binary_file %s"%fnMask
-            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            if self.useGpu:
+                self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             self.runJob("xmipp_image_convert","-i %s_avgDiff.vol -o %s -t vol"%(fnRootRestored,fnVolAvg),numberOfMpi=1)
             cleanPath("%s_avgDiff.vol"%fnRootRestored)
             cleanPath("%s_restored1.vol"%fnRootRestored)

@@ -83,7 +83,7 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
                       label="Show resolution histogram")
 
         group = form.addGroup('Colored resolution Slices and Volumes')
-        group.addParam('colorMap', EnumParam, choices=COLOR_CHOICES,
+        group.addParam('colorMap', EnumParam, choices=list(COLOR_CHOICES.values()),
                        default=COLOR_JET,
                        label='Color map',
                        help='Select the color map to apply to the resolution map. '
@@ -149,7 +149,7 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
 
     def _showVolumeColorSlices(self, mapFile):
         imageFile = self.protocol._getFileName(mapFile)
-        imgData, min_Res, max_Res = self.getImgData(imageFile)
+        imgData, min_Res, max_Res, voldim__ = self.getImgData(imageFile)
 
         xplotter = XmippPlotter(x=2, y=2, mainTitle="Local Resolution Slices "
                                                     "along %s-axis."
@@ -170,9 +170,9 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
 
     def _showVolumeColorSlicesTwoMaps(self, mapFile1, mapFile2):
         imageFile = self.protocol._getFileName(mapFile1)
-        imgData, min_Res, max_Res = self.getImgData(imageFile)
+        imgData, min_Res, max_Res, voldim__ = self.getImgData(imageFile)
         imageFile = self.protocol._getFileName(mapFile2)
-        imgData, min__, max__ = self.getImgData(imageFile)
+        imgData, min__, max__, voldim__ = self.getImgData(imageFile)
 
         xplotter = XmippPlotter(x=2, y=2, mainTitle="Local Resolution Slices "
                                                     "along %s-axis."
@@ -193,7 +193,7 @@ class XmippMonoTomoViewer(LocalResolutionViewer):
 
     def _showOneColorslice(self, param=None):
         imageFile = self.protocol._getFileName(OUTPUT_RESOLUTION_FILE)
-        imgData, min_Res, max_Res = self.getImgData(imageFile)
+        imgData, min_Res, max_Res, voldim__ = self.getImgData(imageFile)
 
         xplotter = XmippPlotter(x=1, y=1, mainTitle="Local Resolution Slices "
                                                     "along %s-axis."

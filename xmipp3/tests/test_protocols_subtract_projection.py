@@ -41,6 +41,11 @@ from xmipp3.protocols import XmippProtSubtractProjection
 
 ProtRelionSubtract = Domain.importFromPlugin('relion.protocols',
                                              'ProtRelionSubtract', doRaise=True)
+ProtRelionRefine3D = Domain.importFromPlugin('relion.protocols',
+                                             'ProtRelionRefine3D')
+
+ProtRelionCreateMask3D = Domain.importFromPlugin('relion.protocols',
+                                                 'ProtRelionCreateMask3D')
 
 
 proj1 = [(0, 0, 53, 55, 0.5), (0, 0, 53, 56, 1.0), (0, 0, 53, 57, 0.5), (0, 0, 53, 63, 0.5), (0, 0, 53, 64, 1.0),
@@ -562,15 +567,27 @@ class TestSubProj(BaseTest):
         protSubtractCTFpos.projType.set(XmippProtSubtractProjection.CORRECT_PHASE_FLIP)
         self.launchProtocol(protSubtractCTFpos)
 
-        protSubtractCTFRelion = self.newProtocol(ProtRelionSubtract)
-        protSubtractCTFRelion.inputParticles.set(protCTFProj.outputParticles)
-        protSubtractCTFRelion.inputVolume.set(_protImportVol.outputVolume)
-        self.launchProtocol(protSubtractCTFRelion)
+        protRelionRefine3D = self.newProtocol(ProtRelionRefine3D,
+                                              doCTF=False, runMode=1,
+                                              maskDiameterA=340,
+                                              symmetryGroup="c1",
+                                              numberOfMpi=3, numberOfThreads=2)
+        protRelionRefine3D.inputParticles.set(protCTFProj.outputParticles)
+        protRelionRefine3D.referenceVolume.set(_protImportVol.outputVolume)
+        protRelionRefine3D.doGpu.set(False)
+        self.launchProtocol(protRelionRefine3D)
 
-        self.assertIsNotNone(protSubtract.outputParticles, "There was a problem with subtract projection")
+        protMask = self.newProtocol(ProtRelionCreateMask3D, threshold=0.045)
+        protMask.inputVolume.set(protRelionRefine3D.outputVolume)
+        self.launchProtocol(protMask)
 
-
-
+        protSubtract = self.newProtocol(ProtRelionSubtract,
+                                        refMask=protMask.outputMask,
+                                        numberOfMpi=2)
+        protSubtract.inputProtocol.set(protRelionRefine3D)
+        self.launchProtocol(protSubtract)
+        self.assertIsNotNone(protSubtract.outputParticles,
+                             "There was a problem with subtract projection")
 
         self.assertTrue(True)
         # create 3D reconstruction

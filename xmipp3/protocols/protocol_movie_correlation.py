@@ -59,7 +59,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
     # Map to xmipp interpolation values in command line
     INTERP_MAP = {INTERP_LINEAR: 1, INTERP_CUBIC: 3}
 
-    _label = 'correlation alignment'
+    _label = 'FlexAlign'
     _lastUpdateVersion = VERSION_1_1
 
     def __init__(self, **args):
@@ -396,3 +396,6 @@ class XmippProtMovieCorr(ProtAlignMovies):
             errors.append("I cannot find the Xmipp GPU programs in the path")
 
         return errors
+
+    def _citations(self):
+        return ['strelak2020flexalign']

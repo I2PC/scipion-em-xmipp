@@ -40,6 +40,7 @@ from pwem.constants import ALIGN_NONE
 from pwem.objects import SetOfClasses2D, Volume
 from pwem import emlib
 
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
 from xmipp3.convert import writeSetOfClasses2D, writeSetOfParticles, volumeToRow
 from xmipp3.base import isXmippCudaPresent
 
@@ -281,7 +282,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
 
             args = '-i %s -r %s.doc -o %s --keepBestN %f --dev %s ' % \
                    (self.imgsFn, fnGalleryRoot, anglesFn, N, GpuListCuda)
-            self.runJob("xmipp_cuda_align_significant", args, numberOfMpi=1)
+            self.runJob(CUDA_ALIGN_SIGNIFICANT, args, numberOfMpi=1)
 
             cleanPattern(fnGalleryRoot + "*")
         else:
@@ -332,7 +333,6 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
                     GpuListAux = GpuListAux+str(elem)+','
                     count+=1
                 os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
-
             cudaReconsArgs += ' --thr %s' %  self.numberOfThreads.get()
             if self.numberOfMpi.get()==1:
                 cudaReconsArgs += ' --device %s' %(GpuListCuda)

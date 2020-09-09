@@ -31,9 +31,10 @@ import math
 import os
 from tempfile import mkstemp
 
+from pwem import Domain
 from pwem.objects import Transform
-from pwem.convert import Ccp4Header
 from pwem.emlib.image import ImageHandler
+from pwem.convert import Ccp4Header
 from pwem.protocols import ProtImportVolumes
 from pwem.convert.symmetry import Icosahedron
 from pyworkflow.tests import BaseTest, setupTestProject
@@ -386,8 +387,8 @@ class TestProtModelBuilding(BaseTest):
         self.filename[XMIPP_CYCLIC] = generate(
             SCIPION_SYM_NAME[XMIPP_TO_SCIPION[XMIPP_CYCLIC]][:1]+str(self.symOrder),
             'xmipp', XMIPP_SYM_NAME[XMIPP_CYCLIC][:1]+str(self.symOrder))
-        // dimensions of the output volume
-        // due to rounding the  actual size may be slighly greater
+        # dimensions of the output volume
+        # due to rounding the  actual size may be slighly greater
         self.box[XMIPP_CYCLIC] = (50, 45, 81)
         self.extractunitCell(XMIPP_CYCLIC)
 
@@ -490,9 +491,12 @@ class TestProtModelBuilding(BaseTest):
 
     # general function to extract the unit cell
     def extractunitCell(self, sym, offset=0, cropZ=False):
-        from continuousflex.protocols import FlexProtConvertToPseudoAtoms
-        from continuousflex.protocols.pdb.protocol_pseudoatoms_base import NMA_MASK_THRE
-
+        FlexProtConvertToPseudoAtoms = Domain.importFromPlugin("continuousflex.protocols",
+                                                               "FlexProtConvertToPseudoAtoms",
+                                                                doRaise=True)
+        NMA_MASK_THRE = Domain.importFromPlugin("continuousflex.protocols.pdb.protocol_pseudoatoms_base",
+                                                "NMA_MASK_THRE",
+                                                doRaise=True)
         """ extract unit cell from icosahedral phantom
             using xmipp_i2 symmetry
         """
