@@ -204,8 +204,6 @@ class XmippProtValFit(ProtAnalysis3D):
         else:         
             """ Convert PDB to Map """           
             params = ' --centerPDB '
-#             params += ' --poor_Gaussian ' #just test
-#             params += ' --noHet ' #just test
             params += ' -v 0 '    
             params += ' --sampling %f' % self.inputVolume.get().getSamplingRate()        
             params += ' --size %d' % self.inputVolume.get().getXDim()
@@ -247,7 +245,7 @@ class XmippProtValFit(ProtAnalysis3D):
                             
                 params = ' -i %s' % self._getFileName(OUTPUT_PDBVOL_FILE)+'.vol'          
                 params += ' -o %s' % self.mask_xmipp
-                params += ' --select below 0.02 --substitute binarize'  #0.02                   
+                params += ' --select below 0.02 --substitute binarize'                   
                 self.runJob('xmipp_transform_threshold', params) 
                  
                 params = ' -i %s' % self.mask_xmipp        
@@ -339,7 +337,6 @@ class XmippProtValFit(ProtAnalysis3D):
         Vres = xmipp3.Image(self._getFileName(BLOCRES_HALF_FILE)+':mrc').getData()
         Vt = V
         Zdim, Ydim, Xdim = V.shape
-#         print(Zdim)
               
         for z in range(0,Zdim):
             for y in range(0,Ydim):
@@ -392,7 +389,7 @@ class XmippProtValFit(ProtAnalysis3D):
         mean = mtd.getValue(MDL_VOLUME_SCORE1,1)
         meanA = mtd.getValue(MDL_VOLUME_SCORE2,1)  
         
-        #means value for map divided by resolution
+        #means value for map divided by resolution (FSC-Qr)
         mtd2 = md.MetaData()
         mtd2.read(self._getFileName(MD2_MEANS))
             
@@ -465,9 +462,9 @@ class XmippProtValFit(ProtAnalysis3D):
         summary.append(" ")            
         summary.append("Deviation from the signal of the Half Maps divided by local resolution")
         if self.hasAttribute('mean2'):
-            summary.append("Mean FSC-Q: %.2f" % (self.mean2.get()))
+            summary.append("Mean FSC-Qr: %.2f" % (self.mean2.get()))
         if self.hasAttribute('meanA2'):    
-            summary.append("Absotute Mean FSC-Q: %.2f" % (self.meanA2.get()))      
+            summary.append("Absotute Mean FSC-Qr: %.2f" % (self.meanA2.get()))      
              
         summary.append("------------------------------------------")   
         if self.hasAttribute('total_atom'):                    

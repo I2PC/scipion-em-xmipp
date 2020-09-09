@@ -70,24 +70,26 @@ class XmippProtValFitViewer(ProtocolViewer):
         
         group.addParam('displayVolume', LabelParam,
                       important=True,
-                      label='Display Volume Output')
+                      label='Display FSC-Q Volume Output')
         
         group.addParam('displayNormVolume', LabelParam,
                important=True,
-               label='Display Normalized Volume Output')
+               label='Display FSC-Qr Volume Output')
 
 
         group.addParam('displayPDB', EnumParam,
                       choices=['by residue', 'by atom'],
                       default=0, important=True,
                       display=EnumParam.DISPLAY_COMBO,
-                      label='Display PDB Output') 
+                      label='Display FSC-Q on PDB Output',
+                      help='FSC-Q projected on the atomic model')  
         
         group.addParam('displayNormPDB', EnumParam,
               choices=['by residue', 'by atom'],
               default=0, important=True,
               display=EnumParam.DISPLAY_COMBO,
-              label='Display Normalized PDB Output') 
+              label='Display FSC-Qr on PDB Output',
+              help='FSC-Qr projected on the atomic model') 
         
         group = form.addGroup('Statistics')
         
