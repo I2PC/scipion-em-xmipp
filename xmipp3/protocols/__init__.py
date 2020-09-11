@@ -123,6 +123,5 @@ from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
 from .protocol_consensus_local_ctf import XmippProtConsensusLocalCTF
 from .protocol_particle_pick_remove_duplicates import XmippProtPickingRemoveDuplicates
 from .protocol_metaprotocol_golden_highres import XmippMetaProtGoldenHighRes
-from .protocol_volume_subtraction import XmippProtVolSubtraction
+from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtraction
 from .protocol_volume_consensus import XmippProtVolConsensus
-from .protocol_volume_adjust import XmippProtVolAdjust
