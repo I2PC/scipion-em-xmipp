@@ -26,6 +26,7 @@
 # *
 # **************************************************************************
 
+import json
 import subprocess
 from datetime import datetime
 
@@ -38,7 +39,7 @@ from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.20.07a0'
+_currentVersion = '3.20.07b1'
 
 
 class Plugin(pwem.Plugin):
@@ -57,22 +58,26 @@ class Plugin(pwem.Plugin):
         """ Create the needed environment for Xmipp programs. """
         environ = pwutils.Environ(os.environ)
         pos = pwutils.Environ.BEGIN if xmippFirst else pwutils.Environ.END
+
+        environ.update({
+            'PATH': pwem.Config.CUDA_BIN,
+            'LD_LIBRARY_PATH': pwem.Config.CUDA_LIB
+        }, position=pwutils.Environ.END)
+
+        if os.path.isfile(getXmippPath('xmippEnv.json')):
+            with open(getXmippPath('xmippEnv.json'), 'r') as f:
+                compilationEnv = json.load(f)
+            environ.update(compilationEnv, position=pos)
+
         environ.update({
             'PATH': getXmippPath('bin'),
             'LD_LIBRARY_PATH': getXmippPath('lib'),
-            'PYTHONPATH': getXmippPath('pylib')  # FIXME: Only pylib should be enough
-                          # +":"+getXmippPath(os.path.join('pylib', 'xmippPyModules'))
+            'PYTHONPATH': getXmippPath('pylib')
                              }, position=pos)
         environ['XMIPP_HOME'] = getXmippPath()
 
         # Add path to python lib folder
         environ.addLibrary(Config.getPythonLibFolder())
-
-        # environ variables are strings not booleans
-        environ.update({
-                'PATH': pwem.Config.CUDA_BIN,
-                'LD_LIBRARY_PATH': pwem.Config.CUDA_LIB
-            }, position=pos)
 
         return environ
 
@@ -170,13 +175,13 @@ class Plugin(pwem.Plugin):
                                       bindingsAndLibsTgt)],
                            deps=xmippDeps, default=False)
 
-        sourceTgt.append(verToken)
+        configSrc = ('pwd' if os.environ.get('XMIPP_NOCONFIG', 'False')=='True'
+                     else './xmipp config noAsk && ./xmipp check_config')
         env.addPackage('xmippSrc', version=_currentVersion,
                        # adding 'v' before version to fix a package target (post-link)
                        tar='xmippSrc-v'+_currentVersion+'.tgz',
                        commands=[(installCmd.format(**installVars, cwd='.',
-                                                    configCmd='./xmipp config &&'
-                                                              './xmipp check_config',
+                                                    configCmd=configSrc,
                                                     compileCmd='./xmipp compileAndInstall'),
                                   installTgt + sourceTgt),
                                  (bindingsAndLibsCmd.format(**installVars),

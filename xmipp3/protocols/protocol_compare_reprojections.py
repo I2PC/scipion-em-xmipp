@@ -54,7 +54,8 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
     
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
-    
+        self._classesInfo = dict()
+
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
@@ -156,29 +157,53 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         if os.path.exists(fnImgs):
             cleanPath(fnImgs)
 
-        outputSet = self._createSetOfParticles()
         imgSet = self.inputSet.get()
         imgFn = self._getExtraPath("anglesCont.xmd")
         self.newAssignmentPerformed = os.path.exists(self._getExtraPath("angles.xmd"))
         self.samplingRate = self.inputSet.get().getSamplingRate()
+
+        # Special case for 2D classes
         if isinstance(imgSet, SetOfClasses2D):
-            outputSet = self._createSetOfClasses2D(imgSet)
-            outputSet.copyInfo(imgSet.getImages())
-        elif isinstance(imgSet, SetOfAverages):
-            outputSet = self._createSetOfAverages()
+            outputSet = self._createSetOfClasses2D(imgSet.getImages())
             outputSet.copyInfo(imgSet)
+            outputSet.appendFromClasses(imgSet, updateClassCallback=lambda clazz: self._updateClass(clazz, imgFn))
+
+        # Particles or Averages
         else:
-            outputSet = self._createSetOfParticles()
-            outputSet.copyInfo(imgSet)
-            if not self.newAssignmentPerformed:
-                outputSet.setAlignmentProj()
-        self.iterMd = md.iterRows(imgFn, md.MDL_ITEM_ID)
-        self.lastRow = next(self.iterMd) 
-        outputSet.copyItems(imgSet,
-                            updateItemCallback=self._processRow)
-        self._defineOutputs(outputParticles=outputSet)
+            if isinstance(imgSet, SetOfAverages):
+                outputSet = self._createSetOfAverages()
+                outputSet.copyInfo(imgSet)
+            else:
+                outputSet = self._createSetOfParticles()
+                outputSet.copyInfo(imgSet)
+                if not self.newAssignmentPerformed:
+                    outputSet.setAlignmentProj()
+            self.iterMd = md.iterRows(imgFn, md.MDL_ITEM_ID)
+            self.lastRow = next(self.iterMd)
+            outputSet.copyItems(imgSet,
+                                updateItemCallback=self._processRow)
+
+        self._defineOutputs(reprojections=outputSet)
         self._defineSourceRelation(self.inputSet, outputSet)
 
+    def _updateClass(self, clazz, mdFile):
+        """ Callback to update the class"""
+
+        classId = clazz.getObjId()
+
+        if classId not in self._classesInfo:
+            self._classesInfo[classId] = clazz
+            # Get the row
+            row = self._getMdRow(mdFile, classId)
+            self._createItemMatrix(clazz, row)
+
+    def _getMdRow(self, mdFile, id):
+        """ To get a row. Maybe there is way to request a specific row."""
+        for row in md.iterRows(mdFile):
+            if row.getValue(md.MDL_ITEM_ID) == id:
+                return row
+
+        raise Exception("Missing row %s at %s" % (id,mdFile))
     def _processRow(self, particle, row):
         count = 0
         

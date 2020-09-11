@@ -467,7 +467,7 @@ def applyTransform(imag_array, M, shape):
     '''
     imag = emlib.Image()
     imag.setData(imag_array)
-    imag = imag.applyWarpAffine(list(M.flatten()), shape, 1.0)
+    imag = imag.applyWarpAffine(list(M.flatten()), shape, True)
     return imag.getData()
 
 
