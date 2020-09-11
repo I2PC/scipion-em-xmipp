@@ -68,7 +68,7 @@ class XmippProcessParticles(ProtProcessParticles):
         that will be stored in the output Set.
         """
         # By default update the item location (index, filename)
-        # with the new binary data location (after preprocessing)_insertProcessStep
+        # with the new binary data location (after preprocessing)
         newFn = row.getValue(md.MDL_IMAGE)
         newLoc = xmippToLocation(newFn)
         item.setLocation(newLoc)
