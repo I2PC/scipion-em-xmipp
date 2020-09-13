@@ -164,7 +164,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
         self._insertFunctionStep('convertInputStep', )
         self._insertFunctionStep('resolutionMonogenicSignalStep')
         self._insertFunctionStep('createOutputStep')
-        self._insertFunctionStep("createHistrogram")
+        self._insertFunctionStep("createHistogram")
 
     def convertInputStep(self):
         """ Read the input volume.
@@ -275,7 +275,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
 
 
 
-    def createHistrogram(self):
+    def createHistogram(self):
 
         M = float(self.max_res_init)
         m = float(self.min_res_init)

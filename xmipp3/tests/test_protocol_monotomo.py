@@ -67,7 +67,7 @@ class TestMonoTomo(TestMonoTomoBase):
 
     def testMonoTomo(self):
         MonoTomo = self.newProtocol(XmippProtMonoTomo,
-                                    objLabel='two halves monores',
+                                    objLabel='two halves monotomo',
                                     inputVolume=self.protImportHalf1.outputVol,
                                     inputVolume2=self.protImportHalf2.outputVol,
                                     provideMaskInHalves=True,
