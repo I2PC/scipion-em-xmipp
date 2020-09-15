@@ -226,12 +226,13 @@ class XmippProtMonoTomo(ProtAnalysis3D):
 
         if self.useMask.get():
             params += ' --mask binary_file %s' % self._getFileName(BINARY_MASK)
-            params += ' --steps %f' % range_res
-            params += ' --range %f %f' % (self.min_res_init.get(),
-                                          (float(self.max_res_init.get()) - float(freq_step)))
-            params += ' -o %s' % self._getFileName(FN_METADATA_HISTOGRAM)
 
-            self.runJob('xmipp_image_histogram', params)
+        params += ' --steps %f' % range_res
+        params += ' --range %f %f' % (self.min_res_init.get(),
+                                      (float(self.max_res_init.get()) - float(freq_step)))
+        params += ' -o %s' % self._getFileName(FN_METADATA_HISTOGRAM)
+
+        self.runJob('xmipp_image_histogram', params)
 
     def readMetaDataOutput(self):
         mData = md.MetaData(self._getFileName(METADATA_MASK_FILE))
