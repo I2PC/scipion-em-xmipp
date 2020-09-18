@@ -58,11 +58,11 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
         form.addSection(label='Visualization of input volume and extracted '
                               'unit cell')
         form.addParam('displayVol', params.EnumParam,
-                      choices=['chimera', 'slices'], default=VOLUME_CHIMERA,
+                      choices=['chimerax', 'slices'], default=VOLUME_CHIMERA,
                       display=params.EnumParam.DISPLAY_HLIST,
                       label='Display volume with',
-                      help='*chimera*: display volumes as surface with '
-                           'Chimera.\n*slices*: display volumes as 2D slices '
+                      help='*chimerax*: display volumes as surface with '
+                           'ChimeraX.\n*slices*: display volumes as 2D slices '
                            'along z axis.\n')
 
     def _getVisualizeDict(self):
@@ -72,7 +72,7 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
 
     def _validate(self):
         if find_executable(Chimera.getProgram()) is None:
-            return ["chimera is not available. Either install it or choose"
+            return ["chimerax is not available. Either install it or choose"
                     " option 'slices'. "]
         return []
 
@@ -137,6 +137,10 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
         cMap = ['red', 'yellow', 'green', 'cyan', 'blue']
         d = {}
         d['outerRadius'] = self.protocol.outerRadius.get() * sampling
+        if innerRadius < 0:
+           innerRadius = 0
+        d['innerRadius'] = innerRadius * sampling
+
         d['innerRadius'] = self.protocol.innerRadius.get() * sampling
         d['symmetry'] = Chimera.getSymmetry(XMIPP_TO_SCIPION[self.protocol.symmetryGroup.get()])
 
