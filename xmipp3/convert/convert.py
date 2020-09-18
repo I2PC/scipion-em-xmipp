@@ -1458,7 +1458,10 @@ def alignmentToRow(alignment, alignmentRow, alignType):
         if flip:
             raise Exception("the det of the transformation matrix is "
                             "negative. This is not a valid transformation "
-                            "matrix for Scipion.")
+                            "matrix for Scipion. %s %f"% (str(matrix[0:3, 0:3]),
+                                                          np.linalg.det(matrix[0:3, 0:3])
+                                                         )
+                           )
     shifts, angles = geometryFromMatrix(matrix, inverseTransform)
     alignmentRow.setValue(emlib.MDL_SHIFT_X, shifts[0])
     alignmentRow.setValue(emlib.MDL_SHIFT_Y, shifts[1])
