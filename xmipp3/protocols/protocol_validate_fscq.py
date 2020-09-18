@@ -58,8 +58,6 @@ RESTA_FILE_NORM = 'diferencia_norm.map'
 PDB_NORM_FILE = 'pdb_fsc-q_norm.pdb'
 
 
-
-
 class XmippProtValFit(ProtAnalysis3D):
     """    
     The protocol assesses the quality of the fit.
@@ -101,7 +99,7 @@ class XmippProtValFit(ProtAnalysis3D):
         
         form.addParam('box', IntParam, default=20,
                       label="window size",
-                      help='Kernel size for determining'
+                      help='Kernel size (slidding window) for determining'
                       ' local resolution (pixels/voxels).')
         
         form.addParam('setOrigCoord', BooleanParam,
