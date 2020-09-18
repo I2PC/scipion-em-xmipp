@@ -137,6 +137,10 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
         cMap = ['red', 'yellow', 'green', 'cyan', 'blue']
         d = {}
         d['outerRadius'] = self.protocol.outerRadius.get() * sampling
+        if innerRadius < 0:
+           innerRadius = 0
+        d['innerRadius'] = innerRadius * sampling
+
         d['innerRadius'] = self.protocol.innerRadius.get() * sampling
         d['symmetry'] = Chimera.getSymmetry(XMIPP_TO_SCIPION[self.protocol.symmetryGroup.get()])
 
@@ -144,7 +148,7 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
             f.write("shape icosahedron mesh true radius %(outerRadius)d "
                     "orientation %(symmetry)s\n" % d)
         step = (d['outerRadius'] - d['innerRadius']) / float(len(cMap) - 1)
-        f.write("color radial #3 center 0,0,0 palette ")
+        f.write("color radial #3 center 0,0,0 palette -")
         counter = 0
         s = ""
         for color in cMap:
