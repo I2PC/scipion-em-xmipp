@@ -40,7 +40,7 @@ VOLUME_SLICES = 1
 VOLUME_CHIMERA = 0
 
 
-class viewerXmippProtVolSubtraction(EmProtocolViewer):
+class XmippProtVolSubtractionViewer(EmProtocolViewer):
     """ Visualize the input and output volumes of protocol XmippProtVolumeSubtraction
         by choosing Chimera (3D) or Xmipp visualizer (2D).
         The axes of coordinates x, y, z will be shown by choosing Chimera"""
