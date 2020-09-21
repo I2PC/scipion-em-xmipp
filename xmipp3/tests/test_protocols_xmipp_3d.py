@@ -788,21 +788,6 @@ class TestXmippProtAlignVolume(TestXmippBase):
                                      )
         protAlign.inputVolumes.append(self.protImport2.outputVolume)
         self.launchProtocol(protAlign)
-        
-
-class TestXmippConvertToPseudoatoms(TestXmippBase):
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        TestXmippBase.setData()
-        cls.protImport = cls.runImportVolumes(cls.vol1, 9.896)
-
-    def testConvertToPseudoatoms(self):
-        print("Run convert to pseudoatoms")
-        prot = XmippProtConvertToPseudoAtoms(pseudoAtomTarget=15)
-        prot.inputStructure.set(self.protImport.outputVolume)
-        self.proj.launchProtocol(prot, wait=True)
-        self.assertIsNotNone(prot.outputPdb, "There was a problem with Convert to pseudoatoms output Pdb")
 
 
 class TestXmippProtHelicalParameters(TestXmippBase):

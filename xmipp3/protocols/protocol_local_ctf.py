@@ -78,6 +78,7 @@ class XmippProtLocalCTF(ProtAnalysis3D):
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self):
+        """convert input to proper format and dimensions if necessary"""
         imgSet = self.inputSet.get()
         writeSetOfParticles(imgSet, self._getExtraPath('input_imgs.xmd'))
         img = emlib.image.ImageHandler()
@@ -89,6 +90,7 @@ class XmippProtLocalCTF(ProtAnalysis3D):
             self.runJob("xmipp_image_resize","-i %s --dim %d"%(fnVol,xDimImg),numberOfMpi=1)
 
     def refineDefocus(self):
+        """compute local defocus using Xmipp (xmipp_angular_continuous_assign2) and add to metadata columns related to defocus"""
         fnVol = self._getExtraPath("volume.vol")
         fnIn = self._getExtraPath('input_imgs.xmd')
         fnOut = self._getExtraPath('output_imgs.xmd')
@@ -114,6 +116,7 @@ class XmippProtLocalCTF(ProtAnalysis3D):
         cleanPattern(self._getExtraPath("anglesCont.*"))
 
     def createOutputStep(self):
+        """create scipion output data from metadata"""
         outputSet = self._createSetOfParticles()
         imgSet = self.inputSet.get()
         outputSet.copyInfo(imgSet)

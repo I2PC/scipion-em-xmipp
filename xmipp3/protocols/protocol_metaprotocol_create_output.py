@@ -94,7 +94,7 @@ class XmippMetaProtCreateOutput(EMProtocol):
             # print("createOutputStep ", i)
             classItem = prot.outputClasses[classListIds[i]]
             volFn = str(classItem._representative._filename)
-            volFnOut = self._getExtraPath('outVol%d.vol'%(i+1))
+            volFnOut = self._getExtraPath('outVol%d.mrc'%(i+1))
             volDim = classItem._representative.getDim()[0]
             if volDim!=origDim:
                 self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d"

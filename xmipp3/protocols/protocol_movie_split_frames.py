@@ -124,9 +124,6 @@ class XmippProtSplitFrames(ProtPreprocessMicrographs):
             oddSet.append(imgOutOdd)
             evenSet.append(imgOutEven)
 
-        oddSet.copyInfo(self.inputMovies.get())
-        evenSet.copyInfo(self.inputMovies.get())
-
         oddSet.setSamplingRate(self.inputMovies.get().getSamplingRate())
         evenSet.setSamplingRate(self.inputMovies.get().getSamplingRate())
 

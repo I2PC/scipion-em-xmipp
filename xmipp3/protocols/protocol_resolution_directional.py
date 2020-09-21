@@ -42,8 +42,8 @@ MONORES_METHOD_URL = 'http://github.com/I2PC/scipion/wiki/XmippProtMonoDir'
 
 
 OUTPUT_RADIAL_AVERAGES = 'Radial_averages.xmd'
-OUTPUT_RESOLUTION_FILE = 'mgresolution.vol'
-OUTPUT_RESOLUTION_FILE_CHIMERA = 'MG_Chimera_resolution.vol'
+OUTPUT_RESOLUTION_FILE = 'monoresResolutionMap.mrc'
+OUTPUT_RESOLUTION_FILE_CHIMERA = 'monoresResolutionChimera.mrc'
 OUTPUT_MASK_FILE = 'output_Mask.vol'
 FN_MEAN_VOL = 'mean_volume.vol'
 METADATA_ANGLES_FILE = 'angles_md.xmd'
@@ -202,32 +202,15 @@ class XmippProtMonoDir(ProtAnalysis3D):
 
     def MonoResStep(self):
 
-        if self.isPremasked:
-            if self.volumeRadius == -1:
-                xdim, _ydim, _zdim = self.inputVolumes.get().getDim()
-                xdim = xdim*0.5
-            else:
-                xdim = self.volumeRadius.get()
-        else:
-            xdim, _ydim, _zdim = self.inputVolumes.get().getDim()
-            xdim = xdim*0.5
-                
-
         params = ' --vol %s' % self.vol0Fn
         params += ' --mask %s' % self.maskFn
-        params += ' --mask_out %s' % self._getTmpPath('mask.vol')  
-        params += ' -o %s' % self._getExtraPath(OUTPUT_RESOLUTION_FILE)
-
+        params += ' -o %s' % self._getExtraPath()
         params += ' --sampling_rate %f' % self.inputVolumes.get().getSamplingRate()
         params += ' --step %f' % 0.25
         params += ' --minRes %f' % (2.0*self.inputVolumes.get().getSamplingRate())
         params += ' --maxRes %f' % 18.0
-        params += ' --volumeRadius %f' % xdim
-        params += ' --exact'
-        params += ' --sym %s' % 'c1'
         params += ' --significance %f' % self.significance.get()
-        params += ' --md_outputdata %s' % self._getTmpPath('metadata.xmd')  
-        params += ' --filtered_volume %s' % ''
+        params += ' --threads %i' % self.numberOfThreads.get()  
         self.runJob('xmipp_resolution_monogenic_signal', params)
 
     def createEllipsoid(self):
