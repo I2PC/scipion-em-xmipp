@@ -118,10 +118,14 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                       label='Sphere radius',
                       experLevel=params.LEVEL_ADVANCED,
                       help='Radius of the sphere where the spherical harmonics will be computed.')
-        form.addParam('depth', params.IntParam, default=3,
-                      label='Harmonical depth', condition='computeDef',
+        form.addParam('l1', params.IntParam, default=2,
+                      label='Zernike Degree',
                       expertLevel=params.LEVEL_ADVANCED,
-                      help='Harmonical depth of the deformation=1,2,3,...')
+                      help='Degree Zernike Polynomials of the deformation=1,2,3,...')
+        form.addParam('l2', params.IntParam, default=2,
+                      label='Harmonical Degree',
+                      expertLevel=params.LEVEL_ADVANCED,
+                      help='Degree Spherical Harmonics of the deformation=1,2,3,...')
         form.addParam('penalization', params.FloatParam, default=0.00025, label='Regularization',
                       expertLevel=params.LEVEL_ADVANCED,
                       help='Penalization to deformations (higher values penalize more the deformation).')
@@ -207,8 +211,8 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         self.runJob("xmipp_volume_align", params)
 
         if self.computeDef.get():
-            params = ' -i %s -r %s -o %s --depth %d --sigma "%s" --oroot %s --regularization %f' %\
-                     (fnOut, refVolFn, fnOut2, self.depth.get(), self.sigma.get(),
+            params = ' -i %s -r %s -o %s --l1 %d --l2 %d --sigma "%s" --oroot %s --regularization %f' %\
+                     (fnOut, refVolFn, fnOut2, self.l1.get(), self.l2.get(), self.sigma.get(),
                       self._getExtraPath('Pair_%d_%d' % (i, j)), self.penalization.get())
             if self.newRmax != 0:
                 params = params + ' --Rmax %d' % self.newRmax
@@ -440,6 +444,17 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
     def _defineResultsName3(self, i):
         return self._getExtraPath('ConsensusMatrix%d.txt' % i)
+
+    # ------------------------- VALIDATE functions -----------------------------
+    def validate(self):
+        """ Try to find errors on define params. """
+        errors = []
+        l1 = self.l1.get()
+        l2 = self.l2.get()
+        if (l1 - l2) < 0:
+            errors.append('Zernike degree must be higher than '
+                          'SPH degree.')
+        return errors
 
 
 
