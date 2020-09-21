@@ -167,3 +167,14 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
             geo_str = file.read().replace('\n', ',')
         params = " -i %s -o %s --matrix %s" % (fnInputVol, fnOutVol, geo_str)
         self.runJob("xmipp_transform_geometry", params)
+
+    # ------------------------- VALIDATE functions -----------------------------
+    def validate(self):
+        """ Try to find errors on define params. """
+        errors = []
+        l1 = self.l1.get()
+        l2 = self.l2.get()
+        if (l1 - l2) < 0:
+            errors.append('Zernike degree must be higher than '
+                          'SPH degree.')
+        return errors
