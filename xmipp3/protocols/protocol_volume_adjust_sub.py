@@ -56,10 +56,10 @@ class XmippProtVolAdjBase(EMProtocol):
                       help='Decay of the filter (sigma parameter) to smooth the mask transition',
                       expertLevel=LEVEL_ADVANCED)
         form.addParam('iter', IntParam, label="Number of iterations: ", default=5, expertLevel=LEVEL_ADVANCED)
-        form.addParam('rfactor', FloatParam, label="Relaxation factor (lambda): ", default=0.5,
+        form.addParam('rfactor', FloatParam, label="Relaxation factor (lambda): ", default=1,
                       expertLevel=LEVEL_ADVANCED,
                       help='Relaxation factor for Fourier amplitude projector (POCS), it should be between 0 and 1, '
-                           'being 0 no relaxation and 1 no modification of volume 2 amplitudes')
+                           'being 1 no relaxation and 0 no modification of volume 2 amplitudes')
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
