@@ -1148,3 +1148,40 @@ if __name__ == "__main__":
             print("Test: '%s' not found." % className)
     else:
         unittest.main()
+
+
+class TestXmippVolSubtraction(TestXmippBase):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
+        cls.vol1 = cls.dataset.getFile('volumes/volume_1_iter_002.mrc')
+        cls.vol2 = cls.dataset.getFile('volumes/volume_2_iter_002.mrc')
+
+    def testXmippVolSub(self):
+        print("Import Volume 1")
+        protImportVol1 = self.newProtocol(ProtImportVolumes,
+                                         objLabel='Volume',
+                                         filesPath=self.vol1,
+                                         samplingRate=7.08)
+        self.launchProtocol(protImportVol1)
+        self.assertIsNotNone(protImportVol1.getFiles(),
+                             "There was a problem with the import 1")
+        print("Import Volume 2")
+        protImportVol2 = self.newProtocol(ProtImportVolumes,
+                                         objLabel='Volume',
+                                         filesPath=self.vol2,
+                                         samplingRate=7.08)
+        self.launchProtocol(protImportVol2)
+        self.assertIsNotNone(protImportVol2.getFiles(),
+                             "There was a problem with the import 2")
+        print("Run volume subtraction")
+        protVolSub = self.newProtocol(XmippProtVolSubtraction,
+                                      vol1=protImportVol1.outputVolume,
+                                      vol2=protImportVol2.outputVolume,
+                                      pdb=False,
+                                      masks=False)
+        self.launchProtocol(protVolSub)
+        self.assertIsNotNone(protVolSub.outputVolume,
+                             "There was a problem with Volumes subtraction")
