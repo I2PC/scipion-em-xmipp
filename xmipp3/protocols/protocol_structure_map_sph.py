@@ -217,7 +217,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         if self.newRmax != 0:
             params = params + ' --Rmax %d' % self.newRmax
 
-            self.runJob("xmipp_volume_deform_sph", params)
+        self.runJob("xmipp_volume_deform_sph", params)
 
     def deformationMatrix(self, volList):
         numVol = len(volList)
