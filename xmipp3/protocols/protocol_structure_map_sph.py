@@ -109,16 +109,16 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                       default=8.0,
                       help="In Angstroms, the images and the volume are rescaled so that this resolution is at "
                            "2/3 of the Fourier spectrum.")
-        form.addParam('computeDef', params.BooleanParam, label="Compute deformation",
-                      default=True,
-                      help="Performed and structure mapping with/without deforming the input volumes")
+        # form.addParam('computeDef', params.BooleanParam, label="Compute deformation",
+        #               default=True,
+        #               help="Performed and structure mapping with/without deforming the input volumes")
         form.addParam('sigma', params.NumericListParam, label="Multiresolution", default="1 2",
                       help="Perform the analysys comparing different filtered versions of the volumes")
         form.addParam('Rmax', params.IntParam, default=0,
                       label='Sphere radius',
                       experLevel=params.LEVEL_ADVANCED,
                       help='Radius of the sphere where the spherical harmonics will be computed.')
-        form.addParam('l1', params.IntParam, default=2,
+        form.addParam('l1', params.IntParam, default=3,
                       label='Zernike Degree',
                       expertLevel=params.LEVEL_ADVANCED,
                       help='Degree Zernike Polynomials of the deformation=1,2,3,...')
@@ -162,16 +162,16 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                 nVolj += 1
             nVoli += 1
 
-        if self.computeDef.get():
-            self._insertFunctionStep('deformationMatrix', volList, prerequisites=deps)
-            self._insertFunctionStep('gatherResultsStepDef')
+        # if self.computeDef.get():
+        self._insertFunctionStep('deformationMatrix', volList, prerequisites=deps)
+        self._insertFunctionStep('gatherResultsStepDef')
 
         self._insertFunctionStep('computeCorr', volList)
 
         self._insertFunctionStep('gatherResultsStepCorr')
 
-        if self.computeDef.get():
-            self._insertFunctionStep('entropyConsensus')
+        # if self.computeDef.get():
+        self._insertFunctionStep('entropyConsensus')
 
         cleanPattern(self._getExtraPath('*.vol'))
 
@@ -210,12 +210,12 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
         self.runJob("xmipp_volume_align", params)
 
-        if self.computeDef.get():
-            params = ' -i %s -r %s -o %s --l1 %d --l2 %d --sigma "%s" --oroot %s --regularization %f' %\
-                     (fnOut, refVolFn, fnOut2, self.l1.get(), self.l2.get(), self.sigma.get(),
-                      self._getExtraPath('Pair_%d_%d' % (i, j)), self.penalization.get())
-            if self.newRmax != 0:
-                params = params + ' --Rmax %d' % self.newRmax
+        # if self.computeDef.get():
+        params = ' -i %s -r %s -o %s --l1 %d --l2 %d --sigma "%s" --oroot %s --regularization %f' %\
+                 (fnOut, refVolFn, fnOut2, self.l1.get(), self.l2.get(), self.sigma.get(),
+                  self._getExtraPath('Pair_%d_%d' % (i, j)), self.penalization.get())
+        if self.newRmax != 0:
+            params = params + ' --Rmax %d' % self.newRmax
 
             self.runJob("xmipp_volume_deform_sph", params)
 
@@ -257,10 +257,10 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         for item in volList:
             vol = xmippLib.Image(item)
             self.corrMatrix[ind][ind] = 0.0
-            if self.computeDef.get():
-                path = self._getExtraPath("*DeformedTo%d.vol" % ind)
-            else:
-                path = self._getExtraPath("*AlignedTo%d.vol" % ind)
+            # if self.computeDef.get():
+            path = self._getExtraPath("*DeformedTo%d.vol" % ind)
+            # else:
+            #     path = self._getExtraPath("*AlignedTo%d.vol" % ind)
             for fileVol in glob.glob(path):
                 matches = re.findall("(\d+)", fileVol)
                 ind2 = int(matches[1])

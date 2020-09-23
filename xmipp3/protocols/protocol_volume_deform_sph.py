@@ -54,7 +54,7 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
                       label='Sphere radius',
                       experLevel=params.LEVEL_ADVANCED,
                       help='Radius of the sphere where the spherical harmonics will be computed.')
-        form.addParam('l1', params.IntParam, default=2,
+        form.addParam('l1', params.IntParam, default=3,
                       label='Zernike Degree',
                       expertLevel=params.LEVEL_ADVANCED,
                       help='Degree Zernike Polynomials of the deformation=1,2,3,...')
