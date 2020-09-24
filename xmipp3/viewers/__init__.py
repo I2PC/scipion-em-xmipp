@@ -58,6 +58,7 @@ from .viewer_projmatch import XmippProjMatchViewer
 from .viewer_structure_map_sph import XmippProtStructureMapSphViewer
 from .viewer_volume_deform_sph import XmippVolumeDeformSphViewer
 from .viewer_metaprotocol_golden_highres import XmippMetaprotocolGoldenHighResViewer
+from .viewer_structure_map import XmippProtStructureMapViewer
 
 from .viewer_pdb_deform_sph import XmippPDBDeformViewer
 
