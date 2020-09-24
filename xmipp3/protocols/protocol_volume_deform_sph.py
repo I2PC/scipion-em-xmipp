@@ -25,6 +25,8 @@
 # *
 # **************************************************************************
 
+import numpy as np
+
 from pwem.protocols import ProtAnalysis3D
 import pyworkflow.protocol.params as params
 from pwem.emlib.image import ImageHandler
@@ -137,6 +139,19 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
 
 
     def createOutputStep(self):
+        if self.targetResolution.get() != 3.0:
+            correctionFactor = self.targetResolution.get() / 3.0
+            with open(self._getExtraPath('Volumes_clnm.txt'), 'r') as fid:
+                lines = fid.readlines()
+                basisParams = np.fromstring(lines[0], sep=' ')
+                if self.Rmax.get() != 0:
+                    basisParams[2] = self.Rmax.get()
+                else:
+                    basisParams[2] = self.refVolume.get().getDim()[0] / 2
+                clnm = np.fromstring(lines[1], sep=' ') * correctionFactor
+            with open(self._getExtraPath('Volumes_clnm.txt'), 'w') as fid:
+                fid.write(' '.join(map(str, basisParams)) + "\n")
+                fid.write(' '.join(map(str, clnm)) + "\n")
         vol = Volume()
         vol.setLocation(self._getFileName('fnOutVol'))
         vol.setSamplingRate(self.newTs)
