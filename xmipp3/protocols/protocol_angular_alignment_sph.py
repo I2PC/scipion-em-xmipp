@@ -26,6 +26,7 @@
 # **************************************************************************
 
 import pyworkflow.protocol.params as params
+from pyworkflow.object import Integer
 from pyworkflow.utils.path import moveFile
 
 from pwem.protocols import ProtAnalysis3D
@@ -54,9 +55,14 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         form.addParam('targetResolution', params.FloatParam, label="Target resolution (A)", default=8.0,
                       help="In Angstroms, the images and the volume are rescaled so that this resolution is at "
                            "2/3 of the Fourier spectrum.")
-        form.addParam('depth', params.IntParam, default=3,
-                      label='Harmonical depth', expertLevel=params.LEVEL_ADVANCED,
-                      help='Harmonical depth of the deformation=1,2,3,...')
+        form.addParam('l1', params.IntParam, default=3,
+                      label='Zernike Degree',
+                      expertLevel=params.LEVEL_ADVANCED,
+                      help='Degree Zernike Polynomials of the deformation=1,2,3,...')
+        form.addParam('l2', params.IntParam, default=2,
+                      label='Harmonical Degree',
+                      expertLevel=params.LEVEL_ADVANCED,
+                      help='Degree Spherical Harmonics of the deformation=1,2,3,...')
         form.addParam('maxShift', params.FloatParam, default=-1,
                       label='Maximum shift (px)', expertLevel=params.LEVEL_ADVANCED,
                       help='Maximum shift allowed in pixels')
@@ -66,6 +72,9 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         form.addParam('maxResolution', params.FloatParam, default=4.0,
                       label='Maximum resolution (A)', expertLevel=params.LEVEL_ADVANCED,
                       help='Maximum resolution (A)')
+        form.addParam('penalization', params.FloatParam, default=0.00025, label='Regularization',
+                      expertLevel=params.LEVEL_ADVANCED,
+                      help='Penalization to deformations (higher values penalize more the deformation).')
         form.addParallelSection(threads=1, mpi=8)
 
     def _createFilenameTemplates(self):
@@ -93,10 +102,10 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         inputParticles = self.inputParticles.get()
         writeSetOfParticles(inputParticles, imgsFn)
         Xdim = inputParticles.getXDim()
-        Ts = inputParticles.getSamplingRate()
+        self.Ts = inputParticles.getSamplingRate()
         newTs = self.targetResolution.get() * 1.0 /3.0
-        newTs = max(Ts, newTs)
-        self.newXdim = int(Xdim * Ts / newTs)
+        self.newTs = max(self.Ts, newTs)
+        self.newXdim = int(Xdim * self.Ts / newTs)
         writeInfoField(self._getExtraPath(), "sampling", md.MDL_SAMPLINGRATE, newTs)
         writeInfoField(self._getExtraPath(), "size", md.MDL_XSIZE, self.newXdim)
         if self.newXdim != Xdim:
@@ -119,14 +128,14 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
     def alignmentStep(self):
         imgsFn = self._getFileName('imgsFn')
         fnVol = self._getFileName('fnVol')
-        fnOut =  self._getFileName('fnOut')
+        fnOut = self._getFileName('fnOut')
         fnOutDir = self._getFileName('fnOutDir')
         Ts = readInfoField(self._getExtraPath(), "sampling", md.MDL_SAMPLINGRATE)
         params = ' -i %s --ref %s -o %s --optimizeAlignment --optimizeDeformation ' \
-                 '--depth %d --max_shift %f --max_angular_change %f --sampling %f ' \
-                 ' --max_resolution %f --odir %s --resume' %\
-                 (imgsFn, fnVol, fnOut, self.depth, self.maxShift, self.maxAngular,
-                  Ts, self.maxResolution, fnOutDir)
+                 '--l1 %d --l2 %d --max_shift %f --max_angular_change %f --sampling %f ' \
+                 ' --max_resolution %f --odir %s --resume --regularization %f' %\
+                 (imgsFn, fnVol, fnOut, self.l1.get(), self.l2.get(), self.maxShift,
+                  self.maxAngular, Ts, self.maxResolution, fnOutDir, self.penalization.get())
         if self.inputParticles.get().isPhaseFlipped(): #preguntar
             params += ' --phaseFlipped'
         self.runJob("xmipp_angular_sph_alignment", params, numberOfMpi=self.numberOfMpi.get())
@@ -153,6 +162,11 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
             newRow = row
             newRow.setValue(md.MDL_SPH_TSNE_COEFF1D, float(X_tsne_1d[i,0]))
             newRow.setValue(md.MDL_SPH_TSNE_COEFF2D, [float(X_tsne_2d[i, 0]),  float(X_tsne_2d[i, 1])])
+            if self.newTs != self.Ts:
+                coeffs = mdOut.getValue(md.MDL_SPH_COEFFICIENTS, row.getObjId())
+                correctionFactor = self.inputVolume.get().getDim()[0] / self.newXdim
+                coeffs = [correctionFactor*coeff for coeff in coeffs]
+                newRow.setValue(md.MDL_SPH_COEFFICIENTS, coeffs)
             newRow.addToMd(newMdOut)
             i+=1
             newMdOut.write(fnOut)
@@ -165,6 +179,9 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         partSet.copyItems(inputSet,
                           updateItemCallback=self._updateParticle,
                           itemDataIterator=md.iterRows(fnOut, sortByLabel=md.MDL_ITEM_ID))
+        partSet.L1 = Integer(self.l1.get())
+        partSet.L2 = Integer(self.l2.get())
+        partSet.Rmax = Integer(self.inputVolume.get().getDim()[0] / 2)
 
         self._defineOutputs(outputParticles=partSet)
         self._defineTransformRelation(self.inputParticles, partSet)
@@ -181,6 +198,17 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
 
     def getInputParticles(self):
         return self.inputParticles.get()
+
+    # ----------------------- VALIDATE functions ----------------------------------------
+    def validate(self):
+        """ Try to find errors on define params. """
+        errors = []
+        l1 = self.l1.get()
+        l2 = self.l2.get()
+        if (l1 - l2) < 0:
+            errors.append('Zernike degree must be higher than '
+                          'SPH degree.')
+        return errors
 
 
 
