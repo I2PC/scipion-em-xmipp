@@ -136,6 +136,7 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
 
         cMap = ['red', 'yellow', 'green', 'cyan', 'blue']
         d = {}
+        innerRadius = self.protocol.innerRadius.get()
         d['outerRadius'] = self.protocol.outerRadius.get() * sampling
         if innerRadius < 0:
            innerRadius = 0
