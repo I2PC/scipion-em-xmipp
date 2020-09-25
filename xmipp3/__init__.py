@@ -157,7 +157,7 @@ class Plugin(pwem.Plugin):
         ## Allowing xmippDev if devel mode detected
         # plugin  = scipion-em-xmipp  <--  xmipp3    <--     __init__.py
         pluginDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        # bundle  = xmipp-bundle  <-  src  <-  scipion-em-xmipp
+        # bundle  = xmipp-bundle  <-  src   <-  scipion-em-xmipp
         bundleDir = os.path.dirname(os.path.dirname(pluginDir))
 
         isPypiDev = os.path.isfile(os.path.join(pluginDir, 'setup.py'))
