@@ -72,7 +72,7 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         form.addParam('maxResolution', params.FloatParam, default=4.0,
                       label='Maximum resolution (A)', expertLevel=params.LEVEL_ADVANCED,
                       help='Maximum resolution (A)')
-        form.addParam('penalization', params.FloatParam, default=0.00025, label='Regularization',
+        form.addParam('penalization', params.FloatParam, default=0.005, label='Regularization',
                       expertLevel=params.LEVEL_ADVANCED,
                       help='Penalization to deformations (higher values penalize more the deformation).')
         form.addParallelSection(threads=1, mpi=8)
