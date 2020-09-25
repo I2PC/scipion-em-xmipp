@@ -39,7 +39,7 @@ from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.20.07b1'
+_currentVersion = '3.20.07rc'
 
 
 class Plugin(pwem.Plugin):
@@ -187,21 +187,6 @@ class Plugin(pwem.Plugin):
                                  (bindingsAndLibsCmd.format(**installVars),
                                   bindingsAndLibsTgt)],
                        deps=xmippDeps, default=not develMode)
-
-        installBin = ("rm -rf {xmippHome} 2>/dev/null; cd .. ; "
-                      "ln -srf xmippBin_{distro}-{currVersion} {xmippHome} && "
-                      "touch {installedToken}")
-        env.addPackage('xmippBin_Debian', version=_currentVersion,
-                       commands=[(installBin.format(**installVars, distro='Debian'),
-                                  installTgt + [confToken, verToken+'_Debian']),
-                                 (bindingsAndLibsCmd, bindingsAndLibsTgt)],
-                       deps=xmippDeps, default=False)
-
-        env.addPackage('xmippBin_Centos', version=_currentVersion,
-                       commands=[(installBin.format(**installVars, distro='Centos'),
-                                  installTgt+[confToken, verToken+'_Centos']),
-                                 (bindingsAndLibsCmd, bindingsAndLibsTgt)],
-                       deps=xmippDeps, default=False)
 
         ## EXTRA PACKAGES ##
         installDeepLearningToolkit(cls, env)
