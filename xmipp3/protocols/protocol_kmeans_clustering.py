@@ -28,6 +28,7 @@ import os
 from sklearn.cluster import KMeans
 import numpy as np
 
+from pyworkflow.object import Integer
 import pyworkflow.protocol.params as param
 from pyworkflow import VERSION_2_0
 import pwem.emlib.metadata as md
@@ -85,6 +86,9 @@ class XmippProtKmeansSPH(ProtClassify2D):
                                    updateClassCallback=self._updateClass,
                                    itemDataIterator=iter(self.kmeans.labels_))
         result = {'outputClasses': classes2DSet}
+        classes2DSet.L1 = Integer(self.inputParts.get().L1)
+        classes2DSet.L2 = Integer(self.inputParts.get().L2)
+        classes2DSet.Rmax = Integer(self.inputParts.get().Rmax)
         self._defineOutputs(**result)
         self._defineSourceRelation(self.inputParts, classes2DSet)
 

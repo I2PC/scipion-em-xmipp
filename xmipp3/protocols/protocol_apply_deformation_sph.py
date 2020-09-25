@@ -59,11 +59,15 @@ class XmippProtApplySPH(ProtAnalysis3D):
         self.outParams = []
         classes = self.inputClasses.get()
         for rep in classes.iterItems():
+            basisParams = [rep.L1, rep.L2, rep.Rmax]
             coeffs = rep.getRepresentative().get()
             coeffs = np.fromstring(coeffs, sep=',')
             idx = rep.getObjId() + 1
             file = self._getTmpPath('coeffs.txt')
-            np.savetxt(file, coeffs)
+            # np.savetxt(file, coeffs)
+            with open(file, 'w') as fid:
+                fid.write(' '.join(map(str, basisParams)) + "\n")
+                fid.write(' '.join(map(str, coeffs)) + "\n")
             outFile = pwutils.removeBaseExt(self.inputVol.get().getFileName()) + '_%d_deformed.vol' % idx
             params = ' -i %s --clnm %s -o %s' % \
                      (self.inputVol.get().getFileName(), file, self._getExtraPath(outFile))
