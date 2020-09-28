@@ -294,8 +294,10 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             X2 = np.loadtxt(self._defineResultsName2(i))
 
             # Normalize the matrices
-            [_, S, _] = np.linalg.svd(X1) ; X1 = X1 / np.amax(np.abs(S))
-            [_, S, _] = np.linalg.svd(X2) ; X2 = X2 / np.amax(np.abs(S))
+            [_, S, _] = np.linalg.svd(X1)
+            X1 = X1 / np.amax(np.abs(S))
+            [_, S, _] = np.linalg.svd(X2)
+            X2 = X2 / np.amax(np.abs(S))
 
             # Register the points (taking mirrors into account)
             for idf in range(4):
@@ -332,7 +334,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             # Round point to place them in a grid
             Xr1 = np.round(X1, decimals=3)
             Xr2 = np.round(X2, decimals=3)
-            size_grid = 2 * max((np.amax(Xr1), np.amax(Xr2)))
+            size_grid = 2.5 * max((np.amax(Xr1), np.amax(Xr2)))
 
             # Parameters needed for future convolution
             if i == 2:
@@ -343,7 +345,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                 R, C = np.meshgrid(grid_coords, grid_coords, indexing='ij')
             else:
                 R, C, D = np.meshgrid(grid_coords, grid_coords, grid_coords, indexing='ij')
-            sigma = R.shape[0] / (200 / 5)
+            sigma = R.shape[0] / 20
 
             # Create Gaussian Kernel
             lbox = int(6 * sigma)
@@ -395,7 +397,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             id_peaks, _ = find_peaks(-entropy_vect)
             if id_peaks.size > 1:
                 peaks = entropy_vect[id_peaks]
-                id_optimal = np.argmax(peaks)
+                id_optimal = id_peaks[np.argmin(peaks)]
             elif id_peaks.size == 1:
                 id_optimal = id_peaks[0]
             else:
