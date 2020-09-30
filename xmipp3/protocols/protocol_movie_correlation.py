@@ -277,8 +277,8 @@ class XmippProtMovieCorr(ProtAlignMovies):
             x, y,frames = self.inputMovies.get().getDim()
             Ts = self.inputMovies.get().getSamplingRate()
             # one control point each 1000 A
-            self.controlPointX.set(int(x * Ts) / 1000 + 2)
-            self.controlPointY.set(int(y * Ts) / 1000 + 2)
+            self.controlPointX.set(int(x / Ts) / 1000 + 2)
+            self.controlPointY.set(int(y / Ts) / 1000 + 2)
             self.controlPointT.set(ceil(frames/7.) + 2)
 
     def _getMovieShifts(self, movie):
