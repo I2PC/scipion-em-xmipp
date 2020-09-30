@@ -64,7 +64,7 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
                       label='Harmonical Degree',
                       expertLevel=params.LEVEL_ADVANCED,
                       help='Degree Spherical Harmonics of the deformation=1,2,3,...')
-        form.addParam('penalization', params.FloatParam, default=0.0, label='Regularization',
+        form.addParam('penalization', params.FloatParam, default=0.00025, label='Regularization',
                       expertLevel=params.LEVEL_ADVANCED,
                       help='Penalization to deformations (higher values penalize more the deformation).')
 
