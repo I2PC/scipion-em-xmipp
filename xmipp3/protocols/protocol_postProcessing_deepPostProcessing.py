@@ -43,7 +43,8 @@ POSTPROCESS_VOL_BASENAME= "deepPostProcess.mrc"
 
 class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
     """    
-    Given a map the protocol performs automatic deep post-processing to enhance visualization
+    Given a map the protocol performs automatic deep post-processing to enhance visualization. Usage guide at
+    https://github.com/rsanchezgarc/deepEMhancer
     """
     _label = 'deepEMhancer'
     _conda_env = 'xmipp_deepEMhancer'
@@ -302,5 +303,5 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
         return error
     
     def _citations(self):
-        return ['Sanchez-Garcia, 2020']
+        return ['Sanchez-Garcia, 2020, https://doi.org/10.1101/2020.06.12.148296']
 
