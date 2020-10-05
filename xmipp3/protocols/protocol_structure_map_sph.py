@@ -88,7 +88,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
-        self.stepsExecutionMode = params.STEPS_PARALLEL
+        # self.stepsExecutionMode = params.STEPS_PARALLEL
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
@@ -129,7 +129,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         form.addParam('penalization', params.FloatParam, default=0.00025, label='Regularization',
                       expertLevel=params.LEVEL_ADVANCED,
                       help='Penalization to deformations (higher values penalize more the deformation).')
-        form.addParallelSection(threads=1, mpi=1)
+        form.addParallelSection(threads=1, mpi=0)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -216,6 +216,8 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                   self._getExtraPath('Pair_%d_%d' % (i, j)), self.penalization.get())
         if self.newRmax != 0:
             params = params + ' --Rmax %d' % self.newRmax
+        if self.numberOfThreads.get() != 0:
+            params = params + ' --thr %d' % self.numberOfThreads.get()
 
         self.runJob("xmipp_volume_deform_sph", params)
 
