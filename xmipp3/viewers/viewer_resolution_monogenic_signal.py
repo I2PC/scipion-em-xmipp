@@ -96,7 +96,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
                        label='Show slice number')
         
         group.addParam('doShowChimera', LabelParam,
-                      label="Show Resolution map in Chimera")
+                      label="Show Resolution map in ChimeraX")
 
         ColorScaleWizardBase.defineColorScaleParams(group, defaultLowest=self.protocol.min_res_init,
                                                     defaultHighest=self.protocol.max_res_init)
