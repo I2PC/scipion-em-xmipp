@@ -129,7 +129,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         form.addParam('penalization', params.FloatParam, default=0.00025, label='Regularization',
                       expertLevel=params.LEVEL_ADVANCED,
                       help='Penalization to deformations (higher values penalize more the deformation).')
-        form.addParallelSection(threads=1, mpi=0)
+        form.addParallelSection(threads=1, mpi=1)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
