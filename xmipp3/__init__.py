@@ -136,7 +136,7 @@ class Plugin(pwem.Plugin):
 
         ## Installation commands (removing bindingsToken)
         installCmd = ("cd {cwd} && {configCmd} && {compileCmd} N={nProcessors:d} && "
-                      "ln -srf build {xmippHome} && cd - && "
+                      "ln -srfn build {xmippHome} && cd - && "
                       "touch {installedToken} && rm {bindingsToken} 2> /dev/null")
         installTgt = [getXmippPath('bin', 'xmipp_reconstruct_significant'),
                       getXmippPath("lib/libXmippJNI.so"),
@@ -144,8 +144,8 @@ class Plugin(pwem.Plugin):
 
         ## Linking bindings (removing installationToken)
         bindingsAndLibsCmd = ("find {bindingsSrc} -maxdepth 1 -mindepth 1 "
-                              "! -name __pycache__ -exec ln -srf {{}} {bindingsDst} \; && "
-                              "ln -srf {coreLib} {libsDst} && "
+                              "! -name __pycache__ -exec ln -srfn {{}} {bindingsDst} \; && "
+                              "ln -srfn {coreLib} {libsDst} && "
                               "touch {bindingsToken} && "
                               "rm {installedToken} 2> /dev/null")
         bindingsAndLibsTgt = [os.path.join(Config.getBindingsFolder(), 'xmipp_base.py'),
