@@ -253,17 +253,24 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
         volume.setFileName(self._getExtraPath(POSTPROCESS_VOL_BASENAME))
 
         if self.useHalfMapsInsteadVol.get():
-          if self.halfMapsAttached.get():
-            volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
-          else:
-            volume.setSamplingRate(self.inputHalf1.get().getSamplingRate())
-          self._defineOutputs(Volume=volume)
-          self._defineTransformRelation(self.inputHalf1, volume)
-          self._defineTransformRelation(self.inputHalf2, volume)
+            if self.halfMapsAttached.get():
+                inVol = self.inputVolume.get()
+            else:
+                inVol = self.inputHalf1.get()
+
+            volume.setSamplingRate(inVol.getSamplingRate())
+            volume.setOrigin(inVol.getOrigin(force=True))
+
+            self._defineOutputs(Volume=volume)
+            self._defineTransformRelation(self.inputHalf1, volume)
+            self._defineTransformRelation(self.inputHalf2, volume)
         else:
-          volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
-          self._defineOutputs(Volume=volume)
-          self._defineTransformRelation(self.inputVolume, volume)
+            inVol = self.inputVolume.get()
+            volume.setSamplingRate(inVol.getSamplingRate())
+            volume.setOrigin(inVol.getOrigin(force=True))
+
+            self._defineOutputs(Volume=volume)
+            self._defineTransformRelation(self.inputVolume, volume)
 
 
                 

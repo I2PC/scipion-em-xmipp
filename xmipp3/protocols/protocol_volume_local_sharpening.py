@@ -38,6 +38,7 @@ import pwem.emlib.metadata as md
 from pwem.emlib.metadata import (MDL_COST, MDL_ITER, MDL_SCALE)
 from ntpath import dirname
 from os.path import exists
+from pwem.convert import Ccp4Header
 
 LOCALDEBLUR_METHOD_URL='http://github.com/I2PC/scipion/wiki/XmippProtLocSharp' 
 
@@ -271,22 +272,21 @@ class XmippProtLocSharp(ProtAnalysis3D):
              
     def createOutputStep(self):
 
-        volume=Volume()
+        volume = Volume()
         volume.setFileName(self._getExtraPath('sharpenedMap_last.mrc'))
         volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
         volume.setOrigin(self.inputVolume.get().getOrigin(True))
 
-
         volumesSet = self._createSetOfVolumes()
-        volumesSet.setSamplingRate(self.inputVolume.get().getSamplingRate()) 
+        volumesSet.setSamplingRate(self.inputVolume.get().getSamplingRate())
         for i in range(self.iteration):
-            vol = Volume()       
-            vol.setLocation(i, self._getExtraPath('sharpenedMap_%d.mrc' % (i+1)))
-            vol.setObjComment("Sharpened Map, \n Epoch %d"%(i+1))
-            volumesSet.append(vol)  
-            
+            vol = Volume()
+            vol.setLocation(i, self._getExtraPath('sharpenedMap_%d.mrc' % (i + 1)))
+            vol.setObjComment("Sharpened Map, \n Epoch %d" % (i + 1))
+            volumesSet.append(vol)
+
         self._defineOutputs(outputVolumes=volumesSet)
-        self._defineSourceRelation(self.inputVolume, volumesSet)            
+        self._defineSourceRelation(self.inputVolume, volumesSet)
                      
     # --------------------------- INFO functions ------------------------------
 
