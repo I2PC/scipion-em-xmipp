@@ -75,6 +75,9 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         form.addParam('penalization', params.FloatParam, default=0.005, label='Regularization',
                       expertLevel=params.LEVEL_ADVANCED,
                       help='Penalization to deformations (higher values penalize more the deformation).')
+        form.addParam('ignoreCTF', params.BooleanParam, default=False, label='Ignore CTF?',
+                      expertLevel=params.LEVEL_ADVANCED,
+                      help="If true, volume projection won't suffer CTF corrections")
         form.addParallelSection(threads=1, mpi=8)
 
     def _createFilenameTemplates(self):
@@ -131,11 +134,13 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         fnOut = self._getFileName('fnOut')
         fnOutDir = self._getFileName('fnOutDir')
         Ts = readInfoField(self._getExtraPath(), "sampling", md.MDL_SAMPLINGRATE)
-        params = ' -i %s --ref %s -o %s --optimizeAlignment --optimizeDeformation ' \
+        params = ' -i %s --ref %s -o %s --optimizeAlignment --optimizeDeformation --optimizeDefocus ' \
                  '--l1 %d --l2 %d --max_shift %f --max_angular_change %f --sampling %f ' \
                  ' --max_resolution %f --odir %s --resume --regularization %f' %\
                  (imgsFn, fnVol, fnOut, self.l1.get(), self.l2.get(), self.maxShift,
                   self.maxAngular, Ts, self.maxResolution, fnOutDir, self.penalization.get())
+        if self.ignoreCTF.get():
+            params = params + ' --ignoreCTF'
         if self.inputParticles.get().isPhaseFlipped(): #preguntar
             params += ' --phaseFlipped'
         self.runJob("xmipp_angular_sph_alignment", params, numberOfMpi=self.numberOfMpi.get())
