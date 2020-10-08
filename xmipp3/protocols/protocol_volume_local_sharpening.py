@@ -38,7 +38,6 @@ import pwem.emlib.metadata as md
 from pwem.emlib.metadata import (MDL_COST, MDL_ITER, MDL_SCALE)
 from ntpath import dirname
 from os.path import exists
-from pwem.convert import Ccp4Header
 
 LOCALDEBLUR_METHOD_URL='http://github.com/I2PC/scipion/wiki/XmippProtLocSharp' 
 
