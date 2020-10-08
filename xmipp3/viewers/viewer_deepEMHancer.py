@@ -41,7 +41,7 @@ class viewerXmippProtDeepVolPostProc(Viewer):
     """ Visualize the input and output volumes of protocol XmippProtDeepVolPostProc
         with ChimeraX (3D).
         The axes of coordinates x, y, z will be shown"""
-    _label = 'viewer deepEMHancer'
+    _label = 'viewer deepEMhancer'
     _targets = [XmippProtDeepVolPostProc]
     _environments = [DESKTOP_TKINTER]
 
