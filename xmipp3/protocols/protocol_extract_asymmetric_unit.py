@@ -147,7 +147,6 @@ class XmippProtExtractUnit(EMProtocol):
     def createOutputStep(self):
         vol = Volume()
         vol.setLocation(self._getOutputVol())
-
         sampling = self.inputVolumes.get().getSamplingRate()
         vol.setSamplingRate(sampling)
         #
