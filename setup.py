@@ -11,11 +11,17 @@ from setuptools import setup, find_packages
 from codecs import open
 from os import path
 
+from xmipp3 import XMIPP_URL
+
 here = path.abspath(path.dirname(__file__))
 
 # Get the long description from the README file
 with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
+
+# Load requirements.txt
+with open('requirements.txt') as f:
+    requirements = f.read().splitlines()
 
 # Arguments marked as "Required" below must be included for upload to PyPI.
 # Fields marked as "Optional" may be commented out.
@@ -40,13 +46,12 @@ setup(
     # For a discussion on single-sourcing the version across setup.py and the
     # project code, see
     # https://packaging.python.org/en/latest/single_source_version.html
-    version='19.04.03',  # Required
+    version='20.07.01',  # Required
 
     # This is a one-line description or tagline of what your project does. This
     # corresponds to the "Summary" metadata field:
     # https://packaging.python.org/specifications/core-metadata/#summary
-    description='Plugin to use Xmipp programs within the Scipion framework. '
-                'NOTE: CUDA 8.0 is used for GPU coding.',
+    description='Plugin to use Xmipp programs within the Scipion framework (see https://scipion-em.github.io/docs/).',
 
     # This is an optional longer description of your project that represents
     # the body of text which users will see when they visit PyPI.
@@ -62,7 +67,7 @@ setup(
     #
     # This field corresponds to the "Home-Page" metadata field:
     # https://packaging.python.org/specifications/core-metadata/#home-page-optional
-    url='https://github.com/i2pc/scipion-em-xmipp',  # Optional
+    url=XMIPP_URL,  # Optional
 
     # This should be your name or the name of the organization which owns the
     # project.
@@ -98,7 +103,7 @@ setup(
     # project page. What does your project relate to?
     #
     # Note that this is a string of words separated by whitespace, not a list.
-    keywords='scipion cryoem imageprocessing scipion-2.0',  # Optional
+    keywords='scipion cryoem imageprocessing scipion-3.0',  # Optional
 
     # You can just specify package directories manually here if your project is
     # simple. Or you can use find_packages().
@@ -117,7 +122,7 @@ setup(
     #
     # For an analysis of "install_requires" vs pip's requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    #install_requires=['peppercorn'],  # Optional
+    install_requires=[requirements],  # Optional
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). Users will be able to install these using the "extras"
@@ -138,8 +143,8 @@ setup(
     # If using Python 2.6 or earlier, then these have to be included in
     # MANIFEST.in as well.
     # include_package_data=True,
-    package_data={  # Optional
-      'xmipp3': ['xmipp_logo.png', 'protocols.conf'],
+    package_data={  # Put here all non-python files to include them in the pypi module
+      'xmipp3': ['xmipp_logo.png', 'protocols.conf', 'templates/*'],
     },
 
     # Although 'package_data' is the preferred approach, in some case you may
@@ -161,4 +166,7 @@ setup(
     #        'sample=sample:main',
     #    ],
     #},
+    entry_points={
+        'pyworkflow.plugin': 'xmipp3 = xmipp3'
+    },
 )

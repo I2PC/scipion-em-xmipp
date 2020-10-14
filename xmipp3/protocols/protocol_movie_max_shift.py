@@ -28,14 +28,15 @@ from os.path import exists
 import numpy as np
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.em.protocol.protocol_movies import ProtProcessMovies
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Set
 from pyworkflow.protocol.constants import STATUS_NEW
 from pyworkflow.protocol.params import PointerParam
 from pyworkflow.utils.properties import Message
-from pyworkflow.em.data import SetOfMovies, SetOfMicrographs
+
+from pwem.protocols import ProtProcessMovies
+from pwem.objects import SetOfMicrographs, SetOfMovies
 
 
 class XmippProtMovieMaxShift(ProtProcessMovies):
@@ -90,7 +91,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
                            ' - *by frame or movie*: Rejects movies if one of '
                                     'the conditions above are met.')
 
-        form.addParam('maxFrameShift', params.FloatParam, default=10,
+        form.addParam('maxFrameShift', params.FloatParam, default=5,
                        label='Max. frame shift (A)',
                        condition='rejType==%s or rejType==%s or rejType==%s'
                                   % (self.REJ_FRAME, self.REJ_AND, self.REJ_OR),
@@ -112,13 +113,14 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             self.setInputMics()
         # Insert the selection/rejection step
         movieStepId = self._insertFunctionStep('_evaluateMovieAlign',
-                                               movie.clone(),
+                                               movie.getObjId(),
                                                prerequisites=[])
         return movieStepId
 
-    def _evaluateMovieAlign(self, movie):
+    def _evaluateMovieAlign(self, movieId):
         """ Fill the accepted or the rejected list with the movie.
         """
+        movie = self.inputMovies.get()[movieId].clone()
         alignment = movie.getAlignment()
         sampling = self.samplingRate
 
@@ -134,7 +136,6 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             shiftArrayY = np.asarray(shiftListY)
 
             evalBoth = self.rejType==self.REJ_AND or self.rejType==self.REJ_OR
-
             if self.rejType == self.REJ_MOVIE or evalBoth:
                 rangeX = np.max(shiftArrayX) - np.min(shiftArrayX)
                 rangeY = np.max(shiftArrayY) - np.min(shiftArrayY)
@@ -214,33 +215,55 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             micsDwSet = self._loadOutputSet(SetOfMicrographs,
                                   'micrographs_dose-weighted%s.sqlite' % suffix)
 
+            def tryToAppend(outSet, micOut, tries=1, labelPrefix='movie'):
+                """ When micrograph is very big, sometimes it's not ready to be read
+                Then we will wait for it up to a minute in 6 time-growing tries. 
+                Returns True if fails! """
+                if micOut is None:
+                    return
+                try:
+                    micOut.setEnabled(enable)
+                    outSet.append(micOut)
+                except Exception as ex:
+                    if tries < 10:
+                        from time import sleep
+                        sleep(tries*3)
+                        tryToAppend(outSet, micOut, tries+1)
+                    else:
+                        labelStr = ' '.join([labelPrefix, micOut.getMicName()])
+                        self.warning("The %s seems corrupted. Skipping it...\n "
+                                     " > %s" % (labelStr, ex))
+
             for movie in newDoneList:
-                movie.setEnabled(enable)
-                movieSet.append(movie)
+                tryToAppend(movieSet, movie,
+                            labelPrefix='movie')
                 if self.inputMics is not None:
                     mic = self.getMicFromMovie(movie, isDoseWeighted=False)
-                    mic.setEnabled(enable)
-                    micsSet.append(mic)
+                    tryToAppend(micsSet, mic,
+                                labelPrefix='micrograph')
                 if self.inputDwMics is not None:
                     micDw = self.getMicFromMovie(movie, isDoseWeighted=True)
-                    micDw.setEnabled(enable)
-                    micsDwSet.append(micDw)
-
-            self._updateOutputSet('outputMovies%s' % suffix, movieSet,
-                                  streamMode)
-            if self.inputMics is not None:
+                    tryToAppend(micsDwSet, micDw,
+                                labelPrefix='micDW')
+            
+            if movieSet.getSize() > 0:
+                self._updateOutputSet('outputMovies%s' % suffix, movieSet,
+                                      streamMode)
+                                      
+            if self.inputMics is not None and micsSet.getSize() > 0:
                 self._updateOutputSet('outputMicrographs%s' % suffix, micsSet,
                                       streamMode)
-            if self.inputDwMics is not None:
+            if self.inputDwMics is not None and micsDwSet.getSize() > 0:
                 self._updateOutputSet('outputMicrographsDoseWeighted%s' % suffix,
                                       micsDwSet, streamMode)
-            if firstTime:
-                # define relation just the first time
-                self._defineTransformRelation(self.inputMovies.get(), movieSet)
-                if self.inputMics is not None:
+            if firstTime:  # define relation just the first time
+                if movieSet.getSize() > 0:
+                    self._defineTransformRelation(self.inputMovies.get(), movieSet)
+                if self.inputMics is not None and micsSet.getSize() > 0:
                     self._defineTransformRelation(self.inputMics, micsSet)
-                if self.inputDwMics is not None:
+                if self.inputDwMics is not None and micsDwSet.getSize() > 0:
                     self._defineTransformRelation(self.inputDwMics, micsDwSet)
+            
             movieSet.close()
             if self.inputMics is not None:
                 micsSet.close()
@@ -268,21 +291,23 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         pass
 
     #--------------------------- UTILS functions -------------------------------
-    def _loadOutputSet(self, SetClass, baseName, fixSampling=True):
-        """ Load the output set if it exists or create a new one.
-        fixSampling: correct the output sampling rate if binning was used,
-        except for the case when the original movies are kept and shifts
-            refers to that one.
+    def _loadOutputSet(self, SetClass, baseName):
+        """ Load the output set if it exists or create a new one based on the inputs.
         """
         if SetClass == SetOfMicrographs:
             if 'dose-weighted' in baseName:
                 if self.inputDwMics is None:
                     # if no DwMics to do, do nothing and exit
                     return None
+                inputSet = self.inputDwMics
             else:
                 if self.inputMics is None:
                     # if no mics to do, do nothing and exit
                     return None
+                inputSet = self.inputMics
+        else:
+            inputSet = self.inputMovies.get()
+
         setFile = self._getPath(baseName)
 
         if exists(setFile):
@@ -298,12 +323,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
 
-        inputMovies = self.inputMovies.get()
-        outputSet.copyInfo(inputMovies)
-
-        if fixSampling:
-            newSampling = inputMovies.getSamplingRate()
-            outputSet.setSamplingRate(newSampling)
+        outputSet.copyInfo(inputSet)
 
         return outputSet
 
@@ -356,12 +376,16 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         return errors
 
     def _summary(self):
-        moviesAcc = 0 if not self.hasAttribute('outputMovies') else \
-                    self.outputMovies.getSize()
-        moviesDisc = 0 if not self.hasAttribute('outputMoviesDiscarded') else \
-                    self.outputMoviesDiscarded.getSize()
+        def getSize(outNameCondition):
+            for outName, outObj in self.iterOutputAttributes():
+                if outNameCondition(outName):
+                    return outObj.getSize()
+            return 0
 
-        summary = ['Movies processed: %d'%(moviesAcc+moviesDisc)]
-        summary.append('Movies rejected: *%d*' % moviesDisc)
+        moviesAcc = getSize(lambda x: not x.endswith('Discarded'))
+        outDisc = getSize(lambda x: x.endswith('Discarded'))
+
+        summary = ['Movies processed: %d' % (moviesAcc+outDisc),
+                   'Movies rejected: *%d*' % outDisc]
 
         return summary

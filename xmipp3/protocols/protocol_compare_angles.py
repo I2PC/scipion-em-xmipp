@@ -26,12 +26,11 @@
 
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_2_0
-from pyworkflow.em.protocol import ProtAnalysis3D
-import pyworkflow.em.metadata as md
+from pwem.protocols import ProtAnalysis3D
+import pwem.emlib.metadata as md
 
-import xmippLib
-from xmipp3.convert import (rowToAlignment, setXmippAttributes,
-                       xmippToLocation, writeSetOfParticles)
+from pwem import emlib
+from xmipp3.convert import (setXmippAttributes, writeSetOfParticles)
 from xmipp3.constants import SYM_URL
 
 
@@ -147,7 +146,7 @@ class XmippProtCompareAngles(ProtAnalysis3D):
         particle._appendItem = count > 0
         
     def _createItemMatrix(self, particle, row):
-        setXmippAttributes(particle, row, xmippLib.MDL_SHIFT_DIFF, xmippLib.MDL_ANGLE_DIFF)
+        setXmippAttributes(particle, row, emlib.MDL_SHIFT_DIFF, emlib.MDL_ANGLE_DIFF)
 
     # --------------------------- INFO functions -------------------------------
 

@@ -26,17 +26,17 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.constants import *
-from pyworkflow.em.wizard import *
-from pyworkflow.em.protocol import ProtImportCoordinates
+from pwem.constants import *
+from pwem.wizards import *
+from pyworkflow.wizard import Wizard
+from xmipp3.viewers import XmippMonoResViewer, XmippMonoTomoViewer, XmippResDeepResViewer
 
-from .constants import *
 from .protocols.protocol_cl2d import IMAGES_PER_CLASS
 
 from .protocols import (
     XmippProtCTFMicrographs, XmippProtProjMatch, XmippProtPreprocessParticles,
     XmippProtPreprocessMicrographs, XmippProtPreprocessVolumes,
-    XmippProtExtractParticles, XmippProtExtractParticlesPairs,
+    XmippProtExtractParticles, XmippProtExtractParticlesPairs, XmippProtPickingRemoveDuplicates,
     XmippProtFilterParticles, XmippProtFilterVolumes, XmippProtMaskParticles,
     XmippProtMaskVolumes, XmippProtAlignVolume, XmippProtCL2D,
     XmippProtHelicalParameters, XmippProtConsensusPicking, XmippProtMonoRes,
@@ -216,7 +216,6 @@ class XmippParticleMaskRadiusWizard(ParticleMaskRadiusWizard):
         _value = params['value']
         _label = params['label']
         ParticleMaskRadiusWizard.show(self, form, _value, _label, UNIT_PIXEL)
-
 
 
 class XmippParticleMaskRadiiWizard(ParticlesMaskRadiiWizard):
@@ -499,4 +498,5 @@ class XmippGaussianVolumesWizard(GaussianVolumesWizard):
         GaussianVolumesWizard.show(self, form, _value, _label, UNIT_PIXEL_FOURIER)
 
 
-
+class ColorScaleWizard(ColorScaleWizardBase):
+        _targets = ColorScaleWizardBase.defineTargets(XmippMonoResViewer, XmippMonoTomoViewer, XmippResDeepResViewer)

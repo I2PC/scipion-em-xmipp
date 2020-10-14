@@ -27,7 +27,7 @@
 This module implement the classes to create plots on xmipp.
 """
 
-from pyworkflow.em.viewers.plotter import EmPlotter
+from pwem.viewers import EmPlotter
 
 
 class XmippPlotter(EmPlotter):
@@ -40,7 +40,7 @@ class XmippPlotter(EmPlotter):
         distribution of weight projections. A metadata should be provided containing
         labels: MDL_ANGLE_ROT, MDL_ANGLE_TILT, MDL_WEIGHT '''
         from math import radians
-        from xmippLib import MDL_ANGLE_ROT, MDL_ANGLE_TILT, MDL_WEIGHT
+        from pwem.emlib import MDL_ANGLE_ROT, MDL_ANGLE_TILT, MDL_WEIGHT
         
         rot = [radians(md.getValue(MDL_ANGLE_ROT, objId)) for objId in md]
         tilt = [md.getValue(MDL_ANGLE_TILT, objId) for objId in md]
@@ -48,7 +48,7 @@ class XmippPlotter(EmPlotter):
         
         self.plotAngularDistribution(title, rot, tilt, weight)
     
-    def plotMd(self, md, mdLabelX, mdLabelY, color='g',**args):
+    def _prepareDataForPlot(self, md, mdLabelX, mdLabelY):
         """ plot metadata columns mdLabelX and mdLabelY
             if nbins is in args then and histogram over y data is made
         """
@@ -61,7 +61,23 @@ class XmippPlotter(EmPlotter):
             if mdLabelX:
                 xx.append(md.getValue(mdLabelX, objId))
             yy.append(md.getValue(mdLabelY, objId))
-        
+        return xx, yy
+
+    def plotScatterMd(self, md, mdLabelX, mdLabelY, color='g', **args):
+        """ scatterplot metadata columns mdLabelX and mdLabelY
+            if nbins is in args then and histogram over y data is made
+        """
+        xx, yy= self._prepareDataForPlot( md, mdLabelX, mdLabelY)
+        try:
+            self.plotScatter(xx, yy, color, **args)
+        except AttributeError:
+            return
+
+    def plotMd(self, md, mdLabelX, mdLabelY, color='g', **args):
+        """ plot metadata columns mdLabelX and mdLabelY
+            if nbins is in args then and histogram over y data is made
+        """
+        xx, yy= self._prepareDataForPlot( md, mdLabelX, mdLabelY)
         nbins = args.pop('nbins', None)
         if nbins is None:
             self.plotData(xx, yy, color, **args)
@@ -72,7 +88,7 @@ class XmippPlotter(EmPlotter):
         """ plot metadataFile columns mdLabelX and mdLabelY
             if nbins is in args then and histogram over y data is made
         """
-        from xmippLib import MetaData
+        from pwem.emlib import MetaData
         md = MetaData(mdFilename)
         self.plotMd(md, mdLabelX, mdLabelY, color=color,**args)
       

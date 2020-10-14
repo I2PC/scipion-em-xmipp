@@ -24,14 +24,10 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
-import unittest, sys
-# import numpy as np
-from pyworkflow.em import exists
-#from pyworkflow.em.packages.xmipp3.protocol_resolution_monogenic_signal import OUTPUT_RESOLUTION_FILE
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
-from xmipp3.protocols import XmippProtMonoRes, XmippProtCreateMask3D, XmippProtLocSharp
-from pyworkflow.em.protocol import ProtImportVolumes
+from xmipp3.protocols import (XmippProtMonoRes, XmippProtCreateMask3D,
+                              XmippProtLocSharp)
+from pwem.protocols import ProtImportVolumes, exists
 
 
 class TestLocalDeblurBase(BaseTest):
@@ -85,14 +81,11 @@ class TestLocalDeblur(TestLocalDeblurBase):
                                    halfVolumes=False,
                                    inputVolumes=self.protImportVol.outputVolume,
                                    Mask=self.protCreateMask.outputMask,
-                                   symmetry='c1',
                                    minRes=1,
-                                   maxRes=25,
-                                   isPremasked = False,
-                                   filterInput=False,
+                                   maxRes=25
                                    )
         self.launchProtocol(MonoRes)
-        self.assertTrue(exists(MonoRes._getExtraPath('mgresolution.mrc')),
+        self.assertTrue(exists(MonoRes._getExtraPath('monoresResolutionMap.mrc')),
                         "MonoRes (no split, no premasked) has failed")
 
         LocalDeblur = self.newProtocol(XmippProtLocSharp,

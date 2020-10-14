@@ -33,12 +33,21 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, IntParam, 
                                         FloatParam, StringParam, Positive, GE,
                                         EnumParam, NumericListParam, TextParam,
-                                        DigFreqParam)
+                                        DigFreqParam, USE_GPU, GPU_LIST)
 from xmipp3.constants import *
                                         
 
 def _defineProjectionMatchingParams(self, form):
-    
+    form.addHidden(USE_GPU, BooleanParam, default=True,
+                   label="Use GPU for execution",
+                   help="This protocol has both CPU and GPU implementation.\
+                   Select the one you want to use.")
+
+    form.addHidden(GPU_LIST, StringParam, default='0',
+                   expertLevel=LEVEL_ADVANCED,
+                   label="Choose GPU IDs",
+                   help="Add a list of GPU devices that can be used")
+
     form.addSection(label='Input')
     
     #SelFileName

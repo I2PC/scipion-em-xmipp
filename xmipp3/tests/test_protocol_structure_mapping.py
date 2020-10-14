@@ -20,11 +20,9 @@
 # *  All comments concerning this program package may be sent to the
 # *  e-mail address 'scipion@cnb.csic.es'
 # ***************************************************************************/
-
+from pwem import Domain
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
-from pyworkflow.em.protocol import ProtImportVolumes
-
-from xmipp3.protocols import XmippProtStructureMapping
+from pwem.protocols import ProtImportVolumes
 
     
 class TestStructureMapping(BaseTest):
@@ -46,8 +44,12 @@ class TestStructureMapping(BaseTest):
     def testStructureMapping(self):
         """ 
             Test protocol structure mapping
-        """             
-        protStrucMap = self.newProtocol(XmippProtStructureMapping,
+        """
+        FlexProtStructureMapping = Domain.importFromPlugin(
+            "continuousflex.protocols",
+            "FlexProtStructureMapping",
+            doRaise=True)
+        protStrucMap = self.newProtocol(FlexProtStructureMapping,
                                 objLabel='structure mapping',
                                 numberOfMpi=1, numberOfThreads=4)
         protStrucMap.inputVolumes.append(self.protImport1.outputVolume)

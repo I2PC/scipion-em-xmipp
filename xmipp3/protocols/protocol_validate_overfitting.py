@@ -27,19 +27,19 @@
 
 from math import sqrt
 import glob
+import os
 
 from pyworkflow import VERSION_1_1
 from pyworkflow.utils import getFloatListFromValues
-from pyworkflow.utils.path import cleanPattern, cleanPath, copyFile
-from pyworkflow.em.data import Volume
-from pyworkflow.object import Float, String
-from pyworkflow.em.protocol import ProtReconstruct3D
+from pyworkflow.utils.path import cleanPattern
+from pwem.protocols import ProtReconstruct3D
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         NumericListParam, IntParam,
                                         StringParam, BooleanParam,
-                                        LEVEL_ADVANCED)
-import xmippLib
+                                        LEVEL_ADVANCED, GPU_LIST, USE_GPU)
+from pwem import emlib
 from xmipp3.convert import writeSetOfParticles
+from xmipp3.base import isXmippCudaPresent
 
 
 class XmippProtValidateOverfitting(ProtReconstruct3D):
@@ -65,6 +65,16 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
     # --------------------------- DEFINE param functions --------------------------------------------
 
     def _defineParams(self, form):
+        form.addHidden(USE_GPU, BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       expertLevel=LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+
         form.addSection(label='Input')
 
         form.addParam('inputParticles', PointerParam,
@@ -98,8 +108,6 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                       help="See [[Xmipp Symmetry][http://www2.mrc-lmb.cam.ac.uk/Xmipp/index.php/Conventions_%26_File_formats#Symmetry]] page"
                            "for a description of the symmetry format"
                            "accepted by Xmipp")
-        form.addParam('useGpu', BooleanParam, default=False,
-                      label='Use GPU?')
         form.addParam('numberOfParticles', NumericListParam,
                       default="10 20 50 100 200 500 1000 1500 2000 3000 5000",
                       expertLevel=LEVEL_ADVANCED,
@@ -124,7 +132,7 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                       expertLevel=LEVEL_ADVANCED,
                       label="Angular sampling rate")
 
-        form.addParallelSection(threads=0, mpi=4)
+        form.addParallelSection(threads=1, mpi=4)
 
     # --------------------------- INSERT steps functions --------------------------------------------
 
@@ -202,7 +210,7 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
         fractionCounter = 0
         maxNumberOfParticles = 0.5 * self.inputParticles.get().getSize()
         for number in numberOfParticles:
-            if number <= maxNumberOfParticles:
+            if number <= maxNumberOfParticles: #AJ before maxNumberOfParticles
                 for iteration in range(0, self.numberOfIterations.get()):
                     self._insertFunctionStep('reconstructionStep', number,
                                              fractionCounter, iteration,
@@ -240,15 +248,39 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
             params += ' --sym %s' % self.symmetryGroup.get()
             params += ' --max_resolution %0.3f' % self.maxRes
             params += ' --padding 2'
-            params += ' --thr 1'
-            # params += ' --thr %d' % self.numberOfThreads.get()
+            params += ' --fast'
             params += ' --sampling %f' % Ts
 
-            if not self.useGpu.get():
-                self.runJob('xmipp_reconstruct_fourier', params)
+            if self.useGpu.get():
+                #AJ to make it work with and without queue system
+                if self.numberOfMpi.get()>1:
+                    N_GPUs = len((self.gpuList.get()).split(','))
+                    params += ' -gpusPerNode %d' % N_GPUs
+                    params += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+                count=0
+                GpuListCuda=''
+                if self.useQueueForSteps() or self.useQueue():
+                    GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                    GpuList = GpuList.split(",")
+                    for elem in GpuList:
+                        GpuListCuda = GpuListCuda+str(count)+' '
+                        count+=1
+                else:
+                    GpuListAux = ''
+                    for elem in self.getGpuList():
+                        GpuListCuda = GpuListCuda+str(count)+' '
+                        GpuListAux = GpuListAux+str(elem)+','
+                        count+=1
+                    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                if self.numberOfMpi.get()==1:
+                    params += " --device %s" %(GpuListCuda)
+                params += ' --thr %d' % self.numberOfThreads.get()
+                if self.numberOfMpi.get()>1:
+                    self.runJob('xmipp_cuda_reconstruct_fourier', params, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+                else:
+                    self.runJob('xmipp_cuda_reconstruct_fourier', params)
             else:
-                params += ' --fftOnGPU '
-                self.runJob('xmipp_cuda_reconstruct_fourier', params, numberOfMpi=1)
+                self.runJob('xmipp_reconstruct_fourier_accel', params)
 
             # for noise
             if self.doNoise.get():
@@ -298,11 +330,36 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                 # params += ' --thr %d' % self.numberOfThreads.get()
                 params += ' --sampling %f' % Ts
 
-                if not self.useGpu.get():
-                    self.runJob('xmipp_reconstruct_fourier', params)
+                if self.useGpu.get():
+                    #AJ to make it work with and without queue system
+                    if self.numberOfMpi.get()>1:
+                        N_GPUs = len((self.gpuList.get()).split(','))
+                        params += ' -gpusPerNode %d' % N_GPUs
+                        params += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+                    count=0
+                    GpuListCuda=''
+                    if self.useQueueForSteps() or self.useQueue():
+                        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                        GpuList = GpuList.split(",")
+                        for elem in GpuList:
+                            GpuListCuda = GpuListCuda+str(count)+' '
+                            count+=1
+                    else:
+                        GpuListAux = ''
+                        for elem in self.getGpuList():
+                            GpuListCuda = GpuListCuda+str(count)+' '
+                            GpuListAux = GpuListAux+str(elem)+','
+                            count+=1
+                        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                    if self.numberOfMpi.get()==1:
+                        params += " --device %s" %(GpuListCuda)
+                    params += ' --thr %d' % self.numberOfThreads.get()
+                    if self.numberOfMpi.get()>1:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', params, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+                    else:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', params)
                 else:
-                    params += ' --fftOnGPU '
-                    self.runJob('xmipp_cuda_reconstruct_fourier', params, numberOfMpi=1)
+                    self.runJob('xmipp_reconstruct_fourier_accel', params)
 
 
         self.runJob('xmipp_resolution_fsc',
@@ -312,10 +369,10 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                      fnRoot + "_fsc_%02d.xmd" % iteration, Ts),
                     numberOfMpi=1)
 
-        mdFSC = xmippLib.MetaData(fnRoot + "_fsc_%02d.xmd" % iteration)
+        mdFSC = emlib.MetaData(fnRoot + "_fsc_%02d.xmd" % iteration)
         for id in mdFSC:
-            fscValue = mdFSC.getValue(xmippLib.MDL_RESOLUTION_FRC, id)
-            maxFreq = mdFSC.getValue(xmippLib.MDL_RESOLUTION_FREQREAL, id)
+            fscValue = mdFSC.getValue(emlib.MDL_RESOLUTION_FRC, id)
+            maxFreq = mdFSC.getValue(emlib.MDL_RESOLUTION_FREQREAL, id)
             if fscValue < 0.5:
                 break
         fh = open(fnRoot + "_freq.txt", "a")
@@ -336,10 +393,10 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
             cleanPattern(fnRoot + "_noisesL_0?.xmd")
             cleanPattern(fnRoot + "_noises2_0?.stk")
 
-            mdFSCN = xmippLib.MetaData(fnRootN + "_fsc_%02d.xmd" % iteration)
+            mdFSCN = emlib.MetaData(fnRootN + "_fsc_%02d.xmd" % iteration)
             for id in mdFSCN:
-                fscValueN = mdFSCN.getValue(xmippLib.MDL_RESOLUTION_FRC, id)
-                maxFreqN = mdFSCN.getValue(xmippLib.MDL_RESOLUTION_FREQREAL, id)
+                fscValueN = mdFSCN.getValue(emlib.MDL_RESOLUTION_FRC, id)
+                maxFreqN = mdFSCN.getValue(emlib.MDL_RESOLUTION_FREQREAL, id)
                 if fscValueN < 0.5:
                     break
             fhN = open(fnRootN + "_freq.txt", "a")
@@ -409,6 +466,8 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                 self.newSize.get() == self.inputParticles.get().getDim()[0]):
             errors.append("The new chosen size is equal to the "
                           "recent particles size")
+        if self.useGpu and not isXmippCudaPresent():
+            errors.append("You have asked to use GPU, but I cannot find the Xmipp GPU programs")
         return errors
 
         # --------------------------- UTILS functions --------------------------------------------
@@ -421,24 +480,19 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
         subset = 0
 
         numberOfParticles = getFloatListFromValues(self.numberOfParticles.get())
-        validationMd = xmippLib.MetaData()
+        validationMd = emlib.MetaData()
         fnOut = open(outputFn, 'w')
 
         for fnFreq in fnFreqs:
-            print fnFreq
             data = []
             dataInv = []
             fnFreqOpen = open(fnFreq, "r")
             for line in fnFreqOpen:
                 fields = line.split()
-                rowdata = map(float, fields)
-                print("rowdata",rowdata)
-                #AJ cambio
+                rowdata = list(map(float, fields))
                 val = 1.0/(float(rowdata[0])*float(rowdata[0]))
                 dataInv.append(val)
-                #FIN AJ
                 data.extend(rowdata)
-                print("data", data, dataInv)
             meanRes = (sum(data) / len(data))
             data[:] = [(x - meanRes) ** 2 for x in data]
             varRes = (sum(data) / (len(data) - 1))
@@ -454,11 +508,11 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                         + str(stdResInv) + '\n')
         #
         #     objId = validationMd.addObject()
-        #     validationMd.setValue(xmippLib.MDL_COUNT,
+        #     validationMd.setValue(emlib.MDL_COUNT,
         #                           long(numberOfParticles[subset]),
         #                           objId)
-        #     validationMd.setValue(xmippLib.MDL_AVG, meanRes, objId)
-        #     validationMd.setValue(xmippLib.MDL_STDDEV, stdRes, objId)
+        #     validationMd.setValue(emlib.MDL_AVG, meanRes, objId)
+        #     validationMd.setValue(emlib.MDL_STDDEV, stdRes, objId)
             subset += 1
 
         # validationMd.write(outputFn)
