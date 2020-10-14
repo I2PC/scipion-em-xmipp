@@ -175,7 +175,8 @@ class Plugin(pwem.Plugin):
                                       bindingsAndLibsTgt)],
                            deps=xmippDeps, default=False)
 
-        configSrc = ('pwd' if os.environ.get('XMIPP_NOCONFIG', 'False') == 'True'
+        avoidConfig = os.environ.get('XMIPP_NOCONFIG', 'False') == 'True'
+        configSrc = ('./xmipp check_config' if avoidConfig
                      else './xmipp config noAsk && ./xmipp check_config')
         env.addPackage('xmippSrc', version=_currentVersion,
                        # adding 'v' before version to fix a package target (post-link)
