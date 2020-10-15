@@ -78,6 +78,8 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         form.addParam('ignoreCTF', params.BooleanParam, default=False, label='Ignore CTF?',
                       expertLevel=params.LEVEL_ADVANCED,
                       help="If true, volume projection won't suffer CTF corrections")
+        form.addParam('phaseFlip', params.BooleanParam, default=False, label='Flip CTF phase?',
+                      expertLevel=params.LEVEL_ADVANCED)
         form.addParallelSection(threads=1, mpi=8)
 
     def _createFilenameTemplates(self):
@@ -140,8 +142,9 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
                  (imgsFn, fnVol, fnOut, self.l1.get(), self.l2.get(), self.maxShift,
                   self.maxAngular, Ts, self.maxResolution, fnOutDir, self.penalization.get())
         if self.ignoreCTF.get():
-            params = params + ' --ignoreCTF'
-        if self.inputParticles.get().isPhaseFlipped(): #preguntar
+            params += ' --ignoreCTF'
+        # if self.inputParticles.get().isPhaseFlipped():  # FIXME: preguntar (Amaya)
+        if self.phaseFlip.get():
             params += ' --phaseFlipped'
         self.runJob("xmipp_angular_sph_alignment", params, numberOfMpi=self.numberOfMpi.get())
 
