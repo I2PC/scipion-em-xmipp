@@ -120,8 +120,6 @@ class XmippProtStructureMap(ProtAnalysis3D):
 
         self._insertFunctionStep('gatherResultsStepCorr')
 
-        cleanPattern(self._getExtraPath('*.vol'))
-
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self, volFn, volDim, volSr, minDim, maxSr, nVoli):
         Xdim = volDim
@@ -175,6 +173,7 @@ class XmippProtStructureMap(ProtAnalysis3D):
     def gatherResultsStepCorr(self):
         fnRoot = self._getExtraPath("CorrMatrix.txt")
         self.saveCorrelation(self.corrMatrix, fnRoot)
+        cleanPattern(self._getExtraPath('*.vol'))
 
     def saveCorrelation(self, matrix, fnRoot, label=''):
         np.savetxt(fnRoot, matrix, "%f")

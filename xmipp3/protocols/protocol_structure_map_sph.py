@@ -173,8 +173,6 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         # if self.computeDef.get():
         self._insertFunctionStep('entropyConsensus')
 
-        cleanPattern(self._getExtraPath('*.vol'))
-
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self, volFn, volDim, volSr, minDim, maxSr, nVoli):
         Xdim = volDim
@@ -281,6 +279,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             for idm in range(4):
                 fnRoot = self._getExtraPath("CorrSubMatrix_%d.txt" % (idm + 1))
                 self.saveCorrelation(subMatrixes[idm], fnRoot, 'Sub_%d_' % (idm + 1))
+        cleanPattern(self._getExtraPath('*.vol'))
 
     def saveCorrelation(self, matrix, fnRoot, label=''):
         np.savetxt(fnRoot, matrix, "%f")
