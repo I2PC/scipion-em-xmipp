@@ -176,6 +176,13 @@ class XmippResDeepResViewer(LocalResolutionViewer):
 
         return [plotter]
 
+    def _getStepColors(self, minRes, maxRes, numberOfColors=13):
+        inter = (maxRes - minRes) / (numberOfColors - 1)
+        rangeList = []
+        for step in range(0, numberOfColors):
+            rangeList.append(round(minRes + step * inter, 2))
+        return rangeList
+
     def _getAxis(self):
         return self.getEnumText('sliceAxis')
 
