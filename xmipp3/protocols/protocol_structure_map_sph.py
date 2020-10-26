@@ -42,7 +42,7 @@ import pyworkflow.protocol.params as params
 from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfVolumes, Volume
 from pyworkflow import VERSION_2_0
-from pyworkflow.utils import cleanPattern
+from pyworkflow.utils import cleanPattern, cleanPath
 
 
 def mds(d, dimensions=2):
@@ -166,8 +166,9 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         self._insertFunctionStep('deformationMatrix', volList, prerequisites=deps)
         self._insertFunctionStep('gatherResultsStepDef')
 
-        self._insertFunctionStep('computeCorr', volList)
+        # self._insertFunctionStep('computeCorr', volList)
 
+        self._insertFunctionStep('correlationMatrix', volList, prerequisites=deps)
         self._insertFunctionStep('gatherResultsStepCorr')
 
         # if self.computeDef.get():
@@ -200,8 +201,8 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
     def deformStep(self, inputVolFn, refVolFn, i, j):
         inputVolFn = self._getExtraPath(os.path.basename(os.path.splitext(inputVolFn)[0] + '_%d_crop.vol' % (i+1)))
         refVolFn = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0] + '_%d_crop.vol' % (j+1)))
-        fnOut = self._getExtraPath('vol%dAlignedTo%d.vol' % (i, j))
-        fnOut2 = self._getExtraPath('vol%dDeformedTo%d.vol' % (i, j))
+        fnOut = self._getTmpPath('vol%dAlignedTo%d.vol' % (i, j))
+        fnOut2 = self._getTmpPath('vol%dDeformedTo%d.vol' % (i, j))
 
         params = ' --i1 %s --i2 %s --apply %s --local --dontScale' % \
                  (refVolFn, inputVolFn, fnOut)
@@ -220,6 +221,11 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
         self.runJob("xmipp_volume_deform_sph", params)
 
+        self.computeCorr(fnOut2, refVolFn, i, j)
+
+        cleanPath(fnOut)
+        cleanPath(fnOut2)
+
     def deformationMatrix(self, volList):
         numVol = len(volList)
         self.distanceMatrix = np.zeros((numVol, numVol))
@@ -228,6 +234,15 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                 if i != j:
                     path = self._getExtraPath('Pair_%d_%d_deformation.txt' % (i,j))
                     self.distanceMatrix[i,j] = np.loadtxt(path)
+
+    def correlationMatrix(self, volList):
+        numVol = len(volList)
+        self.corrMatrix = np.zeros((numVol, numVol))
+        for i in range(numVol):
+            for j in range(numVol):
+                if i != j:
+                    path = self._getExtraPath('Pair_%d_%d_correlation.txt' % (i,j))
+                    self.corrMatrix[i,j] = np.loadtxt(path)
 
 
     def gatherResultsStepDef(self):
@@ -249,26 +264,41 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                                    "constant", constant_values=0)
             np.savetxt(self._defineResultsName(i, label), embedExtended)
 
-    def computeCorr(self, volList):
-        ind = 0
-        numVol = len(volList)
-        self.corrMatrix = np.zeros((numVol, numVol))
-        self.corrMatrix[numVol-1][numVol-1] = 0.0
+    # def computeCorr(self, volList):
+    #     ind = 0
+    #     numVol = len(volList)
+    #     self.corrMatrix = np.zeros((numVol, numVol))
+    #     self.corrMatrix[numVol-1][numVol-1] = 0.0
+    #
+    #     for item in volList:
+    #         vol = xmippLib.Image(item)
+    #         self.corrMatrix[ind][ind] = 0.0
+    #         # if self.computeDef.get():
+    #         path = self._getExtraPath("*DeformedTo%d.vol" % ind)
+    #         # else:
+    #         #     path = self._getExtraPath("*AlignedTo%d.vol" % ind)
+    #         for fileVol in glob.glob(path):
+    #             matches = re.findall("(\d+)", fileVol)
+    #             ind2 = int(matches[1])
+    #             defVol = xmippLib.Image(fileVol)
+    #             corr = vol.correlation(defVol)
+    #             self.corrMatrix[ind2][ind] = 1-corr
+    #         ind += 1
 
-        for item in volList:
-            vol = xmippLib.Image(item)
-            self.corrMatrix[ind][ind] = 0.0
-            # if self.computeDef.get():
-            path = self._getExtraPath("*DeformedTo%d.vol" % ind)
-            # else:
-            #     path = self._getExtraPath("*AlignedTo%d.vol" % ind)
-            for fileVol in glob.glob(path):
-                matches = re.findall("(\d+)", fileVol)
-                ind2 = int(matches[1])
-                defVol = xmippLib.Image(fileVol)
-                corr = vol.correlation(defVol)
-                self.corrMatrix[ind2][ind] = 1-corr
-            ind += 1
+    def computeCorr(self, vol1, vol2, i, j):
+        vol = xmippLib.Image(vol1)
+        # if self.computeDef.get():
+        # path = self._getExtraPath("*DeformedTo%d.vol" % ind)
+        # else:
+        #     path = self._getExtraPath("*AlignedTo%d.vol" % ind)
+        # for fileVol in glob.glob(path):
+        #     matches = re.findall("(\d+)", fileVol)
+        #     ind2 = int(matches[1])
+        defVol = xmippLib.Image(vol2)
+        corr = vol.correlation(defVol)
+        np.savetxt(self._getExtraPath('Pair_%d_%d_correlation.txt' % (i,j)))
+        # self.corrMatrix[ind2][ind] = 1-corr
+        # ind += 1
 
     def gatherResultsStepCorr(self):
         fnRoot = self._getExtraPath("CorrMatrix.txt")
@@ -279,7 +309,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             for idm in range(4):
                 fnRoot = self._getExtraPath("CorrSubMatrix_%d.txt" % (idm + 1))
                 self.saveCorrelation(subMatrixes[idm], fnRoot, 'Sub_%d_' % (idm + 1))
-        cleanPattern(self._getExtraPath('*.vol'))
+        # cleanPattern(self._getExtraPath('*.vol'))
 
     def saveCorrelation(self, matrix, fnRoot, label=''):
         np.savetxt(fnRoot, matrix, "%f")

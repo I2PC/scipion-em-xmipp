@@ -36,7 +36,7 @@ import pyworkflow.protocol.params as params
 from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfVolumes, Volume
 from pyworkflow import VERSION_2_0
-from pyworkflow.utils import cleanPattern
+from pyworkflow.utils import cleanPattern, cleanPath
 
 
 def mds(d, dimensions=2):
@@ -116,6 +116,7 @@ class XmippProtStructureMap(ProtAnalysis3D):
                 nVolj += 1
             nVoli += 1
 
+        self._insertFunctionStep('correlationMatrix', volList, prerequisites=deps)
         self._insertFunctionStep('computeCorr', volList)
 
         self._insertFunctionStep('gatherResultsStepCorr')
@@ -145,35 +146,63 @@ class XmippProtStructureMap(ProtAnalysis3D):
     def alignStep(self, inputVolFn, refVolFn, i, j):
         inputVolFn = self._getExtraPath(os.path.basename(os.path.splitext(inputVolFn)[0] + '_%d_crop.vol' % (i + 1)))
         refVolFn = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0] + '_%d_crop.vol' % (j + 1)))
-        fnOut = self._getExtraPath('vol%dAlignedTo%d.vol' % (i, j))
+        fnOut = self._getTmpPath('vol%dAlignedTo%d.vol' % (i, j))
 
         params = ' --i1 %s --i2 %s --apply %s --local --dontScale' % \
                  (refVolFn, inputVolFn, fnOut)
 
         self.runJob("xmipp_volume_align", params)
 
-    def computeCorr(self, volList):
-        ind = 0
+        self.computeCorr(fnOut, refVolFn, i, j)
+
+        cleanPath(fnOut)
+
+    # def computeCorr(self, volList):
+    #     ind = 0
+    #     numVol = len(volList)
+    #     self.corrMatrix = np.zeros((numVol, numVol))
+    #     self.corrMatrix[numVol-1][numVol-1] = 0.0
+    #
+    #     for item in volList:
+    #         vol = xmippLib.Image(item)
+    #         self.corrMatrix[ind][ind] = 0.0
+    #         path = self._getExtraPath("*AlignedTo%d.vol" % ind)
+    #         for fileVol in glob.glob(path):
+    #             matches = re.findall("(\d+)", fileVol)
+    #             ind2 = int(matches[1])
+    #             defVol = xmippLib.Image(fileVol)
+    #             corr = vol.correlation(defVol)
+    #             self.corrMatrix[ind2][ind] = 1-corr
+    #         ind += 1
+
+    def computeCorr(self, vol1, vol2, i, j):
+        vol = xmippLib.Image(vol1)
+        # if self.computeDef.get():
+        # path = self._getExtraPath("*DeformedTo%d.vol" % ind)
+        # else:
+        #     path = self._getExtraPath("*AlignedTo%d.vol" % ind)
+        # for fileVol in glob.glob(path):
+        #     matches = re.findall("(\d+)", fileVol)
+        #     ind2 = int(matches[1])
+        defVol = xmippLib.Image(vol2)
+        corr = vol.correlation(defVol)
+        np.savetxt(self._getExtraPath('Pair_%d_%d_correlation.txt' % (i,j)))
+        # self.corrMatrix[ind2][ind] = 1-corr
+        # ind += 1
+
+    def correlationMatrix(self, volList):
         numVol = len(volList)
         self.corrMatrix = np.zeros((numVol, numVol))
-        self.corrMatrix[numVol-1][numVol-1] = 0.0
-
-        for item in volList:
-            vol = xmippLib.Image(item)
-            self.corrMatrix[ind][ind] = 0.0
-            path = self._getExtraPath("*AlignedTo%d.vol" % ind)
-            for fileVol in glob.glob(path):
-                matches = re.findall("(\d+)", fileVol)
-                ind2 = int(matches[1])
-                defVol = xmippLib.Image(fileVol)
-                corr = vol.correlation(defVol)
-                self.corrMatrix[ind2][ind] = 1-corr
-            ind += 1
+        for i in range(numVol):
+            for j in range(numVol):
+                if i != j:
+                    path = self._getExtraPath('Pair_%d_%d_correlation.txt' % (i,j))
+                    self.corrMatrix[i,j] = np.loadtxt(path)
 
     def gatherResultsStepCorr(self):
         fnRoot = self._getExtraPath("CorrMatrix.txt")
         self.saveCorrelation(self.corrMatrix, fnRoot)
-        cleanPattern(self._getExtraPath('*.vol'))
+        # cleanPattern(self._getExtraPath('*.vol'))
 
     def saveCorrelation(self, matrix, fnRoot, label=''):
         np.savetxt(fnRoot, matrix, "%f")
