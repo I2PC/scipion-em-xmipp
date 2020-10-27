@@ -117,8 +117,6 @@ class XmippProtStructureMap(ProtAnalysis3D):
             nVoli += 1
 
         self._insertFunctionStep('correlationMatrix', volList, prerequisites=deps)
-        self._insertFunctionStep('computeCorr', volList)
-
         self._insertFunctionStep('gatherResultsStepCorr')
 
     # --------------------------- STEPS functions ---------------------------------------------------
@@ -186,7 +184,9 @@ class XmippProtStructureMap(ProtAnalysis3D):
         #     ind2 = int(matches[1])
         defVol = xmippLib.Image(vol2)
         corr = vol.correlation(defVol)
-        np.savetxt(self._getExtraPath('Pair_%d_%d_correlation.txt' % (i,j)))
+        outFile = self._getExtraPath('Pair_%d_%d_correlation.txt' % (i,j))
+        with open(outFile, 'w') as f:
+            f.write('%f' % corr)
         # self.corrMatrix[ind2][ind] = 1-corr
         # ind += 1
 
