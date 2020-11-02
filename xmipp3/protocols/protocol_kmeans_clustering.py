@@ -51,7 +51,7 @@ class XmippProtKmeansSPH(ProtClassify2D):
     # --------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
         form.addSection(label=Message.LABEL_INPUT)
-        form.addParam('inputParts', param.PointerParam, pointerClass='SetOfParticles',
+        form.addParam('inputParts', param.MultiPointerParam, pointerClass='SetOfParticles',
                       label="Input particles",
                       important=True)
         form.addParam('column', param.EnumParam, choices=['SPH', 'NMA'],
@@ -69,28 +69,30 @@ class XmippProtKmeansSPH(ProtClassify2D):
 
     def findClustersStep(self):
         self.kDict = []
-        particles = self.inputParts.get()
-        colData = self.column.get()
-        coeffs = []
-        if colData == 0:
-            mdLabel = md.MDL_SPH_COEFFICIENTS
-        elif colData == 1:
-            mdLabel = md.MDL_NMA
-        for particle in particles.iterItems():
-            coeffs.append(np.fromstring(getXmippAttribute(particle, mdLabel).get(), sep=','))
+        for inputParts in self.inputParts:
+            particles = inputParts.get()
+            colData = self.column.get()
+            coeffs = []
+            if colData == 0:
+                mdLabel = md.MDL_SPH_COEFFICIENTS
+            elif colData == 1:
+                mdLabel = md.MDL_NMA
+            for particle in particles.iterItems():
+                coeffs.append(np.fromstring(getXmippAttribute(particle, mdLabel).get(), sep=','))
         self.kmeans = KMeans(n_clusters=self.clusters.get()).fit(np.asarray(coeffs))
 
     def createOutputStep(self):
-        classes2DSet = self._createSetOfClasses2D(self.inputParts.get())
+        classes2DSet = self._createSetOfClasses2D(self.inputParts[0].get())
         classes2DSet.classifyItems(updateItemCallback=self._updateParticle,
                                    updateClassCallback=self._updateClass,
                                    itemDataIterator=iter(self.kmeans.labels_))
         result = {'outputClasses': classes2DSet}
-        classes2DSet.L1 = Integer(self.inputParts.get().L1)
-        classes2DSet.L2 = Integer(self.inputParts.get().L2)
-        classes2DSet.Rmax = Integer(self.inputParts.get().Rmax)
+        classes2DSet.L1 = Integer(self.inputParts[0].get().L1)
+        classes2DSet.L2 = Integer(self.inputParts[0].get().L2)
+        classes2DSet.Rmax = Integer(self.inputParts[0].get().Rmax)
         self._defineOutputs(**result)
-        self._defineSourceRelation(self.inputParts, classes2DSet)
+        for inputParts in self.inputParts:
+            self._defineSourceRelation(inputParts, classes2DSet)
 
     # ------------------------------- UTILS functions -------------------------------
     def _updateParticle(self, item, idc):
