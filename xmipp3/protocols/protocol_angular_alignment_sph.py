@@ -2,6 +2,7 @@
 # **************************************************************************
 # *
 # * Authors:     Amaya Jimenez Moreno (ajimenez@cnb.csic.es)
+# *              David Herreros Calero (dherreos@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -78,8 +79,6 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         form.addParam('ignoreCTF', params.BooleanParam, default=False, label='Ignore CTF?',
                       expertLevel=params.LEVEL_ADVANCED,
                       help="If true, volume projection won't suffer CTF corrections")
-        form.addParam('phaseFlip', params.BooleanParam, default=False, label='Flip CTF phase?',
-                      expertLevel=params.LEVEL_ADVANCED)
         form.addParallelSection(threads=1, mpi=8)
 
     def _createFilenameTemplates(self):
@@ -143,8 +142,7 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
                   self.maxAngular, Ts, self.maxResolution, fnOutDir, self.penalization.get())
         if self.ignoreCTF.get():
             params += ' --ignoreCTF'
-        # if self.inputParticles.get().isPhaseFlipped():  # FIXME: preguntar (Amaya)
-        if self.phaseFlip.get():
+        if self.inputParticles.get().isPhaseFlipped():
             params += ' --phaseFlipped'
         self.runJob("xmipp_angular_sph_alignment", params, numberOfMpi=self.numberOfMpi.get())
 
