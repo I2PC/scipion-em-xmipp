@@ -58,9 +58,6 @@ class XmippProtKmeansSPH(ProtClassify2D):
                       label='Column to cluster', default=0,
                       help='Selecto from the type of coefficients to be used for the '
                            'clustering.')
-        form.addParam('clusters', param.IntParam, default=50,
-                      label='Number of clusters',
-                      help='Number of clusters to initialize kmeans algorithm.')
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
