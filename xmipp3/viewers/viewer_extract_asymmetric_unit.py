@@ -46,7 +46,7 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
     """ Visualize the input and output volumes of protocol XmippProtExtractUnit
         by choosing Chimera (3D) or Xmipp visualizer (2D).
         The axes of coordinates x, y, z will be shown by choosing Chimera"""
-    _label = 'viewer extract unit cell'
+    _label = 'viewer extract asymmetric unit'
     _targets = [XmippProtExtractUnit]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
 
@@ -56,7 +56,7 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
 
     def _defineParams(self, form):
         form.addSection(label='Visualization of input volume and extracted '
-                              'unit cell')
+                              'asymmetric unit')
         form.addParam('displayVol', params.EnumParam,
                       choices=['chimerax', 'slices'], default=VOLUME_CHIMERA,
                       display=params.EnumParam.DISPLAY_HLIST,
@@ -136,6 +136,7 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
 
         cMap = ['red', 'yellow', 'green', 'cyan', 'blue']
         d = {}
+        innerRadius = self.protocol.innerRadius.get()
         d['outerRadius'] = self.protocol.outerRadius.get() * sampling
         if innerRadius < 0:
            innerRadius = 0
