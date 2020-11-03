@@ -79,7 +79,10 @@ class XmippProtKmeansSPH(ProtClassify2D):
                 mdLabel = md.MDL_NMA
             for particle in particles.iterItems():
                 coeffs.append(np.fromstring(getXmippAttribute(particle, mdLabel).get(), sep=','))
-        self.kmeans = KMeans(n_clusters=self.clusters.get()).fit(np.asarray(coeffs))
+        intertia = []
+        for nClusters in range(1, 101):
+            self.kmeans = KMeans(n_clusters=nClusters).fit(np.asarray(coeffs))
+            intertia.append(self.kmeans.inertia_)
 
     def createOutputStep(self):
         classes2DSet = self._createSetOfClasses2D(self.inputParts[0].get())
