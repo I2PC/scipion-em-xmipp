@@ -29,7 +29,7 @@ import numpy as np
 
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
-                                        LEVEL_ADVANCED)
+                                        LEVEL_ADVANCED, EnumParam)
 from pwem.protocols import ProtAnalysis3D
 from pyworkflow.object import Float
 from pwem.emlib.image import ImageHandler
@@ -72,26 +72,32 @@ class XmippProtMonoRes(ProtAnalysis3D):
                       help='The noise estimation for determining the '
                       'local resolution is performed via half volumes.')
 
+        form.addParam('halfVolumesFile', BooleanParam, default=True,
+                      condition='halfVolumes',
+                      label="Are the half volumes stored with the input volume?",
+                      help='Usually, the half volumes are stored as properties of '
+                      'the input volume. If this is not the case, set this to '
+                      'False and specify the two halves you want to use.')
+
         form.addParam('inputVolumes', PointerParam, pointerClass='Volume',
                       label="Input Volume", important=True,
-                      condition = 'not halfVolumes',
+                      condition = 'halfVolumesFile',
                       help='Select a volume for determining its '
                       'local resolution.')
 
         form.addParam('inputVolume', PointerParam, pointerClass='Volume',
                       label="Volume Half 1", important=True,
-                      condition = 'halfVolumes', 
-                      help='Select a volume for determining its '
+                      condition = 'not halfVolumesFile', 
+                      help='Select the first half of a volume for determining its '
                       'local resolution.')
 
         form.addParam('inputVolume2', PointerParam, pointerClass='Volume',
                       label="Volume Half 2", important=True,
-                      condition='halfVolumes',
-                      help='Select a second volume for determining a '
+                      condition='not halfVolumesFile',
+                      help='Select the second half of a volume for determining a '
                       'local resolution.')
 
         form.addParam('Mask', PointerParam, pointerClass='VolumeMask', 
-                      condition='(halfVolumes) or (not halfVolumes)',
                       allowsNull=True,
                       label="Binary Mask", 
                       help='The mask determines which points are specimen'
@@ -173,8 +179,12 @@ class XmippProtMonoRes(ProtAnalysis3D):
         self.micsFn = self._getPath()
 
         if self.halfVolumes:
-            self.vol1Fn = self.inputVolume.get().getFileName()
-            self.vol2Fn = self.inputVolume2.get().getFileName()
+            if not self.halfVolumesFile:
+                self.vol1Fn = self.inputVolume.get().getFileName()
+                self.vol2Fn = self.inputVolume2.get().getFileName()
+                #self.inputVolumes.set(None)
+            else:
+                self.vol1Fn, self.vol2Fn = self.inputVolumes.get().getHalfMaps().split(',')
             extVol1 = getExt(self.vol1Fn)
             extVol2 = getExt(self.vol2Fn)
             if (extVol1 == '.mrc') or (extVol1 == '.map'):
@@ -187,7 +197,6 @@ class XmippProtMonoRes(ProtAnalysis3D):
             else:
                 self.maskFn = self.Mask.get().getFileName()
 
-            self.inputVolumes.set(None)
         else:
             self.vol0Fn = self.inputVolumes.get().getFileName()
             extVol0 = getExt(self.vol0Fn)
@@ -199,8 +208,8 @@ class XmippProtMonoRes(ProtAnalysis3D):
             else:
                 self.maskFn = self.Mask.get().getFileName()
             
-            self.inputVolume.set(None)
-            self.inputVolume2.set(None)
+            #self.inputVolume.set(None)
+            #self.inputVolume2.set(None)
 
 
         extMask = getExt(self.maskFn)
@@ -216,7 +225,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
             self.runJob('xmipp_transform_threshold', params)
 
     def ifNomask(self, fnVol):
-        if self.halfVolumes:
+        if self.halfVolumes and not self.halfVolumesFile:
             xdim, _ydim, _zdim = self.inputVolume.get().getDim()
             params = ' -i %s' % fnVol
         else:
@@ -250,7 +259,10 @@ class XmippProtMonoRes(ProtAnalysis3D):
         if self.halfVolumes:
             params = ' --vol %s' % self.vol1Fn
             params += ' --vol2 %s' % self.vol2Fn
-            params += ' --sampling_rate %f' % self.inputVolume.get().getSamplingRate()
+            if not self.halfVolumesFile:
+                params += ' --sampling_rate %f' % self.inputVolume.get().getSamplingRate()
+            else:
+                params += ' --sampling_rate %f' % self.inputVolumes.get().getSamplingRate()
             if (self.noiseonlyinhalves.get() is True):
                 params += ' --noiseonlyinhalves'
         else:
@@ -308,7 +320,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
     def createOutputStep(self):
         volume=Volume()
         volume.setFileName(self._getExtraPath(OUTPUT_RESOLUTION_FILE))
-        if (self.halfVolumes):
+        if self.halfVolumes and not self.halfVolumesFile:
             volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
             volume.setOrigin(self.inputVolume.get().getOrigin(True))
             self._defineOutputs(resolution_Volume=volume)
