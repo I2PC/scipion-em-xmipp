@@ -136,8 +136,8 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
                   self._getExtraPath('Volumes'), self.penalization.get())
         if self.newRmax != 0:
             params = params + ' --Rmax %d' % self.newRmax
-        if self.numberOfThreads.get() != 0:
-            params = params + ' --thr %d' % self.numberOfThreads.get()
+        # if self.numberOfThreads.get() != 0:
+        #     params = params + ' --thr %d' % self.numberOfThreads.get()
         self.runJob("xmipp_volume_deform_sph", params)
 
 
