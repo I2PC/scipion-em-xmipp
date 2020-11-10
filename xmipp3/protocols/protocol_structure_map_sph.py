@@ -217,7 +217,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             params = params + ' --Rmax %d' % self.newRmax
         # if self.numberOfThreads.get() != 0:
         #     params = params + ' --thr %d' % self.numberOfThreads.get()
-        params = params + ' --thr 4'
+        # params = params + ' --thr 3'
 
         self.runJob("xmipp_volume_deform_sph", params)
 
