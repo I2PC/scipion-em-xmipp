@@ -490,8 +490,11 @@ class XmippProtValFit(ProtAnalysis3D):
 
         try:
             import bsoft
-        except ImportError as e:
-            errors.append("This protocol requires bsoft plugin to run.")
+            if bsoft.__version__ in ["3.0.0", "3.0.1", "3.0.4"]:
+                errors.append("This protocol requires bsoft plugin 3.0.5 or above to run."
+                              " You have %s. Update it using the plugin manager or command line" % bsoft.__version__)
+        except Exception as e:
+            errors.append("This protocol requires bsoft plugin 3.0.5 or above to run. Update it using the plugin manager or command line")
             
         return errors    
 
