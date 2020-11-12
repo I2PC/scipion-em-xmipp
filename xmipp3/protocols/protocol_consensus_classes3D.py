@@ -41,9 +41,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
     """
     _label = 'consensus clustering 3D'
 
-    def __init__(self):
-        EMProtocol.__init__(self)
-
     def _defineParams(self, form):
         form.addSection(label='Input')
 
