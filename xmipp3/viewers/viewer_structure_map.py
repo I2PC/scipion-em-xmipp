@@ -26,6 +26,7 @@
 
 import os, matplotlib, math
 from scipy import ndimage
+from scipy.spatial import KDTree
 import tkinter as tk
 matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
@@ -83,9 +84,10 @@ class XmippProtStructureMapViewer(ProtocolViewer):
 
 class projectionPlot(object):
 
-    def __init__(self, coords, weights=None):
+    def __init__(self, coords, weights):
         self.coords = coords
         self.weights = weights
+        self.minimum_spanning_tree()
         self.proj_coords = None
         self.radio = None
         self.cb = None
@@ -94,10 +96,89 @@ class projectionPlot(object):
         self.fig = plt.Figure(figsize=(10, 4))
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
         self.ax_3d = self.fig.add_subplot(121, projection="3d")
-        self.ax_3d.set_title("3D Scatter Plot")
+        self.ax_3d.set_title("3D Minimum Spanning Tree")
+        self.ax_3d.set_axis_off()
         self.fig.canvas.mpl_connect('button_release_event', self.onRelease)
         self.ax_2d = self.fig.add_subplot(122)
-        self.ax_2d.set_title("Projection Scatter Plot")
+        self.ax_2d.set_title("Projection Minimum Spanning Tree")
+
+    def minimum_spanning_tree(self):
+        N = self.coords.shape[0]
+        tree = KDTree(self.coords)
+        distances, indices = tree.query(self.coords, k=10)
+        nn_mat = np.zeros((N, N))
+        for idn in range(N):
+            nn_mat[idn, indices[idn]] += distances[idn].reshape(-1)
+            nn_mat[idn, idn] = 0
+
+        edges = ((int(e[0]), int(e[1])) for e in zip(*np.asarray(nn_mat).nonzero()))
+        triples = list(((u, v, float(nn_mat[u, v])) for u, v in edges))
+        edges = [(triple[0], triple[1]) for triple in triples]
+        weigths_edge = [triple[2] for triple in triples]
+
+        edge_matrix = np.zeros((N, N))
+        for edge, weigth in zip(edges, weigths_edge):
+            edge_matrix[edge] = weigth
+        self.T = self.KruskalMST(triples, N)
+
+    def KruskalMST(self, triples, N):
+        result = []
+        i = 0
+        e = 0
+        graph = sorted(triples, key=lambda item: item[2])
+        parent = []
+        rank = []
+        for node in range(N):
+            parent.append(node)
+            rank.append(0)
+        while e < N - 1:
+            u, v, w = graph[i]
+            i = i + 1
+            x = self.find(parent, u)
+            y = self.find(parent, v)
+            if x != y:
+                e = e + 1
+                result.append([u, v, w])
+                self.union(parent, rank, x, y)
+        return result
+
+    def find(self, parent, i):
+        if parent[i] == i:
+            return i
+        return self.find(parent, parent[i])
+
+    def union(self, parent, rank, x, y):
+        xroot = self.find(parent, x)
+        yroot = self.find(parent, y)
+        if rank[xroot] < rank[yroot]:
+            parent[xroot] = yroot
+        elif rank[xroot] > rank[yroot]:
+            parent[yroot] = xroot
+        else:
+            parent[yroot] = xroot
+            rank[xroot] += 1
+
+    def mst_3D(self):
+        N = self.coords.shape[0]
+        degree = [0] * N
+        edges_mst = [0] * (N - 1)
+        for idn in range(N - 1):
+            degree[self.T[idn][0]] += 1
+            degree[self.T[idn][1]] += 1
+            edges_mst[idn] = (self.T[idn][0], self.T[idn][1])
+        edge_max = max(degree)
+        colors = [plt.cm.plasma(val / edge_max) for val in degree]
+        for idn, row in enumerate(self.coords):
+            xi = row[0]
+            yi = row[1]
+            zi = row[2]
+            self.ax_3d.scatter(xi, yi, zi, c=[colors[idn]], s=20 + 20 * degree[idn], edgecolors='k', alpha=0.7)
+        for edge in edges_mst:
+            if edge != 0:
+                x = np.array((self.coords[edge[0]][0], self.coords[edge[1]][0]))
+                y = np.array((self.coords[edge[0]][1], self.coords[edge[1]][1]))
+                z = np.array((self.coords[edge[0]][2], self.coords[edge[1]][2]))
+                self.ax_3d.plot(x, y, z, c='black', alpha=0.5)
 
     def projectMatrix(self, M, coords):
         proj_coords = []
@@ -123,7 +204,7 @@ class projectionPlot(object):
         if label == 'Scatter':
             self.ax_2d.clear()
             self.ax_2d.scatter(x, y, color="green")
-            self.ax_2d.set_title("Projection Scatter Plot")
+            self.ax_2d.set_title("Projection Minimum Spanning Tree")
             self.fig.canvas.draw()
         elif label == 'Contour':
             self.ax_2d.clear()
@@ -170,14 +251,14 @@ class projectionPlot(object):
             for p in range(Xr.shape[0]):
                 indx = np.argmin(np.abs(R[:, 0] - Xr[p, 0]))
                 indy = np.argmin(np.abs(C[0, :] - Xr[p, 1]))
-                if self.weights != None:
-                    S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel * self.weights[p]
+                if 'weights' in locals():
+                    S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel * self.weights
                 else:
                     S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel
             S = S[~np.all(S == 0, axis=1)]
             S = S[:, ~np.all(S == 0, axis=0)]
             S = ndimage.rotate(S, 90)
-            cf = self.ax_2d.imshow(S, cmap=matplotlib.cm.jet)
+            cf = self.ax_2d.imshow(S)
             cbaxes = self.fig.add_axes([0.92, 0.1, 0.01, 0.8])
             self.ax_2d.set_title('Projection Scatter Plot')
             self.cb = self.fig.colorbar(mappable=cf, cax=cbaxes)
@@ -185,7 +266,7 @@ class projectionPlot(object):
             self.fig.canvas.draw()
 
     def initializePlot(self):
-        self.ax_3d.scatter3D(self.coords[:, 0], self.coords[:, 1], self.coords[:, 2], color="green")
+        self.mst_3D()
         M = self.ax_3d.get_proj()
         self.proj_coords = self.projectMatrix(M, self.coords)
         self.ax_2d.scatter(self.proj_coords[:, 0], self.proj_coords[:, 1], color="green")
