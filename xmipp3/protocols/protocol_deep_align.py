@@ -99,6 +99,11 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
                       default=10,
                       help="Number of epochs for training.",
                       condition='modelPretrain==False')
+        form.addParam('batchSize', IntParam,
+                      label="Batch size for training",
+                      default=128,
+                      help="Batch size for training.",
+                      condition='modelPretrain==False')
         form.addParam('spanConesTilt', FloatParam,
                       label="Distance between region centers",
                       default=30,
@@ -125,7 +130,6 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
         deps2 = []
 
         self.lastIter = 0
-        self.batchSize = 128
         self.imgsFn = self._getExtraPath('input_imgs.xmd')
         self.trainImgsFn = self._getExtraPath('train_input_imgs.xmd')
 
@@ -542,7 +546,7 @@ _noiseCoord   '0'
                     try:
                         args = "%s %s %s %s %d %d %d %d " % (
                         expSet, fnLabels, self._getExtraPath(),
-                        modelFn+'_aux', self.numEpochs, newXdim, 2, self.batchSize)
+                        modelFn+'_aux', self.numEpochs, newXdim, 2, self.batchSize.get())
                         #args += " %(GPU)s"
                         args += " %s " % (gpuId)
                         #args += " %s " %(int(idx % totalGpu))
