@@ -37,7 +37,9 @@ from pwem.protocols import ProtAnalysis3D
 from pyworkflow.utils.path import moveFile, makePath
 import pwem.emlib.metadata as md
 
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
 from xmipp3.convert import writeSetOfParticles
+from xmipp3.base import isXmippCudaPresent
 
 PROJECTION_MATCHING = 0
 SIGNIFICANT = 1
@@ -202,7 +204,7 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
                   "orientations": self.numOrientations.get(),
                   "gallery": self._getGalleryMd(volId),
                   "outDir": self._getVolDir(volId),
-                  "output": self._getAnglesMd(volId),
+                  "output": "angles_iter001_00.xmd",
                   "device": GpuListCuda,
                   }
 
@@ -213,7 +215,7 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
         else:
             args = '-i %(inputParts)s -r %(gallery)s -o %(output)s --keepBestN %(orientations)f '
             args += '--odir %(outDir)s --dev %(device)s '
-            self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+            self.runJob(CUDA_ALIGN_SIGNIFICANT, args % params, numberOfMpi=1)
 
     def projectionMatchingStep(self, volId):
         params = {"inputParts": self._getMdParticles(),
@@ -278,6 +280,8 @@ class XmippProtValidateNonTilt(ProtAnalysis3D):
             validateMsgs.append('Please provide an input reference volume.')
         if self.inputParticles.get() and not self.inputParticles.hasValue():
             validateMsgs.append('Please provide input particles.')
+        if self.useGpu and not isXmippCudaPresent(CUDA_ALIGN_SIGNIFICANT):
+            validateMsgs.append("You have asked to use GPU, but I cannot find the Xmipp GPU programs")
         return validateMsgs
 
     def _summary(self):

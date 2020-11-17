@@ -69,7 +69,7 @@ class TestCenterParticles(BaseTest):
 
 
     def calculateCtf(self, inputMics):
-        protCTF = ProtCTFFind(useCftfind4=True)
+        protCTF = ProtCTFFind()
         protCTF.inputMicrographs.set(inputMics)
         # Gone in new version: protCTF.ctfDownFactor.set(1.0)
         protCTF.lowRes.set(44)

@@ -39,6 +39,7 @@ from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         LEVEL_ADVANCED, GPU_LIST, USE_GPU)
 from pwem import emlib
 from xmipp3.convert import writeSetOfParticles
+from xmipp3.base import isXmippCudaPresent
 
 
 class XmippProtValidateOverfitting(ProtReconstruct3D):
@@ -209,7 +210,7 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
         fractionCounter = 0
         maxNumberOfParticles = 0.5 * self.inputParticles.get().getSize()
         for number in numberOfParticles:
-            if number <= numberOfParticles: #AJ before maxNumberOfParticles
+            if number <= maxNumberOfParticles: #AJ before maxNumberOfParticles
                 for iteration in range(0, self.numberOfIterations.get()):
                     self._insertFunctionStep('reconstructionStep', number,
                                              fractionCounter, iteration,
@@ -357,8 +358,8 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                         self.runJob('xmipp_cuda_reconstruct_fourier', params, numberOfMpi=len((self.gpuList.get()).split(','))+1)
                     else:
                         self.runJob('xmipp_cuda_reconstruct_fourier', params)
-            else:
-                self.runJob('xmipp_reconstruct_fourier_accel', params)
+                else:
+                    self.runJob('xmipp_reconstruct_fourier_accel', params)
 
 
         self.runJob('xmipp_resolution_fsc',
@@ -465,6 +466,8 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                 self.newSize.get() == self.inputParticles.get().getDim()[0]):
             errors.append("The new chosen size is equal to the "
                           "recent particles size")
+        if self.useGpu and not isXmippCudaPresent():
+            errors.append("You have asked to use GPU, but I cannot find the Xmipp GPU programs")
         return errors
 
         # --------------------------- UTILS functions --------------------------------------------
@@ -481,20 +484,15 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
         fnOut = open(outputFn, 'w')
 
         for fnFreq in fnFreqs:
-            print(fnFreq)
             data = []
             dataInv = []
             fnFreqOpen = open(fnFreq, "r")
             for line in fnFreqOpen:
                 fields = line.split()
-                rowdata = map(float, fields)
-                print("rowdata",rowdata)
-                #AJ cambio
+                rowdata = list(map(float, fields))
                 val = 1.0/(float(rowdata[0])*float(rowdata[0]))
                 dataInv.append(val)
-                #FIN AJ
                 data.extend(rowdata)
-                print("data", data, dataInv)
             meanRes = (sum(data) / len(data))
             data[:] = [(x - meanRes) ** 2 for x in data]
             varRes = (sum(data) / (len(data) - 1))

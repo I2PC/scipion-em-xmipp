@@ -27,7 +27,7 @@
 
 from os.path import getmtime
 from datetime import datetime
-from os.path import exists
+from os.path import exists, splitext
 import os
 
 from pyworkflow import VERSION_2_0
@@ -42,9 +42,10 @@ from pwem.constants import ALIGN_2D, ALIGN_NONE
 from pwem.protocols import ProtAlign2D
 import pwem.emlib.metadata as md
 
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
 from xmipp3.convert import (writeSetOfParticles, rowToAlignment,
                             writeSetOfClasses2D)
-
+from xmipp3.base import isXmippCudaPresent
 
 REF_CLASSES = 0
 REF_AVERAGES = 1
@@ -149,6 +150,11 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
         self.lastDate = p.getObjCreation()
         self._saveCreationTimeFile(self.lastDate)
 
+        metadataRef = md.MetaData(self.imgsRef)
+        if metadataRef.containsLabel(md.MDL_REF) is False:
+            args = ('-i %s --fill ref lineal 1 1 -o %s')%(self.imgsRef, self.imgsRef)
+            self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
+
         # Calling program xmipp_cuda_correlation
         count = 0
         GpuListCuda = ''
@@ -173,13 +179,13 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
                         'keepBest': self.keepBest.get(),
                         'maxshift': self.maximumShift,
                         'outputClassesFile': clasesOut,
-                        'device': int(GpuListCuda[0]),
+                        'device': GpuListCuda,
+                        'outputClassesFileNoExt': splitext(clasesOut)[0],
                         }
 
-        args = ('-i_ref %(imgsRef)s -i_exp %(imgsExp)s -o %(outputFile)s '
-                '--keep_best %(keepBest)d --maxShift %(maxshift)d '
-                '--simplifiedMd --classify %(outputClassesFile)s --device %(device)d ')
-        self.runJob("xmipp_cuda_correlation", args % self._params)
+        args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \
+               '--keepBestN 1 --oUpdatedRefs %(outputClassesFileNoExt)s --dev %(device)s '
+        self.runJob(CUDA_ALIGN_SIGNIFICANT, args % self._params, numberOfMpi=1)
 
 
     # ------ Methods for Streaming 2D Classification --------------
@@ -256,6 +262,8 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
         if x1 != x2 or y1 != y2:
             errors.append('The input images (%s, %s) and the reference images (%s, %s) '
                           'have different sizes' % (x1, y1, x2, y2))
+        if not isXmippCudaPresent("xmipp_cuda_correlation"):
+            errors.append("I cannot find the Xmipp GPU programs in the path")
         return errors
 
     def _summary(self):

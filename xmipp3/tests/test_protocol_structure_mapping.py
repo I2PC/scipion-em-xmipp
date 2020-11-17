@@ -20,7 +20,7 @@
 # *  All comments concerning this program package may be sent to the
 # *  e-mail address 'scipion@cnb.csic.es'
 # ***************************************************************************/
-
+from pwem import Domain
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pwem.protocols import ProtImportVolumes
 
@@ -45,7 +45,10 @@ class TestStructureMapping(BaseTest):
         """ 
             Test protocol structure mapping
         """
-        from continuousflex.protocols import FlexProtStructureMapping
+        FlexProtStructureMapping = Domain.importFromPlugin(
+            "continuousflex.protocols",
+            "FlexProtStructureMapping",
+            doRaise=True)
         protStrucMap = self.newProtocol(FlexProtStructureMapping,
                                 objLabel='structure mapping',
                                 numberOfMpi=1, numberOfThreads=4)

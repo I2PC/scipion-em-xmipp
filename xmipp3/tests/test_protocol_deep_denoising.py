@@ -47,7 +47,7 @@ class TestDeepDenoising(BaseTest):
                                                inputParticles=self.particles,
                                                imageSize=32)
         self.launchProtocol(trainAndPredictProt)
-        self.assertIsNotEmpty(trainAndPredictProt.outputParticles)
+        self.assertSetSize(trainAndPredictProt.outputParticles, msg="Denoising training +  predict output seems wrong")
 
     def test_only_predict(self):
         self.importData()
@@ -61,4 +61,4 @@ class TestDeepDenoising(BaseTest):
                                        imageSize=32)
         self.launchProtocol(predictProt)
 
-        self.assertIsNotEmpty(predictProt.outputParticles)
+        self.assertSetSize(predictProt.outputParticles, msg="Denoising only predict output seems wrong")

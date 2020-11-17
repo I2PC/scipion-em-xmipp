@@ -40,7 +40,7 @@ from pwem.objects import SetOfClasses2D
 from pwem import emlib
 from xmipp3.convert import (writeSetOfClasses2D, readSetOfVolumes,
                             writeSetOfParticles)
-from xmipp3.base import isMdEmpty
+from xmipp3.base import isMdEmpty, isXmippCudaPresent
 
 
 class XmippProtRansac(ProtInitialVolume):
@@ -500,6 +500,10 @@ class XmippProtRansac(ProtInitialVolume):
                 errors.append('of grids squared. \n')
                 errors.append('Consider either provide more classes or')
                 errors.append('disable dimensionality reduction')
+
+        if self.useGpu and not isXmippCudaPresent():
+            errors.append("You have asked to use GPU, but I cannot find Xmipp GPU programs in the path")
+
         return errors
     
     def _summary(self):

@@ -67,6 +67,8 @@ class XmippAnalyzeLocalCTFViewer(ProtocolViewer):
                 }
 
     def _viewLocalDefocus(self, paramName=None):
+        """display a 3D view of where the particles are placed in the micrograph taking as height the value estimated
+        for local defocues"""
         views=[]
         fnDefoci="%s"%(self.protocol._getExtraPath("micrographDefoci.xmd"))
         if exists(fnDefoci):

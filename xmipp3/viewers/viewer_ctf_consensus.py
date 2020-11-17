@@ -97,9 +97,9 @@ class XmippCTFConsensusViewer(ProtocolViewer):
             labels += ' '.join(CtfView.EXTRA_LABELS)
 
         if self.protocol.hasAttribute(objName):
+            set = getattr(self.protocol, objName)
             views.append(ObjectView(
-                self._project, self.protocol.strId(),
-                getattr(self.protocol, objName).getFileName(),
+                self._project, set.getObjId(),set.getFileName(),
                 viewParams={MODE: MODE_MD, ORDER: labels, VISIBLE: labels}))
         else:
             self.infoMessage('%s does not have %s%s'

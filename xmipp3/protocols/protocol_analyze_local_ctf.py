@@ -62,6 +62,8 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def analyzeDefocus(self):
+        """compute R2 coefficient of each micrograph and prepare data to be later displayed in the viewer as a 3D
+        representation of the distribution of particles in the micrograph"""
         micIds=[]
         particleIds=[]
         x=[]
@@ -122,6 +124,7 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
 
 
     def createOutputStep(self):
+        """create as output a setOfParticles and add the columns of corresponding computed metadata"""
         inputMicSet = self.inputMics.get()
         fnMics = self._getExtraPath('input_mics.xmd')
         writeSetOfMicrographs(inputMicSet, fnMics)

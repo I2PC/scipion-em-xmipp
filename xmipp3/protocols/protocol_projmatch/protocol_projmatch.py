@@ -34,6 +34,7 @@ from pwem import emlib
 from .projmatch_initialize import *
 from .projmatch_form import _defineProjectionMatchingParams
 from .projmatch_steps import *
+from xmipp3.base import isXmippCudaPresent
 
 
 class XmippProtProjMatch(ProtRefine3D, ProtClassify3D):
@@ -223,6 +224,9 @@ class XmippProtProjMatch(ProtRefine3D, ProtClassify3D):
         self._validateDim(self.inputParticles.get(),
                           self.input3DReferences.get(),
                           errors, 'Input particles', 'Reference volume')
+
+        if self.useGpu and not isXmippCudaPresent():
+            errors.append("You have asked to use GPU, but I cannot find Xmipp GPU programs in the path")
 
         return errors
     

@@ -77,7 +77,7 @@ class XmippProtNormalizeStrain(ProtAnalysis3D):
             protId=prot.get().getObjId()
             protDir=prot.get()._getPath('')
             fnRoot=os.path.relpath(os.path.join(protDir,"extra","result"),self._getPath(''))
-            scriptFile = self._getPath('%d_result_%s_chimera.cmd'%(protId,what))
+            scriptFile = self._getPath('%d_result_%s_chimera.cxc'%(protId,what))
             fhCmd = open(scriptFile, 'w')
             fhCmd.write("open %s\n" % (fnRoot+"_final.vol"))
             fhCmd.write("open %s\n" % (fnRoot+"_%s.vol"%what))

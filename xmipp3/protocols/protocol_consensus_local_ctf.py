@@ -65,6 +65,8 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def compareDefocus(self):
+        """compare with median, mad and correlation matrix the local defocus value for each pixel estimated by
+        different programs (Xmipp, Relion, gCTF, ...)"""
         allParticlesDef = {}
         for defsetP in self.inputSets:
             defset = defsetP.get()
@@ -100,6 +102,8 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
         np.savetxt(self._getExtraPath("correlationMatrix.txt"),self.corrMatrix)
 
     def createOutputStep(self):
+        """create as output a setOfParticles with a consensus estimation of local defocus (median) and its median
+        standard deviation (mad)"""
         imgSet = self.inputSet.get()
 
         outputSet = self._createSetOfParticles()
@@ -122,6 +126,7 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
 
 
     def _updateItem(self, particle, row):
+        """update each particle in the set with the values computed"""
         pId = particle.getObjId()
         setXmippAttribute(particle,emlib.MDL_CTF_DEFOCUSA,self.median[self.pMatrixIdx[pId]])
         setXmippAttribute(particle,emlib.MDL_CTF_DEFOCUS_RESIDUAL,self.mad[self.pMatrixIdx[pId]])

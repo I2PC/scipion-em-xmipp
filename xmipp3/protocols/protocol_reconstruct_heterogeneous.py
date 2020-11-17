@@ -45,6 +45,8 @@ import pwem.emlib.metadata as md
 
 from pwem import emlib
 from pwem.emlib import MetaData, MD_APPEND, MDL_CLASS_COUNT
+
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
 from xmipp3.convert import (createItemMatrix, setXmippAttributes,
                             writeSetOfParticles, readSetOfParticles)
 
@@ -441,7 +443,7 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                             args = '-i %s -r %s -o %s --keepBestN %d --dev %s ' % \
                                    (fnGroup, fnGalleryGroupMd, fnAnglesSignificant,
                                     self.numberOfReplicates.get(), GpuListCuda)
-                            self.runJob('xmipp_cuda_align_significant', args,
+                            self.runJob(CUDA_ALIGN_SIGNIFICANT, args,
                                         numberOfMpi=1)
 
                         if (exists(fnAnglesSignificant) and getSize(
@@ -511,8 +513,6 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
                     args += " --optimizeShift --max_shift %f" % maxShift
                     args += " --optimizeAngles --max_angular_change %f" % (
                             2 * angleStep)
-                    if self.numberOfMpi.get() * self.numberOfThreads.get() > 1:
-                        args += " --Nsimultaneous 12"
                     if self.inputParticles.get().isPhaseFlipped():
                         args += " --phaseFlipped"
                     self.runJob("xmipp_angular_continuous_assign2", args,

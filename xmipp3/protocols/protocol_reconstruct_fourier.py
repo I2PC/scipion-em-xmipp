@@ -29,6 +29,7 @@ from pwem.protocols import ProtReconstruct3D
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 from xmipp3.convert import writeSetOfParticles
+from xmipp3.base import isXmippCudaPresent
 import os
 
 
@@ -199,6 +200,8 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
             errors.append("Approximative version is not implemented for Legacy code")
         if not self.useGpu.get() and self.numberOfThreads.get() > 1:
             errors.append("CPU version can use only a single thread. Use MPI instead")
+        if self.useGpu and not isXmippCudaPresent():
+            errors.append("You have asked to use GPU, but I cannot find Xmipp GPU programs in the path")
         return errors
     
     def _summary(self):

@@ -788,21 +788,6 @@ class TestXmippProtAlignVolume(TestXmippBase):
                                      )
         protAlign.inputVolumes.append(self.protImport2.outputVolume)
         self.launchProtocol(protAlign)
-        
-
-class TestXmippConvertToPseudoatoms(TestXmippBase):
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        TestXmippBase.setData()
-        cls.protImport = cls.runImportVolumes(cls.vol1, 9.896)
-
-    def testConvertToPseudoatoms(self):
-        print("Run convert to pseudoatoms")
-        prot = XmippProtConvertToPseudoAtoms(pseudoAtomTarget=15)
-        prot.inputStructure.set(self.protImport.outputVolume)
-        self.proj.launchProtocol(prot, wait=True)
-        self.assertIsNotNone(prot.outputPdb, "There was a problem with Convert to pseudoatoms output Pdb")
 
 
 class TestXmippProtHelicalParameters(TestXmippBase):
@@ -1126,17 +1111,28 @@ class TestXmippValidateNonTilt(TestXmippBase):
         self.launchProtocol(protImportVol)
         self.assertIsNotNone(protImportVol.getFiles(), "There was a problem with the import")
         
-        print("Run Validate Non-Tilt significant")
+        print("Run Validate Non-Tilt significant GPU")
         protValidate = self.newProtocol(XmippProtValidateNonTilt)
         protValidate.inputParticles.set(protSubset.outputParticles)
         protValidate.inputVolumes.set(protImportVol.outputVolume)
+        protValidate.setObjLabel('Validate Non-Tilt significant GPU')
         self.launchProtocol(protValidate)
-        self.assertIsNotNone(protValidate.outputVolumes, "There was a problem with Validate Non-Tilt")
+        self.assertIsNotNone(protValidate.outputVolumes, "There was a problem with Validate Non-Tilt GPU")
+
+        print("Run Validate Non-Tilt significant CPU")
+        protValidate = self.newProtocol(XmippProtValidateNonTilt)
+        protValidate.inputParticles.set(protSubset.outputParticles)
+        protValidate.inputVolumes.set(protImportVol.outputVolume)
+        protValidate.useGpu.set(False)
+        protValidate.setObjLabel('Validate Non-Tilt significant CPU')
+        self.launchProtocol(protValidate)
+        self.assertIsNotNone(protValidate.outputVolumes, "There was a problem with Validate Non-Tilt CPU")
         
         print("Run Validate Non-Tilt projection matching")
         protValidate = self.newProtocol(XmippProtValidateNonTilt, alignmentMethod=1)
         protValidate.inputParticles.set(protSubset.outputParticles)
         protValidate.inputVolumes.set(protImportVol.outputVolume)
+        protValidate.setObjLabel('Validate Non-Tilt projection matching')
         self.launchProtocol(protValidate)
         self.assertIsNotNone(protValidate.outputVolumes, "There was a problem with Validate Non-Tilt")
 
@@ -1152,3 +1148,40 @@ if __name__ == "__main__":
             print("Test: '%s' not found." % className)
     else:
         unittest.main()
+
+
+class TestXmippVolSubtraction(TestXmippBase):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
+        cls.vol1 = cls.dataset.getFile('volumes/volume_1_iter_002.mrc')
+        cls.vol2 = cls.dataset.getFile('volumes/volume_2_iter_002.mrc')
+
+    def testXmippVolSub(self):
+        print("Import Volume 1")
+        protImportVol1 = self.newProtocol(ProtImportVolumes,
+                                         objLabel='Volume',
+                                         filesPath=self.vol1,
+                                         samplingRate=7.08)
+        self.launchProtocol(protImportVol1)
+        self.assertIsNotNone(protImportVol1.getFiles(),
+                             "There was a problem with the import 1")
+        print("Import Volume 2")
+        protImportVol2 = self.newProtocol(ProtImportVolumes,
+                                         objLabel='Volume',
+                                         filesPath=self.vol2,
+                                         samplingRate=7.08)
+        self.launchProtocol(protImportVol2)
+        self.assertIsNotNone(protImportVol2.getFiles(),
+                             "There was a problem with the import 2")
+        print("Run volume subtraction")
+        protVolSub = self.newProtocol(XmippProtVolSubtraction,
+                                      vol1=protImportVol1.outputVolume,
+                                      vol2=protImportVol2.outputVolume,
+                                      pdb=False,
+                                      masks=False)
+        self.launchProtocol(protVolSub)
+        self.assertIsNotNone(protVolSub.outputVolume,
+                             "There was a problem with Volumes subtraction")

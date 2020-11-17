@@ -38,8 +38,7 @@ from pyworkflow.utils.properties import Message
 
 from pwem import ALIGN_NONE
 from pwem.protocols import ProtClassify2D
-from pwem.objects import SetOfParticles, SetOfAverages, SetOfClasses2D, Class2D
-
+from pwem.objects import SetOfParticles, SetOfAverages, SetOfClasses2D, Class2D, SetOfClasses, SetOfImages
 
 from xmipp3.convert import (writeSetOfParticles, readSetOfParticles,
                             setXmippAttributes)
@@ -436,7 +435,7 @@ class XmippProtEliminateEmptyClasses(XmippProtEliminateEmptyBase):
     def prepareImages(self):
         inSet = self.getInput()
 
-        if isinstance(inSet, em.SetOfImages):
+        if isinstance(inSet, SetOfImages):
             firstRep = inSet.getFirstItem()
             getImage = lambda item: item.clone()
             self.classesDict = None

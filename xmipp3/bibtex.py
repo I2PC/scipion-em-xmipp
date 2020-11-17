@@ -564,9 +564,22 @@ keywords = ""
   pages                    = "337--344",
   volume                   = "26",
   doi = {10.1016/j.str.2017.12.018},
-  url = {https://doi.org/10.1016/j.str.2017.12.018},
+  url = {http://doi.org/10.1016/j.str.2017.12.018},
 }
 
+
+@Article{strelak2020flexalign,
+AUTHOR = {Střelák, David and Filipovič, Jiří and Jiménez-Moreno, Amaya and Carazo, Jose María and Sánchez Sorzano, Carlos Óscar},
+TITLE = {FlexAlign: An Accurate and Fast Algorithm for Movie Alignment in Cryo-Electron Microscopy},
+JOURNAL = {Electronics},
+VOLUME = {9},
+YEAR = {2020},
+NUMBER = {6},
+ARTICLE-NUMBER = {1040},
+URL = {http://www.mdpi.com/2079-9292/9/6/1040},
+ISSN = {2079-9292},
+DOI = {http://doi.org/10.3390/electronics9061040}
+}
 
 
 """

@@ -62,6 +62,11 @@ def getXmippPath(*paths):
     if a subfolder is provided, will be concatenated to the path'''
     return os.path.join(pwem.Config.XMIPP_HOME, *paths)
 
+def isXmippCudaPresent(program=""):
+    if program=="":
+        return os.path.isfile(getXmippPath("bin","xmipp_cuda_reconstruct_fourier"))
+    else:
+        return os.path.isfile(getXmippPath("bin",program))
 
 def getLabelPythonType(label):
     """ From xmipp label to python variable type """
