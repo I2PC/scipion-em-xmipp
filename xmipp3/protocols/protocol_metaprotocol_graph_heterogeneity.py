@@ -231,7 +231,7 @@ class XmippMetaProtDiscreteGraphHeterogeneity(EMProtocol):
                         #multiresolution=False,
                         numberOfMpi=self.numberOfMpi.get(),
                         alignmentMethod=XmippProtReconstructHighRes.GLOBAL_ALIGNMENT,
-                        useGpu=self.useGpu.get(), # si algo cambiar a false
+                        useGpu=self.useGpu.get(),
                         gpuList = self.gpuList.get()
                         )    
                 newHighres.inputParticles.set(previousProtPart)
@@ -309,125 +309,6 @@ class XmippMetaProtDiscreteGraphHeterogeneity(EMProtocol):
                 
                 project.scheduleProtocol(highresNoAlignProt, self._runPrerequisites) 
                 self._finishedProt(highresNoAlignProt)
-                    
-                
-        
-        
-#         for iter in range(1, numIter):
-#             print('iter: ',iter)
-#             
-#             # se debe actualizar las partículas que van a pasar a cada iteración
-#             # para iter 1 particles es self
-#             # para iter>1 particles es el subset  de newhighres que cumple con criterios de calidad
-#             
-#             # en cuanto al volumen
-#             # en iter == 1
-#             # el volumen es relionClassify3DProt
-#             # en iter > 1
-#             # el volumen es la reconstruccion que se haga con las partículas buenas 
-#             # que salen de la validación con graph consistence
-#             # para este volumen se puede usar la asignación para esas partículas hecha por newhigres
-#                   
-#             for classItem in relionClassify3DProt.outputClasses:
-#                 classVar = classItem.getObjId()
-#                 print('classItem-ObjId',classItem.getObjId())
-#                 # highres with all particles
-#                 print('Highres (one class) - iter', iter,'class',classVar)
-#                 sys.stdout.flush()
-#                 
-#                 newHighres = project.newProtocol(
-#                         XmippProtReconstructHighRes,
-#                         objLabel='xmipp Highres - iter %d class %d' % (iter,classVar),
-#                         symmetryGroup=self.symmetryGroup.get(),
-#                         numberOfIterations=1, 
-#                         particleRadius = self.particleRadius.get(),
-#                         maximumTargetResolution = self.targetResolution.get(),
-#                         numberOfMpi=self.numberOfMpi.get(),
-#                         alignmentMethod=XmippProtReconstructHighRes.GLOBAL_ALIGNMENT,
-#                         useGpu=self.useGpu.get(),
-#                         gpuList = self.gpuList.get()
-#                         )    
-#                 previousProtPart = self
-#                 newHighres.inputParticles.set(previousProtPart)
-#                 newHighres.inputParticles.setExtended('outputParticlesInit') # is important this name to match
-#                  
-#                 previousProtVol = relionClassify3DProt
-#                 newHighres.inputVolumes.set(previousProtVol)
-#                 volumeName = 'outputVolumes.%d'%classItem.getObjId()
-#                 newHighres.inputVolumes.setExtended(volumeName) # is important this name to match
-#                 
-#                 project.scheduleProtocol(newHighres, self._runPrerequisites)                               
-#                 self._finishedProt(newHighres)
-#         
-#                 # angular graph validation
-#                 print('angular graph validation - iter',iter,'class',classVar)
-#                 sys.stdout.flush()
-#                 
-#                 validationProt = project.newProtocol(
-#                     XmippProtAngularGraphConsistence2,
-#                     objLabel='graphValidation - iter %d' % iter,
-#                     symmetryGroup=self.symmetryGroup.get(),
-#                     maximumTargetResolution=10,
-#                     numberOfMpi=self.numberOfMpi.get()
-#                     )
-#                 previousProtPart = newHighres
-#                 validationProt.inputParticles.set(previousProtPart)
-#                 validationProt.inputParticles.setExtended('outputParticles') # todo no es así !!
-#                 
-#                 previousProtVol = relionClassify3DProt
-#                 validationProt.inputVolumes.set(previousProtVol)
-#                 volumeName = 'outputVolumes.%d'%classItem.getObjId()
-#                 validationProt.inputVolumes.setExtended(volumeName) 
-#                 
-#                 project.scheduleProtocol(validationProt, self._runPrerequisites) 
-#                 self._finishedProt(validationProt)
-#                 
-#                 # angular assignment from newHigresProt
-#                 print('angular assignment from Highres - iter',iter,'class',classVar)
-#                 sys.stdout.flush()
-#                 
-#                 angAssignProt = project.newProtocol(
-#                     ProtAlignmentAssign,
-#                     objLabel='assignment from highres',
-#                     )
-#                 previousProtPart = validationProt
-#                 partName = 'outputParticlesAux'
-#                 angAssignProt.inputParticles.set(validationProt)
-#                 angAssignProt.inputParticles.setExtended(partName)
-#                    
-#                 angAssignProt.inputAlignment.set(newHighres)
-#                 angAssignProt.inputAlignment.setExtended('outputParticles')
-#                 
-#                 project.scheduleProtocol(angAssignProt, self._runPrerequisites) 
-#                 self._finishedProt(angAssignProt)
-#                             
-#                 # reconstruction of new volume for reference using only correctly assigned particles
-#                 print('Highres reconstruction No-Alignment - iter',iter,'class',classVar)
-#                 sys.stdout.flush()
-#                 
-#                 highresNoAlignProt = project.newProtocol(
-#                         XmippProtReconstructHighRes,
-#                         objLabel='xmipp Highres - No alignment',
-#                         symmetryGroup=self.symmetryGroup.get(),
-#                         numberOfIterations=1, 
-#                         particleRadius = self.particleRadius.get(),
-#                         maximumTargetResolution = self.targetResolution.get(),
-#                         numberOfMpi=self.numberOfMpi.get(),
-#                         alignmentMethod=XmippProtReconstructHighRes.NO_ALIGNMENT,
-#                         useGpu=self.useGpu.get(),
-#                         gpuList = self.gpuList.get()
-#                         )    
-#                 previousProtPart = angAssignProt
-#                 highresNoAlignProt.inputParticles.set(previousProtPart)
-#                 highresNoAlignProt.inputParticles.setExtended('outputParticles') # is important this name to match
-#                  
-#                 previousProtVol = relionClassify3DProt
-#                 highresNoAlignProt.inputVolumes.set(previousProtVol)
-#                 volumeName = 'outputVolumes.%d'%classItem.getObjId()
-#                 highresNoAlignProt.inputVolumes.setExtended(volumeName) # is important this name to match
-#                 
-#                 project.scheduleProtocol(highresNoAlignProt, self._runPrerequisites) 
-#                 self._finishedProt(highresNoAlignProt)
                     
     # --------------------------- STEPS functions -------------------------------
     

@@ -30,11 +30,15 @@ from os.path import join, isfile, exists
 from shutil import copyfile, copy
 import os
 
-from pyworkflow.object import Float, String
+#from pyworkflow.object import Float, String
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         STEPS_PARALLEL,
                                         StringParam, BooleanParam, IntParam,
                                         LEVEL_ADVANCED, USE_GPU, GPU_LIST)
+
+from pyworkflow.protocol import String, Float
+
+from pyworkflow.protocol import params
 
 from pyworkflow.utils.path import (moveFile, makePath, cleanPattern, copyFile, cleanPath)
 from pyworkflow.gui.plotter import Plotter
@@ -59,7 +63,7 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
     protocol produces an histogram with two groups of particles.
     """
     _label = 'angular graph consistence'
-
+    
     def __init__(self, *args, **kwargs):
         ProtAnalysis3D.__init__(self, *args, **kwargs)
 
@@ -207,15 +211,11 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
             result = {'outputParticlesAux' : self.subsets[i]}
             self._defineOutputs(**result)
             self._store(self.subsets[i])
-            
+
             # extra output info
             p_gsp = (1 - n_false/nParticles)* 100
-            parameterFile = self._getExtraPath('parameter.txt')
-            fh = open(parameterFile, "w")
-            fh.write("%.2f" % p_gsp)
-            fh.close()             
-            
-#             self.createPlot2D(fnAngles) # sometimes there is error with bins in histogram plots
+            self.percentage = Float(p_gsp)
+            self._store()
             
     def _updateItem(self, particle, row):
         count = 0
@@ -561,14 +561,14 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
         if (not hasattr(self, 'outputParticles')):
             summary.append("Output not ready yet.")
         else:
-            parameterFile = self._getExtraPath('parameter.txt')
-            fh = open(parameterFile, "r")
-            val = fh.readline()
-            fh.close()
-            if val == "100.00":
+#             parameterFile = self._getExtraPath('parameter.txt')
+#             fh = open(parameterFile, "r")
+#             val = fh.readline()
+#             fh.close()
+            if self.percentage == 100.0:
                 text = 'After validation, all of the images are likely to be within the realiable assignment zone'
             else:
-                text = 'After validation, a %s' % val
+                text = 'After validation, a %.2f' % self.percentage
                 text += r'% of the images are likely to be within the reliable assignment zone'
             summary.append(text)
         return summary    
