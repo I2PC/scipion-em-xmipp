@@ -193,109 +193,111 @@ class XmippProtExtractMovieParticlesNew(ProtProcessMovies):
 
     def _processMovie(self, movie):
 
-        if movie is not None:
-            movId = movie.getObjId()
-            #print("AQUI", movId, movie.getDim(), movie.getFramesRange())
-            x, y, n = movie.getDim()
-            iniFrame, lastFrame, _ = movie.getFramesRange()
-            frame0, frameN = self._getRange(movie)
-            boxSize = self.boxSize.get()
-    
-            if movie.hasAlignment():
-                shiftX, shiftY = movie.getAlignment().getShifts()  # lists.
-            else:
-                shiftX = [0] * (lastFrame - iniFrame + 1)
-                shiftY = shiftX
+        movId = movie.getObjId()
+        #print("AQUI", movId, movie.getDim(), movie.getFramesRange())
+        ih = emlib.image.ImageHandler()
+        x, y, z, n = ih.getDimensions(movie.getFileName())
+        print("AQUI", movId, x, y, z, n, movie.getFramesRange())
+        #x, y, n = movie.getDim()
+        iniFrame, lastFrame, _ = movie.getFramesRange()
+        frame0, frameN = self._getRange(movie)
+        boxSize = self.boxSize.get()
 
-            stkIndex = 0
-            movieStk = self._getMovieName(movie, '.stk')
-            movieMdFile = self._getMovieName(movie, '.xmd')
-            movieMd = md.MetaData()
-            frameMd = md.MetaData()
-            frameMdImages = md.MetaData()
-            frameRow = md.Row()
+        if movie.hasAlignment():
+            shiftX, shiftY = movie.getAlignment().getShifts()  # lists.
+        else:
+            shiftX = [0] * (lastFrame - iniFrame + 1)
+            shiftY = shiftX
 
-            if self._hasCoordinates(movie):
-                imgh = ImageHandler()
+        stkIndex = 0
+        movieStk = self._getMovieName(movie, '.stk')
+        movieMdFile = self._getMovieName(movie, '.xmd')
+        movieMd = md.MetaData()
+        frameMd = md.MetaData()
+        frameMdImages = md.MetaData()
+        frameRow = md.Row()
 
-                for frame in range(frame0, frameN + 1):
-                    indx = frame - iniFrame
-                    frameName = self._getFnRelated('frameMic', movId, frame)
-                    frameMdFile = self._getFnRelated('frameMdFile', movId, frame)
-                    coordinatesName = self._getFnRelated('frameCoords', movId,
-                                                         frame)
-                    frameImages = self._getFnRelated('frameImages', movId, frame)
-                    frameStk = self._getFnRelated('frameStk', movId, frame)
+        if self._hasCoordinates(movie):
+            imgh = ImageHandler()
 
-
-                    self.info("Writing frame: %s" % frameName)
-                    # TODO: there is no need to write the frame and then operate
-                    # the input of the first operation should be the movie
-                    movieName = imgh.fixXmippVolumeFileName(movie)
-                    imgh.convert((frame, movieName), frameName)
-
-                    self.info("Extracting particles")
-
-                    frameNum = frame-1
-                    fnRoot = self.inputAlignMovieProt.get()._getExtraPath()
-                    fnMovie = removeExt(movie.getFileName())
-                    fnAlign = fnRoot + '/' + fnMovie.split('/')[-1] + '_shifts.xmd'
-                    fnOutFile = self.inputAlignMovieProt.get()._getExtraPath('auxOutputFile.txt')
+            for frame in range(frame0, frameN + 1):
+                indx = frame - iniFrame
+                frameName = self._getFnRelated('frameMic', movId, frame)
+                frameMdFile = self._getFnRelated('frameMdFile', movId, frame)
+                coordinatesName = self._getFnRelated('frameCoords', movId,
+                                                     frame)
+                frameImages = self._getFnRelated('frameImages', movId, frame)
+                frameStk = self._getFnRelated('frameStk', movId, frame)
 
 
-                    try:
-                        #print("Applying " + "localAlignment@" + fnAlign)
-                        mdAlign = md.MetaData("localAlignment@"+fnAlign)
-                        shiftX = [0] * (lastFrame - iniFrame + 1)
-                        shiftY = shiftX
-                        self._writeXmippPosFile(movie, coordinatesName,
-                                                shiftX[indx], shiftY[indx])
-                        args = '-i %(frameName)s --pos %(coordinatesName)s ' \
-                               '-o %(frameImages)s --Xdim %(boxSize)d --Xdmov %(x)d ' \
-                               '--Ydmov %(y)d --Ndmov %(n)d --curFrame %(frameNum)d ' \
-                               '-iAlign %(fnAlign)s ' % locals()
-                        args += " --downsampling %f " % self.getBoxScale()
-                        self.runJob('xmipp_micrograph_scissor_new', args)
-                    except:
-                        print("WARNING: No applying new version of xmipp_micrograph_scissor for " + frameName)
-                        self._writeXmippPosFile(movie, coordinatesName,
-                                                shiftX[indx], shiftY[indx])
-                        args = '-i %(frameName)s --pos %(coordinatesName)s ' \
-                               '-o %(frameImages)s --Xdim %(boxSize)d ' % locals()
-                        args += " --downsampling %f " % self.getBoxScale()
-                        self.runJob('xmipp_micrograph_scissor', args)
+                self.info("Writing frame: %s" % frameName)
+                # TODO: there is no need to write the frame and then operate
+                # the input of the first operation should be the movie
+                movieName = imgh.fixXmippVolumeFileName(movie)
+                imgh.convert((frame, movieName), frameName)
+
+                self.info("Extracting particles")
+
+                frameNum = frame-1
+                fnRoot = self.inputAlignMovieProt.get()._getExtraPath()
+                fnMovie = removeExt(movie.getFileName())
+                fnAlign = fnRoot + '/' + fnMovie.split('/')[-1] + '_shifts.xmd'
+                fnOutFile = self.inputAlignMovieProt.get()._getExtraPath('auxOutputFile.txt')
+
+
+                try:
+                    #print("Applying " + "localAlignment@" + fnAlign)
+                    mdAlign = md.MetaData("localAlignment@"+fnAlign)
+                    shiftX = [0] * (lastFrame - iniFrame + 1)
+                    shiftY = shiftX
+                    self._writeXmippPosFile(movie, coordinatesName,
+                                            shiftX[indx], shiftY[indx])
+                    args = '-i %(frameName)s --pos %(coordinatesName)s ' \
+                           '-o %(frameImages)s --Xdim %(boxSize)d --Xdmov %(x)d ' \
+                           '--Ydmov %(y)d --Ndmov %(n)d --curFrame %(frameNum)d ' \
+                           '-iAlign %(fnAlign)s ' % locals()
+                    args += " --downsampling %f " % self.getBoxScale()
+                    self.runJob('xmipp_micrograph_scissor_new', args)
+                except:
+                    print("WARNING: No applying new version of xmipp_micrograph_scissor for " + frameName)
+                    self._writeXmippPosFile(movie, coordinatesName,
+                                            shiftX[indx], shiftY[indx])
+                    args = '-i %(frameName)s --pos %(coordinatesName)s ' \
+                           '-o %(frameImages)s --Xdim %(boxSize)d ' % locals()
+                    args += " --downsampling %f " % self.getBoxScale()
+                    self.runJob('xmipp_micrograph_scissor', args)
 
 
 
-                    cleanPath(frameName)
+                cleanPath(frameName)
 
-                    self.info("Combining particles into one stack.")
+                self.info("Combining particles into one stack.")
 
-                    frameMdImages.read(frameMdFile)
-                    frameMd.read('particles@%s' % coordinatesName)
-                    frameMd.merge(frameMdImages)
+                frameMdImages.read(frameMdFile)
+                frameMd.read('particles@%s' % coordinatesName)
+                frameMd.merge(frameMdImages)
 
-                    for objId in frameMd:
-                        stkIndex += 1
-                        frameRow.readFromMd(frameMd, objId)
-                        location = xmippToLocation(frameRow.getValue(md.MDL_IMAGE))
-                        newLocation = (stkIndex, movieStk)
-                        imgh.convert(location, newLocation)
+                for objId in frameMd:
+                    stkIndex += 1
+                    frameRow.readFromMd(frameMd, objId)
+                    location = xmippToLocation(frameRow.getValue(md.MDL_IMAGE))
+                    newLocation = (stkIndex, movieStk)
+                    imgh.convert(location, newLocation)
 
-                        # Fix the name to be accessible from the Project directory
-                        # so we know that the movie stack file will be moved
-                        # to final particles folder
-                        newImageName = '%d@%s' % newLocation
-                        frameRow.setValue(md.MDL_IMAGE, newImageName)
-                        frameRow.setValue(md.MDL_MICROGRAPH_ID, int(movId))
-                        frameRow.setValue(md.MDL_MICROGRAPH, str(movId))
-                        frameRow.setValue(md.MDL_FRAME_ID, int(frame))
-                        frameRow.setValue(md.MDL_PARTICLE_ID,
-                                          frameRow.getValue(md.MDL_ITEM_ID))
-                        frameRow.writeToMd(movieMd, movieMd.addObject())
-                    movieMd.addItemId()
-                    movieMd.write(movieMdFile)
-                    cleanPath(frameStk)
+                    # Fix the name to be accessible from the Project directory
+                    # so we know that the movie stack file will be moved
+                    # to final particles folder
+                    newImageName = '%d@%s' % newLocation
+                    frameRow.setValue(md.MDL_IMAGE, newImageName)
+                    frameRow.setValue(md.MDL_MICROGRAPH_ID, int(movId))
+                    frameRow.setValue(md.MDL_MICROGRAPH, str(movId))
+                    frameRow.setValue(md.MDL_FRAME_ID, int(frame))
+                    frameRow.setValue(md.MDL_PARTICLE_ID,
+                                      frameRow.getValue(md.MDL_ITEM_ID))
+                    frameRow.writeToMd(movieMd, movieMd.addObject())
+                movieMd.addItemId()
+                movieMd.write(movieMdFile)
+                cleanPath(frameStk)
 
 
     def createOutputStep(self):
