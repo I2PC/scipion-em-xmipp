@@ -115,12 +115,9 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
         self.TsOrig = self.inputParticles.get().getSamplingRate()
         sym = self.symmetryGroup.get()
         self._insertFunctionStep('doIteration000')
-        self.firstIteration = 1
-        numberOfIterations = 1
         self._maximumTargetResolution = self.maximumTargetResolution.get()
-        self.iteration = 1 # quitar esta linea
-        self._insertFunctionStep('globalAssignment')  # quitar self.iteration self._insertFunctionStep('globalAssignment', self.iteration)
-        self._insertFunctionStep('cleanDirectory') # quitar self.iteration self._insertFunctionStep('cleanDirectory', self.iteration)
+        self._insertFunctionStep('globalAssignment')  
+        self._insertFunctionStep('cleanDirectory') 
         self._insertFunctionStep("createOutput")        
 
     def convertInputStep(self, inputParticlesId):
@@ -133,15 +130,11 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
         self.runJob('xmipp_metadata_utilities', '-i %s --operate keep_column particleId -o %s' % (self.imgsFn, imgsFnId), numberOfMpi=1)
 
     def createOutput(self):
-        # # get last iteration
-        # fnIterDir = glob(self._getExtraPath("Iter*"))
-        # lastIter = len(fnIterDir) - 1
-        fnLastDir = self._getExtraPath("Iter001")  # fnLastDir = self._getExtraPath("Iter%03d" % lastIter)
+        fnLastDir = self._getExtraPath("Iter001") 
         fnDirGlobal = join(fnLastDir, "globalAssignment")
         Ts = self.readInfoField(fnDirGlobal, "sampling", emlib.MDL_SAMPLINGRATE)
-        #Ts = self.readInfoField(fnLastDir, "sampling", emlib.MDL_SAMPLINGRATE)
 
-        fnAnglesDisc=join(fnDirGlobal,"anglesDisc.xmd")   # fnAnglesDisc=join(fnDirGlobal,"anglesDisc01.xmd") 
+        fnAnglesDisc=join(fnDirGlobal,"anglesDisc.xmd")
         if exists(fnAnglesDisc):
             fnAngles = self._getPath("angles.xmd")
             self.runJob('xmipp_metadata_utilities', '-i %s -o %s --operate modify_values "image=image1"' % (fnAnglesDisc, fnAngles), numberOfMpi=1)
@@ -188,7 +181,6 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
             mdParticles = emlib.MetaData(fnOutParticles)
             n_false = 0;
             
-            angAccept = 3 * self.angularSampling.get()
             nParticles = 0
             for row in iterRows(mdParticles):
                 nParticles += 1
@@ -198,7 +190,6 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
                 graphDistMaxGraphPrev = row.getValue(emlib.MDL_GRAPH_DISTANCE2MAX_PREVIOUS)
 
                 if (assigDirRefCC < th_ccAsigDir) and ( graphCCPrev < th_ccGraph ) and (graphDistMaxGraphPrev > th_angDist):
-                #if (assigDirRefCC < self.ccLevel) and ( graphCCPrev < self.ccLevel ) and (graphDistMaxGraphPrev > angAccept):
                     n_false += 1
                     mdParticles.setValue(emlib.MDL_ENABLED, -1, objId)
             mdParticles.write(fnOutParticles) 
@@ -219,7 +210,6 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
             
     def _updateItem(self, particle, row):
         count = 0
-
         while self.lastRow and particle.getObjId() == self.lastRow.getValue(md.MDL_PARTICLE_ID):
             count += 1
             if count:
@@ -241,7 +231,6 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
                            md.MDL_MAXCC_PREVIOUS, md.MDL_GRAPH_CC_PREVIOUS,
                            md.MDL_ASSIGNED_DIR_REF_CC, md.MDL_GRAPH_DISTANCE2MAX_PREVIOUS,
                            md.MDL_GRAPH_CC, md.MDL_GRAPH_DISTANCE2MAX)
-         
         
         createItemMatrix(particle, row, align=ALIGN_PROJ)
 
@@ -265,13 +254,13 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
         if isinstance(self.inputVolumes.get(), SetOfVolumes):
             i = 1
             for vol in self.inputVolumes.get():
-                fnVol = join(fnDirCurrent, "volume.vol")  # fnVol = join(fnDirCurrent, "volume%02d.vol" % i)
+                fnVol = join(fnDirCurrent, "volume.vol") 
                 img.convert(vol, fnVol)
                 if newXdim != vol.getDim()[0]:
                     self.runJob('xmipp_transform_window', "-i %s --size %d" % (fnVol, newXdim), numberOfMpi=1)
                 i += 1
         else:
-            fnVol1 = join(fnDirCurrent, "volume.vol")  # fnVol1 = join(fnDirCurrent, "volume%02d.vol" % 1)
+            fnVol1 = join(fnDirCurrent, "volume.vol")  
 
             vol = self.inputVolumes.get()
             img.convert(vol, fnVol1)
@@ -279,9 +268,9 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
             if newXdim != volXdim:
                 self.runJob('xmipp_transform_window', "-i %s --size %d" % (fnVol1, newXdim), numberOfMpi=1)
 
-    def globalAssignment(self):  # globalAssignment(self, iteration):
-        fnDirPrevious = self._getExtraPath("Iter000")  # poner "Iter000"
-        fnDirCurrent = self._getExtraPath("Iter001")         # poner "Iter001"
+    def globalAssignment(self):  
+        fnDirPrevious = self._getExtraPath("Iter000") 
+        fnDirCurrent = self._getExtraPath("Iter001")
         makePath(fnDirCurrent)
         fnGlobal = join(fnDirCurrent, "globalAssignment")
         makePath(fnGlobal)
@@ -308,8 +297,7 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
         self.numberOfPerturbations = 1
         perturbationList = [chr(x) for x in range(ord('a'), ord('a') + self.numberOfPerturbations)]
 
-        i = 1
-        fnDirAssignment = join(fnGlobal, "assignment") # poner assignment  fnDirAssignment = join(fnGlobal, "assignment%02d" % i)
+        fnDirAssignment = join(fnGlobal, "assignment")
         fnImgs = join(fnGlobal, "images.xmd")
         makePath(fnDirAssignment)
 
@@ -330,7 +318,7 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
             fnCTFs = ""
             
         # Generate projections
-        fnReferenceVol = join(fnGlobal, "volumeRef.vol") # poner volumeRef.vol  fnReferenceVol = join(fnGlobal, "volumeRef%02d.vol" % i)
+        fnReferenceVol = join(fnGlobal, "volumeRef.vol") 
         for subset in perturbationList:
             fnGallery = join(fnDirAssignment, "gallery%s.stk" % subset)
             fnGalleryMd = join(fnDirAssignment, "gallery%s.xmd" % subset)
@@ -378,7 +366,7 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
                 self.runJob("rm -f", fnDirAssignment + "/gallery*", numberOfMpi=1)  
                 
         # Evaluate the stability of the alignment
-        fnOut = join(fnGlobal, "anglesDisc") # poner anglesDisc
+        fnOut = join(fnGlobal, "anglesDisc")
         for subset1 in perturbationList:
             fnOut1 = join(fnGlobal, "anglesDisc%s" % subset1)
             fnAngles1 = fnOut1 + ".xmd"
@@ -501,8 +489,8 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
         newXdim = self.readInfoField(fnDir, "size", emlib.MDL_XSIZE)
         oldXdim = self.readInfoField(fnDirPrevious, "size", emlib.MDL_XSIZE)
         i=1
-        fnPreviousVol = join(fnDirPrevious, "volume.vol") #poner volume.vol
-        fnReferenceVol = join(fnDir, "volumeRef.vol") #poner volumeRef.vol  fnReferenceVol = join(fnDir, "volumeRef.vol" % i)
+        fnPreviousVol = join(fnDirPrevious, "volume.vol") 
+        fnReferenceVol = join(fnDir, "volumeRef.vol") 
         if oldXdim != newXdim:
             self.runJob("xmipp_image_resize", "-i %s -o %s --dim %d" % (fnPreviousVol, fnReferenceVol, newXdim), numberOfMpi=1)
         else:
@@ -526,16 +514,14 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
         self.writeInfoField(fnDir, "count", emlib.MDL_COUNT, int(2)) 
 
     def cleanDirectory(self):
-        fnDirCurrent = self._getExtraPath("Iter001") # poner Iter001
+        fnDirCurrent = self._getExtraPath("Iter001") 
         if self.saveSpace:
             fnGlobal = join(fnDirCurrent, "globalAssignment")
             if exists(fnGlobal):
                 cleanPath(join(fnGlobal, "images.stk"))
-            #for i in range(1, 2):
-            i=1
             if exists(fnGlobal):
                 cleanPath(join(fnGlobal, "images.xmd"))
-                cleanPath(join(fnGlobal, "volumeRef.vol")) #poner volumeRef.vol
+                cleanPath(join(fnGlobal, "volumeRef.vol"))
 
     # --------------------------- INFO functions --------------------------------------------
     def _validate(self):
@@ -555,10 +541,6 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
         if (not hasattr(self, 'outputParticles')):
             summary.append("Output not ready yet.")
         else:
-#             parameterFile = self._getExtraPath('parameter.txt')
-#             fh = open(parameterFile, "r")
-#             val = fh.readline()
-#             fh.close()
             if self.percentage == 100.0:
                 text = 'After validation, all of the images are likely to be within the realiable assignment zone'
             else:
@@ -577,7 +559,7 @@ class XmippProtAngularGraphConsistence2(ProtAnalysis3D):
         return messages
     
     def otsu(self, ccList):
-        # method from golden highres
+        # from golden-highres
         import numpy as np
 
         cc_number = len(ccList)
