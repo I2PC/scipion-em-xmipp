@@ -127,3 +127,5 @@ from .protocol_particle_pick_remove_duplicates import XmippProtPickingRemoveDupl
 from .protocol_metaprotocol_golden_highres import XmippMetaProtGoldenHighRes
 from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtraction
 from .protocol_volume_consensus import XmippProtVolConsensus
+
+from .protocol_tilt_estimation import XmippProtTiltEstimation #DMT
