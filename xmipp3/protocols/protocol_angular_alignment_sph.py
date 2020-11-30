@@ -79,7 +79,7 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         form.addParam('ignoreCTF', params.BooleanParam, default=False, label='Ignore CTF?',
                       expertLevel=params.LEVEL_ADVANCED,
                       help="If true, volume projection won't suffer CTF corrections")
-        form.addParm('optimizeAlignment', params.BooleanParam, default=True, label='Optimize alignment?',
+        form.addParam('optimizeAlignment', params.BooleanParam, default=True, label='Optimize alignment?',
                      expertLevel=params.LEVEL_ADVANCED)
         form.addParallelSection(threads=1, mpi=8)
 
