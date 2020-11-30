@@ -130,6 +130,14 @@ class XmippProtMovieCorr(ProtAlignMovies):
                       expertLevel=cons.LEVEL_ADVANCED,
                       condition='doLocalAlignment',
                       help="If on, protocol will automatically determine necessary number of control points.")
+        line = group.addLine('Number of control points',
+                    expertLevel=cons.LEVEL_ADVANCED,
+                    help='Number of control points use for BSpline.',
+                    condition='not autoControlPoints')
+        line.addParam('controlPointX', params.IntParam, default=6, label='X')
+        line.addParam('controlPointY', params.IntParam, default=6, label='Y')
+        line.addParam('controlPointT', params.IntParam, default=5, label='t')
+
         group.addParam('minLocalRes', params.FloatParam, default=500,
                        expertLevel=cons.LEVEL_ADVANCED,
                        label='Min size of the patch (A)',
@@ -141,14 +149,6 @@ class XmippProtMovieCorr(ProtAlignMovies):
                        help="We try to faster settings of for the FFT library. This takes some time, "
                             "but consecutive executions will be faster and use less memory."
                             "Set to True (autotuning will be turned off) if you process just few movies")
-
-        line = group.addLine('Number of control points',
-                    expertLevel=cons.LEVEL_ADVANCED,
-                    help='Number of control points use for BSpline.',
-                    condition='not autoControlPoints')
-        line.addParam('controlPointX', params.IntParam, default=6, label='X')
-        line.addParam('controlPointY', params.IntParam, default=6, label='Y')
-        line.addParam('controlPointT', params.IntParam, default=5, label='t')
 
         group.addParam('groupNFrames', params.IntParam, default=3,
                     expertLevel=cons.LEVEL_ADVANCED,
@@ -285,12 +285,12 @@ class XmippProtMovieCorr(ProtAlignMovies):
         self.inputMovies.get().close()
 
     def _setControlPoints(self):
-            x, y,frames = self.inputMovies.get().getDim()
-            Ts = self.inputMovies.get().getSamplingRate()
-            # one control point each 1000 A
-            self.controlPointX.set(int(x / Ts) / 1000 + 2)
-            self.controlPointY.set(int(y / Ts) / 1000 + 2)
-            self.controlPointT.set(ceil(frames/7.) + 2)
+        x, y, frames = self.inputMovies.get().getDim()
+        Ts = self.inputMovies.get().getSamplingRate()
+        # one control point each 1000 A
+        self.controlPointX.set(max([int(x / Ts) / 1000 + 2, 3]))
+        self.controlPointY.set(max([int(y / Ts) / 1000 + 2, 3]))
+        self.controlPointT.set(max([ceil(frames/7.) + 2, 3]))
 
     def _getMovieShifts(self, movie):
         from ..convert import readShiftsMovieAlignment
@@ -366,12 +366,10 @@ class XmippProtMovieCorr(ProtAlignMovies):
         nThreads = self.numberOfThreads.get()
         errors = []
         if nThreads != 1:
-            errors.append("Multithreading is not supported. Use a single thread or MPI.")
+            errors.append('Multithreading is not supported. Use a single thread or one MPI.')
         validMPIs = 1 if nGpus == 1 else nGpus + 1
         if self.useGpu.get() and nMPI != validMPIs:
-            errors.append("Invalid number of MPIs. "
-                        "Please set it to number of GPUs + 1, i.e. to %d, as you want to use %d GPUs"
-                          % (validMPIs, nGpus))
+            errors.append('Invalid number of MPI. Please set it to %d, as you set %d GPU(s)' % (validMPIs, nGpus))
         return errors
 
     def _validateBinary(self):
