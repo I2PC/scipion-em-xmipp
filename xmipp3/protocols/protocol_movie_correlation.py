@@ -348,52 +348,53 @@ class XmippProtMovieCorr(ProtAlignMovies):
         self._setAlignmentInfo(movie, alignedMovie)
         return alignedMovie
 
-    def _validate(self):
-        if self.autoControlPoints.get():
-            self._setControlPoints() # make sure we work with proper values
-        errors = ProtAlignMovies._validate(self)
-        getXmippHome = self.getClassPackage().Plugin.getHome
-        if self.doLocalAlignment.get():
-            cudaBinaryFn = getXmippHome('bin', 'xmipp_cuda_movie_alignment_correlation')
-            if not os.path.isfile(cudaBinaryFn):
-                errors.append('GPU version not found, make sure that Xmipp is '
-                              'compiled with GPU\n'
-                              '( *CUDA=True* in _scipion.conf_ + '
-                              '_run_: $ *scipion installb xmippSrc* ).')
-                return errors
-            elif not self.useGpu.get():
-                errors.append("GPU is needed to do local alignment.")
-                return errors
 
+    def _validateParallelProcessing(self):
         nGpus = len(self.gpuList.get().split())
         nMPI = self.numberOfMpi.get()
         nThreads = self.numberOfThreads.get()
-        validThreads = nGpus if nGpus == 1 else nGpus + 1
-        if self.useGpu and nMPI * nThreads != validThreads:
-            coreStr = ('threads' if nThreads > 1 else
-                       'MPI' if nMPI > 1 else
-                       'threads or MPI')
-            errors.append("The number of threads/mpi must be one more than "
-                          "the number of GPUs to use (single threading is also "
-                          "valid for one single GPU)\n"
-                          "i.e. *%s = %d* , when using *%d GPUs*"
-                          % (coreStr, validThreads, nGpus))
-        else:
-            cpuBinaryFn = getXmippHome('bin', 'xmipp_movie_alignment_correlation')
-            if not os.path.isfile(cpuBinaryFn):
-                errors.append('CPU version not found for some reason, try to GPU=True.')
-                return errors
+        errors = []
+        if nThreads != 1:
+            errors.append("Multithreading is not supported. Use a single thread or MPI.")
+        validMPIs = 1 if nGpus == 1 else nGpus + 1
+        if self.useGpu.get() and nMPI != validMPIs:
+            errors.append("Invalid number of MPIs. "
+                        "Please set it to number of GPUs + 1, i.e. to %d, as you want to use %d GPUs"
+                          % (validMPIs, nGpus))
+        return errors
+
+    def _validateBinary(self):
+        errors = []
+        getXmippHome = self.getClassPackage().Plugin.getHome
+        cpuBinaryFn = getXmippHome('bin', 'xmipp_movie_alignment_correlation')
+        if self.useGpu.get() and not isXmippCudaPresent("xmipp_cuda_movie_alignment_correlation"):
+            errors.append('GPU version not found, make sure that Xmipp is '
+                          'compiled with GPU\n'
+                          '( *CUDA=True* in _scipion.conf_ + '
+                          '_run_: $ *scipion installb xmippSrc* ).')
+        elif not os.path.isfile(cpuBinaryFn):
+            errors.append('CPU version not found for some reason, try to use the GPU version.')
+        return errors
+
+    def _validate(self):
+        if self.autoControlPoints.get():
+            self._setControlPoints()  # make sure we work with proper values
+        # check execution issues
+        errors = ProtAlignMovies._validate(self)
+        errors.extend(self._validateBinary())
+        errors.extend(self._validateParallelProcessing())
+        if errors:
+            return errors
+
+        # check settings issues
+        if self.doLocalAlignment.get() and not self.useGpu.get():
+            errors.append("GPU is needed to do local alignment.")
         if (self.controlPointX < 3):
             errors.append("You have to use at least 3 control points in X dim")
-            return errors # to avoid possible division by zero later
         if (self.controlPointY < 3):
             errors.append("You have to use at least 3 control points in Y dim")
-            return errors # to avoid possible division by zero later
         if (self.controlPointT < 3):
             errors.append("You have to use at least 3 control points in T dim")
-            return errors # to avoid possible division by zero later
-        if self.useGpu and not isXmippCudaPresent("xmipp_cuda_movie_alignment_correlation"):
-            errors.append("I cannot find the Xmipp GPU programs in the path")
 
         return errors
 
