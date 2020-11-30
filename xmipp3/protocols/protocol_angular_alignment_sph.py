@@ -79,6 +79,8 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         form.addParam('ignoreCTF', params.BooleanParam, default=False, label='Ignore CTF?',
                       expertLevel=params.LEVEL_ADVANCED,
                       help="If true, volume projection won't suffer CTF corrections")
+        form.addParm('optimizeAlignment', params.BooleanParam, default=True, label='Optimize alignment?',
+                     expertLevel=params.LEVEL_ADVANCED)
         form.addParallelSection(threads=1, mpi=8)
 
     def _createFilenameTemplates(self):
@@ -135,11 +137,13 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         fnOut = self._getFileName('fnOut')
         fnOutDir = self._getFileName('fnOutDir')
         Ts = readInfoField(self._getExtraPath(), "sampling", md.MDL_SAMPLINGRATE)
-        params = ' -i %s --ref %s -o %s --optimizeAlignment --optimizeDeformation --optimizeDefocus ' \
+        params = ' -i %s --ref %s -o %s --optimizeDeformation --optimizeDefocus ' \
                  '--l1 %d --l2 %d --max_shift %f --max_angular_change %f --sampling %f ' \
                  ' --max_resolution %f --odir %s --resume --regularization %f' %\
                  (imgsFn, fnVol, fnOut, self.l1.get(), self.l2.get(), self.maxShift,
                   self.maxAngular, Ts, self.maxResolution, fnOutDir, self.penalization.get())
+        if self.optimizeAlignment.get():
+            params += ' --optimizeAlignment'
         if self.ignoreCTF.get():
             params += ' --ignoreCTF'
         if self.inputParticles.get().isPhaseFlipped():
