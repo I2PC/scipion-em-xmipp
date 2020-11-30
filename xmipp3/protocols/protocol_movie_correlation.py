@@ -111,6 +111,13 @@ class XmippProtMovieCorr(ProtAlignMovies):
                       label="How to fill borders",
                       help='How to fill the borders when shifting the frames')
 
+        # this must stay together with the outside mode
+        form.addParam('outsideValue', params.FloatParam, default=0.0,
+                       expertLevel=cons.LEVEL_ADVANCED,
+                       condition="outsideMode==2",
+                       label='Fill value',
+                       help="Fixed value for filling borders")
+
         #Local alignment params
         group = form.addGroup('Local alignment')
 
@@ -150,12 +157,6 @@ class XmippProtMovieCorr(ProtAlignMovies):
                         The alignment is then performed on the summed frames.',
                     condition='doLocalAlignment')
 
-        form.addParam('outsideValue', params.FloatParam, default=0.0,
-                       expertLevel=cons.LEVEL_ADVANCED,
-                       condition="outsideMode==2",
-                       label='Fill value',
-                       help="Fixed value for filling borders")
-
         form.addParallelSection(threads=1, mpi=1)
 
     #--------------------------- STEPS functions -------------------------------
@@ -165,6 +166,48 @@ class XmippProtMovieCorr(ProtAlignMovies):
         except Exception as ex:
             print(yellowStr("We cannot process %s" % movie.getFileName()))
             print(ex)
+
+    def getOutsideModeArg(self):
+        if self.outsideMode == self.OUTSIDE_WRAP:
+            return ' --outside wrap'
+        if self.outsideMode == self.OUTSIDE_AVG:
+            return ' --outside avg'
+        if self.outsideMode == self.OUTSIDE_VALUE:
+            return ' --outside value %f' % self.outsideValue
+        return ''
+
+    def getCropCornerArg(self, x, y):
+        # Assume that if you provide one cropDim, you provide all
+        offsetX = self.cropOffsetX.get()
+        offsetY = self.cropOffsetY.get()
+        cropDimX = self.cropDimX.get()
+        cropDimY = self.cropDimY.get()
+
+        args = ' --cropULCorner %d %d' % (offsetX, offsetY)
+
+        if cropDimX <= 0:
+            dimX = x - 1
+        else:
+            dimX = offsetX + cropDimX - 1
+
+        if cropDimY <= 0:
+            dimY = y - 1
+        else:
+            dimY = offsetY + cropDimY - 1
+
+        args += ' --cropDRCorner %d %d' % (dimX, dimY)
+        return args
+
+    def getGPUArgs(self):
+        args = ' --device %(GPU)s'
+        if self.doLocalAlignment.get():
+            args += ' --processLocalShifts '
+        if self.skipAutotuning.get():
+            args += " --skipAutotuning"
+        args += ' --storage "%s"' % self._getExtraPath("fftBenchmark.txt")
+        args += ' --controlPoints %d %d %d' % (self.controlPointX, self.controlPointY, self.controlPointT)
+        args += ' --patchesAvg %d' % self.groupNFrames
+        return args
 
     def tryProcessMovie(self, movie):
         movieFolder = self._getOutputMovieFolder(movie)
@@ -177,44 +220,19 @@ class XmippProtMovieCorr(ProtAlignMovies):
         writeMovieMd(movie, inputMd, a0, aN, useAlignment=False)
 
         args = '-i "%s" ' % inputMd
-        args += '-o "%s" ' % self._getShiftsFile(movie)
-        args += '--sampling %f ' % movie.getSamplingRate()
-        args += '--maxResForCorrelation %f ' % self.maxResForCorrelation
-        args += '--Bspline %d ' % self.INTERP_MAP[self.splineOrder.get()]
+        args += ' -o "%s"' % self._getShiftsFile(movie)
+        args += ' --sampling %f' % movie.getSamplingRate()
+        args += ' --maxResForCorrelation %f' % self.maxResForCorrelation
+        args += ' --Bspline %d' % self.INTERP_MAP[self.splineOrder.get()]
 
         if self.binFactor > 1:
-            args += '--bin %f ' % self.binFactor
-        # Assume that if you provide one cropDim, you provide all
+            args += ' --bin %f' % self.binFactor
 
-        offsetX = self.cropOffsetX.get()
-        offsetY = self.cropOffsetY.get()
-        cropDimX = self.cropDimX.get()
-        cropDimY = self.cropDimY.get()
-
-        args += '--cropULCorner %d %d ' % (offsetX, offsetY)
-
-        if cropDimX <= 0:
-            dimX = x - 1
-        else:
-            dimX = offsetX + cropDimX - 1
-
-        if cropDimY <= 0:
-            dimY = y - 1
-        else:
-            dimY = offsetY + cropDimY - 1
-
-        args += '--cropDRCorner %d %d ' % (dimX, dimY)
-
-        if self.outsideMode == self.OUTSIDE_WRAP:
-            args += "--outside wrap"
-        elif self.outsideMode == self.OUTSIDE_AVG:
-            args += "--outside avg"
-        elif self.outsideMode == self.OUTSIDE_AVG:
-            args += "--outside value %f" % self.outsideValue
-
-        args += ' --frameRange %d %d ' % (0, aN-a0)
-        args += ' --frameRangeSum %d %d ' % (s0-a0, sN-a0)
-        args += ' --max_shift %d ' % self.maxShift
+        args += self.getCropCornerArg(x, y)
+        args += self.getOutsideModeArg()
+        args += ' --frameRange %d %d' % (0, aN-a0)
+        args += ' --frameRangeSum %d %d' % (s0-a0, sN-a0)
+        args += ' --max_shift %d' % self.maxShift
 
         if self.doSaveAveMic or self.doComputePSD:
             fnAvg = self._getExtraPath(self._getOutputMicName(movie))
@@ -222,16 +240,16 @@ class XmippProtMovieCorr(ProtAlignMovies):
 
         if self.doComputePSD:
             fnInitial = os.path.join(movieFolder, "initialMic.mrc")
-            args  += ' --oavgInitial %s' % fnInitial
+            args  += ' --oavgInitial "%s"' % fnInitial
 
         if self.doSaveMovie:
-            args += ' --oaligned %s' % self._getExtraPath(self._getOutputMovieName(movie))
+            args += ' --oaligned "%s"' % self._getExtraPath(self._getOutputMovieName(movie))
 
         if self.inputMovies.get().getDark():
-            args += ' --dark ' + self.inputMovies.get().getDark()
+            args += ' --dark "%s"' % self.inputMovies.get().getDark()
 
         if self.inputMovies.get().getGain():
-            args += ' --gain ' + self.inputMovies.get().getGain()
+            args += ' --gain "%s"' % self.inputMovies.get().getGain()
 
         if self.autoControlPoints.get():
             self._setControlPoints()
@@ -240,14 +258,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
             args += ' --minLocalRes %f' % self.minLocalRes
 
         if self.useGpu.get():
-            args += ' --device %(GPU)s'
-            if self.doLocalAlignment.get():
-                args += ' --processLocalShifts '
-            if self.skipAutotuning.get():
-                args += " --skipAutotuning"
-            args += ' --storage ' + self._getExtraPath("fftBenchmark.txt")
-            args += ' --controlPoints %d %d %d' % (self.controlPointX, self.controlPointY, self.controlPointT)
-            args += ' --patchesAvg %d' % self.groupNFrames
+            args += self.getGPUArgs()
             self.runJob('xmipp_cuda_movie_alignment_correlation', args, numberOfMpi=1)
         else:
             self.runJob('xmipp_movie_alignment_correlation', args, numberOfMpi=1)
