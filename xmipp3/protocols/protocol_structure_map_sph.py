@@ -296,6 +296,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
         #     ind2 = int(matches[1])
         defVol = xmippLib.Image(vol2)
         corr = vol.correlation(defVol)
+        corr = 1-corr
         outFile = self._getExtraPath('Pair_%d_%d_correlation.txt' % (i, j))
         with open(outFile, 'w') as f:
             f.write('%f' % corr)
@@ -372,9 +373,9 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
 
             # Parameters needed for future convolution
             if i == 2:
-                grid_coords = np.arange(-size_grid, size_grid, 0.001)
+                grid_coords = np.linspace(-size_grid, size_grid, num=1000)
             else:
-                grid_coords = np.arange(-size_grid, size_grid, 0.003)
+                grid_coords = np.linspace(-size_grid, size_grid, num=1000)
             if i == 2:
                 R, C = np.meshgrid(grid_coords, grid_coords, indexing='ij')
             else:

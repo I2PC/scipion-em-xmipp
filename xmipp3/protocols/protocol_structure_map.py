@@ -184,6 +184,7 @@ class XmippProtStructureMap(ProtAnalysis3D):
         #     ind2 = int(matches[1])
         defVol = xmippLib.Image(vol2)
         corr = vol.correlation(defVol)
+        corr = 1 - corr
         outFile = self._getExtraPath('Pair_%d_%d_correlation.txt' % (i,j))
         with open(outFile, 'w') as f:
             f.write('%f' % corr)
