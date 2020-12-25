@@ -4,4 +4,3 @@ peppercorn
 plotter
 scons
 PyWavelets
-pyvista
