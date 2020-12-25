@@ -80,40 +80,17 @@ class TestXmippProtSimulateCTF(BaseTest):
         projectionsCTFDefault = self.runSimulateCTF(projectionsGallery)
         self.assertTrue(projectionsCTFDefault,
                         "There was a problem with particles output")
-        self.assertTrue(projectionsCTFDefault.getSize() == 1647,
+        self.assertEqual(projectionsCTFDefault.getSize(),1647,
                         "There was a problem with particles output")
-        self.assertTrue(projectionsCTFDefault.getXDim() == 60,
+        self.assertEqual(projectionsCTFDefault.getXDim(),60,
                         "Unexpected particle size in output particles")
-        self.assertTrue(projectionsCTFDefault.getSamplingRate() == 1,
+        self.assertEqual(projectionsCTFDefault.getSamplingRate(),1,
                         "Unexpected sampling rate in output particles")
         for projection in projectionsCTFDefault.iterItems():
             defocusU = projection.getCTF().getDefocusU()
             defocusV = projection.getCTF().getDefocusV()
-            if defocusU != defocusV:
-                raise Exception('DefocusU and DeofcusV are not equal but they should be')
-            else:
-                if defocusU < 5000 or defocusU > 25000:
-                    raise Exception('DefocusU and DefocusV values are outside the specified range:'
+            self.assertEqual(defocusU,defocusV,'DefocusU and DeofcusV are not equal but they should be')
+            self.assertGreaterEqual(defocusU,5000, 'DefocusU and DefocusV values are outside the specified range:'
                                     '[%f, %f]' % (5000, 25000))
-
-        # Check different defoci range
-        projectionsCTFNewRange = self.runSimulateCTF(projectionsGallery, 1000, 3000)
-        self.assertTrue(projectionsCTFNewRange,
-                        "There was a problem with particles output")
-        self.assertTrue(projectionsCTFNewRange.getSize() == 1647,
-                        "There was a problem with particles output")
-        self.assertTrue(projectionsCTFNewRange.getXDim() == 60,
-                        "Unexpected particle size in output particles")
-        self.assertTrue(projectionsCTFNewRange.getSamplingRate() == 1,
-                        "Unexpected sampling rate in output particles")
-        for projection in projectionsCTFNewRange.iterItems():
-            defocusU = projection.getCTF().getDefocusU()
-            defocusV = projection.getCTF().getDefocusV()
-            if defocusU != defocusV:
-                raise Exception('DefocusU and DeofcusV are not equal but they should be')
-            else:
-                if defocusU < 1000 or defocusU > 3000:
-                    raise Exception('DefocusU and DefocusV values are outside the specified range:'
-                                    '[%.2f, %.2f]' % (1000, 3000))
-
-
+            self.assertLessEqual(defocusU,25000, 'DefocusU and DefocusV values are outside the specified range:'
+                                    '[%f, %f]' % (5000, 25000))
