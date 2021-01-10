@@ -42,9 +42,9 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('inputVolume', params.PointerParam, label="Volume 1",
+        form.addParam('refVolume', params.PointerParam, label="Volume 1",
                       pointerClass='Volume')
-        form.addParam('refVolume', params.PointerParam, label="Volume 2",
+        form.addParam('inputVolume', params.PointerParam, label="Volume 2",
                       pointerClass='Volume')
         form.addParam('sigma', params.NumericListParam, label="Multiresolution", default="1 2",
                       help="Perform the analysys comparing different filtered versions of the volumes")
