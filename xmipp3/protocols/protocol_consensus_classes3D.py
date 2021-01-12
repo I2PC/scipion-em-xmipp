@@ -262,12 +262,13 @@ class XmippProtConsensusClasses3D(EMProtocol):
         '''
         # Creating intersection clusters (us)
         iList = self.intersectsList
-
         us = self.get_us(iList)
-        all_us = []
-        self.all_iLists = []
 
-        ob_values = []
+        # Initialize with values before merging
+        all_us = [us]
+        self.all_iLists = [iList]
+        ob_values = [0.0]
+
         # Iterations of merging clusters
         while len(us) > min_nclust:
             # Similarity vectors
