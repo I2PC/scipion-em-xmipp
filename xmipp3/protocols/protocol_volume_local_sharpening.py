@@ -274,7 +274,7 @@ class XmippProtLocSharp(ProtAnalysis3D):
         for i in range(self.iteration):
             vol = Volume()
             vol.setOrigin(self.inputVolume.get().getOrigin(True))
-            if (self.iteration > 1 and self.iteration > (i + 1)):
+            if (self.iteration > (i + 1)):
                 vol.setLocation(i, self._getExtraPath('sharpenedMap_%d.mrc' % (i + 1)))
                 vol.setObjComment("Sharpened Map, \n Epoch %d" % (i + 1))
             else:
