@@ -119,6 +119,9 @@ class XmippProtVolSubtraction(XmippProtVolAdjBase):
                       help='Specify a volume.')
         form.addParam('mask2', PointerParam, pointerClass='VolumeMask', label="Mask for volume 2",
                       condition='masks and pdb==False', help='Specify a mask for volume 1.')
+        form.addParam('saveFiles', BooleanParam, label='Save intermediate files?', default=False,
+                      expertLevel=LEVEL_ADVANCED, help='Save input volume 1 filtered and input volume 2 adjusted, which'
+                                                       'are the volumes that are really subtracted.')
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAdjSteps(self):
@@ -189,6 +192,9 @@ class XmippProtVolSubtraction(XmippProtVolAdjBase):
 
         if self.masks:
             args += ' --mask1 %s --mask2 %s' % (self.mask1.get().getFileName(), mask2)
+        if self.saveFiles:
+            args += ' --saveV1 %s --saveV2 %s' % (self._getExtraPath('vol1_filtered.mrc'),
+                                                  self._getExtraPath('vol2_adjusted.mrc'))
         self.runJob(program, args)
 
     # --------------------------- INFO functions --------------------------------------------
