@@ -31,9 +31,7 @@ from scipy.spatial.distance import pdist
 from scipy.signal import find_peaks
 from scipy.stats import entropy
 from scipy.ndimage.filters import gaussian_filter
-import glob
 import os
-import re
 
 import xmippLib
 
@@ -42,7 +40,7 @@ import pyworkflow.protocol.params as params
 from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfVolumes, Volume
 from pyworkflow import VERSION_2_0
-from pyworkflow.utils import cleanPattern, cleanPath
+from pyworkflow.utils import cleanPath
 
 
 def mds(d, dimensions=2):
@@ -372,10 +370,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             size_grid = 2.5 * max((np.amax(Xr1), np.amax(Xr2)))
 
             # Parameters needed for future convolution
-            if i == 2:
-                grid_coords = np.linspace(-size_grid, size_grid, num=1000)
-            else:
-                grid_coords = np.linspace(-size_grid, size_grid, num=1000)
+            grid_coords = np.linspace(-size_grid, size_grid, num=400)
             if i == 2:
                 R, C = np.meshgrid(grid_coords, grid_coords, indexing='ij')
             else:
@@ -383,7 +378,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             sigma = R.shape[0] / 20
 
             # Create Gaussian Kernel
-            lbox = int(6 * sigma)
+            lbox = int(6*sigma)
             if lbox % 2 == 0:
                 lbox += 1
             mid = int((lbox - 1) / 2 + 1)
@@ -409,19 +404,20 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                 Xr = np.round(X, decimals=3)
 
                 # Create the grid
-                S = np.zeros(R.shape)
+                S_shape = [d+lbox for d in R.shape]
+                S = np.zeros(S_shape)
 
                 # Place rounded points on the grid
                 for p in range(Xr1.shape[0]):
                     if i == 2:
-                        indx = np.argmin(np.abs(R[:, 0] - Xr[p, 0]))
-                        indy = np.argmin(np.abs(C[0, :] - Xr[p, 1]))
-                        S[indx-mid:indx+mid-1, indy-mid:indy+mid-1] += kernel
+                        indy = np.argmin(np.abs(R[:, 0] - Xr[p, 0]))
+                        indx = np.argmin(np.abs(C[0, :] - Xr[p, 1]))
+                        S[indx:indx+2*mid-1, indy:indy+2*mid-1] += kernel
                     else:
                         indx = np.argmin(np.abs(R[:, 0, 0] - Xr[p, 0]))
                         indy = np.argmin(np.abs(C[0, :, 0] - Xr[p, 1]))
                         indz = np.argmin(np.abs(D[0, 0, :] - Xr[p, 2]))
-                        S[indx-mid:indx+mid-1, indy-mid:indy+mid-1, indz-mid:indz+mid-1] += kernel
+                        S[indx:indx+2*mid-1, indy:indy+2*mid-1, indz:indz+2*mid-1] += kernel
 
                 # Compute the Shannon entropy associated to the convolved grid
                 _, counts = np.unique(S, return_counts=True)
