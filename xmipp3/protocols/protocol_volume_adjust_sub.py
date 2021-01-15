@@ -98,15 +98,20 @@ class XmippProtVolSubtraction(XmippProtVolAdjBase):
         XmippProtVolAdjBase._defineParams(form)
         form.addParam('pdb', BooleanParam, label='Is the second input a PDB?', default=False,
                       help='If yes, the protocol will generate and store in folder "extra" of this protocol '
-                           'a volume and a mask from the pdb. If not, a second volume has to be input and optionally '
-                           '(but highly recomendable), a mask for it')
+                           'a volume and a mask from the pdb. This is not the recommended option, as the automatic '
+                           'conversion of the PDB into a density map may not be successful due to origin mismatches. '
+                           'We recommend to convert previously the PDB, inspect the converted map and use the map as '
+                           'input. If not, a second volume has to be input and optionally (but highly recommendable), '
+                           'a mask for it.')
         form.addParam('inputPdbData', EnumParam, choices=['object', 'file'], condition='pdb',
                       label="Retrieve PDB from", default=self.IMPORT_OBJ,
                       display=EnumParam.DISPLAY_HLIST,
                       help='Retrieve PDB data from server, use a pdb Object, or a local file')
         form.addParam('pdbObj', PointerParam, pointerClass='AtomStruct',
                       label="Input pdb ", condition='inputPdbData == IMPORT_OBJ and pdb', allowsNull=True,
-                      help='Specify a pdb object.')
+                      help='Specify a pdb object. This is not the recommended option, as the automatic conversion of '
+                           'the PDB into a density map may not be successful due to origin mismatches. We recommend'
+                           'to convert previously the PDB, inspect the converted map and use the map as input.')
         form.addParam('pdbFile', FileParam,
                       label="File path", condition='inputPdbData == IMPORT_FROM_FILES and pdb', allowsNull=True,
                       help='Specify a path to desired PDB structure.')
