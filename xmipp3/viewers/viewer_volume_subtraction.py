@@ -81,23 +81,23 @@ class XmippProtVolSubtractionViewer(EmProtocolViewer):
             return self._showVolumesXmipp()
 
     def _createSetOfVolumes(self):
-        if not exists(self.protocol._getTmpPath('tmpVolumes.sqlite')):
-            tmpFileName = self.protocol._getTmpPath("tmpVolumes.sqlite")
+        if not exists(self.protocol._getExtraPath('tmpVolumes.sqlite')):
+            tmpFileName = self.protocol._getExtraPath("tmpVolumes.sqlite")
             _outputVol = self.protocol.outputVolume
             setOfVolumes = SetOfVolumes(filename=tmpFileName)
             setOfVolumes.append(_outputVol)
             setOfVolumes.write()
         else:
-            tmpFileName = self.protocol._getTmpPath('tmpVolumes.sqlite')
+            tmpFileName = self.protocol._getExtraPath('tmpVolumes.sqlite')
             setOfVolumes = SetOfVolumes(filename=tmpFileName)
         return setOfVolumes
 
     def _showVolumesChimera(self):
-        tmpFileNameCMD = self.protocol._getTmpPath("chimera.cxc")
+        tmpFileNameCMD = self.protocol._getExtraPath("chimera.cxc")
         f = open(tmpFileNameCMD, "w")
         dim = self.protocol.outputVolume.getDim()[0]
         sampling = self.protocol.outputVolume.getSamplingRate()
-        tmpFileName = os.path.abspath(self.protocol._getTmpPath("axis.bild"))
+        tmpFileName = os.path.abspath(self.protocol._getExtraPath("axis.bild"))
         Chimera.createCoordinateAxisFile(dim,
                                          bildFileName=tmpFileName,
                                          sampling=sampling)
