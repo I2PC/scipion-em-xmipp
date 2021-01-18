@@ -246,10 +246,10 @@ Examples:
             self.createAngDistributionSqlite(fnAnglesSqLite, getSize(fnAngles),
                                              itemDataIterator=self._iterAngles(fnAngles))
             vol = os.path.join(fnDir, "volumeAvg.mrc")
-            tmpFilesPath = self.protocol._getTmpPath()
+            extraFilesPath = self.protocol._getExtraPath()
             volOrigin = self.protocol.outputVolume.getShiftsFromOrigin()
             radius = self.spheresScale.get()
-            view = ChimeraAngDist(vol, tmpFilesPath,
+            view = ChimeraAngDist(vol, extraFilesPath,
                                   angularDistFile=fnAngles,
                                   spheresDistance=radius,
                                   voxelSize=self.protocol.outputVolume.getSamplingRate(),

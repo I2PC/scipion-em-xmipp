@@ -120,7 +120,7 @@ class XmippProtValFitViewer(LocalResolutionViewer):
     
     def _create_legend(self, scale):
          
-        fnCmd = self.protocol._getTmpPath("chimera_output.py")
+        fnCmd = self.protocol._getExtraPath("chimera_output.py")
         
         f = open(fnCmd, 'w')
         f.write("from chimerax.core.commands import run\n")
@@ -155,7 +155,7 @@ class XmippProtValFitViewer(LocalResolutionViewer):
         
         self._create_legend(3);
         
-        fnCmd = self.protocol._getTmpPath("chimera_output.py")       
+        fnCmd = self.protocol._getExtraPath("chimera_output.py")
         f = open(fnCmd, 'a')
                
         f.write("run(session, 'open %s')\n" % self.protocol._getFileName(OUTPUT_PDBMRC_FILE))
@@ -178,7 +178,7 @@ class XmippProtValFitViewer(LocalResolutionViewer):
         
         self._create_legend(1.5);
         
-        fnCmd = self.protocol._getTmpPath("chimera_output.py")       
+        fnCmd = self.protocol._getExtraPath("chimera_output.py")
         f = open(fnCmd, 'a')
                
         f.write("run(session, 'open %s')\n" % self.protocol._getFileName(OUTPUT_PDBMRC_FILE))
@@ -201,7 +201,7 @@ class XmippProtValFitViewer(LocalResolutionViewer):
         
         self._create_legend(3);
         
-        fnCmd = self.protocol._getTmpPath("chimera_output.py")       
+        fnCmd = self.protocol._getExtraPath("chimera_output.py")
         f = open(fnCmd, 'a')
                
         f.write("run(session, 'open %s')\n" % self.protocol._getFileName(PDB_VALUE_FILE))
@@ -229,7 +229,7 @@ class XmippProtValFitViewer(LocalResolutionViewer):
         
         self._create_legend(1.5);
         
-        fnCmd = self.protocol._getTmpPath("chimera_output.py")       
+        fnCmd = self.protocol._getExtraPath("chimera_output.py")
         f = open(fnCmd, 'a')
                
         f.write("run(session, 'open %s')\n" % self.protocol._getFileName(PDB_NORM_FILE))
