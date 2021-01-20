@@ -56,11 +56,13 @@ from .viewer_projmatch import XmippProjMatchViewer
 
 #AJ
 from .viewer_structure_map_sph import XmippProtStructureMapSphViewer
+from .viewer_structure_map_pdb import XmippProtStructureMapPDBViewer
 from .viewer_volume_deform_sph import XmippVolumeDeformSphViewer
+from .viewer_pdb_deform_sph import XmippPDBDeformSphViewer
 from .viewer_metaprotocol_golden_highres import XmippMetaprotocolGoldenHighResViewer
 from .viewer_structure_map import XmippProtStructureMapViewer
 
-from .viewer_pdb_deform_sph import XmippPDBDeformViewer
+from .viewer_apply_deformation_pdb import XmippProtPDBApplyViewer
 
 # TODO: Import from continuousflex the modules needed to create clusters (soft dependency)
 from .viewer_angular_alignment_sph import XmippAngularAlignmentSphViewer

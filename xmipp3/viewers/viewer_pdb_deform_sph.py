@@ -24,71 +24,126 @@
 # *
 # **************************************************************************
 
-import os
-
-import pyworkflow.viewer as pwviewer
-import pwem.viewers.views as vi
-import pyworkflow.protocol.params as params
+from os.path import abspath
+from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pwem.viewers import ChimeraView
-from xmipp3.protocols.protocol_pdb_deform_sph import XmippProtDeformPDB
+import pyworkflow.protocol.params as params
+from pyworkflow.utils import getExt, removeExt
+from os.path import abspath
+from xmipp3.protocols.protocol_pdb_deform_sph import XmippProtPDBDeformSPH
 
 
-class XmippPDBDeformViewer(pwviewer.ProtocolViewer):
-    """ Visualize the deformation applied to the PDB file """
+class XmippPDBDeformSphViewer(ProtocolViewer):
+    """ Visualize the output of protocol pdb strain """
     _label = 'viewer pdb deform sph'
-    _targets = [XmippProtDeformPDB]
-    _environments = [pwviewer.DESKTOP_TKINTER, pwviewer.WEB_DJANGO]
+    _targets = [XmippProtPDBDeformSPH]
+    _environments = [DESKTOP_TKINTER, WEB_DJANGO]
+    
 
     def _defineParams(self, form):
         form.addSection(label='Show deformation')
-        form.addParam('doShowPDB', params.LabelParam,
-                      label="Display original and deformed PDB")
-        form.addParam('doShowMorph', params.LabelParam,
-                      label="Display a morphing between the original and deformed PDB")
+        form.addParam('pdb', params.EnumParam, label='PDB to show',
+                      choices=['First', 'Second'], default=0,
+                      display=params.EnumParam.DISPLAY_HLIST)
+        form.addParam('doShowStrain', params.LabelParam,
+                      label="Display the strain deformation")
+        form.addParam('doShowRotation', params.LabelParam,
+                      label="Display the rotation deformation")
+        form.addParam('doShowMorphOrig', params.LabelParam,
+                      label="Display the morphing between first and second structures")
+        form.addParam('doShowMorphDeformedRef', params.LabelParam,
+                      label="Display the morphing between deformed and target structures")
 
     def _getVisualizeDict(self):
-        return {'doShowPDB': self._doShowPDB,
-                'doShowMorph': self._doShowMorph}
+        self.protocol._createFilenameTemplates()
+        return {'doShowStrain': self._doShowStrain,
+                'doShowRotation': self._doShowRotation,
+                'doShowMorphOrig': self._doShowMorphOrigRef,
+                'doShowMorphDeformedRef': self._doShowDeformedOrigRef,
+                }
 
-    def _doShowPDB(self, obj, **kwargs):
-        scriptFile = self.protocol._getPath('pdb_deform_chimera.cxc')
+
+    def _doShowStrain(self, param=None):
+        if self.pdb.get() == 0:
+            pdb = self.protocol._getFileName('fnStruct_1')
+        else:
+            pdb = self.protocol._getFileName('fnStruct_2')
+        scriptFile = self.protocol._getPath('strain_chimera.cxc')
         fhCmd = open(scriptFile, 'w')
-        inputFile = os.path.abspath(self.protocol.inputPDB.get().getFileName())
-        outputFile = os.path.abspath(self.protocol.outputPDB.getFileName())
+        fninput = removeExt(pdb) + "_strain.pdb"
+        fninput = abspath(fninput)
 
-        fhCmd.write("open %s\n" % inputFile)
-        fhCmd.write("open %s\n" % outputFile)
-        # fhCmd.write("start Model Panel\n")
+        fhCmd.write("open %s\n" % fninput)
         fhCmd.write("show cartoons\n")
         fhCmd.write("cartoon style width 1.5 thick 1.5\n")
         fhCmd.write("style stick\n")
-        fhCmd.write("color bymodel\n")
+        fhCmd.write('color by occupancy palette rainbow\n')
+        fhCmd.write("view\n")
         fhCmd.close()
 
         view = ChimeraView(scriptFile)
         return [view]
 
-    def _doShowMorph(self, obj, **kwargs):
-        scriptFile = self.protocol._getPath('pdb_deform_chimera.cxc')
+
+    def _doShowRotation(self, param=None):
+        if self.pdb.get() == 0:
+            pdb = self.protocol._getFileName('fnStruct_1')
+        else:
+            pdb = self.protocol._getFileName('fnStruct_2')
+        scriptFile = self.protocol._getPath('strain_chimera.cxc')
         fhCmd = open(scriptFile, 'w')
-        inputFile = os.path.abspath(self.protocol.inputPDB.get().getFileName())
-        outputFile = os.path.abspath(self.protocol.outputPDB.getFileName())
+        fninput = removeExt(pdb) + "_rotation.pdb"
+        fninput = abspath(fninput)
+
+        fhCmd.write("open %s\n" % fninput)
+        fhCmd.write("show cartoons\n")
+        fhCmd.write("cartoon style width 1.5 thick 1.5\n")
+        fhCmd.write("style stick\n")
+        fhCmd.write('color by occupancy palette rainbow\n')
+        fhCmd.write("view\n")
+        fhCmd.close()
+
+        view = ChimeraView(scriptFile)
+        return [view]
+
+    def _doShowMorphOrigRef(self, param=None):
+        scriptFile = self.protocol._getPath('morph_orig_ref_chimera.cxc')
+        fhCmd = open(scriptFile, 'w')
+        inputFile = abspath(self.protocol._getFileName('fnStruct_1'))
+        outputFile = abspath(self.protocol._getFileName('fnStruct_2'))
 
         fhCmd.write("open %s\n" % inputFile)
         fhCmd.write("open %s\n" % outputFile)
         fhCmd.write("hide models\n")
-        # fhCmd.write("morph  start #0 frames 100\n")
-        # fhCmd.write("morph interpolate #1\n")
-        # fhCmd.write("morph movie\n")
         fhCmd.write("morph #1,2 frames 50 play false\n")
-        # fhCmd.write("start Model Panel\n")
-        # fhCmd.write("coordset #2 1,100\n")
         fhCmd.write("coordset #3 1,\n")
         fhCmd.write("wait 50\n")
-        # fhCmd.write("coordset #2 100,1,-1\n")
         fhCmd.write("coordset #3 50,1\n")
         fhCmd.close()
 
         view = ChimeraView(scriptFile)
         return [view]
 
+    def _doShowDeformedOrigRef(self, param=None):
+        scriptFile = self.protocol._getPath('morph_deformed_ref_chimera.cxc')
+        fhCmd = open(scriptFile, 'w')
+        if self.pdb.get() == 0:
+            inputFile = removeExt(self.protocol._getFileName('fnStruct_1')) + "_deformed.pdb"
+            outputFile = self.protocol._getFileName('fnStruct_2')
+        else:
+            inputFile = removeExt(self.protocol._getFileName('fnStruct_2')) + "_deformed.pdb"
+            outputFile = self.protocol._getFileName('fnStruct_1')
+
+        inputFile = abspath(inputFile)
+        outputFile = abspath(outputFile)
+        fhCmd.write("open %s\n" % inputFile)
+        fhCmd.write("open %s\n" % outputFile)
+        fhCmd.write("hide models\n")
+        fhCmd.write("morph #1,2 frames 50 play false\n")
+        fhCmd.write("coordset #3 1,\n")
+        fhCmd.write("wait 50\n")
+        fhCmd.write("coordset #3 50,1\n")
+        fhCmd.close()
+
+        view = ChimeraView(scriptFile)
+        return [view]
