@@ -144,6 +144,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         # Normalize clusters and obvalues
         normc, normo = normalize(nclusters, ob_values)
         # Find different kinds of elbows
+        elbow_idx_origin = find_closest_point_to_origin(normc, normo)
         elbow_idx_angle, _ = find_elbow_angle(normc, normo)
         # Plot all indexes ontop of objective function
 
@@ -543,6 +544,14 @@ def normalize(x, y):
     normy = (y-np.min(y))/(np.max(y)-np.min(y))
 
     return normx, normy
+
+def find_closest_point_to_origin(x, y):
+    """ Find the point closest to origin from normalied data
+    """
+    coors = list(zip(x, y))
+    distances = np.linalg.norm(coors, axis=1)
+    elbow_idx = np.argmin(distances)
+    return elbow_idx
 
 def find_elbow_angle(x, y):
     """Find the angle the slope of the function makes and
