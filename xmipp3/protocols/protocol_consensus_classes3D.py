@@ -2,6 +2,7 @@
 # *
 # * Authors:     David Maluenda (dmaluenda@cnb.csic.es)
 # *              Daniel del Hoyo Gomez (daniel.delhoyo.gomez@alumnos.upm.es)
+# *              Jorge Garcia Condado (jgcondado@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
