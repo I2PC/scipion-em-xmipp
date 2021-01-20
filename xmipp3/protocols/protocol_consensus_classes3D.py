@@ -135,17 +135,28 @@ class XmippProtConsensusClasses3D(EMProtocol):
         """
         cs = self.get_cs(self.inputMultiClasses)
         all_coss_us, ob_values = self.coss_ensemble(cs, min_nclust=1)
+
         # Plot dendogram
         self.plot_dendogram(ob_values, self._getExtraPath())
+
         # Get number of clusters at each step
         nclusters = n_clusters(all_coss_us)
+
         # Reverse objective calues so they go from largest to smallest
         ob_values = list(reversed(ob_values))
+
+        # Get profile log likelihood for log of objective values
+        # Remove last obvalue as it is zero and log(0) is undefined
+        pll = full_profile_log_likelihood(np.log(ob_values[:-1]))
+
         # Normalize clusters and obvalues
         normc, normo = normalize(nclusters, ob_values)
+
         # Find different kinds of elbows
         elbow_idx_origin = find_closest_point_to_origin(normc, normo)
         elbow_idx_angle, _ = find_elbow_angle(normc, normo)
+        elbow_idx_pll = np.argmax(pll)
+
         # Plot all indexes ontop of objective function
 
         # Store values of objective function
@@ -560,6 +571,45 @@ def find_elbow_angle(x, y):
     angles = np.arctan(-slopes)
     elbow_idx = np.argmin(np.abs(angles-np.pi/4))+1
     return elbow_idx, angles
+
+def mle_estimates(d, q):
+    """ MLE estimates of guassian distributions
+    with common variance parameter
+    """
+    p = len(d)
+    d1 = d[:q]
+    d2 = d[q:]
+    mu1 = np.mean(d1)
+    mu2 = np.mean(d2)
+    var1 = np.var(d1)
+    var2 = np.var(d2)
+    sigma = ((q-1)*var1+(p-q-1)*var2)/(p-2)
+    theta1 = [mu1, sigma]
+    theta2 = [mu2, sigma]
+    return theta1, theta2
+
+def fg(d, theta):
+    """ Gaussian pdf """
+    m = theta[0]
+    s = theta[1]
+    gauss = 1/(np.sqrt(2*np.pi*s))*np.exp(-1/(2*s)*(d-m)**2)
+    return gauss
+
+def profile_log_likelihood(d, q, theta1, theta2):
+    """ Profile log likelihood for given parameters """
+    log_f_q = np.log(fg(d[:q], theta1))
+    log_f_p = np.log(fg(d[q:], theta2))
+    l_q = np.sum(log_f_q) + np.sum(log_f_p)
+    return l_q
+
+def full_profile_log_likelihood(d):
+    """ Calculate profile log likelihood for each partition
+    of the data """
+    pll = []
+    for q in range(1, len(d)):
+        theta1, theta2 = mle_estimates(d, q)
+        pll.append(profile_log_likelihood(d, q, theta1, theta2))
+    return pll
 
 # TODO remove as deprecated
 
