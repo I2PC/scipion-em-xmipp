@@ -157,8 +157,11 @@ class XmippProtConsensusClasses3D(EMProtocol):
         elbow_idx_origin = find_closest_point_to_origin(normc, normo)
         elbow_idx_angle, _ = find_elbow_angle(normc, normo)
         elbow_idx_pll = np.argmax(pll)
+        elbows = [[elbow_idx_origin, 'origin'], [elbow_idx_angle, 'angle'],
+                  [elbow_idx_pll, 'pll']]
 
         # Plot all indexes ontop of objective function
+        plot_function_and_elbows(nclusters, ob_values, elbows, self._getExtraPath()+'/objective_function_plot.png')
 
         # Store values of objective function
         self._objectiveFData = [nclusters,ob_values]
@@ -611,6 +614,21 @@ def full_profile_log_likelihood(d):
         theta1, theta2 = mle_estimates(d, q)
         pll.append(profile_log_likelihood(d, q, theta1, theta2))
     return pll
+
+def plot_function_and_elbows(nclusters, ob_values, elbows, outimage):
+    '''Plots the objective function and elbows
+    '''
+
+    plt.figure()
+    plt.plot(nclusters, ob_values)
+    for elbow_idx, name in elbows:
+        plt.scatter([nclusters[elbow_idx]], [ob_values[elbow_idx]], label=name + ': '+str(nclusters[elbow_idx]))
+    plt.legend()
+    plt.xlabel('Number of clusters')
+    plt.ylabel('Objective values')
+    plt.title('Objective values for each number of clusters')
+    plt.tight_layout()
+    plt.savefig(outimage)
 
 # TODO remove as deprecated
 
