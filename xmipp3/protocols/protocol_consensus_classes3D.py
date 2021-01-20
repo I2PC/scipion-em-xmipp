@@ -135,20 +135,32 @@ class XmippProtConsensusClasses3D(EMProtocol):
         """
         cs = self.get_cs(self.inputMultiClasses)
         all_coss_us, ob_values = self.coss_ensemble(cs, min_nclust=1)
+        # Plot dendogram
         self.plot_dendogram(ob_values, self._getExtraPath())
-        nclusters, ob_values, elbow_idx = plot_all_coss(all_coss_us, ob_values,
-                                                        self._getExtraPath() + '/objective_values.png')
+        # Get number of clusters at each step
+        nclusters = n_clusters(all_coss_us)
+        # Reverse objective calues so they go from largest to smallest
+        ob_values = list(reversed(ob_values))
+        # Normalize clusters and obvalues
+        normc, normo = normalize(nclusters, ob_values)
+        # Find different kinds of elbows
+        elbow_idx_angle, _ = find_elbow_angle(normc, normo)
+        # Plot all indexes ontop of objective function
+
+        # Store values of objective function
         self._objectiveFData = [nclusters,ob_values]
         self.nclusters = nclusters
-        self.elbowIdx = elbow_idx
+
+        # TODO how do we set this
+        self.elbowIdx = elbow_idx_angle
 
         nclust = self.numClust.get()
         if  nclust == -1:
-            self.intersectsList = self.all_iLists[elbow_idx]
+            self.intersectsList = self.all_iLists[self.elbowIdx]
         else:
             self.intersectsList = self.all_iLists[nclusters.index(nclust)]
 
-        print('Saving best number of clusters detected: ', nclusters[elbow_idx])
+        print('Saving best number of clusters detected: ', nclusters[self.elbowIdx])
 
         self.save_outputs()
 
@@ -303,6 +315,9 @@ class XmippProtConsensusClasses3D(EMProtocol):
         return all_us, ob_values
 
     def plot_dendogram(self, obvalues, outimage):
+        ''' Plot the dendogram from the objective functions of the merge
+        between the groups of images
+        '''
         # Initzialize required values
         allilists = self.all_iLists.copy()
         allilists.reverse()
@@ -510,6 +525,34 @@ def get_vs(us, cs):
     for u in us:
         vs.append(build_simvector(u, list_cs))
     return vs
+
+def n_clusters(all_coss_us):
+    """Find number of clusters in each set"""
+    nclusters = []
+    for coss_us in all_coss_us:
+        nclusters.append(len(coss_us))
+
+    # Reverse to have smallest to biggest
+    nclusters = list(reversed(nclusters))
+
+    return nclusters
+
+def normalize(x, y):
+    """Normalize values to range 0 to 1"""
+    normx = (x-np.min(x))/(np.max(x)-np.min(x))
+    normy = (y-np.min(y))/(np.max(y)-np.min(y))
+
+    return normx, normy
+
+def find_elbow_angle(x, y):
+    """Find the angle the slope of the function makes and
+    return the point at which the slope is closest to 45º"""
+    slopes = np.diff(y)/np.diff(x)
+    angles = np.arctan(-slopes)
+    elbow_idx = np.argmin(np.abs(angles-np.pi/4))+1
+    return elbow_idx, angles
+
+# TODO remove as deprecated
 
 def find_function_elbow(values, xs=None, ploti=False):
     '''Finds the point where the maximum change in the slope of the function draw from
