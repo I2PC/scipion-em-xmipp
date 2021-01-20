@@ -28,6 +28,7 @@
 from pwem.protocols import EMProtocol
 from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam
 from pwem.objects import Class3D
+from scipy.cluster import hierarchy
 
 import math
 import numpy as np
@@ -134,6 +135,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         """
         cs = self.get_cs(self.inputMultiClasses)
         all_coss_us, ob_values = self.coss_ensemble(cs, min_nclust=1)
+        self.plot_dendogram(ob_values, self._getExtraPath())
         nclusters, ob_values, elbow_idx = plot_all_coss(all_coss_us, ob_values,
                                                         self._getExtraPath() + '/objective_values.png')
         self._objectiveFData = [nclusters,ob_values]
@@ -299,6 +301,57 @@ class XmippProtConsensusClasses3D(EMProtocol):
             self.all_iLists.append(iList)
         self.all_iLists = list(reversed(self.all_iLists))
         return all_us, ob_values
+
+    def plot_dendogram(self, obvalues, outimage):
+        # Initzialize required values
+        allilists = self.all_iLists.copy()
+        allilists.reverse()
+        linkage_matrix = np.zeros((len(allilists)-1, 4))
+        set_ids = np.arange(len(allilists))
+        original_num_sets = len(allilists)
+
+        # loop over each iteration of clustering
+        for i in range(len(allilists)-1):
+            # find the two sets that were merged
+            sets_merged = []
+            for set_info, set_id in zip(allilists[i], set_ids):
+                if set_info not in allilists[i+1]:
+                    sets_merged.append(set_id)
+
+            # find original number of sets within new set
+            if sets_merged[0] - original_num_sets < 0:
+                n1 = 1
+            else:
+                n1 = linkage_matrix[sets_merged[0]-original_num_sets, 3]
+            if sets_merged[1] - original_num_sets < 0:
+                n2 = 1
+            else:
+                n2 = linkage_matrix[sets_merged[1]-original_num_sets, 3]
+
+            # create linkage matrix
+            linkage_matrix[i, 0] = sets_merged[0] # set id of merged set
+            linkage_matrix[i, 1] = sets_merged[1] # set id of merged set
+            linkage_matrix[i, 2] = obvalues[i+1]  # objective function as distance
+            linkage_matrix[i, 3] = n1+n2 # total number of oiginal sets
+
+            # change set ids to reflect new set of clusters
+            set_ids = np.delete(set_ids, np.argwhere(set_ids == sets_merged[0]))
+            set_ids = np.delete(set_ids, np.argwhere(set_ids == sets_merged[1]))
+            set_ids = np.append(set_ids, len(allilists)+i)
+
+        # Plot resulting dendogram
+        plt.figure()
+        dn = hierarchy.dendrogram(linkage_matrix)
+        plt.title('Dendogram')
+        plt.xlabel('sets ids')
+        plt.ylabel('objective function')
+        plt.tight_layout()
+        plt.savefig(outimage+'/dendogram.png')
+
+        # Plot resulting dendogram with log scale
+        plt.yscale('log')
+        plt.ylim([np.min(linkage_matrix[:, 2]), np.max(linkage_matrix[:,2])])
+        plt.savefig(outimage+'/dendogram_log.png')
 
 #################################
 # COSS functions. See notes 8/4/2019
