@@ -83,7 +83,8 @@ class XmippProtVolSubtractionViewer(EmProtocolViewer):
 
     def _createSetOfVolumes(self):
         tmpFileName = join(tempfile.gettempdir(), 'tmpVolumes_adjust.sqlite')
-        os.remove(tmpFileName)
+        if exists(tmpFileName):
+            os.remove(tmpFileName)
         _outputVol = self.protocol.outputVolume
         setOfVolumes = SetOfVolumes(filename=tmpFileName)
         setOfVolumes.append(_outputVol)
