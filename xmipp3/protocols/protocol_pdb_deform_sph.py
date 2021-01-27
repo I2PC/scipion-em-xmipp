@@ -3,7 +3,7 @@
 # *
 # * Authors:     David Herreros Calero (ajimenez@cnb.csic.es)
 # *
-# * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
+# * Unidad de Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -109,12 +109,12 @@ class XmippProtPDBDeformSPH(ProtAnalysis3D):
         for inputPDB in inputPDBs:
             vol = pwutils.removeExt(inputPDB) + "_strain.mrc"
             outPDB = pwutils.removeExt(inputPDB) + "_strain.pdb"
-            params = '--pdb %s --vol %s -o %s --sampling 1 --origin %f %f %f ' % (
+            params = '--pdb %s --vol %s -o %s --sampling 1 --origin %f %f %f --radius 5' % (
                      inputPDB, vol, outPDB, shift, shift, shift)
             self.runJob("xmipp_pdb_label_from_volume", params)
             vol = pwutils.removeExt(inputPDB) + "_rotation.mrc"
             outPDB = pwutils.removeExt(inputPDB) + "_rotation.pdb"
-            params = '--pdb %s --vol %s -o %s --sampling 1 --origin %f %f %f ' % (
+            params = '--pdb %s --vol %s -o %s --sampling 1 --origin %f %f %f --radius 5' % (
                      inputPDB, vol, outPDB, shift, shift, shift)
             self.runJob("xmipp_pdb_label_from_volume", params)
 
