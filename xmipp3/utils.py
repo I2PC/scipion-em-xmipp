@@ -30,10 +30,6 @@ This module contains utils functions for Xmipp protocols
 
 from os.path import join
 import numpy as np
-
-# import pyvista as pv
-
-
 from pyworkflow import Config
 from pwem import emlib
 
