@@ -67,7 +67,7 @@ class XmippProtPDBDeformSPH(ProtAnalysis3D):
             'fnStruct_2': self._getExtraPath('fnStruct_2.pdb'),
             'fnOutStruct_1': self._getExtraPath('fnStruct_1_deformed.pdb'),
             'fnOutStruct_2': self._getExtraPath('fnStruct_2_deformed.pdb'),
-            'outParams': self._getExtraPath('Structures_clnm.txt')
+            'outParams': self._getExtraPath('Structures_clnm_plus.txt')
                  }
         self._updateFilenamesDict(myDict)
 
