@@ -61,10 +61,8 @@ class XmippProtAlignPDB(ProtAnalysis3D):
 
     # --------------------------- INSERT step functions --------------------------
     def _insertAllSteps(self):
-        # Iterate through all input atomic structures and align them
-        # againt the reference volume
+        # Iterate through all input atomic structures and align them against the reference volume
         refAtoms = self.retrieveAtomCoords(self.inputReference.get().getFileName())
-        # refTree = KDTree(refAtoms)
 
         idx = 1
         alignSteps = []
@@ -85,96 +83,70 @@ class XmippProtAlignPDB(ProtAnalysis3D):
         rmsd = sys.maxsize
 
         # Center Atoms in the origin (ICS needs and initial estimation of the alignment)
-        for i in range(1):
-            if i == 0:  # No Flip
-                init_R = np.eye(3)
-            elif i == 1:  # Flip X
-                init_R = np.array([[1, 0, 0], [0, -1, 0], [0, 0, -1]])
-            elif i == 2:  # Flip Y
-                init_R1 = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]])
-                init_R2 = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
-                init_R = init_R2 @ init_R1
-            elif i == 3:  # Flip Z
-                init_R = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]])
-            rotate_input = self.createTransformation(init_R, np.array([0, 0, 0]))
-            center_input = self.createTransformation(np.eye(3), -np.mean(inAtoms_ori[:, :3], axis=0))
-            center_input = rotate_input @ center_input
-            center_ref = self.createTransformation(np.eye(3), -np.mean(refAtoms_ori[:, :3], axis=0))
-            inAtoms = np.transpose(np.dot(center_input, inAtoms_ori.T))
-            refAtoms = np.transpose(np.dot(center_ref, refAtoms_ori.T))
+        center_input = self.createTransformation(np.eye(3), -np.mean(inAtoms_ori[:, :3], axis=0))
+        center_ref = self.createTransformation(np.eye(3), -np.mean(refAtoms_ori[:, :3], axis=0))
+        inAtoms = np.transpose(np.dot(center_input, inAtoms_ori.T))
+        refAtoms = np.transpose(np.dot(center_ref, refAtoms_ori.T))
 
-            ah = AtomicStructHandler()
-            ah.read(inAtomsFn)
-            ah.writeAsPdb(self._getExtraPath('Input.pdb'))
+        ah = AtomicStructHandler()
+        ah.read(inAtomsFn)
+        ah.writeAsPdb(self._getExtraPath('Input.pdb'))
 
-            ah = AtomicStructHandler()
-            ah.read(self.inputReference.get().getFileName())
-            ah.writeAsPdb(self._getExtraPath('Ref.pdb'))
+        ah = AtomicStructHandler()
+        ah.read(self.inputReference.get().getFileName())
+        ah.writeAsPdb(self._getExtraPath('Ref.pdb'))
 
-            # Compute Convex Hull of atoms and extract boundary coordinates
-            boundary_input = ConvexHull(inAtoms[:, :3]).vertices
-            boundary_reference = ConvexHull(refAtoms[:, :3]).vertices
-            number_input_atoms = len(boundary_input)
-            size = int(number_input_atoms * 0.1)
-            inAtoms = inAtoms[boundary_input, :]
-            refAtoms = refAtoms[boundary_reference, :]
-            refTree = KDTree(refAtoms)
+        # Compute Convex Hull of atoms and extract boundary coordinates
+        boundary_input = ConvexHull(inAtoms[:, :3]).vertices
+        boundary_reference = ConvexHull(refAtoms[:, :3]).vertices
+        number_input_atoms = len(boundary_input)
+        size = int(number_input_atoms * 0.1)
+        inAtoms = inAtoms[boundary_input, :]
+        refAtoms = refAtoms[boundary_reference, :]
+        refTree = KDTree(refAtoms)
 
-            # ICS algorithm with Procrustes rigid aligment
-            Tr = np.eye(4)
-            for _ in range(10000):
+        # ICS algorithm with Procrustes rigid aligment
+        Tr = np.eye(4)
+        for _ in range(1000):  # 10000 For slightly better accuracy (1 minute vs 10 seconds)
 
-                # Extract initial subset of points and compute closest neighbours
-                inAtoms_try = np.transpose(np.dot(Tr, inAtoms.T))
-                random_indices = np.random.choice(number_input_atoms, size=size, replace=False)
-                # random_indices = np.sort(random_indices)
-                points = inAtoms_try[random_indices, :]
-                _, index_neighbours = refTree.query(points, k=1)
-                neighbours = refAtoms[index_neighbours, :]
+            # Extract initial subset of points and compute closest neighbours
+            inAtoms_try = np.transpose(np.dot(Tr, inAtoms.T))
+            random_indices = np.random.choice(number_input_atoms, size=size, replace=False)
+            # random_indices = np.sort(random_indices)
+            points = inAtoms_try[random_indices, :]
+            _, index_neighbours = refTree.query(points, k=1)
+            neighbours = refAtoms[index_neighbours, :]
 
-                # Removed outliers and compute cost with initial coordinates
-                distance_points = np.sqrt(np.sum(np.subtract(points, neighbours)**2, axis=1))
-                median_3x = 3 * np.median(distance_points)
-                points_cleaned = points[distance_points <= median_3x].reshape(-1, 4)
-                neighbours_cleaned = neighbours[distance_points <= median_3x].reshape(-1, 4)
-                # cost_start = np.mean(np.linalg.norm(points_cleaned - neighbours_cleaned, axis=1) ** 2)
+            # Removed outliers and compute cost with initial coordinates
+            distance_points = np.sqrt(np.sum(np.subtract(points, neighbours)**2, axis=1))
+            median_3x = 3 * np.median(distance_points)
+            points_cleaned = points[distance_points <= median_3x].reshape(-1, 4)
+            neighbours_cleaned = neighbours[distance_points <= median_3x].reshape(-1, 4)
 
-                # Rigid aligment of subset and new cost
-                R_try, t_try = self.rigidRegistration(points_cleaned[:, :3], neighbours_cleaned[:, :3])
-                Tr_try = self.createTransformation(R_try, t_try)
-                registered_points = np.transpose(np.dot(Tr_try, points_cleaned.T))
-                # cost_new = np.mean(np.linalg.norm(registered_points - neighbours_cleaned, axis=1) ** 2)
+            # Rigid aligment of subset and new cost
+            R_try, t_try = self.rigidRegistration(points_cleaned[:, :3], neighbours_cleaned[:, :3])
+            Tr_try = self.createTransformation(R_try, t_try)
 
-                # tol_ratio = cost_new / cost_start
+            Tr_all = center_with_reference @ Tr_try @ Tr @ center_input
+            atoms_aligned = np.transpose(np.dot(Tr_all, inAtoms_ori.T))
+            _, index_neighbours = refTree_ori.query(atoms_aligned, k=1)
+            neighbours_input = refAtoms_ori[index_neighbours, :]
+            rmsd_input_ref = np.sqrt(np.mean(np.linalg.norm(atoms_aligned - neighbours_input, axis=1) ** 2))
+            alignedTree = KDTree(atoms_aligned)
+            _, index_neighbours = alignedTree.query(refAtoms_ori, k=1)
+            neighbours_ref = refAtoms_ori[index_neighbours, :]
+            rmsd_ref_input = np.sqrt(np.mean(np.linalg.norm(refAtoms_ori - neighbours_ref, axis=1) ** 2))
+            rmsd_trial = 0.5 * (rmsd_input_ref + rmsd_ref_input)
 
-                Tr_all = center_with_reference @ Tr_try @ Tr @ center_input
-                atoms_aligned = np.transpose(np.dot(Tr_all, inAtoms_ori.T))
-                _, index_neighbours = refTree_ori.query(atoms_aligned, k=1)
-                neighbours_input = refAtoms_ori[index_neighbours, :]
-                rmsd_input_ref = np.sqrt(np.mean(np.linalg.norm(atoms_aligned - neighbours_input, axis=1) ** 2))
-                alignedTree = KDTree(atoms_aligned)
-                _, index_neighbours = alignedTree.query(refAtoms_ori, k=1)
-                neighbours_ref = refAtoms_ori[index_neighbours, :]
-                rmsd_ref_input = np.sqrt(np.mean(np.linalg.norm(refAtoms_ori - neighbours_ref, axis=1) ** 2))
-                rmsd_trial = 0.5 * (rmsd_input_ref + rmsd_ref_input)
+            # We only update the transformation in those interations leading to an improvement
+            if (rmsd_trial < rmsd):
+                Tr = np.dot(Tr_try, Tr)
+                rmsd = rmsd_trial
+                # print("Iteration #{} improved aligment by {:2.4%}".format(iteration, 1.0 - tol_ratio))
+                # sys.stdout.flush()
 
-                # We only update the transformation in those interations leading to an improvement
-                if (rmsd_trial < rmsd):
-                    Tr = np.dot(Tr_try, Tr)
-                    rmsd = rmsd_trial
-                    # print("Iteration #{} improved aligment by {:2.4%}".format(iteration, 1.0 - tol_ratio))
-                    # sys.stdout.flush()
-
-            # Apply Transformations to get final alignment transformation and check final RMSD of alignment
-            Tr_final = center_with_reference @ Tr @ center_input
-            # atoms_aligned = np.transpose(np.dot(Tr, inAtoms_ori.T))
-            # _, index_neighbours = refTree_ori.query(atoms_aligned, k=1)
-            # neighbours_aligned = refAtoms_ori[index_neighbours, :]
-            # rmsd_trial = np.sqrt(np.mean(np.linalg.norm(atoms_aligned - neighbours_aligned, axis=1) ** 2))
-            # print(rmsd_trial)
-            # # if rmsd_trial < rmsd:
-            # Tr_final = Tr
-            # rmsd = rmsd_trial
+        # Apply Transformations to get final alignment transformation
+        Tr_final = center_with_reference @ Tr @ center_input
 
         print("RMSD of aligned structures is %.2f A" % rmsd)
 
