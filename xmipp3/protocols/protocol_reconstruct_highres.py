@@ -369,7 +369,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             imgSetOut = self._createSetOfParticles()
             imgSetOut.copyInfo(imgSet)
             imgSetOut.setAlignmentProj()
-            imgSetOut.setIsPhaseFlipped( imgSet.isPhaseFlipped() )
+            imgSetOut.setIsPhaseFlipped(True)
             self.iterMd = md.iterRows(fnAngles, md.MDL_PARTICLE_ID)
             self.lastRow = next(self.iterMd)
             imgSetOut.copyItems(imgSet,
@@ -495,7 +495,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             if self.inputVolumes.get() is None:
                 args = "-i %s -o %s --max_resolution 0.3 --sampling %f --sym %s" % (
                     self.imgsFn, fnVol1, TsCurrent, self.symmetryGroup.get())
-                if self.useGpu.get():
+                if False: #self.useGpu.get():
                     #AJ to make it work with and without queue system
                     if self.numberOfMpi.get()>1:
                         N_GPUs = len((self.gpuList.get()).split(','))
@@ -1090,8 +1090,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     args+=" --optimizeAngles --max_angular_change %f"%maxAngle
                 if self.contDefocus or (self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT and iteration>=5):
                     args+=" --optimizeDefocus --max_defocus_change %f"%self.contMaxDefocus.get()
-                if self.inputParticles.get().isPhaseFlipped():
-                    args+=" --phaseFlipped"
+                #if self.inputParticles.get().isPhaseFlipped():
+                args+=" --phaseFlipped"
                 #if self.weightResiduals:
                 #    args+=" --oresiduals %s"%join(fnDirLocal,"residuals%02i.stk"%i)
                 self.runJob("xmipp_angular_continuous_assign2",args,numberOfMpi=self.numberOfMpi.get())
@@ -1355,8 +1355,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 if hasCTF:
                     args="-i %s -o %s.stk --save_metadata_stack %s.xmd --keep_input_columns"%(fnAngles,fnCorrectedImagesRoot,fnCorrectedImagesRoot)
                     args+=" --sampling_rate %f --correct_envelope"%TsCurrent
-                    if self.inputParticles.get().isPhaseFlipped():
-                        args+=" --phase_flipped"
+                    #if self.inputParticles.get().isPhaseFlipped():
+                    args+=" --phase_flipped"
                     self.runJob("xmipp_ctf_correct_wiener2d",args,numberOfMpi=min(self.numberOfMpi.get(),24))
                     self.runJob("xmipp_image_eliminate_byEnergy","-i %s.xmd --sigma2 9 --minSigma2 0.01"%\
                                 fnCorrectedImagesRoot,numberOfMpi=min(self.numberOfMpi.get(),12))
@@ -1405,7 +1405,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
 
                 # Reconstruct Fourier
                 args="-i %s -o %s --sym %s --weight"%(fnAnglesToUse,fnVol,self.symmetryGroup)
-                if self.useGpu.get():
+                if False: #self.useGpu.get():
                     #AJ to make it work with and without queue system
                     if self.numberOfMpi.get()>1:
                         N_GPUs = len((self.gpuList.get()).split(','))
@@ -1468,6 +1468,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             self.runJob("xmipp_metadata_utilities",'-i %s --set merge %s'%(fnAngles,fnAnglesAux),numberOfMpi=1)
             cleanPath(fnAnglesAux)
             cleanPath(fnAnglesAuxId)
+
 
     def postProcessing(self, iteration):
         fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)

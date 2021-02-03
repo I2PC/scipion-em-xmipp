@@ -648,8 +648,8 @@ class XmippMetaProtGoldenHighRes(EMProtocol):
         errors = []
         if not self.inputParticles.hasValue():
             errors.append("You must provide input particles")
-        if not self.inputParticles.get().isPhaseFlipped():
-            errors.append("The input particles must be phase flipped")
+        #if not self.inputParticles.get().isPhaseFlipped():
+        #    errors.append("The input particles must be phase flipped")
         return errors
     
     def _summary(self):

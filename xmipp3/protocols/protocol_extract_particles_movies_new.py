@@ -198,7 +198,8 @@ class XmippProtExtractMovieParticlesNew(ProtProcessMovies):
         ih = emlib.image.ImageHandler()
         x, y, z, n = ih.getDimensions(movie.getFileName())
         print("AQUI", movId, x, y, z, n, movie.getFramesRange())
-        #x, y, n = movie.getDim()
+        x, y, n = movie.getDim()
+        print("2 AQUI", movId, x, y, z, n, movie.getFramesRange())
         iniFrame, lastFrame, _ = movie.getFramesRange()
         frame0, frameN = self._getRange(movie)
         boxSize = self.boxSize.get()
@@ -366,6 +367,8 @@ class XmippProtExtractMovieParticlesNew(ProtProcessMovies):
                 ccIn = rowIn.getValue(emlib.MDL_MAXCC)
                 costIn = rowIn.getValue(emlib.MDL_COST)
                 wIn = rowIn.getValue(emlib.MDL_WEIGHT)
+                contXIn = rowIn.getValue(emlib.MDL_CONTINUOUS_X)
+                contYIn = rowIn.getValue(emlib.MDL_CONTINUOUS_Y)
 
                 count = 0
                 rowsOutputParts = iterRows(mdOutputParts)
@@ -394,6 +397,10 @@ class XmippProtExtractMovieParticlesNew(ProtProcessMovies):
                         rowOutFinal.setValue(emlib.MDL_ANGLE_TILT, tiltIn)
                         rowOutFinal.setValue(emlib.MDL_ANGLE_PSI, psiIn)
                         rowOutFinal.setValue(emlib.MDL_FLIP, flipIn)
+                        if contXIn is not None:
+                            rowOutFinal.setValue(emlib.MDL_CONTINUOUS_X, contXIn)
+                        if contYIn is not None:
+                            rowOutFinal.setValue(emlib.MDL_CONTINUOUS_Y, contYIn)
                         if ccIn is not None:
                             rowOutFinal.setValue(emlib.MDL_MAXCC, ccIn)
                         if costIn is not None:
