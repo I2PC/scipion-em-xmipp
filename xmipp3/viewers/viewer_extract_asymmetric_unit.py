@@ -46,7 +46,7 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
     """ Visualize the input and output volumes of protocol XmippProtExtractUnit
         by choosing Chimera (3D) or Xmipp visualizer (2D).
         The axes of coordinates x, y, z will be shown by choosing Chimera"""
-    _label = 'viewer extract unit cell'
+    _label = 'viewer extract asymmetric unit'
     _targets = [XmippProtExtractUnit]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
 
@@ -56,7 +56,7 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
 
     def _defineParams(self, form):
         form.addSection(label='Visualization of input volume and extracted '
-                              'unit cell')
+                              'asymmetric unit')
         form.addParam('displayVol', params.EnumParam,
                       choices=['chimerax', 'slices'], default=VOLUME_CHIMERA,
                       display=params.EnumParam.DISPLAY_HLIST,
@@ -87,8 +87,8 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
             return self._showVolumesXmipp()
 
     def _createSetOfVolumes(self):
-        if not exists(self.protocol._getTmpPath('tmpVolumes.sqlite')):
-            tmpFileName = self.protocol._getTmpPath("tmpVolumes.sqlite")
+        if not exists(self.protocol._getExtraPath('tmpVolumes.sqlite')):
+            tmpFileName = self.protocol._getExtraPath("tmpVolumes.sqlite")
             _inputVol = self.protocol.inputVolumes.get()
             _outputVol = self.protocol.outputVolume
             setOfVolumes = SetOfVolumes(filename=tmpFileName)
@@ -96,16 +96,16 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
             setOfVolumes.append(_outputVol)
             setOfVolumes.write()
         else:
-            tmpFileName = self.protocol._getTmpPath('tmpVolumes.sqlite')
+            tmpFileName = self.protocol._getExtraPath('tmpVolumes.sqlite')
             setOfVolumes = SetOfVolumes(filename=tmpFileName)
         return setOfVolumes
 
     def _showVolumesChimera(self):
-        tmpFileNameCMD = self.protocol._getTmpPath("chimera.cxc")
+        tmpFileNameCMD = self.protocol._getExtraPath("chimera.cxc")
         f = open(tmpFileNameCMD, "w")
         dim = self.protocol.inputVolumes.get().getDim()[0]
         sampling = self.protocol.inputVolumes.get().getSamplingRate()
-        tmpFileName = os.path.abspath(self.protocol._getTmpPath("axis.bild"))
+        tmpFileName = os.path.abspath(self.protocol._getExtraPath("axis.bild"))
         Chimera.createCoordinateAxisFile(dim,
                                  bildFileName=tmpFileName,
                                  sampling=sampling)
@@ -136,6 +136,7 @@ class viewerXmippProtExtractUnit(EmProtocolViewer):
 
         cMap = ['red', 'yellow', 'green', 'cyan', 'blue']
         d = {}
+        innerRadius = self.protocol.innerRadius.get()
         d['outerRadius'] = self.protocol.outerRadius.get() * sampling
         if innerRadius < 0:
            innerRadius = 0

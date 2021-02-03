@@ -26,8 +26,9 @@
 # **************************************************************************
 
 import os
+import tempfile
 from distutils.spawn import find_executable
-from os.path import exists
+from os.path import exists, join
 
 import pyworkflow.protocol.params as params
 from pwem.emlib.image import ImageHandler
@@ -52,11 +53,11 @@ class XmippProtVolSubtractionViewer(EmProtocolViewer):
     def _defineParams(self, form):
         form.addSection(label='Visualization volumes subtraction output')
         form.addParam('displayVol', params.EnumParam,
-                      choices=['chimera', 'slices'], default=VOLUME_CHIMERA,
+                      choices=['chimerax', 'slices'], default=VOLUME_CHIMERA,
                       display=params.EnumParam.DISPLAY_HLIST,
                       label='Display volume with',
-                      help='*chimera*: display volumes as surface with '
-                           'Chimera.\n*slices*: display volumes as 2D slices '
+                      help='*chimerax*: display volumes as surface with '
+                           'ChimeraX.\n*slices*: display volumes as 2D slices '
                            'along z axis.\n')
 
     def _getVisualizeDict(self):
@@ -66,7 +67,7 @@ class XmippProtVolSubtractionViewer(EmProtocolViewer):
 
     def _validate(self):
         if find_executable(Chimera.getProgram()) is None:
-            return ["chimera is not available. Either install it or choose"
+            return ["chimerax is not available. Either install it or choose"
                     " option 'slices'. "]
         return []
 
@@ -81,23 +82,21 @@ class XmippProtVolSubtractionViewer(EmProtocolViewer):
             return self._showVolumesXmipp()
 
     def _createSetOfVolumes(self):
-        if not exists(self.protocol._getTmpPath('tmpVolumes.sqlite')):
-            tmpFileName = self.protocol._getTmpPath("tmpVolumes.sqlite")
-            _outputVol = self.protocol.outputVolume
-            setOfVolumes = SetOfVolumes(filename=tmpFileName)
-            setOfVolumes.append(_outputVol)
-            setOfVolumes.write()
-        else:
-            tmpFileName = self.protocol._getTmpPath('tmpVolumes.sqlite')
-            setOfVolumes = SetOfVolumes(filename=tmpFileName)
+        tmpFileName = join(tempfile.gettempdir(), 'tmpVolumes_adjust.sqlite')
+        if exists(tmpFileName):
+            os.remove(tmpFileName)
+        _outputVol = self.protocol.outputVolume
+        setOfVolumes = SetOfVolumes(filename=tmpFileName)
+        setOfVolumes.append(_outputVol)
+        setOfVolumes.write()
         return setOfVolumes
 
     def _showVolumesChimera(self):
-        tmpFileNameCMD = self.protocol._getTmpPath("chimera.cxc")
+        tmpFileNameCMD = join(tempfile.gettempdir(), "vol_adjust_chimera.cxc")
         f = open(tmpFileNameCMD, "w")
         dim = self.protocol.outputVolume.getDim()[0]
         sampling = self.protocol.outputVolume.getSamplingRate()
-        tmpFileName = os.path.abspath(self.protocol._getTmpPath("axis.bild"))
+        tmpFileName = os.path.abspath(join(tempfile.gettempdir(), "axis_vol_adjust.bild"))
         Chimera.createCoordinateAxisFile(dim,
                                          bildFileName=tmpFileName,
                                          sampling=sampling)

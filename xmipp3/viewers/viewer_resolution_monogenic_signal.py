@@ -97,7 +97,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
                        label='Show slice number')
         
         group.addParam('doShowChimera', LabelParam,
-                      label="Show Resolution map in Chimera")
+                      label="Show Resolution map in ChimeraX")
 
         ColorScaleWizardBase.defineColorScaleParams(group, defaultLowest=self.protocol.min_res_init,
                                                     defaultHighest=self.protocol.max_res_init)
@@ -119,7 +119,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
         return [cm]
     
     def _showOriginalVolumeSlices(self, param=None):
-        if self.protocol.halfVolumes.get() is True:
+        if self.protocol.halfVolumes.get() is True and self.protocol.halfVolumesFile.get() is False:
             cm = DataView(self.protocol.inputVolume.get().getFileName())
             cm2 = DataView(self.protocol.inputVolume2.get().getFileName())
             return [cm, cm2]
@@ -209,7 +209,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
         else:
             fnResVol = self.protocol._getExtraPath(OUTPUT_RESOLUTION_FILE_CHIMERA)
 
-        if self.protocol.halfVolumes.get():
+        if self.protocol.halfVolumes.get() is True and self.protocol.halfVolumesFile.get() is False:
             vol = self.protocol.inputVolume.get()
         else:
             vol = self.protocol.inputVolumes.get()

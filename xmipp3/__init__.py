@@ -39,7 +39,7 @@ from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.20.07b1'
+_currentVersion = '3.20.07'
 
 
 class Plugin(pwem.Plugin):
@@ -136,7 +136,7 @@ class Plugin(pwem.Plugin):
 
         ## Installation commands (removing bindingsToken)
         installCmd = ("cd {cwd} && {configCmd} && {compileCmd} N={nProcessors:d} && "
-                      "ln -srf build {xmippHome} && cd - && "
+                      "ln -srfn build {xmippHome} && cd - && "
                       "touch {installedToken} && rm {bindingsToken} 2> /dev/null")
         installTgt = [getXmippPath('bin', 'xmipp_reconstruct_significant'),
                       getXmippPath("lib/libXmippJNI.so"),
@@ -144,8 +144,8 @@ class Plugin(pwem.Plugin):
 
         ## Linking bindings (removing installationToken)
         bindingsAndLibsCmd = ("find {bindingsSrc} -maxdepth 1 -mindepth 1 "
-                              "! -name __pycache__ -exec ln -srf {{}} {bindingsDst} \; && "
-                              "ln -srf {coreLib} {libsDst} && "
+                              r"! -name __pycache__ -exec ln -srfn {{}} {bindingsDst} \; && "
+                              "ln -srfn {coreLib} {libsDst} && "
                               "touch {bindingsToken} && "
                               "rm {installedToken} 2> /dev/null")
         bindingsAndLibsTgt = [os.path.join(Config.getBindingsFolder(), 'xmipp_base.py'),
@@ -175,7 +175,8 @@ class Plugin(pwem.Plugin):
                                       bindingsAndLibsTgt)],
                            deps=xmippDeps, default=False)
 
-        configSrc = ('pwd' if os.environ.get('XMIPP_NOCONFIG', 'False')=='True'
+        avoidConfig = os.environ.get('XMIPP_NOCONFIG', 'False') == 'True'
+        configSrc = ('./xmipp check_config' if avoidConfig
                      else './xmipp config noAsk && ./xmipp check_config')
         env.addPackage('xmippSrc', version=_currentVersion,
                        # adding 'v' before version to fix a package target (post-link)
@@ -187,21 +188,6 @@ class Plugin(pwem.Plugin):
                                  (bindingsAndLibsCmd.format(**installVars),
                                   bindingsAndLibsTgt)],
                        deps=xmippDeps, default=not develMode)
-
-        installBin = ("rm -rf {xmippHome} 2>/dev/null; cd .. ; "
-                      "ln -srf xmippBin_{distro}-{currVersion} {xmippHome} && "
-                      "touch {installedToken}")
-        env.addPackage('xmippBin_Debian', version=_currentVersion,
-                       commands=[(installBin.format(**installVars, distro='Debian'),
-                                  installTgt + [confToken, verToken+'_Debian']),
-                                 (bindingsAndLibsCmd, bindingsAndLibsTgt)],
-                       deps=xmippDeps, default=False)
-
-        env.addPackage('xmippBin_Centos', version=_currentVersion,
-                       commands=[(installBin.format(**installVars, distro='Centos'),
-                                  installTgt+[confToken, verToken+'_Centos']),
-                                 (bindingsAndLibsCmd, bindingsAndLibsTgt)],
-                       deps=xmippDeps, default=False)
 
         ## EXTRA PACKAGES ##
         installDeepLearningToolkit(cls, env)

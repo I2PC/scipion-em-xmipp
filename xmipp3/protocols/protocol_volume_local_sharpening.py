@@ -253,10 +253,8 @@ class XmippProtLocSharp(ProtAnalysis3D):
                 nextIter = False
                 break
 
-        # TODO: please copy the file using python not the operating system
-        os.system('cp '  +self._getExtraPath('sharpenedMap_'+str(self.iteration)+'.mrc')+
-                   ' '  +self._getExtraPath('sharpenedMap_last.mrc'))
-
+        os.rename(self._getExtraPath('sharpenedMap_' + str(self.iteration) + '.mrc'),
+                  self._getExtraPath('sharpenedMap_last.mrc'))
         
         resFile = self.resolutionVolume.get().getFileName()        
         pathres=dirname(resFile)
@@ -271,22 +269,21 @@ class XmippProtLocSharp(ProtAnalysis3D):
              
     def createOutputStep(self):
 
-        volume=Volume()
-        volume.setFileName(self._getExtraPath('sharpenedMap_last.mrc'))
-        volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
-        volume.setOrigin(self.inputVolume.get().getOrigin(True))
-
-
         volumesSet = self._createSetOfVolumes()
-        volumesSet.setSamplingRate(self.inputVolume.get().getSamplingRate()) 
+        volumesSet.setSamplingRate(self.inputVolume.get().getSamplingRate())
         for i in range(self.iteration):
-            vol = Volume()       
-            vol.setLocation(i, self._getExtraPath('sharpenedMap_%d.mrc' % (i+1)))
-            vol.setObjComment("Sharpened Map, \n Epoch %d"%(i+1))
-            volumesSet.append(vol)  
-            
+            vol = Volume()
+            vol.setOrigin(self.inputVolume.get().getOrigin(True))
+            if (self.iteration > (i + 1)):
+                vol.setLocation(i, self._getExtraPath('sharpenedMap_%d.mrc' % (i + 1)))
+                vol.setObjComment("Sharpened Map, \n Epoch %d" % (i + 1))
+            else:
+                vol.setLocation(i, self._getExtraPath('sharpenedMap_last.mrc'))
+                vol.setObjComment("Sharpened Map, \n Epoch last")
+            volumesSet.append(vol)
+
         self._defineOutputs(outputVolumes=volumesSet)
-        self._defineSourceRelation(self.inputVolume, volumesSet)            
+        self._defineSourceRelation(self.inputVolume, volumesSet)
                      
     # --------------------------- INFO functions ------------------------------
 

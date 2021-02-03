@@ -43,7 +43,8 @@ POSTPROCESS_VOL_BASENAME= "deepPostProcess.mrc"
 
 class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
     """    
-    Given a map the protocol performs automatic deep post-processing to enhance visualization
+    Given a map the protocol performs automatic deep post-processing to enhance visualization. Usage guide at
+    https://github.com/rsanchezgarc/deepEMhancer
     """
     _label = 'deepEMhancer'
     _conda_env = 'xmipp_deepEMhancer'
@@ -252,17 +253,25 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
         volume.setFileName(self._getExtraPath(POSTPROCESS_VOL_BASENAME))
 
         if self.useHalfMapsInsteadVol.get():
-          if self.halfMapsAttached.get():
-            volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
-          else:
-            volume.setSamplingRate(self.inputHalf1.get().getSamplingRate())
-          self._defineOutputs(Volume=volume)
-          self._defineTransformRelation(self.inputHalf1, volume)
-          self._defineTransformRelation(self.inputHalf2, volume)
+            if self.halfMapsAttached.get():
+                inVol = self.inputVolume.get()
+            else:
+                inVol = self.inputHalf1.get()
+
+            volume.setSamplingRate(inVol.getSamplingRate())
+            volume.setOrigin(inVol.getOrigin(force=True))
+
+            self._defineOutputs(Volume=volume)
+            self._defineTransformRelation(inVol, volume)
+            if not self.halfMapsAttached.get():
+              self._defineTransformRelation(self.inputHalf2, volume)
         else:
-          volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
-          self._defineOutputs(Volume=volume)
-          self._defineTransformRelation(self.inputVolume, volume)
+            inVol = self.inputVolume.get()
+            volume.setSamplingRate(inVol.getSamplingRate())
+            volume.setOrigin(inVol.getOrigin(force=True))
+
+            self._defineOutputs(Volume=volume)
+            self._defineTransformRelation(self.inputVolume, volume)
 
 
                 
@@ -302,5 +311,5 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
         return error
     
     def _citations(self):
-        return ['Sanchez-Garcia, 2020']
+        return ['Sanchez-Garcia, 2020, https://doi.org/10.1101/2020.06.12.148296']
 

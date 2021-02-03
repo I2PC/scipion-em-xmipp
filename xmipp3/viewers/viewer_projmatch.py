@@ -42,7 +42,6 @@ from pyworkflow.protocol.params import (LabelParam, IntParam, FloatParam,
 from xmipp3.convert import *
 from xmipp3.viewers.plotter import XmippPlotter
 from xmipp3.protocols import XmippProtProjMatch
-from pyworkflow.utils.path import cleanPath
 
 
 ITER_LAST = 0
@@ -274,8 +273,7 @@ Examples:
     
     def _createVolumesMd(self, volumes):
         """ Write a metadata with all volumes selected for visualization. """
-        mdPath = self.protocol._getTmpPath('viewer_volumes.xmd')
-        cleanPath(mdPath)
+        mdPath = self.protocol._getExtraPath('viewer_volumes.xmd')
         md = emlib.MetaData()
         
         for volFn in volumes:
@@ -295,12 +293,11 @@ Examples:
     def _showVolumesChimera(self, volumes):
         """ Create a chimera script to visualize selected volumes. """
         if len(volumes) > 1:
-            cmdFile = self.protocol._getTmpPath('chimera_volumes.cxc')
-            cleanPath(cmdFile)
+            cmdFile = self.protocol._getExtraPath('chimera_volumes.cxc')
             f = open(cmdFile, 'w+')
             f.write('windowsize 800 600\n')
             for volFn in volumes:
-                vol = os.path.relpath(volFn, self.protocol._getTmpPath())
+                vol = os.path.relpath(volFn, self.protocol._getExtraPath())
                 f.write("open %s\n" % vol)
             f.write('tile\n')
             f.close()
@@ -382,7 +379,7 @@ Examples:
         list = []
         mdIn  = emlib.MetaData()
         mdOut = emlib.MetaData()
-        cleanPattern(self.protocol._getTmpPath('references_library*'))
+        cleanPattern(self.protocol._getExtraPath('references_library*'))
         
         for ref3d in self._refsList:
             for it in self._iterations:
@@ -413,7 +410,7 @@ Examples:
                         if mdOut.size() == 0:
                             print("Empty metadata: ", file_nameReferences)
                         else:
-                            file_nameReferences = self.protocol._getTmpPath('references_library.xmd')
+                            file_nameReferences = self.protocol._getExtraPath('references_library.xmd')
                             sfn = createUniqueFileName(file_nameReferences)
                             file_nameReferences = 'projectionDirections@' + sfn
                             mdOut.write(file_nameReferences)
@@ -614,7 +611,7 @@ Examples:
                     if self.angleSort:
                         mDoutRef3D.sort(emlib.MDL_ANGLE_DIFF)
                         fn = emlib.FileName()
-                        baseFileName   = self.protocol._getTmpPath("angle_sort.xmd")
+                        baseFileName   = self.protocol._getExtraPath("angle_sort.xmd")
                         fn = self.protocol._getRefBlockFileName("angle_iter", it, "ref3D", ref3d, baseFileName)
                         mDoutRef3D.write(fn, emlib.MD_APPEND)
                         print("File with sorted angles saved in:", fn)
@@ -622,7 +619,7 @@ Examples:
                     if self.shiftSort:
                         mDoutRef3D.sort(emlib.MDL_SHIFT_DIFF)
                         fn = emlib.FileName()
-                        baseFileName   = self.protocol._getTmpPath("angle_sort.xmd")
+                        baseFileName   = self.protocol._getExtraPath("angle_sort.xmd")
                         fn = self.protocol._getRefBlockFileName("shift_iter", it, "ref3D", ref3d, baseFileName)
                         mDoutRef3D.write(fn, emlib.MD_APPEND)
                         print("File with sorted shifts saved in:", fn)
@@ -659,7 +656,7 @@ Examples:
             classesFn = self.protocol._getFileName('outClassesXmd', iter=it, ref=ref3d)
             vol = self.protocol._getFileName('reconstructedFilteredFileNamesIters', iter=it, ref=ref3d)
             if exists(classesFn):
-                tmpFilesPath = self.protocol._getTmpPath()
+                tmpFilesPath = self.protocol._getExtraPath()
                 volOrigin = self.protocol.outputVolume.getShiftsFromOrigin()
                 return ChimeraAngDist(vol, tmpFilesPath,
                                       angularDistFile=classesFn,
