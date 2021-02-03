@@ -81,11 +81,11 @@ class viewerXmippProtDeepVolPostProc(Viewer):
                 dim = _inputVol.getDim()[0]
                 sampling = _inputVol.getSamplingRate()
                 listVol.append(_inputVol)
-        bildFileName = self.protocol._getTmpPath("axis_output.bild")
+        bildFileName = self.protocol._getExtraPath("axis_output.bild")
         Chimera.createCoordinateAxisFile(dim,
                                          bildFileName=bildFileName,
                                          sampling=sampling)
-        fnCxc = self.protocol._getTmpPath("chimera_output.cxc")
+        fnCxc = self.protocol._getExtraPath("chimera_output.cxc")
         f = open(fnCxc, 'w')
         # change to workingDir
         # If we do not use cd and the project name has an space

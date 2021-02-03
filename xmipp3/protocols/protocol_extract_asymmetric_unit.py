@@ -22,7 +22,7 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
+import os
 
 from pyworkflow import VERSION_3_0
 from pwem.objects import Volume
@@ -179,7 +179,9 @@ class XmippProtExtractUnit(EMProtocol):
     # --------------------------- UTILS functions -----------------------------
 
     def _getOutputVol(self):
-        return self._getExtraPath("output_volume.mrc")
+        prefix = os.path.basename(self.inputVolumes.get().getFileName()).split(".")[0]
+
+        return self._getExtraPath(prefix + "_output_volume.mrc")
 
     def replace_at_index(self, tup, ix, val):
         return tup[:ix] + (val,) + tup[ix + 1:]

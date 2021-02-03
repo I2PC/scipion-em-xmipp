@@ -524,10 +524,10 @@ class TestXmippPreprocessParticles(TestXmippBase):
                 self.assertEquals(x.getAlignment(), y.getAlignment(),
                                   "Alignment wrong")
                 
-        self.assertAlmostEquals(protPreproc.outputParticles.getSamplingRate(), 
-                          self.protImport.outputParticles.getSamplingRate(),
-                                "There was a problem with the sampling rate "
-                                " in the preprocess particles")
+        self.assertAlmostEquals(protPreproc.outputParticles.getSamplingRate(),
+                                self.protImport.outputParticles.getSamplingRate(),
+                                'There was a problem with the sampling rate '
+                                ' in the preprocess particles')
 
         self.assertIsNotNone(protPreproc.outputParticles,
                              "There was a problem with preprocess particles")
@@ -1085,17 +1085,6 @@ class TestAlignmentAssign(TestXmippBase):
         # Check the scaling between the input and the output translation in the roto-translation transformation matrix
         self._checkTranslationScaling(protAssign, self.protResize)
 
-    def test_alignment_assign_othersize_shiftsAppliedBefore(self):
-        protAssign = self.newProtocol(emprot.ProtAlignmentAssign, shiftsAppliedBefore=True)
-        protAssign.setObjLabel("Assign alignment of different size (assuming shiftsAppliedBefore)")
-        protAssign.inputParticles.set(self.protResize.outputParticles)
-        protAssign.inputAlignment.set(self.align2D.outputParticles)
-        self.launchProtocol(protAssign)
-        # We check that protocol generates output
-        self.assertIsNotNone(protAssign.outputParticles, "There was a problem generating output particles")
-        # Check the scaling between the input and the output translation in the roto-translation transformation matrix
-        self._checkTranslationScaling(protAssign, self.protResize, shiftsAppliedBefore=True)
-
     def _checkTranslationScaling(self, protAssign, protParticles, shiftsAppliedBefore=False):
         inputAlignFirstPartTransMat = self.align2D.outputParticles.getFirstItem().getTransform().getMatrix()
         outputAlignFirstPartTransMat = protAssign.outputParticles.getFirstItem().getTransform().getMatrix()
@@ -1103,16 +1092,10 @@ class TestAlignmentAssign(TestXmippBase):
         outTranslation = [outputAlignFirstPartTransMat[0, 3],  # X trans
                           outputAlignFirstPartTransMat[1, 3],  # Y trans
                           outputAlignFirstPartTransMat[2, 3]]  # Z trans
-        if shiftsAppliedBefore:
-            # Translation on X and Y only work with the decimal part of the shift applied (assuming that the user has
-            # selected the option 'apply shifts' when extracting coordinates
-            inTranslation = [inputAlignFirstPartTransMat[0, 3] - int(inputAlignFirstPartTransMat[0, 3]),  # X trans
-                             inputAlignFirstPartTransMat[1, 3] - int(inputAlignFirstPartTransMat[1, 3]),  # Y trans
-                             inputAlignFirstPartTransMat[2, 3]]  # Z trans
-        else:
-            inTranslation = [inputAlignFirstPartTransMat[0, 3],  # X translation
-                             inputAlignFirstPartTransMat[1, 3],  # Y translation
-                             inputAlignFirstPartTransMat[2, 3]]  # Z translation
+
+        inTranslation = [inputAlignFirstPartTransMat[0, 3],  # X translation
+                         inputAlignFirstPartTransMat[1, 3],  # Y translation
+                         inputAlignFirstPartTransMat[2, 3]]  # Z translation
 
         self.assertFalse(all(v == 0 for v in inTranslation))
         self.assertFalse(all(v == 0 for v in outTranslation))
@@ -1244,10 +1227,10 @@ class TestXmippCreateGallery(TestXmippBase):
         return prot
 
     def test_step5(self):
-        prot = self._createGallery(step=5, projections=131)
+        self._createGallery(step=5, projections=131)
 
     def test_step10(self):
-        prot = self._createGallery(step=10, projections=32)
+        self._createGallery(step=10, projections=32)
 
 
 class TestXmippBreakSym(TestXmippBase):
