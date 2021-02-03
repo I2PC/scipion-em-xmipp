@@ -89,7 +89,7 @@ class XmippProtTiltEstimation(ProtMicrographs):
                             the PSD and its correlations will be computed in every segment.''')
 
         form.addParam('saveMediumResults', BooleanParam, default=False,
-                      label="Save intermediate results",
+                      label="Save intermediate results", expertLevel=LEVEL_ADVANCED,
                       help='''Save the micrograph segments, the PSD of those segments
                            and the correlation statistics of those segments''')
 
@@ -503,11 +503,6 @@ class XmippProtTiltEstimation(ProtMicrographs):
         return self._getExtraPath('DONE', 'mic_%06d.TXT' % mic.getObjId())
 
     # --------------------------- INFO functions -------------------------------
-    def _validate(self):
-        errors = []
-        if self.evaluationStep.get() <= 0:
-            errors.append("The evaluation step should be a positive number")
-        return errors
 
     def _summary(self):
         fnSummary = self._getPath("summary.txt")
