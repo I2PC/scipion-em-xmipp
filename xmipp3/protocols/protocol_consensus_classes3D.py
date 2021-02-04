@@ -99,8 +99,9 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
                 interTuple = self.intersectClasses(set1Id, cls1Id, ids1,
                                                    set2Id, cls2Id, ids2)
-
-                newList.append(interTuple)
+                # Do not append classes that have no elements
+                if interTuple[0] != 0:
+                    newList.append(interTuple)
 
         self.intersectsList = newList
 
@@ -127,7 +128,9 @@ class XmippProtConsensusClasses3D(EMProtocol):
                 interTuple = self.intersectClasses(set1Id, cls1Id, ids1,
                                                    set2Id, cls2Id, ids2, clSize)
 
-                newList.append(interTuple)
+                # Do not append classes that have no elements
+                if interTuple[0] != 0:
+                    newList.append(interTuple)
 
         self.intersectsList = newList
 
