@@ -31,6 +31,7 @@ from os.path import join, basename, exists
 import math
 from datetime import datetime
 from scipy import stats
+from collections import OrderedDict
 
 
 from pyworkflow import VERSION_1_1
@@ -38,6 +39,7 @@ from pyworkflow.object import Set
 from pyworkflow.protocol import STEPS_PARALLEL, params
 from pyworkflow.protocol.params import (PointerParam, IntParam,
                                         BooleanParam, LEVEL_ADVANCED)
+from pyworkflow import SCIPION_DEBUG_NOCLEAN
 
 import pyworkflow.utils as pwutils
 from pyworkflow.utils.properties import Message
@@ -57,7 +59,7 @@ from xmipp3 import emlib
 from xmipp3.convert import setXmippAttribute
 
 
-
+#Change name to XmippProtTiltEvaluation
 class XmippProtTiltEstimation(ProtMicrographs):
     """ Estimate the tilt of a micrograph, by analyzing the PSD correlations of different segments of the image.
     """
@@ -67,7 +69,6 @@ class XmippProtTiltEstimation(ProtMicrographs):
     mean_correlations = []
     stats = {}
     #micDict = {}
-    insertedDict = {}
 
 
     def __init__(self, **args):
@@ -96,9 +97,151 @@ class XmippProtTiltEstimation(ProtMicrographs):
         form.addParallelSection(threads=3, mpi=1) #poner aqui 4
 
     # -------------------------- STEPS functions ------------------------------
+    def _insertAllSteps(self):
+        """ Insert the steps to perform CTF estimation, or re-estimation,
+        on a set of micrographs.
+        """
+        print('insertAllStep')
+
+        self.insertedDict = OrderedDict()
+        self.samplingRate = self.inputMicrographs.get().getSamplingRate()
+        #
+        #self.initialIds = self._insertInitialSteps()
+        self._loadInputList()
+        fDeps = self._insertNewMicrographSteps(self.insertedDict,
+                                               self.listOfMicrographs)
+        # For the streaming mode, the steps function have a 'wait' flag that can be turned on/off. For example, here we insert the
+        # createOutputStep but it wait=True, which means that can not be executed until it is set to False
+        #(when the input micrographs stream is closed)
+        waitCondition = self._getFirstJoinStepName() == 'createOutputStep'
+        finalSteps = self._insertFinalSteps(fDeps)
+
+        self._insertFunctionStep('createOutputStep',
+                                 prerequisites=finalSteps, wait=waitCondition)
+
 
     def createOutputStep(self):
         pass
+
+    #def createOutputStep(self):
+     #   micsIn = self.inputMicrographs.get()
+      #  micsOut = self._createSetOfMicrographs()
+       # micsOut.copyInfo(micsIn)
+        #moviesOut.setGain(self.gainImage.get().getFileName())
+        #moviesOut.copyItems(moviesIn)
+
+        #self._defineOutputs(outputMovies=moviesOut)
+        #self._defineSourceRelation(self.inputMovies, moviesOut)
+
+    def _loadInputList(self):
+        """ Load the input set of mics and create a list. """
+        micsFile = self.inputMicrographs.get().getFileName()
+        self.debug("Loading input db: %s" % micsFile)
+        micSet = SetOfMicrographs(filename=micsFile)
+        micSet.loadAllProperties()
+        self.listOfMicrographs = [m.clone() for m in micSet]
+        self.streamClosed = micSet.isStreamClosed()
+        micSet.close()
+        self.debug("Closed db.")
+
+
+    def _stepsCheck(self):
+        # Input micrograph set can be loaded or None when checked for new inputs
+        # If None, we load it
+        print('prueba stepcheck')
+        self._checkNewInput()
+        self._checkNewOutput()
+
+    def _getFirstJoinStepName(self):
+        # This function will be used for streaming, to check which is
+        # the first function that need to wait for all micrographs
+        # to have completed, this can be overriden in subclasses
+        # (e.g., in Xmipp 'sortPSDStep')
+        return 'createOutputStep'
+
+    def _getFirstJoinStep(self):
+        for s in self._steps:
+            if s.funcName == self._getFirstJoinStepName():
+                return s
+        return None
+
+
+    def _checkNewInput(self):
+        # Check if there are new micrographs to process from the input set
+        #localFile = self.getInputMicrographs().getFileName()
+        localFile = self.inputMicrographs.get().getFileName()
+        now = datetime.now()
+        self.lastCheck = getattr(self, 'lastCheck', now)
+        mTime = datetime.fromtimestamp(os.path.getmtime(localFile))
+        self.debug('Last check: %s, modification: %s'
+                % (pwutils.prettyTime(self.lastCheck),
+                    pwutils.prettyTime(mTime)))
+        # If the input micrographs.sqlite have not changed since our last check,
+        # it does not make sense to check for new input data
+        if self.lastCheck > mTime and hasattr(self, 'listOfMics'):
+            return None
+
+        self.lastCheck = now
+        # Open input micrographs.sqlite and close it as soon as possible
+        self._loadInputList()
+
+        newMics = any(m.getObjId() not in self.insertedDict
+                        for m in self.listOfMicrographs)
+
+        outputStep = self._getFirstJoinStep()
+
+        if newMics:
+            fDeps = self._insertNewMicrographSteps(self.insertedDict,
+                                               self.listOfMicrographs)
+            if outputStep is not None:
+                outputStep.addPrerequisites(*fDeps)
+
+            self.updateSteps()
+
+
+    def _checkNewOutput(self):
+        if getattr(self, 'finished', False):
+            return
+        # Load previously done items (from text file)
+        doneList = self._readDoneList()
+        # Check for newly done items
+        newDone = [m.clone() for m in self.listOfMicrographs
+                    if int(m.getObjId()) not in doneList and
+                    self._isMicDone(m)]
+
+        allDone = len(doneList) + len(newDone)
+        # We have finished when there is not more input movies
+        # (stream closed) and the number of processed movies is
+        # equal to the number of inputs
+        self.finished = self.streamClosed and allDone == len(self.listOfMicrographs)
+        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+
+        if newDone:
+            self._writeDoneList(newDone)
+        elif not self.finished:
+            # If we are not finished and no new output have been produced
+            # it does not make sense to proceed and updated the outputs
+            # so we exit from the function here
+            return
+
+        micSet = self._loadOutputSet(SetOfMicrographs,
+                                        'micrograph.sqlite')
+
+        for mic in newDone:
+            id = mic.getObjId()
+            corr_mean = Float(self.stats[id]['mean'])
+            new_Mic = mic.clone()
+            setXmippAttribute(new_Mic, emlib.MDL_TILT_ESTIMATION, corr_mean)
+            micSet.append(new_Mic)
+            # AQUI DEBERIA IR EL setXMIPP_atribute
+
+        self._updateOutputSet('outputMicrographs', micSet, streamMode)
+
+        if self.finished:  # Unlock createOutputStep if finished all jobs
+            outputStep = self._getFirstJoinStep()
+            if outputStep and outputStep.isWaiting():
+                outputStep.setStatus(cons.STATUS_NEW)
+
 
 
 
@@ -195,6 +338,7 @@ class XmippProtTiltEstimation(ProtMicrographs):
                 self._cleanMicFolder(micFolder)
 
         # Mark this movie as finished
+        pwutils.makePath(self._getExtraPath(micDoneFn))
         open(micDoneFn, 'w').close()
 
 
@@ -234,11 +378,11 @@ class XmippProtTiltEstimation(ProtMicrographs):
             fnMonitorSummary = open(fnMonitorSummary, "a")
 
         fhSummary.write("micrograph_%06d: mean=%f std=%f [min=%f,max=%f] \n" %
-                        (micrographId, stats['mean'], stats['dev'], stats['min'], stats['max']))
+                        (micrographId, stats['mean'], stats['std'], stats['min'], stats['max']))
         fhSummary.close()
 
         fnMonitorSummary.write("micrograph_%06d: mean=%f std=%f [min=%f,max=%f] \n" %
-                        (micrographId, stats['mean'], stats['dev'], stats['min'], stats['max']))
+                        (micrographId, stats['mean'], stats['std'], stats['min'], stats['max']))
         fnMonitorSummary.close()
 
 
@@ -307,115 +451,6 @@ class XmippProtTiltEstimation(ProtMicrographs):
         return correlations
 
 
-    def _stepsCheck(self):
-        # Input micrograph set can be loaded or None when checked for new inputs
-        # If None, we load it
-        self._checkNewInput()
-        self._checkNewOutput()
-
-    def _getFirstJoinStepName(self):
-        # This function will be used for streaming, to check which is
-        # the first function that need to wait for all micrographs
-        # to have completed, this can be overriden in subclasses
-        # (e.g., in Xmipp 'sortPSDStep')
-        return 'createOutputStep'
-
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
-
-
-    def _checkNewInput(self):
-        # Check if there are new micrographs to process from the input set
-        #localFile = self.getInputMicrographs().getFileName()
-        localFile = self.inputMicrographs.get().getFileName()
-        now = datetime.now()
-        self.lastCheck = getattr(self, 'lastCheck', now)
-        mTime = datetime.fromtimestamp(os.path.getmtime(localFile))
-        self.debug('Last check: %s, modification: %s'
-                % (pwutils.prettyTime(self.lastCheck),
-                    pwutils.prettyTime(mTime)))
-        # If the input micrographs.sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastCheck > mTime and hasattr(self, 'listOfMics'):
-            return None
-
-        self.lastCheck = now
-        # Open input micrographs.sqlite and close it as soon as possible
-        self._loadInputList()
-
-        newMics = any(m.getObjId() not in self.insertedDict
-                        for m in self.listOfMicrographs)
-
-        outputStep = self._getFirstJoinStep()
-
-        if newMicss:
-            fDeps = self._insertNewMicrographSteps(self.insertedDict,
-                                               self.listOfMicrographs)
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
-
-            self.updateSteps()
-
-
-    def _loadInputList(self):
-        """ Load the input set of mics and create a list. """
-        micsFile = self.inputMicrographs.get().getFileName()
-        self.debug("Loading input db: %s" % micsFile)
-        micSet = SetOfMicrographs(filename=micsFile)
-        micSet.loadAllProperties()
-        self.listOfMicrographs = [m.clone() for m in micSet]
-        self.streamClosed = micSet.isStreamClosed()
-        micSet.close()
-        self.debug("Closed db.")
-
-
-    def _checkNewOutput(self):
-        if getattr(self, 'finished', False):
-            return
-        # Load previously done items (from text file)
-        doneList = self._readDoneList()
-        # Check for newly done items
-        newDone = [m.clone() for m in self.listOfMicrographs
-                    if int(m.getObjId()) not in doneList and
-                    self._isMicDone(m)]
-
-        allDone = len(doneList) + len(newDone)
-        # We have finished when there is not more input movies
-        # (stream closed) and the number of processed movies is
-        # equal to the number of inputs
-        self.finished = self.streamClosed and allDone == len(self.listOfMovies)
-        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
-
-        if newDone:
-            self._writeDoneList(newDone)
-        elif not self.finished:
-            # If we are not finished and no new output have been produced
-            # it does not make sense to proceed and updated the outputs
-            # so we exit from the function here
-            return
-
-        micSet = self._loadOutputSet(SetOfMicrographs,
-                                        'micrograph.sqlite')
-
-        for mic in newDone:
-            id = mic.getObjId()
-            corr_mean = Float(self.stats[id]['mean'])
-            new_Mic = mic.clone()
-            setXmippAttribute(new_Mic, emlib.MDL_TILT_ESTIMATION, corr_mean)
-            micSet.append(new_Mic)
-            # AQUI DEBERIA IR EL setXMIPP_atribute
-
-        self._updateOutputSet('outputMicrographs', micSet, streamMode)
-
-        if self.finished:  # Unlock createOutputStep if finished all jobs
-            outputStep = self._getFirstJoinStep()
-            if outputStep and outputStep.isWaiting():
-                outputStep.setStatus(cons.STATUS_NEW)
-
-
     def _loadOutputSet(self, SetClass, baseName):
         """
         Load the output set if it exists or create a new one.
@@ -454,6 +489,10 @@ class XmippProtTiltEstimation(ProtMicrographs):
 
 
     # ------------------------- UTILS functions --------------------------------
+    def _insertFinalSteps(self, deps):
+        """ This should be implemented in subclasses"""
+        return deps
+
 
     def _getOutputMicFolder(self, micrograph):
         """ Create a Mic folder where to work with it. """
@@ -501,6 +540,7 @@ class XmippProtTiltEstimation(ProtMicrographs):
     def _getMicrographDone(self, mic):
         """ Return the file that is used as a flag of termination. """
         return self._getExtraPath('DONE', 'mic_%06d.TXT' % mic.getObjId())
+
 
     # --------------------------- INFO functions -------------------------------
 
