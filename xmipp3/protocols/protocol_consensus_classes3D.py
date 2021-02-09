@@ -160,11 +160,14 @@ class XmippProtConsensusClasses3D(EMProtocol):
         elbow_idx_origin = find_closest_point_to_origin(normc, normo)
         elbow_idx_angle, _ = find_elbow_angle(normc, normo)
         elbow_idx_pll = np.argmax(pll)
-        elbows = [[elbow_idx_origin, 'origin'], [elbow_idx_angle, 'angle'],
+        self.elbows = [[elbow_idx_origin, 'origin'], [elbow_idx_angle, 'angle'],
                   [elbow_idx_pll, 'pll']]
 
+        for elbow in self.elbows:
+            print(elbow[1]+':'+str(elbow[0]+1))
+
         # Plot all indexes ontop of objective function
-        plot_function_and_elbows(nclusters, ob_values, elbows, self._getExtraPath()+'/objective_function_plot.png')
+        plot_function_and_elbows(nclusters, ob_values, self.elbows, self._getExtraPath()+'/objective_function_plot.png')
 
         # Store values of objective function
         self._objectiveFData = [nclusters,ob_values]
@@ -220,6 +223,8 @@ class XmippProtConsensusClasses3D(EMProtocol):
     # --------------------------- INFO functions -------------------------------
     def _summary(self):
         summary = []
+        for elbow in self.elbows:
+            summary.append(elbow[1]+':'+str(elbow[0]+1))
         return summary
 
     def _methods(self):
@@ -573,10 +578,14 @@ def find_closest_point_to_origin(x, y):
 
 def find_elbow_angle(x, y):
     """Find the angle the slope of the function makes and
-    return the point at which the slope is closest to 45º"""
+    return the point at which the slope changes from > 45º
+    to <45º"""
     slopes = np.diff(y)/np.diff(x)
     angles = np.arctan(-slopes)
-    elbow_idx = np.argmin(np.abs(angles-np.pi/4))+1
+    for i in range(len(angles)):
+        if angles[i] < np.pi/4:
+            elbow_idx = i
+            break
     return elbow_idx, angles
 
 def mle_estimates(d, q):
