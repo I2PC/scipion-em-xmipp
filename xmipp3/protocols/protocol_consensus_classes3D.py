@@ -28,6 +28,7 @@
 
 from pwem.protocols import EMProtocol
 from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam
+from pyworkflow.object import List, Integer, String
 from pwem.objects import Class3D
 from scipy.cluster import hierarchy
 
@@ -160,14 +161,19 @@ class XmippProtConsensusClasses3D(EMProtocol):
         elbow_idx_origin = find_closest_point_to_origin(normc, normo)
         elbow_idx_angle, _ = find_elbow_angle(normc, normo)
         elbow_idx_pll = np.argmax(pll)
-        self.elbows = [[elbow_idx_origin, 'origin'], [elbow_idx_angle, 'angle'],
+
+        # Save indexes for summary
+        self.el1 = Integer(elbow_idx_origin)
+        self.el2 = Integer(elbow_idx_angle)
+        self.el3 = Integer(elbow_idx_pll)
+        self._store()
+
+        # Parse all elbow info to pass to other functions
+        elbows = [[elbow_idx_origin, 'origin'], [elbow_idx_angle, 'angle'],
                   [elbow_idx_pll, 'pll']]
 
-        for elbow in self.elbows:
-            print(elbow[1]+':'+str(elbow[0]+1))
-
         # Plot all indexes ontop of objective function
-        plot_function_and_elbows(nclusters, ob_values, self.elbows, self._getExtraPath()+'/objective_function_plot.png')
+        plot_function_and_elbows(nclusters, ob_values, elbows, self._getExtraPath()+'/objective_function_plot.png')
 
         # Store values of objective function
         self._objectiveFData = [nclusters,ob_values]
@@ -223,8 +229,12 @@ class XmippProtConsensusClasses3D(EMProtocol):
     # --------------------------- INFO functions -------------------------------
     def _summary(self):
         summary = []
-        for elbow in self.elbows:
-            summary.append(elbow[1]+':'+str(elbow[0]+1))
+        # If it has el1 should have the rest
+        if hasattr(self, 'el1'):
+            summary.append('Number of Classes')
+            summary.append('origin:  '+str(self.el1.get()+1))
+            summary.append('angle: '+str(self.el2.get()+1))
+            summary.append('pll: '+str(self.el3.get()+1))
         return summary
 
     def _methods(self):
