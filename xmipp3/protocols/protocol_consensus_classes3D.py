@@ -162,79 +162,70 @@ class XmippProtConsensusClasses3D(EMProtocol):
         elbow_idx_angle, _ = find_elbow_angle(normc, normo)
         elbow_idx_pll = np.argmax(pll)
 
-        # Save indexes for summary
-        self.el1 = Integer(elbow_idx_origin)
-        self.el2 = Integer(elbow_idx_angle)
-        self.el3 = Integer(elbow_idx_pll)
+        # Save number of classes for summary
+        n1 = len(self.all_iLists[elbow_idx_origin])
+        n2 = len(self.all_iLists[elbow_idx_angle])
+        n3 = len(self.all_iLists[elbow_idx_pll])
+        self.n1 = Integer(n1)
+        self.n2 = Integer(n2)
+        self.n3 = Integer(n3)
         self._store()
 
         # Parse all elbow info to pass to other functions
-        elbows = [[elbow_idx_origin, 'origin'], [elbow_idx_angle, 'angle'],
+        self.elbows = [[elbow_idx_origin, 'origin'], [elbow_idx_angle, 'angle'],
                   [elbow_idx_pll, 'pll']]
 
         # Plot all indexes ontop of objective function
-        plot_function_and_elbows(nclusters, ob_values, elbows, self._getExtraPath()+'/objective_function_plot.png')
+        plot_function_and_elbows(nclusters, ob_values, self.elbows, self._getExtraPath()+'/objective_function_plot.png')
 
         # Store values of objective function
         self._objectiveFData = [nclusters,ob_values]
         self.nclusters = nclusters
 
-        # TODO how do we set this
-        self.elbowIdx = elbow_idx_angle
-
-        nclust = self.numClust.get()
-        if  nclust == -1:
-            self.intersectsList = self.all_iLists[self.elbowIdx]
-        else:
-            self.intersectsList = self.all_iLists[nclusters.index(nclust)]
-
-        print('Saving best number of clusters detected: ', nclusters[self.elbowIdx])
-
+        # Save relevant data for analysis
         self.save_outputs()
 
     def createOutputStep(self):
-        '''Saves the outputs into the pickle files'''
-        inputParticles = self.inputMultiClasses[0].get().getImages()
-        outputClasses = self._createSetOfClasses3D(inputParticles)
+        """ Save the output classes """
 
-        clustering = self.intersectsList
+        # Check user selected number of clusters or elbows
+        nclust = self.numClust.get()
 
-        for classItem in clustering:
-            numOfPart = classItem[0]
-            partIds = classItem[1]
-            setRepId = classItem[2]
-            clsRepId = classItem[3]
+        # If consensus not done save just merge if not specified number of clusters
+        # or elbow determined clusters
+        if self.doConsensus.get() != 0:
+            outputClasses = self.createOutput3Dclass(self.intersectsList, 'all')
+            self._defineOutputs(outputClasses=outputClasses)
+            for item in self.inputMultiClasses:
+                self._defineSourceRelation(item, outputClasses)
+        elif  nclust == -1:
+            outputClasses_origin = self.createOutput3Dclass(self.all_iLists[self.elbows[0][0]], self.elbows[0][1])
+            outputClasses_angle = self.createOutput3Dclass(self.all_iLists[self.elbows[1][0]], self.elbows[1][1])
+            outputClasses_pll = self.createOutput3Dclass(self.all_iLists[self.elbows[2][0]], self.elbows[2][1])
+            self._defineOutputs(outputClassesOrigin=outputClasses_origin,
+                                outputClassesAngle=outputClasses_angle,
+                                outputClassesPll=outputClasses_pll)
+            for item in self.inputMultiClasses:
+                self._defineSourceRelation(item, outputClasses_origin)
+                self._defineSourceRelation(item, outputClasses_angle)
+                self._defineSourceRelation(item, outputClasses_pll)
+        else:
+            outputClasses = self.createOutput3Dclass(self.all_iLists[self.nclusters.index(nclust)], 'nclust')
+            self._defineOutputs(outputClasses=outputClasses)
+            for item in self.inputMultiClasses:
+                self._defineSourceRelation(item, outputClasses)
 
-            setRep = self.inputMultiClasses[setRepId].get()
-            clRep = setRep[clsRepId]
 
-            newClass = Class3D()
-            # newClass.copyInfo(clRep)
-            newClass.setAcquisition(clRep.getAcquisition())
-            newClass.setRepresentative(clRep.getRepresentative())
-
-            outputClasses.append(newClass)
-
-            enabledClass = outputClasses[newClass.getObjId()]
-            enabledClass.enableAppend()
-            for itemId in partIds:
-                enabledClass.append(inputParticles[itemId])
-
-            outputClasses.update(enabledClass)
-
-        self._defineOutputs(outputClasses=outputClasses)
-        for item in self.inputMultiClasses:
-            self._defineSourceRelation(item, outputClasses)
 
     # --------------------------- INFO functions -------------------------------
     def _summary(self):
         summary = []
-        # If it has el1 should have the rest
-        if hasattr(self, 'el1'):
+        # If it has n1 should have the rest
+        if hasattr(self, 'n1'):
             summary.append('Number of Classes')
-            summary.append('origin:  '+str(self.el1.get()+1))
-            summary.append('angle: '+str(self.el2.get()+1))
-            summary.append('pll: '+str(self.el3.get()+1))
+            summary.append('origin:  '+str(self.n1))
+            summary.append('angle: '+str(self.n2))
+            summary.append('pll: '+str(self.n3))
         return summary
 
     def _methods(self):
@@ -265,10 +256,11 @@ class XmippProtConsensusClasses3D(EMProtocol):
             pickle.dump(self._objectiveFData, f)
 
     def saveElbowIndex(self):
-        '''Save the calculated number of clusters where the function has an elbow'''
+        '''Save the calculated number of clusters where the function has an elbow
+           for each of the different methods.'''
         savepath = self._getExtraPath('elbowclusters.pkl')
         with open(savepath, 'wb') as f:
-            pickle.dump(self.elbowIdx, f)
+            pickle.dump(self.elbows, f)
 
     def intersectClasses(self, setId1, clId1, ids1,
                          setId2, clId2, ids2, clsSize2=None):
@@ -401,6 +393,36 @@ class XmippProtConsensusClasses3D(EMProtocol):
         plt.yscale('log')
         plt.ylim([np.min(linkage_matrix[:, 2]), np.max(linkage_matrix[:,2])])
         plt.savefig(outimage+'/dendogram_log.png')
+
+    def createOutput3Dclass(self, clustering, name):
+
+        inputParticles = self.inputMultiClasses[0].get().getImages()
+        outputClasses = self._createSetOfClasses3D(inputParticles, suffix=name)
+
+        for classItem in clustering:
+            numOfPart = classItem[0]
+            partIds = classItem[1]
+            setRepId = classItem[2]
+            clsRepId = classItem[3]
+
+            setRep = self.inputMultiClasses[setRepId].get()
+            clRep = setRep[clsRepId]
+
+            newClass = Class3D()
+            # newClass.copyInfo(clRep)
+            newClass.setAcquisition(clRep.getAcquisition())
+            newClass.setRepresentative(clRep.getRepresentative())
+
+            outputClasses.append(newClass)
+
+            enabledClass = outputClasses[newClass.getObjId()]
+            enabledClass.enableAppend()
+            for itemId in partIds:
+                enabledClass.append(inputParticles[itemId])
+
+            outputClasses.update(enabledClass)
+
+        return outputClasses
 
 #################################
 # COSS functions. See notes 8/4/2019
