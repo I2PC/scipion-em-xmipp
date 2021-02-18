@@ -91,6 +91,8 @@ class XmippProtScreenDeepConsensusStream(ProtParticlePicking, XmippProtocol):
     ADD_MODEL_TRAIN_PRETRAIN = 1
     ADD_MODEL_TRAIN_PREVRUN = 2
 
+    ADDED_DATA = False
+
     #Streaming parameters
     PREPROCESSED_MICFNS = []
     PREPROCESSING = False
@@ -98,6 +100,9 @@ class XmippProtScreenDeepConsensusStream(ProtParticlePicking, XmippProtocol):
     TO_EXTRACT_MICFNS = {'OR': [],
                          'NOISE': [],
                          'AND': []}
+    EXTRACTING = {'OR': False,
+                  'NOISE': False,
+                  'AND': False}
     EXTRACTED_MICFNS = {'OR': [],
                         'NOISE': [],
                         'AND': [],
@@ -469,25 +474,31 @@ class XmippProtScreenDeepConsensusStream(ProtParticlePicking, XmippProtocol):
           if not self.checkIfPrevRunIsCompatible("mics_") and len(self.readyToPreprocessMics()) > 0 and not self.PREPROCESSING:
             self.lastDeps = [self._insertFunctionStep("preprocessMicsStep", prerequisites=self.initDeps)]
             self.PREPROCESSING = True
-          if self.checkIfNewMics('OR'):
+          if self.checkIfNewMics('OR') and not self.EXTRACTING['OR']:
             newSteps += [self.insertCaculateConsensusSteps('OR', prerequisites=self.initDeps)]
             newSteps += self.insertExtractPartSteps('OR', prerequisites=newSteps)
+            self.EXTRACTING['OR'] = True
           if not self.skipTraining.get():
-            if self.checkIfNewMics('NOISE'):
+            if self.checkIfNewMics('NOISE') and not self.EXTRACTING['NOISE']:
               depNoise = self._insertFunctionStep('pickNoise', prerequisites=self.initDeps)
               depsNoise = self.insertExtractPartSteps('NOISE', prerequisites=[depNoise])
               newSteps += depsNoise
+              self.EXTRACTING['NOISE'] = True
 
-            if self.checkIfNewMics('AND'):
+            if self.checkIfNewMics('AND') and not self.EXTRACTING['AND']:
               depsAnd = self.insertCaculateConsensusSteps('AND', prerequisites=self.initDeps)
               depsAnd = self.insertExtractPartSteps('AND', prerequisites=[depsAnd])
               newSteps += depsAnd
+              self.EXTRACTING['AND'] = True
 
-            if self.addTrainingData.get() == self.ADD_DATA_TRAIN_CUST and self.trainingDataType == self.ADD_DATA_TRAIN_CUSTOM_OPT_COORS:
+            if self.addTrainingData.get() == self.ADD_DATA_TRAIN_CUST and \
+                    self.trainingDataType == self.ADD_DATA_TRAIN_CUSTOM_OPT_COORS and not self.ADDED_DATA:
               if self.trainTrueSetOfCoords.get() is not None:
                 newSteps += self.insertExtractPartSteps('ADDITIONAL_COORDS_TRUE', prerequisites=self.initDeps)
+                self.ADDED_DATA = True
               if self.trainFalseSetOfCoords.get() is not None:
                 newSteps += self.insertExtractPartSteps('ADDITIONAL_COORDS_FALSE', prerequisites=self.initDeps)
+                self.ADDED_DATA = True
 
             if not self.TRAINING and self.numPosTrainedParts < self.toTrainDataSize.get():
               self.TO_TRAIN_MICFNS = self.readyToTrainMicFns()
@@ -496,6 +507,7 @@ class XmippProtScreenDeepConsensusStream(ProtParticlePicking, XmippProtocol):
                 newSteps += self.depsTrain
           else:
             self.TRAINED = True
+            self.PREDICTED = []
 
           if self.TRAINED and self.TRAINING_PASS not in self.PREDICTED:
             depPredict = self._insertFunctionStep('predictCNN', prerequisites= self.depsTrain)
@@ -719,10 +731,7 @@ class XmippProtScreenDeepConsensusStream(ProtParticlePicking, XmippProtocol):
         args="-i %s -s %d -c %d -d %f -o %s -t %d"%(configFname, self._getBoxSize(), consensus, self.consensusRadius.get(),
                                                    outCoordsDataPath, self.numberOfThreads.get())
         self.runJob('xmipp_coordinates_consensus', args, numberOfMpi=1)
-        readyToExtractFns = self.readyToExtractMicFns(mode)
-        self.TO_EXTRACT_MICFNS[mode] = readyToExtractFns
-        print('Adding to extract {} micrograhs'.format(mode))
-        print(readyToExtractFns)
+        self.TO_EXTRACT_MICFNS[mode] = self.readyToExtractMicFns(mode)
 
 
     def loadCoords(self, posCoorsPath, mode, micSet=[]):
@@ -1060,6 +1069,7 @@ class XmippProtScreenDeepConsensusStream(ProtParticlePicking, XmippProtocol):
           else:
             imgsXmd.append(fnImages)
           print('\nParticles xmd file {} updated'.format(fnImages))
+        self.EXTRACTING[mode] = False
 
 
     def __dataDict_toStrs(self, dataDict):
