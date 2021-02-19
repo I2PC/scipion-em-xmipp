@@ -98,7 +98,6 @@ from .protocol_rotational_spectra import XmippProtRotSpectra
 from .protocol_rotational_symmetry import XmippProtRotationalSymmetry
 from .protocol_screen_particles import XmippProtScreenParticles
 from .protocol_screen_deepConsensus import XmippProtScreenDeepConsensus, XmippProtDeepConsSubSet
-from .protocol_screen_deepConsensus_stream import XmippProtScreenDeepConsensusStream, XmippProtDeepConsSubSet
 from .protocol_screen_deeplearning import XmippProtScreenDeepLearning
 from .protocol_simulate_ctf import XmippProtSimulateCTF
 from .protocol_solid_angles import XmippProtSolidAngles
