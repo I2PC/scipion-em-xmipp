@@ -27,7 +27,7 @@
 """
 Deep Consensus picking protocol
 """
-import os, sys
+import os
 from glob import glob
 import six
 import json, shutil
@@ -37,7 +37,7 @@ from pyworkflow.utils.path import (makePath, cleanPattern, cleanPath, copyTree,
                                    createLink)
 from pwem.constants import RELATION_CTF, ALIGN_NONE
 from pwem.emlib.image import ImageHandler
-from pwem.objects import SetOfParticles, Set, SetOfMicrographs, Micrograph, SetOfCoordinates
+from pwem.objects import SetOfParticles, Micrograph
 from pwem.protocols import ProtParticlePicking, ProtUserSubSet
 
 import pyworkflow.utils as pwutils
@@ -68,7 +68,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         a coordinate is considered to be a correct particle according to the
         neural network predictions.
     """
-    _label = 'stream deep consensus picking'
+    _label = 'deep consensus picking'
     _lastUpdateVersion = VERSION_2_0
     _conda_env = 'xmipp_DLTK_v0.3'
     _stepsCheckSecs = 10              # time in seconds to check the steps
@@ -139,7 +139,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                             " if you do not know what we are talking about."
                             " First core index is 0, second 1 and so on.")
                             
-        form.addParallelSection(threads=4, mpi=1)
+        form.addParallelSection(threads=2, mpi=1)
         
         form.addSection(label='Input')
         
