@@ -1,5 +1,5 @@
 # **************************************************************************
-# *
+# *sudo forticlientsslvpn/64bit/forticlientsslvpn_cli --server https://vpnssl.cnb.csic.es:443 --vpnuser 78954376E --keepalive
 # * Authors:     David Maluenda (dmaluenda@cnb.csic.es)
 # *              Daniel del Hoyo Gomez (daniel.delhoyo.gomez@alumnos.upm.es)
 # *              Jorge Garcia Condado (jgcondado@cnb.csic.es)
@@ -233,8 +233,14 @@ class XmippProtConsensusClasses3D(EMProtocol):
         return methods
 
     def _validate(self):
-        errors = [] if len(self.inputMultiClasses) > 1 else \
-            ["More than one Input Classes is needed to compute the consensus."]
+        max_nclusters = np.prod([len(self.inputMultiClasses[i].get()) for i in range(len(self.inputMultiClasses))])
+        errors = []
+        if len(self.inputMultiClasses) == 1:
+            errors = ["More than one Input Classes is needed to compute the consensus."]
+        elif self.numClust.get() > max_nclusters:
+            errors = ["Too many clusters selected for output"]
+        elif self.numClust.get() < -1 or self.numClust.get() == 0:
+            errors = ["Invalid number of clusters selected"]
         return errors
 
     # --------------------------- UTILS functions ------------------------------
