@@ -957,9 +957,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     def insertExtractPartSteps(self, mode, prerequisites):
         newSteps = []
         if not self.checkIfPrevRunIsCompatible(""):
-          preprocMicsPath = self._getTmpPath(self.PRE_PROC_MICs_PATH)
-          outCoordsDataPath = self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE % mode)
-
           newSteps.append(self._insertFunctionStep("extractParticles", mode, prerequisites= prerequisites))
           newSteps.append(self._insertFunctionStep("joinSetOfParticlesStep", mode, prerequisites= newSteps))
         return newSteps
@@ -993,9 +990,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             posFname= os.path.join(posDir, posFname)
             if posNameBase in micsFnameSet:
               extractCoordsContent+= "%s particles@%s\n"%(micsFnameSet[posNameBase], posFname)
-            else:
-              pass
-              #print("WARNING, no micFn for coords %s"%(posFname))
 
           inputsFname= self._getTmpPath("extractParticles_inputs_%s.txt"%mode)
           outputDir= self._getConsensusParticlesDir(mode)
@@ -1046,7 +1040,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           self.EXTRACTED_MICFNS[mode] += self.TO_EXTRACT_MICFNS[mode]
           self.TO_EXTRACT_MICFNS[mode] = []
           imgsXmd = md.MetaData()
-          #posFiles = glob(self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE%mode, '*.pos'))
           posDir = self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE % mode)
 
           for micFn in toExtractMicFns:
@@ -1160,7 +1153,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           if self.skipTraining.get():
               nEpochs = 0
         elif self._usePretrainedModel():
-          #nTrueParticles=  self._getEffectiveNumPartsTrain(posTrainDict)
           if nTrueParticles<1500:
             effectiveSize=1000
           elif 1500<=nTrueParticles<20000:
