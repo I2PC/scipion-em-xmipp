@@ -1004,13 +1004,18 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           self.runJob('xmipp_extract_particles', args, numberOfMpi=1)
 
 
-    def writeSetOfParticlesXmd(self, mode, micFns='', trainingPass=''):
+    def joinSetOfParticlesStep(self, mode, micFns='', trainingPass=''):
         # Create images.xmd metadata joining from different .stk
         fnImages = self._getExtraPath("particles_{}{}.xmd".format(mode, trainingPass))
         posDir = self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE % mode)
-
         if micFns == '':
           micFns = self.TO_EXTRACT_MICFNS[mode]
+          self.EXTRACTED_MICFNS[mode] += self.TO_EXTRACT_MICFNS[mode]
+          self.TO_EXTRACT_MICFNS[mode] = []
+          self.EXTRACTING[mode] = False
+          print('Updating set of particles written in {}'.format(fnImages))
+        else:
+          print('Creating set of particles for training pass {} in {}'.format(trainingPass, fnImages))
 
         imgsXmd = md.MetaData()
         for micFn in micFns:
@@ -1029,37 +1034,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           imgsXmd.write(fnImages)
         else:
           imgsXmd.append(fnImages)
-        print('\nSet of {} particles written in {}'.format(mode, fnImages))
-
-    def joinSetOfParticlesStep( self, mode):
-        #Generalized version in: writeSetOfParticlesXmd
-        #Create images.xmd metadata joining from different .stk
-        fnImages = self._getExtraPath("particles_%s.xmd" % mode)
-        toExtractMicFns = self.TO_EXTRACT_MICFNS[mode]
-        if len(self.TO_EXTRACT_MICFNS[mode]) > 0:
-          self.EXTRACTED_MICFNS[mode] += self.TO_EXTRACT_MICFNS[mode]
-          self.TO_EXTRACT_MICFNS[mode] = []
-          imgsXmd = md.MetaData()
-          posDir = self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE % mode)
-
-          for micFn in toExtractMicFns:
-            posFn = os.path.join(posDir, pwutils.replaceBaseExt(micFn, "pos"))
-            xmdFn = os.path.join(self._getConsensusParticlesDir(mode),
-                                       pwutils.replaceBaseExt(posFn, "xmd"))
-            if os.path.exists(xmdFn):
-              mdFn = md.MetaData(xmdFn)
-              mdPos = md.MetaData('particles@%s' % posFn)
-              mdPos.merge(mdFn)
-              imgsXmd.unionAll(mdPos)
-            else:
-              self.warning("The coord file %s wasn't used for extraction! "
-                           % os.path.basename(posFn))
-          if not os.path.exists(fnImages):
-            imgsXmd.write(fnImages)
-          else:
-            imgsXmd.append(fnImages)
-          print('\nParticles xmd file {} updated'.format(fnImages))
-        self.EXTRACTING[mode] = False
 
 
     def __dataDict_toStrs(self, dataDict):
@@ -1105,7 +1079,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           self.TRAINING_PASS += 1
         #Writting the inputs in xmd
         for mode in ['AND', 'NOISE', 'OR']:
-          self.writeSetOfParticlesXmd(mode, toTrainMicFns, self.TRAINING_PASS)
+          self.joinSetOfParticlesStep(mode, toTrainMicFns, self.TRAINING_PASS)
         #Creatting the training pass directory
         netDataPath = self._getExtraPath("nnetData{}".format(self.TRAINING_PASS))
         if not os.path.exists(netDataPath):
