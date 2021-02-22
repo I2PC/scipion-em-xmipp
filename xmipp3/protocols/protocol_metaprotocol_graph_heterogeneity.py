@@ -212,8 +212,10 @@ class XmippMetaProtDiscreteGraphHeterogeneity(EMProtocol):
                     previousProtVol = relionClassify3DProt
                     volumeName = 'outputVolumes.%d'%classItem.getObjId()
                 else:
-                    previousProtPart = highresNoAlignProt
-                    partName = 'outputParticles'
+                    #previousProtPart = highresNoAlignProt
+                    #partName = 'outputParticles'
+                    previousProtPart = self
+                    partName = 'outputParticlesInit'
                     previousProtVol = highresNoAlignProt
                     volumeName = 'outputVolume'
                 
@@ -257,7 +259,7 @@ class XmippMetaProtDiscreteGraphHeterogeneity(EMProtocol):
                 previousProtPart = newHighres
                 partName = 'outputParticles'
                 validationProt.inputParticles.set(previousProtPart)
-                validationProt.inputParticles.setExtended(partName) # todo no es así !!
+                validationProt.inputParticles.setExtended(partName)
                 
                 validationProt.inputVolumes.set(previousProtVol)
                 validationProt.inputVolumes.setExtended(volumeName) 
@@ -297,7 +299,7 @@ class XmippMetaProtDiscreteGraphHeterogeneity(EMProtocol):
                         maximumTargetResolution = self.targetResolution.get(),
                         numberOfMpi=self.numberOfMpi.get(),
                         alignmentMethod=XmippProtReconstructHighRes.NO_ALIGNMENT,
-                        useGpu=self.useGpu.get(),
+                        useGpu=False, #self.useGpu.get(), # this may cause an error
                         gpuList = self.gpuList.get()
                         )    
                 previousProtPart = angAssignProt
