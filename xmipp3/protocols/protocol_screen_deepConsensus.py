@@ -67,11 +67,15 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         using different subset of picked and not picked cooridantes. Finally,
         a coordinate is considered to be a correct particle according to the
         neural network predictions.
+        In streaming, the network is trained and used to predict in batches.
+        The network is trained until the number of particles set is reached,
+        meanwhile, a preliminary output is generated. Once the threshold is reached,
+        the final output is produced by batches.
     """
     _label = 'deep consensus picking'
     _lastUpdateVersion = VERSION_2_0
     _conda_env = 'xmipp_DLTK_v0.3'
-    _stepsCheckSecs = 10              # time in seconds to check the steps
+    _stepsCheckSecs = 6              # time in seconds to check the steps
 
     CONSENSUS_COOR_PATH_TEMPLATE="consensus_coords_%s"
     CONSENSUS_PARTS_PATH_TEMPLATE="consensus_parts_%s"
@@ -93,7 +97,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
     #Streaming parameters
     PREPROCESSING = False
-
     TO_EXTRACT_MICFNS = {'OR': [],
                          'NOISE': [],
                          'AND': []}
@@ -109,7 +112,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     TRAINED_PARAMS_PATH = 'trainedParams.pickle'
     TRAINING = False
     PREDICTING = False
-
 
     LAST_ROUND = False
     ENDED = False
