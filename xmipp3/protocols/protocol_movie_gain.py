@@ -48,7 +48,6 @@ from xmipp3.utils import normalize_array
 
 class XmippProtMovieGain(ProtProcessMovies):
     """ Estimate the gain image of a camera, directly analyzing one of its movies.
-    TODO: add check orientation etc
     """
     _label = 'movie gain'
     _lastUpdateVersion = VERSION_1_1
