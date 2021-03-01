@@ -450,11 +450,13 @@ class HelicalFinder:
 
     def runCoarseSearch(self, fnVol, dihedral, heightFraction, z0, zF, zStep,
                         rot0, rotF, rotStep, Nthr, fnOut, cylinderInnerRadius,
-                        cylinderOuterRadius, height, Ts):
+                        cylinderOuterRadius, height, Ts, Cn="c1"):
         args = ("-i %s --sym %s --heightFraction %f -z %f %f %f "
                 "--rotHelical %f %f %f --thr %d -o %s --sampling %f"
                 %(fnVol, self.getSymmetry(dihedral), heightFraction, z0, zF, zStep,
                   rot0, rotF, rotStep, Nthr, fnOut, Ts))
+        if Cn!="c1":
+            args += " --sym2 %s"%Cn
         if cylinderOuterRadius > 0 and cylinderInnerRadius < 0:
             args += " --mask cylinder %d %d"%(-cylinderOuterRadius, -height)
         elif cylinderOuterRadius > 0 and cylinderInnerRadius > 0:
@@ -463,7 +465,7 @@ class HelicalFinder:
 
     def runFineSearch(self, fnVol, dihedral, fnCoarse, fnFine, heightFraction,
                       z0, zF, rot0, rotF, cylinderInnerRadius, cylinderOuterRadius,
-                      height, Ts):
+                      height, Ts, Cn="c1"):
         md=emlib.MetaData(fnCoarse)
         objId=md.firstObject()
         rotInit=md.getValue(emlib.MDL_ANGLE_ROT,objId)
@@ -472,6 +474,8 @@ class HelicalFinder:
               "-z %f %f 1 --rotHelical %f %f 1 --sampling %f"
               %(fnVol, self.getSymmetry(dihedral), heightFraction, zInit, rotInit,
                 fnFine, z0, zF, rot0, rotF, Ts))
+        if Cn!="c1":
+            args += " --sym2 %s"%Cn
         if cylinderOuterRadius>0 and cylinderInnerRadius<0:
             args+=" --mask cylinder %d %d"%(-cylinderOuterRadius,-height)
         elif cylinderOuterRadius>0 and cylinderInnerRadius>0:
@@ -479,7 +483,7 @@ class HelicalFinder:
         self.runJob('xmipp_volume_find_symmetry',args, numberOfMpi=1)
 
     def runSymmetrize(self, fnVol, dihedral, fnParams, fnOut, heightFraction,
-                      cylinderInnerRadius, cylinderOuterRadius, height, Ts):
+                      cylinderInnerRadius, cylinderOuterRadius, height, Ts, Cn="c1"):
         md=emlib.MetaData(fnParams)
         objId=md.firstObject()
         rot0=md.getValue(emlib.MDL_ANGLE_ROT,objId)
@@ -487,6 +491,8 @@ class HelicalFinder:
         args=("-i %s --sym %s --helixParams %f %f --heightFraction %f -o %s "
               "--sampling %f --dont_wrap"
               % (fnVol,self.getSymmetry(dihedral),z0,rot0,heightFraction,fnOut,Ts))
+        if Cn!="c1":
+            args += " --sym2 %s"%Cn
         self.runJob('xmipp_transform_symmetrize',args,numberOfMpi=1)
         doMask=False
         if cylinderOuterRadius>0 and cylinderInnerRadius<0:
