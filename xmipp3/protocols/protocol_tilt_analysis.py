@@ -1,7 +1,7 @@
  #**************************************************************************
 # *
 # * Authors:     Carlos Oscar S. Sorzano (coss@cnb.csic.es)
-# *              Daniel Marchán
+# *              Daniel Marchán Torres (da.marchan@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -36,7 +36,7 @@ from collections import OrderedDict
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow.protocol.params import (PointerParam, IntParam,
-                                        BooleanParam, LEVEL_ADVANCED)
+                                        BooleanParam, LEVEL_ADVANCED, FloatParam)
 from pyworkflow import SCIPION_DEBUG_NOCLEAN
 
 import pyworkflow.utils as pwutils
@@ -52,15 +52,19 @@ from pwem.protocols import ProtMicrographs
 from xmipp3 import emlib
 from xmipp3.convert import setXmippAttribute, getScipionObj, prefixAttribute
 
+# from timeit import default_timer # FOR TIC TOC methods
 
- # Change name to XmippProtTiltEvaluation
-class XmippProtTiltEstimation(ProtMicrographs):
+
+
+
+class XmippProtTiltAnalysis(ProtMicrographs):
     """ Estimate the tilt of a micrograph, by analyzing the PSD correlations of different segments of the image.
     """
-    _label = 'tilt estimation'
+    _label = 'tilt analysis'
     _lastUpdateVersion = VERSION_1_1
     mean_correlations = []
     stats = {}
+    tilt = False
 
 
     def __init__(self, **args):
@@ -77,16 +81,30 @@ class XmippProtTiltEstimation(ProtMicrographs):
                       help='Select the SetOfMicrograph to be preprocessed.')
 
         form.addParam('window_size', IntParam, label='Window size',
-                      default=2048, expertLevel=LEVEL_ADVANCED,
-                      help='''By default, the micrograph will be divided into windows of size 1024x1024, 
+                      default=512, expertLevel=LEVEL_ADVANCED,
+                      help='''By default, the micrograph will be divided into windows of dimensions 512x512, 
                             the PSD and its correlations will be computed in every segment.''')
 
-        form.addParam('saveMediumResults', BooleanParam, default=False,
-                      label="Save intermediate results", expertLevel=LEVEL_ADVANCED,
-                      help='''Save the micrograph segments, the PSD of those segments
+        form.addParam('objective_resolution', FloatParam, label='Objective resolution',
+                      default=3, expertLevel=LEVEL_ADVANCED,
+                      help='''By default, micrographs PSD will be cropped into a central windows of dimensions
+                            (xdim*(sampling rate/objective resolution))x(ydim*(sampling rate/objective resolution)).''')
+
+        form.addParam('meanCorr_threshold', FloatParam, label='Mean correlation threshold',
+                      default=0.6, expertLevel=LEVEL_ADVANCED,
+                      help='''By default, micrographs will be divided into an output set and a discarded set based
+                            on the mean and std threshold''')
+
+        form.addParam('stdCorr_threshold', FloatParam, label='STD correlation threshold',
+                      default=0.1, expertLevel=LEVEL_ADVANCED,
+                      help='''By default, micrographs will be divided into an output set and a discarded set based
+                                    on the mean and std threshold''')
+
+        form.addHidden('saveIntermediateResults', BooleanParam, default=False, label="Save intermediate results",
+                        help='''Save the micrograph segments, the PSD of those segments
                            and the correlation statistics of those segments''')
 
-        form.addParallelSection(threads=4, mpi=1) #poner aqui 4
+        form.addParallelSection(threads=4, mpi=1)
 
     # -------------------------- STEPS functions ------------------------------
     def _insertAllSteps(self):
@@ -95,7 +113,7 @@ class XmippProtTiltEstimation(ProtMicrographs):
         """
         self.insertedDict = OrderedDict()
         self.samplingRate = self.inputMicrographs.get().getSamplingRate()
-        # self.initialIds = self._insertInitialSteps()
+        self.listOfMicrographs = []
         self._loadInputList()
         pwutils.makePath(self._getExtraPath('DONE'))
         fDeps = self._insertNewMicrographSteps(self.insertedDict,
@@ -113,17 +131,18 @@ class XmippProtTiltEstimation(ProtMicrographs):
     def createOutputStep(self):
         pass
 
-    # Aqui podriamos copiar solo aquellas mics que no se encuentren en
+
     def _loadInputList(self):
         """ Load the input set of mics and create a list. """
         micsFile = self.inputMicrographs.get().getFileName()
         self.debug("Loading input db: %s" % micsFile)
-        # ---------SE copia inputMicrograph dos veces y se vuelve a copiar todas las micrografias en listOfMicrographs, hacer
-        # un append de las micrografias que sea hayan añadido recientemente
         micSet = SetOfMicrographs(filename=micsFile)
         micSet.loadAllProperties()
-        self.listOfMicrographs = [m.clone() for m in micSet]
-        # --------- Solucion: self.listOfMicrographs = SetOfMicrographs(filename=micsFile)
+        # self.listOfMicrographs = [m.clone() for m in micSet] # CHANGE
+        # ---- SOLUTION
+        newMics = [m.clone() for m in micSet if m.getObjId() not in self.insertedDict]
+        self.listOfMicrographs.extend(newMics)
+        # ---
         self.streamClosed = micSet.isStreamClosed()
         micSet.close()
         self.debug("Closed db.")
@@ -135,12 +154,14 @@ class XmippProtTiltEstimation(ProtMicrographs):
         self._checkNewInput()
         self._checkNewOutput()
 
+
     def _getFirstJoinStepName(self):
         # This function will be used for streaming, to check which is
         # the first function that need to wait for all micrographs
         # to have completed, this can be overriden in subclasses
         # (e.g., in Xmipp 'sortPSDStep')
         return 'createOutputStep'
+
 
     def _getFirstJoinStep(self):
         for s in self._steps:
@@ -151,31 +172,31 @@ class XmippProtTiltEstimation(ProtMicrographs):
 
     def _checkNewInput(self):
         # Check if there are new micrographs to process from the input set
-        # -------Esto se podria hacer de una forma mas sofisticada
         localFile = self.inputMicrographs.get().getFileName()
         now = datetime.now()
         self.lastCheck = getattr(self, 'lastCheck', now)
         mTime = datetime.fromtimestamp(os.path.getmtime(localFile))
         self.debug('Last check: %s, modification: %s'
-                % (pwutils.prettyTime(self.lastCheck),
-                    pwutils.prettyTime(mTime)))
+                   % (pwutils.prettyTime(self.lastCheck),
+                   pwutils.prettyTime(mTime)))
         # If the input micrographs.sqlite have not changed since our last check,
         # it does not make sense to check for new input data
-        if self.lastCheck > mTime and hasattr(self, 'listOfMics'):
+        if self.lastCheck > mTime and hasattr(self, 'listOfMicrographs'):
             return None
-        # -----------------------------------Por la comprobación de arriba sabemos que hay newInput
+
         self.lastCheck = now
         # Open input micrographs.sqlite and close it as soon as possible
         self._loadInputList()
 
-        newMics = any(m.getObjId() not in self.insertedDict for m in self.listOfMicrographs)
-
+        # newMics = any(m.getObjId() not in self.insertedDict for m in self.listOfMicrographs) # CHANGE
+        newMics = [m for m in self.listOfMicrographs if m.getObjId() not in self.insertedDict] # SOLUTION
+        newMicsBool = [len(newMics) > 0]
         outputStep = self._getFirstJoinStep()
 
-        if newMics:
-            # Aqui le estás pasando toda la lista completa de micrografias y luego comprueba si estan in insertedDict
-            fDeps = self._insertNewMicrographSteps(self.insertedDict,
-                                               self.listOfMicrographs)
+        if newMicsBool:
+            # fDeps = self._insertNewMicrographSteps(self.insertedDict, self.listOfMicrographs) #CHANGE
+            fDeps = self._insertNewMicrographSteps(self.insertedDict, newMics) # SOLUTION
+
             if outputStep is not None:
                 outputStep.addPrerequisites(*fDeps)
 
@@ -189,7 +210,6 @@ class XmippProtTiltEstimation(ProtMicrographs):
         doneList = self._readDoneList()
         # Check for newly done items
         newDone = [m.clone() for m in self.listOfMicrographs if int(m.getObjId()) not in doneList and self._isMicDone(m)]
-
         allDone = len(doneList) + len(newDone)
         # We have finished when there is not more input movies
         # (stream closed) and the number of processed movies is
@@ -206,16 +226,34 @@ class XmippProtTiltEstimation(ProtMicrographs):
             return
 
         micSet = self._loadOutputSet(SetOfMicrographs, 'micrograph.sqlite')
+        if self.tilt:
+            micSet_discarded = self._loadOutputSet(SetOfMicrographs, 'micrograph'+'DISCARDED'+'.sqlite')
 
         for mic in newDone:
             id = mic.getObjId()
-            print('STAT[mean]'+ str(self.stats[id]['mean']))
             corr_mean = Float(self.stats[id]['mean'])
+            corr_std = Float(self.stats[id]['std'])
+            corr_min = Float(self.stats[id]['min'])
+            corr_max = Float(self.stats[id]['max'])
             new_Mic = mic.clone()
-            setattr(new_Mic, self.getTiltLabel(), corr_mean)
-            micSet.append(new_Mic)
+            setattr(new_Mic, self.getTiltMeanLabel(), corr_mean)
+            setattr(new_Mic, self.getTiltSTDLabel(), corr_std)
+            setattr(new_Mic, self.getTiltMinLabel(), corr_min)
+            setattr(new_Mic, self.getTiltMaxLabel(), corr_max)
+            # Double threshold
+            if corr_mean > self.meanCorr_threshold.get() and corr_std < self.stdCorr_threshold.get():
+                micSet.append(new_Mic)
+            else:
+                if not self.tilt:
+                    micSet_discarded = self._loadOutputSet(SetOfMicrographs, 'micrograph' + 'DISCARDED' + '.sqlite')
+                    self.tilt = True
+
+                micSet_discarded.append(new_Mic)
 
         self._updateOutputSet('outputMicrographs', micSet, streamMode)
+
+        if self.tilt:
+            self._updateOutputSet('discardedMicrographs', micSet_discarded, streamMode)
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
@@ -250,7 +288,6 @@ class XmippProtTiltEstimation(ProtMicrographs):
         # as parameter for a functionStep
         micDict = micrograph.getObjDict(includeBasic=True)
         micStepId = self._insertFunctionStep('processMicrographStep', micDict, prerequisites=[])
-
         return micStepId
 
 
@@ -258,7 +295,7 @@ class XmippProtTiltEstimation(ProtMicrographs):
         micrograph = Micrograph()
         micrograph.setAcquisition(Acquisition())
         micrograph.setAttributesFromDict(micDict, setBasic=True, ignoreMissing=True)
-        micFolder = self._getOutputMicFolder(micrograph)  # tmp/micID
+        micFolderTmp = self._getOutputMicFolder(micrograph)  # tmp/micID
         micFn = micrograph.getFileName()
         micName = basename(micFn)
         micDoneFn = self._getMicrographDone(micrograph)  # EXTRAPath/Done/micrograph_ID.TXT
@@ -267,84 +304,42 @@ class XmippProtTiltEstimation(ProtMicrographs):
             self.info("Skipping micrograph: %s, seems to be done" % micFn)
             return
 
-        # Clean old finished files
         pwutils.cleanPath(micDoneFn)
 
         if self._filterMicrograph(micrograph):
-            pwutils.makePath(micFolder)
-            pwutils.createLink(micFn, join(micFolder, micName))
+            pwutils.makePath(micFolderTmp)
+            pwutils.createLink(micFn, join(micFolderTmp, micName))
 
-        # -------------------------------------ESTO meterlo dentro de una función
-            if micName.endswith('bz2'):
-                newMicName = micName.replace('.bz2', '')
-                # We assume that if compressed the name ends with .mrc.bz2
-                if not exists(newMicName):
-                    self.runJob('bzip2', '-d -f %s' % micName, cwd=micFolder)
-
-            elif micName.endswith('tbz'):
-                newMicName = micName.replace('.tbz', '.mrc')
-                # We assume that if compressed the name ends with .tbz
-                if not exists(newMicName):
-                    self.runJob('tar', 'jxf %s' % micName, cwd=micFolder)
-
-            elif micName.endswith('.txt'):
-                # Support a list of frame as a simple .txt file containing
-                # all the frames in a raw list, we could use a xmd as well,
-                # but a plain text was choose to simply its generation
-                micTxt = os.path.join(micFolder, micName)
-                with open(micTxt) as f:
-                    micOrigin = os.path.basename(os.readlink(micFn))
-                    newMicName = micName.replace('.txt', '.mrc')
-                    ih = emlib.image.ImageHandler()
-                    for i, line in enumerate(f):
-                        if line.strip():
-                            inputFrame = os.path.join(micOrigin, line.strip())
-                            ih.convert(inputFrame, (i+1, os.path.join(micFolder, newMicName)))
-            # -----------------------------HASTA AQUI
-            else:
-                newMicName = micName
+            newMicName = self._correctFormat(micName, micFn, micFolderTmp)
 
             # Just store the original name in case it is needed in _processMovie
             micrograph._originalFileName = String(objDoStore=False)
             micrograph._originalFileName.set(micrograph.getFileName())
             # Now set the new filename (either linked or converted)
-            micrograph.setFileName(os.path.join(micFolder, newMicName))
+            micrograph.setFileName(os.path.join(micFolderTmp, newMicName))
             self.info("Processing micrograph: %s" % micrograph.getFileName())
 
             self._processMicrograph(micrograph)
 
-            # Maybe here we shoould copy the tmp to extrapath depending on the saveIntermidiateResults parameter
-            if self._doMicFolderCleanUp():
-
-                self._cleanMicFolder(micFolder)
+            if self.saveIntermediateResults.get():
+                micOutputFn = self._getResultsMicFolder(micrograph)  # ExtraPath/micID
+                pwutils.makePath(micOutputFn)
+                for file in getFiles(micFolderTmp):
+                    moveFile(file, micOutputFn)
 
         # Mark this movie as finished
         open(micDoneFn, 'w').close()
 
 
     def _processMicrograph(self, micrograph):
-        # REMEBER TO COPY THE IMPORTANT FILES TO EXTRA_PATH WE ARE IN TMP NOW
         micrographId = micrograph.getObjId()
-        fnMicrograph = micrograph.getFileName()
-        micFolder = self._getResultsMicFolder(micrograph)
-        micTmpFolder = self._getOutputMicFolder(micrograph)
-        pwutils.makePath(micFolder)
-
         correlations = self.calculateTiltCorrelationStep(micrograph)
         # Numpy array to compute all the
         correlations = np.asarray(correlations)
         # Calculate the mean, dev of the correlation
         stats = computeStats(correlations)
-
         self.mean_correlations.append(stats['mean'])
         self.stats[micrographId] = stats
-
-        if self.saveMediumResults.get():
-            for file in getFiles(micTmpFolder):
-                moveFile(file, micFolder)
-        else:
-            #Store only the statistics of the correlation object
-            pass
 
         fnSummary = self._getPath("summary.txt")
         fnMonitorSummary = self._getPath("summaryForMonitor.txt")
@@ -366,31 +361,27 @@ class XmippProtTiltEstimation(ProtMicrographs):
 
 
     def calculateTiltCorrelationStep(self, mic):
-        windows = []
         psds = []
-        rotated_psds = []
         correlations = []
         autocorrelations = []
         # read image
-        micFn = mic.getFileName()
-        micName = mic.getMicName()
         micFolder = self._getOutputMicFolder(mic)  # tmp/micID
-
         micImage = ImageHandler().read(mic.getLocation())  # This is an Xmipp Image DATA
         dimx, dimy, z, n = micImage.getDimensions()
         wind_step = self.window_size.get()
         overlap = 0.7
         x_steps, y_steps = window_coordinates2D(dimx, dimy, wind_step, overlap)
-
         # Extract windows
+        window_image = ImageHandler().createImage()
+        rotatedWind_psd = ImageHandler().createImage()
+        ih = ImageHandler()
         for x0 in x_steps:
             for y0 in y_steps:
                 window = micImage.window2D(x0, y0, x0 + (wind_step - 1), y0 + (wind_step - 1))
-                mean, dev, min, max = window.computeStats()
                 x_dim, y_dim, z, n = window.getDimensions()
                 # NORMALIZED
-                winMatrix = (window.getData() - mean) / dev  # Esta normalización se podría normalizar
-                window_image = ImageHandler().createImage()
+                mean, dev, min, max = window.computeStats()  # numpy
+                winMatrix = (window.getData() - mean) / dev
                 window_image.setData(winMatrix)
                 # Compute PSD
                 wind_psd = window_image.computePSD(0.4, x_dim, y_dim, 1)
@@ -399,33 +390,55 @@ class XmippProtTiltEstimation(ProtMicrographs):
                 psdMatrix = wind_psd.getData()
                 P = np.identity(3)
                 rotatedPSD_matrix, M = rotation(psdMatrix, 90, psdMatrix.shape, P)
-                rotatedwind_psd = ImageHandler().createImage()
-                rotatedwind_psd.setData(rotatedPSD_matrix)
-                # Calculate autocorrelation 90 degrees
-                autocorrelation = wind_psd.correlation(rotatedwind_psd)
-                print("Autocorrelation with rotation: " + str(autocorrelation))
-                autocorrelations.append(autocorrelation)
+                rotatedWind_psd.setData(rotatedPSD_matrix)
+                #Window intro a sub window psd for the correlations
+                subWindStep = int(x_dim * (self.samplingRate/self.objective_resolution.get()))
+                x0_sub = int((x_dim/2) - (subWindStep/2))
+                y0_sub = int((x_dim/2) - (subWindStep/2))
+
+                subWind_psd = wind_psd.window2D(x0_sub, y0_sub, int(x0_sub + subWindStep - 1),
+                                                int(y0_sub + subWindStep - 1))
+                subRotatedWind_psd = rotatedWind_psd.window2D(x0_sub, y0_sub, int(x0_sub + subWindStep - 1),
+                                                              int(y0_sub + subWindStep - 1))
                 # SAVE images
                 filename = "tmp" + str(x_steps.index(x0)) + str(y_steps.index(y0)) + '.mrc'
                 window_image.write(os.path.join(micFolder, filename))
-                filename = "tmp_psd" + str(x_steps.index(x0)) + str(y_steps.index(y0)) + '.mrc'
-                wind_psd.write(os.path.join(micFolder, filename))
-                filename = "tmp_psd_rotated" + str(x_steps.index(x0)) + str(y_steps.index(y0)) + '.mrc'
-                rotatedwind_psd.write(os.path.join(micFolder, filename))
+                filename_subwindPSD = os.path.join(micFolder,
+                                                   "tmp_psd" + str(x_steps.index(x0)) +
+                                                   str(y_steps.index(y0)) + '.mrc')
+                filename_rotatedPSD = os.path.join(micFolder,
+                                                   "tmp_psd_rotated" + str(x_steps.index(x0)) +
+                                                   str(y_steps.index(y0)) + '.mrc')
+                subWind_psd.write(filename_subwindPSD)
+                subRotatedWind_psd.write(filename_rotatedPSD)
+                # Filter this window using runJob
+                filename_subwindPSD_filt = os.path.join(micFolder,
+                                                        "tmp_psd_filtered" + str(x_steps.index(x0)) +
+                                                        str(y_steps.index(y0)) + '.mrc')
+                filename_subwindRotatedPSD_filt = os.path.join(micFolder,
+                                                               "tmp_psd_rot_filtered" + str(x_steps.index(x0)) +
+                                                               str(y_steps.index(y0)) + '.mrc')
+
+                args1 = '-i %s -o %s --fourier low_pass 0.1' % (filename_subwindPSD, filename_subwindPSD_filt)
+                args2 = '-i %s -o %s --fourier low_pass 0.1' % (filename_rotatedPSD, filename_subwindRotatedPSD_filt)
+
+                self.runJob("xmipp_transform_filter", args1)
+                self.runJob("xmipp_transform_filter", args2)
+                # We take the inverse of the estimated gain computed by xm
+                # Calculate autocorrelation 90 degrees
+                subWind_psd_filt = ih.read(filename_subwindPSD_filt)
+                subRotatedWind_psd_filt = ih.read(filename_subwindRotatedPSD_filt)
+                autocorrelation = subWind_psd_filt.correlation(subRotatedWind_psd_filt)
                 # Append
-                windows.append(window_image)
-                psds.append(wind_psd)
-                rotated_psds.append(rotatedwind_psd)
+                autocorrelations.append(autocorrelation)
+                psds.append(subWind_psd_filt)
 
         correlation_pairs = list(combinations(psds, 2))
-        print("Correlation all the combinations with rotation 90")
         for m1, m2 in correlation_pairs:
             correlation = m1.correlation(m2)
-            print(correlation)
-            correlations.append(correlation)  # check this
+            correlations.append(correlation)
 
         correlations.extend(autocorrelations)
-
         return correlations
 
 
@@ -434,6 +447,12 @@ class XmippProtTiltEstimation(ProtMicrographs):
         Load the output set if it exists or create a new one.
         """
         setFile = self._getPath(baseName)
+        # -----------------Si no lo pones asi no funciona
+        if os.path.exists(setFile):
+            outputSet = SetClass(filename=setFile)
+            if outputSet.__len__() == 0:
+                pwutils.path.cleanPath(setFile)
+        # ----------------
         if os.path.exists(setFile):
             outputSet = SetClass(filename=setFile)
             outputSet.loadAllProperties()
@@ -461,16 +480,46 @@ class XmippProtTiltEstimation(ProtMicrographs):
             # Here the defineOutputs function will call the write() method
             self._defineOutputs(**{outputName: outputSet})
             self._store(outputSet)
-
         # Close set databaset to avoid locking it
         outputSet.close()
 
 
     # ------------------------- UTILS functions --------------------------------
+
+    def _correctFormat(self, micName, micFn, micFolderTmp):
+        if micName.endswith('bz2'):
+            newMicName = micName.replace('.bz2', '')
+            # We assume that if compressed the name ends with .mrc.bz2
+            if not exists(newMicName):
+                self.runJob('bzip2', '-d -f %s' % micName, cwd=micFolderTmp)
+
+        elif micName.endswith('tbz'):
+            newMicName = micName.replace('.tbz', '.mrc')
+            # We assume that if compressed the name ends with .tbz
+            if not exists(newMicName):
+                self.runJob('tar', 'jxf %s' % micName, cwd=micFolderTmp)
+
+        elif micName.endswith('.txt'):
+            # Support a list of frame as a simple .txt file containing
+            # all the frames in a raw list, we could use a xmd as well,
+            # but a plain text was choose to simply its generation
+            micTxt = os.path.join(micFolderTmp, micName)
+            with open(micTxt) as f:
+                micOrigin = os.path.basename(os.readlink(micFn))
+                newMicName = micName.replace('.txt', '.mrc')
+                ih = emlib.image.ImageHandler()
+                for i, line in enumerate(f):
+                    if line.strip():
+                        inputFrame = os.path.join(micOrigin, line.strip())
+                        ih.convert(inputFrame, (i + 1, os.path.join(micFolderTmp, newMicName)))
+        else:
+            newMicName = micName
+
+        return newMicName
+
     def _insertFinalSteps(self, deps):
         """ This should be implemented in subclasses"""
         return deps
-
 
     def _getOutputMicFolder(self, micrograph):
         """ Create a Mic folder where to work with it. """
@@ -519,9 +568,22 @@ class XmippProtTiltEstimation(ProtMicrographs):
         """ Return the file that is used as a flag of termination. """
         return self._getExtraPath('DONE', 'mic_%06d.TXT' % mic.getObjId())
 
+
     @staticmethod
-    def getTiltLabel():
-        return prefixAttribute(emlib.label2Str(emlib.MDL_TILT_ESTIMATION))
+    def getTiltMeanLabel():
+        return prefixAttribute(emlib.label2Str(emlib.MDL_TILT_ANALYSIS_MEAN))
+
+    @staticmethod
+    def getTiltSTDLabel():
+        return prefixAttribute(emlib.label2Str(emlib.MDL_TILT_ANALYSIS_STD))
+
+    @staticmethod
+    def getTiltMinLabel():
+        return prefixAttribute(emlib.label2Str(emlib.MDL_TILT_ANALYSIS_MIN))
+
+    @staticmethod
+    def getTiltMaxLabel():
+        return prefixAttribute(emlib.label2Str(emlib.MDL_TILT_ANALYSIS_MAX))
 
     # --------------------------- INFO functions -------------------------------
 
@@ -539,18 +601,20 @@ class XmippProtTiltEstimation(ProtMicrographs):
 
 
  # --------------------------- OVERRIDE functions --------------------------
+
     def _filterMicrograph(self, micrograph):
         """ Check if process or not this movie.
         """
         return True
 
+    # Este método esta raro
     def _doMicFolderCleanUp(self):
         """ This functions allows subclasses to change the default behaviour
         of cleanup the movie folders after the _processMicrograph function.
         In some cases it makes sense that the protocol subclass take cares
         of when to do the clean up.
         """
-        return True
+        return not self.saveMediumResults.get()
 
     def _cleanMicFolder(self, micFolder):
         if pwutils.envVarOn(SCIPION_DEBUG_NOCLEAN):
@@ -560,11 +624,11 @@ class XmippProtTiltEstimation(ProtMicrographs):
             self.info("Erasing.....micrographFolder: %s" % micFolder)
             os.system('rm -rf %s' % micFolder)
             # cleanPath(movieFolder)
+
 # --------------------- WORKERS --------------------------------------
 
 def applyTransform(imag_array, M, shape):
-    ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
-    '''
+    '''Apply a transformation(M) to a np array(imag) and return it in a given shape'''
     imag = emlib.Image()
     imag.setData(imag_array)
     imag = imag.applyWarpAffine(list(M.flatten()), shape, True)
@@ -631,16 +695,16 @@ def computeStats(correlations):
     max = np.max(correlations)
     min = np.min(correlations)
 
-    stats ={'mean': mean,
-            'std': std,
-            'var': var,
-            'max': max,
-            'min': min,
-            'per25': p[0],
-            'per50': p[1],
-            'per75': p[2],
-            'per97.5': p[3]
-            }
+    stats = {'mean': mean,
+             'std': std,
+             'var': var,
+             'max': max,
+             'min': min,
+             'per25': p[0],
+             'per50': p[1],
+             'per75': p[2],
+             'per97.5': p[3]
+             }
     return stats
 
 

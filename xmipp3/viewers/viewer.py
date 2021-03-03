@@ -51,6 +51,8 @@ from xmipp3.protocols import XmippProtMovieGain
 from xmipp3.protocols import XmippProtDeepDenoising
 from xmipp3.protocols import XmippProtParticleBoxsize
 from .plotter import XmippPlotter
+from xmipp3.protocols import XmippProtTiltAnalysis
+from pwem.viewers.viewers_data import MicrographsView
 
 
 class XmippViewer(DataViewer):
@@ -75,7 +77,8 @@ class XmippViewer(DataViewer):
                 XmippProtMultiRefAlignability,
                 XmippProtMovieGain,
                 XmippProtDeepDenoising,
-                XmippProtParticleBoxsize
+                XmippProtParticleBoxsize,
+                XmippProtTiltAnalysis
                 ]
 
     def __createTemporaryCtfs(self, obj, setOfMics):
@@ -123,6 +126,9 @@ class XmippViewer(DataViewer):
         #                                   fn, obj.strId(),
         #                                   viewParams={OBJCMDS: objCommands},
         #                                   **kwargs))
+
+
+
 
         elif (issubclass(cls, XmippProtExtractParticles) or
               issubclass(cls, XmippProtScreenParticles)):
@@ -195,6 +201,26 @@ class XmippViewer(DataViewer):
                                                                      '_representative._filename',
                                                            'labels': '_size',
                                                            'sortby': 'id'})
+
+        elif issubclass(cls, XmippProtTiltAnalysis):
+            micView = MicrographsView(self._project, obj.outputMicrographs) #Si existe el otro atributo abrir t
+            micView.getViewParams()[VISIBLE] = micView.getViewParams()[VISIBLE] + \
+                                                ' ' + XmippProtTiltAnalysis.getTiltMeanLabel() + \
+                                                ' ' + XmippProtTiltAnalysis.getTiltSTDLabel() + \
+                                                ' ' + XmippProtTiltAnalysis.getTiltMinLabel() + \
+                                                ' ' + XmippProtTiltAnalysis.getTiltMaxLabel()
+            self._views.append(micView)
+
+            if obj.hasAttribute('discardedMicrographs'):
+                print('Entra aqui')
+                micView2 = MicrographsView(self._project, obj.discardedMicrographs)
+                micView2.getViewParams()[VISIBLE] = micView.getViewParams()[VISIBLE] + \
+                                                   ' ' + XmippProtTiltAnalysis.getTiltMeanLabel() + \
+                                                   ' ' + XmippProtTiltAnalysis.getTiltSTDLabel() + \
+                                                   ' ' + XmippProtTiltAnalysis.getTiltMinLabel() + \
+                                                   ' ' + XmippProtTiltAnalysis.getTiltMaxLabel()
+                self._views.append(micView2)
+
 
         elif issubclass(cls, XmippProtCompareReprojections):
                 fn = obj.reprojections.getFileName()
