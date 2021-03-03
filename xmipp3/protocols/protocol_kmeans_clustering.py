@@ -76,14 +76,15 @@ class XmippProtKmeansSPH(ProtClassify2D):
                 mdLabel = md.MDL_NMA
             for particle in particles.iterItems():
                 coeffs.append(np.fromstring(getXmippAttribute(particle, mdLabel).get(), sep=','))
-        rmse = np.zeros((100))
-        for nClusters in range(1, 101):
+        maxClusters = 101 if len(coeffs) > 101 else len(coeffs) + 1
+        rmse = np.zeros((maxClusters - 1))
+        for nClusters in range(1, maxClusters):
             kmeans = KMeans(n_clusters=nClusters).fit(np.asarray(coeffs))
             rmse[nClusters-1] = np.sqrt(kmeans.inertia_ / len(coeffs))
         p1 = np.array((1, rmse[0]))
-        p2 = np.array((100, rmse[-1]))
-        d = np.zeros((100))
-        for nClusters in range(2, 100):
+        p2 = np.array((maxClusters - 1, rmse[-1]))
+        d = np.zeros((maxClusters - 1))
+        for nClusters in range(2, maxClusters - 1):
             p3 = np.array((nClusters, rmse[nClusters - 1]))
             d[nClusters-1] = np.linalg.norm(np.cross(p2 - p1, p1 - p3)) / np.linalg.norm(p2 - p1)
         nClusters = np.argmax(d) + 1

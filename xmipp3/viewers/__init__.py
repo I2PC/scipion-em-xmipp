@@ -55,8 +55,8 @@ from .viewer_extract_asymmetric_unit import viewerXmippProtExtractUnit
 from .viewer_projmatch import XmippProjMatchViewer
 
 #AJ
-from .viewer_structure_map_sph import XmippProtStructureMapSphViewer
-from .viewer_volume_deform_sph import XmippVolumeDeformSphViewer
+from .viewer_structure_map_zernike3d import XmippProtStructureMapZernike3DViewer
+from .viewer_volume_deform_zernike3d import XmippVolumeDeformZernike3DViewer
 from .viewer_metaprotocol_golden_highres import XmippMetaprotocolGoldenHighResViewer
 from .viewer_structure_map import XmippProtStructureMapViewer
 

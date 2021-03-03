@@ -32,17 +32,17 @@ from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pyworkflow.gui.plotter import plt
 import pyworkflow.protocol.params as params
 
-from xmipp3.protocols.protocol_structure_map_sph import XmippProtStructureMapSPH
+from xmipp3.protocols.protocol_structure_map_zernike3d import XmippProtStructureMapZernike3D
 
 
-class XmippProtStructureMapSphViewer(ProtocolViewer):
+class XmippProtStructureMapZernike3DViewer(ProtocolViewer):
     """ Wrapper to visualize different type of data objects
     with the Xmipp program xmipp_showj
     """
     
     _label = 'viewer structure map sph'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
-    _targets = [XmippProtStructureMapSPH]
+    _targets = [XmippProtStructureMapZernike3D]
 
 
     def _defineParams(self, form):

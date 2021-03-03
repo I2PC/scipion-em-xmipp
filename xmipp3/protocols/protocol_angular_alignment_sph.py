@@ -53,6 +53,8 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         form.addSection(label='Input')
         form.addParam('inputParticles', params.PointerParam, label="Input particles", pointerClass='SetOfParticles')
         form.addParam('inputVolume', params.PointerParam, label="Input volume", pointerClass='Volume')
+        form.addParam('inputVolumeMask', params.PointerParam, label="Input volume mask", pointerClass='VolumeMask',
+                      allowsNull=True)
         form.addParam('targetResolution', params.FloatParam, label="Target resolution (A)", default=8.0,
                       help="In Angstroms, the images and the volume are rescaled so that this resolution is at "
                            "2/3 of the Fourier spectrum.")
@@ -88,6 +90,7 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         myDict = {
             'imgsFn': self._getExtraPath('input_particles.xmd'),
             'fnVol': self._getExtraPath('input_volume.vol'),
+            'fnVolMask': self._getExtraPath('input_volume_mask.vol'),
             'fnOut': self._getExtraPath('output_particles.xmd'),
             'fnOutDir': self._getExtraPath()
                  }
@@ -104,6 +107,7 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
     def convertStep(self):
         imgsFn = self._getFileName('imgsFn')
         fnVol = self._getFileName('fnVol')
+        fnVolMask = self._getFileName('fnVolMask')
 
         inputParticles = self.inputParticles.get()
         writeSetOfParticles(inputParticles, imgsFn)
@@ -127,14 +131,20 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         ih.convert(self.inputVolume.get(), fnVol)
         Xdim = self.inputVolume.get().getDim()[0]
         if Xdim != self.newXdim:
-            self.runJob("xmipp_image_resize"
-                        ,"-i %s --dim %d " %(fnVol, self.newXdim), numberOfMpi=1)
+            self.runJob("xmipp_image_resize",
+                        "-i %s --dim %d " %(fnVol, self.newXdim), numberOfMpi=1)
+        if self.inputVolumeMask.get():
+            ih.convert(self.inputVolumeMask.get(), fnVolMask)
+            if Xdim != self.newXdim:
+                self.runJob("xmipp_image_resize",
+                            "-i %s --dim %d " % (fnVolMask, self.newXdim), numberOfMpi=1)
 
 
     def alignmentStep(self):
         imgsFn = self._getFileName('imgsFn')
         fnVol = self._getFileName('fnVol')
         fnOut = self._getFileName('fnOut')
+        fnVolMask = self._getFileName('fnVolMask')
         fnOutDir = self._getFileName('fnOutDir')
         Ts = readInfoField(self._getExtraPath(), "sampling", md.MDL_SAMPLINGRATE)
         params = ' -i %s --ref %s -o %s --optimizeDeformation --optimizeDefocus ' \
@@ -148,6 +158,8 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
             params += ' --ignoreCTF'
         if self.inputParticles.get().isPhaseFlipped():
             params += ' --phaseFlipped'
+        if self.inputVolumeMask.get():
+            params += ' --mask %s' % fnVolMask
         self.runJob("xmipp_angular_sph_alignment", params, numberOfMpi=self.numberOfMpi.get())
 
 

@@ -2,6 +2,7 @@
 # **************************************************************************
 # *
 # * Authors:     Amaya Jimenez Moreno (ajimenez@cnb.csic.es)
+# *              David Herreros Calero (dherreros@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -34,9 +35,9 @@ from pwem.objects import Volume
 from pyworkflow import VERSION_2_0
 
 
-class XmippProtVolumeDeformSPH(ProtAnalysis3D):
-    """ Protocol for volume deformation based on spherical harmonics. """
-    _label = 'sph volume deform'
+class XmippProtVolumeDeformZernike3D(ProtAnalysis3D):
+    """ Protocol for volume deformation based on Zernike3D. """
+    _label = 'volume deform - Zernike3D'
     _lastUpdateVersion = VERSION_2_0
 
     # --------------------------- DEFINE param functions --------------------------------------------
@@ -136,8 +137,8 @@ class XmippProtVolumeDeformSPH(ProtAnalysis3D):
                   self._getExtraPath('Volumes'), self.penalization.get())
         if self.newRmax != 0:
             params = params + ' --Rmax %d' % self.newRmax
-        # if self.numberOfThreads.get() != 0:
-        #     params = params + ' --thr %d' % self.numberOfThreads.get()
+        if self.numberOfThreads.get() != 0:
+            params = params + ' --thr %d' % self.numberOfThreads.get()
         self.runJob("xmipp_volume_deform_sph", params)
 
 

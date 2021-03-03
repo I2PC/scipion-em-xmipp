@@ -79,9 +79,9 @@ def rigidRegistration(X, Y):
     return R, t
 
 
-class XmippProtStructureMapSPH(ProtAnalysis3D):
-    """ Protocol for structure mapping based on spherical harmonics. """
-    _label = 'sph struct map'
+class XmippProtStructureMapZernike3D(ProtAnalysis3D):
+    """ Protocol for structure mapping based on Zernike3D. """
+    _label = 'sph struct - Zernike3D'
     _lastUpdateVersion = VERSION_2_0
 
     def __init__(self, **args):
@@ -213,9 +213,7 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                   self._getExtraPath('Pair_%d_%d' % (i, j)), self.penalization.get())
         if self.newRmax != 0:
             params = params + ' --Rmax %d' % self.newRmax
-        # if self.numberOfThreads.get() != 0:
-        #     params = params + ' --thr %d' % self.numberOfThreads.get()
-        # params = params + ' --thr 3'
+        params = params + ' --thr 1'
 
         self.runJob("xmipp_volume_deform_sph", params)
 
@@ -262,44 +260,14 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
                                    "constant", constant_values=0)
             np.savetxt(self._defineResultsName(i, label), embedExtended)
 
-    # def computeCorr(self, volList):
-    #     ind = 0
-    #     numVol = len(volList)
-    #     self.corrMatrix = np.zeros((numVol, numVol))
-    #     self.corrMatrix[numVol-1][numVol-1] = 0.0
-    #
-    #     for item in volList:
-    #         vol = xmippLib.Image(item)
-    #         self.corrMatrix[ind][ind] = 0.0
-    #         # if self.computeDef.get():
-    #         path = self._getExtraPath("*DeformedTo%d.vol" % ind)
-    #         # else:
-    #         #     path = self._getExtraPath("*AlignedTo%d.vol" % ind)
-    #         for fileVol in glob.glob(path):
-    #             matches = re.findall("(\d+)", fileVol)
-    #             ind2 = int(matches[1])
-    #             defVol = xmippLib.Image(fileVol)
-    #             corr = vol.correlation(defVol)
-    #             self.corrMatrix[ind2][ind] = 1-corr
-    #         ind += 1
-
     def computeCorr(self, vol1, vol2, i, j):
         vol = xmippLib.Image(vol1)
-        # if self.computeDef.get():
-        # path = self._getExtraPath("*DeformedTo%d.vol" % ind)
-        # else:
-        #     path = self._getExtraPath("*AlignedTo%d.vol" % ind)
-        # for fileVol in glob.glob(path):
-        #     matches = re.findall("(\d+)", fileVol)
-        #     ind2 = int(matches[1])
         defVol = xmippLib.Image(vol2)
         corr = vol.correlation(defVol)
         corr = 1-corr
         outFile = self._getExtraPath('Pair_%d_%d_correlation.txt' % (i, j))
         with open(outFile, 'w') as f:
             f.write('%f' % corr)
-        # self.corrMatrix[ind2][ind] = 1-corr
-        # ind += 1
 
     def gatherResultsStepCorr(self):
         fnRoot = self._getExtraPath("CorrMatrix.txt")
@@ -310,7 +278,6 @@ class XmippProtStructureMapSPH(ProtAnalysis3D):
             for idm in range(4):
                 fnRoot = self._getExtraPath("CorrSubMatrix_%d.txt" % (idm + 1))
                 self.saveCorrelation(subMatrixes[idm], fnRoot, 'Sub_%d_' % (idm + 1))
-        # cleanPattern(self._getExtraPath('*.vol'))
 
     def saveCorrelation(self, matrix, fnRoot, label=''):
         np.savetxt(fnRoot, matrix, "%f")

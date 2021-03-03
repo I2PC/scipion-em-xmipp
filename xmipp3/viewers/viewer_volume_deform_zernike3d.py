@@ -30,13 +30,13 @@ from pwem.viewers import ChimeraView
 import pyworkflow.protocol.params as params
 from pyworkflow.utils import getExt, removeExt
 from os.path import abspath
-from xmipp3.protocols.protocol_volume_deform_sph import XmippProtVolumeDeformSPH
+from xmipp3.protocols.protocol_volume_deform_zernike3d import XmippProtVolumeDeformZernike3D
 
 
-class XmippVolumeDeformSphViewer(ProtocolViewer):
+class XmippVolumeDeformZernike3DViewer(ProtocolViewer):
     """ Visualize the output of protocol volume strain """
     _label = 'viewer volume deform sph'
-    _targets = [XmippProtVolumeDeformSPH]
+    _targets = [XmippProtVolumeDeformZernike3D]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
     
 
