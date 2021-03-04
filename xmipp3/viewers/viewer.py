@@ -212,7 +212,6 @@ class XmippViewer(DataViewer):
             self._views.append(micView)
 
             if obj.hasAttribute('discardedMicrographs'):
-                print('Entra aqui')
                 micView2 = MicrographsView(self._project, obj.discardedMicrographs)
                 micView2.getViewParams()[VISIBLE] = micView.getViewParams()[VISIBLE] + \
                                                    ' ' + XmippProtTiltAnalysis.getTiltMeanLabel() + \

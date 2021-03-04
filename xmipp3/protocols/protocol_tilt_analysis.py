@@ -36,7 +36,7 @@ from collections import OrderedDict
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow.protocol.params import (PointerParam, IntParam,
-                                        BooleanParam, LEVEL_ADVANCED, FloatParam)
+                                        BooleanParam, LEVEL_ADVANCED, FloatParam, GE, GT, Range)
 from pyworkflow import SCIPION_DEBUG_NOCLEAN
 
 import pyworkflow.utils as pwutils
@@ -81,22 +81,22 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                       help='Select the SetOfMicrograph to be preprocessed.')
 
         form.addParam('window_size', IntParam, label='Window size',
-                      default=512, expertLevel=LEVEL_ADVANCED,
+                      default=512, expertLevel=LEVEL_ADVANCED, validators=[GE(100,'Error must be greater than 100')],
                       help='''By default, the micrograph will be divided into windows of dimensions 512x512, 
                             the PSD and its correlations will be computed in every segment.''')
 
         form.addParam('objective_resolution', FloatParam, label='Objective resolution',
-                      default=3, expertLevel=LEVEL_ADVANCED,
+                      default=3, expertLevel=LEVEL_ADVANCED, validators=[GT(0.,'Error must be Positive')],
                       help='''By default, micrographs PSD will be cropped into a central windows of dimensions
                             (xdim*(sampling rate/objective resolution))x(ydim*(sampling rate/objective resolution)).''')
 
         form.addParam('meanCorr_threshold', FloatParam, label='Mean correlation threshold',
-                      default=0.6, expertLevel=LEVEL_ADVANCED,
+                      default=0.6, expertLevel=LEVEL_ADVANCED,validators=[Range(0, 1)],
                       help='''By default, micrographs will be divided into an output set and a discarded set based
                             on the mean and std threshold''')
 
         form.addParam('stdCorr_threshold', FloatParam, label='STD correlation threshold',
-                      default=0.1, expertLevel=LEVEL_ADVANCED,
+                      default=0.1, expertLevel=LEVEL_ADVANCED, validators=[GT(0,'Error must be greater than 0')],
                       help='''By default, micrographs will be divided into an output set and a discarded set based
                                     on the mean and std threshold''')
 
@@ -241,7 +241,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
             setattr(new_Mic, self.getTiltMinLabel(), corr_min)
             setattr(new_Mic, self.getTiltMaxLabel(), corr_max)
             # Double threshold
-            if corr_mean > self.meanCorr_threshold.get() and corr_std < self.stdCorr_threshold.get():
+            if corr_mean > self.meanCorr_threshold.get() and corr_std < self.stdCorr_threshold.get(): #AND or OR
                 micSet.append(new_Mic)
             else:
                 if not self.tilt:
