@@ -486,6 +486,35 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
     # ------------------------- UTILS functions --------------------------------
 
+    def getOutputSetOfTiltSeries(self):
+        if hasattr(self, "outputSetOfTiltSeries"):
+            self.outputSetOfTiltSeries.enableAppend()
+        else:
+            outputSetOfTiltSeries = self._createSetOfTiltSeries()
+            outputSetOfTiltSeries.copyInfo(self.inputSetOfTiltSeries.get())
+            outputSetOfTiltSeries.setDim(self.inputSetOfTiltSeries.get().getDim())
+            outputSetOfTiltSeries.setStreamState(Set.STREAM_OPEN)
+            self._defineOutputs(outputSetOfTiltSeries=outputSetOfTiltSeries)
+            self._defineSourceRelation(self.inputSetOfTiltSeries, outputSetOfTiltSeries)
+        return self.outputSetOfTiltSeries
+
+    def getOutputInterpolatedSetOfTiltSeries(self):
+        if hasattr(self, "outputInterpolatedSetOfTiltSeries"):
+            self.outputInterpolatedSetOfTiltSeries.enableAppend()
+        else:
+            outputInterpolatedSetOfTiltSeries = self._createSetOfTiltSeries(suffix='Interpolated')
+            outputInterpolatedSetOfTiltSeries.copyInfo(self.inputSetOfTiltSeries.get())
+            outputInterpolatedSetOfTiltSeries.setDim(self.inputSetOfTiltSeries.get().getDim())
+            if self.binning > 1:
+                samplingRate = self.inputSetOfTiltSeries.get().getSamplingRate()
+                samplingRate *= self.binning.get()
+                outputInterpolatedSetOfTiltSeries.setSamplingRate(samplingRate)
+            outputInterpolatedSetOfTiltSeries.setStreamState(Set.STREAM_OPEN)
+            self._defineOutputs(outputInterpolatedSetOfTiltSeries=outputInterpolatedSetOfTiltSeries)
+            self._defineSourceRelation(self.inputSetOfTiltSeries, outputInterpolatedSetOfTiltSeries)
+        return self.outputInterpolatedSetOfTiltSeries
+
+
     def _correctFormat(self, micName, micFn, micFolderTmp):
         if micName.endswith('bz2'):
             newMicName = micName.replace('.bz2', '')
@@ -584,6 +613,12 @@ class XmippProtTiltAnalysis(ProtMicrographs):
     @staticmethod
     def getTiltMaxLabel():
         return prefixAttribute(emlib.label2Str(emlib.MDL_TILT_ANALYSIS_MAX))
+
+
+
+
+
+
 
     # --------------------------- INFO functions -------------------------------
 
@@ -713,7 +748,3 @@ def setAttribute(obj, label, value):
         return
     setattr(obj, label, getScipionObj(value))
 
-###### Prueba
-
-
-print('hola')
