@@ -74,7 +74,7 @@ class TestXmippProtScreenDeepConsensus(BaseTest):
       kwargs = {"setof" : SET_OF_COORDINATES,
                 "inputCoordinates" : protImportCoords.outputCoordinates,
                 "nDim" : 20,
-                "creationInterval" : 10,
+                "creationInterval" : 5,
                 "extraRandomInterval" : 5,
                 "delay" : 0
                 }
@@ -83,29 +83,62 @@ class TestXmippProtScreenDeepConsensus(BaseTest):
       self.proj.launchProtocol(prot, wait=False)
       return prot
 
-    def _runDeepConsensusPicking(self, inpCoords, kwargs):
+    def _runDeepConsensusPicking(self, inpCoords, kwargs, case = ''):
       prot = self.newProtocol(XmippProtScreenDeepConsensus,
                                    inputCoordinates= inpCoords,
                                    **kwargs)
 
-      prot.setObjLabel('Consensus picking')
+      prot.setObjLabel('Consensus picking {}'.format(case))
       self.launchProtocol(prot, wait=True)
+      self.assertIsNotNone(prot.outputCoordinates,
+                           "There was a problem with the consensus")
+      self.assertIsNotNone(prot.outputParticles,
+                           "There was a problem with the consensus")
       return prot
 
     def getDeepConsensusKwargs(self, case=1):
+      ADD_MODEL_TRAIN_NEW = 0
+      ADD_MODEL_TRAIN_PRETRAIN = 1
+      ADD_MODEL_TRAIN_PREVRUN = 2
+
+      ADD_DATA_TRAIN_NONE = 0
+      ADD_DATA_TRAIN_PRECOMP = 1
+      ADD_DATA_TRAIN_CUST = 2
+
+      ADD_DATA_TRAIN_CUSTOM_OPT_PARTS = 0
+      ADD_DATA_TRAIN_CUSTOM_OPT_COORS = 1
+
       kwargs = {
         'nEpochs' : 2.0,
-        'nModels' :2
+        'nModels' :2,
+        'extractingBatch':3,
+        'trainingBatch':3,
+        'predictingBatch':3
       }
       if case == 1:
-        caseKwargs = {'threads':1}
+        #Simplest case
+        caseKwargs = {}
       elif case == 2:
-        caseKwargs = {'doPreliminarPredictions': True}
-      elif case == 3:
+        #Pretrained model, do testing, additional data particles, do preliminar predictions
         caseKwargs = {'doPreliminarPredictions': True,
-                  'modelInitialization':2,
-                  'continueRun':self.lastRun
-                  }
+                      'modelInitialization': ADD_MODEL_TRAIN_PRETRAIN,
+                      'addTrainingData': ADD_DATA_TRAIN_CUST,
+                      'trainingDataType':ADD_DATA_TRAIN_CUSTOM_OPT_PARTS,
+                      'trainTrueSetOfParticles': self.lastRun.outputParticles,
+                      'trainFalseSetOfParticles': self.lastRun.outputParticles
+                      }
+      elif case == 3:
+        #Previous run model, additional data coords
+        caseKwargs = {'modelInitialization':ADD_MODEL_TRAIN_PREVRUN,
+                      'continueRun':self.lastRun,
+                      'doTesting': True,
+                      'testTrueSetOfParticles': self.lastRun.outputParticles,
+                      'testFalseSetOfParticles': self.lastRun.outputParticles,
+                      'addTrainingData': ADD_DATA_TRAIN_CUST,
+                      'trainingDataType': ADD_DATA_TRAIN_CUSTOM_OPT_COORS,
+                      'trainTrueSetOfCoords': self.lastRun.outputCoordinates,
+                      'trainFalseSetOfCoords': self.lastRun.outputCoordinates
+                      }
       else:
         caseKwargs={}
 
@@ -133,7 +166,7 @@ class TestXmippProtScreenDeepConsensus(BaseTest):
           inpCoords.append(point)
         kwargs = self.getDeepConsensusKwargs(case)
 
-        self.lastRun = self._runDeepConsensusPicking(inpCoords, kwargs)
+        self.lastRun = self._runDeepConsensusPicking(inpCoords, kwargs, case)
 
 
     def _updateProtocol(self, prot):

@@ -32,7 +32,6 @@ import os, sys
 from glob import glob
 import six
 import json, shutil, pickle
-import time
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.utils.path import (makePath, cleanPattern, cleanPath, copyTree,
