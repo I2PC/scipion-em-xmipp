@@ -409,7 +409,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                       help='Size of the extraction batches (in number of micrographs)')
         form.addParam('trainingBatch', params.IntParam, default='5',
                       label="Training batch size",
-                      help='Size of the training batches (in number of micrographs)')
+                      help='Size of the training batches (in number of micrographs).'
+                           'The CNN needs a minimum number of particles to train for each batch, if there are not'
+                           'enough particles, the batch size must be increased')
 
 
     def _validate(self):
