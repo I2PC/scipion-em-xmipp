@@ -32,6 +32,8 @@ import os, sys
 from glob import glob
 import six
 import json, shutil, pickle
+import time
+from xmipp3.protocols import XmippProtReconstructHighRes
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.utils.path import (makePath, cleanPattern, cleanPath, copyTree,
@@ -105,9 +107,11 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                   'NOISE': False,
                   'AND': False}
 
-    TRAIN_BATCH_MIN = 3
+
+    EXTRACT_BATCH_MIN = 5
+    TRAIN_BATCH_MIN = 5
     TRAIN_BATCH_MAX = 20
-    PREDICT_BATCH_MIN = 3
+    PREDICT_BATCH_MIN = 5
 
     TO_TRAIN_MICFNS = []
     TRAINED_PARAMS_PATH = 'trainedParams.pickle'
@@ -459,11 +463,12 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         newSteps = []
         if not self.ENDED:
           # Functions streamed. Input is processed as soon as it is generated
-          if not self.checkIfPrevRunIsCompatible("mics_") and len(self.readyToPreprocessMics(shared = False)) > 0 and not self.PREPROCESSING:
-            self.PREPROCESSING = True
-            self.lastDeps = [self._insertFunctionStep("preprocessMicsStep", prerequisites=self.initDeps)]
+          if not self.checkIfPrevRunIsCompatible("mics_"):
+            if len(self.readyToPreprocessMics(shared = False)) > 0 and not self.PREPROCESSING:
+              self.PREPROCESSING = True
+              self.lastDeps = [self._insertFunctionStep("preprocessMicsStep", prerequisites=self.initDeps)]
 
-          if len(self.readyToExtractMicFns('OR')) > 0 and not self.EXTRACTING['OR']:
+          if len(self.readyToExtractMicFns('OR')) >= self.EXTRACT_BATCH_MIN and not self.EXTRACTING['OR']:
             self.EXTRACTING['OR'] = True
             newSteps += [self.insertCaculateConsensusSteps('OR', prerequisites=self.initDeps)]
             newSteps += self.insertExtractPartSteps('OR', prerequisites=newSteps)
@@ -472,13 +477,13 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           trainedParams = self.loadTrainedParams()
           toTrainSize = self.toTrainDataSize.get() if self.toTrainDataSize.get() != -1 else 1e10
           if not self.skipTraining.get() and trainedParams['posParticlesTrained'] < toTrainSize:
-            if len(self.readyToExtractMicFns('NOISE')) > 0 and not self.EXTRACTING['NOISE']:
+            if len(self.readyToExtractMicFns('NOISE')) >= self.EXTRACT_BATCH_MIN and not self.EXTRACTING['NOISE']:
               self.EXTRACTING['NOISE'] = True
               depNoise = self._insertFunctionStep('pickNoise', prerequisites=self.initDeps)
               depsNoise = self.insertExtractPartSteps('NOISE', prerequisites=[depNoise])
               newSteps += depsNoise
 
-            if len(self.readyToExtractMicFns('AND')) > 0 and not self.EXTRACTING['AND']:
+            if len(self.readyToExtractMicFns('AND')) >= self.EXTRACT_BATCH_MIN and not self.EXTRACTING['AND']:
               self.EXTRACTING['AND'] = True
               depsAnd = self.insertCaculateConsensusSteps('AND', prerequisites=self.initDeps)
               depsAnd = self.insertExtractPartSteps('AND', prerequisites=[depsAnd])
@@ -495,7 +500,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                 self.uploadTrainedParam('addedData', True)
 
 
-            if self.freeToContinue():
+            if self.cnnFree():
               self.TO_TRAIN_MICFNS = self.readyToTrainMicFns()
               if len(self.TO_TRAIN_MICFNS) >= self.TRAIN_BATCH_MIN:
                 self.TRAINING = True
@@ -511,16 +516,14 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             self.saveTrainedParams(trainedParams)
 
 
-          if self.networkReadyToPredict() and self.freeToContinue() and self.predictionsOn():
-            if len(self.readyToPredictMicFns()) >= self.PREDICT_BATCH_MIN:
+          if self.networkReadyToPredict() and self.cnnFree() and self.predictionsOn():
               self.PREDICTING = True
               depPredict = self._insertFunctionStep('predictCNN', prerequisites= newSteps)
               newSteps += [self._insertFunctionStep('endPredictingStep', prerequisites=[depPredict])]
               newSteps += [self._insertFunctionStep('createOutputStep', prerequisites=[depPredict])]
-          sys.stdout.flush()
 
 
-          if self.networkReadyToPredict() and self.freeToContinue() and \
+          if self.networkReadyToPredict() and self.allFree() and \
                   not self.LAST_ROUND and self.checkIfParentsFinished():
             protLast = self._steps[self.lastStep - 1]
             protLast.addPrerequisites(*newSteps)
@@ -543,7 +546,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     def lastRoundStep(self):
       '''Starts the last round of training and predictions with the remainign microgrpahs
       when all the inputs have arrived'''
-      self.TRAIN_BATCH_MIN, self.PREDICT_BATCH_MIN = 1, 1
+      self.EXTRACT_BATCH_MIN, self.TRAIN_BATCH_MIN, self.PREDICT_BATCH_MIN = 1, 1, 1
       self.LAST_ROUND = True
 
     def endProtocolStep(self):
@@ -598,21 +601,14 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             createLink( self.continueRun.get()._getExtraPath(newDataPath),
                         self._getExtraPath(newDataPath))
 
-            prevTrainedFile = self.continueRun.get()._getTmpPath(self.TRAINED_PARAMS_PATH)
-            newTrainedFile = self._getTmpPath(self.TRAINED_PARAMS_PATH)
-            shutil.copyfile(prevTrainedFile, newTrainedFile)
-
         else:
           if self.checkIfPrevRunIsCompatible( "mics_"):
-            sourcePath= self.continueRun.get()._getTmpPath(self.PRE_PROC_MICs_PATH )
+            sourcePath= self.continueRun.get()._getExtraPath(self.PRE_PROC_MICs_PATH )
             print("copying mics from %s"%(sourcePath))
-            createLink( sourcePath, self._getTmpPath(self.PRE_PROC_MICs_PATH ))
+            createLink( sourcePath, self._getExtraPath(self.PRE_PROC_MICs_PATH ))
 
-            prevTrainedFile = self.continueRun.get()._getTmpPath(self.TRAINED_PARAMS_PATH)
-            newTrainedFile = self._getTmpPath(self.TRAINED_PARAMS_PATH)
-            shutil.copyfile(prevTrainedFile, newTrainedFile)
           else:
-            makePath(self._getTmpPath(self.PRE_PROC_MICs_PATH))
+            makePath(self._getExtraPath(self.PRE_PROC_MICs_PATH))
 
           if self.checkIfPrevRunIsCompatible( "coords_"):
             for mode in ["OR", "AND", "NOISE"]:
@@ -624,6 +620,14 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
               for mode in ["AND", "OR", "NOISE"]:
                 consensusCoordsPath = self.CONSENSUS_COOR_PATH_TEMPLATE % mode
                 makePath(self._getExtraPath(consensusCoordsPath))
+
+        if self._doContinue():
+          if self.skipTraining.get():
+            trPass=''
+          else:
+            trPass=1
+          self.retrievePreviousRunModel(self.continueRun.get(), trPass)
+          self.uploadTrainedParam('trainingPass', trPass)
 
         preprocessParamsFname= self._getExtraPath("preprocess_params.json")
         preprocParams= self.getPreProcParamsFromForm()
@@ -664,7 +668,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
 
           inputsFname= self._getTmpPath("preprocMic_inputs.txt")
-          ouputDir= self._getTmpPath(self.PRE_PROC_MICs_PATH)
+          ouputDir= self._getExtraPath(self.PRE_PROC_MICs_PATH)
           nThrs= self.numberOfThreads.get()
           with open(inputsFname, "w") as f:
             f.write(preproMicsContent)
@@ -705,7 +709,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         inputCoordsFnames={}
         for coord_num, coordinatesP in enumerate(self.inputCoordinates):
-            tmpPosDir= self._getTmpPath("input_coords_%d"%(coord_num))
+            tmpPosDir= self._getTmpPath("input_coords_%d_%s"%(coord_num, mode))
             if not os.path.exists(tmpPosDir):
               makePath(tmpPosDir)
             writeSetOfCoordinates(tmpPosDir, coordinatesP.get(), scale=float(Tm[coord_num])/float(Tm[0]))
@@ -743,7 +747,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         if not "OR" in self.coordinatesDict:  # fill self.coordinatesDict['OR']
           self.loadCoords(orPosDir, 'OR')
         # Getting the extracted mics where noise have not been picked yet
-        micsDir = self._getTmpPath(self.PRE_PROC_MICs_PATH)
+        micsDir = self._getExtraPath(self.PRE_PROC_MICs_PATH)
         toPickNoiseFns = list(set(self.getExtractedMicFns('OR')) -
                               (set(self.getExtractedMicFns('NOISE')) | set(self.TO_EXTRACT_MICFNS['NOISE'])))
         if len(toPickNoiseFns) > 0:
@@ -827,7 +831,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     def extractParticles(self, mode):
         '''Extract the particles from a set of micrographs with their corresponding coordinates'''
         micsFnameSet = {}
-        preprocMicsPath = self._getTmpPath(self.PRE_PROC_MICs_PATH)
+        preprocMicsPath = self._getExtraPath(self.PRE_PROC_MICs_PATH)
         toExtractMicFns = self.TO_EXTRACT_MICFNS[mode]
         print('To extract in mode {}: {}'.format(mode, toExtractMicFns))
         if len(toExtractMicFns) > 0:
@@ -946,12 +950,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         effectiveSize=-1
         nTrueParticles = self.toTrainDataSize.get() if self.toTrainDataSize.get() != -1 else 1e10
-        if self._doContinue():
-          prevRunPath = self.continueRun.get()._getExtraPath('nnetData{}'.format(trPass))
-          copyTree(prevRunPath, netDataPath)
-          if self.skipTraining.get():
-              nEpochs = 0
-        elif self._usePretrainedModel():
+        if self._usePretrainedModel():
           if nTrueParticles<1500:
             effectiveSize=1000
           elif 1500<=nTrueParticles<20000:
@@ -1220,11 +1219,29 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       cleanPath(self._getPath("particles%s.sqlite" % tmpSqliteSuff))
       return partSet
 
+    def getMicrographFnsWithCoordinates(self, shared=True):
+      '''Return a list with the filenames of those microgrpahs which already have coordinates associated in the input
+      sets. If shared, it must be in all the sets, if not shared, at least in one'''
+      sharedMics = self.getAllCoordsInputMicrographs(shared)
+      micPaths = []
+      for mic in sharedMics:
+        coordsInMic = []
+        for coordSet in self.inputCoordinates:
+          for coord in coordSet.get().iterCoordinates(mic):
+            coordsInMic.append(True)
+            break
+
+        if len(coordsInMic) == len(self.inputCoordinates):
+          micPaths.append(mic.getFileName())
+
+      micFns = self.prunePaths(micPaths)
+      return micFns
+
     def getAllCoordsInputMicrographs(self, shared=False):
       '''Returns a set with the input micrographs present associated with all the input coordinates sets.
       If shared, the list contains only those micrographs present in all input coordinates sets, else the list contains
       all microgrpah present in any set (Intersection vs Union)'''
-      micFns = set(self.prunePaths(self.inputCoordinates[0].get().getMicrographs().getFiles()))
+      micFns = set([])
       micDict = {}
       for inputCoord in self.inputCoordinates:
         newMics = inputCoord.get().getMicrographs()
@@ -1234,10 +1251,10 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           micDict[micFn] = mic.clone()
           newMicFns.append(micFn)
 
-        if shared:
-          micFns = micFns & set(newMicFns)
-        else:
+        if micFns == set([]) or not shared:
           micFns = micFns | set(newMicFns)
+        else:
+          micFns = micFns & set(newMicFns)
 
       mics = self._createSetOfMicrographs()
       mics.copyInfo(self.inputCoordinates[0].get().getMicrographs())
@@ -1390,8 +1407,11 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       trainedParams = self.loadTrainedParams()
       return self.skipTraining.get() or len(trainedParams['trainedMicFns']) > 0
 
-    def freeToContinue(self):
-      '''Kind of "traficlight that specifies if there is not extraction, training or prediction going on, which would
+    def cnnFree(self):
+      return not self.PREDICTING and not self.TRAINING
+
+    def allFree(self):
+      '''Kind of "traficlight" that specifies if there is not extraction, training or prediction going on, which would
       alterate the states of the protocol'''
       gExtracting = False
       for mode in ['OR', 'NOISE', 'AND']:
@@ -1448,7 +1468,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
     def getPreprocessedMicFns(self):
       '''Return the list of preprocessed micrograph filenames'''
-      prepDir = self._getTmpPath(self.PRE_PROC_MICs_PATH)
+      prepDir = self._getExtraPath(self.PRE_PROC_MICs_PATH)
       if not os.path.exists(prepDir):
         return []
       return os.listdir(prepDir)
@@ -1483,7 +1503,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     def readyToExtractMicFns(self, mode):
       '''Return the list of micrograph filenames which are ready to be extracted (preprocessed and common for all inputs)
       and have not or are not being extracted yet'''
-      return list((set(self.getPreprocessedMicFns()) & set(self.getInputMicsFns(shared=True))) -
+      return list((set(self.getPreprocessedMicFns()) & set(self.getMicrographFnsWithCoordinates(shared=True))) -
                   (set(self.getExtractedMicFns(mode)) | set(self.TO_EXTRACT_MICFNS[mode])))
 
     def readyToTrainMicFns(self):
@@ -1505,7 +1525,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     def loadTrainedParams(self):
       '''Load the dictionary stored in pickle format which stores the trained parameters.
       Creates a initial one if it does not exist yet'''
-      paramsFile = self._getTmpPath(self.TRAINED_PARAMS_PATH)
+      paramsFile = self._getExtraPath(self.TRAINED_PARAMS_PATH)
       if os.path.exists(paramsFile):
         with open(paramsFile, 'rb') as handle:
           params = pickle.load(handle)
@@ -1528,7 +1548,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
     def saveTrainedParams(self, params):
       '''Save the trained parameters dictionary'''
-      paramsFile = self._getTmpPath(self.TRAINED_PARAMS_PATH)
+      paramsFile = self._getExtraPath(self.TRAINED_PARAMS_PATH)
       with open(paramsFile, 'wb') as handle:
         pickle.dump(params, handle)
 
@@ -1540,6 +1560,13 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         prevNetDataPath = self._getExtraPath("nnetData{}".format(lastTrPass))
       else:
         prevNetDataPath = self._getExtraPath("nnetData{}".format(trPass - 1))
+      if prevNetDataPath != curNetDataPath:
+        copyTree(prevNetDataPath, curNetDataPath)
+
+    def retrievePreviousRunModel(self, prevProt, trPass=''):
+      '''Retrieves a CNN model from other protocol and copies its folders to used the network in a new location'''
+      curNetDataPath = self._getExtraPath("nnetData{}".format(trPass))
+      prevNetDataPath = prevProt._getExtraPath("nnetData")
       if prevNetDataPath != curNetDataPath:
         copyTree(prevNetDataPath, curNetDataPath)
 
