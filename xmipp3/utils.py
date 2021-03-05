@@ -30,8 +30,6 @@ This module contains utils functions for Xmipp protocols
 
 from os.path import join
 import numpy as np
-import pyvista as pv
-
 from pyworkflow import Config
 from pwem import emlib
 
@@ -94,30 +92,163 @@ def surrounding_values(a,ii,jj,depth=1):
     return values
 
 
-def rotation_matrix_from_vectors(vec1, vec2):
-    # a, b = (vec1 / np.linalg.norm(vec1)).reshape(3), (vec2 / np.linalg.norm(vec2)).reshape(3)
-    a, b = vec1, vec2
-    v = np.cross(a, b)
-    c = np.dot(a, b)
-    s = np.linalg.norm(v)
-    if s != 0:
-        tr = np.zeros([4, 4])
-        kmat = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
-        rotation_matrix = np.eye(3) + kmat + kmat.dot(kmat) * ((1 - c) / (s ** 2))
-        tr[0:3, 0:3] = rotation_matrix
-        tr[-1, -1] = 1
-        return tr
-    else:
-        return np.eye(4)
+class Point:
+    """ Return x, y 2d coordinates and some other properties
+    such as weight and state.
+    """
+    # Selection states
+    DISCARDED = -1
+    NORMAL = 0
+    SELECTED = 1
+
+    def __init__(self, pointId, data, weight, state=0):
+        self._id = pointId
+        self._data = data
+        self._weight = weight
+        self._state = state
+        self._container = None
+
+    def getId(self):
+        return self._id
+
+    def getX(self):
+        return self._data[self._container.XIND]
+
+    def setX(self, value):
+        self._data[self._container.XIND] = value
+
+    def getY(self):
+        return self._data[self._container.YIND]
+
+    def setY(self, value):
+        self._data[self._container.YIND] = value
+
+    def getZ(self):
+        return self._data[self._container.ZIND]
+
+    def setZ(self, value):
+        self._data[self._container.ZIND] = value
+
+    def getWeight(self):
+        return self._weight
+
+    def getState(self):
+        return self._state
+
+    def setState(self, newState):
+        self._state = newState
+
+    def eval(self, expression):
+        localDict = {}
+        for i, x in enumerate(self._data):
+            localDict['x%d' % (i + 1)] = x
+        return eval(expression, {"__builtins__": None}, localDict)
+
+    def setSelected(self):
+        self.setState(Point.SELECTED)
+
+    def isSelected(self):
+        return self.getState() == Point.SELECTED
+
+    def setDiscarded(self):
+        self.setState(Point.DISCARDED)
+
+    def isDiscarded(self):
+        return self.getState() == Point.DISCARDED
+
+    def getData(self):
+        return self._data
 
 
-def delaunayTriangulation(cloud):
-    cloud = pv.PolyData(cloud)
-    mesh = cloud.delaunay_3d()
-    shell = mesh.extract_geometry().triangulate()
-    return shell
+class Data():
+    """ Store data points. """
+
+    def __init__(self, **kwargs):
+        # Indexes of data
+        self._dim = kwargs.get('dim')  # The points dimensions
+        self.clear()
+
+    def addPoint(self, point, position=None):
+        point._container = self
+        if position is None:
+            self._points.append(point)
+        else:
+            self._points.insert(position, point)
+
+    def getPoint(self, index):
+        return self._points[index]
+
+    def __iter__(self):
+        for point in self._points:
+            if not point.isDiscarded():
+                yield point
+
+    def iterAll(self):
+        """ Iterate over all points, including the discarded ones."""
+        return iter(self._points)
+
+    def getXData(self):
+        return [p.getX() for p in self]
+
+    def getYData(self):
+        return [p.getY() for p in self]
+
+    def getZData(self):
+        return [p.getZ() for p in self]
+
+    def getWeights(self):
+        return [p.getWeight() for p in self]
+
+    def getSize(self):
+        return len(self._points)
+
+    def getSelectedSize(self):
+        return len([p for p in self if p.isSelected()])
+
+    def getDiscardedSize(self):
+        return len([p for p in self.iterAll() if p.isDiscarded()])
+
+    def clear(self):
+        self.XIND = 0
+        self.YIND = 1
+        self.ZIND = 2
+        self._points = []
 
 
-def computeNormals(triangulation):
-    triangulation.compute_normals(inplace=True)
-    return triangulation.point_normals
+class PathData(Data):
+    """ Just contains two list of x and y coordinates. """
+
+    def __init__(self, **kwargs):
+        Data.__init__(self, **kwargs)
+
+    def splitLongestSegment(self):
+        """ Split the longest segment by adding the midpoint. """
+        maxDist = 0
+        n = self.getSize()
+        # Find the longest segment and its index
+        for i in range(n - 1):
+            p1 = self.getPoint(i)
+            x1, y1 = p1.getX(), p1.getY()
+            p2 = self.getPoint(i + 1)
+            x2, y2 = p2.getX(), p2.getY()
+            dist = (x1 - x2) ** 2 + (y1 - y2) ** 2
+            if dist > maxDist:
+                maxDist = dist
+                maxIndex = i + 1
+                midX = (x1 + x2) / 2
+                midY = (y1 + y2) / 2
+        # Add a midpoint to it
+        point = self.createEmptyPoint()
+        point.setX(midX)
+        point.setY(midY)
+        self.addPoint(point, position=maxIndex)
+
+    def createEmptyPoint(self):
+        data = [0.] * self._dim  # create 0, 0...0 point
+        point = Point(0, data, 0)
+        point._container = self
+
+        return point
+
+    def removeLastPoint(self):
+        del self._points[-1]

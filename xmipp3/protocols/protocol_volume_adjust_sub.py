@@ -98,15 +98,20 @@ class XmippProtVolSubtraction(XmippProtVolAdjBase):
         XmippProtVolAdjBase._defineParams(form)
         form.addParam('pdb', BooleanParam, label='Is the second input a PDB?', default=False,
                       help='If yes, the protocol will generate and store in folder "extra" of this protocol '
-                           'a volume and a mask from the pdb. If not, a second volume has to be input and optionally '
-                           '(but highly recomendable), a mask for it')
+                           'a volume and a mask from the pdb. This is not the recommended option, as the automatic '
+                           'conversion of the PDB into a density map may not be successful due to origin mismatches. '
+                           'We recommend to convert previously the PDB, inspect the converted map and use the map as '
+                           'input. If not, a second volume has to be input and optionally (but highly recommendable), '
+                           'a mask for it.')
         form.addParam('inputPdbData', EnumParam, choices=['object', 'file'], condition='pdb',
                       label="Retrieve PDB from", default=self.IMPORT_OBJ,
                       display=EnumParam.DISPLAY_HLIST,
                       help='Retrieve PDB data from server, use a pdb Object, or a local file')
         form.addParam('pdbObj', PointerParam, pointerClass='AtomStruct',
                       label="Input pdb ", condition='inputPdbData == IMPORT_OBJ and pdb', allowsNull=True,
-                      help='Specify a pdb object.')
+                      help='Specify a pdb object. This is not the recommended option, as the automatic conversion of '
+                           'the PDB into a density map may not be successful due to origin mismatches. We recommend'
+                           'to convert previously the PDB, inspect the converted map and use the map as input.')
         form.addParam('pdbFile', FileParam,
                       label="File path", condition='inputPdbData == IMPORT_FROM_FILES and pdb', allowsNull=True,
                       help='Specify a path to desired PDB structure.')
@@ -114,6 +119,9 @@ class XmippProtVolSubtraction(XmippProtVolAdjBase):
                       help='Specify a volume.')
         form.addParam('mask2', PointerParam, pointerClass='VolumeMask', label="Mask for volume 2",
                       condition='masks and pdb==False', help='Specify a mask for volume 1.')
+        form.addParam('saveFiles', BooleanParam, label='Save intermediate files?', default=False,
+                      expertLevel=LEVEL_ADVANCED, help='Save input volume 1 filtered and input volume 2 adjusted, which'
+                                                       'are the volumes that are really subtracted.')
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAdjSteps(self):
@@ -184,6 +192,9 @@ class XmippProtVolSubtraction(XmippProtVolAdjBase):
 
         if self.masks:
             args += ' --mask1 %s --mask2 %s' % (self.mask1.get().getFileName(), mask2)
+        if self.saveFiles:
+            args += ' --saveV1 %s --saveV2 %s' % (self._getExtraPath('vol1_filtered.mrc'),
+                                                  self._getExtraPath('vol2_adjusted.mrc'))
         self.runJob(program, args)
 
     # --------------------------- INFO functions --------------------------------------------

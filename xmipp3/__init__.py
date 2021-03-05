@@ -144,7 +144,7 @@ class Plugin(pwem.Plugin):
 
         ## Linking bindings (removing installationToken)
         bindingsAndLibsCmd = ("find {bindingsSrc} -maxdepth 1 -mindepth 1 "
-                              "! -name __pycache__ -exec ln -srfn {{}} {bindingsDst} \; && "
+                              r"! -name __pycache__ -exec ln -srfn {{}} {bindingsDst} \; && "
                               "ln -srfn {coreLib} {libsDst} && "
                               "touch {bindingsToken} && "
                               "rm {installedToken} 2> /dev/null")
