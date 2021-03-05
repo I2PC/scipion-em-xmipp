@@ -366,6 +366,8 @@ class XmippProtExtractMovieParticlesNew(ProtProcessMovies):
                 ccIn = rowIn.getValue(emlib.MDL_MAXCC)
                 costIn = rowIn.getValue(emlib.MDL_COST)
                 wIn = rowIn.getValue(emlib.MDL_WEIGHT)
+                contXIn = rowIn.getValue(emlib.MDL_CONTINUOUS_X)
+                contYIn = rowIn.getValue(emlib.MDL_CONTINUOUS_Y)
 
                 count = 0
                 rowsOutputParts = iterRows(mdOutputParts)
@@ -394,6 +396,8 @@ class XmippProtExtractMovieParticlesNew(ProtProcessMovies):
                         rowOutFinal.setValue(emlib.MDL_ANGLE_TILT, tiltIn)
                         rowOutFinal.setValue(emlib.MDL_ANGLE_PSI, psiIn)
                         rowOutFinal.setValue(emlib.MDL_FLIP, flipIn)
+                        rowOutFinal.setValue(emlib.MDL_CONTINUOUS_X, contXIn)
+                        rowOutFinal.setValue(emlib.MDL_CONTINUOUS_Y, contYIn)
                         if ccIn is not None:
                             rowOutFinal.setValue(emlib.MDL_MAXCC, ccIn)
                         if costIn is not None:

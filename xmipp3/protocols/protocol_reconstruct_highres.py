@@ -1090,8 +1090,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     args+=" --optimizeAngles --max_angular_change %f"%maxAngle
                 if self.contDefocus or (self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT and iteration>=5):
                     args+=" --optimizeDefocus --max_defocus_change %f"%self.contMaxDefocus.get()
-                if self.inputParticles.get().isPhaseFlipped():
-                    args+=" --phaseFlipped"
+                #if self.inputParticles.get().isPhaseFlipped():
+                args+=" --phaseFlipped"
                 #if self.weightResiduals:
                 #    args+=" --oresiduals %s"%join(fnDirLocal,"residuals%02i.stk"%i)
                 self.runJob("xmipp_angular_continuous_assign2",args,numberOfMpi=self.numberOfMpi.get())
@@ -1355,8 +1355,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 if hasCTF:
                     args="-i %s -o %s.stk --save_metadata_stack %s.xmd --keep_input_columns"%(fnAngles,fnCorrectedImagesRoot,fnCorrectedImagesRoot)
                     args+=" --sampling_rate %f --correct_envelope"%TsCurrent
-                    if self.inputParticles.get().isPhaseFlipped():
-                        args+=" --phase_flipped"
+                    #if self.inputParticles.get().isPhaseFlipped():
+                    args+=" --phase_flipped"
                     self.runJob("xmipp_ctf_correct_wiener2d",args,numberOfMpi=min(self.numberOfMpi.get(),24))
                     self.runJob("xmipp_image_eliminate_byEnergy","-i %s.xmd --sigma2 9 --minSigma2 0.01"%\
                                 fnCorrectedImagesRoot,numberOfMpi=min(self.numberOfMpi.get(),12))
