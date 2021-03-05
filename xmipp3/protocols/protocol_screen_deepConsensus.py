@@ -33,7 +33,6 @@ from glob import glob
 import six
 import json, shutil, pickle
 import time
-from xmipp3.protocols import XmippProtReconstructHighRes
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.utils.path import (makePath, cleanPattern, cleanPath, copyTree,
