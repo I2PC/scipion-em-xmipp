@@ -45,14 +45,14 @@ class XmippProtSubtractProjection(EMProtocol):
     @classmethod
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('vol1', PointerParam, pointerClass='Volume', label="Volume 1 ", help='Specify a volume.')
-        form.addParam('masks', BooleanParam, label='Mask volumes?', default=True,
-                      help='The masks are not mandatory but highly recommendable.')
-        form.addParam('mask1', PointerParam, pointerClass='VolumeMask', label="Mask for volume 1",
+        form.addParam('vol', PointerParam, pointerClass='Volume', label="Initial volume ", help='Specify a volume.')
+        form.addParam('maskBool', BooleanParam, label='Subtract in a region?', default=True,
+                      help='The mask is not mandatory but highly recommendable.')
+        form.addParam('mask', PointerParam, pointerClass='Mask', label="Mask for subtraction region",
                       condition='masks', help='Specify a mask for volume 1.')
         form.addParam('resol', FloatParam, label="Filter at resolution: ", default=3, allowsNull=True,
                       expertLevel=LEVEL_ADVANCED,
-                      help='Resolution (A) at which subtraction will be performed, filtering the input volumes.'
+                      help='Resolution (A) at which subtraction will be performed, filtering the volume projections.'
                            'Value 0 implies no filtering.')
         form.addParam('sigma', FloatParam, label="Decay of the filter (sigma): ", default=3, condition='resol',
                       help='Decay of the filter (sigma parameter) to smooth the mask transition',
@@ -62,33 +62,11 @@ class XmippProtSubtractProjection(EMProtocol):
                       expertLevel=LEVEL_ADVANCED,
                       help='Relaxation factor for Fourier amplitude projector (POCS), it should be between 0 and 1, '
                            'being 1 no relaxation and 0 no modification of volume 2 amplitudes')
-
-        form.addParam('pdb', BooleanParam, label='Is the second input a PDB?', default=False,
-                      help='If yes, the protocol will generate and store in folder "extra" of this protocol '
-                           'a volume and a mask from the pdb. This is not the recommended option, as the automatic '
-                           'conversion of the PDB into a density map may not be successful due to origin mismatches. '
-                           'We recommend to convert previously the PDB, inspect the converted map and use the map as '
-                           'input. If not, a second volume has to be input and optionally (but highly recommendable), '
-                           'a mask for it.')
-        form.addParam('inputPdbData', EnumParam, choices=['object', 'file'], condition='pdb',
-                      label="Retrieve PDB from", default=self.IMPORT_OBJ,
-                      display=EnumParam.DISPLAY_HLIST,
-                      help='Retrieve PDB data from server, use a pdb Object, or a local file')
-        form.addParam('pdbObj', PointerParam, pointerClass='AtomStruct',
-                      label="Input pdb ", condition='inputPdbData == IMPORT_OBJ and pdb', allowsNull=True,
-                      help='Specify a pdb object. This is not the recommended option, as the automatic conversion of '
-                           'the PDB into a density map may not be successful due to origin mismatches. We recommend'
-                           'to convert previously the PDB, inspect the converted map and use the map as input.')
-        form.addParam('pdbFile', FileParam,
-                      label="File path", condition='inputPdbData == IMPORT_FROM_FILES and pdb', allowsNull=True,
-                      help='Specify a path to desired PDB structure.')
-        form.addParam('vol2', PointerParam, pointerClass='Volume', label="Volume 2 ", condition='pdb == False',
-                      help='Specify a volume.')
-        form.addParam('mask2', PointerParam, pointerClass='VolumeMask', label="Mask for volume 2",
-                      condition='masks and pdb==False', help='Specify a mask for volume 1.')
-        form.addParam('saveFiles', BooleanParam, label='Save intermediate files?', default=False,
-                      expertLevel=LEVEL_ADVANCED, help='Save input volume 1 filtered and input volume 2 adjusted, which'
-                                                       'are the volumes that are really subtracted.')
+        form.addParam('particles', PointerParam, pointerClass='SetOfParticles', label="Particles: ",
+                      help='Specify a SetOfParticles.')
+        # form.addParam('saveFiles', BooleanParam, label='Save intermediate files?', default=False,
+        #               expertLevel=LEVEL_ADVANCED, help='Save input volume 1 filtered and input volume 2 adjusted, which'
+        #                                                'are the volumes that are really subtracted.')
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -102,8 +80,8 @@ class XmippProtSubtractProjection(EMProtocol):
         pass
 
     def subtractionStep(self):
-        vol1 = self.vol1.get().clone()
-        fileName1 = vol1.getFileName()
+        vol = self.vol.get().clone()
+        fileName1 = vol.getFileName()
         if fileName1.endswith('.mrc'):
             fileName1 += ':mrc'
         if self.pdb:
@@ -119,25 +97,25 @@ class XmippProtSubtractProjection(EMProtocol):
         iter = self.iter.get()
         program = "xmipp_volume_subtraction"
         args = '--i1 %s --i2 %s -o %s --iter %s --lambda %s --sub' % \
-               (vol1.getFileName(), vol2, self._getExtraPath("output_volume.mrc"), iter, self.rfactor.get())
+               (vol.getFileName(), vol2, self._getExtraPath("output_volume.mrc"), iter, self.rfactor.get())
         if resol:
-            fc = vol1.getSamplingRate()/resol
+            fc = vol.getSamplingRate()/resol
             args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
 
         if self.masks:
             args += ' --mask1 %s --mask2 %s' % (self.mask1.get().getFileName(), mask2)
         if self.saveFiles:
-            args += ' --saveV1 %s --saveV2 %s' % (self._getExtraPath('vol1_filtered.mrc'),
+            args += ' --saveV1 %s --saveV2 %s' % (self._getExtraPath('vol_filtered.mrc'),
                                                   self._getExtraPath('vol2_adjusted.mrc'))
         self.runJob(program, args)
 
     def createOutputStep(self):
-        vol1 = self.vol1.get()
+        vol = self.vol.get()
         volume = Volume()
-        volume.setSamplingRate(vol1.getSamplingRate())
-        if vol1.getFileName().endswith('mrc'):
+        volume.setSamplingRate(vol.getSamplingRate())
+        if vol.getFileName().endswith('mrc'):
             origin = Transform()
-            ccp4header = headers.Ccp4Header(vol1.getFileName(), readHeader=True)
+            ccp4header = headers.Ccp4Header(vol.getFileName(), readHeader=True)
             shifts = ccp4header.getOrigin()
             origin.setShiftsTuple(shifts)
             volume.setOrigin(origin)
@@ -149,7 +127,7 @@ class XmippProtSubtractProjection(EMProtocol):
 
     # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
-        summary = ["Volume 1: %s" % self.vol1.get().getFileName()]
+        summary = ["Volume 1: %s" % self.vol.get().getFileName()]
         summary.append("Volume 2: %s" % self.vol2.get().getFileName())
         if self.masks:
             summary.append("Input mask 1: %s" % self.mask1.get().getFileName())
@@ -163,7 +141,7 @@ class XmippProtSubtractProjection(EMProtocol):
             methods.append("Output volume not ready yet.")
         else:
             methods.append("Volume %s subtracted from volume %s" % (self.vol2.get().getFileName(),
-                                                                    self.vol1.get().getFileName()))
+                                                                    self.vol.get().getFileName()))
             if self.resol.get() != 0:
                 methods.append(" at resolution %f A" % self.resol.get())
         return methods
