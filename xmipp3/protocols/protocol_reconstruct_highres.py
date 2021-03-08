@@ -333,8 +333,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             writeSetOfParticles(self.inputParticles.get(), self.imgsFn)
         self.runJob('xmipp_metadata_utilities','-i %s --fill image1 constant noImage'%self.imgsFn,numberOfMpi=1)
         self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "image1=image"'%self.imgsFn,numberOfMpi=1)
-        self.runJob('xmipp_metadata_utilities','-i %s --fill particleId constant 1'%self.imgsFn,numberOfMpi=1)
-        self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "particleId=itemId"'%self.imgsFn,numberOfMpi=1)
+        #self.runJob('xmipp_metadata_utilities','-i %s --fill particleId constant 1'%self.imgsFn,numberOfMpi=1)
+        #self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "particleId=itemId"'%self.imgsFn,numberOfMpi=1)
         imgsFnId=self._getExtraPath('imagesId.xmd')
         self.runJob('xmipp_metadata_utilities','-i %s --operate keep_column particleId -o %s'%(self.imgsFn,imgsFnId),numberOfMpi=1)
 
@@ -369,7 +369,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             imgSetOut = self._createSetOfParticles()
             imgSetOut.copyInfo(imgSet)
             imgSetOut.setAlignmentProj()
-            imgSetOut.setIsPhaseFlipped( imgSet.isPhaseFlipped() )
+            imgSetOut.setIsPhaseFlipped(True)
             self.iterMd = md.iterRows(fnAngles, md.MDL_PARTICLE_ID)
             self.lastRow = next(self.iterMd)
             imgSetOut.copyItems(imgSet,
@@ -495,7 +495,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             if self.inputVolumes.get() is None:
                 args = "-i %s -o %s --max_resolution 0.3 --sampling %f --sym %s" % (
                     self.imgsFn, fnVol1, TsCurrent, self.symmetryGroup.get())
-                if self.useGpu.get():
+                if False: #self.useGpu.get():
                     #AJ to make it work with and without queue system
                     if self.numberOfMpi.get()>1:
                         N_GPUs = len((self.gpuList.get()).split(','))
@@ -1405,7 +1405,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
 
                 # Reconstruct Fourier
                 args="-i %s -o %s --sym %s --weight"%(fnAnglesToUse,fnVol,self.symmetryGroup)
-                if self.useGpu.get():
+                if False: #self.useGpu.get():
                     #AJ to make it work with and without queue system
                     if self.numberOfMpi.get()>1:
                         N_GPUs = len((self.gpuList.get()).split(','))
@@ -1430,6 +1430,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         args += " --device %s" %(GpuListCuda)
                     args += ' --thr %s' % self.numberOfThreads.get()
                     if self.numberOfMpi.get()>1:
+                        print("AAA", args)
                         self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
                     else:
                         self.runJob('xmipp_cuda_reconstruct_fourier', args)
@@ -1468,6 +1469,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             self.runJob("xmipp_metadata_utilities",'-i %s --set merge %s'%(fnAngles,fnAnglesAux),numberOfMpi=1)
             cleanPath(fnAnglesAux)
             cleanPath(fnAnglesAuxId)
+
 
     def postProcessing(self, iteration):
         fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
@@ -1534,11 +1536,18 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if self.postSignificantDenoise:
             fnRootRestored=join(fnDirCurrent,"volumeRestored")
             args='--i1 %s --i2 %s --oroot %s --denoising 1'%(fnVol1,fnVol2,fnRootRestored)
-            if fnMask!="":
-                args+=" --mask binary_file %s"%fnMask
             if self.useGpu:
+                if fnMask!="":
+                    args+=" --mask %s"%fnMask
+                if not self.useQueueForSteps() and not self.useQueue():
+                    GpuListAux = ''
+                    for elem in self.getGpuList():
+                        GpuListAux = GpuListAux+str(elem)+','
+                    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                 self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
             else:
+                if fnMask!="":
+                    args+=" --mask binary_file %s"%fnMask
                 self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
             moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
@@ -1547,11 +1556,18 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if self.postFilterBank:
             fnRootRestored=join(fnDirCurrent,"volumeRestored")
             args='--i1 %s --i2 %s --oroot %s --filterBank 0.01'%(fnVol1,fnVol2,fnRootRestored)
-            if fnMask!="":
-                args+=" --mask binary_file %s"%fnMask
             if self.useGpu:
+                if fnMask!="":
+                    args+=" --mask %s"%fnMask
+                if not self.useQueueForSteps() and not self.useQueue():
+                    GpuListAux = ''
+                    for elem in self.getGpuList():
+                        GpuListAux = GpuListAux+str(elem)+','
+                    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                 self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
             else:
+                if fnMask!="":
+                    args+=" --mask binary_file %s"%fnMask
                 self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
             moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
@@ -1570,11 +1586,18 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if self.postDeconvolve:
             fnRootRestored=join(fnDirCurrent,"volumeRestored")
             args='--i1 %s --i2 %s --oroot %s --deconvolution 1'%(fnVol1,fnVol2,fnRootRestored)
-            if fnMask!="":
-                args+=" --mask binary_file %s"%fnMask
             if self.useGpu:
+                if fnMask!="":
+                    args+=" --mask %s"%fnMask
+                if not self.useQueueForSteps() and not self.useQueue():
+                    GpuListAux = ''
+                    for elem in self.getGpuList():
+                        GpuListAux = GpuListAux+str(elem)+','
+                    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                 self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
             else:
+                if fnMask!="":
+                    args+=" --mask binary_file %s"%fnMask
                 self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
             moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
@@ -1605,11 +1628,18 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if self.postDifference:
             fnRootRestored=join(fnDirCurrent,"volumeRestored")
             args='--i1 %s --i2 %s --oroot %s --difference 2 2'%(fnVol1,fnVol2,fnRootRestored)
-            if fnMask!="":
-                args+=" --mask binary_file %s"%fnMask
             if self.useGpu:
+                if fnMask!="":
+                    args+=" --mask %s"%fnMask
+                if not self.useQueueForSteps() and not self.useQueue():
+                    GpuListAux = ''
+                    for elem in self.getGpuList():
+                        GpuListAux = GpuListAux+str(elem)+','
+                    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                 self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
             else:
+                if fnMask!="":
+                    args+=" --mask binary_file %s"%fnMask
                 self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             self.runJob("xmipp_image_convert","-i %s_avgDiff.vol -o %s -t vol"%(fnRootRestored,fnVolAvg),numberOfMpi=1)
             cleanPath("%s_avgDiff.vol"%fnRootRestored)

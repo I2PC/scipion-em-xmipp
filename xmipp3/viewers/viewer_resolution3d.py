@@ -41,6 +41,8 @@ import pyworkflow.gui.dialog as dialog
 from pwem import emlib
 from xmipp3.convert import getImageLocation
 from xmipp3.protocols.protocol_resolution3d import XmippProtResolution3D
+from xmipp3.utils import PathData
+
 from .plotter import XmippPlotter
 from os.path import exists
 
@@ -136,7 +138,6 @@ class XmippResolution3DViewer(ProtocolViewer):
         f.close()
             
     def _loadData(self):
-        from xmipp3.protocols.nma.data import PathData
         data = PathData(dim=2)
         bfactorFile = self.protocol._getPath('bfactor.txt')
         if os.path.exists(bfactorFile):

@@ -459,7 +459,7 @@ def insertAngularClassAverageStep(self, iterN, refN, **kwargs):
               'outClasses' : outClasses
               }
     
-    args = ' -i ctfGroup[0-9][0-9][0-9][0-9][0-9][0-9]\$@'
+    args = r' -i ctfGroup[0-9][0-9][0-9][0-9][0-9][0-9]\$@'
     args += '%(docFileInputAngles)s --lib %(projLibraryDoc)s -o %(outClasses)s'
     
     # FIXME: This option no exist in the form

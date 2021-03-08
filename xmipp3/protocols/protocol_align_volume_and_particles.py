@@ -44,6 +44,9 @@ from xmipp3.constants import SYM_URL
 ALIGN_MASK_CIRCULAR = 0
 ALIGN_MASK_BINARY_FILE = 1
 
+ALIGN_GLOBAL = 0
+ALIGN_LOCAL = 1
+
 
 class XmippProtAlignVolumeParticles(ProtAlignVolume):
     """ 
@@ -74,6 +77,8 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
                       help='Select one set of particles to be aligned against '
                            'the reference set of particles using the transformation '
                            'calculated with the reference and input volumes.')
+        form.addParam('alignmentMode', params.EnumParam, default=ALIGN_GLOBAL, choices=["Global","Local"],
+                      label="Alignment mode")
         form.addParam('symmetryGroup', params.StringParam, default='c1',
                       label="Symmetry group",
                       help='See %s page for a description of the symmetries '
@@ -150,7 +155,10 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
         args = "--i1 %s --i2 %s --apply %s" % \
                (self.fnRefVol, self.fnInputVol, outVolFn)
         args += maskArgs
-        args += " --frm "
+        if self.alignmentMode.get()==ALIGN_GLOBAL:
+            args += " --frm"
+        else:
+            args += " --local"
         args += " --copyGeo %s" % fhInputTranMat        
         self.runJob("xmipp_volume_align", args)
         cleanPath(self.fnRefVol)
