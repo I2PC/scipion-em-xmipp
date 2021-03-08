@@ -138,9 +138,10 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         self.debug("Loading input db: %s" % micsFile)
         micSet = SetOfMicrographs(filename=micsFile)
         micSet.loadAllProperties()
+        micSet.iterItems()#filtro UTC time o ID or Creation
         # self.listOfMicrographs = [m.clone() for m in micSet] # CHANGE
         # ---- SOLUTION
-        newMics = [m.clone() for m in micSet if m.getObjId() not in self.insertedDict]
+        newMics = [m.clone() for m in micSet if m.getObjId() not in self.insertedDict] #con el ultimo ID de insertedDict
         self.listOfMicrographs.extend(newMics)
         # ---
         self.streamClosed = micSet.isStreamClosed()
