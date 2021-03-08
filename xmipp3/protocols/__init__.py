@@ -67,10 +67,6 @@ from .protocol_extract_asymmetric_unit import XmippProtExtractUnit
 from .protocol_helical_parameters import XmippProtHelicalParameters
 from .protocol_kerdensom import XmippProtKerdensom
 from .protocol_local_ctf import XmippProtLocalCTF
-from .protocol_metaprotocol_golden_highres import XmippMetaProtGoldenHighRes
-from .protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
-from .protocol_metaprotocol_create_output import XmippMetaProtCreateOutput
-from .protocol_metaprotocol_discrete_heterogeneity_scheduler import XmippMetaProtDiscreteHeterogeneityScheduler # keep this after XmippMetaProtCreateSubset and XmippMetaProtCreateOutput
 from .protocol_ml2d import XmippProtML2D
 from .protocol_movie_gain import XmippProtMovieGain
 from .protocol_movie_average import XmippProtMovieAverage
@@ -128,5 +124,10 @@ from .protocol_write_testC import XmippProtWriteTestC
 from .protocol_write_testP import XmippProtWriteTestP
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
 from .protocol_deep_denoising import XmippProtDeepDenoising  # deepDenoising has to be after XmippProtGenerateReprojections and XmippProtCompareReprojections
+
+from .protocol_metaprotocol_golden_highres import XmippMetaProtGoldenHighRes
+from .protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
+from .protocol_metaprotocol_create_output import XmippMetaProtCreateOutput
+from .protocol_metaprotocol_discrete_heterogeneity_scheduler import XmippMetaProtDiscreteHeterogeneityScheduler # keep this after XmippMetaProtCreateSubset and XmippMetaProtCreateOutput
 from .protocol_deep_align import XmippProtDeepAlign
 

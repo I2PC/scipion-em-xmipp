@@ -40,7 +40,6 @@ from .viewer_resolution_directional import XmippMonoDirViewer
 from .viewer_resolution_fso import XmippProtFSOViewer
 from .viewer_resolution_monogenic_signal import XmippMonoResViewer
 from .viewer_resolution_deepres import XmippResDeepResViewer
-from .viewer_resolution_monotomo import XmippMonoTomoViewer
 from .viewer_validate_nontilt import XmippValidateNonTiltViewer
 from .viewer_validate_fscq import XmippProtValFitViewer
 from .viewer_split_volume import XmippViewerSplitVolume
