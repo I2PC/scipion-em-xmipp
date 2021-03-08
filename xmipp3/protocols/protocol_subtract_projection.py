@@ -83,8 +83,6 @@ class XmippProtSubtractProjection(EMProtocol):
         mdParticles = lib.MetaData()
         for part in self.particles.get():
             fn = part.getFileName()
-            # if fn.endswith('.mrc'):
-            #     fn += ':mrc'
             nRow = md.Row()
             nRow.setValue(lib.MDL_ITEM_ID, int(part.getObjId()))
             nRow.setValue(lib.MDL_IMAGE, fn)
@@ -96,8 +94,6 @@ class XmippProtSubtractProjection(EMProtocol):
     def subtractionStep(self):
         vol = self.vol.get().clone()
         fnVol = vol.getFileName()
-        if fnVol.endswith('.mrc'):
-            fnVol += ':mrc'
         resol = self.resol.get()
         iter = self.iter.get()
         program = "xmipp_subtract_projection"
