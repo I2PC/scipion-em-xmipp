@@ -66,10 +66,9 @@ class XmippProtSubtractProjection(EMProtocol):
                       expertLevel=LEVEL_ADVANCED,
                       help='Relaxation factor for Fourier amplitude projector (POCS), it should be between 0 and 1, '
                            'being 1 no relaxation and 0 no modification of volume 2 amplitudes')
-
-        # form.addParam('saveFiles', BooleanParam, label='Save intermediate files?', default=False,
-        #               expertLevel=LEVEL_ADVANCED, help='Save input volume 1 filtered and input volume 2 adjusted, which'
-        #                                                'are the volumes that are really subtracted.')
+        form.addParam('saveFiles', BooleanParam, label='Save intermediate files?', default=False,
+                      expertLevel=LEVEL_ADVANCED, help='Save input particle filtered and computed projection adjusted, '
+                                                       'which are the volumes that are really subtracted.')
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -82,9 +81,10 @@ class XmippProtSubtractProjection(EMProtocol):
         # convert input particles into .xmd file
         mdParticles = lib.MetaData()
         for part in self.particles.get():
-            fn = part.getFileName()
+            id = part.getObjId()
+            fn = "%s@%s" % (id, part.getFileName())
             nRow = md.Row()
-            nRow.setValue(lib.MDL_ITEM_ID, int(part.getObjId()))
+            nRow.setValue(lib.MDL_ITEM_ID, int(id))
             nRow.setValue(lib.MDL_IMAGE, fn)
             alignmentToRow(part.getTransform(), nRow, ALIGN_3D)
             ctfModelToRow(part.getCTF(), nRow)
@@ -94,20 +94,23 @@ class XmippProtSubtractProjection(EMProtocol):
     def subtractionStep(self):
         vol = self.vol.get().clone()
         fnVol = vol.getFileName()
+        if fnVol.endswith('.mrc'):
+            fnVol += ':mrc'
         resol = self.resol.get()
         iter = self.iter.get()
         program = "xmipp_subtract_projection"
-        args = '-i %s --ref %s --iter %s --lambda %s' % (self._getExtraPath("input_particles.xmd"), fnVol, iter,
-                                                         self.rfactor.get())
+        args = '-i %s --ref %s -o %s --iter %s --lambda %s' % (self._getExtraPath("input_particles.xmd"), fnVol,
+                                                               self._getExtraPath("output_particle.mrc"), iter,
+                                                               self.rfactor.get())
         if resol:
             fc = vol.getSamplingRate()/resol
             args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
 
         if self.maskBool:
             args += ' --mask %s' % self.mask.get().getFileName()
-        # if self.saveFiles:
-        #     args += ' --saveV1 %s --saveV2 %s' % (self._getExtraPath('vol_filtered.mrc'),
-        #                                           self._getExtraPath('vol2_adjusted.mrc'))
+        if self.saveFiles:
+            args += ' --savePart %s --saveProj %s' % (self._getExtraPath('part_filtered.mrc'),
+                                                      self._getExtraPath('proj_adjusted.mrc'))
         self.runJob(program, args)
 
     def createOutputStep(self):
