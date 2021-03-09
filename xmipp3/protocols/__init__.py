@@ -26,26 +26,21 @@
 # *
 # **************************************************************************
 
-# Please keep alphabetical order
-
 from .protocol_preprocess import *
 
-from .protocol_align_volume import XmippProtAlignVolume, XmippProtAlignVolumeForWeb
-from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
-from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
-from .protocol_angular_alignment_sph import XmippProtAngularAlignmentSPH
 from .protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
+from .protocol_align_volume import XmippProtAlignVolume, XmippProtAlignVolumeForWeb
+from .protocol_preprocess.protocol_add_noise import (XmippProtAddNoiseVolumes,
+                                                     XmippProtAddNoiseParticles)
 from .protocol_apply_alignment import XmippProtApplyAlignment
 from .protocol_apply_transformation_matrix import XmippProtApplyTransformationMatrix
 from .protocol_break_symmetry import XmippProtAngBreakSymmetry
-from .protocol_center_particles import XmippProtCenterParticles
 from .protocol_cl2d_align import XmippProtCL2DAlign
 from .protocol_cl2d import XmippProtCL2D
 from .protocol_classify_kmeans2d import XmippProtKmeansClassif2D
 from .protocol_classification_gpuCorr import XmippProtGpuCrrCL2D
 from .protocol_classification_gpuCorr_semi import XmippProtStrGpuCrrSimple
 from .protocol_classification_gpuCorr_full import XmippProtStrGpuCrrCL2D
-from .protocol_consensus_local_ctf import XmippProtConsensusLocalCTF
 from .protocol_ctf_defocus_group import XmippProtCTFDefocusGroup
 from .protocol_compare_reprojections import XmippProtCompareReprojections
 from .protocol_compare_angles import XmippProtCompareAngles
@@ -66,11 +61,6 @@ from .protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
 from .protocol_extract_asymmetric_unit import XmippProtExtractUnit
 from .protocol_helical_parameters import XmippProtHelicalParameters
 from .protocol_kerdensom import XmippProtKerdensom
-from .protocol_local_ctf import XmippProtLocalCTF
-from .protocol_metaprotocol_golden_highres import XmippMetaProtGoldenHighRes
-from .protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
-from .protocol_metaprotocol_create_output import XmippMetaProtCreateOutput
-from .protocol_metaprotocol_discrete_heterogeneity_scheduler import XmippMetaProtDiscreteHeterogeneityScheduler # keep this after XmippMetaProtCreateSubset and XmippMetaProtCreateOutput
 from .protocol_ml2d import XmippProtML2D
 from .protocol_movie_gain import XmippProtMovieGain
 from .protocol_movie_average import XmippProtMovieAverage
@@ -87,16 +77,12 @@ from .protocol_pick_noise import XmippProtPickNoise
 from .protocol_particle_boxsize import XmippProtParticleBoxsize
 from .protocol_particle_pick import XmippProtParticlePicking
 from .protocol_particle_pick_pairs import XmippProtParticlePickingPairs
-from .protocol_preprocess.protocol_add_noise import (XmippProtAddNoiseVolumes,
-                                                     XmippProtAddNoiseParticles)
-from .protocol_particle_pick_remove_duplicates import XmippProtPickingRemoveDuplicates
-from .protocol_postProcessing_deepPostProcessing import XmippProtDeepVolPostProc
 from .protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
 from .protocol_projmatch import XmippProtProjMatch
 from .protocol_random_conical_tilt import XmippProtRCT
 from .protocol_ransac import XmippProtRansac
+from .protocol_center_particles import XmippProtCenterParticles
 from .protocol_reconstruct_fourier import XmippProtReconstructFourier
-from .protocol_reconstruct_heterogeneous import XmippProtReconstructHeterogeneous
 from .protocol_reconstruct_highres import XmippProtReconstructHighRes
 from .protocol_reconstruct_significant import XmippProtReconstructSignificant
 from .protocol_reconstruct_swarm import XmippProtReconstructSwarm
@@ -105,6 +91,7 @@ from .protocol_resolution_directional import XmippProtMonoDir
 from .protocol_resolution_fso import XmippProtFSO
 from .protocol_resolution_monogenic_signal import XmippProtMonoRes
 from .protocol_resolution_deepres import XmippProtDeepRes
+from .protocol_postProcessing_deepPostProcessing import XmippProtDeepVolPostProc
 from .protocol_rotational_spectra import XmippProtRotSpectra
 from .protocol_rotational_symmetry import XmippProtRotationalSymmetry
 from .protocol_screen_particles import XmippProtScreenParticles
@@ -113,30 +100,30 @@ from .protocol_screen_deeplearning import XmippProtScreenDeepLearning
 from .protocol_simulate_ctf import XmippProtSimulateCTF
 from .protocol_solid_angles import XmippProtSolidAngles
 from .protocol_split_volume import XmippProtSplitvolume
-from .protocol_split_volume_hierarchical_cluster import XmippProtSplitVolumeHierarchical
-from .protocol_structure_map_sph import XmippProtStructureMapSPH
 from .protocol_trigger_data import XmippProtTriggerData
 from .protocol_validate_nontilt import XmippProtValidateNonTilt
 from .protocol_validate_overfitting import XmippProtValidateOverfitting
 from .protocol_validate_fscq import XmippProtValFit
-from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtraction
-from .protocol_volume_consensus import XmippProtVolConsensus
-from .protocol_volume_deform_sph import XmippProtVolumeDeformSPH
 from .protocol_volume_local_sharpening import XmippProtLocSharp
 from .protocol_volume_strain import XmippProtVolumeStrain
 from .protocol_write_testC import XmippProtWriteTestC
 from .protocol_write_testP import XmippProtWriteTestP
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
 from .protocol_deep_denoising import XmippProtDeepDenoising  # deepDenoising has to be after XmippProtGenerateReprojections and XmippProtCompareReprojections
-
-
-
-
-
-
-
-
-
-
-
+from .protocol_split_volume_hierarchical_cluster import XmippProtSplitVolumeHierarchical
+from .protocol_reconstruct_heterogeneous import XmippProtReconstructHeterogeneous
+from .protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
+from .protocol_metaprotocol_create_output import XmippMetaProtCreateOutput
+from .protocol_metaprotocol_discrete_heterogeneity_scheduler import XmippMetaProtDiscreteHeterogeneityScheduler # keep this after XmippMetaProtCreateSubset and XmippMetaProtCreateOutput
+from .protocol_angular_alignment_sph import XmippProtAngularAlignmentSPH
+from .protocol_volume_deform_sph import XmippProtVolumeDeformSPH
+from .protocol_structure_map_sph import XmippProtStructureMapSPH
+from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
+from .protocol_local_ctf import XmippProtLocalCTF
+from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
+from .protocol_consensus_local_ctf import XmippProtConsensusLocalCTF
+from .protocol_particle_pick_remove_duplicates import XmippProtPickingRemoveDuplicates
+from .protocol_metaprotocol_golden_highres import XmippMetaProtGoldenHighRes
+from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtraction
+from .protocol_volume_consensus import XmippProtVolConsensus
 
