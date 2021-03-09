@@ -56,7 +56,6 @@ from xmipp3.convert import setXmippAttribute, getScipionObj, prefixAttribute
 
 
 
-
 class XmippProtTiltAnalysis(ProtMicrographs):
     """ Estimate the tilt of a micrograph, by analyzing the PSD correlations of different segments of the image.
     """
@@ -138,22 +137,8 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         self.debug("Loading input db: %s" % micsFile)
         micSet = SetOfMicrographs(filename=micsFile)
         micSet.loadAllProperties()
-
-        #if len(self.insertedDict) == 0:
-         #   lastID = -1
-        #else:
-         #   lastID = self.insertedDict.popitem()
-          #  lastID = lastID[0]
-
-        #print('-----------------------THE LAST Id %d' %lastID)
-        # self.listOfMicrographs = [m.clone() for m in micSet] # CHANGE
-        # ---- SOLUTION
-        #newMics = [m.clone() for m in micSet.iterItems(where="id > %06d" %lastID) if not micSet.isEmpty()]
         newMics = [m.clone() for m in micSet if m.getObjId() not in self.insertedDict]
-        #print('-----------------------THE FIRST Id added %d' %newMics[0].getObjId())
-
         self.listOfMicrographs.extend(newMics)
-        # ---
         self.streamClosed = micSet.isStreamClosed()
         micSet.close()
         self.debug("Closed db.")
