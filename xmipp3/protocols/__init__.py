@@ -90,7 +90,6 @@ from .protocol_resolution3d import XmippProtResolution3D
 from .protocol_resolution_directional import XmippProtMonoDir
 from .protocol_resolution_fso import XmippProtFSO
 from .protocol_resolution_monogenic_signal import XmippProtMonoRes
-from .protocol_resolution_monotomo import XmippProtMonoTomo
 from .protocol_resolution_deepres import XmippProtDeepRes
 from .protocol_postProcessing_deepPostProcessing import XmippProtDeepVolPostProc
 from .protocol_rotational_spectra import XmippProtRotSpectra
@@ -125,7 +124,5 @@ from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
 from .protocol_consensus_local_ctf import XmippProtConsensusLocalCTF
 from .protocol_particle_pick_remove_duplicates import XmippProtPickingRemoveDuplicates
 from .protocol_metaprotocol_golden_highres import XmippMetaProtGoldenHighRes
-from .protocol_movie_poisson import XmippProtMoviePoisson
-from .protocol_extract_particles_movies_new import XmippProtExtractMovieParticlesNew
 from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtraction
 from .protocol_volume_consensus import XmippProtVolConsensus
