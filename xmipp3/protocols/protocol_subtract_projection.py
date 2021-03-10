@@ -26,6 +26,7 @@
 # *
 # **************************************************************************
 
+from os.path import basename
 from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pwem import ALIGN_3D
@@ -82,7 +83,8 @@ class XmippProtSubtractProjection(EMProtocol):
         mdParticles = lib.MetaData()
         for part in self.particles.get():
             id = part.getObjId()
-            fn = "%s@%s" % (id, part.getFileName())
+            ix = part.getIndex()
+            fn = "%s@%s" % (ix, part.getFileName())
             nRow = md.Row()
             nRow.setValue(lib.MDL_ITEM_ID, int(id))
             nRow.setValue(lib.MDL_IMAGE, fn)
@@ -100,7 +102,7 @@ class XmippProtSubtractProjection(EMProtocol):
         iter = self.iter.get()
         program = "xmipp_subtract_projection"
         args = '-i %s --ref %s -o %s --iter %s --lambda %s' % (self._getExtraPath("input_particles.xmd"), fnVol,
-                                                               self._getExtraPath("output_particle.mrc"), iter,
+                                                               self._getExtraPath("output_particle"), iter,
                                                                self.rfactor.get())
         if resol:
             fc = vol.getSamplingRate()/resol
@@ -114,48 +116,43 @@ class XmippProtSubtractProjection(EMProtocol):
         self.runJob(program, args)
 
     def createOutputStep(self):
-        pass
-        # vol = self.vol.get()
-        # volume = Volume()
-        # volume.setSamplingRate(vol.getSamplingRate())
-        # if vol.getFileName().endswith('mrc'):
-        #     origin = Transform()
-        #     ccp4header = headers.Ccp4Header(vol.getFileName(), readHeader=True)
-        #     shifts = ccp4header.getOrigin()
-        #     origin.setShiftsTuple(shifts)
-        #     volume.setOrigin(origin)
-        # volume.setFileName(self._getExtraPath("output_volume.mrc"))
-        # filename = volume.getFileName()
-        # if filename.endswith('.mrc') or filename.endswith('.map'):
-        #     volume.setFileName(filename + ':mrc')
-        # self._defineOutputs(outputVolume=volume)
+        inputSet = self.particles.get()
+        outputSet = self._createSetOfParticles()
+        outputSet.copyInfo(inputSet)
+        outputSet.copyItems(inputSet, updateItemCallback=self._updateItem)
+        self._defineOutputs(outputParticles=outputSet)
+        self._defineSourceRelation(inputSet, outputSet)
 
     # --------------------------- INFO functions --------------------------------------------
-    # def _summary(self):
-    #     summary = ["Volume 1: %s" % self.vol.get().getFileName()]
-    #     summary.append("Volume 2: %s" % self.vol2.get().getFileName())
-    #     if self.mask:
-    #         summary.append("Input mask 1: %s" % self.mask1.get().getFileName())
-    #     if self.resol.get() != 0:
-    #         summary.append("Subtraction at resolution %f A" % self.resol.get())
-    #     return summary
-    #
-    # def _methods(self):
-    #     methods = []
-    #     if not hasattr(self, 'outputVolume'):
-    #         methods.append("Output volume not ready yet.")
-    #     else:
-    #         methods.append("Volume %s subtracted from volume %s" % (self.vol2.get().getFileName(),
-    #                                                                 self.vol.get().getFileName()))
-    #         if self.resol.get() != 0:
-    #             methods.append(" at resolution %f A" % self.resol.get())
-    #     return methods
-    #
-    # def _validate(self):
-    #     errors = []
-    #     rfactor = self.rfactor.get()
-    #     if rfactor < 0 or rfactor > 1:
-    #         errors.append('Relaxation factor (lambda) must be between 0 and 1')
-    #     return errors
+    def _summary(self):
+        summary = ["Volume: %s" % self.vol.get().getFileName()]
+        summary.append("Set of particles: %s" % self.particles.get())
+        if self.maskBool:
+            summary.append("Mask: %s" % self.mask.get().getFileName())
+        if self.resol.get() != 0:
+            summary.append("Subtraction at resolution %f A" % self.resol.get())
+        return summary
+
+    def _methods(self):
+        methods = []
+        if not hasattr(self, 'outputParticles'):
+            methods.append("Output particles not ready yet.")
+        else:
+            methods.append("Volume projections from %s subtracted from particles" %
+                           basename(self.vol.get().getFileName()))
+            if self.maskBool:
+                methods.append("with mask %s" % basename(self.mask.get().getFileName()))
+            if self.resol.get() != 0:
+                methods.append(" at resolution %f A" % self.resol.get())
+        return methods
+
+    def _validate(self):
+        errors = []
+        rfactor = self.rfactor.get()
+        if rfactor < 0 or rfactor > 1:
+            errors.append('Relaxation factor (lambda) must be between 0 and 1')
+        return errors
 
     # --------------------------- UTLIS functions --------------------------------------------
+    def _updateItem(self, item, row):
+        item.setLocation(self._getExtraPath("output_particle_%d.mrc") % item.getObjId())
