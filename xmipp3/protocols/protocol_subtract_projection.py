@@ -102,7 +102,7 @@ class XmippProtSubtractProjection(EMProtocol):
         iter = self.iter.get()
         program = "xmipp_subtract_projection"
         args = '-i %s --ref %s -o %s --iter %s --lambda %s' % (self._getExtraPath("input_particles.xmd"), fnVol,
-                                                               self._getExtraPath("output_particle"), iter,
+                                                               self._getExtraPath("output_particles"), iter,
                                                                self.rfactor.get())
         if resol:
             fc = vol.getSamplingRate()/resol
@@ -111,15 +111,18 @@ class XmippProtSubtractProjection(EMProtocol):
         if self.maskBool:
             args += ' --mask %s' % self.mask.get().getFileName()
         if self.saveFiles:
-            args += ' --savePart %s --saveProj %s' % (self._getExtraPath('part_filtered.mrc'),
-                                                      self._getExtraPath('proj_adjusted.mrc'))
+            args += ' --savePart %s --saveProj %s' % (self._getExtraPath('particle_filtered.mrc'),
+                                                      self._getExtraPath('projection_adjusted.mrc'))
         self.runJob(program, args)
 
     def createOutputStep(self):
         inputSet = self.particles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
-        outputSet.copyItems(inputSet, updateItemCallback=self._updateItem)
+
+        outputSet.copyItems(inputSet, updateItemCallback=self._updateItem,
+                            itemDataIterator=md.iterRows(self._getExtraPath("input_particles.xmd")))
+
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(inputSet, outputSet)
 
@@ -155,4 +158,5 @@ class XmippProtSubtractProjection(EMProtocol):
 
     # --------------------------- UTLIS functions --------------------------------------------
     def _updateItem(self, item, row):
-        item.setLocation(self._getExtraPath("output_particle_%d.mrc") % item.getObjId())
+        newFn = row.getValue(md.MDL_IMAGE)
+        item.setLocation(newFn)
