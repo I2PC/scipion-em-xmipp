@@ -121,11 +121,11 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         # For the streaming mode, the steps function have a 'wait' flag that can be turned on/off. For example, here we insert the
         # createOutputStep but it wait=True, which means that can not be executed until it is set to False
         # (when the input micrographs stream is closed)
-        waitCondition = self._getFirstJoinStepName() == 'createOutputStep'
-        finalSteps = self._insertFinalSteps(fDeps)
+        #waitCondition = self._getFirstJoinStepName() == 'createOutputStep'
+        #finalSteps = self._insertFinalSteps(fDeps)
 
-        self._insertFunctionStep('createOutputStep',
-                                 prerequisites=finalSteps, wait=waitCondition)
+        #self._insertFunctionStep('createOutputStep',
+         #                        prerequisites=finalSteps, wait=waitCondition)
 
 
     def createOutputStep(self):
@@ -153,7 +153,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         # Input micrograph set can be loaded or None when checked for new inputs
         # If None, we load it
         self._checkNewInput()
-        self._checkNewOutput()
+        #self._checkNewOutput()
 
 
     def _getFirstJoinStepName(self):
@@ -192,14 +192,14 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         # newMics = any(m.getObjId() not in self.insertedDict for m in self.listOfMicrographs) # CHANGE
         newMics = [m for m in self.listOfMicrographs if m.getObjId() not in self.insertedDict] # SOLUTION
         newMicsBool = [len(newMics) > 0]
-        outputStep = self._getFirstJoinStep()
+        #outputStep = self._getFirstJoinStep()
 
         if newMicsBool:
             # fDeps = self._insertNewMicrographSteps(self.insertedDict, self.listOfMicrographs) #CHANGE
             fDeps = self._insertNewMicrographSteps(self.insertedDict, newMics) # SOLUTION
 
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
+            #if outputStep is not None:
+             #   outputStep.addPrerequisites(*fDeps)
 
             self.updateSteps()
 
@@ -330,6 +330,35 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
         # Mark this movie as finished
         open(micDoneFn, 'w').close()
+
+
+        """Generate output tilt series"""
+        outputMicrographs = self.getOutputSetOfMicrographs()
+
+        id = micrograph.getObjId()
+        corr_mean = Float(self.stats[id]['mean'])
+        corr_std = Float(self.stats[id]['std'])
+        corr_min = Float(self.stats[id]['min'])
+        corr_max = Float(self.stats[id]['max'])
+
+        #newMic = Micrograph(objId=id)
+        #newMic.copyInfo(micrograph)
+        newMic = micrograph.clone()
+
+        setattr(newMic, self.getTiltMeanLabel(), corr_mean)
+        setattr(newMic, self.getTiltSTDLabel(), corr_std)
+        setattr(newMic, self.getTiltMinLabel(), corr_min)
+        setattr(newMic, self.getTiltMaxLabel(), corr_max)
+
+        # Double threshold
+        if corr_mean > self.meanCorr_threshold.get() and corr_std < self.stdCorr_threshold.get():  # AND or OR
+            outputMicrographs.append(newMic)
+            outputMicrographs.update(newMic)
+            outputMicrographs.write()
+
+
+        self._store()
+
 
 
     def _processMicrograph(self, micrograph):
@@ -499,21 +528,17 @@ class XmippProtTiltAnalysis(ProtMicrographs):
             self._defineSourceRelation(self.inputSetOfTiltSeries, outputSetOfTiltSeries)
         return self.outputSetOfTiltSeries
 
-    def getOutputInterpolatedSetOfTiltSeries(self):
-        if hasattr(self, "outputInterpolatedSetOfTiltSeries"):
-            self.outputInterpolatedSetOfTiltSeries.enableAppend()
+    def getOutputSetOfMicrographs(self):
+        if hasattr(self, "outputMicrographs"):
+            self.outputMicrographs.enableAppend()
         else:
-            outputInterpolatedSetOfTiltSeries = self._createSetOfTiltSeries(suffix='Interpolated')
-            outputInterpolatedSetOfTiltSeries.copyInfo(self.inputSetOfTiltSeries.get())
-            outputInterpolatedSetOfTiltSeries.setDim(self.inputSetOfTiltSeries.get().getDim())
-            if self.binning > 1:
-                samplingRate = self.inputSetOfTiltSeries.get().getSamplingRate()
-                samplingRate *= self.binning.get()
-                outputInterpolatedSetOfTiltSeries.setSamplingRate(samplingRate)
-            outputInterpolatedSetOfTiltSeries.setStreamState(Set.STREAM_OPEN)
-            self._defineOutputs(outputInterpolatedSetOfTiltSeries=outputInterpolatedSetOfTiltSeries)
-            self._defineSourceRelation(self.inputSetOfTiltSeries, outputInterpolatedSetOfTiltSeries)
-        return self.outputInterpolatedSetOfTiltSeries
+            outputMicrographs = self._createSetOfMicrographs()
+            outputMicrographs.copyInfo(self.inputMicrographs.get())
+            #outputSetOfTiltSeries.setDim(self.inputSetOfTiltSeries.get().getDim())
+            outputMicrographs.setStreamState(Set.STREAM_OPEN)
+            self._defineOutputs(outputMicrographs=outputMicrographs)
+
+        return self.outputMicrographs
 
 
     def _correctFormat(self, micName, micFn, micFolderTmp):
