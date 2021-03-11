@@ -300,6 +300,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         micFn = micrograph.getFileName()
         micName = basename(micFn)
         micDoneFn = self._getMicrographDone(micrograph)  # EXTRAPath/Done/micrograph_ID.TXT
+        newMic = micrograph.clone()
 
         if self.isContinued() and os.path.exists(micDoneFn):
             self.info("Skipping micrograph: %s, seems to be done" % micFn)
@@ -343,7 +344,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
         #newMic = Micrograph(objId=id)
         #newMic.copyInfo(micrograph)
-        newMic = micrograph.clone()
 
         setattr(newMic, self.getTiltMeanLabel(), corr_mean)
         setattr(newMic, self.getTiltSTDLabel(), corr_std)
@@ -358,7 +358,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
 
         self._store()
-
 
 
     def _processMicrograph(self, micrograph):
