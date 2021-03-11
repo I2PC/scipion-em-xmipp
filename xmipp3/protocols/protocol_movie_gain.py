@@ -48,6 +48,11 @@ from xmipp3.utils import normalize_array
 
 class XmippProtMovieGain(ProtProcessMovies):
     """ Estimate the gain image of a camera, directly analyzing one of its movies.
+    It can correct the orientation of an external gain image (by comparing it with the estimated).
+    Finally, it estimates the residual gain (the gain of the movie after correcting with a gain).
+    The gain used in the correction will be preferably the external gain, but can also be the estimated
+    gain if the first is not found.
+    The same criteria is used for assigning the gain to the output movies (external corrected > external > estimated)
     """
     _label = 'movie gain'
     _lastUpdateVersion = VERSION_1_1
