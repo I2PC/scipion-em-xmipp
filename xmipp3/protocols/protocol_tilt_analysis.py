@@ -130,6 +130,12 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
     def createOutputStep(self):
         pass
+        # if self.keyCloseStream == 1:
+        #   print('Last that is not closed is discardedMics')
+        # self._updateOutputSet('discardedMicrographs', self.discardedMicrographs, self.streamMode)
+        # elif self.keyCloseStream == 2:
+        # self._updateOutputSet('outputMicrographs', self.outputMicrographs, self.streamMode)
+        #   print('Last that is not closed is outputMics')
 
 
     def _loadInputList(self):
@@ -139,11 +145,8 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         micSet = SetOfMicrographs(filename=micsFile)
         micSet.loadAllProperties()
         micSet.iterItems()#filtro UTC time o ID or Creation
-        # self.listOfMicrographs = [m.clone() for m in micSet] # CHANGE
-        # ---- SOLUTION
         newMics = [m.clone() for m in micSet if m.getObjId() not in self.insertedDict] #con el ultimo ID de insertedDict
         self.listOfMicrographs.extend(newMics)
-        # ---
         self.streamClosed = micSet.isStreamClosed()
         micSet.close()
         self.debug("Closed db.")
@@ -300,6 +303,8 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         micFn = micrograph.getFileName()
         micName = basename(micFn)
         micDoneFn = self._getMicrographDone(micrograph)  # EXTRAPath/Done/micrograph_ID.TXT
+
+        #Save the orginal one
         newMic = micrograph.clone()
 
         if self.isContinued() and os.path.exists(micDoneFn):
@@ -311,9 +316,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         if self._filterMicrograph(micrograph):
             pwutils.makePath(micFolderTmp)
             pwutils.createLink(micFn, join(micFolderTmp, micName))
-
             newMicName = self._correctFormat(micName, micFn, micFolderTmp)
-
             # Just store the original name in case it is needed in _processMovie
             micrograph._originalFileName = String(objDoStore=False)
             micrograph._originalFileName.set(micrograph.getFileName())
@@ -329,12 +332,9 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                 for file in getFiles(micFolderTmp):
                     moveFile(file, micOutputFn)
 
-        # Mark this movie as finished
-        open(micDoneFn, 'w').close()
-
-
         """Generate output tilt series"""
-        outputMicrographs = self.getOutputSetOfMicrographs()
+        outputMicrographs = self._loadOutputSet(SetOfMicrographs, 'micrograph.sqlite')
+        discardedMicrographs = self._loadOutputSet(SetOfMicrographs, 'micrograph' + 'DISCARDED' + '.sqlite')
 
         id = micrograph.getObjId()
         corr_mean = Float(self.stats[id]['mean'])
@@ -342,22 +342,52 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         corr_min = Float(self.stats[id]['min'])
         corr_max = Float(self.stats[id]['max'])
 
-        #newMic = Micrograph(objId=id)
-        #newMic.copyInfo(micrograph)
-
         setattr(newMic, self.getTiltMeanLabel(), corr_mean)
         setattr(newMic, self.getTiltSTDLabel(), corr_std)
         setattr(newMic, self.getTiltMinLabel(), corr_min)
         setattr(newMic, self.getTiltMaxLabel(), corr_max)
 
+        #
+        # newMic = [m.clone() for m in self.listOfMicrographs if m.getObjId() == id]
+        # newMic = newMic.pop(-1)
+        # -----CHAPUZA
+
+        # Load previously done items (from text file)
+        self._writeDoneList(newMic)
+        doneList = self._readDoneList()
+        # Check for newly done items
+        allDone = len(doneList)
+        # We have finished when there is not more input movies
+        # (stream closed) and the number of processed movies is
+        # equal to the number of inputs
+        self.finished = self.streamClosed and allDone == len(self.listOfMicrographs)
+        streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+
         # Double threshold
         if corr_mean > self.meanCorr_threshold.get() and corr_std < self.stdCorr_threshold.get():  # AND or OR
             outputMicrographs.append(newMic)
-            outputMicrographs.update(newMic)
-            outputMicrographs.write()
+            # outputMicrographs.update(newMic)
+            self._updateOutputSet('outputMicrographs', outputMicrographs, streamMode)
+            if streamMode == Set.STREAM_CLOSED:
+                keyCloseStream = 1
+                discardedMicrographs.setStreamState(streamMode)
+                self._updateOutputSet('discardedMicrographs', discardedMicrographs, streamMode)
+        else:
+            discardedMicrographs.append(newMic)
+            self._updateOutputSet('discardedMicrographs', discardedMicrographs, streamMode)
+            if streamMode == Set.STREAM_CLOSED:
+                keyCloseStream = 2
+                outputMicrographs.setStreamState(streamMode)
+                self._updateOutputSet('outputMicrographs', outputMicrographs, streamMode)
 
+        # Mark this movie as finished
+        open(micDoneFn, 'w').close()
 
-        self._store()
+        #if self.finished:  # Unlock createOutputStep if finished all jobs
+         #   outputStep = self._getFirstJoinStep()
+          #  if outputStep and outputStep.isWaiting():
+          #      outputStep.setStatus(cons.STATUS_NEW)
+
 
 
     def _processMicrograph(self, micrograph):
@@ -489,9 +519,9 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         else:
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
+            # self._defineOutputs(outputMicrographs=outputSet)
 
-        inputMicrographs = self.inputMicrographs.get()
-        outputSet.copyInfo(inputMicrographs)
+        outputSet.copyInfo(self.inputMicrographs.get())
 
         return outputSet
 
@@ -608,11 +638,11 @@ class XmippProtTiltAnalysis(ProtMicrographs):
     def _getAllDone(self):
         return self._getExtraPath('DONE_all.TXT')
 
-    def _writeDoneList(self, micList):
+    def _writeDoneList(self, mic):
         """ Write to a text file the items that have been done. """
         with open(self._getAllDone(), 'a') as f:
-            for mic in micList:
-                f.write('%d\n' % mic.getObjId())
+            #for mic in micList:
+            f.write('%d\n' % mic.getObjId())
 
     def _isMicDone(self, mic):
         """ A mic is done if the marker file exists. """
