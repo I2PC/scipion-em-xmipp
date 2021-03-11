@@ -81,9 +81,9 @@ class XmippProtMovieGain(ProtProcessMovies):
                       label="Estimate gain orientation",
                       help='Estimate the relative orientation between the estimated '
                            'and the existing gain')
-        form.addParam('normalizeGain', BooleanParam, default=True,
-                      label="Normalize existing gain", expertLevel=LEVEL_ADVANCED,
-                      help='Normalize the input gain so that it has a mean of 1')
+        form.addParam('estimateSigma', BooleanParam, default=False, expertLevel=LEVEL_ADVANCED,
+                      label="Estimate the sigma parameter",
+                      help='Estimate the sigma parameter for the gain image estimation')
         form.addParam('useExistingGainImage', BooleanParam, default=True,
                       label="Estimate residual gain",
                       help='If there is a gain image associated with input '
@@ -91,6 +91,9 @@ class XmippProtMovieGain(ProtProcessMovies):
                            'estimating raw/residual gain image. Location of '
                            'this gain image needs to be indicated in import '
                            'movies protocol.')
+        form.addParam('normalizeGain', BooleanParam, default=True,
+                      label="Normalize existing gain", expertLevel=LEVEL_ADVANCED,
+                      help='Normalize the input gain so that it has a mean of 1')
 
         # It should be in parallel (>2) in order to be able of attaching
         #  new movies to the output while estimating residual gain
@@ -181,6 +184,9 @@ class XmippProtMovieGain(ProtProcessMovies):
 
         if self.useExistingGainImage.get() and inputGain is not None:
             args += " --gainImage %s" % self.getFinalGain()
+
+        if not self.estimateSigma.get():
+            args += ' --sigma 0'
 
         self.runJob("xmipp_movie_estimate_gain", args, numberOfMpi=1)
 

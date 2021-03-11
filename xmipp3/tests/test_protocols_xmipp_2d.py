@@ -1304,37 +1304,6 @@ class TestXmippCorrectWiener2D(TestXmippBase):
         self.launchProtocol(protCorrect)
         self.assertIsNotNone(protCorrect.outputParticles, "There was a problem with Wiener Correction")
 
-        
-class TestXmippSubtractProjection(TestXmippBase):
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        cls.dsRelion = DataSet.getDataSet('relion_tutorial')
-    
-    def test_subtract(self):
-        protParts = self.newProtocol(emprot.ProtImportParticles,
-                                     objLabel='from relion auto-refine',
-                                     importFrom=emprot.ProtImportParticles.IMPORT_FROM_RELION,
-                                     starFile=self.dsRelion.getFile('import/refine3d/extra/relion_it001_data.star'),
-                                     magnification=10000,
-                                     samplingRate=7.08,
-                                     haveDataBeenPhaseFlipped=True
-                                     )
-        self.launchProtocol(protParts)
-        self.assertEqual(60, protParts.outputParticles.getXDim())
-        
-        protVol = self.newProtocol(emprot.ProtImportVolumes,
-                                   filesPath=self.dsRelion.getFile('volumes/reference.mrc'),
-                                   samplingRate=7.08)
-        self.launchProtocol(protVol)
-        self.assertEqual(60, protVol.outputVolume.getDim()[0])
-        
-        protSubtract = self.newProtocol(XmippProtSubtractProjection)
-        protSubtract.inputParticles.set(protParts.outputParticles)
-        protSubtract.inputVolume.set(protVol.outputVolume)
-        self.launchProtocol(protSubtract)
-        self.assertIsNotNone(protSubtract.outputParticles, "There was a problem with subtract projection")
-        
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
