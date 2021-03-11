@@ -34,7 +34,8 @@ from pyworkflow.protocol.executor import StepExecutor
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pwem.viewers import (DataView, EmPlotter, showj, ChimeraClientView,
                           ChimeraView, ObjectView, ChimeraAngDist)
-from pyworkflow.utils import createUniqueFileName, cleanPattern
+import pwem.objects as emobj
+from pyworkflow.utils import createUniqueFileName, cleanPattern, cleanPath
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (LabelParam, IntParam, FloatParam,
                                         StringParam, EnumParam,
@@ -283,6 +284,23 @@ Examples:
             # print("Volume: %s %s" %(volFn, blockName))
             md.write("%s@%s"% (blockName, mdPath), emlib.MD_APPEND)
         return [self.createDataView(mdPath)]
+
+    def createVolumesSqlite(self, files, path, samplingRate,
+                            updateItemCallback=None):
+        cleanPath(path)
+        volSet = emobj.SetOfVolumes(filename=path)
+        volSet.setSamplingRate(samplingRate)
+
+        for volFn in files:
+            vol = emobj.Volume()
+            vol.setFileName(volFn)
+            if updateItemCallback:
+                updateItemCallback(vol)
+            volSet.append(vol)
+        volSet.write()
+        volSet.close()
+
+        return volSet
 
     def viewVolumesSqlite(self, volumes):
         path = self.protocol._getExtraPath('viewer_volumes.sqlite')
