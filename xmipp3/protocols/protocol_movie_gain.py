@@ -109,7 +109,13 @@ class XmippProtMovieGain(ProtProcessMovies):
 
     # -------------------------- STEPS functions ------------------------------
     def createOutputStep(self):
-        pass
+        if self.estimateGain.get():
+            estGainsSet = self._loadOutputSet(SetOfImages, 'estGains.sqlite')
+            self._updateOutputSet('estimatedGains', estGainsSet, Set.STREAM_CLOSED)
+
+        if self.estimateResidualGain.get():
+            resGainsSet = self._loadOutputSet(SetOfImages, 'resGains.sqlite')
+            self._updateOutputSet('residualGains', resGainsSet, Set.STREAM_CLOSED)
 
     def _insertNewMoviesSteps(self, insertedDict, inputMovies):
         """ Insert steps to process new movies (from streaming)
@@ -141,7 +147,7 @@ class XmippProtMovieGain(ProtProcessMovies):
                                                       prerequisites=self.convertCIStep)
                 # adding normStep as dependency for all other steps
                 self.convertCIStep.append(normStepId)
-
+            self.estimatedIds, self.estimatedResIds = [], []
             # For each movie insert the step to process it
             for movie in self.inputMovies.get():
                 if movie.getObjId() not in insertedDict:
@@ -169,7 +175,8 @@ class XmippProtMovieGain(ProtProcessMovies):
         estGainFn = self.getEstimatedGainPath(movieId)
         expGainFn = self.inputMovies.get().getGain()
 
-        if not os.path.exists(estGainFn):
+        if not movieId in self.estimatedIds:
+            self.estimatedIds.append(movieId)
             self.estimateGainFun(movie, noSigma=True)
 
         estGain = self.readImage(estGainFn)
@@ -200,12 +207,13 @@ class XmippProtMovieGain(ProtProcessMovies):
         fnMovie = movie.getFileName()
         inputGain = self.getInputGain()
           
-        if self.estimateGain.get():
-            if not os.path.exists(self.getEstimatedGainPath(movieId)):
+        if self.estimateGain.get() and not movieId in self.estimatedIds:
+                self.estimatedIds.append(movieId)
                 self.estimateGainFun(movie)
 
-        if self.estimateResidualGain.get():
-            print('Estimating residual gain')
+        if self.estimateResidualGain.get() and not movieId in self.estimatedResIds:
+            print('\nEstimating residual gain')
+            self.estimatedResIds.append(movieId)
             self.estimateGainFun(movie, residual=True)
 
         # If the gain hasn't been oriented or normalized, we still need orientedGain
@@ -385,7 +393,7 @@ class XmippProtMovieGain(ProtProcessMovies):
             with respect to the estimated
             Input: 2 Xmipp Images
         '''
-        print('Estimating best orientation')
+        print('\nEstimating best orientation')
         sys.stdout.flush()
         best_cor = 0
         #Building conjugate of FT of estimated gain for correlations
@@ -489,8 +497,11 @@ class XmippProtMovieGain(ProtProcessMovies):
             if finalGainFn == None:
                 # If no gains have been estimated, estimate one and use that
                 firstMovie = self.inputMovies.get().getFirstItem()
-                self.estimateGainFun(firstMovie)
-                finalGainFn = self.getEstimatedGainPath(firstMovie.getObjId())
+                movieId = firstMovie.getObjId()
+                if not movieId in self.estimatedIds:
+                    self.estimatedIds.append(movieId)
+                    self.estimateGainFun(firstMovie)
+                finalGainFn = self.getEstimatedGainPath(movieId)
         return finalGainFn
 
     def searchEstimatedGainPath(self):
