@@ -116,6 +116,7 @@ class XmippProtSubtractProjection(EMProtocol):
         self.runJob(program, args)
 
     def createOutputStep(self):
+        self.ix = 0
         inputSet = self.particles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
@@ -159,4 +160,6 @@ class XmippProtSubtractProjection(EMProtocol):
     # --------------------------- UTLIS functions --------------------------------------------
     def _updateItem(self, item, row):
         newFn = row.getValue(md.MDL_IMAGE)
-        item.setLocation(newFn)
+        self.ix = self.ix + 1
+        newFn = newFn.split('@')[1]
+        item.setLocation(self.ix, newFn)
