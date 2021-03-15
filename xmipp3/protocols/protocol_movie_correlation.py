@@ -183,6 +183,9 @@ class XmippProtMovieCorr(ProtAlignMovies):
         cropDimX = self.cropDimX.get()
         cropDimY = self.cropDimY.get()
 
+        if 0 == offsetX and 0 == offsetY and 0 == cropDimX and 0 == cropDimY:
+            return '' # user does not want to crop at all
+
         args = ' --cropULCorner %d %d' % (offsetX, offsetY)
 
         if cropDimX <= 0:

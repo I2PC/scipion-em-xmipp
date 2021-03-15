@@ -26,8 +26,6 @@
 # *
 # **************************************************************************
 
-# Please keep alphabetical order
-
 from .protocol_preprocess import *
 
 from .protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
@@ -128,5 +126,3 @@ from .protocol_particle_pick_remove_duplicates import XmippProtPickingRemoveDupl
 from .protocol_metaprotocol_golden_highres import XmippMetaProtGoldenHighRes
 from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtraction
 from .protocol_volume_consensus import XmippProtVolConsensus
-from .protocol_deep_align import XmippProtDeepAlign
-
