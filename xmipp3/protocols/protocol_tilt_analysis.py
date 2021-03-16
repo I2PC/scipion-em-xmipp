@@ -379,7 +379,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
             self.lock = True
             self._updateOutputSet('outputMicrographs', outputMicrographs, streamMode)
             if streamMode == Set.STREAM_CLOSED:
-                keyCloseStream = 1
                 discardedMicrographs.setStreamState(streamMode)
                 self._updateOutputSet('discardedMicrographs', discardedMicrographs, streamMode)
             self.lock = False
@@ -390,7 +389,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
             self.lock = True
             self._updateOutputSet('discardedMicrographs', discardedMicrographs, streamMode)
             if streamMode == Set.STREAM_CLOSED:
-                keyCloseStream = 2
                 outputMicrographs.setStreamState(streamMode)
                 self._updateOutputSet('outputMicrographs', outputMicrographs, streamMode)
             self.lock = False
