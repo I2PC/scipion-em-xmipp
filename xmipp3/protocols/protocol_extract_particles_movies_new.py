@@ -245,29 +245,27 @@ class XmippProtExtractMovieParticlesNew(ProtProcessMovies):
                 fnOutFile = self.inputAlignMovieProt.get()._getExtraPath('auxOutputFile.txt')
 
 
-                try:
-                    #print("Applying " + "localAlignment@" + fnAlign)
-                    mdAlign = md.MetaData("localAlignment@"+fnAlign)
-                    shiftX = [0] * (lastFrame - iniFrame + 1)
-                    shiftY = shiftX
-                    self._writeXmippPosFile(movie, coordinatesName,
-                                            shiftX[indx], shiftY[indx])
-                    args = '-i %(frameName)s --pos %(coordinatesName)s ' \
-                           '-o %(frameImages)s --Xdim %(boxSize)d --Xdmov %(x)d ' \
-                           '--Ydmov %(y)d --Ndmov %(n)d --curFrame %(frameNum)d ' \
-                           '-iAlign %(fnAlign)s ' % locals()
-                    args += " --downsampling %f " % self.getBoxScale()
-                    self.runJob('xmipp_micrograph_scissor_new', args)
-                except:
-                    print("WARNING: No applying new version of xmipp_micrograph_scissor for " + frameName)
-                    self._writeXmippPosFile(movie, coordinatesName,
-                                            shiftX[indx], shiftY[indx])
-                    args = '-i %(frameName)s --pos %(coordinatesName)s ' \
-                           '-o %(frameImages)s --Xdim %(boxSize)d ' % locals()
-                    args += " --downsampling %f " % self.getBoxScale()
-                    self.runJob('xmipp_micrograph_scissor', args)
-
-
+                #try:
+                #print("Applying " + "localAlignment@" + fnAlign)
+                mdAlign = md.MetaData("localAlignment@"+fnAlign)
+                shiftX = [0] * (lastFrame - iniFrame + 1)
+                shiftY = shiftX
+                self._writeXmippPosFile(movie, coordinatesName,
+                                        shiftX[indx], shiftY[indx])
+                args = '-i %(frameName)s --pos %(coordinatesName)s ' \
+                       '-o %(frameImages)s --Xdim %(boxSize)d --Xdmov %(x)d ' \
+                       '--Ydmov %(y)d --Ndmov %(n)d --curFrame %(frameNum)d ' \
+                       '-iAlign %(fnAlign)s ' % locals()
+                args += " --downsampling %f " % self.getBoxScale()
+                self.runJob('xmipp_micrograph_scissor_new', args)
+                #except:
+                #    print("WARNING: No applying new version of xmipp_micrograph_scissor for " + frameName)
+                #    self._writeXmippPosFile(movie, coordinatesName,
+                #                            shiftX[indx], shiftY[indx])
+                #    args = '-i %(frameName)s --pos %(coordinatesName)s ' \
+                #           '-o %(frameImages)s --Xdim %(boxSize)d ' % locals()
+                #    args += " --downsampling %f " % self.getBoxScale()
+                #    self.runJob('xmipp_micrograph_scissor', args)
 
                 cleanPath(frameName)
 
@@ -348,70 +346,71 @@ class XmippProtExtractMovieParticlesNew(ProtProcessMovies):
 
             self.writeNewOutputMetadata(imgsFn, particleMd, self._getPath('movie_particles_new.xmd'), frameN, frame0)
 
-            mdInputParts = md.MetaData(imgsFn)
-            mdOutputParts = md.MetaData(particleMd)
-            mdFinal = md.MetaData()
-            rowsInputParts = iterRows(mdInputParts)
-            for rowIn in rowsInputParts:
-                partIn = rowToParticle(rowIn)
-                if partIn.hasCTF():
-                    ctfModel = partIn.getCTF()
-                idIn = rowIn.getValue(md.MDL_ITEM_ID)
-                shiftXIn = rowIn.getValue(emlib.MDL_SHIFT_X)
-                shiftYIn = rowIn.getValue(emlib.MDL_SHIFT_Y)
-                rotIn = rowIn.getValue(emlib.MDL_ANGLE_ROT)
-                tiltIn = rowIn.getValue(emlib.MDL_ANGLE_TILT)
-                psiIn = rowIn.getValue(emlib.MDL_ANGLE_PSI)
-                flipIn = rowIn.getValue(emlib.MDL_FLIP)
-                ccIn = rowIn.getValue(emlib.MDL_MAXCC)
-                costIn = rowIn.getValue(emlib.MDL_COST)
-                wIn = rowIn.getValue(emlib.MDL_WEIGHT)
-                contXIn = rowIn.getValue(emlib.MDL_CONTINUOUS_X)
-                contYIn = rowIn.getValue(emlib.MDL_CONTINUOUS_Y)
+            #mdInputParts = md.MetaData(imgsFn)
+            #mdOutputParts = md.MetaData(particleMd)
+            #mdFinal = md.MetaData()
+            #rowsInputParts = iterRows(mdInputParts)
+            #for rowIn in rowsInputParts:
+            #    partIn = rowToParticle(rowIn)
+            #    if partIn.hasCTF():
+            #        ctfModel = partIn.getCTF()
+            #    idIn = rowIn.getValue(md.MDL_ITEM_ID)
+            #    shiftXIn = rowIn.getValue(emlib.MDL_SHIFT_X)
+            #    shiftYIn = rowIn.getValue(emlib.MDL_SHIFT_Y)
+            #    rotIn = rowIn.getValue(emlib.MDL_ANGLE_ROT)
+            #    tiltIn = rowIn.getValue(emlib.MDL_ANGLE_TILT)
+            #    psiIn = rowIn.getValue(emlib.MDL_ANGLE_PSI)
+            #    flipIn = rowIn.getValue(emlib.MDL_FLIP)
+            #    ccIn = rowIn.getValue(emlib.MDL_MAXCC)
+            #    costIn = rowIn.getValue(emlib.MDL_COST)
+            #    wIn = rowIn.getValue(emlib.MDL_WEIGHT)
+            #    contXIn = rowIn.getValue(emlib.MDL_CONTINUOUS_X)
+            #    contYIn = rowIn.getValue(emlib.MDL_CONTINUOUS_Y)
 
-                count = 0
-                rowsOutputParts = iterRows(mdOutputParts)
+            #    count = 0
+            #    rowsOutputParts = iterRows(mdOutputParts)
 
-                for rowOut in rowsOutputParts:
-                    if rowOut.getValue(md.MDL_PARTICLE_ID) == idIn:
-                        partId = rowOut.getValue(md.MDL_PARTICLE_ID)
-                        frId = rowOut.getValue(md.MDL_FRAME_ID)
-                        partOut = rowToParticle(rowOut)
-                        if partIn.hasCTF():
-                            partOut.setCTF(ctfModel)
-                        # setXmippAttributes(partOut, rowIn, md.MDL_SHIFT_X)
-                        # setXmippAttributes(partOut, rowIn, md.MDL_SHIFT_Y)
-                        # setXmippAttributes(partOut, rowIn, md.MDL_ANGLE_ROT)
-                        # setXmippAttributes(partOut, rowIn, md.MDL_ANGLE_TILT)
-                        # setXmippAttributes(partOut, rowIn, md.MDL_ANGLE_PSI)
-                        # setXmippAttributes(partOut, rowIn, md.MDL_FLIP)
+            #    for rowOut in rowsOutputParts:
+            #        if rowOut.getValue(md.MDL_PARTICLE_ID) == idIn:
+            #            partId = rowOut.getValue(md.MDL_PARTICLE_ID)
+            #            frId = rowOut.getValue(md.MDL_FRAME_ID)
+            #            partOut = rowToParticle(rowOut)
+            #            if partIn.hasCTF():
+            #                partOut.setCTF(ctfModel)
+            #            # setXmippAttributes(partOut, rowIn, md.MDL_SHIFT_X)
+            #            # setXmippAttributes(partOut, rowIn, md.MDL_SHIFT_Y)
+            #            # setXmippAttributes(partOut, rowIn, md.MDL_ANGLE_ROT)
+            #            # setXmippAttributes(partOut, rowIn, md.MDL_ANGLE_TILT)
+            #            # setXmippAttributes(partOut, rowIn, md.MDL_ANGLE_PSI)
+            #            # setXmippAttributes(partOut, rowIn, md.MDL_FLIP)
 
-                        rowOutFinal = md.Row()
-                        particleToRow(partOut, rowOutFinal)
-                        rowOutFinal.setValue(md.MDL_PARTICLE_ID, int(partId))
-                        rowOutFinal.setValue(md.MDL_FRAME_ID, int(frId))
-                        rowOutFinal.setValue(emlib.MDL_SHIFT_X, shiftXIn)
-                        rowOutFinal.setValue(emlib.MDL_SHIFT_Y, shiftYIn)
-                        rowOutFinal.setValue(emlib.MDL_ANGLE_ROT, rotIn)
-                        rowOutFinal.setValue(emlib.MDL_ANGLE_TILT, tiltIn)
-                        rowOutFinal.setValue(emlib.MDL_ANGLE_PSI, psiIn)
-                        rowOutFinal.setValue(emlib.MDL_FLIP, flipIn)
-                        if contXIn is not None:
-                            rowOutFinal.setValue(emlib.MDL_CONTINUOUS_X, contXIn)
-                        if contYIn is not None:
-                            rowOutFinal.setValue(emlib.MDL_CONTINUOUS_Y, contYIn)
-                        if ccIn is not None:
-                            rowOutFinal.setValue(emlib.MDL_MAXCC, ccIn)
-                        if costIn is not None:
-                            rowOutFinal.setValue(emlib.MDL_COST, costIn)
-                        if wIn is not None:
-                            rowOutFinal.setValue(emlib.MDL_WEIGHT, wIn)
-                        rowOutFinal.addToMd(mdFinal)
-                        count += 1
-                        if count == (frameN - frame0 + 1):
-                            break
-            mdFinal.write(particleMd)
+            #            rowOutFinal = md.Row()
+            #            particleToRow(partOut, rowOutFinal)
+            #            rowOutFinal.setValue(md.MDL_PARTICLE_ID, int(partId))
+            #            rowOutFinal.setValue(md.MDL_FRAME_ID, int(frId))
+            #            rowOutFinal.setValue(emlib.MDL_SHIFT_X, shiftXIn)
+            #            rowOutFinal.setValue(emlib.MDL_SHIFT_Y, shiftYIn)
+            #            rowOutFinal.setValue(emlib.MDL_ANGLE_ROT, rotIn)
+            #            rowOutFinal.setValue(emlib.MDL_ANGLE_TILT, tiltIn)
+            #            rowOutFinal.setValue(emlib.MDL_ANGLE_PSI, psiIn)
+            #            rowOutFinal.setValue(emlib.MDL_FLIP, flipIn)
+            #            if contXIn is not None:
+            #                rowOutFinal.setValue(emlib.MDL_CONTINUOUS_X, contXIn)
+            #            if contYIn is not None:
+            #                rowOutFinal.setValue(emlib.MDL_CONTINUOUS_Y, contYIn)
+            #            if ccIn is not None:
+            #                rowOutFinal.setValue(emlib.MDL_MAXCC, ccIn)
+            #            if costIn is not None:
+            #                rowOutFinal.setValue(emlib.MDL_COST, costIn)
+            #            if wIn is not None:
+            #                rowOutFinal.setValue(emlib.MDL_WEIGHT, wIn)
+            #            rowOutFinal.addToMd(mdFinal)
+            #            count += 1
+            #            if count == (frameN - frame0 + 1):
+            #                break
+            #mdFinal.write(particleMd)
 
+            particleMd = self._getPath('movie_particles_new.xmd')
             readSetOfMovieParticles(particleMd, particleSetOut,
                                     removeDisabled=False,
                                     postprocessImageRow=self._postprocessImageRow)
