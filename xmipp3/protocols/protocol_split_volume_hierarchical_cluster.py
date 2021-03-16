@@ -321,6 +321,15 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
                        ' --keepBestN 1 --oUpdatedRefs %s ' % (fnToUse, mdRefName, join(fnDir,"level_%02d"%i), 'class_classes')
                 args += ' --dev %s ' %GpuListCuda
                 self.runJob(CUDA_ALIGN_SIGNIFICANT, args, numberOfMpi=1)
+
+                # Checking if the two classes contain images, if not this output should not be considered
+                cl1 = md.getSize("class000001_images@" + join(fnDir, "level_%02d/class_classes.xmd" % i))
+                cl2 = md.getSize("class000002_images@" + join(fnDir, "level_%02d/class_classes.xmd" % i))
+                if cl1 == 0 or cl2 == 0:
+                    os.remove(join(fnDir, "level_%02d/class_classes.xmd" % i))
+                    os.remove(join(fnDir, "level_%02d/class_classes.stk" % i))
+                    return
+
             copy(join(fnDir,"level_%02d"%(self.class2dIterations.get()-1), "images.xmd"), join(fnDir,"images.xmd"))
 
             # After classification the stk and xmd files should be produced
@@ -341,6 +350,14 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
                 try:
                     self.runJob("xmipp_classify_CL2D", args, numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
                 except:
+                    return
+
+                # Checking if the two classes contain images, if not delete this output
+                cl1 = md.getSize("class000001_images@" + join(fnDir, "level_%02d/class_classes.xmd" % Nlevels))
+                cl2 = md.getSize("class000002_images@" + join(fnDir, "level_%02d/class_classes.xmd" % Nlevels))
+                if cl1 == 0 or cl2 == 0:
+                    os.remove(join(fnDir, "level_%02d/class_classes.xmd" % Nlevels))
+                    os.remove(join(fnDir, "level_%02d/class_classes.stk" % Nlevels))
                     return
 
             # After CL2D the stk and xmd files should be produced
