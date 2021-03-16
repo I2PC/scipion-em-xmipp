@@ -52,7 +52,7 @@ from pwem.protocols import ProtMicrographs
 from xmipp3 import emlib
 from xmipp3.convert import setXmippAttribute, getScipionObj, prefixAttribute
 
-# from timeit import default_timer # FOR TIC TOC methods
+from timeit import default_timer # FOR TIC TOC methods
 
 
 
@@ -65,6 +65,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
     mean_correlations = []
     stats = {}
     tilt = False
+    lock = False
 
 
     def __init__(self, **args):
@@ -144,8 +145,18 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         self.debug("Loading input db: %s" % micsFile)
         micSet = SetOfMicrographs(filename=micsFile)
         micSet.loadAllProperties()
-        micSet.iterItems()#filtro UTC time o ID or Creation
-        newMics = [m.clone() for m in micSet if m.getObjId() not in self.insertedDict] #con el ultimo ID de insertedDict
+        #-----Probar esto
+        # if len(self.insertedDict) == 0:
+        # lastID = -1
+        # else:
+        #   lastID = self.insertedDict.popitem()
+        #  lastID = lastID[0]
+        # print('-----------------------THE LAST Id %d' %lastID)
+        # newMics = [m.clone() for m in micSet.iterItems(where="id > %d" %lastID) if not micSet.isEmpty() and m.getObjId() not in self.insertedDict]
+        # print('-----------------------THE FIRST Id added %d' %newMics[0].getObjId())
+        # self.listOfMicrographs = [m.clone() for m in micSet] # CHANGE
+        # ----
+        newMics = [m.clone() for m in micSet if m.getObjId() not in self.insertedDict]
         self.listOfMicrographs.extend(newMics)
         self.streamClosed = micSet.isStreamClosed()
         micSet.close()
@@ -347,11 +358,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         setattr(newMic, self.getTiltMinLabel(), corr_min)
         setattr(newMic, self.getTiltMaxLabel(), corr_max)
 
-        #
-        # newMic = [m.clone() for m in self.listOfMicrographs if m.getObjId() == id]
-        # newMic = newMic.pop(-1)
-        # -----CHAPUZA
-
         # Load previously done items (from text file)
         self._writeDoneList(newMic)
         doneList = self._readDoneList()
@@ -367,18 +373,27 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         if corr_mean > self.meanCorr_threshold.get() and corr_std < self.stdCorr_threshold.get():  # AND or OR
             outputMicrographs.append(newMic)
             # outputMicrographs.update(newMic)
+            while(self.lock):
+                print('---------TRAPPED IN OUTPUT')
+            #print('---------FINALLY FREE AFTER FROM OUTPUT')
+            self.lock = True
             self._updateOutputSet('outputMicrographs', outputMicrographs, streamMode)
             if streamMode == Set.STREAM_CLOSED:
                 keyCloseStream = 1
                 discardedMicrographs.setStreamState(streamMode)
                 self._updateOutputSet('discardedMicrographs', discardedMicrographs, streamMode)
+            self.lock = False
         else:
             discardedMicrographs.append(newMic)
+            while (self.lock):
+                print('---------TRAPPED IN DISCARDED')
+            self.lock = True
             self._updateOutputSet('discardedMicrographs', discardedMicrographs, streamMode)
             if streamMode == Set.STREAM_CLOSED:
                 keyCloseStream = 2
                 outputMicrographs.setStreamState(streamMode)
                 self._updateOutputSet('outputMicrographs', outputMicrographs, streamMode)
+            self.lock = False
 
         # Mark this movie as finished
         open(micDoneFn, 'w').close()
@@ -540,7 +555,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
             self._defineOutputs(**{outputName: outputSet})
             self._store(outputSet)
         # Close set databaset to avoid locking it
-        outputSet.close()
+        #outputSet.close() #ojo aqui cerrar solo una vez comentar esta linea
 
 
     # ------------------------- UTILS functions --------------------------------
