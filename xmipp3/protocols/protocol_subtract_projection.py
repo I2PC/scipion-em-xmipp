@@ -51,10 +51,9 @@ class XmippProtSubtractProjection(EMProtocol):
         form.addParam('particles', PointerParam, pointerClass='SetOfParticles', label="Particles: ",
                       help='Specify a SetOfParticles.')
         form.addParam('vol', PointerParam, pointerClass='Volume', label="Initial volume ", help='Specify a volume.')
-        form.addParam('maskBool', BooleanParam, label='Subtract in a region?', default=True,
-                      help='The mask is not mandatory but highly recommendable.')
-        form.addParam('mask', PointerParam, pointerClass='VolumeMask', label="3D mask for region to keep",
-                      condition='maskBool',
+        form.addParam('maskVol', PointerParam, pointerClass='VolumeMask', label='Volume mask', allowsNull=True,
+                      help='3D mask for the input volume. This mask is not mandatory but highly recommendable.')
+        form.addParam('mask', PointerParam, pointerClass='VolumeMask', label="Mask for region to keep", allowsNull=True,
                       help='Specify a 3D mask for the region of the input volume that you want to keep.')
         form.addParam('resol', FloatParam, label="Filter at resolution: ", default=3, allowsNull=True,
                       expertLevel=LEVEL_ADVANCED,
@@ -108,8 +107,9 @@ class XmippProtSubtractProjection(EMProtocol):
         if resol:
             fc = vol.getSamplingRate()/resol
             args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
-
-        if self.maskBool:
+        if self.maskVol:
+            args += ' --maskVol %s' % self.maskVol.get().getFileName()
+        if self.mask:
             args += ' --mask %s' % self.mask.get().getFileName()
         if self.saveFiles:
             args += ' --savePart %s --saveProj %s' % (self._getExtraPath('particle_filtered.mrc'),
@@ -132,7 +132,7 @@ class XmippProtSubtractProjection(EMProtocol):
     def _summary(self):
         summary = ["Volume: %s" % self.vol.get().getFileName()]
         summary.append("Set of particles: %s" % self.particles.get())
-        if self.maskBool:
+        if self.mask:
             summary.append("Mask: %s" % self.mask.get().getFileName())
         if self.resol.get() != 0:
             summary.append("Subtraction at resolution %f A" % self.resol.get())
@@ -145,7 +145,7 @@ class XmippProtSubtractProjection(EMProtocol):
         else:
             methods.append("Volume projections from %s subtracted from particles" %
                            basename(self.vol.get().getFileName()))
-            if self.maskBool:
+            if self.mask:
                 methods.append("with mask %s" % basename(self.mask.get().getFileName()))
             if self.resol.get() != 0:
                 methods.append(" at resolution %f A" % self.resol.get())
