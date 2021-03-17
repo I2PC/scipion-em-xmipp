@@ -53,6 +53,7 @@ from xmipp3 import emlib
 from xmipp3.convert import setXmippAttribute, getScipionObj, prefixAttribute
 
 from timeit import default_timer # FOR TIC TOC methods
+import threading as thr
 
 
 
@@ -65,7 +66,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
     mean_correlations = []
     stats = {}
     tilt = False
-    lock = False
+    _lock = thr.Lock()
 
 
     def __init__(self, **args):
@@ -343,9 +344,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                 for file in getFiles(micFolderTmp):
                     moveFile(file, micOutputFn)
 
-        """Generate output tilt series"""
-        outputMicrographs = self._loadOutputSet(SetOfMicrographs, 'micrograph.sqlite')
-        discardedMicrographs = self._loadOutputSet(SetOfMicrographs, 'micrograph' + 'DISCARDED' + '.sqlite')
 
         id = micrograph.getObjId()
         corr_mean = Float(self.stats[id]['mean'])
@@ -369,33 +367,28 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         self.finished = self.streamClosed and allDone == len(self.listOfMicrographs)
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
+        with self._lock:
+            print('--------GOT THE LOCK OUTPUT')
+            outputMicrographs = self._loadOutputSet(SetOfMicrographs, 'micrograph.sqlite')
+            discardedMicrographs = self._loadOutputSet(SetOfMicrographs, 'micrograph' + 'DISCARDED' + '.sqlite')
         # Double threshold
-        if corr_mean > self.meanCorr_threshold.get() and corr_std < self.stdCorr_threshold.get():  # AND or OR
-            outputMicrographs.append(newMic)
-            # outputMicrographs.update(newMic)
-            while(self.lock):
-                print('---------TRAPPED IN OUTPUT')
-            #print('---------FINALLY FREE AFTER FROM OUTPUT')
-            self.lock = True
-            self._updateOutputSet('outputMicrographs', outputMicrographs, streamMode)
-            if streamMode == Set.STREAM_CLOSED:
-                discardedMicrographs.setStreamState(streamMode)
-                self._updateOutputSet('discardedMicrographs', discardedMicrographs, streamMode)
-            self.lock = False
-        else:
-            discardedMicrographs.append(newMic)
-            while (self.lock):
-                print('---------TRAPPED IN DISCARDED')
-            self.lock = True
-            self._updateOutputSet('discardedMicrographs', discardedMicrographs, streamMode)
-            if streamMode == Set.STREAM_CLOSED:
-                outputMicrographs.setStreamState(streamMode)
+            if corr_mean > self.meanCorr_threshold.get() and corr_std < self.stdCorr_threshold.get():  # AND or OR
+                outputMicrographs.append(newMic)
                 self._updateOutputSet('outputMicrographs', outputMicrographs, streamMode)
-            self.lock = False
+                if streamMode == Set.STREAM_CLOSED:
+                    discardedMicrographs.setStreamState(streamMode)
+                    self._updateOutputSet('discardedMicrographs', discardedMicrographs, streamMode)
+            else:
+                discardedMicrographs.append(newMic)
+                self._updateOutputSet('discardedMicrographs', discardedMicrographs, streamMode)
+                if streamMode == Set.STREAM_CLOSED:
+                    outputMicrographs.setStreamState(streamMode)
+                    self._updateOutputSet('outputMicrographs', outputMicrographs, streamMode)
+
+        print('--------RELEASE THE LOCK')
 
         # Mark this movie as finished
         open(micDoneFn, 'w').close()
-
         #if self.finished:  # Unlock createOutputStep if finished all jobs
          #   outputStep = self._getFirstJoinStep()
           #  if outputStep and outputStep.isWaiting():
