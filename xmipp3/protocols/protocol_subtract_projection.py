@@ -53,8 +53,9 @@ class XmippProtSubtractProjection(EMProtocol):
         form.addParam('vol', PointerParam, pointerClass='Volume', label="Initial volume ", help='Specify a volume.')
         form.addParam('maskBool', BooleanParam, label='Subtract in a region?', default=True,
                       help='The mask is not mandatory but highly recommendable.')
-        form.addParam('mask', PointerParam, pointerClass='VolumeMask', label="3D mask for subtraction region",
-                      condition='maskBool', help='Specify a 3D mask for volume 1.')
+        form.addParam('mask', PointerParam, pointerClass='VolumeMask', label="3D mask for region to keep",
+                      condition='maskBool',
+                      help='Specify a 3D mask for the region of the input volume that you want to keep.')
         form.addParam('resol', FloatParam, label="Filter at resolution: ", default=3, allowsNull=True,
                       expertLevel=LEVEL_ADVANCED,
                       help='Resolution (A) at which subtraction will be performed, filtering the volume projections.'
