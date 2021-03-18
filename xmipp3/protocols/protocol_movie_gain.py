@@ -57,6 +57,9 @@ class XmippProtMovieGain(ProtProcessMovies):
     _label = 'movie gain'
     _lastUpdateVersion = VERSION_1_1
 
+    estimatedDatabase = 'estGains.sqlite'
+    residualDatabase = 'resGains.sqlite'
+
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
         self.stepsExecutionMode = STEPS_PARALLEL
@@ -110,11 +113,11 @@ class XmippProtMovieGain(ProtProcessMovies):
     # -------------------------- STEPS functions ------------------------------
     def createOutputStep(self):
         if self.estimateGain.get():
-            estGainsSet = self._loadOutputSet(SetOfImages, 'estGains.sqlite')
+            estGainsSet = self._loadOutputSet(SetOfImages, self.estimatedDatabase)
             self._updateOutputSet('estimatedGains', estGainsSet, Set.STREAM_CLOSED)
 
         if self.estimateResidualGain.get():
-            resGainsSet = self._loadOutputSet(SetOfImages, 'resGains.sqlite')
+            resGainsSet = self._loadOutputSet(SetOfImages, self.residualDatabase)
             self._updateOutputSet('residualGains', resGainsSet, Set.STREAM_CLOSED)
 
     def _insertNewMoviesSteps(self, insertedDict, inputMovies):
@@ -204,7 +207,6 @@ class XmippProtMovieGain(ProtProcessMovies):
         movieId = movie.getObjId()
         if not self.doGainProcess(movieId):
             return
-        fnMovie = movie.getFileName()
         inputGain = self.getInputGain()
           
         if self.estimateGain.get() and not movieId in self.estimatedIds:
@@ -292,11 +294,11 @@ class XmippProtMovieGain(ProtProcessMovies):
             self._updateOutputSet('outputMovies', moviesSet, streamMode)
 
             if self.estimateGain.get():
-                estGainsSet = self._loadOutputSet(SetOfImages, 'estGains.sqlite')
+                estGainsSet = self._loadOutputSet(SetOfImages, self.estimatedDatabase)
                 estGainsSet = self.updateGainsOutput(movie, estGainsSet, self.getEstimatedGainPath(movieId))
                 self._updateOutputSet('estimatedGains', estGainsSet, streamMode)
             if self.estimateResidualGain.get():
-                resGainsSet = self._loadOutputSet(SetOfImages, 'resGains.sqlite')
+                resGainsSet = self._loadOutputSet(SetOfImages, self.residualDatabase)
                 resGainsSet = self.updateGainsOutput(movie, resGainsSet, self.getResidualGainPath(movieId))
                 self._updateOutputSet('residualGains', resGainsSet, streamMode)
 
@@ -331,9 +333,9 @@ class XmippProtMovieGain(ProtProcessMovies):
             if any([self.doGainProcess(i.getObjId()) for i in newDone]):
                 # update outputGains if any residualGain is processed in newDone
                 if self.estimateGain.get():
-                    estGainsSet = self._loadOutputSet(SetOfImages, 'estGains.sqlite')
+                    estGainsSet = self._loadOutputSet(SetOfImages, self.estimatedDatabase)
                 if self.estimateResidualGain.get():
-                    resGainsSet = self._loadOutputSet(SetOfImages, 'resGains.sqlite')
+                    resGainsSet = self._loadOutputSet(SetOfImages, self.residualDatabase)
                   
                 for movie in newDone:
                     movieId = movie.getObjId()
@@ -422,8 +424,7 @@ class XmippProtMovieGain(ProtProcessMovies):
                 maxVal = np.amax(correlationFunction)
                 minLoc = np.where(correlationFunction == minVal)
                 maxLoc = np.where(correlationFunction == maxVal)
-                #print('Correlation values')
-                #print(minVal, maxVal, minLoc, maxLoc)
+
                 if abs(minVal) > abs(best_cor):
                     corLoc = translation_correction(minLoc,est_gain_array.shape)
                     best_cor = minVal
