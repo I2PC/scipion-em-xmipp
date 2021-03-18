@@ -45,7 +45,7 @@ from pwem.protocols import ProtAlignMovies
 
 from xmipp3.convert import writeMovieMd
 from xmipp3.base import isXmippCudaPresent
-from ..utils import *
+import xmipp3.utils as xmutils
 
 
 class XmippProtMovieCorr(ProtAlignMovies):
@@ -322,7 +322,7 @@ class XmippProtMovieCorr(ProtAlignMovies):
         baseName = os.path.basename(gainFn).replace(ext, '_transformed' + ext)
         outFn = os.path.abspath(self._getExtraPath(baseName))
 
-      gainImg = readImage(gainFn)
+      gainImg = xmutils.readImage(gainFn)
       imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
 
       # Building the transformation matrix
@@ -330,8 +330,8 @@ class XmippProtMovieCorr(ProtAlignMovies):
       M = self.getUserFlip(imag_array)
       print('Transforming gain: {} degrees rotation, {} flip'.
             format(angle, ['no', 'vertical', 'horizontal'][self.gainFlip.get()]))
-      flipped_array, M = rotation(imag_array, angle, imag_array.shape, M)
-      writeImageFromArray(flipped_array, outFn)
+      flipped_array, M = xmutils.rotation(imag_array, angle, imag_array.shape, M)
+      xmutils.writeImageFromArray(flipped_array, outFn)
       return outFn
 
     def flipYGain(self, gainFn, outFn=None):
@@ -343,13 +343,13 @@ class XmippProtMovieCorr(ProtAlignMovies):
         else:
           baseName = os.path.basename(gainFn).replace('_flipped', '')
         outFn = os.path.abspath(self._getExtraPath(baseName))
-      gainImg = readImage(gainFn)
+      gainImg = xmutils.readImage(gainFn)
       imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
 
       #Flipped Y matrix
       M, angle = np.asarray([[1, 0, 0], [0, -1, imag_array.shape[0]], [0, 0, 1]]), 0
-      flipped_array, M = rotation(imag_array, angle, imag_array.shape, M)
-      writeImageFromArray(flipped_array, outFn)
+      flipped_array, M = xmutils.rotation(imag_array, angle, imag_array.shape, M)
+      xmutils.writeImageFromArray(flipped_array, outFn)
       return outFn
 
     def _getShiftsFile(self, movie):

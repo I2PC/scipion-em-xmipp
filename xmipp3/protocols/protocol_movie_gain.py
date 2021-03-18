@@ -43,8 +43,7 @@ from pwem.objects import SetOfMovies, Movie, SetOfImages, Image
 from pwem.protocols import EMProtocol, ProtProcessMovies
 
 from pwem import emlib
-from xmipp3.utils import normalize_array
-from ..utils import *
+import xmipp3.utils as xmutils
 
 
 class XmippProtMovieGain(ProtProcessMovies):
@@ -180,8 +179,8 @@ class XmippProtMovieGain(ProtProcessMovies):
             self.estimatedIds.append(movieId)
             self.estimateGainFun(movie, noSigma=True)
 
-        estGain = readImage(estGainFn)
-        expGain = readImage(expGainFn)
+        estGain = xmutils.readImage(estGainFn)
+        expGain = xmutils.readImage(expGainFn)
         self.match_orientation(expGain, estGain)
 
         orientedSet = self._loadOutputSet(SetOfImages, 'orientedGain.sqlite')
@@ -399,7 +398,7 @@ class XmippProtMovieGain(ProtProcessMovies):
         best_cor = 0
         #Building conjugate of FT of estimated gain for correlations
         est_gain_array = est_gain.getData()
-        est_gain_array = normalize_array(est_gain_array)
+        est_gain_array = xmutils.normalize_array(est_gain_array)
         est_gain_array_FT_conj = np.conj(np.fft.fft2(est_gain_array))
 
         # Iterating for mirrors
@@ -414,7 +413,7 @@ class XmippProtMovieGain(ProtProcessMovies):
                     M = np.identity(3)
                 angle = irot * 90
                 #Transformating the imag array (mirror + rotation)
-                imag_array, R = rotation(imag_array, angle, est_gain_array.shape, M)
+                imag_array, R = xmutils.rotation(imag_array, angle, est_gain_array.shape, M)
 
                 # calculating correlation
                 correlationFunction = arrays_correlation_FT(imag_array,est_gain_array_FT_conj)
@@ -440,18 +439,18 @@ class XmippProtMovieGain(ProtProcessMovies):
 
         # Multiply by inverse of translation matrix
         best_M = np.matmul(np.linalg.inv(T), best_R)
-        best_gain_array = applyTransform(np.asarray(exp_gain.getData(), dtype=np.float64), best_M, est_gain_array.shape)
+        best_gain_array = xmutils.applyTransform(np.asarray(exp_gain.getData(), dtype=np.float64), best_M, est_gain_array.shape)
 
         print('Best correlation: ', best_cor)
         print('Rotation angle: {}\nHorizontal mirror: {}'.format(best_transf[0],best_transf[1]==1))
 
         inv_best_gain_array = invert_array(best_gain_array)
         if best_cor > 0:
-            writeImageFromArray(best_gain_array, self.getOrientedGainPath())
-            #writeImageFromArray(inv_best_gain_array, self.getBestCorrectionPath())
+            xmutils.writeImageFromArray(best_gain_array, self.getOrientedGainPath())
+            #xmutils.writeImageFromArray(inv_best_gain_array, self.getBestCorrectionPath())
         else:
-            writeImageFromArray(inv_best_gain_array, self.getOrientedGainPath())
-            #writeImageFromArray(best_gain_array, self.getBestCorrectionPath())
+            xmutils.writeImageFromArray(inv_best_gain_array, self.getOrientedGainPath())
+            #xmutils.writeImageFromArray(best_gain_array, self.getBestCorrectionPath())
 
     # ------------------------- UTILS functions --------------------------------
     def flipYGain(self, gainFn, outFn=None):
@@ -460,19 +459,19 @@ class XmippProtMovieGain(ProtProcessMovies):
         ext = pwutils.getExt(gainFn)
         baseName = os.path.basename(gainFn).replace(ext, '_flipped' + ext)
         outFn = os.path.abspath(self._getExtraPath(baseName))
-      gainImg = readImage(gainFn)
+      gainImg = xmutils.readImage(gainFn)
       imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
 
       #Flipped Y matrix
       M, angle = np.asarray([[1, 0, 0], [0, -1, imag_array.shape[0]], [0, 0, 1]]), 0
-      flipped_array, M = rotation(imag_array, angle, imag_array.shape, M)
-      writeImageFromArray(flipped_array, outFn)
+      flipped_array, M = xmutils.rotation(imag_array, angle, imag_array.shape, M)
+      xmutils.writeImageFromArray(flipped_array, outFn)
       return outFn
 
     def invertImage(self, img, outFn):
         array = img.getData()
         inv_array = invert_array(array)
-        writeImageFromArray(inv_array, outFn)
+        xmutils.writeImageFromArray(inv_array, outFn)
 
     def getInputGain(self):
         return self.inputMovies.get().getGain()
@@ -568,7 +567,7 @@ def arrays_correlation_FT(ar1,ar2_ft_conj,normalize=True):
     '''Return the correlation matrix of an array and the FT_conjugate of a second array using the fourier transform
     '''
     if normalize:
-        ar1=normalize_array(ar1)
+        ar1=xmutils.normalize_array(ar1)
 
     ar1_FT = np.fft.fft2(ar1)
     corr2FT = np.multiply(ar1_FT, ar2_ft_conj)
