@@ -27,7 +27,6 @@
 
 import numpy as np
 import os
-import math
 import sys
 
 from pyworkflow import VERSION_1_1
@@ -45,6 +44,7 @@ from pwem.protocols import EMProtocol, ProtProcessMovies
 
 from pwem import emlib
 from xmipp3.utils import normalize_array
+from ..utils import *
 
 
 class XmippProtMovieGain(ProtProcessMovies):
@@ -180,8 +180,8 @@ class XmippProtMovieGain(ProtProcessMovies):
             self.estimatedIds.append(movieId)
             self.estimateGainFun(movie, noSigma=True)
 
-        estGain = self.readImage(estGainFn)
-        expGain = self.readImage(expGainFn)
+        estGain = readImage(estGainFn)
+        expGain = readImage(expGainFn)
         self.match_orientation(expGain, estGain)
 
         orientedSet = self._loadOutputSet(SetOfImages, 'orientedGain.sqlite')
@@ -447,11 +447,11 @@ class XmippProtMovieGain(ProtProcessMovies):
 
         inv_best_gain_array = invert_array(best_gain_array)
         if best_cor > 0:
-            self.writeImageFromArray(best_gain_array, self.getOrientedGainPath())
-            #self.writeImageFromArray(inv_best_gain_array, self.getBestCorrectionPath())
+            writeImageFromArray(best_gain_array, self.getOrientedGainPath())
+            #writeImageFromArray(inv_best_gain_array, self.getBestCorrectionPath())
         else:
-            self.writeImageFromArray(inv_best_gain_array, self.getOrientedGainPath())
-            #self.writeImageFromArray(best_gain_array, self.getBestCorrectionPath())
+            writeImageFromArray(inv_best_gain_array, self.getOrientedGainPath())
+            #writeImageFromArray(best_gain_array, self.getBestCorrectionPath())
 
     # ------------------------- UTILS functions --------------------------------
     def flipYGain(self, gainFn, outFn=None):
@@ -460,29 +460,19 @@ class XmippProtMovieGain(ProtProcessMovies):
         ext = pwutils.getExt(gainFn)
         baseName = os.path.basename(gainFn).replace(ext, '_flipped' + ext)
         outFn = os.path.abspath(self._getExtraPath(baseName))
-      gainImg = self.readImage(gainFn)
+      gainImg = readImage(gainFn)
       imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
 
       #Flipped Y matrix
       M, angle = np.asarray([[1, 0, 0], [0, -1, imag_array.shape[0]], [0, 0, 1]]), 0
       flipped_array, M = rotation(imag_array, angle, imag_array.shape, M)
-      self.writeImageFromArray(flipped_array, outFn)
+      writeImageFromArray(flipped_array, outFn)
       return outFn
-
-    def writeImageFromArray(self, array, fn):
-        img = emlib.Image()
-        img.setData(array)
-        img.write(fn)
 
     def invertImage(self, img, outFn):
         array = img.getData()
         inv_array = invert_array(array)
-        self.writeImageFromArray(inv_array, outFn)
-
-    def readImage(self, fn):
-        img = emlib.Image()
-        img.read(fn)
-        return img
+        writeImageFromArray(inv_array, outFn)
 
     def getInputGain(self):
         return self.inputMovies.get().getGain()
@@ -574,32 +564,6 @@ class XmippProtMovieGain(ProtProcessMovies):
 
 
 # --------------------- WORKERS --------------------------------------
-
-def applyTransform(imag_array, M, shape):
-    ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
-    '''
-    imag = emlib.Image()
-    imag.setData(imag_array)
-    imag = imag.applyWarpAffine(list(M.flatten()), shape, True)
-    return imag.getData()
-
-
-def rotation(imag, angle, shape, P):
-    '''Rotate a np.array and return also the transformation matrix
-    #imag: np.array
-    #angle: angle in degrees
-    #shape: output shape
-    #P: transform matrix (further transformation in addition to the rotation)'''
-    (hsrc, wsrc) = imag.shape
-    angle *= math.pi / 180
-    T = np.asarray([[1, 0, -wsrc / 2], [0, 1, -hsrc / 2], [0, 0, 1]])
-    R = np.asarray([[math.cos(angle), math.sin(angle), 0], [-math.sin(angle), math.cos(angle), 0], [0, 0, 1]])
-    M = np.matmul(np.matmul(np.linalg.inv(T), np.matmul(R, T)), P)
-
-    transformed = applyTransform(imag, M, shape)
-    return transformed, M
-
-
 def arrays_correlation_FT(ar1,ar2_ft_conj,normalize=True):
     '''Return the correlation matrix of an array and the FT_conjugate of a second array using the fourier transform
     '''

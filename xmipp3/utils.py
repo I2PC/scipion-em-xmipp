@@ -30,6 +30,7 @@ This module contains utils functions for Xmipp protocols
 
 from os.path import join
 import numpy as np
+import math
 from pyworkflow import Config
 from pwem import emlib
 
@@ -50,6 +51,40 @@ CUDA_BIN = %(CUDA_HOME)s/bin
 CUDA_LIB = %(CUDA_HOME)s/lib64
 CUDNN_VERSION = 6 or 7
 '''.format(Config.SCIPION_CONFIG)
+
+
+def writeImageFromArray(array, fn):
+    img = emlib.Image()
+    img.setData(array)
+    img.write(fn)
+
+def readImage(fn):
+    img = emlib.Image()
+    img.read(fn)
+    return img
+
+def applyTransform(imag_array, M, shape):
+  ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
+  '''
+  imag = emlib.Image()
+  imag.setData(imag_array)
+  imag = imag.applyWarpAffine(list(M.flatten()), shape, True)
+  return imag.getData()
+
+def rotation(imag, angle, shape, P):
+  '''Rotate a np.array and return also the transformation matrix
+  #imag: np.array
+  #angle: angle in degrees
+  #shape: output shape
+  #P: transform matrix (further transformation in addition to the rotation)'''
+  (hsrc, wsrc) = imag.shape
+  angle *= math.pi / 180
+  T = np.asarray([[1, 0, -wsrc / 2], [0, 1, -hsrc / 2], [0, 0, 1]])
+  R = np.asarray([[math.cos(angle), math.sin(angle), 0], [-math.sin(angle), math.cos(angle), 0], [0, 0, 1]])
+  M = np.matmul(np.matmul(np.linalg.inv(T), np.matmul(R, T)), P)
+
+  transformed = applyTransform(imag, M, shape)
+  return transformed, M
 
 
 def copy_image(imag):
