@@ -28,7 +28,9 @@
 # **************************************************************************
 
 import os
+import math
 from math import ceil
+import numpy as np
 
 import pyworkflow.utils as pwutils
 from pyworkflow.utils import yellowStr
@@ -36,6 +38,7 @@ import pyworkflow.object as pwobj
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 import pwem.emlib.metadata as md
+from pwem import emlib
 from pwem.objects import Image
 from pwem.protocols.protocol_align_movies import createAlignmentPlot
 from pyworkflow import VERSION_1_1
@@ -198,6 +201,21 @@ class XmippProtMovieCorr(ProtAlignMovies):
         args += ' --cropDRCorner %d %d' % (dimX, dimY)
         return args
 
+    def flipYGain(self, gainFn, outFn=None):
+      '''Flips an image in the Y axis'''
+      if outFn == None:
+        ext = pwutils.getExt(gainFn)
+        baseName = os.path.basename(gainFn).replace(ext, '_flipped' + ext)
+        outFn = os.path.abspath(self._getExtraPath(baseName))
+      gainImg = self.readImage(gainFn)
+      imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
+
+      #Flipped Y matrix
+      M, angle = np.asarray([[1, 0, 0], [0, -1, imag_array.shape[0]], [0, 0, 1]]), 0
+      flipped_array, M = rotation(imag_array, angle, imag_array.shape, M)
+      self.writeImageFromArray(flipped_array, outFn)
+      return outFn
+
     def getGPUArgs(self):
         args = ' --device %(GPU)s'
         if self.doLocalAlignment.get():
@@ -249,7 +267,13 @@ class XmippProtMovieCorr(ProtAlignMovies):
             args += ' --dark "%s"' % self.inputMovies.get().getDark()
 
         if self.inputMovies.get().getGain():
-            args += ' --gain "%s"' % self.inputMovies.get().getGain()
+            ext = pwutils.getExt(self.inputMovies.get().getFirstItem().getFileName()).lower()
+            if ext in ['.tif', '.tiff']:
+              self.flipY = True
+              gainFn = self.flipYGain(self.inputMovies.get().getGain())
+            else:
+              gainFn = self.inputMovies.get().getGain()
+            args += ' --gain "%s"' % gainFn
 
         if self.autoControlPoints.get():
             self._setControlPoints()
@@ -409,3 +433,39 @@ class XmippProtMovieCorr(ProtAlignMovies):
 
     def _citations(self):
         return ['strelak2020flexalign']
+
+
+    def writeImageFromArray(self, array, fn):
+        img = emlib.Image()
+        img.setData(array)
+        img.write(fn)
+
+    def readImage(self, fn):
+        img = emlib.Image()
+        img.read(fn)
+        return img
+
+
+def applyTransform(imag_array, M, shape):
+  ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
+  '''
+  imag = emlib.Image()
+  imag.setData(imag_array)
+  imag = imag.applyWarpAffine(list(M.flatten()), shape, True)
+  return imag.getData()
+
+
+def rotation(imag, angle, shape, P):
+  '''Rotate a np.array and return also the transformation matrix
+  #imag: np.array
+  #angle: angle in degrees
+  #shape: output shape
+  #P: transform matrix (further transformation in addition to the rotation)'''
+  (hsrc, wsrc) = imag.shape
+  angle *= math.pi / 180
+  T = np.asarray([[1, 0, -wsrc / 2], [0, 1, -hsrc / 2], [0, 0, 1]])
+  R = np.asarray([[math.cos(angle), math.sin(angle), 0], [-math.sin(angle), math.cos(angle), 0], [0, 0, 1]])
+  M = np.matmul(np.matmul(np.linalg.inv(T), np.matmul(R, T)), P)
+
+  transformed = applyTransform(imag, M, shape)
+  return transformed, M

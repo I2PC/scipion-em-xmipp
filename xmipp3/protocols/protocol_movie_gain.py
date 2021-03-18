@@ -31,6 +31,7 @@ import math
 import sys
 
 from pyworkflow import VERSION_1_1
+import pyworkflow.utils as pwutils
 from pyworkflow.object import Set
 from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow.protocol.params import (PointerParam, IntParam,
@@ -198,7 +199,7 @@ class XmippProtMovieGain(ProtProcessMovies):
         oriArray = oriArray / np.mean(oriArray)
 
         oriGain.setData(oriArray)
-        oriGain.write(self.getOrientedGainPath())
+        oriGain.write(self.getFinalGainPath())
 
     def _processMovie(self, movie):
         movieId = movie.getObjId()
@@ -271,7 +272,7 @@ class XmippProtMovieGain(ProtProcessMovies):
                 outputSet.copyInfo(inputMovies)
 
                 if fixGain:
-                    outputSet.setGain(self.getFinalGainPath())
+                    outputSet.setGain(self.getFinalGainPath(tifFlipped=True))
 
         return outputSet
 
@@ -453,6 +454,21 @@ class XmippProtMovieGain(ProtProcessMovies):
             #self.writeImageFromArray(best_gain_array, self.getBestCorrectionPath())
 
     # ------------------------- UTILS functions --------------------------------
+    def flipYGain(self, gainFn, outFn=None):
+      '''Flips an image in the Y axis'''
+      if outFn == None:
+        ext = pwutils.getExt(gainFn)
+        baseName = os.path.basename(gainFn).replace(ext, '_flipped' + ext)
+        outFn = os.path.abspath(self._getExtraPath(baseName))
+      gainImg = self.readImage(gainFn)
+      imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
+
+      #Flipped Y matrix
+      M, angle = np.asarray([[1, 0, 0], [0, -1, imag_array.shape[0]], [0, 0, 1]]), 0
+      flipped_array, M = rotation(imag_array, angle, imag_array.shape, M)
+      self.writeImageFromArray(flipped_array, outFn)
+      return outFn
+
     def writeImageFromArray(self, array, fn):
         img = emlib.Image()
         img.setData(array)
@@ -477,13 +493,16 @@ class XmippProtMovieGain(ProtProcessMovies):
     def getResidualGainPath(self, movieId):
         return self._getExtraPath("movie_%06d_residual_gain.xmp" % movieId)
 
+    def getFlippedOrientedGainPath(self):
+        return self._getExtraPath("orientedGain_flipped.mrc")
+
     def getOrientedGainPath(self):
         return self._getExtraPath("orientedGain.mrc")
 
     def getOrientedCorrectionPath(self):
         return self._getExtraPath("orientedCorrection.mrc")
 
-    def getFinalGainPath(self):
+    def getFinalGainPath(self, tifFlipped=False):
         fnBest = self.getOrientedGainPath()
         if os.path.exists(fnBest):
             # If the best orientatin has been calculated, take it
@@ -502,6 +521,11 @@ class XmippProtMovieGain(ProtProcessMovies):
                     self.estimatedIds.append(movieId)
                     self.estimateGainFun(firstMovie)
                 finalGainFn = self.getEstimatedGainPath(movieId)
+
+        ext = pwutils.getExt(self.inputMovies.get().getFirstItem().getFileName()).lower()
+        if ext in ['.tif', '.tiff'] and tifFlipped:
+            finalGainFn = self.flipYGain(finalGainFn)
+
         return finalGainFn
 
     def searchEstimatedGainPath(self):
