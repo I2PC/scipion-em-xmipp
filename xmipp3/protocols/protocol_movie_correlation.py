@@ -62,6 +62,9 @@ class XmippProtMovieCorr(ProtAlignMovies):
     # Map to xmipp interpolation values in command line
     INTERP_MAP = {INTERP_LINEAR: 1, INTERP_CUBIC: 3}
 
+    NO_ROTATION = 0
+    NO_FLIP = 0
+
     _label = 'FlexAlign'
     _lastUpdateVersion = VERSION_1_1
 
@@ -160,6 +163,22 @@ class XmippProtMovieCorr(ProtAlignMovies):
                         The alignment is then performed on the summed frames.',
                     condition='doLocalAlignment')
 
+        form.addSection(label="Gain orientation")
+        form.addParam('gainRot', params.EnumParam,
+                      choices=['no rotation', '90 degrees',
+                               '180 degrees', '270 degrees'],
+                      label="Rotate gain reference:",
+                      default=self.NO_ROTATION,
+                      display=params.EnumParam.DISPLAY_COMBO,
+                      help="Rotate gain reference counter-clockwise.")
+
+        form.addParam('gainFlip', params.EnumParam,
+                      choices=['no flip', 'upside down', 'left right'],
+                      label="Flip gain reference:", default=self.NO_FLIP,
+                      display=params.EnumParam.DISPLAY_COMBO,
+                      help="Flip gain reference after rotation. "
+                           "For tiff movies, gain is automatically upside-down flipped")
+
         form.addParallelSection(threads=1, mpi=1)
 
     #--------------------------- STEPS functions -------------------------------
@@ -201,11 +220,43 @@ class XmippProtMovieCorr(ProtAlignMovies):
         args += ' --cropDRCorner %d %d' % (dimX, dimY)
         return args
 
+    def getUserAngle(self):
+      anglesDic = {0:0, 1:90, 2:180, 3:270}
+      return anglesDic[self.gainRot.get()]
+
+    def getUserFlip(self, imag_array):
+      flipDic = {0: np.asarray([[1, 0, 0], [0, 1, 0], [0, 0, 1]]),
+                 1: np.asarray([[1, 0, 0], [0, -1, imag_array.shape[0]], [0, 0, 1]]),
+                 2: np.asarray([[-1, 0, imag_array.shape[1]], [0, 1, 0], [0, 0, 1]])}
+      return flipDic[self.gainFlip.get()]
+
+    def transformGain(self, gainFn, outFn=None):
+      '''Transforms the gain image with the user especifications'''
+      if outFn == None:
+        ext = pwutils.getExt(gainFn)
+        baseName = os.path.basename(gainFn).replace(ext, '_transformed' + ext)
+        outFn = os.path.abspath(self._getExtraPath(baseName))
+
+      gainImg = self.readImage(gainFn)
+      imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
+
+      # Building the transformation matrix
+      angle = self.getUserAngle()
+      M = self.getUserFlip(imag_array)
+      print('Transforming gain: {} degrees rotation, {} flip'.
+            format(angle, ['no', 'vertical', 'horizontal'][self.gainFlip.get()]))
+      flipped_array, M = rotation(imag_array, angle, imag_array.shape, M)
+      self.writeImageFromArray(flipped_array, outFn)
+      return outFn
+
     def flipYGain(self, gainFn, outFn=None):
       '''Flips an image in the Y axis'''
       if outFn == None:
         ext = pwutils.getExt(gainFn)
-        baseName = os.path.basename(gainFn).replace(ext, '_flipped' + ext)
+        if not '_flipped' in os.path.basename(gainFn):
+          baseName = os.path.basename(gainFn).replace(ext, '_flipped' + ext)
+        else:
+          baseName = os.path.basename(gainFn).replace('_flipped', '')
         outFn = os.path.abspath(self._getExtraPath(baseName))
       gainImg = self.readImage(gainFn)
       imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
@@ -273,6 +324,9 @@ class XmippProtMovieCorr(ProtAlignMovies):
               gainFn = self.flipYGain(self.inputMovies.get().getGain())
             else:
               gainFn = self.inputMovies.get().getGain()
+
+            if self.gainRot.get() != 0 or self.gainFlip.get() != 0:
+              gainFn = self.transformGain(gainFn)
             args += ' --gain "%s"' % gainFn
 
         if self.autoControlPoints.get():
