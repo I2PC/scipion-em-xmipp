@@ -335,24 +335,6 @@ class XmippProtMovieCorr(ProtAlignMovies):
       xmutils.writeImageFromArray(flipped_array, outFn)
       return outFn
 
-    def flipYGain(self, gainFn, outFn=None):
-      '''Flips an image in the Y axis'''
-      if outFn == None:
-        ext = pwutils.getExt(gainFn)
-        if not '_flipped' in os.path.basename(gainFn):
-          baseName = os.path.basename(gainFn).replace(ext, '_flipped' + ext)
-        else:
-          baseName = os.path.basename(gainFn).replace('_flipped', '')
-        outFn = os.path.abspath(self._getExtraPath(baseName))
-      gainImg = xmutils.readImage(gainFn)
-      imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
-
-      #Flipped Y matrix
-      M, angle = np.asarray([[1, 0, 0], [0, -1, imag_array.shape[0]], [0, 0, 1]]), 0
-      flipped_array, M = xmutils.rotation(imag_array, angle, imag_array.shape, M)
-      xmutils.writeImageFromArray(flipped_array, outFn)
-      return outFn
-
     def _getShiftsFile(self, movie):
         return self._getExtraPath(self._getMovieRoot(movie) + '_shifts.xmd')
 
