@@ -28,10 +28,11 @@
 This module contains utils functions for Xmipp protocols
 """
 
-from os.path import join
+from os.path import join, basename
 import numpy as np
 import math
 from pyworkflow import Config
+import pyworkflow.utils as pwutils
 from pwem import emlib
 
 
@@ -86,6 +87,24 @@ def rotation(imag, angle, shape, P):
   transformed = applyTransform(imag, M, shape)
   return transformed, M
 
+def flipYImage(inFn, outFn=None, outDir=None):
+    '''Flips an image in the Y axis'''
+    if outFn == None:
+        if not '_flipped' in basename(inFn):
+            ext = pwutils.getExt(inFn)
+            outFn = inFn.replace(ext, '_flipped' + ext)
+        else:
+            outFn = inFn.replace('_flipped', '')
+    if outDir != None:
+        outFn = outDir + '/' + basename(outFn)
+    gainImg = readImage(inFn)
+    imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
+
+    # Flipped Y matrix
+    M, angle = np.asarray([[1, 0, 0], [0, -1, imag_array.shape[0]], [0, 0, 1]]), 0
+    flipped_array, M = rotation(imag_array, angle, imag_array.shape, M)
+    writeImageFromArray(flipped_array, outFn)
+    return outFn
 
 def copy_image(imag):
     ''' Return a copy of a xmipp_image

@@ -284,7 +284,8 @@ class XmippProtMovieCorr(ProtAlignMovies):
             ext = pwutils.getExt(self.inputMovies.get().getFirstItem().getFileName()).lower()
             if ext in ['.tif', '.tiff']:
               self.flipY = True
-              gainFn = self.flipYGain(self.inputMovies.get().getGain())
+              inGainFn = self.inputMovies.get().getGain()
+              gainFn = xmutils.flipYImage(inGainFn, outDir = self._getExtraPath())
             else:
               gainFn = self.inputMovies.get().getGain()
 
