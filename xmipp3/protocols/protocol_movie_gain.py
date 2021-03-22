@@ -27,10 +27,10 @@
 
 import numpy as np
 import os
-import math
 import sys
 
 from pyworkflow import VERSION_1_1
+import pyworkflow.utils as pwutils
 from pyworkflow.object import Set
 from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow.protocol.params import (PointerParam, IntParam,
@@ -43,7 +43,7 @@ from pwem.objects import SetOfMovies, Movie, SetOfImages, Image
 from pwem.protocols import EMProtocol, ProtProcessMovies
 
 from pwem import emlib
-from xmipp3.utils import normalize_array
+import xmipp3.utils as xmutils
 
 
 class XmippProtMovieGain(ProtProcessMovies):
@@ -56,6 +56,9 @@ class XmippProtMovieGain(ProtProcessMovies):
     """
     _label = 'movie gain'
     _lastUpdateVersion = VERSION_1_1
+
+    estimatedDatabase = 'estGains.sqlite'
+    residualDatabase = 'resGains.sqlite'
 
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
@@ -110,11 +113,11 @@ class XmippProtMovieGain(ProtProcessMovies):
     # -------------------------- STEPS functions ------------------------------
     def createOutputStep(self):
         if self.estimateGain.get():
-            estGainsSet = self._loadOutputSet(SetOfImages, 'estGains.sqlite')
+            estGainsSet = self._loadOutputSet(SetOfImages, self.estimatedDatabase)
             self._updateOutputSet('estimatedGains', estGainsSet, Set.STREAM_CLOSED)
 
         if self.estimateResidualGain.get():
-            resGainsSet = self._loadOutputSet(SetOfImages, 'resGains.sqlite')
+            resGainsSet = self._loadOutputSet(SetOfImages, self.residualDatabase)
             self._updateOutputSet('residualGains', resGainsSet, Set.STREAM_CLOSED)
 
     def _insertNewMoviesSteps(self, insertedDict, inputMovies):
@@ -179,8 +182,8 @@ class XmippProtMovieGain(ProtProcessMovies):
             self.estimatedIds.append(movieId)
             self.estimateGainFun(movie, noSigma=True)
 
-        estGain = self.readImage(estGainFn)
-        expGain = self.readImage(expGainFn)
+        estGain = xmutils.readImage(estGainFn)
+        expGain = xmutils.readImage(expGainFn)
         self.match_orientation(expGain, estGain)
 
         orientedSet = self._loadOutputSet(SetOfImages, 'orientedGain.sqlite')
@@ -198,13 +201,12 @@ class XmippProtMovieGain(ProtProcessMovies):
         oriArray = oriArray / np.mean(oriArray)
 
         oriGain.setData(oriArray)
-        oriGain.write(self.getOrientedGainPath())
+        oriGain.write(self.getFinalGainPath())
 
     def _processMovie(self, movie):
         movieId = movie.getObjId()
         if not self.doGainProcess(movieId):
             return
-        fnMovie = movie.getFileName()
         inputGain = self.getInputGain()
           
         if self.estimateGain.get() and not movieId in self.estimatedIds:
@@ -271,7 +273,7 @@ class XmippProtMovieGain(ProtProcessMovies):
                 outputSet.copyInfo(inputMovies)
 
                 if fixGain:
-                    outputSet.setGain(self.getFinalGainPath())
+                    outputSet.setGain(self.getFinalGainPath(tifFlipped=True))
 
         return outputSet
 
@@ -292,11 +294,11 @@ class XmippProtMovieGain(ProtProcessMovies):
             self._updateOutputSet('outputMovies', moviesSet, streamMode)
 
             if self.estimateGain.get():
-                estGainsSet = self._loadOutputSet(SetOfImages, 'estGains.sqlite')
+                estGainsSet = self._loadOutputSet(SetOfImages, self.estimatedDatabase)
                 estGainsSet = self.updateGainsOutput(movie, estGainsSet, self.getEstimatedGainPath(movieId))
                 self._updateOutputSet('estimatedGains', estGainsSet, streamMode)
             if self.estimateResidualGain.get():
-                resGainsSet = self._loadOutputSet(SetOfImages, 'resGains.sqlite')
+                resGainsSet = self._loadOutputSet(SetOfImages, self.residualDatabase)
                 resGainsSet = self.updateGainsOutput(movie, resGainsSet, self.getResidualGainPath(movieId))
                 self._updateOutputSet('residualGains', resGainsSet, streamMode)
 
@@ -331,9 +333,9 @@ class XmippProtMovieGain(ProtProcessMovies):
             if any([self.doGainProcess(i.getObjId()) for i in newDone]):
                 # update outputGains if any residualGain is processed in newDone
                 if self.estimateGain.get():
-                    estGainsSet = self._loadOutputSet(SetOfImages, 'estGains.sqlite')
+                    estGainsSet = self._loadOutputSet(SetOfImages, self.estimatedDatabase)
                 if self.estimateResidualGain.get():
-                    resGainsSet = self._loadOutputSet(SetOfImages, 'resGains.sqlite')
+                    resGainsSet = self._loadOutputSet(SetOfImages, self.residualDatabase)
                   
                 for movie in newDone:
                     movieId = movie.getObjId()
@@ -398,7 +400,7 @@ class XmippProtMovieGain(ProtProcessMovies):
         best_cor = 0
         #Building conjugate of FT of estimated gain for correlations
         est_gain_array = est_gain.getData()
-        est_gain_array = normalize_array(est_gain_array)
+        est_gain_array = xmutils.normalize_array(est_gain_array)
         est_gain_array_FT_conj = np.conj(np.fft.fft2(est_gain_array))
 
         # Iterating for mirrors
@@ -413,7 +415,7 @@ class XmippProtMovieGain(ProtProcessMovies):
                     M = np.identity(3)
                 angle = irot * 90
                 #Transformating the imag array (mirror + rotation)
-                imag_array, R = rotation(imag_array, angle, est_gain_array.shape, M)
+                imag_array, R = xmutils.rotation(imag_array, angle, est_gain_array.shape, M)
 
                 # calculating correlation
                 correlationFunction = arrays_correlation_FT(imag_array,est_gain_array_FT_conj)
@@ -422,8 +424,7 @@ class XmippProtMovieGain(ProtProcessMovies):
                 maxVal = np.amax(correlationFunction)
                 minLoc = np.where(correlationFunction == minVal)
                 maxLoc = np.where(correlationFunction == maxVal)
-                #print('Correlation values')
-                #print(minVal, maxVal, minLoc, maxLoc)
+
                 if abs(minVal) > abs(best_cor):
                     corLoc = translation_correction(minLoc,est_gain_array.shape)
                     best_cor = minVal
@@ -439,34 +440,24 @@ class XmippProtMovieGain(ProtProcessMovies):
 
         # Multiply by inverse of translation matrix
         best_M = np.matmul(np.linalg.inv(T), best_R)
-        best_gain_array = applyTransform(np.asarray(exp_gain.getData(), dtype=np.float64), best_M, est_gain_array.shape)
+        best_gain_array = xmutils.applyTransform(np.asarray(exp_gain.getData(), dtype=np.float64), best_M, est_gain_array.shape)
 
         print('Best correlation: ', best_cor)
-        print('Rotation angle: {}\nVertical mirror: {}'.format(best_transf[0],best_transf[1]==1))
+        print('Rotation angle: {}\nHorizontal mirror: {}'.format(best_transf[0],best_transf[1]==1))
 
         inv_best_gain_array = invert_array(best_gain_array)
         if best_cor > 0:
-            self.writeImageFromArray(best_gain_array, self.getOrientedGainPath())
-            #self.writeImageFromArray(inv_best_gain_array, self.getBestCorrectionPath())
+            xmutils.writeImageFromArray(best_gain_array, self.getOrientedGainPath())
+            #xmutils.writeImageFromArray(inv_best_gain_array, self.getBestCorrectionPath())
         else:
-            self.writeImageFromArray(inv_best_gain_array, self.getOrientedGainPath())
-            #self.writeImageFromArray(best_gain_array, self.getBestCorrectionPath())
+            xmutils.writeImageFromArray(inv_best_gain_array, self.getOrientedGainPath())
+            #xmutils.writeImageFromArray(best_gain_array, self.getBestCorrectionPath())
 
     # ------------------------- UTILS functions --------------------------------
-    def writeImageFromArray(self, array, fn):
-        img = emlib.Image()
-        img.setData(array)
-        img.write(fn)
-
     def invertImage(self, img, outFn):
         array = img.getData()
         inv_array = invert_array(array)
-        self.writeImageFromArray(inv_array, outFn)
-
-    def readImage(self, fn):
-        img = emlib.Image()
-        img.read(fn)
-        return img
+        xmutils.writeImageFromArray(inv_array, outFn)
 
     def getInputGain(self):
         return self.inputMovies.get().getGain()
@@ -477,13 +468,16 @@ class XmippProtMovieGain(ProtProcessMovies):
     def getResidualGainPath(self, movieId):
         return self._getExtraPath("movie_%06d_residual_gain.xmp" % movieId)
 
+    def getFlippedOrientedGainPath(self):
+        return self._getExtraPath("orientedGain_flipped.mrc")
+
     def getOrientedGainPath(self):
         return self._getExtraPath("orientedGain.mrc")
 
     def getOrientedCorrectionPath(self):
         return self._getExtraPath("orientedCorrection.mrc")
 
-    def getFinalGainPath(self):
+    def getFinalGainPath(self, tifFlipped=False):
         fnBest = self.getOrientedGainPath()
         if os.path.exists(fnBest):
             # If the best orientatin has been calculated, take it
@@ -502,6 +496,11 @@ class XmippProtMovieGain(ProtProcessMovies):
                     self.estimatedIds.append(movieId)
                     self.estimateGainFun(firstMovie)
                 finalGainFn = self.getEstimatedGainPath(movieId)
+
+        ext = pwutils.getExt(self.inputMovies.get().getFirstItem().getFileName()).lower()
+        if ext in ['.tif', '.tiff'] and tifFlipped:
+            finalGainFn = xmutils.flipYImage(finalGainFn, outDir = self._getExtraPath())
+
         return finalGainFn
 
     def searchEstimatedGainPath(self):
@@ -550,37 +549,11 @@ class XmippProtMovieGain(ProtProcessMovies):
 
 
 # --------------------- WORKERS --------------------------------------
-
-def applyTransform(imag_array, M, shape):
-    ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
-    '''
-    imag = emlib.Image()
-    imag.setData(imag_array)
-    imag = imag.applyWarpAffine(list(M.flatten()), shape, True)
-    return imag.getData()
-
-
-def rotation(imag, angle, shape, P):
-    '''Rotate a np.array and return also the transformation matrix
-    #imag: np.array
-    #angle: angle in degrees
-    #shape: output shape
-    #P: transform matrix (further transformation in addition to the rotation)'''
-    (hsrc, wsrc) = imag.shape
-    angle *= math.pi / 180
-    T = np.asarray([[1, 0, -wsrc / 2], [0, 1, -hsrc / 2], [0, 0, 1]])
-    R = np.asarray([[math.cos(angle), math.sin(angle), 0], [-math.sin(angle), math.cos(angle), 0], [0, 0, 1]])
-    M = np.matmul(np.matmul(np.linalg.inv(T), np.matmul(R, T)), P)
-
-    transformed = applyTransform(imag, M, shape)
-    return transformed, M
-
-
 def arrays_correlation_FT(ar1,ar2_ft_conj,normalize=True):
     '''Return the correlation matrix of an array and the FT_conjugate of a second array using the fourier transform
     '''
     if normalize:
-        ar1=normalize_array(ar1)
+        ar1=xmutils.normalize_array(ar1)
 
     ar1_FT = np.fft.fft2(ar1)
     corr2FT = np.multiply(ar1_FT, ar2_ft_conj)
