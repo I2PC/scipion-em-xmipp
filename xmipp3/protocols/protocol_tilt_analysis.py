@@ -116,29 +116,34 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         self.insertedDict = OrderedDict()
         self.samplingRate = self.inputMicrographs.get().getSamplingRate()
         self.listOfMicrographs = []
-        self._loadInputList()
+        # self._loadInputList()
         pwutils.makePath(self._getExtraPath('DONE'))
-        fDeps = self._insertNewMicrographSteps(self.insertedDict,
-                                               self.listOfMicrographs)
+        # fDeps = self._insertNewMicrographSteps(self.insertedDict,
+        #                                        self.listOfMicrographs)
+
         # For the streaming mode, the steps function have a 'wait' flag that can be turned on/off. For example, here we insert the
         # createOutputStep but it wait=True, which means that can not be executed until it is set to False
         # (when the input micrographs stream is closed)
         #waitCondition = self._getFirstJoinStepName() == 'createOutputStep'
         #finalSteps = self._insertFinalSteps(fDeps)
 
-        #self._insertFunctionStep('createOutputStep',
-         #                        prerequisites=finalSteps, wait=waitCondition)
+        self._insertFunctionStep(self._getFirstJoinStepName(),
+                                 prerequisites=[], wait=True)
 
 
-    def createOutputStep(self):
-        pass
+    def closeOutputStep(self):
         # if self.keyCloseStream == 1:
         #   print('Last that is not closed is discardedMics')
-        # self._updateOutputSet('discardedMicrographs', self.discardedMicrographs, self.streamMode)
+        self._updateOutputSet('discardedMicrographs', self._getOutputDiscardedMics(), Set.STREAM_CLOSED)
         # elif self.keyCloseStream == 2:
-        # self._updateOutputSet('outputMicrographs', self.outputMicrographs, self.streamMode)
+        self._updateOutputSet('outputMicrographs', self._getOutputMics(), Set.STREAM_CLOSED)
         #   print('Last that is not closed is outputMics')
 
+    def _getOutputMics(self):
+        return self._loadOutputSet(SetOfMicrographs, 'micrograph.sqlite')
+
+    def _getOutputDiscardedMics(self):
+        return self._loadOutputSet(SetOfMicrographs, 'micrograph' + 'DISCARDED' + '.sqlite')
 
     def _loadInputList(self):
         """ Load the input set of mics and create a list. """
@@ -176,7 +181,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         # the first function that need to wait for all micrographs
         # to have completed, this can be overriden in subclasses
         # (e.g., in Xmipp 'sortPSDStep')
-        return 'createOutputStep'
+        return 'closeOutputStep'
 
 
     def _getFirstJoinStep(self):
@@ -190,14 +195,14 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         # Check if there are new micrographs to process from the input set
         localFile = self.inputMicrographs.get().getFileName()
         now = datetime.now()
-        self.lastCheck = getattr(self, 'lastCheck', now)
+        self.lastCheck = getattr(self, 'lastCheck', None)
         mTime = datetime.fromtimestamp(os.path.getmtime(localFile))
         self.debug('Last check: %s, modification: %s'
                    % (pwutils.prettyTime(self.lastCheck),
                    pwutils.prettyTime(mTime)))
         # If the input micrographs.sqlite have not changed since our last check,
         # it does not make sense to check for new input data
-        if self.lastCheck > mTime and hasattr(self, 'listOfMicrographs'):
+        if self.lastCheck is not None and self.lastCheck > mTime:
             return None
 
         self.lastCheck = now
@@ -207,16 +212,22 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         # newMics = any(m.getObjId() not in self.insertedDict for m in self.listOfMicrographs) # CHANGE
         newMics = [m for m in self.listOfMicrographs if m.getObjId() not in self.insertedDict] # SOLUTION
         newMicsBool = [len(newMics) > 0]
-        #outputStep = self._getFirstJoinStep()
+
+        outputStep = self._getFirstJoinStep()
 
         if newMicsBool:
-            # fDeps = self._insertNewMicrographSteps(self.insertedDict, self.listOfMicrographs) #CHANGE
+            #fDeps = self._insertNewMicrographSteps(self.insertedDict, self.listOfMicrographs) #CHANGE
             fDeps = self._insertNewMicrographSteps(self.insertedDict, newMics) # SOLUTION
 
-            #if outputStep is not None:
-             #   outputStep.addPrerequisites(*fDeps)
+            outputStep.addPrerequisites(*fDeps)
 
             self.updateSteps()
+
+        print('---------------STREAMCLOSED' + str(self.streamClosed))
+        if self.streamClosed:
+            outputStep.setStatus(cons.STATUS_NEW)
+            self.updateSteps()
+
 
 
     def _checkNewOutput(self):
@@ -369,21 +380,21 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
         with self._lock:
             print('--------GOT THE LOCK OUTPUT')
-            outputMicrographs = self._loadOutputSet(SetOfMicrographs, 'micrograph.sqlite')
-            discardedMicrographs = self._loadOutputSet(SetOfMicrographs, 'micrograph' + 'DISCARDED' + '.sqlite')
         # Double threshold
             if corr_mean > self.meanCorr_threshold.get() and corr_std < self.stdCorr_threshold.get():  # AND or OR
+                outputMicrographs = self._getOutputMics()
                 outputMicrographs.append(newMic)
                 self._updateOutputSet('outputMicrographs', outputMicrographs, streamMode)
                 if streamMode == Set.STREAM_CLOSED:
-                    discardedMicrographs.setStreamState(streamMode)
-                    self._updateOutputSet('discardedMicrographs', discardedMicrographs, streamMode)
+                    print('----------LAST UPDATE DISCARDED')
+                    #elf._updateOutputSet('discardedMicrographs', discardedMicrographs, streamMode)
             else:
+                discardedMicrographs = self._getOutputDiscardedMics()
                 discardedMicrographs.append(newMic)
                 self._updateOutputSet('discardedMicrographs', discardedMicrographs, streamMode)
                 if streamMode == Set.STREAM_CLOSED:
-                    outputMicrographs.setStreamState(streamMode)
-                    self._updateOutputSet('outputMicrographs', outputMicrographs, streamMode)
+                    print('----------LAST UPDATE OUTPUT')
+                    #self._updateOutputSet('outputMicrographs', outputMicrographs, streamMode)
 
         print('--------RELEASE THE LOCK')
 
@@ -540,6 +551,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
             # Copy the properties to the object contained in the protocol
             outputAttr.copy(outputSet, copyId=False)
             # Persist changes
+            #self._store(outputSet)
             self._store(outputAttr)
         else:
             # Here the defineOutputs function will call the write() method
