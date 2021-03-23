@@ -370,6 +370,8 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         # Extract windows
         window_image = ImageHandler().createImage()
         rotatedWind_psd = ImageHandler().createImage()
+        output_image = ImageHandler().createImage()
+        output_array = np.ones((dimx, dimy))
         ih = ImageHandler()
         for x0 in x_steps:
             for y0 in y_steps:
@@ -396,6 +398,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                                                 int(y0_sub + subWindStep - 1))
                 subRotatedWind_psd = rotatedWind_psd.window2D(x0_sub, y0_sub, int(x0_sub + subWindStep - 1),
                                                               int(y0_sub + subWindStep - 1))
+
                 # SAVE images
                 filename = "tmp" + str(x_steps.index(x0)) + str(y_steps.index(y0)) + '.mrc'
                 window_image.write(os.path.join(micFolder, filename))
@@ -420,14 +423,24 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
                 self.runJob("xmipp_transform_filter", args1)
                 self.runJob("xmipp_transform_filter", args2)
-                # We take the inverse of the estimated gain computed by xm
+
                 # Calculate autocorrelation 90 degrees
                 subWind_psd_filt = ih.read(filename_subwindPSD_filt)
                 subRotatedWind_psd_filt = ih.read(filename_subwindRotatedPSD_filt)
                 autocorrelation = subWind_psd_filt.correlation(subRotatedWind_psd_filt)
+                # Paint the output array
+                x0_paint = int((x0 + wind_step / 2) - (subWindStep / 2))
+                y0_paint = int((y0 + wind_step / 2) - (subWindStep / 2))
+                xf_paint = int(x0_paint + subWindStep)
+                yf_paint = int(y0_paint + subWindStep)
+                output_array[x0_paint:xf_paint, y0_paint:yf_paint] = subWind_psd_filt.getData()
                 # Append
                 autocorrelations.append(autocorrelation)
                 psds.append(subWind_psd_filt)
+
+        output_image.setData(output_array)
+        filename = "psd_outputs" + str(mic.getObjId()) + '.mrc'
+        output_image.write(os.path.join(micFolder, filename))
 
         correlation_pairs = list(combinations(psds, 2))
         for m1, m2 in correlation_pairs:
