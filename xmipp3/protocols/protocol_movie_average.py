@@ -30,7 +30,8 @@ import os
 
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_1
-from pyworkflow.utils import getExt
+import pyworkflow.utils as pwutils
+import xmipp3.utils as xmutils
 
 from pwem.protocols import ProtAlignMovies
 
@@ -141,9 +142,17 @@ class XmippProtMovieAverage(ProtAlignMovies):
         else:
             roi = None
 
+        if self.inputMovies.get().getGain():
+          ext = pwutils.getExt(self.inputMovies.get().getFirstItem().getFileName()).lower()
+          if ext in ['.tif', '.tiff']:
+            self.flipY = True
+            inGainFn = self.inputMovies.get().getGain()
+            gainFn = xmutils.flipYImage(inGainFn, outDir=self._getExtraPath())
+          else:
+            gainFn = self.inputMovies.get().getGain()
+
         self.averageMovie(movie, inputMd, outputMicFn, self.binFactor.get(),
-                          roi, self.inputMovies.get().getDark(),
-                          self.inputMovies.get().getGain(),
+                          roi, self.inputMovies.get().getDark(), gainFn,
                           splineOrder=self.INTERP_MAP[self.splineOrder.get()])
 
         self._storeSummary(movie)
@@ -162,7 +171,7 @@ class XmippProtMovieAverage(ProtAlignMovies):
         return self._getExtraPath(self._getMovieRoot(movie) + '_shifts.xmd')
 
     def _getConvertExtension(self, filename):
-        ext = getExt(filename).lower()
+        ext = pwutils.getExt(filename).lower()
         return None if ext in ['.mrc', '.mrcs', '.tiff', '.tif', '.stk'] else 'mrc'
 
     def _createOutputMovies(self):
