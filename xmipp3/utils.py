@@ -28,9 +28,11 @@
 This module contains utils functions for Xmipp protocols
 """
 
-from os.path import join
+from os.path import join, basename
 import numpy as np
+import math
 from pyworkflow import Config
+import pyworkflow.utils as pwutils
 from pwem import emlib
 
 
@@ -51,6 +53,58 @@ CUDA_LIB = %(CUDA_HOME)s/lib64
 CUDNN_VERSION = 6 or 7
 '''.format(Config.SCIPION_CONFIG)
 
+
+def writeImageFromArray(array, fn):
+    img = emlib.Image()
+    img.setData(array)
+    img.write(fn)
+
+def readImage(fn):
+    img = emlib.Image()
+    img.read(fn)
+    return img
+
+def applyTransform(imag_array, M, shape):
+  ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
+  '''
+  imag = emlib.Image()
+  imag.setData(imag_array)
+  imag = imag.applyWarpAffine(list(M.flatten()), shape, True)
+  return imag.getData()
+
+def rotation(imag, angle, shape, P):
+  '''Rotate a np.array and return also the transformation matrix
+  #imag: np.array
+  #angle: angle in degrees
+  #shape: output shape
+  #P: transform matrix (further transformation in addition to the rotation)'''
+  (hsrc, wsrc) = imag.shape
+  angle *= math.pi / 180
+  T = np.asarray([[1, 0, -wsrc / 2], [0, 1, -hsrc / 2], [0, 0, 1]])
+  R = np.asarray([[math.cos(angle), math.sin(angle), 0], [-math.sin(angle), math.cos(angle), 0], [0, 0, 1]])
+  M = np.matmul(np.matmul(np.linalg.inv(T), np.matmul(R, T)), P)
+
+  transformed = applyTransform(imag, M, shape)
+  return transformed, M
+
+def flipYImage(inFn, outFn=None, outDir=None):
+    '''Flips an image in the Y axis'''
+    if outFn == None:
+        if not '_flipped' in basename(inFn):
+            ext = pwutils.getExt(inFn)
+            outFn = inFn.replace(ext, '_flipped' + ext)
+        else:
+            outFn = inFn.replace('_flipped', '')
+    if outDir != None:
+        outFn = outDir + '/' + basename(outFn)
+    gainImg = readImage(inFn)
+    imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
+
+    # Flipped Y matrix
+    M, angle = np.asarray([[1, 0, 0], [0, -1, imag_array.shape[0]], [0, 0, 1]]), 0
+    flipped_array, M = rotation(imag_array, angle, imag_array.shape, M)
+    writeImageFromArray(flipped_array, outFn)
+    return outFn
 
 def copy_image(imag):
     ''' Return a copy of a xmipp_image
