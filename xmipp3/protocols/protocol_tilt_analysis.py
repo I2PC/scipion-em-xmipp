@@ -231,11 +231,14 @@ class XmippProtTiltAnalysis(ProtMicrographs):
             corr_std = Float(self.stats[id]['std'])
             corr_min = Float(self.stats[id]['min'])
             corr_max = Float(self.stats[id]['max'])
+            psdImage = Image(location=self.getPSDs(self._getExtraPath(), id))
+
             new_Mic = mic.clone()
             setattr(new_Mic, self.getTiltMeanLabel(), corr_mean)
             setattr(new_Mic, self.getTiltSTDLabel(), corr_std)
             setattr(new_Mic, self.getTiltMinLabel(), corr_min)
             setattr(new_Mic, self.getTiltMaxLabel(), corr_max)
+            setattr(new_Mic, self.getTiltPSDsLabel(), psdImage)
             # Double threshold
             if corr_mean > self.meanCorr_threshold.get() and corr_std < self.stdCorr_threshold.get(): #AND or OR
                 micSet.append(new_Mic)
@@ -293,6 +296,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         micrograph.setAttributesFromDict(micDict, setBasic=True, ignoreMissing=True)
         micFolderTmp = self._getOutputMicFolder(micrograph)  # tmp/micID
         micFn = micrograph.getFileName()
+        micID = micrograph.getObjId()
         micName = basename(micFn)
         micDoneFn = self._getMicrographDone(micrograph)  # EXTRAPath/Done/micrograph_ID.TXT
 
@@ -322,6 +326,10 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                 pwutils.makePath(micOutputFn)
                 for file in getFiles(micFolderTmp):
                     moveFile(file, micOutputFn)
+            else:
+                moveFile(self.getPSDs(micFolderTmp, micID), self._getExtraPath())
+
+
 
         # Mark this movie as finished
         open(micDoneFn, 'w').close()
@@ -439,7 +447,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                 psds.append(subWind_psd_filt)
 
         output_image.setData(output_array)
-        filename = "psd_outputs" + str(mic.getObjId()) + '.mrc'
+        filename = "psd_outputs" + str(mic.getObjId()) + '.jpeg'
         output_image.write(os.path.join(micFolder, filename))
 
         correlation_pairs = list(combinations(psds, 2))
@@ -577,6 +585,11 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         """ Return the file that is used as a flag of termination. """
         return self._getExtraPath('DONE', 'mic_%06d.TXT' % mic.getObjId())
 
+    @staticmethod
+    def getPSDs(micFolder, ID):
+        """ Return the Mic folder where find the PSDs in the tmp folder. """
+        filename = 'psd_outputs' + str(ID) + '.jpeg'
+        return os.path.join(micFolder, filename)
 
     @staticmethod
     def getTiltMeanLabel():
@@ -593,6 +606,11 @@ class XmippProtTiltAnalysis(ProtMicrographs):
     @staticmethod
     def getTiltMaxLabel():
         return prefixAttribute(emlib.label2Str(emlib.MDL_TILT_ANALYSIS_MAX))
+
+    @staticmethod
+    def getTiltPSDsLabel():
+        return prefixAttribute(emlib.label2Str(emlib.MDL_TILT_ANALYSIS_PSDs))
+
 
     # --------------------------- INFO functions -------------------------------
 

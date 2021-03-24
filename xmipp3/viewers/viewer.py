@@ -203,21 +203,45 @@ class XmippViewer(DataViewer):
                                                            'sortby': 'id'})
 
         elif issubclass(cls, XmippProtTiltAnalysis):
-            micView = MicrographsView(self._project, obj.outputMicrographs) #Si existe el otro atributo abrir t
+            micView = MicrographsView(self._project, obj.outputMicrographs)
             micView.getViewParams()[VISIBLE] = micView.getViewParams()[VISIBLE] + \
-                                                ' ' + XmippProtTiltAnalysis.getTiltMeanLabel() + \
-                                                ' ' + XmippProtTiltAnalysis.getTiltSTDLabel() + \
-                                                ' ' + XmippProtTiltAnalysis.getTiltMinLabel() + \
-                                                ' ' + XmippProtTiltAnalysis.getTiltMaxLabel()
+                                               ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename' + \
+                                               ' ' + XmippProtTiltAnalysis.getTiltMeanLabel() + \
+                                               ' ' + XmippProtTiltAnalysis.getTiltSTDLabel() + \
+                                               ' ' + XmippProtTiltAnalysis.getTiltMinLabel() + \
+                                               ' ' + XmippProtTiltAnalysis.getTiltMaxLabel()
+
+            micView.getViewParams()[RENDER] = micView.getViewParams()[RENDER] + \
+                                               ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename'
+
+            micView.getViewParams()[ORDER] = micView.getViewParams()[ORDER] + \
+                                               ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename' + \
+                                               ' ' + XmippProtTiltAnalysis.getTiltMeanLabel() + \
+                                               ' ' + XmippProtTiltAnalysis.getTiltSTDLabel() + \
+                                               ' ' + XmippProtTiltAnalysis.getTiltMinLabel() + \
+                                               ' ' + XmippProtTiltAnalysis.getTiltMaxLabel()
+
             self._views.append(micView)
 
             if obj.hasAttribute('discardedMicrographs'):
                 micView2 = MicrographsView(self._project, obj.discardedMicrographs)
-                micView2.getViewParams()[VISIBLE] = micView.getViewParams()[VISIBLE] + \
+                micView2.getViewParams()[VISIBLE] = micView2.getViewParams()[VISIBLE] + \
+                                                   ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename' + \
                                                    ' ' + XmippProtTiltAnalysis.getTiltMeanLabel() + \
                                                    ' ' + XmippProtTiltAnalysis.getTiltSTDLabel() + \
                                                    ' ' + XmippProtTiltAnalysis.getTiltMinLabel() + \
                                                    ' ' + XmippProtTiltAnalysis.getTiltMaxLabel()
+
+                micView2.getViewParams()[RENDER] = micView2.getViewParams()[RENDER] + \
+                                                  ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename'
+
+                micView2.getViewParams()[ORDER] = micView2.getViewParams()[ORDER] + \
+                                                    ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename' + \
+                                                    ' ' + XmippProtTiltAnalysis.getTiltMeanLabel() + \
+                                                    ' ' + XmippProtTiltAnalysis.getTiltSTDLabel() + \
+                                                    ' ' + XmippProtTiltAnalysis.getTiltMinLabel() + \
+                                                    ' ' + XmippProtTiltAnalysis.getTiltMaxLabel()
+
                 self._views.append(micView2)
 
 
