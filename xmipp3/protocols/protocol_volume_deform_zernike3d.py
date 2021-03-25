@@ -43,6 +43,14 @@ class XmippProtVolumeDeformZernike3D(ProtAnalysis3D):
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
+        form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                           Select the one you want to use.")
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
+                       expertLevel=params.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
         form.addParam('refVolume', params.PointerParam, label="Volume 1",
                       pointerClass='Volume')
         form.addParam('inputVolume', params.PointerParam, label="Volume 2",
@@ -111,7 +119,7 @@ class XmippProtVolumeDeformZernike3D(ProtAnalysis3D):
         if XdimI != newXdimI:
             self.runJob("xmipp_image_resize",
                         "-i %s --dim %d" % (fnInputVol, newXdimI))
-        if newXdimI>self.newXdim:
+        if newXdimI > self.newXdim:
             self.runJob("xmipp_transform_window", " -i %s --crop %d" %
                         (fnInputVol, (newXdimI-self.newXdim)))
 
@@ -121,7 +129,7 @@ class XmippProtVolumeDeformZernike3D(ProtAnalysis3D):
         if XdimR != newXdimR:
             self.runJob("xmipp_image_resize",
                         "-i %s --dim %d" % (fnRefVol, newXdimR))
-        if newXdimR>self.newXdim:
+        if newXdimR > self.newXdim:
             self.runJob("xmipp_transform_window", " -i %s --crop %d" %
                         (fnRefVol, (newXdimR-self.newXdim)))
 
@@ -137,9 +145,13 @@ class XmippProtVolumeDeformZernike3D(ProtAnalysis3D):
                   self._getExtraPath('Volumes'), self.penalization.get())
         if self.newRmax != 0:
             params = params + ' --Rmax %d' % self.newRmax
-        if self.numberOfThreads.get() != 0:
-            params = params + ' --thr %d' % self.numberOfThreads.get()
-        self.runJob("xmipp_volume_deform_sph", params)
+
+        if self.useGpu.get():
+            self.runJob("xmipp_cuda_volume_deform_sph", params)
+        else:
+            if self.numberOfThreads.get() != 0:
+                params = params + ' --thr %d' % self.numberOfThreads.get()
+            self.runJob("xmipp_volume_deform_sph", params)
 
 
     def createOutputStep(self):

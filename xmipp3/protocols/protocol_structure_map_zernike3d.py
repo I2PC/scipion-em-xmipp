@@ -81,7 +81,7 @@ def rigidRegistration(X, Y):
 
 class XmippProtStructureMapZernike3D(ProtAnalysis3D):
     """ Protocol for structure mapping based on Zernike3D. """
-    _label = 'sph struct - Zernike3D'
+    _label = 'struct map - Zernike3D'
     _lastUpdateVersion = VERSION_2_0
 
     def __init__(self, **args):
@@ -91,6 +91,14 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
+        form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                           Select the one you want to use.")
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
+                       expertLevel=params.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
         form.addParam('inputVolumes', params.MultiPointerParam,
                       pointerClass='SetOfVolumes,Volume',
                       label="Input volume(s)", important=True,
@@ -213,9 +221,12 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
                   self._getExtraPath('Pair_%d_%d' % (i, j)), self.penalization.get())
         if self.newRmax != 0:
             params = params + ' --Rmax %d' % self.newRmax
-        params = params + ' --thr 1'
 
-        self.runJob("xmipp_volume_deform_sph", params)
+        if self.useGpu.get():
+            self.runJob("xmipp_cuda_volume_deform_sph", params)
+        else:
+            params = params + ' --thr 1'
+            self.runJob("xmipp_volume_deform_sph", params)
 
         self.computeCorr(fnOut2, refVolFn, i, j)
 
