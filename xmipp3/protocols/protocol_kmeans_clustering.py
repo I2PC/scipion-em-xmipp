@@ -78,8 +78,9 @@ class XmippProtKmeansSPH(ProtClassify2D):
                 coeffs.append(np.fromstring(getXmippAttribute(particle, mdLabel).get(), sep=','))
         maxClusters = 101 if len(coeffs) > 101 else len(coeffs) + 1
         rmse = np.zeros((maxClusters - 1))
+        coeffs = np.asarray(coeffs)[:, :-8]
         for nClusters in range(1, maxClusters):
-            kmeans = KMeans(n_clusters=nClusters).fit(np.asarray(coeffs))
+            kmeans = KMeans(n_clusters=nClusters).fit(coeffs)
             rmse[nClusters-1] = np.sqrt(kmeans.inertia_ / len(coeffs))
         p1 = np.array((1, rmse[0]))
         p2 = np.array((maxClusters - 1, rmse[-1]))
