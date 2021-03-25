@@ -132,12 +132,12 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         Xdim = self.inputVolume.get().getDim()[0]
         if Xdim != self.newXdim:
             self.runJob("xmipp_image_resize",
-                        "-i %s --dim %d " %(fnVol, self.newXdim), numberOfMpi=1)
+                        "-i %s --dim %d " % (fnVol, self.newXdim), numberOfMpi=1)
         if self.inputVolumeMask.get():
             ih.convert(self.inputVolumeMask.get(), fnVolMask)
             if Xdim != self.newXdim:
                 self.runJob("xmipp_image_resize",
-                            "-i %s --dim %d " % (fnVolMask, self.newXdim), numberOfMpi=1)
+                            "-i %s --dim %d --interp nearest" % (fnVolMask, self.newXdim), numberOfMpi=1)
 
 
     def alignmentStep(self):
