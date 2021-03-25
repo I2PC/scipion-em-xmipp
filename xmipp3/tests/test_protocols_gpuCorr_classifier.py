@@ -23,27 +23,40 @@
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pyworkflow.plugin import Domain
-from pwem.protocols import ProtImportAverages, ProtImportMicrographs, ProtSubSet
+from pwem.protocols import ProtImportAverages, ProtImportParticles
+from xmipp3.protocols.protocol_preprocess.protocol_crop_resize import XmippProtCropResizeParticles
 
-from xmipp3.protocols import XmippProtPreprocessMicrographs
-from xmipp3.protocols.protocol_extract_particles import *
 from xmipp3.protocols.protocol_classification_gpuCorr import *
 
-ProtCTFFind = Domain.importFromPlugin('grigoriefflab.protocols', 'ProtCTFFind',
-                                      doRaise=True)
-SparxGaussianProtPicking = Domain.importFromPlugin('eman2.protocols',
-                                                   'SparxGaussianProtPicking',
-                                                   doRaise=True)
-
-
-# Number of mics to be processed
-NUM_MICS = 5 #maximum the number of mics in the relion set
 
 class TestGpuCorrClassifier(BaseTest):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
         cls.dsRelion = DataSet.getDataSet('relion_tutorial')
+
+    def importParticles(self, path):
+        """ Import an EMX file with Particles and defocus
+        """
+        prot = self.newProtocol(ProtImportParticles,
+                                objLabel='from relion',
+                                importFrom=ProtImportParticles.IMPORT_FROM_RELION,
+                                starFile=self.dsRelion.getFile(path),
+                                magnification=10000,
+                                samplingRate=7.08,
+                                haveDataBeenPhaseFlipped=True)
+        self.launchProtocol(prot)
+
+        return prot
+
+    def resizeParticles(self, particles):
+        protResize = self.newProtocol(XmippProtCropResizeParticles,
+                                         doResize=True,
+                                         resizeOption=1,
+                                         resizeDim=60)
+        protResize.inputParticles.set(particles)
+        self.launchProtocol(protResize)
+        return protResize
 
     def importAverages(self):
         prot = self.newProtocol(ProtImportAverages,
@@ -54,74 +67,9 @@ class TestGpuCorrClassifier(BaseTest):
 
         return prot
 
-    def importMicrographs(self):
-        prot = self.newProtocol(ProtImportMicrographs,
-                                filesPath=self.dsRelion.getFile('micrographs'),
-                                filesPattern='*.mrc',
-                                samplingRateMode=1,
-                                magnification=79096,
-                                scannedPixelSize=56, voltage=300,
-                                sphericalAberration=2.0)
-        self.launchProtocol(prot)
-
-        return prot
-
-
-    def subsetMics(self, inputMics):
-        protSubset = ProtSubSet()
-        protSubset.inputFullSet.set(inputMics)
-        protSubset.chooseAtRandom.set(True)
-        protSubset.nElements.set(NUM_MICS)
-        self.launchProtocol(protSubset)
-
-        return protSubset
-
-    def invertContrast(self, inputMics):
-        protInvCont = XmippProtPreprocessMicrographs(doInvert=True)
-        protInvCont.inputMicrographs.set(inputMics)
-        self.launchProtocol(protInvCont)
-
-        return protInvCont
-
-    def calculateCtf(self, inputMics):
-        protCTF = ProtCTFFind(useCftfind4=True, numberOfThreads=6)
-        protCTF.inputMicrographs.set(inputMics)
-        protCTF.ctfDownFactor.set(1.0)
-        protCTF.lowRes.set(0.05)
-        protCTF.highRes.set(0.5)
-        self.launchProtocol(protCTF)
-
-        return protCTF
-
-
-    def runPicking(self, inputMicrographs):
-        """ Run a particle picking. """
-        protPicking = SparxGaussianProtPicking(boxSize=64,
-                                               numberOfThreads=6,
-                                               numberOfMpi=1,
-                                               lowerThreshold=0.01)
-        protPicking.inputMicrographs.set(inputMicrographs)
-        self.launchProtocol(protPicking)
-
-        return protPicking
-
-    def runExtractParticles(self, inputCoord, setCtfs):
-        protExtract = self.newProtocol(XmippProtExtractParticles,
-                                       boxSize=64,
-                                       numberOfThreads=6,
-                                       doInvert = False,
-                                       doFlip = False)
-
-        protExtract.inputCoordinates.set(inputCoord)
-        protExtract.ctfRelations.set(setCtfs)
-
-        self.launchProtocol(protExtract)
-
-        return protExtract
-
     def runClassify(self, inputParts):
         numClasses = int(inputParts.getSize()/1000)
-        if numClasses<2:
+        if numClasses<=2:
             numClasses=4
         protClassify = self.newProtocol(XmippProtGpuCrrCL2D,
                                         useReferenceImages=False,
@@ -133,7 +81,7 @@ class TestGpuCorrClassifier(BaseTest):
 
     def runClassify2(self, inputParts, inputRefs):
         numClasses = int(inputParts.getSize()/1000)
-        if numClasses<inputRefs.getSize():
+        if numClasses<=inputRefs.getSize():
             numClasses=inputRefs.getSize()
         protClassify = self.newProtocol(XmippProtGpuCrrCL2D,
                                         useReferenceImages=True,
@@ -156,35 +104,20 @@ class TestGpuCorrClassifier(BaseTest):
 
         return protClassify, numClasses
 
-
     def test_pattern(self):
-
-        protImportMics = self.importMicrographs()
-        self.assertFalse(protImportMics.isFailed(), 'ImportMics has failed.')
 
         protImportAvgs = self.importAverages()
         self.assertFalse(protImportAvgs.isFailed(), 'ImportAverages has failed.')
 
-        if NUM_MICS<20:
-            protSubsetMics = self.subsetMics(protImportMics.outputMicrographs)
-            self.assertFalse(protSubsetMics.isFailed(), 'protSubsetMics has failed.')
-            outMics = protSubsetMics.outputMicrographs
+        protResize = self.resizeParticles(protImportAvgs.outputAverages)
+        self.assertFalse(protResize.isFailed(), 'Resize has failed.')
 
-        protInvContr = self.invertContrast(outMics)
-        self.assertFalse(protInvContr.isFailed(), 'protInvContr has failed.')
-        outMics = protInvContr.outputMicrographs
+        path = 'import/case2/relion_it015_data.star'
+        protImportParts = self.importParticles(path)
+        self.assertFalse(protImportParts.isFailed(), 'Importparticles has failed.')
 
-        protCtf = self.calculateCtf(outMics)
-        self.assertFalse(protCtf.isFailed(), 'CTFfind4 has failed.')
 
-        protPicking = self.runPicking(outMics)
-        self.assertFalse(protPicking.isFailed(), 'Eamn Sparx has failed.')
-
-        protExtract = self.runExtractParticles(protPicking.outputCoordinates,
-                                               protCtf.outputCTF)
-        self.assertFalse(protExtract.isFailed(), 'Extract particles has failed.')
-
-        protClassify, numClasses = self.runClassify(protExtract.outputParticles)
+        protClassify, numClasses = self.runClassify(protImportParts.outputParticles)
         self.assertFalse(protClassify.isFailed(), 'GL2D (1) has failed.')
         self.assertTrue(protClassify.hasAttribute('outputClasses'),
                         'GL2D (1) has no outputClasses.')
@@ -192,7 +125,7 @@ class TestGpuCorrClassifier(BaseTest):
                          'GL2D (1) returned a wrong number of classes.')
 
         protClassify2, numClasses2 = self.runClassify2(
-            protExtract.outputParticles, protImportAvgs.outputAverages)
+            protImportParts.outputParticles, protResize.outputAverages)
         self.assertFalse(protClassify2.isFailed(), 'GL2D (2) has failed.')
         self.assertTrue(protClassify2.hasAttribute('outputClasses'),
                         'GL2D (2) has no outputClasses.')
@@ -200,7 +133,7 @@ class TestGpuCorrClassifier(BaseTest):
                          'GL2D (2) returned a wrong number of classes.')
 
         protClassify3, numClasses3 = self.runClassify3(
-            protExtract.outputParticles, protImportAvgs.outputAverages)
+            protImportParts.outputParticles, protResize.outputAverages)
         self.assertFalse(protClassify3.isFailed(), 'GL2D (3) has failed.')
         self.assertTrue(protClassify3.hasAttribute('outputClasses'),
                         'GL2D (3) has no outputClasses.')

@@ -25,9 +25,9 @@
 # ******************************************************************************
 
 from shutil import copy
-from os.path import exists, getmtime
+from os.path import exists, getmtime, splitext
 from datetime import datetime
-from os import system, popen, mkdir, listdir
+from os import system, popen, mkdir, listdir, remove
 from os.path import join
 from random import randint
 import os
@@ -45,9 +45,11 @@ import pwem.emlib.metadata as md
 
 from pwem import emlib
 from pwem.emlib import Image, MD_APPEND, DT_DOUBLE
+
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
 from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
                             rowToAlignment, rowToParticle)
-
+from xmipp3.base import isXmippCudaPresent
 
 HASH_SIZE = 100
 
@@ -89,11 +91,11 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
                       help='Number of classes to assign every input image '
                            'during the alignment',
                       expertLevel=const.LEVEL_ADVANCED)
-        form.addParam('numberOfSplitIterations', params.IntParam, default=3,
+        form.addParam('numberOfSplitIterations', params.IntParam, default=2,
                       label='Number of iterations in split stage:',
                       help='Maximum number of iterations in split stage',
                       expertLevel=const.LEVEL_ADVANCED)
-        form.addParam('numberOfClassifyIterations', params.IntParam, default=3,
+        form.addParam('numberOfClassifyIterations', params.IntParam, default=2,
                       label='Number of iterations in classify stage:',
                       help='Maximum number of iterations when the classification'
                            ' of the whole image set is carried out',
@@ -467,7 +469,6 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
 
     def generateOutputClasses(self, classesOut, firstTime):
 
-
         if firstTime:
             self._saveFileDataClasses(classesOut, self._getExtraPath(
                'last_classes.xmd'))
@@ -517,7 +518,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
         else:
             outImgs, classesOut = self._getOutputClassFn()
 
-        outDirName = imgsExp[:-4]
+        outDirName = splitext(imgsExp)[0]
         if iter==0 and flag_split==True:
 
             # First step: divide the metadata input file to generate
@@ -554,13 +555,13 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
             self.runJob("xmipp_metadata_utilities", args % self._params,
                         numberOfMpi=1)
 
-            if not self.useCL2D:
-                metadataRef = md.MetaData(refSet)
-                if metadataRef.containsLabel(md.MDL_REF) is False:
-                    args = ('-i %(outputMd)s --fill ref lineal 1 1 -o %(outputMd)s')
-                    self.runJob("xmipp_metadata_utilities", args % self._params, numberOfMpi=1)
+        # Fourth step: calling program xmipp_cuda_align_significant
+        metadataRef = md.MetaData(refSet)
+        if metadataRef.containsLabel(md.MDL_REF) is False:
+            args = ('-i %(outputMd)s --fill ref lineal 1 1 -o %(outputMd)s')
+            self.runJob("xmipp_metadata_utilities", args % self._params,
+                        numberOfMpi=1)
 
-        # Fourth step: calling program xmipp_cuda_correlation
         count = 0
         GpuListCuda = ''
         if self.useQueueForSteps() or self.useQueue():
@@ -570,7 +571,6 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
                 GpuListCuda = GpuListCuda + str(count) + ' '
                 count += 1
         else:
-            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
             GpuListAux = ''
             for elem in self.getGpuList():
                 GpuListCuda = GpuListCuda + str(count) + ' '
@@ -579,36 +579,25 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
             os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
 
         if flag_split:
+            fileTocopy = classesOut.replace('.xmd', '_classes.xmd')
+            fileTocopy = fileTocopy.replace('extra/', 'extra/level_00/')
             self._params = {'imgsRef': refSet,
                             'imgsExp': imgsExp,
                             'maxshift': self.maximumShift,
                             'Nrefs': md.getSize(refSet),
                             'outDir': self._getExtraPath(),
-                            'outDirNew': self._getExtraPath("level_00"),
+                            'outImgCuda': self._getExtraPath("images.xmd"),
                             'rootFn': classesOut.split('/')[-1].replace('.xmd', ''),
-                            'rootFnNew': classesOut.split('/')[-1].replace('.xmd','_classes'),
-                            'device': GpuListCuda,
+                            'keepBest': self.keepBest.get(),
+                            'outClassesCuda': fileTocopy,
                             }
-            if self.useCL2D:
-                args = '-i %(imgsExp)s --ref0 %(imgsRef)s --nref %(Nrefs)d ' \
-                       '--iter 1 --distance correlation --classicalMultiref ' \
-                       '--maxShift %(maxshift)d --odir %(outDir)s --oroot %(' \
-                       'rootFn)s --dontMirrorImages '
-                self.runJob("xmipp_classify_CL2D",
-                            args % self._params, numberOfMpi=self.numberOfMpi.get())
 
-            else:
-                if not exists(self._getExtraPath("level_00")):
-                    mkdir(self._getExtraPath("level_00"))
-                args = '-i %(imgsExp)s -r %(imgsRef)s -o images.xmd ' \
-                      '--keepBestN 1 --oUpdatedRefs %(rootFnNew)s ' \
-                      '--odir %(outDirNew)s --dev %(device)s '
-                self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
-                copy(self._getExtraPath(join("level_00", "images.xmd")),
-                     self._getExtraPath("images.xmd"))
-
-            fileTocopy = classesOut.replace('.xmd', '_classes.xmd')
-            fileTocopy = fileTocopy.replace('extra/', 'extra/level_00/')
+            args = '-i %(imgsExp)s --ref0 %(imgsRef)s --nref %(Nrefs)d ' \
+                   '--iter 1 --distance correlation --classicalMultiref ' \
+                   '--maxShift %(maxshift)d --odir %(outDir)s --oroot %(' \
+                   'rootFn)s --dontMirrorImages '
+            self.runJob("xmipp_classify_CL2D",
+                        args % self._params, numberOfMpi=self.numberOfMpi.get())
             copy(fileTocopy, classesOut)
             copy(self._getExtraPath("images.xmd"), outImgs)
 
@@ -620,12 +609,14 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
                             'maxshift': self.maximumShift,
                             'outputClassesFile': classesOut,
                             'device': GpuListCuda,
-                            'outputClassesFileNoExt': classesOut[:-4],
+                            'outputClassesFileNoExt': splitext(classesOut)[0],
+                            'auxOut': self._getExtraPath('flipReferences%06d.xmd'%iter),
                             }
+
             args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \
                    '--keepBestN 1 --oUpdatedRefs %(outputClassesFileNoExt)s --dev %(device)s '
-            self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
-
+            self.runJob(CUDA_ALIGN_SIGNIFICANT, args % self._params,
+                        numberOfMpi=1)
 
         if exists(outDirName + '000001.xmd'):
             cleanPath(expSet1)
@@ -636,7 +627,6 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
             cleanPath(avg2 + 'stddev.xmp')
 
         return outImgs, classesOut
-
 
     def checkSplit(self):
 
@@ -996,6 +986,8 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
         if newSize>x or newSize>y:
             errors.append('The image size must be smaller than the size of '
                           'the input images')
+        if not isXmippCudaPresent("xmipp_cuda_correlation"):
+            errors.append("I cannot find the Xmipp GPU programs in the path")
         return errors
 
     def _summary(self):

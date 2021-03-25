@@ -70,9 +70,9 @@ class XmippDeepMicrographViewer(ProtocolViewer):
         views = []
         outCoords = self.protocol.getOutput()
 
-        if not outCoords:  print(" > Not output found, yet."); return
+        if not outCoords: print(" > Not output found, yet."); return
 
-        coordsViewerFn = self.protocol._getTmpPath('coordsViewer.sqlite')
+        coordsViewerFn = self.protocol._getExtraPath('coordsViewer.sqlite')
 
         mdLabel = emlib.MDL_GOOD_REGION_SCORE
 

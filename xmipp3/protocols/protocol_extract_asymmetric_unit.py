@@ -22,7 +22,7 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
+import os
 
 from pyworkflow import VERSION_3_0
 from pwem.objects import Volume
@@ -43,7 +43,7 @@ DEBUG = True
 class XmippProtExtractUnit(EMProtocol):
     """ generates files for volumes and FSCs to submit structures to EMDB
     """
-    _label = 'extract unit cell'
+    _label = 'extract asymmetric unit'
     _program = ""
     _version = VERSION_3_0
 
@@ -110,7 +110,6 @@ class XmippProtExtractUnit(EMProtocol):
 
     def extractUnit(self):
         sym = self.symmetryGroup.get()
-        print("sym:_____________________________________________", sym)
         if sym == XMIPP_CYCLIC:
             sym = "%s%d" % (XMIPP_SYM_NAME[XMIPP_CYCLIC][:1], self.symmetryOrder)
         elif sym == XMIPP_DIHEDRAL_X:
@@ -180,7 +179,9 @@ class XmippProtExtractUnit(EMProtocol):
     # --------------------------- UTILS functions -----------------------------
 
     def _getOutputVol(self):
-        return self._getExtraPath("output_volume.mrc")
+        prefix = os.path.basename(self.inputVolumes.get().getFileName()).split(".")[0]
+
+        return self._getExtraPath(prefix + "_output_volume.mrc")
 
     def replace_at_index(self, tup, ix, val):
         return tup[:ix] + (val,) + tup[ix + 1:]

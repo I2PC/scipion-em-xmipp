@@ -161,7 +161,7 @@ keywords = "Image processing, Cluster analysis, Neural networks, Self-organizing
 }
 
 @article{PascualMontano2001,
-title = "A Novel Neural Network Technique for Analysis and Classification of \{EM\} Single-Particle Images",
+title = "A Novel Neural Network Technique for Analysis and Classification of \\{EM\\} Single-Particle Images",
 journal = "JSB",
 volume = "133",
 number = "2 - 3",
@@ -318,7 +318,7 @@ author = "Sorzano, C.O.S. and S. Jonic and C. El-Bez and J.M. Carazo and S. De C
 
 @Article{Sorzano2007a,
   Title                    = {Fast, robust and accurate determination of transmission electron microscopy contrast transfer function},
-  Author                   = {Sorzano, C. O. S. and Jonic, S. and N\'u\~nez-Ram\'irez, R. and Boisset, N. and Carazo, J. M.},
+  Author                   = {Sorzano, C. O. S. and Jonic, S. and N\'u\\~nez-Ram\'irez, R. and Boisset, N. and Carazo, J. M.},
   Journal                  = {J. Structural Biology},
   Year                     = {2007},
   Pages                    = {249--262},
@@ -564,9 +564,22 @@ keywords = ""
   pages                    = "337--344",
   volume                   = "26",
   doi = {10.1016/j.str.2017.12.018},
-  url = {https://doi.org/10.1016/j.str.2017.12.018},
+  url = {http://doi.org/10.1016/j.str.2017.12.018},
 }
 
+
+@Article{strelak2020flexalign,
+AUTHOR = {Střelák, David and Filipovič, Jiří and Jiménez-Moreno, Amaya and Carazo, Jose María and Sánchez Sorzano, Carlos Óscar},
+TITLE = {FlexAlign: An Accurate and Fast Algorithm for Movie Alignment in Cryo-Electron Microscopy},
+JOURNAL = {Electronics},
+VOLUME = {9},
+YEAR = {2020},
+NUMBER = {6},
+ARTICLE-NUMBER = {1040},
+URL = {http://www.mdpi.com/2079-9292/9/6/1040},
+ISSN = {2079-9292},
+DOI = {http://doi.org/10.3390/electronics9061040}
+}
 
 
 """

@@ -26,6 +26,7 @@
 # *
 # **************************************************************************
 
+import json
 import subprocess
 from datetime import datetime
 
@@ -38,7 +39,7 @@ from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.20.07a0'
+_currentVersion = '3.20.07'
 
 
 class Plugin(pwem.Plugin):
@@ -57,23 +58,26 @@ class Plugin(pwem.Plugin):
         """ Create the needed environment for Xmipp programs. """
         environ = pwutils.Environ(os.environ)
         pos = pwutils.Environ.BEGIN if xmippFirst else pwutils.Environ.END
+
+        environ.update({
+            'PATH': pwem.Config.CUDA_BIN,
+            'LD_LIBRARY_PATH': pwem.Config.CUDA_LIB
+        }, position=pwutils.Environ.END)
+
+        if os.path.isfile(getXmippPath('xmippEnv.json')):
+            with open(getXmippPath('xmippEnv.json'), 'r') as f:
+                compilationEnv = json.load(f)
+            environ.update(compilationEnv, position=pos)
+
         environ.update({
             'PATH': getXmippPath('bin'),
             'LD_LIBRARY_PATH': getXmippPath('lib'),
-            'PYTHONPATH': getXmippPath('pylib')  # FIXME: Only pylib should be enough
-                          # +":"+getXmippPath(os.path.join('pylib', 'xmippPyModules'))
+            'PYTHONPATH': getXmippPath('pylib')
                              }, position=pos)
         environ['XMIPP_HOME'] = getXmippPath()
 
         # Add path to python lib folder
         environ.addLibrary(Config.getPythonLibFolder())
-
-        # environ variables are strings not booleans
-        if os.environ.get('CUDA', 'False') != 'False':
-            environ.update({
-                'PATH': os.environ.get('CUDA_BIN', ''),
-                'LD_LIBRARY_PATH': os.environ.get('NVCC_LIBDIR', '')
-            }, position=pos)
 
         return environ
 
@@ -132,7 +136,7 @@ class Plugin(pwem.Plugin):
 
         ## Installation commands (removing bindingsToken)
         installCmd = ("cd {cwd} && {configCmd} && {compileCmd} N={nProcessors:d} && "
-                      "ln -srf build {xmippHome} && cd - && "
+                      "ln -srfn build {xmippHome} && cd - && "
                       "touch {installedToken} && rm {bindingsToken} 2> /dev/null")
         installTgt = [getXmippPath('bin', 'xmipp_reconstruct_significant'),
                       getXmippPath("lib/libXmippJNI.so"),
@@ -140,8 +144,8 @@ class Plugin(pwem.Plugin):
 
         ## Linking bindings (removing installationToken)
         bindingsAndLibsCmd = ("find {bindingsSrc} -maxdepth 1 -mindepth 1 "
-                              "! -name __pycache__ -exec ln -srf {{}} {bindingsDst} \; && "
-                              "ln -srf {coreLib} {libsDst} && "
+                              r"! -name __pycache__ -exec ln -srfn {{}} {bindingsDst} \; && "
+                              "ln -srfn {coreLib} {libsDst} && "
                               "touch {bindingsToken} && "
                               "rm {installedToken} 2> /dev/null")
         bindingsAndLibsTgt = [os.path.join(Config.getBindingsFolder(), 'xmipp_base.py'),
@@ -153,7 +157,7 @@ class Plugin(pwem.Plugin):
         ## Allowing xmippDev if devel mode detected
         # plugin  = scipion-em-xmipp  <--  xmipp3    <--     __init__.py
         pluginDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        # bundle  = xmipp-bundle  <-  src  <-  scipion-em-xmipp
+        # bundle  = xmipp-bundle  <-  src   <-  scipion-em-xmipp
         bundleDir = os.path.dirname(os.path.dirname(pluginDir))
 
         isPypiDev = os.path.isfile(os.path.join(pluginDir, 'setup.py'))
@@ -171,33 +175,19 @@ class Plugin(pwem.Plugin):
                                       bindingsAndLibsTgt)],
                            deps=xmippDeps, default=False)
 
-        sourceTgt.append(verToken)
+        avoidConfig = os.environ.get('XMIPP_NOCONFIG', 'False') == 'True'
+        configSrc = ('./xmipp check_config' if avoidConfig
+                     else './xmipp config noAsk && ./xmipp check_config')
         env.addPackage('xmippSrc', version=_currentVersion,
                        # adding 'v' before version to fix a package target (post-link)
                        tar='xmippSrc-v'+_currentVersion+'.tgz',
                        commands=[(installCmd.format(**installVars, cwd='.',
-                                                    configCmd='./xmipp config &&'
-                                                              './xmipp check_config',
+                                                    configCmd=configSrc,
                                                     compileCmd='./xmipp compileAndInstall'),
                                   installTgt + sourceTgt),
                                  (bindingsAndLibsCmd.format(**installVars),
                                   bindingsAndLibsTgt)],
                        deps=xmippDeps, default=not develMode)
-
-        installBin = ("rm -rf {xmippHome} 2>/dev/null; cd .. ; "
-                      "ln -srf xmippBin_{distro}-{currVersion} {xmippHome} && "
-                      "touch {installedToken}")
-        env.addPackage('xmippBin_Debian', version=_currentVersion,
-                       commands=[(installBin.format(**installVars, distro='Debian'),
-                                  installTgt + [confToken, verToken+'_Debian']),
-                                 (bindingsAndLibsCmd, bindingsAndLibsTgt)],
-                       deps=xmippDeps, default=False)
-
-        env.addPackage('xmippBin_Centos', version=_currentVersion,
-                       commands=[(installBin.format(**installVars, distro='Centos'),
-                                  installTgt+[confToken, verToken+'_Centos']),
-                                 (bindingsAndLibsCmd, bindingsAndLibsTgt)],
-                       deps=xmippDeps, default=False)
 
         ## EXTRA PACKAGES ##
         installDeepLearningToolkit(cls, env)
@@ -250,7 +240,7 @@ def installDeepLearningToolkit(plugin, env):
                      'xmippLibToken': 'xmippLibToken',
                      'libXmipp': plugin.getHome('lib/libXmipp.so'),
                      'preMsgsStr': ' ; '.join(preMsgs),
-                     'afterMsgs': "\n > ".join(cudaMsgs)}
+                     'afterMsgs': ", > ".join(cudaMsgs)}
 
     installDLvars.update({'modelsTarget': "%s_%s_%s_%s"
                                           % (installDLvars['modelsPrefix'],

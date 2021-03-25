@@ -28,6 +28,9 @@ Protocol to perform high-resolution reconstructions
 """
 from glob import glob
 import math
+
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
+
 try:
     from itertools import izip
 except ImportError:
@@ -52,14 +55,14 @@ import pwem.emlib.metadata as md
 from pwem.constants import ALIGN_PROJ
 
 from pwem import emlib
-from xmipp3.base import HelicalFinder
+from xmipp3.base import HelicalFinder, isXmippCudaPresent
 from xmipp3.convert import createItemMatrix, setXmippAttributes, writeSetOfParticles
 
 def getPreviousQuality(img, imgRow):
     if hasattr(img,"_xmipp_cost"):
         imgRow.setValue(md.MDL_COST,img._xmipp_cost.get())
     if hasattr(img,"_xmipp_maxCC"):
-        imgRow.setValue(md.MDL_MAXCC,img._xmipp_cost.get())
+        imgRow.setValue(md.MDL_MAXCC,img._xmipp_maxCC.get())
 
 class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
     """This is a 3D refinement protocol whose main input is a volume and a set of particles.
@@ -226,8 +229,6 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                  help="In Angstroms")
         form.addParam('contPadding', IntParam, label="Fourier padding factor", default=2, condition='alignmentMethod==1', expertLevel=LEVEL_ADVANCED,
                       help='The volume is zero padded by this factor to produce projections')
-        form.addParam('contSimultaneous', IntParam, label="Number of simultaneous processes", default=4, condition='alignmentMethod==1', expertLevel=LEVEL_ADVANCED,
-                      help='At the beginning of the process, each process requires more memory, this is the number of simultaneous processes that can do this part')
 
         form.addSection(label='Weights')
         form.addParam('weightSSNR', BooleanParam, label="Weight by SSNR?", default=False, expertLevel=LEVEL_ADVANCED,
@@ -398,6 +399,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         row.setValue(emlib.MDL_SHIFT_X, row.getValue(emlib.MDL_SHIFT_X)*self.scaleFactor)
         row.setValue(emlib.MDL_SHIFT_Y, row.getValue(emlib.MDL_SHIFT_Y)*self.scaleFactor)
         setXmippAttributes(particle, row, emlib.MDL_SHIFT_X, emlib.MDL_SHIFT_Y, emlib.MDL_ANGLE_TILT,
+                           emlib.MDL_ANGLE_ROT,
                            emlib.MDL_SCALE, emlib.MDL_MAXCC, emlib.MDL_MAXCC_PERCENTILE, emlib.MDL_WEIGHT)
         if row.containsLabel(emlib.MDL_ANGLE_DIFF0):
             setXmippAttributes(particle, row, emlib.MDL_ANGLE_DIFF0, emlib.MDL_WEIGHT_JUMPER0)
@@ -516,7 +518,6 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                     if self.numberOfMpi.get()==1:
                         args += " --device %s" %(GpuListCuda)
-
                     args += ' --thr %s' % self.numberOfThreads.get()
                     if self.numberOfMpi.get()>1:
                         self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
@@ -925,7 +926,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                     os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                                 args = '-i %s -r %s -o %s --keepBestN %f --dev %s ' % \
                                        (fnGroup, fnGalleryGroupMd, fnAnglesGroup,self.numberOfReplicates.get(), GpuListCuda)
-                                self.runJob("xmipp_cuda_align_significant",args, numberOfMpi=1)
+                                self.runJob(CUDA_ALIGN_SIGNIFICANT,args, numberOfMpi=1)
 
                             if exists(fnAnglesGroup):
                                 if not exists(fnAngles) and exists(fnAnglesGroup):
@@ -1079,8 +1080,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 if R<=0:
                     R=self.inputParticles.get().getDimensions()[0]/2
                 R=round(R*self.TsOrig/TsCurrent)
-                args="-i %s -o %s --sampling %f --Rmax %d --padding %d --ref %s --max_resolution %f --applyTo image1 --Nsimultaneous %d"%\
-                   (fnLocalAssignment,fnLocalStk,TsCurrent,R,self.contPadding.get(),fnVol,previousResolution,self.contSimultaneous.get())
+                args="-i %s -o %s --sampling %f --Rmax %d --padding %d --ref %s --max_resolution %f --applyTo image1"%\
+                   (fnLocalAssignment,fnLocalStk,TsCurrent,R,self.contPadding.get(),fnVol,previousResolution)
                 if self.contShift or self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT:
                     args+=" --optimizeShift --max_shift %f"%(self.contMaxShiftVariation.get()*newXdim*0.01)
                 if self.contScale or (self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT and iteration>=5):
@@ -1378,8 +1379,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     previousResolution=self.readInfoField(fnDirPrevious,"resolution",emlib.MDL_RESOLUTION_FREQREAL)
                     args="-i %s -o %s.stk --sampling %f --Rmax %d --padding %d --ref %s --max_resolution %f --save_metadata_stack %s.xmd"%\
                          (fnAnglesToUse,fnGrayRoot,TsCurrent,R,self.contPadding.get(),fnRefVol,previousResolution,fnGrayRoot)
-                    args+=" --max_gray_scale %f --max_gray_shift %f --Nsimultaneous %d"%\
-                         (self.contMaxGrayScale.get(),self.contMaxGrayShift.get(),self.contSimultaneous.get())
+                    args+=" --max_gray_scale %f --max_gray_shift %f"%\
+                         (self.contMaxGrayScale.get(),self.contMaxGrayShift.get())
                     self.runJob("xmipp_transform_adjust_image_grey_levels",args,numberOfMpi=self.numberOfMpi.get())
                     fnAnglesToUse = fnGrayRoot+".xmd"
                     if deleteStack:
@@ -1535,7 +1536,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             args='--i1 %s --i2 %s --oroot %s --denoising 1'%(fnVol1,fnVol2,fnRootRestored)
             if fnMask!="":
                 args+=" --mask binary_file %s"%fnMask
-            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            if self.useGpu:
+                self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
             moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
 
@@ -1545,7 +1549,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             args='--i1 %s --i2 %s --oroot %s --filterBank 0.01'%(fnVol1,fnVol2,fnRootRestored)
             if fnMask!="":
                 args+=" --mask binary_file %s"%fnMask
-            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            if self.useGpu:
+                self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
             moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
             cleanPath("%s_filterBank.vol"%fnRootRestored)
@@ -1565,7 +1572,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             args='--i1 %s --i2 %s --oroot %s --deconvolution 1'%(fnVol1,fnVol2,fnRootRestored)
             if fnMask!="":
                 args+=" --mask binary_file %s"%fnMask
-            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            if self.useGpu:
+                self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
             moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
             self.runJob("xmipp_image_convert","-i %s_convolved.vol -o %s -t vol"%(fnRootRestored,fnVolAvg),numberOfMpi=1)
@@ -1597,7 +1607,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             args='--i1 %s --i2 %s --oroot %s --difference 2 2'%(fnVol1,fnVol2,fnRootRestored)
             if fnMask!="":
                 args+=" --mask binary_file %s"%fnMask
-            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            if self.useGpu:
+                self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             self.runJob("xmipp_image_convert","-i %s_avgDiff.vol -o %s -t vol"%(fnRootRestored,fnVolAvg),numberOfMpi=1)
             cleanPath("%s_avgDiff.vol"%fnRootRestored)
             cleanPath("%s_restored1.vol"%fnRootRestored)
@@ -1647,6 +1660,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if not self.doContinue and self.inputParticles.hasValue() and \
            self.alignmentMethod.get()==self.LOCAL_ALIGNMENT and not self.inputParticles.get().hasAlignmentProj():
             errors.append("If the first iteration is local, then the input particles must have an alignment")
+        if self.useGpu.get() and not isXmippCudaPresent():
+            errors.append("You have asked to use GPU, but I cannot find the Xmipp GPU programs in the path")
         return errors
     
     def _warnings(self):

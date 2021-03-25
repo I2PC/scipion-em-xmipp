@@ -197,14 +197,14 @@ class XmippViewer(DataViewer):
                                                            'sortby': 'id'})
 
         elif issubclass(cls, XmippProtCompareReprojections):
-                fn = obj.outputParticles.getFileName()
+                fn = obj.reprojections.getFileName()
                 labels = ('id enabled _index _xmipp_image._filename _xmipp_imageRef._filename '
                           '_xmipp_imageResidual._filename _xmipp_imageCovariance._filename '
                           '_xmipp_cost _xmipp_zScoreResCov _xmipp_zScoreResMean _xmipp_zScoreResVar '
                           '_xmipp_continuousA _xmipp_continuousB _xmipp_continuousX _xmipp_continuousY')
                 labelRender = ("_xmipp_image._filename _xmipp_imageRef._filename "
                               "_xmipp_imageResidual._filename _xmipp_imageCovariance._filename")
-                self._views.append(ObjectView(self._project, obj.outputParticles.strId(), fn,
+                self._views.append(ObjectView(self._project, obj.reprojections.strId(), fn,
                                               viewParams={ORDER: labels,
                                                           VISIBLE: labels,
                                                           SORT_BY: '_xmipp_cost asc',
@@ -241,7 +241,7 @@ class XmippViewer(DataViewer):
             if mdFn:
                 micsfn = mdFn.get()
             else:  # happens if protocol is not an xmipp one
-                micsfn = self._getTmpPath(micSet.getName() + '_micrographs.xmd')
+                micsfn = self._getExtraPath(micSet.getName() + '_micrographs.xmd')
                 writeSetOfMicrographs(micSet, micsfn)
                 inTmpFolder = True
 
@@ -256,7 +256,7 @@ class XmippViewer(DataViewer):
             """
             micSet = obj.inputMicrographs.get()
 
-            coordsFn = self._getTmpPath(micSet.getName()+'_coords_to_view.sqlite')
+            coordsFn = self._getExtraPath(micSet.getName()+'_coords_to_view.sqlite')
             if not os.path.exists(coordsFn):
                 # Just creating the coords once
                 coordsSet = SetOfCoordinates(filename=coordsFn)

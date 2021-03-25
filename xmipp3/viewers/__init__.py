@@ -37,9 +37,10 @@ from .viewer_movie_alignment import XmippMovieAlignViewer, XmippMovieMaxShiftVie
 from .viewer_normalize_strain import XmippNormalizeStrainViewer
 from .viewer_resolution3d import XmippResolution3DViewer
 from .viewer_resolution_directional import XmippMonoDirViewer
+from .viewer_resolution_fso import XmippProtFSOViewer
 from .viewer_resolution_monogenic_signal import XmippMonoResViewer
 from .viewer_resolution_deepres import XmippResDeepResViewer
-from .viewer_resolution_monotomo import XmippMonoTomoViewer
+#from .viewer_resolution_monotomo import XmippMonoTomoViewer
 from .viewer_validate_nontilt import XmippValidateNonTiltViewer
 from .viewer_validate_fscq import XmippProtValFitViewer
 from .viewer_split_volume import XmippViewerSplitVolume
@@ -47,8 +48,11 @@ from .viewer_validate_overfitting import XmippValidateOverfittingViewer
 from .viewer_volume_strain import XmippVolumeStrainViewer
 from .viewer_reconstruct_highres import XmippReconstructHighResViewer
 from .viewer_solid_angles import SolidAnglesViewer
-from .viewer_extract_unit_cell import viewerXmippProtExtractUnit
-
+from .viewer_extract_asymmetric_unit import viewerXmippProtExtractUnit
+from .viewer_deepEMHancer import viewerXmippProtDeepVolPostProc
+from .viewer_local_sharpening import viewerXmippProtLocSharp
+from .viewer_volume_subtraction import XmippProtVolSubtractionViewer
+from .viewer_volume_consensus import XmippVolumeConsensusViewer
 
 #from .viewer_combine_pdb import XmippProtCombinePdbViewer
 

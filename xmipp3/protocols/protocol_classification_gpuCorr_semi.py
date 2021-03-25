@@ -27,7 +27,7 @@
 
 from os.path import getmtime
 from datetime import datetime
-from os.path import exists
+from os.path import exists, splitext
 import os
 
 from pyworkflow import VERSION_2_0
@@ -42,9 +42,10 @@ from pwem.constants import ALIGN_2D, ALIGN_NONE
 from pwem.protocols import ProtAlign2D
 import pwem.emlib.metadata as md
 
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
 from xmipp3.convert import (writeSetOfParticles, rowToAlignment,
                             writeSetOfClasses2D)
-
+from xmipp3.base import isXmippCudaPresent
 
 REF_CLASSES = 0
 REF_AVERAGES = 1
@@ -88,6 +89,10 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
                       label='Maximum shift (px):',
                       help='Maximum shift allowed during the alignment as '
                            'percentage of the input set size',
+                      expertLevel=const.LEVEL_ADVANCED)
+        form.addParam('keepBest', params.IntParam, default=1,
+                      label='Number of best images:',
+                      help='Number of the best images to keep for every class',
                       expertLevel=const.LEVEL_ADVANCED)
 
 
@@ -160,7 +165,6 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
                 GpuListCuda = GpuListCuda + str(count) + ' '
                 count += 1
         else:
-            GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
             GpuListAux = ''
             for elem in self.getGpuList():
                 GpuListCuda = GpuListCuda + str(count) + ' '
@@ -176,12 +180,12 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
                         'maxshift': self.maximumShift,
                         'outputClassesFile': clasesOut,
                         'device': GpuListCuda,
-                        'outputClassesFileNoExt': clasesOut[:-4],
+                        'outputClassesFileNoExt': splitext(clasesOut)[0],
                         }
 
         args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \
                '--keepBestN 1 --oUpdatedRefs %(outputClassesFileNoExt)s --dev %(device)s '
-        self.runJob("xmipp_cuda_align_significant", args % self._params, numberOfMpi=1)
+        self.runJob(CUDA_ALIGN_SIGNIFICANT, args % self._params, numberOfMpi=1)
 
 
     # ------ Methods for Streaming 2D Classification --------------
@@ -253,11 +257,13 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
     def _validate(self):
         errors = []
         refImage = self.inputRefs.get()
-        [x1, y1, z1] = refImage.getDimensions()
-        [x2, y2, z2] = self.inputParticles.get().getDim()
-        if x1 != x2 or y1 != y2 or z1 != z2:
-            errors.append('The input images and the reference images '
-                          'have different sizes')
+        [x1, y1, _] = refImage.getDimensions()
+        [x2, y2, _] = self.inputParticles.get().getDim()
+        if x1 != x2 or y1 != y2:
+            errors.append('The input images (%s, %s) and the reference images (%s, %s) '
+                          'have different sizes' % (x1, y1, x2, y2))
+        if not isXmippCudaPresent("xmipp_cuda_correlation"):
+            errors.append("I cannot find the Xmipp GPU programs in the path")
         return errors
 
     def _summary(self):
@@ -417,7 +423,7 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
 
                     outputClasses.update(newClass)
 
-            for imgRow in iterRows(mdImages, sortByLabel=md.MDL_REF):
+            for imgRow in md.iterRows(mdImages, sortByLabel=md.MDL_REF):
                 #Just in case of having repeated ids, this must not happen
                 #self.lastId+=1
                 imgClassId = imgRow.getValue(md.MDL_REF)

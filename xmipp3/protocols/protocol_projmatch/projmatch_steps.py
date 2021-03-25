@@ -194,12 +194,20 @@ def insertAngularProjectLibraryStep(self, iterN, refN, **kwargs):
               'symmetry' : self._symmetry[iterN],
               }
 
-    print("%s %s" % (self.maxChangeInAngles, type(self.maxChangeInAngles)))
-    if int(self.maxChangeInAngles.get()) < 181:
+    tokens = self.maxChangeInAngles.get().strip().split()
+    if len(tokens)==0:
+        maxChangeInAngles = 181
+    elif iterN>=len(tokens):
+        maxChangeInAngles = int(tokens[-1])
+    else:
+        maxChangeInAngles = int(tokens[iterN-1])
+
+    if maxChangeInAngles < 181:
+        params['maxChangeInAngles'] = maxChangeInAngles
         args += ' --near_exp_data --angular_distance %(maxChangeInAngles)s'
     else:
         args += ' --angular_distance -1'
-    
+
     if self._perturbProjectionDirections[iterN]:
         args +=' --perturb %(perturb)s'
         params['perturb'] = math.sin(math.radians(self._angSamplingRateDeg[iterN])) / 4.
@@ -451,7 +459,7 @@ def insertAngularClassAverageStep(self, iterN, refN, **kwargs):
               'outClasses' : outClasses
               }
     
-    args = ' -i ctfGroup[0-9][0-9][0-9][0-9][0-9][0-9]\$@'
+    args = r' -i ctfGroup[0-9][0-9][0-9][0-9][0-9][0-9]\$@'
     args += '%(docFileInputAngles)s --lib %(projLibraryDoc)s -o %(outClasses)s'
     
     # FIXME: This option no exist in the form
@@ -521,7 +529,7 @@ def insertReconstructionStep(self, iterN, refN, suffix='', **kwargs):
         program =  'xmipp_reconstruct_fourier_accel'
         if self.useGpu.get():
             program = 'xmipp_cuda_reconstruct_fourier'
-            args += " --thr %d" % self.numberOfThreads.get()
+            #args += " --thr %d" % self.numberOfThreads.get()
         args += ' --weight --padding %(pad)s %(pad)s'
         params['pad'] = self.paddingFactor.get()
 
@@ -560,7 +568,7 @@ def runReconstructionStep(self, iterN, refN, program, method, args, suffix, **kw
     mdFn = self._getFileName(reconsXmd, iter=iterN, ref=refN)
     volFn = self._getFileName(reconsVol, iter=iterN, ref=refN)
     maskFn = self._getFileName('maskedFileNamesIters', iter=iterN, ref=refN)
-    if method=="art" or method == 'fourier':
+    if method=="art": #or method == 'fourier':
         mpi = 1
         threads = 1
     else:
@@ -568,7 +576,8 @@ def runReconstructionStep(self, iterN, refN, program, method, args, suffix, **kw
         if self.useGpu.get() and self.numberOfMpi.get()>1:
             mpi = len((self.gpuList.get()).split(','))+1
         threads = self.numberOfThreads.get()
-        args += ' --thr %d' % threads
+        if self.useGpu.get():
+            args += ' --thr %d' % threads
     
     if isMdEmpty(mdFn):
         img = emlib.Image()
