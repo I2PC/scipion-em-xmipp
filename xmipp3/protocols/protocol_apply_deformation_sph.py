@@ -56,6 +56,7 @@ class XmippProtApplySPH(ProtAnalysis3D):
 
     # --------------------------- STEPS functions ------------------------------
     def deformStep(self):
+        self.samplingRate = self.inputVol.get().getSamplingRate()
         self.outParams = []
         classes = self.inputClasses.get()
         for rep in classes.iterItems():
@@ -72,10 +73,11 @@ class XmippProtApplySPH(ProtAnalysis3D):
             params = ' -i %s --clnm %s -o %s' % \
                      (self.inputVol.get().getFileName(), file, self._getExtraPath(outFile))
             self.runJob("xmipp_volume_apply_deform_sph", params)
+            params = ' -i %s --sampling_rate %f' %(self._getExtraPath(outFile), self.samplingRate)
+            self.runJob("xmipp_image_header", params)
             self.outParams.append((self._getExtraPath(outFile), rep.getSize()))
 
     def createOutputStep(self):
-        self.samplingRate = self.inputVol.get().getSamplingRate()
         classes3DSet = self._createSetOfClasses3D(self.inputClasses.get().getImages())
         classes3DSet.classifyItems(updateItemCallback=self._updateParticle,
                                    updateClassCallback=self._updateClass,
