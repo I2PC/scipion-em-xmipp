@@ -80,7 +80,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                       help='Select the SetOfMicrograph to be preprocessed.')
 
         form.addParam('window_size', IntParam, label='Window size',
-                      default=512, expertLevel=LEVEL_ADVANCED, validators=[GE(100,'Error must be greater than 100')],
+                      default=1024, expertLevel=LEVEL_ADVANCED, validators=[GE(100,'Error must be greater than 100')],
                       help='''By default, the micrograph will be divided into windows of dimensions 512x512, 
                             the PSD and its correlations will be computed in every segment.''')
 
@@ -375,14 +375,18 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         wind_step = self.window_size.get()
         overlap = 0.7
         x_steps, y_steps = window_coordinates2D(dimx, dimy, wind_step, overlap)
+        #
+        subWindStep = int(wind_step * (self.samplingRate / self.objective_resolution.get()))
+        x_steps_psd, y_steps_psd = window_coordinates2D(subWindStep*len(x_steps), subWindStep*len(y_steps), subWindStep, 0)
+
         # Extract windows
         window_image = ImageHandler().createImage()
         rotatedWind_psd = ImageHandler().createImage()
         output_image = ImageHandler().createImage()
-        output_array = np.ones((dimx, dimy))
+        output_array = np.zeros((subWindStep*len(x_steps), subWindStep*len(y_steps)))
         ih = ImageHandler()
-        for x0 in x_steps:
-            for y0 in y_steps:
+        for x0, x0_psd in zip(x_steps, x_steps_psd):
+            for y0, y0_psd in zip(y_steps, y_steps_psd):
                 window = micImage.window2D(x0, y0, x0 + (wind_step - 1), y0 + (wind_step - 1))
                 x_dim, y_dim, z, n = window.getDimensions()
                 # NORMALIZED
@@ -398,7 +402,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                 rotatedPSD_matrix, M = rotation(psdMatrix, 90, psdMatrix.shape, P)
                 rotatedWind_psd.setData(rotatedPSD_matrix)
                 #Window intro a sub window psd for the correlations
-                subWindStep = int(x_dim * (self.samplingRate/self.objective_resolution.get()))
                 x0_sub = int((x_dim/2) - (subWindStep/2))
                 y0_sub = int((x_dim/2) - (subWindStep/2))
 
@@ -437,11 +440,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                 subRotatedWind_psd_filt = ih.read(filename_subwindRotatedPSD_filt)
                 autocorrelation = subWind_psd_filt.correlation(subRotatedWind_psd_filt)
                 # Paint the output array
-                x0_paint = int((x0 + wind_step / 2) - (subWindStep / 2))
-                y0_paint = int((y0 + wind_step / 2) - (subWindStep / 2))
-                xf_paint = int(x0_paint + subWindStep)
-                yf_paint = int(y0_paint + subWindStep)
-                output_array[x0_paint:xf_paint, y0_paint:yf_paint] = subWind_psd_filt.getData()
+                output_array[y0_psd:y0_psd+subWindStep, x0_psd:x0_psd+subWindStep] = subWind_psd_filt.getData()
                 # Append
                 autocorrelations.append(autocorrelation)
                 psds.append(subWind_psd_filt)
