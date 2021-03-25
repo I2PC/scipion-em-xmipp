@@ -78,7 +78,7 @@ class XmippProtStructureMap(ProtAnalysis3D):
     def _defineParams(self, form):
         form.addSection(label='Input')
         form.addParam('inputVolumes', params.PointerParam,
-                      pointerClass='SetOfClasses3D',
+                      pointerClass='SetOfClasses3D, SetOfVolumes',
                       label="Input volume(s)", important=True,
                       help='Select one or more volumes (SetOfClasses3D)\n'
                            'for structure mapping.')
@@ -219,14 +219,23 @@ class XmippProtStructureMap(ProtAnalysis3D):
         """ Iterate over all the input volumes. """
         count = 1
         weight = []
-        for cls in self.inputVolumes.get().iterItems():
-            vol = cls.getRepresentative()
-            volList.append(vol.getFileName())
-            dimList.append(vol.getDim()[0])
-            srList.append(vol.getSamplingRate())
-            idList.append(count)
-            weight.append(cls.getSize())
-            count += 1
+        if not isinstance(self.inputVolumes.get(), SetOfVolumes):
+            for cls in self.inputVolumes.get().iterItems():
+                vol = cls.getRepresentative()
+                volList.append(vol.getFileName())
+                dimList.append(vol.getDim()[0])
+                srList.append(vol.getSamplingRate())
+                idList.append(count)
+                weight.append(cls.getSize())
+                count += 1
+        else:
+            for vol in self.inputVolumes.get().iterItems():
+                volList.append(vol.getFileName())
+                dimList.append(vol.getDim()[0])
+                srList.append(vol.getSamplingRate())
+                idList.append(count)
+                weight.append(1)
+                count += 1
         np.savetxt(self._getExtraPath('weights.txt'), np.asarray(weight))
         return volList, dimList, srList, idList
 
