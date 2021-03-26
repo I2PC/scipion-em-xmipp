@@ -33,6 +33,9 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.widgets import RadioButtons
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from mpl_toolkits.mplot3d.proj3d import proj_transform
+from matplotlib.text import Annotation
+
 import numpy as np
 from scipy.ndimage.filters import gaussian_filter
 
@@ -69,11 +72,12 @@ class XmippProtStructureMapViewer(ProtocolViewer):
                                       'Execute again the protocol\n',
                                       title='Missing result file')]
         coordinates = np.loadtxt(fnOutput)
+        labels = [str(idp) for idp in range(1, coordinates.shape[0] + 1)]
         if os.path.isfile(self._getExtraPath('weigths.txt')):
             weights = np.loadtxt(self._getExtraPath('weigths.txt'))
         else:
             weights = None
-        plot = projectionPlot(coordinates, weights)
+        plot = projectionPlot(coordinates, labels, weights)
         plot.initializePlot()
         return plot
         
@@ -84,8 +88,9 @@ class XmippProtStructureMapViewer(ProtocolViewer):
 
 class projectionPlot(object):
 
-    def __init__(self, coords, weights):
+    def __init__(self, coords, labels, weights):
         self.coords = coords
+        self.labels = labels
         self.weights = weights
         self.minimum_spanning_tree()
         self.proj_coords = None
@@ -179,6 +184,8 @@ class projectionPlot(object):
                 y = np.array((self.coords[edge[0]][1], self.coords[edge[1]][1]))
                 z = np.array((self.coords[edge[0]][2], self.coords[edge[1]][2]))
                 self.ax_3d.plot(x, y, z, c='black', alpha=0.5)
+        annotate3D(self.ax_3d, s=self.labels, xyz=self.coords, fontsize=10, xytext=(-3, 3),
+                   textcoords='offset points', ha='right', va='bottom')
 
     def projectMatrix(self, M, coords):
         proj_coords = []
@@ -285,3 +292,26 @@ class projectionPlot(object):
         self.canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
         tk.mainloop()
+
+class Annotation3D(Annotation):
+    '''Annotate the point xyz with text s'''
+
+    def __init__(self, s, xyz, *args, **kwargs):
+        Annotation.__init__(self, "", xy=(0, 0), bbox=dict(boxstyle="round,pad=0.3", fc="whitesmoke", ec="lightgray", lw=2),
+                            *args, **kwargs)
+        self._verts3d = xyz
+        self.s = s
+
+    def draw(self, renderer):
+        for coord, text in zip(self._verts3d, self.s):
+            xs3d, ys3d, zs3d = coord[0], coord[1], coord[2]
+            xs, ys, zs = proj_transform(xs3d, ys3d, zs3d, renderer.M)
+            self.xy = (xs, ys)
+            Annotation.set_text(self, text)
+            Annotation.draw(self, renderer)
+
+def annotate3D(ax, s, *args, **kwargs):
+    '''add anotation text s to to Axes3d ax'''
+
+    tag = Annotation3D(s, *args, **kwargs)
+    ax.add_artist(tag)
