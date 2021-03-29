@@ -148,8 +148,8 @@ class XmippProtMovieAverage(ProtAlignMovies):
             self.flipY = True
             inGainFn = self.inputMovies.get().getGain()
             gainFn = xmutils.flipYImage(inGainFn, outDir=self._getExtraPath())
-          else:
-            gainFn = self.inputMovies.get().getGain()
+        else:
+          gainFn = self.inputMovies.get().getGain()
 
         self.averageMovie(movie, inputMd, outputMicFn, self.binFactor.get(),
                           roi, self.inputMovies.get().getDark(), gainFn,
