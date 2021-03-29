@@ -142,14 +142,12 @@ class XmippProtMovieAverage(ProtAlignMovies):
         else:
             roi = None
 
-        if self.inputMovies.get().getGain():
+        gainFn = self.inputMovies.get().getGain()
+        if self.inputMovies.get().getGain() and ext in ['.tif', '.tiff']:
           ext = pwutils.getExt(self.inputMovies.get().getFirstItem().getFileName()).lower()
-          if ext in ['.tif', '.tiff']:
-            self.flipY = True
-            inGainFn = self.inputMovies.get().getGain()
-            gainFn = xmutils.flipYImage(inGainFn, outDir=self._getExtraPath())
-        else:
-          gainFn = self.inputMovies.get().getGain()
+          self.flipY = True
+          inGainFn = self.inputMovies.get().getGain()
+          gainFn = xmutils.flipYImage(inGainFn, outDir=self._getExtraPath())
 
         self.averageMovie(movie, inputMd, outputMicFn, self.binFactor.get(),
                           roi, self.inputMovies.get().getDark(), gainFn,
