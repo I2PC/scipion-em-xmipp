@@ -165,6 +165,11 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
 
     def createOutputStep(self):
         from sklearn.manifold import TSNE
+        Xdim = self.inputParticles.get().getXDim()
+        self.Ts = self.inputParticles.get().getSamplingRate()
+        newTs = self.targetResolution.get() * 1.0 /3.0
+        self.newTs = max(self.Ts, newTs)
+        self.newXdim = int(Xdim * self.Ts / newTs)
         fnOut = self._getFileName('fnOut')
         mdOut = md.MetaData(fnOut)
         i = 0
@@ -178,20 +183,20 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
         X_tsne_1d = TSNE(n_components=1).fit_transform(coeffMatrix)
         X_tsne_2d = TSNE(n_components=2).fit_transform(coeffMatrix)
 
-        newMdOut = md.MetaData()
-        i=0
-        for row in md.iterRows(mdOut):
-            newRow = row
-            newRow.setValue(md.MDL_SPH_TSNE_COEFF1D, float(X_tsne_1d[i,0]))
-            newRow.setValue(md.MDL_SPH_TSNE_COEFF2D, [float(X_tsne_2d[i, 0]),  float(X_tsne_2d[i, 1])])
-            if self.newTs != self.Ts:
-                coeffs = mdOut.getValue(md.MDL_SPH_COEFFICIENTS, row.getObjId())
-                correctionFactor = self.inputVolume.get().getDim()[0] / self.newXdim
-                coeffs = [correctionFactor*coeff for coeff in coeffs]
-                newRow.setValue(md.MDL_SPH_COEFFICIENTS, coeffs)
-            newRow.addToMd(newMdOut)
-            i+=1
-            newMdOut.write(fnOut)
+        # newMdOut = md.MetaData()
+        # i=0
+        # for row in md.iterRows(mdOut):
+        #     newRow = row
+        #     newRow.setValue(md.MDL_SPH_TSNE_COEFF1D, float(X_tsne_1d[i,0]))
+        #     newRow.setValue(md.MDL_SPH_TSNE_COEFF2D, [float(X_tsne_2d[i, 0]),  float(X_tsne_2d[i, 1])])
+        #     if self.newTs != self.Ts:
+        #         coeffs = mdOut.getValue(md.MDL_SPH_COEFFICIENTS, row.getObjId())
+        #         correctionFactor = self.inputVolume.get().getDim()[0] / self.newXdim
+        #         coeffs = [correctionFactor*coeff for coeff in coeffs]
+        #         newRow.setValue(md.MDL_SPH_COEFFICIENTS, coeffs)
+        #     newRow.addToMd(newMdOut)
+        #     i+=1
+        #     newMdOut.write(fnOut)
 
         inputSet = self.inputParticles.get()
         partSet = self._createSetOfParticles()
