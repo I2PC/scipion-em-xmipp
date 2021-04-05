@@ -28,18 +28,17 @@ from math import floor
 import os
 
 from pyworkflow import VERSION_1_1
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.em.constants import ALIGN_PROJ
+from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
+                                        BooleanParam)
 from pyworkflow.utils.path import cleanPath
-from pyworkflow.em.protocol import ProtAnalysis3D
-from pyworkflow.em.data import SetOfClasses2D, Image, SetOfAverages, SetOfParticles, Class2D
-import pyworkflow.em.metadata as md
+from pwem.protocols import ProtAnalysis3D
+from pwem.objects import (SetOfClasses2D, Image, SetOfAverages, SetOfParticles)
+import pwem.emlib.metadata as md
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
-import xmippLib
+from pwem import emlib
 from xmipp3.base import ProjMatcher
-from xmipp3.convert import setXmippAttributes, xmippToLocation, rowToAlignment
+from xmipp3.convert import setXmippAttributes, xmippToLocation
 
         
 class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
@@ -55,7 +54,8 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
     
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
-    
+        self._classesInfo = dict()
+
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
@@ -114,7 +114,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             writeSetOfClasses2D(imgSet, self.imgsFn, writeParticles=True)
         else:
             writeSetOfParticles(imgSet, self.imgsFn)
-        from pyworkflow.em.convert import ImageHandler
+        from pwem.emlib.image import ImageHandler
         img = ImageHandler()
         fnVol = self._getTmpPath("volume.vol")
         img.convert(self.inputVolume.get(), fnVol)
@@ -157,29 +157,53 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         if os.path.exists(fnImgs):
             cleanPath(fnImgs)
 
-        outputSet = self._createSetOfParticles()
         imgSet = self.inputSet.get()
         imgFn = self._getExtraPath("anglesCont.xmd")
         self.newAssignmentPerformed = os.path.exists(self._getExtraPath("angles.xmd"))
         self.samplingRate = self.inputSet.get().getSamplingRate()
+
+        # Special case for 2D classes
         if isinstance(imgSet, SetOfClasses2D):
-            outputSet = self._createSetOfClasses2D(imgSet)
-            outputSet.copyInfo(imgSet.getImages())
-        elif isinstance(imgSet, SetOfAverages):
-            outputSet = self._createSetOfAverages()
+            outputSet = self._createSetOfClasses2D(imgSet.getImages())
             outputSet.copyInfo(imgSet)
+            outputSet.appendFromClasses(imgSet, updateClassCallback=lambda clazz: self._updateClass(clazz, imgFn))
+
+        # Particles or Averages
         else:
-            outputSet = self._createSetOfParticles()
-            outputSet.copyInfo(imgSet)
-            if not self.newAssignmentPerformed:
-                outputSet.setAlignmentProj()
-        self.iterMd = md.iterRows(imgFn, md.MDL_ITEM_ID)
-        self.lastRow = next(self.iterMd) 
-        outputSet.copyItems(imgSet,
-                            updateItemCallback=self._processRow)
-        self._defineOutputs(outputParticles=outputSet)
+            if isinstance(imgSet, SetOfAverages):
+                outputSet = self._createSetOfAverages()
+                outputSet.copyInfo(imgSet)
+            else:
+                outputSet = self._createSetOfParticles()
+                outputSet.copyInfo(imgSet)
+                if not self.newAssignmentPerformed:
+                    outputSet.setAlignmentProj()
+            self.iterMd = md.iterRows(imgFn, md.MDL_ITEM_ID)
+            self.lastRow = next(self.iterMd)
+            outputSet.copyItems(imgSet,
+                                updateItemCallback=self._processRow)
+
+        self._defineOutputs(reprojections=outputSet)
         self._defineSourceRelation(self.inputSet, outputSet)
 
+    def _updateClass(self, clazz, mdFile):
+        """ Callback to update the class"""
+
+        classId = clazz.getObjId()
+
+        if classId not in self._classesInfo:
+            self._classesInfo[classId] = clazz
+            # Get the row
+            row = self._getMdRow(mdFile, classId)
+            self._createItemMatrix(clazz, row)
+
+    def _getMdRow(self, mdFile, id):
+        """ To get a row. Maybe there is way to request a specific row."""
+        for row in md.iterRows(mdFile):
+            if row.getValue(md.MDL_ITEM_ID) == id:
+                return row
+
+        raise Exception("Missing row %s at %s" % (id,mdFile))
     def _processRow(self, particle, row):
         count = 0
         
@@ -196,17 +220,17 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
 
     def _createItemMatrix(self, particle, row):
         setXmippAttributes(particle, row,
-                           xmippLib.MDL_COST, xmippLib.MDL_CONTINUOUS_GRAY_A,
-                           xmippLib.MDL_CONTINUOUS_GRAY_B, xmippLib.MDL_CONTINUOUS_X,
-                           xmippLib.MDL_CONTINUOUS_Y,
-                           xmippLib.MDL_CORRELATION_IDX, xmippLib.MDL_CORRELATION_MASK,
-                           xmippLib.MDL_CORRELATION_WEIGHT, xmippLib.MDL_IMED)
+                           emlib.MDL_COST, emlib.MDL_CONTINUOUS_GRAY_A,
+                           emlib.MDL_CONTINUOUS_GRAY_B, emlib.MDL_CONTINUOUS_X,
+                           emlib.MDL_CONTINUOUS_Y,
+                           emlib.MDL_CORRELATION_IDX, emlib.MDL_CORRELATION_MASK,
+                           emlib.MDL_CORRELATION_WEIGHT, emlib.MDL_IMED)
         if self.evaluateResiduals:
             setXmippAttributes(particle, row,
-                               xmippLib.MDL_ZSCORE_RESVAR, xmippLib.MDL_ZSCORE_RESMEAN,
-                               xmippLib.MDL_ZSCORE_RESCOV)
+                               emlib.MDL_ZSCORE_RESVAR, emlib.MDL_ZSCORE_RESMEAN,
+                               emlib.MDL_ZSCORE_RESCOV)
         def __setXmippImage(label):
-            attr = '_xmipp_' + xmippLib.label2Str(label)
+            attr = '_xmipp_' + emlib.label2Str(label)
             if not hasattr(particle, attr):
                 img = Image()
                 setattr(particle, attr, img)
@@ -215,11 +239,11 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                 img = getattr(particle, attr)
             img.setLocation(xmippToLocation(row.getValue(label)))
         
-        __setXmippImage(xmippLib.MDL_IMAGE)
-        __setXmippImage(xmippLib.MDL_IMAGE_REF)
+        __setXmippImage(emlib.MDL_IMAGE)
+        __setXmippImage(emlib.MDL_IMAGE_REF)
         if self.evaluateResiduals:
-            __setXmippImage(xmippLib.MDL_IMAGE_RESIDUAL)
-            __setXmippImage(xmippLib.MDL_IMAGE_COVARIANCE)
+            __setXmippImage(emlib.MDL_IMAGE_RESIDUAL)
+            __setXmippImage(emlib.MDL_IMAGE_COVARIANCE)
 
     #--------------------------- INFO functions --------------------------------------------
     def _summary(self):

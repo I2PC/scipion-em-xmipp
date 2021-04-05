@@ -24,16 +24,15 @@
 # *
 # **************************************************************************
 
-from itertools import izip
+try:
+    from itertools import izip
+except ImportError:
+    izip = zip
 
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_1
 from pyworkflow.utils.path import makePath, removeBaseExt
-from pyworkflow.em.data import SetOfParticles
-from pyworkflow.em.data_tiltpairs import TiltPair, CoordinatesTiltPair
 
-# from xmipp3.convert import (readAnglesFromMicrographs, readSetOfCoordinates,
-#                             writeSetOfCoordinates)
 from xmipp3.convert import *
 from .protocol_particle_pick_pairs import XmippProtParticlePickingPairs
 

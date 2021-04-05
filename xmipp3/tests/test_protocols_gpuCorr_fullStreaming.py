@@ -24,21 +24,21 @@
 import time
 
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
-from pyworkflow.utils import importFromPlugin, pluginNotFound
-from pyworkflow.em.protocol import ProtImportMicrographs, ProtCreateStreamData
-from pyworkflow.em.protocol.protocol_create_stream_data import \
-    SET_OF_MICROGRAPHS
+from pyworkflow.plugin import Domain
+from pwem.protocols import ProtImportMicrographs, ProtCreateStreamData
+from pwem.protocols.protocol_create_stream_data import SET_OF_MICROGRAPHS
 from pyworkflow.protocol import getProtocolFromDb
 
 from xmipp3.protocols import XmippProtPreprocessMicrographs
 from xmipp3.protocols.protocol_extract_particles import *
 from xmipp3.protocols.protocol_classification_gpuCorr_full import *
 
-ProtCTFFind = importFromPlugin('grigoriefflab.protocols', 'ProtCTFFind', doRaise=True)
-try:
-    from eman2.protocols.protocol_autopick_sparx import *
-except:
-    pluginNotFound('Eman2', "Eman2 is needed to run this test.", doRaise=True)
+ProtCTFFind = Domain.importFromPlugin('cistem.protocols', 'CistemProtCTFFind',
+                                      doRaise=True)
+
+SparxGaussianProtPicking = Domain.importFromPlugin('eman2.protocols',
+                                                   'SparxGaussianProtPicking',
+                                                   doRaise=True)
 
 
 # Number of mics to be processed
@@ -85,9 +85,9 @@ class TestGpuCorrFullStreaming(BaseTest):
     def calculateCtf(self, inputMics):
         protCTF = ProtCTFFind(useCftfind4=True)
         protCTF.inputMicrographs.set(inputMics)
-        protCTF.ctfDownFactor.set(1.0)
-        protCTF.lowRes.set(0.05)
-        protCTF.highRes.set(0.5)
+        # Gone in new version: protCTF.ctfDownFactor.set(1.0)
+        protCTF.lowRes.set(44)
+        protCTF.highRes.set(15)
         self.proj.launchProtocol(protCTF, wait=False)
 
         return protCTF
@@ -207,6 +207,7 @@ class TestGpuCorrFullStreaming(BaseTest):
             time.sleep(2)
             protClassify = self._updateProtocol(protClassify)
             self.assertFalse(protClassify.isFailed(), 'GL2D-streaming has failed.')
+
             if counter > 100:
                 self.assertTrue(protClassify.hasAttribute('outputAverages'),
                                 'GL2D-streaming has no outputAverages in more than 3min.')
@@ -216,4 +217,3 @@ class TestGpuCorrFullStreaming(BaseTest):
                         'GL2D-streaming has no outputAverages at the end.')
         self.assertTrue(protClassify.hasAttribute('outputClasses'),
                         'GL2D-streaming has no outputClasses at the end.')
-

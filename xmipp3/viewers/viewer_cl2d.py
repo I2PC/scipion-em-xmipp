@@ -23,7 +23,6 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-from ..convert import readSetOfClasses
 """
 This module implement the wrappers aroung Xmipp CL2D protocol
 visualization program.
@@ -31,11 +30,11 @@ visualization program.
 
 import os
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.protocol.params import LabelParam, BooleanParam, LEVEL_ADVANCED
+from pyworkflow.protocol.params import LabelParam, LEVEL_ADVANCED
 from pyworkflow.protocol.params import EnumParam, StringParam
 
 from xmipp3.protocols.protocol_cl2d import XmippProtCL2D
-from pyworkflow.em.viewers import DataView, ClassesView
+from pwem.viewers import DataView, ClassesView
 
 CLASSES = 0
 CLASS_CORES = 1

@@ -31,7 +31,7 @@ from datetime import datetime
 
 import pyworkflow.protocol.constants as cons
 from pyworkflow import VERSION_2_0
-from pyworkflow.em.protocol import EMProtocol
+from pwem.protocols import EMProtocol
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import BooleanParam, IntParam, PointerParam, GT
 
@@ -147,12 +147,13 @@ class XmippProtTriggerData(EMProtocol):
         if getattr(self, 'finished', False):
             return
 
-        # If finished if:      - in non-streaming mode the output is released
-        self.finished = ( (not self.allImages and
-                           len(self.images) > self.outputSize)
-                          or # - in streaming if the input is closed and all done
-                          (self.allImages and self.streamClosed and
-                           len(self.images) == len(self.imsSet)) )
+        if self.streamClosed:
+            self.finished = True
+        elif not self.allImages.get():
+            self.finished = len(self.images) >= self.outputSize
+        else:
+            self.finished = False
+
         outputStep = self._getFirstJoinStep()
         deps = []
         if self.finished:  # Unlock createOutputStep if finished all jobs
@@ -169,8 +170,8 @@ class XmippProtTriggerData(EMProtocol):
 
     def _fillingOutput(self):
         imsSqliteFn = '%s.sqlite' % self.getImagesType('lower')
-        outputName = 'output%s' % self.getImagesType()
-        if len(self.images) >= self.outputSize:
+        outputName = self.getOututName()
+        if len(self.images) >= self.outputSize or self.finished:
             if self.allImages:  # Streaming and semi-streaming
                 if self.splitImages:  # Semi-streaming: Splitting the input
                     if len(self.splitedImages) >= self.outputSize or \
@@ -241,11 +242,37 @@ class XmippProtTriggerData(EMProtocol):
     # --------------------------- INFO functions ------------------------------
     def _summary(self):
         summary = []
-        imagesType = self.inputImages.get().getClassName().split("SetOf")[1]
-        if not hasattr(self, 'output%s'%imagesType):
-            summary.append("Not enough images for output yet.")
+
+        outputStr = self.getOututName()
+
+        if self.allImages.get() and not self.splitImages.get():
+            summary.append("MODE: *full streaming*.")
+            triggeredMsg = ("'%s' released, it will be growing up "
+                            "as soon as the input does." % outputStr)
+        elif self.splitImages.get():
+            summary.append("MODE: *semi streaming (batches)*.")
+            triggeredMsg = ("%d '%s' are being released with %d items, "
+                            "each. A new batch will be created when ready."
+                            % (self.getOutputsSize(), outputStr, self.outputSize))
         else:
-            summary.append("Particles were send to output.")
+            summary.append("MODE: *static output*.")
+            triggeredMsg = ("'%s' released and closed. Nothing else to do."
+                            % outputStr)
+
+        if self.getOutputsSize():
+            summary.append(triggeredMsg)
+        else:
+            inputStr = self.getImagesType() if self.inputImages.get() else '(or not ready)'
+            summary.append("Not enough input %s to release an output, yet."
+                           % inputStr)
+            summary.append("At least, %d items are needed to trigger an output."
+                           % self.outputSize.get())
+
+        if (self.isFinished() and
+                self.outputSize.get() > [o for o in
+                                         self.iterOutputAttributes()][0][1].getSize()):
+            summary.append("Output released because streaming finished.")
+
         return summary
 
     def _validate(self):
@@ -275,12 +302,21 @@ class XmippProtTriggerData(EMProtocol):
         return self._inputClass
 
     def setImagesType(self):
-        inputClassName = self.inputImages.get().getClassName()
-        self._inputType = inputClassName.split('SetOf')[1]
+        inputSet = self.inputImages.get()
+        if inputSet:
+            inputClassName = inputSet.getClassName()
+            self._inputType = inputClassName.split('SetOf')[1]
+        else:
+            self._inputType = None
 
     def getImagesType(self, letters='default'):
-        typeStr = self._inputType
+        if not self.hasAttribute('_inputType'):
+            self.setImagesType()
+        typeStr = str(self._inputType)
         if letters == 'lower':
             return typeStr.lower()
         else:
             return typeStr
+
+    def getOututName(self):
+        return 'output%s' % self.getImagesType()

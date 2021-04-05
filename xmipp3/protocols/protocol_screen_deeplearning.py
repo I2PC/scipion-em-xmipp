@@ -24,24 +24,25 @@
 # *
 # **************************************************************************
 
-import os, sys
+import os
 import re
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.utils.path import copyTree
 import pyworkflow.protocol.params as params
-from pyworkflow.em.protocol import ProtProcessParticles
-import pyworkflow.em.metadata as md
+from pwem.protocols import ProtProcessParticles
+import pwem.emlib.metadata as md
 
-from xmipp3.convert import writeSetOfParticles, setXmippAttributes
-from xmipp3.utils import validateDLtoolkit
+from ..convert import writeSetOfParticles, setXmippAttributes
+from ..base import XmippProtocol
 
-N_MAX_NEG_SETS= 5
+N_MAX_NEG_SETS = 5
 
-class XmippProtScreenDeepLearning(ProtProcessParticles):
+class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
     """ Protocol for screening particles using deep learning. """
     _label = 'screen deep learning'
     _lastUpdateVersion = VERSION_2_0
+    _conda_env = 'xmipp_DLTK_v0.3'
 
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
@@ -162,7 +163,7 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
                       help='Select the set of ground false positive particles.')
 
     def _validate(self):
-        return validateDLtoolkit()
+        return self.validateDLtoolkit()
 
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -222,7 +223,7 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
           elif fname== self._getExtraPath("testFalseParticlesSet.xmd"):
             return self.testNegSetOfParticles.get()
           else:
-            matchOjb= re.match( self._getExtraPath("negativeSet_(\d+).xmd"), fname)
+            matchOjb= re.match( self._getExtraPath(r"negativeSet_(\d+).xmd"), fname)
             if matchOjb:
               num= matchOjb.group(1)
               return self.__dict__["negativeSet_%s"%num].get()
@@ -281,12 +282,13 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
           args+= " -g %s"%(gpuToUse)
         if not numberOfThreads is None:
           args+= " -t %s"%(numberOfThreads)
-        self.runJob('xmipp_deep_consensus', args, numberOfMpi=1)
+        self.runJob('xmipp_deep_consensus', args, numberOfMpi=1,
+                    env=self.getCondaEnv())
 
     def predict(self, posTestDict, negTestDict, predictDict):
         """
             posTestDict, negTestDict, predictDict: { fnameToMetadata: { weight:int }
-        """        
+        """
         netDataPath = self._getExtraPath('nnetData')
         if not os.path.isdir(netDataPath) and self.doContinue.get():
             prevRunPath = self.continueRun.get()._getExtraPath('nnetData')
@@ -301,20 +303,21 @@ class XmippProtScreenDeepLearning(ProtProcessParticles):
 
         outParticlesPath = self._getPath("particles.xmd")
         fnamesPred, weightsPred= self.__dataDict_toStrs(predictDict)
-        
+
         args= " -n %s --mode score -i %s -o %s "%(netDataPath, fnamesPred, outParticlesPath)
-                
+
         if posTestDict and negTestDict:
           fnamesPosTest, weightsPosTest= self.__dataDict_toStrs(posTestDict)
           fnamesNegTest, weightsNegTest= self.__dataDict_toStrs(negTestDict)
           args+= " --testingTrue %s --testingFalse %s "%(fnamesPosTest, fnamesNegTest)
-          
+
         if not gpuToUse is None:
           args+= " -g %s"%(gpuToUse)
         if not numberOfThreads is None:
           args+= " -t %s"%(numberOfThreads)
-        self.runJob('xmipp_deep_consensus', args, numberOfMpi=1)
-        
+        self.runJob('xmipp_deep_consensus', args, numberOfMpi=1,
+                    env=self.getCondaEnv())
+
     def createOutputStep(self):
         imgSet = self.predictSetOfParticles.get()
         partSet = self._createSetOfParticles()

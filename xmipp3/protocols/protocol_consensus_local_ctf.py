@@ -26,17 +26,16 @@
 # *
 # **************************************************************************
 
+import numpy as np
+
 from pyworkflow import VERSION_2_0
 from pyworkflow.object import Float
 from pyworkflow.protocol.params import MultiPointerParam, PointerParam
-from pyworkflow.em.protocol import ProtAnalysis3D
 
-import numpy as np
-import xmippLib
+from pwem.protocols import ProtAnalysis3D
+from pwem import emlib
 
-from xmipp3.convert import readSetOfMicrographs, writeSetOfMicrographs, setOfMicrographsToMd, setXmippAttribute
-from ..convert import writeSetOfParticles, readSetOfParticles
-import pyworkflow.em.metadata as md
+from xmipp3.convert import setXmippAttribute
 
 
 class XmippProtConsensusLocalCTF(ProtAnalysis3D):
@@ -66,6 +65,8 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def compareDefocus(self):
+        """compare with median, mad and correlation matrix the local defocus value for each pixel estimated by
+        different programs (Xmipp, Relion, gCTF, ...)"""
         allParticlesDef = {}
         for defsetP in self.inputSets:
             defset = defsetP.get()
@@ -101,6 +102,8 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
         np.savetxt(self._getExtraPath("correlationMatrix.txt"),self.corrMatrix)
 
     def createOutputStep(self):
+        """create as output a setOfParticles with a consensus estimation of local defocus (median) and its median
+        standard deviation (mad)"""
         imgSet = self.inputSet.get()
 
         outputSet = self._createSetOfParticles()
@@ -114,8 +117,8 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
                 newPart = part.clone()
                 pMedian = Float(self.median[index])
                 pMad = Float(self.mad[index])
-                setXmippAttribute(newPart.getCTF(), xmippLib.MDL_CTF_DEFOCUSA, pMedian)
-                setXmippAttribute(newPart.getCTF(), xmippLib.MDL_CTF_DEFOCUS_RESIDUAL, pMad)
+                setXmippAttribute(newPart.getCTF(), emlib.MDL_CTF_DEFOCUSA, pMedian)
+                setXmippAttribute(newPart.getCTF(), emlib.MDL_CTF_DEFOCUS_RESIDUAL, pMad)
                 outputSet.append(newPart)
 
         self._defineOutputs(outputParticles=outputSet)
@@ -123,9 +126,10 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
 
 
     def _updateItem(self, particle, row):
+        """update each particle in the set with the values computed"""
         pId = particle.getObjId()
-        setXmippAttribute(particle,xmippLib.MDL_CTF_DEFOCUSA,self.median[self.pMatrixIdx[pId]])
-        setXmippAttribute(particle,xmippLib.MDL_CTF_DEFOCUS_RESIDUAL,self.mad[self.pMatrixIdx[pId]])
+        setXmippAttribute(particle,emlib.MDL_CTF_DEFOCUSA,self.median[self.pMatrixIdx[pId]])
+        setXmippAttribute(particle,emlib.MDL_CTF_DEFOCUS_RESIDUAL,self.mad[self.pMatrixIdx[pId]])
 
     #--------------------------- INFO functions --------------------------------------------
     def _summary(self):

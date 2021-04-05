@@ -24,12 +24,14 @@
 # *
 # **************************************************************************
 
-import pyworkflow
 import pyworkflow.object as pwobj
-from pyworkflow.em import *
+from pwem.objects import Volume
+from pwem.emlib.image import ImageHandler
+from pwem.protocols import ProtPreprocessVolumes
+import pyworkflow.protocol.params as params
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
-from xmippLib import MetaData, MDL_ANGLE_ROT, MDL_SHIFT_Z
+from pwem.emlib import MetaData, MDL_ANGLE_ROT, MDL_SHIFT_Z
 from xmipp3.base import HelicalFinder
 from xmipp3.convert import getImageLocation
 
@@ -44,28 +46,30 @@ class XmippProtHelicalParameters(ProtPreprocessVolumes, HelicalFinder):
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='General parameters')
-        form.addParam('inputVolume', PointerParam, pointerClass="Volume", label='Input volume')
-        form.addParam('cylinderInnerRadius',IntParam,label='Cylinder inner radius', default=-1,
+        form.addParam('inputVolume', params.PointerParam, pointerClass="Volume", label='Input volume')
+        form.addParam('cylinderInnerRadius', params.IntParam,label='Cylinder inner radius', default=-1,
                       help="The helix is supposed to occupy this radius in voxels around the Z axis. Leave it as -1 for symmetrizing the whole volume")
-        form.addParam('cylinderOuterRadius',IntParam,label='Cylinder outer radius', default=-1,
+        form.addParam('cylinderOuterRadius',params.IntParam,label='Cylinder outer radius', default=-1,
                       help="The helix is supposed to occupy this radius in voxels around the Z axis. Leave it as -1 for symmetrizing the whole volume")
-        form.addParam('dihedral',BooleanParam,default=False,label='Apply dihedral symmetry')
-        form.addParam('forceDihedralX',BooleanParam,default=False,expertLevel=LEVEL_ADVANCED, label='Force the dihedral axis to be in X',
+        form.addParam('dihedral',params.BooleanParam,default=False,label='Apply dihedral symmetry')
+        form.addParam('forceDihedralX',params.BooleanParam,default=False,expertLevel=LEVEL_ADVANCED, label='Force the dihedral axis to be in X',
                       help="If this option is chosen, then the dihedral axis is not searched and it is assumed that it is around X.")
+        form.addParam('additionalCn',params.BooleanParam,default=False,label='Apply Cn symmetry')
+        form.addParam('Cn',params.StringParam,default="C2",condition="additionalCn",label='Cn symmetry')
 
         form.addSection(label='Search limits')
-        form.addParam('heightFraction',FloatParam,default=0.9,label='Height fraction',
+        form.addParam('heightFraction',params.FloatParam,default=0.9,label='Height fraction',
                       help="The helical parameters are only sought using the fraction indicated by this number. "\
                            "In this way, you can avoid including planes that are poorly resolved at the extremes of the volume. " \
                            "However, note that the algorithm can perfectly work with a fraction of 1.")
-        form.addParam('rot0',FloatParam,default=0,label='Minimum rotational angle',help="In degrees")
-        form.addParam('rotF',FloatParam,default=360,label='Maximum rotational angle',help="In degrees")
-        form.addParam('rotStep',FloatParam,default=5,label='Angular step',help="In degrees")
-        form.addParam('z0',FloatParam,default=0,label='Minimum shift Z',help="In Angstroms")
-        form.addParam('zF',FloatParam,default=10,label='Maximum shift Z',help="In Angstroms")
-        form.addParam('zStep',FloatParam,default=0.5,label='Shift step',help="In Angstroms")
-        self.deltaZ=Float()
-        self.deltaRot=Float()
+        form.addParam('rot0',params.FloatParam,default=0,label='Minimum rotational angle',help="In degrees")
+        form.addParam('rotF',params.FloatParam,default=360,label='Maximum rotational angle',help="In degrees")
+        form.addParam('rotStep',params.FloatParam,default=5,label='Angular step',help="In degrees")
+        form.addParam('z0',params.FloatParam,default=1,label='Minimum shift Z',help="In Angstroms")
+        form.addParam('zF',params.FloatParam,default=10,label='Maximum shift Z',help="In Angstroms")
+        form.addParam('zStep',params.FloatParam,default=0.5,label='Shift step',help="In Angstroms")
+        self.deltaZ= params.Float()
+        self.deltaRot=params.Float()
         form.addParallelSection(threads=4, mpi=0)
 
     #--------------------------- INSERT steps functions --------------------------------------------
@@ -92,19 +96,35 @@ class XmippProtHelicalParameters(ProtPreprocessVolumes, HelicalFinder):
             ImageHandler().convert(self.inputVolume.get(), self.fnVolSym)
                         
     def coarseSearch(self):
-        self.runCoarseSearch(self.fnVolSym,self.dihedral.get(),float(self.heightFraction.get()),float(self.z0.get()),float(self.zF.get()),float(self.zStep.get()),
+        Cn = "c1"
+        if self.additionalCn:
+            Cn=self.Cn.get()
+        self.runCoarseSearch(self.fnVolSym,self.dihedral.get(),float(self.heightFraction.get()),
+                             float(self.z0.get()),float(self.zF.get()),float(self.zStep.get()),
                              float(self.rot0.get()),float(self.rotF.get()),float(self.rotStep.get()),
                              self.numberOfThreads.get(),self._getExtraPath('coarseParams.xmd'),
-                             int(self.cylinderInnerRadius.get()),int(self.cylinderOuterRadius.get()),int(self.height),self.inputVolume.get().getSamplingRate())
+                             int(self.cylinderInnerRadius.get()),int(self.cylinderOuterRadius.get()),int(self.height),
+                             self.inputVolume.get().getSamplingRate(), Cn)
 
     def fineSearch(self):
-        self.runFineSearch(self.fnVolSym, self.dihedral.get(), self._getExtraPath('coarseParams.xmd'), self._getExtraPath('fineParams.xmd'), 
-                           float(self.heightFraction.get()),float(self.z0.get()),float(self.zF.get()),float(self.rot0.get()),float(self.rotF.get()),
-                             int(self.cylinderInnerRadius.get()),int(self.cylinderOuterRadius.get()),int(self.height),self.inputVolume.get().getSamplingRate())
+        Cn = "c1"
+        if self.additionalCn:
+            Cn=self.Cn.get()
+        self.runFineSearch(self.fnVolSym, self.dihedral.get(), self._getExtraPath('coarseParams.xmd'),
+                           self._getExtraPath('fineParams.xmd'),
+                           float(self.heightFraction.get()),float(self.z0.get()),float(self.zF.get()),
+                           float(self.rot0.get()),float(self.rotF.get()),
+                           int(self.cylinderInnerRadius.get()),int(self.cylinderOuterRadius.get()),int(self.height),
+                           self.inputVolume.get().getSamplingRate(), Cn)
 
     def symmetrize(self):
-        self.runSymmetrize(self.fnVolSym, self.dihedral.get(), self._getExtraPath('fineParams.xmd'), self.fnVolSym, 
-                           float(self.heightFraction.get()), self.cylinderInnerRadius.get(), self.cylinderOuterRadius.get(), self.height,self.inputVolume.get().getSamplingRate())
+        Cn = "c1"
+        if self.additionalCn:
+            Cn=self.Cn.get()
+        self.runSymmetrize(self.fnVolSym, self.dihedral.get(), self._getExtraPath('fineParams.xmd'), self.fnVolSym,
+                           float(self.heightFraction.get()),
+                           self.cylinderInnerRadius.get(), self.cylinderOuterRadius.get(), self.height,
+                           self.inputVolume.get().getSamplingRate(), Cn)
 
     def createOutput(self):
         volume = Volume()
@@ -130,6 +150,12 @@ class XmippProtHelicalParameters(ProtPreprocessVolumes, HelicalFinder):
     def _citations(self):
         papers=[]
         return papers
+
+    def _validate(self):
+        messages=[]
+        if float(self.z0.get())<=0:
+            messages.append("z0 should not be negative or zero")
+        return messages
 
     def _methods(self):
         messages = []      

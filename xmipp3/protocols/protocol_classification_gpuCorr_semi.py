@@ -27,23 +27,25 @@
 
 from os.path import getmtime
 from datetime import datetime
-from os.path import exists
+from os.path import exists, splitext
+import os
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.em import SetOfParticles, SetOfClasses2D, ALIGN_2D, ALIGN_NONE
-from pyworkflow.em.protocol import ProtAlign2D
-import pyworkflow.em.metadata as md
 import pyworkflow.protocol.params as params
-from pyworkflow.em.metadata.utils import iterRows
-from pyworkflow.utils import prettyTime
-from pyworkflow.object import Set
+from pyworkflow.object import Set, Float, String
 from pyworkflow.protocol.constants import STATUS_NEW
-from pyworkflow.em.data import Class2D
-from pyworkflow.object import Float, String
+from pyworkflow.utils import prettyTime
 import pyworkflow.protocol.constants as const
 
-from xmipp3.convert import writeSetOfParticles, rowToAlignment, writeSetOfClasses2D
+from pwem.objects import SetOfParticles, SetOfClasses2D, Class2D
+from pwem.constants import ALIGN_2D, ALIGN_NONE
+from pwem.protocols import ProtAlign2D
+import pwem.emlib.metadata as md
 
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
+from xmipp3.convert import (writeSetOfParticles, rowToAlignment,
+                            writeSetOfClasses2D)
+from xmipp3.base import isXmippCudaPresent
 
 REF_CLASSES = 0
 REF_AVERAGES = 1
@@ -62,8 +64,6 @@ class HashTableDict:
         if not idx in self.dict[idxDict]:
             self.dict[idxDict][idx]=1
 
-
-
 class XmippProtStrGpuCrrSimple(ProtAlign2D):
     """ 2D alignment in semi streaming using Xmipp GPU Correlation.
     A previous set of classes must be provided to include the new images in the
@@ -77,10 +77,7 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
         form.addHidden(params.GPU_LIST, params.StringParam, default='0',
                        expertLevel=const.LEVEL_ADVANCED,
                        label="Choose GPU IDs",
-                       help="GPU may have several cores. Set it to zero"
-                            " if you do not know what we are talking about."
-                            " First core index is 0, second 1 and so on."
-                            " In this protocol is not possible to use several GPUs.")
+                       help="Add a list of GPU devices that can be used")
         form.addParam('inputRefs', params.PointerParam,
                       pointerClass='SetOfClasses2D, SetOfAverages',
                       important=True,
@@ -153,7 +150,28 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
         self.lastDate = p.getObjCreation()
         self._saveCreationTimeFile(self.lastDate)
 
+        metadataRef = md.MetaData(self.imgsRef)
+        if metadataRef.containsLabel(md.MDL_REF) is False:
+            args = ('-i %s --fill ref lineal 1 1 -o %s')%(self.imgsRef, self.imgsRef)
+            self.runJob("xmipp_metadata_utilities", args, numberOfMpi=1)
+
         # Calling program xmipp_cuda_correlation
+        count = 0
+        GpuListCuda = ''
+        if self.useQueueForSteps() or self.useQueue():
+            GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+            GpuList = GpuList.split(",")
+            for elem in GpuList:
+                GpuListCuda = GpuListCuda + str(count) + ' '
+                count += 1
+        else:
+            GpuListAux = ''
+            for elem in self.getGpuList():
+                GpuListCuda = GpuListCuda + str(count) + ' '
+                GpuListAux = GpuListAux + str(elem) + ','
+                count += 1
+            os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+
         outImgs, clasesOut = self._getOutputsFn()
         self._params = {'imgsRef': self.imgsRef,
                         'imgsExp': inputImgs,
@@ -161,13 +179,13 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
                         'keepBest': self.keepBest.get(),
                         'maxshift': self.maximumShift,
                         'outputClassesFile': clasesOut,
-                        'device': int(self.gpuList.get()),
+                        'device': GpuListCuda,
+                        'outputClassesFileNoExt': splitext(clasesOut)[0],
                         }
 
-        args = ('-i_ref %(imgsRef)s -i_exp %(imgsExp)s -o %(outputFile)s '
-                '--keep_best %(keepBest)d --maxShift %(maxshift)d '
-                '--simplifiedMd --classify %(outputClassesFile)s --device %(device)d ')
-        self.runJob("xmipp_cuda_correlation", args % self._params)
+        args = '-i %(imgsExp)s -r %(imgsRef)s -o %(outputFile)s ' \
+               '--keepBestN 1 --oUpdatedRefs %(outputClassesFileNoExt)s --dev %(device)s '
+        self.runJob(CUDA_ALIGN_SIGNIFICANT, args % self._params, numberOfMpi=1)
 
 
     # ------ Methods for Streaming 2D Classification --------------
@@ -239,13 +257,13 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
     def _validate(self):
         errors = []
         refImage = self.inputRefs.get()
-        [x1, y1, z1] = refImage.getDimensions()
-        [x2, y2, z2] = self.inputParticles.get().getDim()
-        if x1 != x2 or y1 != y2 or z1 != z2:
-            errors.append('The input images and the reference images '
-                          'have different sizes')
-        if len(self.gpuList.get())>1:
-            errors.append("The GPU list only can have one value for this protocol.")
+        [x1, y1, _] = refImage.getDimensions()
+        [x2, y2, _] = self.inputParticles.get().getDim()
+        if x1 != x2 or y1 != y2:
+            errors.append('The input images (%s, %s) and the reference images (%s, %s) '
+                          'have different sizes' % (x1, y1, x2, y2))
+        if not isXmippCudaPresent("xmipp_cuda_correlation"):
+            errors.append("I cannot find the Xmipp GPU programs in the path")
         return errors
 
     def _summary(self):
@@ -405,7 +423,7 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
 
                     outputClasses.update(newClass)
 
-            for imgRow in iterRows(mdImages, sortByLabel=md.MDL_REF):
+            for imgRow in md.iterRows(mdImages, sortByLabel=md.MDL_REF):
                 #Just in case of having repeated ids, this must not happen
                 #self.lastId+=1
                 imgClassId = imgRow.getValue(md.MDL_REF)

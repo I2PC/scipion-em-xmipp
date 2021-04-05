@@ -30,14 +30,13 @@ from math import floor
 import os
 
 from pyworkflow import VERSION_2_0
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam, BooleanParam
+from pyworkflow.protocol.params import PointerParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.utils.path import cleanPattern
-from pyworkflow.em.protocol import ProtAnalysis3D
-from pyworkflow.em.convert import ImageHandler
+from pwem.protocols import ProtAnalysis3D
+from pwem import emlib
 
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles
-import xmippLib
 
 
 class XmippProtLocalCTF(ProtAnalysis3D):
@@ -79,9 +78,10 @@ class XmippProtLocalCTF(ProtAnalysis3D):
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self):
+        """convert input to proper format and dimensions if necessary"""
         imgSet = self.inputSet.get()
         writeSetOfParticles(imgSet, self._getExtraPath('input_imgs.xmd'))
-        img = ImageHandler()
+        img = emlib.image.ImageHandler()
         fnVol = self._getExtraPath("volume.vol")
         img.convert(self.inputVolume.get(), fnVol)
         xDimVol=self.inputVolume.get().getDim()[0]
@@ -90,6 +90,7 @@ class XmippProtLocalCTF(ProtAnalysis3D):
             self.runJob("xmipp_image_resize","-i %s --dim %d"%(fnVol,xDimImg),numberOfMpi=1)
 
     def refineDefocus(self):
+        """compute local defocus using Xmipp (xmipp_angular_continuous_assign2) and add to metadata columns related to defocus"""
         fnVol = self._getExtraPath("volume.vol")
         fnIn = self._getExtraPath('input_imgs.xmd')
         fnOut = self._getExtraPath('output_imgs.xmd')
@@ -115,10 +116,11 @@ class XmippProtLocalCTF(ProtAnalysis3D):
         cleanPattern(self._getExtraPath("anglesCont.*"))
 
     def createOutputStep(self):
+        """create scipion output data from metadata"""
         outputSet = self._createSetOfParticles()
         imgSet = self.inputSet.get()
         outputSet.copyInfo(imgSet)
-        readSetOfParticles(self._getExtraPath('output_imgs.xmd'), outputSet,  extraLabels=[xmippLib.MDL_CTF_DEFOCUS_CHANGE])
+        readSetOfParticles(self._getExtraPath('output_imgs.xmd'), outputSet,  extraLabels=[emlib.MDL_CTF_DEFOCUS_CHANGE])
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(self.inputSet, outputSet)
 

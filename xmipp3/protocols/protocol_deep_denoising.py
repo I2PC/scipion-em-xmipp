@@ -24,27 +24,28 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-import json
 
+import json
+from shutil import copyfile
 import sys, os
 import numpy as np
 import re
-from pyworkflow import VERSION_2_0
-from xmipp3.protocols import XmippProtCompareReprojections
 
-from .protocol_generate_reprojections import XmippProtGenerateReprojections
+from pyworkflow import VERSION_2_0
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
-import pyworkflow.em.metadata as md
 from pyworkflow.utils.path import cleanPath
 
-import xmippLib
-from xmipp3.convert import writeSetOfParticles, setXmippAttributes, xmippToLocation
-from xmipp3.utils import getMdSize
-import xmipp3
-from shutil import copyfile
+import pwem.emlib.metadata as md
+from pwem import emlib
 
-EXEC_MODES= ['Train & Predict','Predict'] 
+import xmipp3
+from xmipp3.convert import writeSetOfParticles, setXmippAttributes, xmippToLocation
+from xmipp3.protocols import XmippProtCompareReprojections
+from xmipp3.protocols import XmippProtGenerateReprojections
+from xmipp3 import XmippProtocol
+
+EXEC_MODES = ['Train & Predict', 'Predict']
 ITER_TRAIN = 0
 ITER_PREDICT = 1
 
@@ -65,26 +66,27 @@ TRAINING_LOSS_BOTH = 2
 
 PRED_BATCH_SIZE=2000
 
-class XmippProtDeepDenoising(XmippProtGenerateReprojections):
+class XmippProtDeepDenoising(XmippProtGenerateReprojections, XmippProtocol):
 
     _label ="deep denoising"
     _lastUpdateVersion = VERSION_2_0
+    _conda_env = 'xmipp_DLTK_v0.3'
 
     def __init__(self, **args):
         XmippProtGenerateReprojections.__init__(self, **args)
-        
+
     def _defineParams(self, form):
 
         form.addSection('Input')
-        form.addHidden(params.GPU_LIST, params.StringParam, default='',
+        form.addHidden(params.GPU_LIST, params.StringParam,
                        expertLevel=cons.LEVEL_ADVANCED,
-                       label="Choose GPU IDs",
+                       label="Choose GPU IDs", default='0',
                        help="GPU may have several cores. Set it to zero"
                             " if you do not know what we are talking about."
                             " First core index is 0, second 1 and so on."
                             " In case to use several GPUs separate with comas:"
                             "0,1,2")
-                                                       
+
         form.addParam('modelTrainPredMode', params.EnumParam, choices=EXEC_MODES,
                        default=ITER_TRAIN,
                        label='Train or predict model',
@@ -111,7 +113,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                       condition='customModelOverPretrain==True and (modelTrainPredMode==%d or continueTraining)'%ITER_PREDICT,
                       label='Set your model',
                       help='Choose the protocol where your model is trained')
-                      
+
         form.addParam('modelType', params.EnumParam,
                       choices=MODEL_TYPES,
                       default=MODEL_TYPE_UNET,
@@ -120,7 +122,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                       help='If you set to *%s*, GAN will be employed '
                            'employed. If you set to *%s* U-Net will be used instead'
                            % tuple(MODEL_TYPES))
-                                                       
+
         form.addParam('inputProjections', params.PointerParam, allowsNull=True,
                       pointerClass='SetOfParticles', important=False,
                       label='Input projections to train (mandatory)/compare (optional)',
@@ -140,22 +142,22 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                       pointerClass='SetOfParticles',  allowsNull=True,
                       label='Input "empty" particles (optional)', help='Input "empty" '
                       'particles to learn how to deal with pure noise')
-                      
+
         form.addParam('imageSize', params.IntParam, allowsNull=True, expertLevel=cons.LEVEL_ADVANCED,
                       condition='modelTrainPredMode==%d and not continueTraining'%ITER_TRAIN,
                       label='Scale images to (px)',
                       default=-1, help='Scale particles to desired size to improve training'
                                         'The recommended particle size is 128 px. The size must be even.'
                                          'Do not use loss=perceptualLoss or loss=Both if  96< size <150.')
-                      
+
         form.addSection(label='Training')
-        
+
         form.addParam('nEpochs', params.FloatParam,
                       condition='modelTrainPredMode==%d'%ITER_TRAIN,
                       label="Number of epochs", default=25.0,
                       help='Number of epochs for neural network training. GAN requires much '
                            'more epochs (>100) to obtain succesfull results')
-                      
+
         form.addParam('learningRate', params.FloatParam,
                       condition='modelTrainPredMode==%d'%ITER_TRAIN,
                       label="Learning rate", default=1e-4,
@@ -166,14 +168,14 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                        condition='modelTrainPredMode==%d'%ITER_TRAIN, expertLevel=cons.LEVEL_ADVANCED,
                        label='Model depth',
                        help='Indicate the model depth. For 128-64 px images, 4 is the recommend value. '
-                            ' larger images may require bigger models') 
+                            ' larger images may require bigger models')
 
         form.addParam('regularizationStrength', params.FloatParam, default=1e-5,
                        condition='modelTrainPredMode==%d'%ITER_TRAIN, expertLevel=cons.LEVEL_ADVANCED,
                        label='Regularization strength',
                        help='Indicate the regularization strength. Make it bigger if sufferening overfitting'
-                            ' and smaller if suffering underfitting') 
-                                                     
+                            ' and smaller if suffering underfitting')
+
         form.addParam('trainingSetType', params.EnumParam, choices=TRAINING_DATA_MODE,
                        condition='modelTrainPredMode==%d'%ITER_TRAIN,
                        default=TRAINING_DATA_MODE_SYNNOISE, expertLevel=cons.LEVEL_ADVANCED,
@@ -181,31 +183,31 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
                        help='*ParticlesAndSyntheticNoise*: Train using particles and synthetic noise\n'
                             'or\n*OnlyParticles*: using only particles\n'
                             'or\n*Both*: Train using both strategies')
-                          
+
         form.addParam('trainingLoss', params.EnumParam, choices=TRAINING_LOSS,
                        condition='modelTrainPredMode==%d'%ITER_TRAIN,
                        default=TRAINING_LOSS_BOTH, expertLevel=cons.LEVEL_ADVANCED,
                        label='Select loss for training',
                        help='*MSE*: Train using mean squered error or\n*PerceptualLoss*: '
                             'Train using DeepConsensus perceptual loss\n or\n*Both*: Train '
-                            'using both DeepConsensus perceptual loss and mean squered error\n')                                                   
-                          
-                            
+                            'using both DeepConsensus perceptual loss and mean squered error\n')
+
+
         form.addParam('numberOfDiscVsGenUpdates', params.IntParam, default=5,
-                       condition='modelType==%d and modelTrainPredMode==%d'%(MODEL_TYPE_GAN, ITER_TRAIN), 
+                       condition='modelType==%d and modelTrainPredMode==%d'%(MODEL_TYPE_GAN, ITER_TRAIN),
                        expertLevel=cons.LEVEL_ADVANCED,
                        label='D/G trainig ratio',
                        help='Indicate the number of times the discriminator is trained for each '
                             'generator training step. If discriminator loss is going to 0, make it '
-                            'smaller, whereas if the discriminator is not training, make it bigger')                           
+                            'smaller, whereas if the discriminator is not training, make it bigger')
 
         form.addParam('loss_logWeight', params.FloatParam, default=3, expertLevel=cons.LEVEL_ADVANCED,
-                       condition='modelType==%d and modelTrainPredMode==%d'%(MODEL_TYPE_GAN, ITER_TRAIN), 
+                       condition='modelType==%d and modelTrainPredMode==%d'%(MODEL_TYPE_GAN, ITER_TRAIN),
                        label='D/G loss ratio',
                        help='Indicate the 10^lossRatio times that the generator loss is stronger than '
                             ' the discriminator loss. If discriminator loss is going to 0, make it '
-                            'smaller, whereas if the generator is not training, make it bigger')    
-                            
+                            'smaller, whereas if the generator is not training, make it bigger')
+
         form.addParallelSection(threads=2, mpi=0)
 
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -227,9 +229,9 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         if not self.checkIfInputIsCompareReprojection()  and self.modelTrainPredMode.get()==ITER_TRAIN and self.inputProjections.get() is None:
           errorMsg.append("Error, in training mode, both particles and projections must be provided")
         if self.imageSize.get() is None and self.modelTrainPredMode.get()==ITER_TRAIN:
-          errorMsg.append("Error, in training mode, image size must be provdided")
+          errorMsg.append("Error, in training mode, image size must be provided")      
         return errorMsg
-            
+
     def _getResizedSize(self):
         resizedSize= self.imageSize.get()
         if self.modelTrainPredMode.get()==ITER_PREDICT:
@@ -239,7 +241,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
             resizedSize= 128
         resizedSize= resizedSize if resizedSize>0 else 128
         return resizedSize
-      
+
     def getStackOrResize(self, setOfParticles, mdFnameIn, stackFnameOut):
 
         if self._getResizedSize()== self.inputParticles.get().getDimensions()[0]:
@@ -286,7 +288,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
             fnNewEmptyParts = self._getExtraPath('resizedEmptyParts.stk')
             self.getStackOrResize(self.emptyParticles.get(), emptyPartsFname, fnNewEmptyParts)
 
-  
+
     def trainModel(self):
 
         modelFname = self._getPath('ModelTrained.h5')
@@ -299,7 +301,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         if self.modelType.get() == MODEL_TYPE_GAN:
           builder_args["training_DG_ratio"]= self.numberOfDiscVsGenUpdates.get()
           builder_args["loss_logWeight"]= self.loss_logWeight.get()
-        
+
         dataPathParticles= self._getExtraPath('resizedParticles.xmd')
         dataPathProjections= self._getExtraPath('resizedProjections.xmd')
         dataPathEmpty= self._getExtraPath('resizedEmptyParts.xmd')
@@ -316,7 +318,8 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         if os.path.isfile(dataPathEmpty):
           args+=" --empty_particles %s"%dataPathEmpty
 
-        self.runJob("xmipp_deep_denoising", args, numberOfMpi=1)
+        self.runJob("xmipp_deep_denoising", args, numberOfMpi=1,
+                    env=self.getCondaEnv())
 
 
     def _getModelFname(self):
@@ -324,14 +327,14 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
           if self.customModelOverPretrain == True:
               modelFname = self.ownModel.get()._getPath('ModelTrained.h5')
           else:
-              modelFname = xmipp3.Plugin.getModel('deepDenoising', 'ModelTrained.h5')
+              modelFname = self.getModel('deepDenoising', 'ModelTrained.h5')
         else:
           modelFname = self._getPath('ModelTrained.h5')
           if self.continueTraining.get():
             if self.customModelOverPretrain == True:
               modelFnameInit = self.ownModel.get()._getPath('ModelTrained.h5')
             else:
-              modelFnameInit = xmipp3.Plugin.getModel('deepDenoising', 'ModelTrained.h5')
+              modelFnameInit = self.getModel('deepDenoising', 'ModelTrained.h5')
 
             copyfile(modelFnameInit, modelFname)
         return modelFname
@@ -359,7 +362,8 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
       elif self.checkIfInputIsCompareReprojection():
         args += " -p %s" % self._getExtraPath('resizedProjections.stk')
 
-      self.runJob("xmipp_deep_denoising", args, numberOfMpi=1)
+      self.runJob("xmipp_deep_denoising", args, numberOfMpi=1,
+                  env=self.getCondaEnv())
 
     def createOutputStep(self):
         imgSet = self.inputParticles.get()
@@ -383,14 +387,22 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
             cleanPath(self._getExtraPath('resizedProjections.xmd'))
         if os.path.exists(self._getExtraPath('resizedEmptyParts.xmd')):
             cleanPath(self._getExtraPath('resizedEmptyParts.xmd'))
+        # extra cleaning    
+        if os.path.exists(self._getExtraPath('training_conf.json')):
+            cleanPath(self._getExtraPath('training_conf.json'))
+        if os.path.exists(self._getExtraPath('predict_conf.json')):
+            cleanPath(self._getExtraPath('predict_conf.json'))            
+        if os.path.exists(self._getExtraPath('batchImages/')):
+            #cleanPath(self._getExtraPath('batchImages/*.png'))
+            cleanPath(self._getExtraPath('batchImages'))
 
     def _processRow(self, particle, row):
-        particle.setLocation(xmippToLocation(row.getValue(xmippLib.MDL_IMAGE)))
+        particle.setLocation(xmippToLocation(row.getValue(emlib.MDL_IMAGE)))
         if self.inputProjections.get() is not None:
             mdToAdd= (md.MDL_IMAGE_ORIGINAL, md.MDL_IMAGE_REF, md.MDL_CORR_DENOISED_PROJECTION, md.MDL_CORR_DENOISED_NOISY)
         else:
             mdToAdd= (md.MDL_IMAGE_ORIGINAL, md.MDL_CORR_DENOISED_NOISY )
-        
+
         setXmippAttributes(particle, row, *mdToAdd)
 
     # --------------------------- INFO functions --------------------------------------------
@@ -399,4 +411,12 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections):
         summary.append("Particles denoised")
         return summary
 
+    def _validate(self):
+        assertModel = (self.modelTrainPredMode.get()==ITER_PREDICT and
+                       not self.customModelOverPretrain.get())
+        errors = self.validateDLtoolkit(assertModel=assertModel,
+                                        model=('deepDenoising', 'ModelTrained.h5'),
+                                        errorMsg="Required with 'Predict' mode when "
+                                                 "no custom model is provided.")
 
+        return errors

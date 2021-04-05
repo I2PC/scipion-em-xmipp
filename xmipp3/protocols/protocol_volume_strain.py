@@ -26,12 +26,10 @@
 
 import os
 
-from pyworkflow.object import Float, String
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.protocol.params import PointerParam, StringParam, FloatParam
-from pyworkflow.em.protocol.protocol import EMProtocol
-from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
-from pyworkflow.utils import cleanPath
+from pyworkflow.protocol.params import PointerParam, StringParam
+from pwem.protocols import ProtAnalysis3D
+
+import xmipp3
 
         
 class XmippProtVolumeStrain(ProtAnalysis3D):
@@ -71,10 +69,11 @@ class XmippProtVolumeStrain(ProtAnalysis3D):
     #--------------------------- STEPS functions ---------------------------------------------------
     def calculateStrain(self, fnVol0, fnVolF, fnMask):
         fnRoot=self._getExtraPath('result')
-        mirtDir = os.path.join(os.environ['XMIPP_HOME'], 'external', 'mirt')
+        mirtDir = xmipp3.base.getXmippPath('external', 'mirt')
         # -wait -nodesktop
-        args='''-r "diary('%s'); xmipp_calculate_strain('%s','%s','%s','%s'); exit"'''%(fnRoot+"_matlab.log",fnVolF,fnVol0,fnMask,fnRoot)
-        self.runJob("matlab", args, env=getMatlabEnviron(mirtDir))
+        args=('''-r "diary('%s'); xmipp_calculate_strain('%s','%s','%s','%s'); exit"'''
+              % (fnRoot+"_matlab.log",fnVolF,fnVol0,fnMask,fnRoot))
+        self.runJob("matlab", args, env=xmipp3.Plugin.getMatlabEnviron(mirtDir))
     
     def prepareOutput(self):
         volDim = self.inputVolume0.get().getDim()[0]

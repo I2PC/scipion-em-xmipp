@@ -30,11 +30,10 @@ This sub-package contains the XmippProtNormalizeStrain protocol
 import os
 
 from pyworkflow import VERSION_1_1
-from pyworkflow.em.protocol.protocol_3d import ProtAnalysis3D
+from pwem.protocols import ProtAnalysis3D
 from pyworkflow.protocol.params import MultiPointerParam
-from pyworkflow.utils.path import createLink
 
-import xmippLib
+from pwem import emlib
 
 
 class XmippProtNormalizeStrain(ProtAnalysis3D):
@@ -61,7 +60,7 @@ class XmippProtNormalizeStrain(ProtAnalysis3D):
             
     def normalize(self,what):
         # Get overall minimum and maximum
-        V=xmippLib.Image()
+        V=emlib.Image()
         minAll=1e38
         maxAll=-1e38
         for prot in self.inputRuns:
@@ -78,7 +77,7 @@ class XmippProtNormalizeStrain(ProtAnalysis3D):
             protId=prot.get().getObjId()
             protDir=prot.get()._getPath('')
             fnRoot=os.path.relpath(os.path.join(protDir,"extra","result"),self._getPath(''))
-            scriptFile = self._getPath('%d_result_%s_chimera.cmd'%(protId,what))
+            scriptFile = self._getPath('%d_result_%s_chimera.cxc'%(protId,what))
             fhCmd = open(scriptFile, 'w')
             fhCmd.write("open %s\n" % (fnRoot+"_final.vol"))
             fhCmd.write("open %s\n" % (fnRoot+"_%s.vol"%what))

@@ -28,8 +28,8 @@ from shutil import copy
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import MultiPointerParam, PointerParam
-from pyworkflow.em.protocol import EMProtocol
-from pyworkflow.em.data import Volume, Class3D
+from pwem.protocols import EMProtocol
+from pwem.objects import Volume, Class3D
 
 
 class XmippMetaProtCreateOutput(EMProtocol):
@@ -94,7 +94,7 @@ class XmippMetaProtCreateOutput(EMProtocol):
             # print("createOutputStep ", i)
             classItem = prot.outputClasses[classListIds[i]]
             volFn = str(classItem._representative._filename)
-            volFnOut = self._getExtraPath('outVol%d.vol'%(i+1))
+            volFnOut = self._getExtraPath('outVol%d.mrc'%(i+1))
             volDim = classItem._representative.getDim()[0]
             if volDim!=origDim:
                 self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d"

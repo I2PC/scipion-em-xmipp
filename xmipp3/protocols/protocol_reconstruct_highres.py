@@ -26,31 +26,43 @@
 """
 Protocol to perform high-resolution reconstructions
 """
-
-from scipy.io.arff.arffread import MetaData
 from glob import glob
 import math
-from itertools import izip
+
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
+
+try:
+    from itertools import izip
+except ImportError:
+    izip = zip
+
 from os.path import join, exists, split
+import os
 
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
                                         BooleanParam, IntParam, EnumParam,
                                         NumericListParam, USE_GPU, GPU_LIST)
-from pyworkflow.utils.path import cleanPath, makePath, copyFile, moveFile, createLink, cleanPattern
-from pyworkflow.em.protocol import ProtRefine3D
-from pyworkflow.em.data import SetOfVolumes, Volume
-from pyworkflow.em.metadata.utils import getFirstRow, getSize
+from pyworkflow.utils.path import (cleanPath, makePath, copyFile, moveFile,
+                                   createLink, cleanPattern)
+from pwem.protocols import ProtRefine3D
+from pwem.objects import SetOfVolumes, Volume
+from pwem.emlib.metadata import getFirstRow, getSize
 from pyworkflow.utils.utils import getFloatListFromValues
-from pyworkflow.em.convert import ImageHandler
-import pyworkflow.em.metadata as md
-import pyworkflow.em as em
+from pwem.emlib.image import ImageHandler
+import pwem.emlib.metadata as md
+from pwem.constants import ALIGN_PROJ
 
-import xmippLib
-from xmipp3.base import HelicalFinder
+from pwem import emlib
+from xmipp3.base import HelicalFinder, isXmippCudaPresent
 from xmipp3.convert import createItemMatrix, setXmippAttributes, writeSetOfParticles
 
+def getPreviousQuality(img, imgRow):
+    if hasattr(img,"_xmipp_cost"):
+        imgRow.setValue(md.MDL_COST,img._xmipp_cost.get())
+    if hasattr(img,"_xmipp_maxCC"):
+        imgRow.setValue(md.MDL_MAXCC,img._xmipp_maxCC.get())
 
 class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
     """This is a 3D refinement protocol whose main input is a volume and a set of particles.
@@ -83,11 +95,9 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
     LOCAL_ALIGNMENT = 1
     AUTOMATIC_ALIGNMENT = 2
     STOCHASTIC_ALIGNMENT = 3
-    
-    GLOBAL_SIGNIFICANT = 0
-    GLOBAL_GPU_SIGNIFICANT = 1
-    
-    #--------------------------- DEFINE param functions --------------------------------------------
+    NO_ALIGNMENT = 4
+
+    # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addHidden(USE_GPU, BooleanParam, default=True,
                        label="Use GPU for execution",
@@ -101,39 +111,41 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
 
 
         form.addSection(label='Input')
-        
+
         form.addParam('doContinue', BooleanParam, default=False,
                       label='Continue from a previous run?',
                       help='If you set to *Yes*, you should select a previous'
                       'run of type *%s* class and some of the input parameters'
                       'will be taken from it.' % self.getClassName())
-        form.addParam('inputParticles', PointerParam, label="Full-size Images", important=True, 
+        form.addParam('inputParticles', PointerParam, label="Full-size Images", important=True,
                       pointerClass='SetOfParticles', allowsNull=True,
                       help='Select a set of images at full resolution')
-        form.addParam('inputVolumes', PointerParam, label="Initial volumes", important=True,
+        form.addParam('inputVolumes', PointerParam, label="Initial volumes", allowsNull=True,
                       condition='not doContinue', pointerClass='Volume, SetOfVolumes',
-                      help='Select a set of volumes with 2 volumes or a single volume')
-        form.addParam('particleRadius', IntParam, default=-1, 
+                      help='Select a set of volumes with 2 volumes or a single volume. '
+                           'If the input particles have an angular assignment, then you may '
+                           'leave empty this field and a 3D reconstruction of the input images is '
+                           'performed using reconstruct_fourier.')
+        form.addParam('particleRadius', IntParam, default=-1,
                      condition='not doContinue', label='Radius of particle (px)',
-                     help='This is the radius (in pixels) of the spherical mask covering the particle in the input images')       
+                     help='This is the radius (in pixels) of the spherical mask covering the particle in the input images')
 
         form.addParam('continueRun', PointerParam, pointerClass=self.getClassName(),
                       condition='doContinue', allowsNull=True,
                       label='Select previous run',
                       help='Select a previous run to continue from.')
         form.addParam('symmetryGroup', StringParam, default="c1",
-                      label='Symmetry group', 
-                      help='See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
-                        'If no symmetry is present, give c1')
+                      label='Symmetry group',
+                      help='If no symmetry is present, give c1')
         form.addParam("saveSpace", BooleanParam, default=True, label="Remove intermediate files", expertLevel=LEVEL_ADVANCED)
-        
+
         form.addSection(label='Next Reference')
         form.addParam('nextLowPass', BooleanParam, label="Low pass filter?", default=True, expertLevel=LEVEL_ADVANCED,
                       help='Apply a low pass filter to the previous iteration whose maximum frequency is '\
                            'the current resolution(A) + resolutionOffset(A). If resolutionOffset>0, then fewer information' \
                            'is used (meant to avoid overfitting). If resolutionOffset<0, then more information is allowed '\
                            '(meant for a greedy convergence).')
-        form.addParam('nextResolutionCriterion',FloatParam, label="FSC criterion", default=0.143, expertLevel=LEVEL_ADVANCED,
+        form.addParam('nextResolutionCriterion',FloatParam, label="FSC criterion", default=0.5, expertLevel=LEVEL_ADVANCED,
                       help='The resolution of the reconstruction is defined as the inverse of the frequency at which '\
                       'the FSC drops below this value. Typical values are 0.143 and 0.5')
         form.addParam('nextResolutionOffset', FloatParam, label="Resolution offset (A)", default=2, expertLevel=LEVEL_ADVANCED, condition='nextLowPass')
@@ -146,18 +158,18 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                       help='The mask values must be between 0 (remove these pixels) and 1 (let them pass). Smooth masks are recommended.')
         form.addParam('nextDropout', FloatParam, label="Dropout", default=0.0, expertLevel=LEVEL_ADVANCED,
                       help='This is the probability with which voxels are dropped (set to 0.0) inside the binary mask')
-        form.addParam('nextReferenceScript', StringParam, label="Next reference command", default="", expertLevel=LEVEL_ADVANCED, 
+        form.addParam('nextReferenceScript', StringParam, label="Next reference command", default="", expertLevel=LEVEL_ADVANCED,
                       help='A command template that is used to generate next reference. The following variables can be used ' 
                            '%(sampling)s %(dim)s %(volume)s %(iterDir)s. The command should read Spider volumes and modify the input volume.'
                            'the command should be accessible either from the PATH or provide the absolute path.\n'
                            'Examples: \n'
                            'xmipp_transform_filter -i %(volume)s --fourier low_pass 15 --sampling %(sampling)s\n' 
                            '/home/joe/myScript %(volume)s sampling=%(sampling)s dim=%(dim)s')
-        form.addParam('nextRemove', BooleanParam, label="Remove reference to save space?", default=True, expertLevel=LEVEL_ADVANCED, 
+        form.addParam('nextRemove', BooleanParam, label="Remove reference to save space?", default=True, expertLevel=LEVEL_ADVANCED,
                       help='Remove reference volumes once they are not needed any more.')
 
         form.addSection(label='Angular assignment')
-        form.addHidden('splitMethod', EnumParam, label='Image split method', choices=['Stochastic','Fixed'], default=self.SPLIT_FIXED, 
+        form.addHidden('splitMethod', EnumParam, label='Image split method', choices=['Stochastic','Fixed'], default=self.SPLIT_FIXED,
                       expertLevel=LEVEL_ADVANCED)
         form.addParam('multiresolution', BooleanParam, label='Multiresolution approach', default=True, expertLevel=LEVEL_ADVANCED,
                       help="In the multiresolution approach the sampling rate of the images is adapted to the current resolution")
@@ -166,12 +178,12 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         line=form.addLine('Tilt angle:', help='0 degrees represent top views, 90 degrees represent side views', expertLevel=LEVEL_ADVANCED)
         line.addParam('angularMinTilt', FloatParam, label="Min.", default=0, expertLevel=LEVEL_ADVANCED,
                       help="Side views are around 90 degrees, top views around 0")
-        line.addParam('angularMaxTilt', FloatParam, label="Max.", default=90, expertLevel=LEVEL_ADVANCED,
+        line.addParam('angularMaxTilt', FloatParam, label="Max.", default=180, expertLevel=LEVEL_ADVANCED,
                       help="You may generate redudant galleries by setting this angle to 180, this may help if c1 symmetry is considered")
-        form.addParam('alignmentMethod', EnumParam, label='Image alignment', choices=['Global','Local','Automatic','Stochastic'],
+        form.addParam('alignmentMethod', EnumParam, label='Image alignment', choices=['Global','Local','Automatic','Stochastic','No alignment'],
                       default=self.GLOBAL_ALIGNMENT)
 
-        form.addParam('numberOfIterations', IntParam, default=3, label='Number of iterations', condition='alignmentMethod!=2')
+        form.addParam('numberOfIterations', IntParam, default=3, label='Number of iterations', condition='alignmentMethod!=2 and alignmentMethod!=4')
         form.addParam('NimgsSGD', IntParam, default=250, label='Random subset size', condition='alignmentMethod==3',
                       expertLevel=LEVEL_ADVANCED, help="Stochastic alignment is performed by taking random subsets of images of this size")
         form.addParam('alphaSGD', FloatParam, default=0.1, label='Step size', condition='alignmentMethod==3',
@@ -180,23 +192,21 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         form.addParam("restrictReconstructionAngles", BooleanParam, label="Restrict reconstruction angles", default=False, expertLevel=LEVEL_ADVANCED,
                       help="You may reconstruct only with those images falling on a certain range. This is particularly useful for helices where "\
                          "you may want to use projections very close to 90 degrees")
-        line=form.addLine('Tilt angle restriction:', help='0 degrees represent top views, 90 degrees represent side views', 
+        line=form.addLine('Tilt angle restriction:', help='0 degrees represent top views, 90 degrees represent side views',
                           condition="restrictReconstructionAngles")
         line.addParam('angularMinTiltReconstruct', FloatParam, label="Min.", default=88, condition="restrictReconstructionAngles",
                       help = "Perform an angular assignment and only use those images whose angles are within these limits")
         line.addParam('angularMaxTiltReconstruct', FloatParam, label="Max.", default=92, condition="restrictReconstructionAngles",
                       help = "Perform an angular assignment and only use those images whose angles are within these limits")
 
-        form.addParam('globalMethod', EnumParam, label="Global alignment method", choices=['Significant','Gpu Signficant'],
-                      default=self.GLOBAL_SIGNIFICANT, condition='alignmentMethod==0 or alignmentMethod==2 or alignmentMethod==3',
-                      expertLevel=LEVEL_ADVANCED)
-        form.addParam('maximumTargetResolution', NumericListParam, label="Max. Target Resolution", default="15 8 4",
+        form.addParam('maximumTargetResolution', NumericListParam,
+                      label="Max. Target Resolution", default="15 8 4",
                       condition='multiresolution',
                       help="In Angstroms. The actual maximum resolution will be the maximum between this number of 0.5 * previousResolution, meaning that"
                       "in a single step you cannot increase the resolution more than 1/2")
-        form.addParam('numberOfPerturbations', IntParam, label="Number of Perturbations", default=1, condition='alignmentMethod!=1',
+        form.addHidden('numberOfPerturbations', IntParam, label="Number of Perturbations", default=1, condition='alignmentMethod!=1',
                   expertLevel=LEVEL_ADVANCED, help="The gallery of reprojections is randomly perturbed this number of times")
-        form.addParam('numberOfReplicates', IntParam, label="Max. Number of Replicates", default=1, condition='alignmentMethod!=1',
+        form.addHidden('numberOfReplicates', IntParam, label="Max. Number of Replicates", default=1, condition='alignmentMethod!=1',
                   expertLevel=LEVEL_ADVANCED, help="Significant alignment is allowed to replicate each image up to this number of times")
 
         form.addParam('contShift', BooleanParam, label="Optimize shifts?", default=True, condition='alignmentMethod==1',
@@ -219,9 +229,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                  help="In Angstroms")
         form.addParam('contPadding', IntParam, label="Fourier padding factor", default=2, condition='alignmentMethod==1', expertLevel=LEVEL_ADVANCED,
                       help='The volume is zero padded by this factor to produce projections')
-        form.addParam('contSimultaneous', IntParam, label="Number of simultaneous processes", default=4, condition='alignmentMethod==1', expertLevel=LEVEL_ADVANCED,
-                      help='At the beginning of the process, each process requires more memory, this is the number of simultaneous processes that can do this part')
-        
+
         form.addSection(label='Weights')
         form.addParam('weightSSNR', BooleanParam, label="Weight by SSNR?", default=False, expertLevel=LEVEL_ADVANCED,
                       help='Weight input images by SSNR')
@@ -232,16 +240,14 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         form.addParam('weightCC', BooleanParam, label="Weight by CC percentile?", default=True, expertLevel=LEVEL_ADVANCED,
                       help='Weight input images by their fitness (cross correlation) percentile in their defocus group')
         form.addParam('weightCCmin', FloatParam, label="Minimum CC weight", default=0.1, expertLevel=LEVEL_ADVANCED,
-                      help='Weights are between this value and 1')
-        
+                      help='Weights are between this value and 1. If most of the particles are good, this value should be high (e.g., 0.9)')
         form.addSection(label='Post-processing')
         form.addParam('postAdHocMask', PointerParam, label="Mask", pointerClass='VolumeMask', allowsNull=True,
                       help='The mask values must be between 0 (remove these pixels) and 1 (let them pass). Smooth masks are recommended.')
         groupSymmetry = form.addGroup('Symmetry', expertLevel=LEVEL_ADVANCED)
         groupSymmetry.addParam('postSymmetryWithinMask', BooleanParam, label="Symmetrize volume within mask?", default=False)
         groupSymmetry.addParam('postSymmetryWithinMaskType', StringParam, label="Mask symmetry", default="i1", condition="postSymmetryWithinMask",
-                           help='If See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry groups format'
-                           'If no symmetry is present, give c1')
+                           help='If no symmetry is present, give c1')
         groupSymmetry.addParam('postSymmetryWithinMaskMask', PointerParam, label="Mask", pointerClass='VolumeMask', allowsNull=True, condition="postSymmetryWithinMask",
                                help='The mask values must be between 0 (remove these pixels) and 1 (let them pass). Smooth masks are recommended.')
         groupSymmetry.addParam('postSymmetryHelical', BooleanParam, label="Apply helical symmetry?", default=False)
@@ -257,7 +263,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                help="In angstroms")
         groupSymmetry.addParam('postSymmetryHelicalMaxZ', FloatParam, label="Max. Z shift", default=40, condition='postSymmetryHelical',
                                help="In angstroms")
-        form.addParam('postScript', StringParam, label="Post-processing command", default="", expertLevel=LEVEL_ADVANCED, 
+        form.addParam('postScript', StringParam, label="Post-processing command", default="", expertLevel=LEVEL_ADVANCED,
                       help='A command template that is used to post-process the reconstruction. The following variables can be used ' 
                            '%(sampling)s %(dim)s %(volume)s %(iterDir)s. The command should read Spider volumes and modify the input volume.'
                            'the command should be accessible either from the PATH or provide the absolute path.\n'
@@ -275,7 +281,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         form.addParam('postDifference', BooleanParam, label="Evaluate difference", expertLevel=LEVEL_ADVANCED, default=True)
 
         form.addParallelSection(threads=1, mpi=8)
-    
+
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self.imgsFn=self._getExtraPath('images.xmd')
@@ -292,10 +298,12 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             self._insertFunctionStep('convertInputStep', self.inputParticles.getObjId())
             if self.weightSSNR:
                 self._insertFunctionStep('doWeightSSNR')
-            self._insertFunctionStep('doIteration000', self.inputVolumes.getObjId())
+            self._insertFunctionStep('doIteration000')
             self.firstIteration=1
         self.TsOrig=self.inputParticles.get().getSamplingRate()
         numberOfIterations = self.numberOfIterations.get() if self.alignmentMethod.get()!=self.AUTOMATIC_ALIGNMENT else 5
+        if self.alignmentMethod.get()==self.NO_ALIGNMENT:
+            numberOfIterations = 1
         self._maximumTargetResolution = getFloatListFromValues(self.maximumTargetResolution.get(),self.firstIteration+numberOfIterations-1)
         for self.iteration in range(self.firstIteration,self.firstIteration+numberOfIterations):
             self.insertIteration(self.iteration)
@@ -306,6 +314,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
            self.alignmentMethod==self.STOCHASTIC_ALIGNMENT or \
            (self.alignmentMethod==self.AUTOMATIC_ALIGNMENT and iteration<=3):
             self._insertFunctionStep('globalAssignment',iteration)
+        elif self.alignmentMethod==self.NO_ALIGNMENT:
+            self._insertFunctionStep('noAssignment', iteration)
         else:
             self._insertFunctionStep('localAssignment',iteration)
         self._insertFunctionStep('weightParticles',iteration)
@@ -317,7 +327,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def convertInputStep(self, inputParticlesId):
-        writeSetOfParticles(self.inputParticles.get(),self.imgsFn)
+        if self.alignmentMethod==self.NO_ALIGNMENT:
+            writeSetOfParticles(self.inputParticles.get(),self.imgsFn, postprocessImageRow=getPreviousQuality)
+        else:
+            writeSetOfParticles(self.inputParticles.get(), self.imgsFn)
         self.runJob('xmipp_metadata_utilities','-i %s --fill image1 constant noImage'%self.imgsFn,numberOfMpi=1)
         self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "image1=image"'%self.imgsFn,numberOfMpi=1)
         self.runJob('xmipp_metadata_utilities','-i %s --fill particleId constant 1'%self.imgsFn,numberOfMpi=1)
@@ -331,18 +344,19 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         lastIter=len(fnIterDir)-1
         fnLastDir=self._getExtraPath("Iter%03d"%lastIter)
         fnLastVol=join(fnLastDir,"volumeAvg.mrc")
-        Ts=self.readInfoField(fnLastDir,"sampling",xmippLib.MDL_SAMPLINGRATE)
+        Ts=self.readInfoField(fnLastDir,"sampling",emlib.MDL_SAMPLINGRATE)
         if exists(fnLastVol):
             volume=Volume()
             volume.setFileName(fnLastVol)
             volume.setSamplingRate(Ts)
-            halfMap1=fnLastVol=join(fnLastDir,"volume01.vol")
-            halfMap2=fnLastVol=join(fnLastDir,"volume02.vol")
+            halfMap1=join(fnLastDir,"volume01.vol")
+            halfMap2=join(fnLastDir,"volume02.vol")
             volume.setHalfMaps([halfMap1, halfMap2])
             self._defineOutputs(outputVolume=volume)
             self._defineSourceRelation(self.inputParticles.get(),volume)
-            #self._defineSourceRelation(self.inputVolumes.get(),volume)
-            
+            if not self.doContinue and self.inputVolumes.get() is not None:
+                self._defineSourceRelation(self.inputVolumes.get(),volume)
+
         fnLastAngles=join(fnLastDir,"angles.xmd")
         if exists(fnLastAngles):
             fnAngles=self._getPath("angles.xmd")
@@ -357,7 +371,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             imgSetOut.setAlignmentProj()
             imgSetOut.setIsPhaseFlipped( imgSet.isPhaseFlipped() )
             self.iterMd = md.iterRows(fnAngles, md.MDL_PARTICLE_ID)
-            self.lastRow = next(self.iterMd) 
+            self.lastRow = next(self.iterMd)
             imgSetOut.copyItems(imgSet,
                                 updateItemCallback=self._updateItem)
             self._defineOutputs(outputParticles=imgSetOut)
@@ -365,7 +379,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
 
     def _updateItem(self, particle, row):
         count = 0
-        
+
         while self.lastRow and particle.getObjId() == self.lastRow.getValue(md.MDL_PARTICLE_ID):
             count += 1
             if count:
@@ -374,43 +388,48 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 self.lastRow = next(self.iterMd)
             except StopIteration:
                 self.lastRow = None
-                    
+
         particle._appendItem = count > 0
-        
+
     def _createItemMatrix(self, particle, row):
-        if row.containsLabel(xmippLib.MDL_CONTINUOUS_X):
-            row.setValue(xmippLib.MDL_SHIFT_X, row.getValue(xmippLib.MDL_CONTINUOUS_X))
-            row.setValue(xmippLib.MDL_SHIFT_Y, row.getValue(xmippLib.MDL_CONTINUOUS_Y))
-            row.setValue(xmippLib.MDL_FLIP, row.getValue(xmippLib.MDL_CONTINUOUS_FLIP))
-        row.setValue(xmippLib.MDL_SHIFT_X, row.getValue(xmippLib.MDL_SHIFT_X)*self.scaleFactor)
-        row.setValue(xmippLib.MDL_SHIFT_Y, row.getValue(xmippLib.MDL_SHIFT_Y)*self.scaleFactor)
-        setXmippAttributes(particle, row, xmippLib.MDL_SHIFT_X, xmippLib.MDL_SHIFT_Y, xmippLib.MDL_ANGLE_TILT,
-                           xmippLib.MDL_SCALE, xmippLib.MDL_MAXCC, xmippLib.MDL_MAXCC_PERCENTILE, xmippLib.MDL_WEIGHT)
-        if row.containsLabel(xmippLib.MDL_ANGLE_DIFF0):
-            setXmippAttributes(particle, row, xmippLib.MDL_ANGLE_DIFF0, xmippLib.MDL_WEIGHT_JUMPER0)
-        if row.containsLabel(xmippLib.MDL_CONTINUOUS_X):
-            setXmippAttributes(particle, row, xmippLib.MDL_COST, xmippLib.MDL_WEIGHT_CONTINUOUS2, xmippLib.MDL_COST_PERCENTILE)
-            if row.containsLabel(xmippLib.MDL_CONTINUOUS_SCALE_X):
-                setXmippAttributes(xmippLib.MDL_CONTINUOUS_SCALE_X, xmippLib.MDL_CONTINUOUS_SCALE_Y)
-            if row.containsLabel(xmippLib.MDL_CONTINUOUS_GRAY_A):
-                setXmippAttributes(xmippLib.MDL_CONTINUOUS_GRAY_A, xmippLib.MDL_CONTINUOUS_GRAY_B)
-        if row.containsLabel(xmippLib.MDL_WEIGHT_JUMPER):
-            setXmippAttributes(particle, row, xmippLib.MDL_WEIGHT_JUMPER)
-        if row.containsLabel(xmippLib.MDL_ANGLE_DIFF):
-            setXmippAttributes(particle, row, xmippLib.MDL_ANGLE_DIFF)
-        if row.containsLabel(xmippLib.MDL_ANGLE_DIFF2):
-            setXmippAttributes(particle, row, xmippLib.MDL_ANGLE_DIFF2)
-        if row.containsLabel(xmippLib.MDL_ANGLE_TEMPERATURE):
-            setXmippAttributes(particle, row, xmippLib.MDL_ANGLE_TEMPERATURE)
-        if row.containsLabel(xmippLib.MDL_WEIGHT_SSNR):
-            setXmippAttributes(particle, row, xmippLib.MDL_WEIGHT_SSNR)
-        createItemMatrix(particle, row, align=em.ALIGN_PROJ)
+        if row.containsLabel(emlib.MDL_CONTINUOUS_X):
+            row.setValue(emlib.MDL_SHIFT_X, row.getValue(emlib.MDL_CONTINUOUS_X))
+            row.setValue(emlib.MDL_SHIFT_Y, row.getValue(emlib.MDL_CONTINUOUS_Y))
+            row.setValue(emlib.MDL_FLIP, row.getValue(emlib.MDL_CONTINUOUS_FLIP))
+        row.setValue(emlib.MDL_SHIFT_X, row.getValue(emlib.MDL_SHIFT_X)*self.scaleFactor)
+        row.setValue(emlib.MDL_SHIFT_Y, row.getValue(emlib.MDL_SHIFT_Y)*self.scaleFactor)
+        setXmippAttributes(particle, row, emlib.MDL_SHIFT_X, emlib.MDL_SHIFT_Y, emlib.MDL_ANGLE_TILT,
+                           emlib.MDL_ANGLE_ROT,
+                           emlib.MDL_SCALE, emlib.MDL_MAXCC, emlib.MDL_MAXCC_PERCENTILE, emlib.MDL_WEIGHT)
+        if row.containsLabel(emlib.MDL_ANGLE_DIFF0):
+            setXmippAttributes(particle, row, emlib.MDL_ANGLE_DIFF0, emlib.MDL_WEIGHT_JUMPER0)
+        if row.containsLabel(emlib.MDL_CONTINUOUS_X):
+            setXmippAttributes(particle, row, emlib.MDL_COST, emlib.MDL_WEIGHT_CONTINUOUS2, emlib.MDL_COST_PERCENTILE,
+                               emlib.MDL_CORRELATION_IDX,
+                               emlib.MDL_CORRELATION_MASK,
+                               emlib.MDL_CORRELATION_WEIGHT,
+                               emlib.MDL_IMED)
+            if row.containsLabel(emlib.MDL_CONTINUOUS_SCALE_X):
+                setXmippAttributes(emlib.MDL_CONTINUOUS_SCALE_X, emlib.MDL_CONTINUOUS_SCALE_Y)
+            if row.containsLabel(emlib.MDL_CONTINUOUS_GRAY_A):
+                setXmippAttributes(emlib.MDL_CONTINUOUS_GRAY_A, emlib.MDL_CONTINUOUS_GRAY_B)
+        if row.containsLabel(emlib.MDL_WEIGHT_JUMPER):
+            setXmippAttributes(particle, row, emlib.MDL_WEIGHT_JUMPER)
+        if row.containsLabel(emlib.MDL_ANGLE_DIFF):
+            setXmippAttributes(particle, row, emlib.MDL_ANGLE_DIFF)
+        if row.containsLabel(emlib.MDL_ANGLE_DIFF2):
+            setXmippAttributes(particle, row, emlib.MDL_ANGLE_DIFF2)
+        if row.containsLabel(emlib.MDL_ANGLE_TEMPERATURE):
+            setXmippAttributes(particle, row, emlib.MDL_ANGLE_TEMPERATURE)
+        if row.containsLabel(emlib.MDL_WEIGHT_SSNR):
+            setXmippAttributes(particle, row, emlib.MDL_WEIGHT_SSNR)
+        createItemMatrix(particle, row, align=ALIGN_PROJ)
 
     def getLastFinishedIter(self):
         fnFscs=sorted(glob(self._getExtraPath("Iter???/fsc.xmd")))
         lastDir=split(fnFscs[-1])[0]
         return int(lastDir[-3:])
-    
+
     def getNumberOfPreviousIterations(self):
         fnDirs=sorted(glob(self.continueRun.get()._getExtraPath("Iter???")))
         lastDir=fnDirs[-1]
@@ -425,7 +444,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             copyFile(previousRun._getExtraPath('ssnrWeights.xmd'),self._getExtraPath('ssnrWeights.xmd'))
         elif self.weightSSNR:
             self.doWeightSSNR()
-        
+
         lastIter=self.getNumberOfPreviousIterations()
         for i in range(0,lastIter+1):
             createLink(previousRun._getExtraPath("Iter%03d"%i),join(self._getExtraPath("Iter%03d"%i)))
@@ -438,25 +457,28 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     (self.imgsFn,R,self.inputParticles.get().getSamplingRate()),numberOfMpi=min(self.numberOfMpi.get(),24))
         self.runJob('xmipp_metadata_utilities','-i %s -o %s --operate keep_column "particleId weightSSNR" '%\
                     (self.imgsFn,self._getExtraPath("ssnrWeights.xmd")),numberOfMpi=1)
-        
-    def doIteration000(self, inputVolumesId):
+
+    def doIteration000(self):
         fnDirCurrent=self._getExtraPath('Iter000')
         makePath(fnDirCurrent)
-        
+
         # Split data
         if self.splitMethod == self.SPLIT_FIXED:
             self.runJob("xmipp_metadata_split","-i %s --oroot %s/images -n 2"%(self.imgsFn,fnDirCurrent),numberOfMpi=1)
             for i in range(1,3):
                 moveFile("%s/images%06d.xmd"%(fnDirCurrent,i),"%s/images%02d.xmd"%(fnDirCurrent,i))
-        
+
         # Get volume sampling rate
-        TsCurrent=self.inputVolumes.get().getSamplingRate()
-        self.writeInfoField(fnDirCurrent,"sampling",xmippLib.MDL_SAMPLINGRATE,TsCurrent)
+        if self.inputVolumes.get() is None:
+            TsCurrent=self.inputParticles.get().getSamplingRate()
+        else:
+            TsCurrent=self.inputVolumes.get().getSamplingRate()
+        self.writeInfoField(fnDirCurrent,"sampling",emlib.MDL_SAMPLINGRATE,TsCurrent)
 
         # Copy reference volumes and window if necessary
         Xdim=self.inputParticles.get().getDimensions()[0]
-        newXdim=long(round(Xdim*self.TsOrig/TsCurrent))
-        self.writeInfoField(fnDirCurrent,"size",xmippLib.MDL_XSIZE,newXdim)
+        newXdim=int(round(Xdim*self.TsOrig/TsCurrent))
+        self.writeInfoField(fnDirCurrent,"size",emlib.MDL_XSIZE,newXdim)
         
         img = ImageHandler()
         if isinstance(self.inputVolumes.get(),SetOfVolumes):
@@ -470,12 +492,54 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         else:
             fnVol1=join(fnDirCurrent,"volume%02d.vol"%1)
             fnVol2=join(fnDirCurrent,"volume%02d.vol"%2)
-            vol=self.inputVolumes.get()
-            img.convert(vol, fnVol1)
-            if newXdim!=vol.getDim()[0]:
+            if self.inputVolumes.get() is None:
+                args = "-i %s -o %s --max_resolution 0.3 --sampling %f --sym %s" % (
+                    self.imgsFn, fnVol1, TsCurrent, self.symmetryGroup.get())
+                if self.useGpu.get():
+                    #AJ to make it work with and without queue system
+                    if self.numberOfMpi.get()>1:
+                        N_GPUs = len((self.gpuList.get()).split(','))
+                        args += ' -gpusPerNode %d' % N_GPUs
+                        args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+                    count=0
+                    GpuListCuda=''
+                    if self.useQueueForSteps() or self.useQueue():
+                        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                        GpuList = GpuList.split(",")
+                        for elem in GpuList:
+                            GpuListCuda = GpuListCuda+str(count)+' '
+                            count+=1
+                    else:
+                        GpuListAux = ''
+                        for elem in self.getGpuList():
+                            GpuListCuda = GpuListCuda+str(count)+' '
+                            GpuListAux = GpuListAux+str(elem)+','
+                            count+=1
+                        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                    if self.numberOfMpi.get()==1:
+                        args += " --device %s" %(GpuListCuda)
+                    args += ' --thr %s' % self.numberOfThreads.get()
+                    if self.numberOfMpi.get()>1:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+                    else:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args)
+                else:
+                    self.runJob("xmipp_reconstruct_fourier_accel", args,
+                                numberOfMpi=self.numberOfMpi.get())
+                volXdim = Xdim
+
+            else:
+                vol=self.inputVolumes.get()
+                img.convert(vol, fnVol1)
+                volXdim = vol.getDim()[0]
+            if newXdim!=volXdim:
                 self.runJob('xmipp_transform_window',"-i %s --size %d"%(fnVol1,newXdim),numberOfMpi=1)
-            self.runJob('xmipp_transform_randomize_phases',"-i %s -o %s --freq discrete 0.25"%(fnVol1,fnVol2),numberOfMpi=1)
-        
+            if self.alignmentMethod != self.LOCAL_ALIGNMENT:
+               maxFreq=0.25
+            else:
+               maxFreq=0.45
+        self.runJob('xmipp_transform_randomize_phases',"-i %s -o %s --freq discrete %f"%(fnVol1,fnVol2,maxFreq),numberOfMpi=1)
+
         # Compare both reconstructions
         self.evaluateReconstructions(0)
 
@@ -490,15 +554,15 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         fnVol2=join(fnDirCurrent,"volume%02d.vol"%2)
         fnVolFSC1=join(fnDirCurrent,"volumeFSC%02d.vol"%1)
         fnVolFSC2=join(fnDirCurrent,"volumeFSC%02d.vol"%2)
-        TsCurrent=self.readInfoField(fnDirCurrent,"sampling",xmippLib.MDL_SAMPLINGRATE)
+        TsCurrent=self.readInfoField(fnDirCurrent,"sampling",emlib.MDL_SAMPLINGRATE)
         
         if not exists(fnVolFSC1):
             copyFile(fnVol1,fnVolFSC1)
             copyFile(fnVol2,fnVolFSC2)
-        
+
         # Apply mask if available
         fnMask=""
-        volXdim = self.readInfoField(fnDirCurrent, "size", xmippLib.MDL_XSIZE)
+        volXdim = self.readInfoField(fnDirCurrent, "size", emlib.MDL_XSIZE)
         if self.postAdHocMask.hasValue():
             fnMask=join(fnDirCurrent,"mask.vol")
             if not exists(fnMask):
@@ -519,7 +583,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         cleanPath(fnVolFSC2)
         if fnMask!="":
             cleanPath(fnMask)
-        
+
         # Estimate resolution before postprocessing
         fnBeforeVol1=join(fnDirCurrent,"volumeBeforePostProcessing%02d.vol"%1)
         fnBeforeVol2=join(fnDirCurrent,"volumeBeforePostProcessing%02d.vol"%2)
@@ -527,32 +591,36 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             fnBeforeFsc=join(fnDirCurrent,"fscBeforePostProcessing.xmd")
             self.runJob('xmipp_resolution_fsc','--ref %s -i %s -o %s --sampling_rate %f'%(fnBeforeVol1,fnBeforeVol2,fnBeforeFsc,TsCurrent),
                         numberOfMpi=1)
-        mdFSC = xmippLib.MetaData(fnFsc)
+        mdFSC = emlib.MetaData(fnFsc)
         resolution=2*TsCurrent
         for objId in mdFSC:
-            fsc = mdFSC.getValue(xmippLib.MDL_RESOLUTION_FRC,objId)
+            fsc = mdFSC.getValue(emlib.MDL_RESOLUTION_FRC,objId)
             if fsc<self.nextResolutionCriterion.get():
-                resolution=mdFSC.getValue(xmippLib.MDL_RESOLUTION_FREQREAL,objId)
+                resolution=mdFSC.getValue(emlib.MDL_RESOLUTION_FREQREAL,objId)
                 break
-        self.writeInfoField(fnDirCurrent,"resolution",xmippLib.MDL_RESOLUTION_FREQREAL,resolution)
-        
+        if iteration==0:
+            if self.alignmentMethod != self.LOCAL_ALIGNMENT:
+                resolution = TsCurrent * 1/0.25
+            else:
+                resolution = TsCurrent * 1/0.45
+        self.writeInfoField(fnDirCurrent,"resolution",emlib.MDL_RESOLUTION_FREQREAL,resolution)
+
         # Produce a filtered volume
         if iteration>0:
             self.runJob('xmipp_transform_filter','-i %s -o %s --fourier low_pass %f --sampling %f'%\
                         (join(fnDirCurrent,"volumeAvg.mrc"),join(fnDirCurrent,"volumeAvgFiltered.mrc"),resolution,TsCurrent),numberOfMpi=1)
-        
+
         # A little bit of statistics (accepted and rejected particles, number of directions, ...)
         if iteration>0:
-            from xmippLib import AGGR_MAX
             for i in range(1,3):
                 fnAnglesi = join(fnDirCurrent,"angles%02d.xmd"%i)
-                mdAngles = xmippLib.MetaData(fnAnglesi)
-                mdUnique = xmippLib.MetaData()
-                mdUnique.aggregateMdGroupBy(mdAngles, AGGR_MAX, [xmippLib.MDL_PARTICLE_ID], xmippLib.MDL_WEIGHT, xmippLib.MDL_WEIGHT)
-                mdUnique.sort(xmippLib.MDL_PARTICLE_ID)
+                mdAngles = emlib.MetaData(fnAnglesi)
+                mdUnique = emlib.MetaData()
+                mdUnique.aggregateMdGroupBy(mdAngles, emlib.AGGR_MAX, [emlib.MDL_PARTICLE_ID], emlib.MDL_WEIGHT, emlib.MDL_WEIGHT)
+                mdUnique.sort(emlib.MDL_PARTICLE_ID)
                 fnAnglesUnique = join(fnDirCurrent,"imagesUsed%02d.xmd"%i)
                 mdUnique.write(fnAnglesUnique)
-    
+
             fnUsed=join(fnDirCurrent,"imagesUsed.xmd")
             fnUsed1=join(fnDirCurrent,"imagesUsed01.xmd")
             fnUsed2=join(fnDirCurrent,"imagesUsed02.xmd")
@@ -563,19 +631,19 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             fnUsedId=join(fnDirCurrent,"imagesUsedId.xmd")
             self.runJob('xmipp_metadata_utilities',"-i %s --operate keep_column particleId -o %s"%(fnUsed,fnUsedId),numberOfMpi=1)
             self.runJob('xmipp_metadata_utilities',"-i %s --set natural_join %s"%(fnUsedId,fnAngles),numberOfMpi=1)
-    
+
             fnImages=self._getExtraPath("images.xmd")
             fnImagesId=self._getExtraPath('imagesId.xmd')
             fnImagesRejected=join(fnDirCurrent,"imagesRejected.xmd")
             self.runJob('xmipp_metadata_utilities',"-i %s --set subtraction %s particleId -o %s"%(fnImagesId,fnUsedId,fnImagesRejected),numberOfMpi=1)
             self.runJob('xmipp_metadata_utilities',"-i %s --set natural_join %s"%(fnImagesRejected,fnImages),numberOfMpi=1)
             cleanPath(fnUsedId)
-    
+
             Nimages=getSize(fnImages)
             Nrepeated=getSize(join(fnDirCurrent,"angles.xmd"))
             Nunique=getSize(fnUsed)
             Nrejected=getSize(fnImagesRejected)
-            
+
             fh=open(join(fnDirCurrent,"statistics.txt"),'w')
             fh.write("Number of input    images: %d\n"%Nimages)
             fh.write("Number of used     images: %d\n"%Nunique)
@@ -583,38 +651,41 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             if Nunique>0:
                 fh.write("Average number of directions per used image: %f\n"%(float(Nrepeated)/Nunique))
             fh.close()
-    
+
     def checkInfoField(self,fnDir,block):
         fnInfo = join(fnDir,"iterInfo.xmd")
         if not exists(fnInfo):
             return False
-        blocks = xmippLib.getBlocksInMetaDataFile(fnInfo)
+        blocks = emlib.getBlocksInMetaDataFile(fnInfo)
         return block in blocks
 
     def readInfoField(self,fnDir,block,label):
-        mdInfo = xmippLib.MetaData("%s@%s"%(block,join(fnDir,"iterInfo.xmd")))
+        mdInfo = emlib.MetaData("%s@%s"%(block,join(fnDir,"iterInfo.xmd")))
         return mdInfo.getValue(label,mdInfo.firstObject())
 
     def writeInfoField(self,fnDir,block,label, value):
-        mdInfo = xmippLib.MetaData()
+        mdInfo = emlib.MetaData()
         objId=mdInfo.addObject()
         mdInfo.setValue(label,value,objId)
-        mdInfo.write("%s@%s"%(block,join(fnDir,"iterInfo.xmd")),xmippLib.MD_APPEND)
-    
+        mdInfo.write("%s@%s"%(block,join(fnDir,"iterInfo.xmd")),emlib.MD_APPEND)
+
     def prepareImages(self,fnDirPrevious,fnDir,TsCurrent,getShiftsFrom=''):
         if self.checkInfoField(fnDir,"count"):
-            state = self.readInfoField(fnDir, "count", xmippLib.MDL_COUNT)
+            state = self.readInfoField(fnDir, "count", emlib.MDL_COUNT)
             if state>=1:
                 return
         
-        print "Preparing images to sampling rate=",TsCurrent
+        print("Preparing images to sampling rate=",TsCurrent)
         Xdim=self.inputParticles.get().getDimensions()[0]
-        newXdim=long(round(Xdim*self.TsOrig/TsCurrent))
+        newXdim=int(round(Xdim*self.TsOrig/TsCurrent))
         if newXdim<40:
-            newXdim=long(40)
+            newXdim=int(40)
             TsCurrent=Xdim*(self.TsOrig/newXdim)
-        self.writeInfoField(fnDir,"sampling",xmippLib.MDL_SAMPLINGRATE,TsCurrent)
-        self.writeInfoField(fnDir,"size",xmippLib.MDL_XSIZE,newXdim)
+        elif newXdim%2==1:
+            newXdim+=1
+            TsCurrent=Xdim*(self.TsOrig/newXdim)
+        self.writeInfoField(fnDir,"sampling",emlib.MDL_SAMPLINGRATE,TsCurrent)
+        self.writeInfoField(fnDir,"size",emlib.MDL_XSIZE,newXdim)
         
         # Prepare particles
         fnDir0=self._getExtraPath("Iter000")
@@ -630,6 +701,11 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         R=min(round(R*self.TsOrig/TsCurrent*(1+self.angularMaxShift.get()*0.01)),newXdim/2)
         self.runJob("xmipp_transform_mask","-i %s --mask circular -%d"%(fnNewParticles,R),numberOfMpi=min(self.numberOfMpi.get(),24))
         fnSource=join(fnDir,"images.xmd")
+
+        if not self.inputParticles.get().isPhaseFlipped():
+            self.runJob("xmipp_ctf_correct_phase", "-i %s --sampling_rate %f" % (fnSource, TsCurrent),
+                        numberOfMpi=min(self.numberOfMpi.get(), 24))
+
         if self.splitMethod==self.SPLIT_STOCHASTIC:
             self.runJob('xmipp_metadata_utilities','-i %s --set intersection %s particleId particleId -o %s/all_images.xmd'%\
                         (fnSource,self._getExtraPath('images.xmd'),fnDir),numberOfMpi=1)
@@ -652,7 +728,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         
         if getShiftsFrom!="":
             fnPreviousAngles=join(getShiftsFrom,"angles.xmd")
-            TsPrevious=self.readInfoField(getShiftsFrom,"sampling",xmippLib.MDL_SAMPLINGRATE)
+            TsPrevious=self.readInfoField(getShiftsFrom,"sampling",emlib.MDL_SAMPLINGRATE)
             fnAux=join(fnDir,"aux.xmd")
             for i in range(1,3):
                 fnImagesi=join(fnDir,"images%02d.xmd"%i)
@@ -660,21 +736,22 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                             (fnImagesi,fnPreviousAngles,fnAux),numberOfMpi=1)
                 self.adaptShifts(fnAux, TsPrevious, fnImagesi, TsCurrent)
             cleanPath(fnAux)
-        self.writeInfoField(fnDir,"count",xmippLib.MDL_COUNT,long(1))
-        
+
+        self.writeInfoField(fnDir,"count",emlib.MDL_COUNT,int(1))
+
     def prepareReferences(self,fnDirPrevious,fnDir,TsCurrent,targetResolution):
         if self.checkInfoField(fnDir,"count"):
-            state = self.readInfoField(fnDir, "count", xmippLib.MDL_COUNT)
+            state = self.readInfoField(fnDir, "count", emlib.MDL_COUNT)
             if state>=2:
                 return
 
-        print "Preparing references to sampling rate=",TsCurrent
+        print("Preparing references to sampling rate=",TsCurrent)
         fnMask=''
-        newXdim=self.readInfoField(fnDir,"size",xmippLib.MDL_XSIZE)
+        newXdim=self.readInfoField(fnDir,"size",emlib.MDL_XSIZE)
         if self.nextMask.hasValue():
             fnMask=join(fnDir,"mask.vol")
             self.prepareMask(self.nextMask.get(), fnMask, TsCurrent, newXdim)
-        oldXdim=self.readInfoField(fnDirPrevious,"size",xmippLib.MDL_XSIZE)
+        oldXdim=self.readInfoField(fnDirPrevious,"size",emlib.MDL_XSIZE)
         for i in range(1,3):
             fnPreviousVol=join(fnDirPrevious,"volume%02d.vol"%i)
             fnReferenceVol=join(fnDir,"volumeRef%02d.vol"%i)
@@ -712,10 +789,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                               'iterDir': fnDir}
                 cmd = self.nextReferenceScript % scriptArgs
                 self.runJob(cmd, '', numberOfMpi=1)
-            
+
         if fnMask!='':
             cleanPath(fnMask)
-        self.writeInfoField(fnDir,"count",xmippLib.MDL_COUNT,long(2))
+        self.writeInfoField(fnDir,"count",emlib.MDL_COUNT,int(2))
 
     def prepareMask(self,maskObject,fnMask,TsMaskOut,XdimOut):
         img=ImageHandler()
@@ -733,13 +810,13 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         fnDirPrevious=self._getExtraPath("Iter%03d"%(iteration-1))
         fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
         makePath(fnDirCurrent)
-        previousResolution=self.readInfoField(fnDirPrevious,"resolution",xmippLib.MDL_RESOLUTION_FREQREAL)
+        previousResolution=self.readInfoField(fnDirPrevious,"resolution",emlib.MDL_RESOLUTION_FREQREAL)
 
         if self.alignmentMethod==self.GLOBAL_ALIGNMENT or self.alignmentMethod==self.AUTOMATIC_ALIGNMENT or \
            self.alignmentMethod==self.STOCHASTIC_ALIGNMENT:
             fnGlobal=join(fnDirCurrent,"globalAssignment")
             makePath(fnGlobal)
-    
+
             targetResolution=max(previousResolution*0.5,self._maximumTargetResolution[iteration-1])
             if self.multiresolution:
                 TsCurrent=max(self.TsOrig,targetResolution/3)
@@ -749,16 +826,17 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             # if iteration>1: # This causes images to be replicated
             #    getShiftsFrom=fnDirPrevious
             self.prepareImages(fnDirPrevious,fnGlobal,TsCurrent,getShiftsFrom)
+            TsCurrent=self.readInfoField(fnGlobal,"sampling",emlib.MDL_SAMPLINGRATE) # Prepare images may have changed it
             self.prepareReferences(fnDirPrevious,fnGlobal,TsCurrent,targetResolution)
 
             # Calculate angular step at this resolution
             ResolutionAlignment=previousResolution
             if self.nextLowPass:
                 ResolutionAlignment+=self.nextResolutionOffset.get()
-            newXdim=self.readInfoField(fnGlobal,"size",xmippLib.MDL_XSIZE)
+            newXdim=self.readInfoField(fnGlobal,"size",emlib.MDL_XSIZE)
             angleStep=self.calculateAngStep(newXdim, TsCurrent, ResolutionAlignment)
             angleStep=max(angleStep,3.0)
-            self.writeInfoField(fnGlobal,"angleStep",xmippLib.MDL_ANGLE_DIFF,float(angleStep))
+            self.writeInfoField(fnGlobal,"angleStep",emlib.MDL_ANGLE_DIFF,float(angleStep))
             
             # Global alignment
             perturbationList = [chr(x) for x in range(ord('a'),ord('a')+self.numberOfPerturbations.get())]
@@ -769,14 +847,14 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
 
                 # Create defocus groups
                 row=getFirstRow(fnImgs)
-                if row.containsLabel(xmippLib.MDL_CTF_MODEL) or row.containsLabel(xmippLib.MDL_CTF_DEFOCUSU):
+                if row.containsLabel(emlib.MDL_CTF_MODEL) or row.containsLabel(emlib.MDL_CTF_DEFOCUSU):
                     self.runJob("xmipp_ctf_group","--ctfdat %s -o %s/ctf:stk --pad 1.0 --sampling_rate %f --phase_flipped  --error 0.1 --resol %f"%\
                                 (fnImgs,fnDirSignificant,TsCurrent,targetResolution),numberOfMpi=1)
                     moveFile("%s/ctf_images.sel"%fnDirSignificant,"%s/ctf_groups.xmd"%fnDirSignificant)
                     cleanPath("%s/ctf_split.doc"%fnDirSignificant)
-                    mdInfo = xmippLib.MetaData("numberGroups@%s"%join(fnDirSignificant,"ctfInfo.xmd"))
+                    mdInfo = emlib.MetaData("numberGroups@%s"%join(fnDirSignificant,"ctfInfo.xmd"))
                     fnCTFs="%s/ctf_ctf.stk"%fnDirSignificant
-                    numberGroups=mdInfo.getValue(xmippLib.MDL_COUNT,mdInfo.firstObject())
+                    numberGroups=mdInfo.getValue(emlib.MDL_COUNT,mdInfo.firstObject())
                     ctfPresent=True
                 else:
                     numberGroups=1
@@ -786,17 +864,18 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 # Generate projections
                 fnReferenceVol=join(fnGlobal,"volumeRef%02d.vol"%i)
                 for subset in perturbationList:
-                    fnGallery=join(fnDirSignificant,"gallery%02d%s.stk"%(i,subset))
-                    fnGalleryMd=join(fnDirSignificant,"gallery%02d%s.xmd"%(i,subset))
-                    args="-i %s -o %s --sampling_rate %f --perturb %f --sym %s --min_tilt_angle %f --max_tilt_angle %f"%\
-                         (fnReferenceVol,fnGallery,angleStep,math.sin(angleStep*math.pi/180.0)/4,self.symmetryGroup,self.angularMinTilt.get(),self.angularMaxTilt.get())
-                    args+=" --compute_neighbors --angular_distance -1 --experimental_images %s"%self._getExtraPath("images.xmd")
-                    self.runJob("xmipp_angular_project_library",args,numberOfMpi=min(self.numberOfMpi.get(),24))
-                    cleanPath(join(fnDirSignificant,"gallery_angles%02d%s.doc"%(i,subset)))
-                    moveFile(join(fnDirSignificant,"gallery%02d%s.doc"%(i,subset)), fnGalleryMd)
-                    fnAngles=join(fnGlobal,"anglesDisc%02d%s.xmd"%(i,subset))
-                    for j in range(1,numberGroups+1):
-                        fnAnglesGroup=join(fnDirSignificant,"angles_group%03d%s.xmd"%(j,subset))
+                    fnGallery = join(fnDirSignificant,"gallery%02d%s.stk" % (i, subset))
+                    fnGalleryMd = join(fnDirSignificant,"gallery%02d%s.xmd" % (i, subset))
+
+                    args = "-i %s -o %s --sampling_rate %f --sym %s --min_tilt_angle %f --max_tilt_angle %f --perturb %f " % \
+                           (fnReferenceVol, fnGallery, angleStep,self.symmetryGroup, self.angularMinTilt.get(),self.angularMaxTilt.get(),math.sin(angleStep * math.pi / 180.0) / 4)
+                    args += " --compute_neighbors --angular_distance -1 --experimental_images %s" % self._getExtraPath("images.xmd")
+                    self.runJob("xmipp_angular_project_library", args,numberOfMpi=min(self.numberOfMpi.get(), 24))
+                    cleanPath(join(fnDirSignificant, "gallery_angles%02d%s.doc" % (i, subset)))
+                    moveFile(join(fnDirSignificant,"gallery%02d%s.doc" % (i, subset)), fnGalleryMd)
+                    fnAngles = join(fnGlobal, "anglesDisc%02d%s.xmd" % (i, subset))
+                    for j in range(1, numberGroups + 1):
+                        fnAnglesGroup = join(fnDirSignificant,"angles_group%03d%s.xmd" % (j, subset))
                         if not exists(fnAnglesGroup):
                             if ctfPresent:
                                 fnGroup="ctfGroup%06d@%s/ctf_groups.xmd"%(j,fnDirSignificant)
@@ -812,26 +891,43 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                                 fnGalleryGroupMd=fnGalleryMd
                             if getSize(fnGroup)==0: # If the group is empty
                                 continue
-                            maxShift=round(self.angularMaxShift.get()*newXdim/100)
-                            R=self.particleRadius.get()
-                            if R<=0:
-                                R=self.inputParticles.get().getDimensions()[0]/2
-                            R=R*self.TsOrig/TsCurrent
-                            if self.globalMethod.get() == self.GLOBAL_SIGNIFICANT:
-                                args='-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d'%\
-                                     (fnGroup,fnGalleryGroupMd,maxShift,fnDirSignificant,self.numberOfReplicates.get()-1)
+                            maxShift = round(self.angularMaxShift.get() * newXdim / 100)
+                            R = self.particleRadius.get()
+                            if R <= 0:
+                                R = self.inputParticles.get().getDimensions()[0] / 2
+                            R = R * self.TsOrig / TsCurrent
+                            if not self.useGpu.get():
+                                args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation %d --dontCheckMirrors ' % \
+                                       (fnGroup, fnGalleryGroupMd, maxShift,fnDirSignificant,self.numberOfReplicates.get() - 1)
                                 self.runJob('xmipp_reconstruct_significant',args,numberOfMpi=self.numberOfMpi.get())
                                 # moveFile(join(fnDirSignificant,"images_significant_iter001_00.xmd"),join(fnDirSignificant,"angles_group%03d%s.xmd"%(j,subset)))
                                 fnAnglesSignificant = join(fnDirSignificant,"angles_iter001_00.xmd")
-                                if exists(fnAnglesSignificant): 
-                                    moveFile(fnAnglesSignificant,fnAnglesGroup)
+                                if exists(fnAnglesSignificant):
+                                    moveFile(fnAnglesSignificant, fnAnglesGroup)
                                     cleanPath(join(fnDirSignificant,"images_iter001_00.xmd"))
-                                    #cleanPath(join(fnDirSignificant,"angles_iter001_00.xmd"))
+                                    # cleanPath(join(fnDirSignificant,"angles_iter001_00.xmd"))
                                     cleanPath(join(fnDirSignificant,"images_significant_iter001_00.xmd"))
-                            elif self.globalMethod.get() == self.GLOBAL_GPU_SIGNIFICANT:
-                                args = '-i_ref %s -i_exp %s -o %s --keep_best %d --maxShift %f'%\
-                                       (fnGalleryGroupMd,fnGroup,fnAnglesGroup,self.numberOfReplicates,maxShift)
-                                self.runJob("xmipp_cuda_correlation", args, numberOfMpi=1)
+                            else:
+                                count=0
+                                GpuListCuda=''
+                                if self.useQueueForSteps() or self.useQueue():
+                                    GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                                    GpuList = GpuList.split(",")
+                                    for elem in GpuList:
+                                        GpuListCuda = GpuListCuda+str(count)+' '
+                                        count+=1
+                                else:
+                                    GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                                    GpuListAux = ''
+                                    for elem in self.getGpuList():
+                                        GpuListCuda = GpuListCuda+str(count)+' '
+                                        GpuListAux = GpuListAux+str(elem)+','
+                                        count+=1
+                                    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                                args = '-i %s -r %s -o %s --keepBestN %f --dev %s ' % \
+                                       (fnGroup, fnGalleryGroupMd, fnAnglesGroup,self.numberOfReplicates.get(), GpuListCuda)
+                                self.runJob(CUDA_ALIGN_SIGNIFICANT,args, numberOfMpi=1)
+
                             if exists(fnAnglesGroup):
                                 if not exists(fnAngles) and exists(fnAnglesGroup):
                                     copyFile(fnAnglesGroup, fnAngles)
@@ -842,7 +938,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         self.runJob("xmipp_metadata_utilities","-i %s --set join %s image"%(fnAngles,fnImgs),numberOfMpi=1)
                     if self.saveSpace and ctfPresent:
                         self.runJob("rm -f",fnDirSignificant+"/gallery*",numberOfMpi=1)
-                
+
                 # Evaluate the stability of the alignment
                 fnOut=join(fnGlobal,"anglesDisc%02d"%i)
                 for subset1 in perturbationList:
@@ -857,34 +953,34 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         self.runJob("xmipp_angular_distance","--ang1 %s --ang2 %s --oroot %s --sym %s --compute_weights 1 particleId 0.5 --check_mirrors --set 0"%(fnAngles2,fnAngles1,fnOut12,self.symmetryGroup),numberOfMpi=1)
                         self.runJob("xmipp_metadata_utilities",'-i %s --operate keep_column "angleDiff0 shiftDiff0 weightJumper0"'%(fnOut12+"_weights.xmd"),numberOfMpi=1)
                         if counter2 == 0:
-                            mdWeightsAll = xmippLib.MetaData(fnOut12+"_weights.xmd")
+                            mdWeightsAll = emlib.MetaData(fnOut12+"_weights.xmd")
                             counter2=1
                         else:
-                            mdWeights = xmippLib.MetaData(fnOut12+"_weights.xmd")
+                            mdWeights = emlib.MetaData(fnOut12+"_weights.xmd")
                             if mdWeights.size()==mdWeightsAll.size():
                                 counter2 += 1
                                 for id1, id2 in izip(mdWeights,mdWeightsAll):
-                                    angleDiff0 = mdWeights.getValue(xmippLib.MDL_ANGLE_DIFF0, id1)
-                                    shiftDiff0 = mdWeights.getValue(xmippLib.MDL_SHIFT_DIFF0, id1)
-                                    weightJumper0 = mdWeights.getValue(xmippLib.MDL_WEIGHT_JUMPER0, id1)
+                                    angleDiff0 = mdWeights.getValue(emlib.MDL_ANGLE_DIFF0, id1)
+                                    shiftDiff0 = mdWeights.getValue(emlib.MDL_SHIFT_DIFF0, id1)
+                                    weightJumper0 = mdWeights.getValue(emlib.MDL_WEIGHT_JUMPER0, id1)
 
-                                    angleDiff0All = mdWeightsAll.getValue(xmippLib.MDL_ANGLE_DIFF0, id2)
-                                    shiftDiff0All = mdWeightsAll.getValue(xmippLib.MDL_SHIFT_DIFF0, id2)
-                                    weightJumper0All = mdWeightsAll.getValue(xmippLib.MDL_WEIGHT_JUMPER0, id2)
+                                    angleDiff0All = mdWeightsAll.getValue(emlib.MDL_ANGLE_DIFF0, id2)
+                                    shiftDiff0All = mdWeightsAll.getValue(emlib.MDL_SHIFT_DIFF0, id2)
+                                    weightJumper0All = mdWeightsAll.getValue(emlib.MDL_WEIGHT_JUMPER0, id2)
 
-                                    mdWeightsAll.setValue(xmippLib.MDL_ANGLE_DIFF0, angleDiff0+angleDiff0All, id2)
-                                    mdWeightsAll.setValue(xmippLib.MDL_SHIFT_DIFF0, shiftDiff0+shiftDiff0All, id2)
-                                    mdWeightsAll.setValue(xmippLib.MDL_WEIGHT_JUMPER0, weightJumper0+weightJumper0All, id2)
+                                    mdWeightsAll.setValue(emlib.MDL_ANGLE_DIFF0, angleDiff0+angleDiff0All, id2)
+                                    mdWeightsAll.setValue(emlib.MDL_SHIFT_DIFF0, shiftDiff0+shiftDiff0All, id2)
+                                    mdWeightsAll.setValue(emlib.MDL_WEIGHT_JUMPER0, weightJumper0+weightJumper0All, id2)
                     if counter2>1:
                         iCounter2 = 1.0/counter2
                         for id in mdWeightsAll:
-                            angleDiff0All = mdWeightsAll.getValue(xmippLib.MDL_ANGLE_DIFF0, id)
-                            shiftDiff0All = mdWeightsAll.getValue(xmippLib.MDL_SHIFT_DIFF0, id)
-                            weightJumper0All = mdWeightsAll.getValue(xmippLib.MDL_WEIGHT_JUMPER0, id)
+                            angleDiff0All = mdWeightsAll.getValue(emlib.MDL_ANGLE_DIFF0, id)
+                            shiftDiff0All = mdWeightsAll.getValue(emlib.MDL_SHIFT_DIFF0, id)
+                            weightJumper0All = mdWeightsAll.getValue(emlib.MDL_WEIGHT_JUMPER0, id)
 
-                            mdWeightsAll.setValue(xmippLib.MDL_ANGLE_DIFF0, angleDiff0All*iCounter2, id)
-                            mdWeightsAll.setValue(xmippLib.MDL_SHIFT_DIFF0, shiftDiff0All*iCounter2, id)
-                            mdWeightsAll.setValue(xmippLib.MDL_WEIGHT_JUMPER0, weightJumper0All*iCounter2, id)
+                            mdWeightsAll.setValue(emlib.MDL_ANGLE_DIFF0, angleDiff0All*iCounter2, id)
+                            mdWeightsAll.setValue(emlib.MDL_SHIFT_DIFF0, shiftDiff0All*iCounter2, id)
+                            mdWeightsAll.setValue(emlib.MDL_WEIGHT_JUMPER0, weightJumper0All*iCounter2, id)
                     if counter2>0:
                         mdWeightsAll.write(fnOut1+"_weights.xmd")
                         self.runJob("xmipp_metadata_utilities",'-i %s --set merge %s'%(fnAngles1,fnOut1+"_weights.xmd"),numberOfMpi=1)
@@ -894,15 +990,15 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                         if exists(fnAngles1) and exists(fnOut+".xmd"):
                             self.runJob("xmipp_metadata_utilities",'-i %s --set union_all %s'%(fnOut+".xmd",fnAngles1),numberOfMpi=1)
         cleanPath(join(fnGlobal,"anglesDisc*_weights.xmd"))
-                
+
     def adaptShifts(self, fnSource, TsSource, fnDest, TsDest):
         K=TsSource/TsDest
         copyFile(fnSource,fnDest)
         row=getFirstRow(fnDest)
-        if row.containsLabel(xmippLib.MDL_SHIFT_X):
+        if row.containsLabel(emlib.MDL_SHIFT_X):
             self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "shiftX=%f*shiftX"'%(fnDest,K),numberOfMpi=1)
             self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "shiftY=%f*shiftY"'%(fnDest,K),numberOfMpi=1)
-        if row.containsLabel(xmippLib.MDL_CONTINUOUS_X):
+        if row.containsLabel(emlib.MDL_CONTINUOUS_X):
             self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "continuousX=%f*continuousX"'%(fnDest,K),numberOfMpi=1)
             self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "continuousY=%f*continuousY"'%(fnDest,K),numberOfMpi=1)
 
@@ -914,28 +1010,29 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             fnDirLocal=join(fnDirCurrent,"localAssignment")
             makePath(fnDirLocal)
 
-            previousResolution=self.readInfoField(fnDirPrevious,"resolution",xmippLib.MDL_RESOLUTION_FREQREAL)
+            previousResolution=self.readInfoField(fnDirPrevious,"resolution",emlib.MDL_RESOLUTION_FREQREAL)
             targetResolution=max(previousResolution*0.8,self._maximumTargetResolution[iteration-1])
             if self.multiresolution:
                 TsCurrent=max(self.TsOrig,targetResolution/3)
             else:
                 TsCurrent=self.TsOrig
-            self.writeInfoField(fnDirLocal,"sampling",xmippLib.MDL_SAMPLINGRATE,TsCurrent)
-            TsCurrent=self.readInfoField(fnDirLocal,"sampling",xmippLib.MDL_SAMPLINGRATE) # Write and read to guarantee consistency with previous directories
+            self.writeInfoField(fnDirLocal,"sampling",emlib.MDL_SAMPLINGRATE,TsCurrent)
+            TsCurrent=self.readInfoField(fnDirLocal,"sampling",emlib.MDL_SAMPLINGRATE) # Write and read to guarantee consistency with previous directories
             
             # Prepare images and references
             produceNewReferences=True
             fnDirGlobal=join(fnDirCurrent,"globalAssignment")
             if exists(fnDirGlobal):
-                TsGlobal=self.readInfoField(fnDirGlobal,"sampling",xmippLib.MDL_SAMPLINGRATE)
+                TsGlobal=self.readInfoField(fnDirGlobal,"sampling",emlib.MDL_SAMPLINGRATE)
                 if TsGlobal==TsCurrent:
                     produceNewReferences=False
             if produceNewReferences:
                 self.prepareImages(fnDirPrevious,fnDirLocal,TsCurrent,fnDirPrevious)
+                TsCurrent=self.readInfoField(fnDirLocal,"sampling",emlib.MDL_SAMPLINGRATE) # Prepare images may have changed it
                 self.prepareReferences(fnDirPrevious,fnDirLocal,TsCurrent,targetResolution)
             else:
-                newXdim=self.readInfoField(fnDirGlobal,"size",xmippLib.MDL_XSIZE)
-                self.writeInfoField(fnDirLocal,"size",xmippLib.MDL_XSIZE,newXdim)
+                newXdim=self.readInfoField(fnDirGlobal,"size",emlib.MDL_XSIZE)
+                self.writeInfoField(fnDirLocal,"size",emlib.MDL_XSIZE,newXdim)
                 for i in range(1,3):
                     createLink(join(fnDirGlobal,"images%02d.xmd"%i),join(fnDirLocal,"images%02d.xmd"%i))
                     createLink(join(fnDirGlobal,"volumeRef%02d.vol"%i),join(fnDirLocal,"volumeRef%02d.vol"%i))
@@ -944,11 +1041,11 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             ResolutionAlignment=previousResolution
             if self.nextLowPass:
                 ResolutionAlignment+=self.nextResolutionOffset.get()
-            newXdim=self.readInfoField(fnDirLocal,"size",xmippLib.MDL_XSIZE)
+            newXdim=self.readInfoField(fnDirLocal,"size",emlib.MDL_XSIZE)
             maxAngle=3*self.calculateAngStep(newXdim, TsCurrent, ResolutionAlignment)
 
             for i in range(1,3):
-                state = self.readInfoField(fnDirLocal, "count", xmippLib.MDL_COUNT)
+                state = self.readInfoField(fnDirLocal, "count", emlib.MDL_COUNT)
                 if state>=2+i:
                     continue
                 fnLocalImages=join(fnDirLocal,"images%02d.xmd"%i)
@@ -958,13 +1055,13 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 fnLocalAssignment=join(fnDirLocal,"anglesDisc%02d.xmd"%i)
                 if exists(fnDirGlobal):
                     fnGlobalAssignment=join(fnDirGlobal,"anglesDisc%02d.xmd"%i)
-                    TsGlobal=self.readInfoField(fnDirGlobal,"sampling",xmippLib.MDL_SAMPLINGRATE)
+                    TsGlobal=self.readInfoField(fnDirGlobal,"sampling",emlib.MDL_SAMPLINGRATE)
                     if TsGlobal==TsCurrent:
                         copyFile(fnGlobalAssignment,fnLocalAssignment)
                     else:
                         self.adaptShifts(fnGlobalAssignment,TsGlobal,fnLocalAssignment,TsCurrent)
                 else:
-                    TsPrevious=self.readInfoField(fnDirPrevious,"sampling",xmippLib.MDL_SAMPLINGRATE)
+                    TsPrevious=self.readInfoField(fnDirPrevious,"sampling",emlib.MDL_SAMPLINGRATE)
                     fnAux=join(fnDirLocal,"aux.xmd")
                     self.runJob("xmipp_metadata_utilities","-i %s --set intersection %s particleId particleId -o %s"%\
                                 (join(fnDirPrevious,"angles.xmd"),fnLocalImages,fnAux),numberOfMpi=1)
@@ -978,17 +1075,17 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
 
                 fnVol=join(fnDirLocal,"volumeRef%02d.vol"%i)
                 fnLocalStk=join(fnDirLocal,"anglesCont%02d.stk"%i)
-                
+
                 R=self.particleRadius.get()
                 if R<=0:
                     R=self.inputParticles.get().getDimensions()[0]/2
                 R=round(R*self.TsOrig/TsCurrent)
-                args="-i %s -o %s --sampling %f --Rmax %d --padding %d --ref %s --max_resolution %f --applyTo image1 --Nsimultaneous %d"%\
-                   (fnLocalAssignment,fnLocalStk,TsCurrent,R,self.contPadding.get(),fnVol,previousResolution,self.contSimultaneous.get())
+                args="-i %s -o %s --sampling %f --Rmax %d --padding %d --ref %s --max_resolution %f --applyTo image1"%\
+                   (fnLocalAssignment,fnLocalStk,TsCurrent,R,self.contPadding.get(),fnVol,previousResolution)
                 if self.contShift or self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT:
                     args+=" --optimizeShift --max_shift %f"%(self.contMaxShiftVariation.get()*newXdim*0.01)
                 if self.contScale or (self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT and iteration>=5):
-                    args+=" --optimizeScale --max_scale %f"%self.contMaxScale.get() 
+                    args+=" --optimizeScale --max_scale %f"%self.contMaxScale.get()
                 if self.contAngles or self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT:
                     args+=" --optimizeAngles --max_angular_change %f"%maxAngle
                 if self.contDefocus or (self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT and iteration>=5):
@@ -999,7 +1096,35 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 #    args+=" --oresiduals %s"%join(fnDirLocal,"residuals%02i.stk"%i)
                 self.runJob("xmipp_angular_continuous_assign2",args,numberOfMpi=self.numberOfMpi.get())
                 self.runJob("xmipp_transform_mask","-i %s --mask circular -%d"%(fnLocalStk,R),numberOfMpi=min(self.numberOfMpi.get(),24))
-                self.writeInfoField(fnDirLocal,"count",xmippLib.MDL_COUNT,long(2+i))
+                self.writeInfoField(fnDirLocal,"count",emlib.MDL_COUNT,int(2+i))
+
+    def noAssignment(self, iteration):
+        fnDirPrevious = self._getExtraPath("Iter%03d" % (iteration - 1))
+        fnDirCurrent = self._getExtraPath("Iter%03d" % iteration)
+        fnDirLocal = join(fnDirCurrent, "noAssignment")
+        makePath(fnDirLocal)
+
+        previousResolution = self.readInfoField(fnDirPrevious, "resolution", emlib.MDL_RESOLUTION_FREQREAL)
+        targetResolution = max(previousResolution * 0.8, self._maximumTargetResolution[iteration - 1])
+        if self.multiresolution:
+            TsCurrent = max(self.TsOrig, targetResolution / 3)
+        else:
+            TsCurrent = self.TsOrig
+        self.writeInfoField(fnDirLocal, "sampling", emlib.MDL_SAMPLINGRATE, TsCurrent)
+        TsCurrent = self.readInfoField(fnDirLocal, "sampling",
+                                       emlib.MDL_SAMPLINGRATE)  # Write and read to guarantee consistency with previous directories
+
+        # Prepare images and references
+        self.prepareImages(fnDirPrevious, fnDirLocal, TsCurrent)
+
+        for i in range(1, 3):
+            fnLocalImages = join(fnDirLocal, "images%02d.xmd" % i)
+            fnAssignment = join(fnDirLocal, "anglesNoAssignment%02d.xmd" % i)
+            TsPrevious = self.readInfoField(fnDirPrevious, "sampling", emlib.MDL_SAMPLINGRATE)
+            self.adaptShifts(fnLocalImages, TsPrevious, fnAssignment, TsCurrent)
+            row = md.getFirstRow(fnAssignment)
+            if not row.hasLabel(md.MDL_MAXCC) and not row.hasLabel(md.MDL_COST):
+                self.runJob("xmipp_metadata_utilities", "-i %s --fill maxCC constant 1"% fnAssignment, numberOfMpi=1)
 
     def weightParticles(self, iteration):
         fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
@@ -1008,26 +1133,34 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             # Grab file
             fnDirGlobal=join(fnDirCurrent,"globalAssignment")
             fnDirLocal=join(fnDirCurrent,"localAssignment")
+            fnDirNo=join(fnDirCurrent,"noAssignment")
+
             fnAnglesCont=join(fnDirLocal,"anglesCont%02d.xmd"%i)
             fnAnglesDisc=join(fnDirGlobal,"anglesDisc%02d.xmd"%i)
+            fnAnglesNo=join(fnDirNo,"anglesNoAssignment%02d.xmd"%i)
+
             fnAngles=join(fnDirCurrent,"angles%02d.xmd"%i)
             if exists(fnAnglesCont):
                 copyFile(fnAnglesCont, fnAngles)
-                TsCurrent=self.readInfoField(fnDirLocal,"sampling",xmippLib.MDL_SAMPLINGRATE)
-                Xdim=self.readInfoField(fnDirLocal,"size",xmippLib.MDL_XSIZE)
+                TsCurrent=self.readInfoField(fnDirLocal,"sampling",emlib.MDL_SAMPLINGRATE)
+                Xdim=self.readInfoField(fnDirLocal,"size",emlib.MDL_XSIZE)
+            elif exists(fnAnglesNo):
+                copyFile(fnAnglesNo, fnAngles)
+                TsCurrent = self.readInfoField(fnDirNo, "sampling", emlib.MDL_SAMPLINGRATE)
+                Xdim = self.readInfoField(fnDirNo, "size", emlib.MDL_XSIZE)
             else:
                 if exists(fnAnglesDisc):
                     copyFile(fnAnglesDisc, fnAngles)
-                    TsCurrent=self.readInfoField(fnDirGlobal,"sampling",xmippLib.MDL_SAMPLINGRATE)
-                    Xdim=self.readInfoField(fnDirGlobal,"size",xmippLib.MDL_XSIZE)
+                    TsCurrent=self.readInfoField(fnDirGlobal,"sampling",emlib.MDL_SAMPLINGRATE)
+                    Xdim=self.readInfoField(fnDirGlobal,"size",emlib.MDL_XSIZE)
                 else:
                     raise Exception("Angles for iteration "+str(iteration)+" not found")
-            self.writeInfoField(fnDirCurrent,"sampling",xmippLib.MDL_SAMPLINGRATE,TsCurrent)
-            self.writeInfoField(fnDirCurrent,"size",xmippLib.MDL_XSIZE,Xdim)
-                
+            self.writeInfoField(fnDirCurrent,"sampling",emlib.MDL_SAMPLINGRATE,TsCurrent)
+            self.writeInfoField(fnDirCurrent,"size",emlib.MDL_XSIZE,Xdim)
+
             if self.weightSSNR:
                 row=getFirstRow(fnAngles)
-                if row.containsLabel(xmippLib.MDL_WEIGHT_SSNR):
+                if row.containsLabel(emlib.MDL_WEIGHT_SSNR):
                     self.runJob("xmipp_metadata_utilities","-i %s --operate drop_column weightSSNR"%fnAngles,numberOfMpi=1)
                 self.runJob("xmipp_metadata_utilities","-i %s --set join %s particleId"%\
                             (fnAngles,self._getExtraPath("ssnrWeights.xmd")),numberOfMpi=1)
@@ -1064,39 +1197,39 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             #    self.runJob("xmipp_image_residuals","-i %s -o %s --normalizeDivergence"%(fnAngles,fnCovariance),numberOfMpi=1)
             #    moveFile(join(fnDirLocal,"covariance%02d.xmd"%i),fnAngles)
             
-            mdAngles=xmippLib.MetaData(fnAngles)
+            mdAngles=emlib.MetaData(fnAngles)
             weightCCmin=float(self.weightCCmin.get())
             for objId in mdAngles:
                 weight=1.0
                 if self.weightJumper and self.alignmentMethod==self.GLOBAL_ALIGNMENT and self.numberOfPerturbations.get()>1:
-                    aux=mdAngles.getValue(xmippLib.MDL_WEIGHT_JUMPER0,objId)
+                    aux=mdAngles.getValue(emlib.MDL_WEIGHT_JUMPER0,objId)
                     weight*=aux
                 if self.weightSSNR:
-                    aux=mdAngles.getValue(xmippLib.MDL_WEIGHT_SSNR,objId)
+                    aux=mdAngles.getValue(emlib.MDL_WEIGHT_SSNR,objId)
                     weight*=aux
                 if self.weightContinuous and exists(fnAnglesCont) and self.alignmentMethod==self.LOCAL_ALIGNMENT:
-                    aux=mdAngles.getValue(xmippLib.MDL_WEIGHT_CONTINUOUS2,objId)
+                    aux=mdAngles.getValue(emlib.MDL_WEIGHT_CONTINUOUS2,objId)
                     weight*=aux
                 #if self.weightResiduals and exists(fnAnglesCont):
-                #    aux=mdAngles.getValue(xmippLib.MDL_ZSCORE_RESCOV,objId)
+                #    aux=mdAngles.getValue(emlib.MDL_ZSCORE_RESCOV,objId)
                 #    aux/=3
                 #    weight*=exp(-0.5*aux*aux)
-                #    aux=mdAngles.getValue(xmippLib.MDL_ZSCORE_RESMEAN,objId)
+                #    aux=mdAngles.getValue(emlib.MDL_ZSCORE_RESMEAN,objId)
                 #    aux/=3
                 #    weight*=exp(-0.5*aux*aux)
-                #    aux=mdAngles.getValue(xmippLib.MDL_ZSCORE_RESVAR,objId)
+                #    aux=mdAngles.getValue(emlib.MDL_ZSCORE_RESVAR,objId)
                 #    aux/=3
                 #    weight*=exp(-0.5*aux*aux)
                 if self.weightJumper and iteration>1:
-                    w1=mdAngles.getValue(xmippLib.MDL_WEIGHT_JUMPER,objId)
+                    w1=mdAngles.getValue(emlib.MDL_WEIGHT_JUMPER,objId)
                     w2=1.0
                     if iteration>2:
-                        w2=mdAngles.getValue(xmippLib.MDL_WEIGHT_JUMPER2,objId)
+                        w2=mdAngles.getValue(emlib.MDL_WEIGHT_JUMPER2,objId)
                     weight*=w1*w2
-                
-                mdAngles.setValue(xmippLib.MDL_WEIGHT,weight,objId)
+
+                mdAngles.setValue(emlib.MDL_WEIGHT,weight,objId)
             mdAngles.write(fnAngles)
-            
+
         fnAngles=join(fnDirCurrent,"angles.xmd")
         fnAngles1=join(fnDirCurrent,"angles01.xmd")
         fnAngles2=join(fnDirCurrent,"angles02.xmd")
@@ -1107,12 +1240,12 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         fnDirPrevious=self._getExtraPath("Iter%03d"%(iteration-1))
         fnAngles=join(fnDirCurrent,"angles.xmd")
         fnAnglesQualified=join(fnDirCurrent,"angles_qualified.xmd")
-        
+
         # Qualify according to CC and COST by defocus groups
         row=getFirstRow(fnAngles)
-        if row.containsLabel(xmippLib.MDL_CTF_MODEL) or row.containsLabel(xmippLib.MDL_CTF_DEFOCUSU):
-            previousResolution=self.readInfoField(fnDirPrevious,"resolution",xmippLib.MDL_RESOLUTION_FREQREAL)
-            TsCurrent=self.readInfoField(fnDirCurrent,"sampling",xmippLib.MDL_SAMPLINGRATE)
+        if row.containsLabel(emlib.MDL_CTF_MODEL) or row.containsLabel(emlib.MDL_CTF_DEFOCUSU):
+            previousResolution=self.readInfoField(fnDirPrevious,"resolution",emlib.MDL_RESOLUTION_FREQREAL)
+            TsCurrent=self.readInfoField(fnDirCurrent,"sampling",emlib.MDL_SAMPLINGRATE)
             numberGroups=50
             self.runJob("xmipp_ctf_group","--ctfdat %s -o %s/ctf:stk --simple %d"%\
                         (fnAngles,fnDirCurrent,numberGroups),numberOfMpi=1)
@@ -1129,10 +1262,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             else:
                 fnGroup=fnAngles
             if getSize(fnGroup)>0:
-                if row.containsLabel(xmippLib.MDL_MAXCC):
+                if row.containsLabel(emlib.MDL_MAXCC):
                     self.runJob("xmipp_metadata_utilities","-i %s --operate percentile maxCC maxCCPerc -o %s"%(fnGroup,fnAnglesGroup),numberOfMpi=1)
-                    fnGroup=fnAnglesGroup    
-                if row.containsLabel(xmippLib.MDL_COST):
+                    fnGroup=fnAnglesGroup
+                if row.containsLabel(emlib.MDL_COST):
                     self.runJob("xmipp_metadata_utilities","-i %s --operate percentile cost costPerc -o %s"%(fnGroup,fnAnglesGroup),numberOfMpi=1)          
                 if not exists(fnAnglesQualified):
                     copyFile(fnAnglesGroup, fnAnglesQualified)
@@ -1142,18 +1275,23 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if ctfPresent:
             cleanPath("%s/ctf_groups.xmd"%fnDirCurrent)
         moveFile(fnAnglesQualified, fnAngles)
-        
+
         if self.weightCC:
-            mdAngles=xmippLib.MetaData(fnAngles)
+            mdAngles=emlib.MetaData(fnAngles)
             weightCCmin=float(self.weightCCmin.get())
+            hasCost = mdAngles.containsLabel(md.MDL_COST_PERCENTILE)
+            hasCC = mdAngles.containsLabel(md.MDL_MAXCC_PERCENTILE)
             for objId in mdAngles:
-                if self.alignmentMethod==self.LOCAL_ALIGNMENT:
-                    w=mdAngles.getValue(xmippLib.MDL_COST_PERCENTILE,objId)
+                if self.alignmentMethod==self.LOCAL_ALIGNMENT or \
+                        (self.alignmentMethod==self.NO_ALIGNMENT and hasCost):
+                    w=mdAngles.getValue(emlib.MDL_COST_PERCENTILE,objId)
+                elif hasCC:
+                    w=mdAngles.getValue(emlib.MDL_MAXCC_PERCENTILE,objId)
                 else:
-                    w=mdAngles.getValue(xmippLib.MDL_MAXCC_PERCENTILE,objId)
-                weight=mdAngles.getValue(xmippLib.MDL_WEIGHT,objId)
+                    w=1
+                weight=mdAngles.getValue(emlib.MDL_WEIGHT,objId)
                 weight*=weightCCmin+w*(1-weightCCmin)
-                mdAngles.setValue(xmippLib.MDL_WEIGHT,weight,objId)
+                mdAngles.setValue(emlib.MDL_WEIGHT,weight,objId)
             mdAngles.write(fnAngles)
 
         # Qualify according to angular temperature
@@ -1167,42 +1305,42 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             self.runJob("xmipp_metadata_utilities",'-i %s --set join %s particleId'%(fnAngles,fnTemp),numberOfMpi=1)
             cleanPath(fnTemp)
             
-        hasDiff0 = row.containsLabel(xmippLib.MDL_ANGLE_DIFF0)
-        hasDiff1 = row.containsLabel(xmippLib.MDL_ANGLE_DIFF)
-        hasDiff2 = row.containsLabel(xmippLib.MDL_ANGLE_DIFF2)
+        hasDiff0 = row.containsLabel(emlib.MDL_ANGLE_DIFF0)
+        hasDiff1 = row.containsLabel(emlib.MDL_ANGLE_DIFF)
+        hasDiff2 = row.containsLabel(emlib.MDL_ANGLE_DIFF2)
         if hasDiff0 or hasDiff1 or hasDiff2:
-            mdAngles=xmippLib.MetaData(fnAngles)
+            mdAngles=emlib.MetaData(fnAngles)
             K=1.0/3.0
             iNorm = 1.0/(hasDiff0 + hasDiff1 + hasDiff2)
             for objId in mdAngles:
                 perturbation=0.
                 if hasDiff0:
-                    perturbation+=mdAngles.getValue(xmippLib.MDL_ANGLE_DIFF0,objId)
+                    perturbation+=mdAngles.getValue(emlib.MDL_ANGLE_DIFF0,objId)
                 if hasDiff1:
-                    perturbation+=mdAngles.getValue(xmippLib.MDL_ANGLE_DIFF,objId)
+                    perturbation+=mdAngles.getValue(emlib.MDL_ANGLE_DIFF,objId)
                 if hasDiff2:
-                    perturbation+=mdAngles.getValue(xmippLib.MDL_ANGLE_DIFF2,objId)
+                    perturbation+=mdAngles.getValue(emlib.MDL_ANGLE_DIFF2,objId)
                 perturbation*=iNorm
-                
-                previousTemp = mdAngles.getValue(xmippLib.MDL_ANGLE_TEMPERATURE,objId)
+
+                previousTemp = mdAngles.getValue(emlib.MDL_ANGLE_TEMPERATURE,objId)
                 currentTemp = (1-K)*previousTemp + K*perturbation
-                mdAngles.setValue(xmippLib.MDL_ANGLE_TEMPERATURE,currentTemp,objId)
+                mdAngles.setValue(emlib.MDL_ANGLE_TEMPERATURE,currentTemp,objId)
             mdAngles.write(fnAngles)
 
     def reconstruct(self, iteration):
         fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
-        TsCurrent=self.readInfoField(fnDirCurrent,"sampling",xmippLib.MDL_SAMPLINGRATE)
-        
+        TsCurrent=self.readInfoField(fnDirCurrent,"sampling",emlib.MDL_SAMPLINGRATE)
+
         # Delete previous image files, they exist in case that the last iteration
         # was performed as a single iteration
         fnDirPrevious=self._getExtraPath("Iter%03d"%(iteration-1))
         fnCorrectedImages1=join(fnDirPrevious,"images_corrected01.stk")
-        if exists(fnCorrectedImages1):
+        if exists(fnCorrectedImages1) and self.saveSpace.get():
             cleanPath(fnCorrectedImages1)
         fnCorrectedImages2=join(fnDirPrevious,"images_corrected02.stk")
-        if exists(fnCorrectedImages2):
+        if exists(fnCorrectedImages2) and self.saveSpace.get():
             cleanPath(fnCorrectedImages2)
-        
+
         grayAdjusted=False
         for i in range(1,3):
             fnAngles=join(fnDirCurrent,"angles%02d.xmd"%i)
@@ -1211,7 +1349,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 # Correct for the CTF
                 fnAnglesToUse = fnAngles
                 row=getFirstRow(fnAngles)
-                hasCTF = row.containsLabel(xmippLib.MDL_CTF_DEFOCUSU) or row.containsLabel(xmippLib.MDL_CTF_MODEL)
+                hasCTF = row.containsLabel(emlib.MDL_CTF_DEFOCUSU) or row.containsLabel(emlib.MDL_CTF_MODEL)
                 fnCorrectedImagesRoot=join(fnDirCurrent,"images_corrected%02d"%i)
                 deleteStack = False
                 if hasCTF:
@@ -1220,15 +1358,17 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     if self.inputParticles.get().isPhaseFlipped():
                         args+=" --phase_flipped"
                     self.runJob("xmipp_ctf_correct_wiener2d",args,numberOfMpi=min(self.numberOfMpi.get(),24))
-                    self.runJob("xmipp_image_eliminate_largeEnergy","-i %s.xmd --sigma2 9"%fnCorrectedImagesRoot,numberOfMpi=min(self.numberOfMpi.get(),12))
+                    self.runJob("xmipp_image_eliminate_byEnergy","-i %s.xmd --sigma2 9 --minSigma2 0.01"%\
+                                fnCorrectedImagesRoot,numberOfMpi=min(self.numberOfMpi.get(),12))
                     fnAnglesToUse = fnCorrectedImagesRoot+".xmd"
                     deleteStack = True
                     deletePattern = fnCorrectedImagesRoot+".*"
                     if self.alignmentMethod!=self.STOCHASTIC_ALIGNMENT:
                         self.runJob('xmipp_metadata_utilities','-i %s --set intersection %s particleId particleId'%(fnAngles,fnAnglesToUse),numberOfMpi=1) 
-                        # This is because eliminate_largeEnergy may have reduced the number of images in fnAngles
+                        # This is because eliminate_byEnergy may have reduced the number of images in fnAngles
                 
-                if self.contGrayValues or (self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT and iteration>=5):
+                if (self.contGrayValues and self.alignmentMethod.get()==self.LOCAL_ALIGNMENT) or \
+                        (self.alignmentMethod.get()==self.AUTOMATIC_ALIGNMENT and iteration>=5):
                     grayAdjusted=True
                     R=self.particleRadius.get()
                     if R<=0:
@@ -1236,18 +1376,18 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     fnGrayRoot = join(fnDirCurrent,"images_gray%02d"%i)
                     fnRefVol=join(fnDirCurrent,"localAssignment","volumeRef%02d.vol"%i)
                     fnDirPrevious=self._getExtraPath("Iter%03d"%(iteration-1))
-                    previousResolution=self.readInfoField(fnDirPrevious,"resolution",xmippLib.MDL_RESOLUTION_FREQREAL)
+                    previousResolution=self.readInfoField(fnDirPrevious,"resolution",emlib.MDL_RESOLUTION_FREQREAL)
                     args="-i %s -o %s.stk --sampling %f --Rmax %d --padding %d --ref %s --max_resolution %f --save_metadata_stack %s.xmd"%\
                          (fnAnglesToUse,fnGrayRoot,TsCurrent,R,self.contPadding.get(),fnRefVol,previousResolution,fnGrayRoot)
-                    args+=" --max_gray_scale %f --max_gray_shift %f --Nsimultaneous %d"%\
-                         (self.contMaxGrayScale.get(),self.contMaxGrayShift.get(),self.contSimultaneous.get())
+                    args+=" --max_gray_scale %f --max_gray_shift %f"%\
+                         (self.contMaxGrayScale.get(),self.contMaxGrayShift.get())
                     self.runJob("xmipp_transform_adjust_image_grey_levels",args,numberOfMpi=self.numberOfMpi.get())
                     fnAnglesToUse = fnGrayRoot+".xmd"
                     if deleteStack:
                         cleanPattern(deletePattern)
                     deleteStack = True
                     deletePattern = fnGrayRoot+".*"
-                    
+
                     # Save the gray transformation
                     self.runJob("xmipp_metadata_utilities",'-i %s --operate drop_column "continuousA continuousB"'%fnAngles,numberOfMpi=1)
                     fnAux = join(fnDirCurrent,"gray_transformation%02d.xmd"%i)
@@ -1262,18 +1402,43 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                            (fnAnglesToUse,self.angularMinTiltReconstruct.get(),self.angularMaxTiltReconstruct.get(),fnRestricted)
                     self.runJob("xmipp_metadata_utilities",args,numberOfMpi=1)
                     fnAnglesToUse = fnRestricted
-                
+
                 # Reconstruct Fourier
                 args="-i %s -o %s --sym %s --weight"%(fnAnglesToUse,fnVol,self.symmetryGroup)
                 if self.useGpu.get():
-                    tmpArgs = args + ' --device %(GPU)s' + ' --thr %s' % self.numberOfThreads.get()
-                    self.runJob('xmipp_cuda_reconstruct_fourier ', tmpArgs, numberOfMpi=1)
+                    #AJ to make it work with and without queue system
+                    if self.numberOfMpi.get()>1:
+                        N_GPUs = len((self.gpuList.get()).split(','))
+                        args += ' -gpusPerNode %d' % N_GPUs
+                        args += ' -threadsPerGPU %d' % max(self.numberOfThreads.get(),4)
+                    count=0
+                    GpuListCuda=''
+                    if self.useQueueForSteps() or self.useQueue():
+                        GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                        GpuList = GpuList.split(",")
+                        for elem in GpuList:
+                            GpuListCuda = GpuListCuda+str(count)+' '
+                            count+=1
+                    else:
+                        GpuListAux = ''
+                        for elem in self.getGpuList():
+                            GpuListCuda = GpuListCuda+str(count)+' '
+                            GpuListAux = GpuListAux+str(elem)+','
+                            count+=1
+                        os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                    if self.numberOfMpi.get()==1:
+                        args += " --device %s" %(GpuListCuda)
+                    args += ' --thr %s' % self.numberOfThreads.get()
+                    if self.numberOfMpi.get()>1:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
+                    else:
+                        self.runJob('xmipp_cuda_reconstruct_fourier', args)
                 else:
                     self.runJob("xmipp_reconstruct_fourier_accel", args, numberOfMpi=self.numberOfMpi.get())
-                
+
                 # If stochastic gradient descent
                 if self.alignmentMethod==self.STOCHASTIC_ALIGNMENT:
-                    newXdim = self.readInfoField(fnDirCurrent, "size", xmippLib.MDL_XSIZE)
+                    newXdim = self.readInfoField(fnDirCurrent, "size", emlib.MDL_XSIZE)
                     fnAuxVol=join(fnDirCurrent,"volume%02d_aux.vol"%i)
                     fnPreviousVol=join(fnDirPrevious,"volume%02d.vol"%i)
                     self.runJob("xmipp_image_resize","-i %s -o %s --dim %d"%(fnPreviousVol,fnAuxVol,newXdim))
@@ -1283,8 +1448,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     cleanPath(fnAuxVol)
                 if deleteStack:
                     cleanPattern(deletePattern)
-                    
-                    
+
+
         if grayAdjusted:
             fnAngles=join(fnDirCurrent,"angles.xmd")
             fnAnglesAux=join(fnDirCurrent,"anglesAux.xmd")
@@ -1294,24 +1459,24 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             self.runJob("xmipp_metadata_utilities",'-i %s --operate drop_column "continuousA continuousB"'%fnAngles,numberOfMpi=1)
             self.runJob('xmipp_metadata_utilities',"-i %s --set union %s -o %s"%(fnAngles1,fnAngles2,fnAnglesAux),numberOfMpi=1)
             self.runJob('xmipp_metadata_utilities',"-i %s --operate keep_column itemId -o %s"%\
-                                                   (fnAnglesAux,fnAnglesAuxId),numberOfMpi=1)                 
+                                                   (fnAnglesAux,fnAnglesAuxId),numberOfMpi=1)
             self.runJob('xmipp_metadata_utilities',"-i %s --set intersection %s itemId itemId"%\
-                                                   (fnAngles,fnAnglesAuxId),numberOfMpi=1)                 
+                                                   (fnAngles,fnAnglesAuxId),numberOfMpi=1)
             self.runJob("xmipp_metadata_utilities",'-i %s --operate sort itemId'%fnAngles,numberOfMpi=1)
             self.runJob("xmipp_metadata_utilities",'-i %s --operate sort itemId'%fnAnglesAux,numberOfMpi=1)
             self.runJob("xmipp_metadata_utilities",'-i %s --operate keep_column "continuousA continuousB"'%fnAnglesAux,numberOfMpi=1)
             self.runJob("xmipp_metadata_utilities",'-i %s --set merge %s'%(fnAngles,fnAnglesAux),numberOfMpi=1)
             cleanPath(fnAnglesAux)
             cleanPath(fnAnglesAuxId)
-    
+
     def postProcessing(self, iteration):
         fnDirCurrent=self._getExtraPath("Iter%03d"%iteration)
-        TsCurrent=self.readInfoField(fnDirCurrent,"sampling",xmippLib.MDL_SAMPLINGRATE)
+        TsCurrent=self.readInfoField(fnDirCurrent,"sampling",emlib.MDL_SAMPLINGRATE)
         for i in range(1,3):
             fnVol=join(fnDirCurrent,"volume%02d.vol"%i)
             fnBeforeVol=join(fnDirCurrent,"volumeBeforePostProcessing%02d.vol"%i)
-            volXdim = self.readInfoField(fnDirCurrent, "size", xmippLib.MDL_XSIZE)
-            
+            volXdim = self.readInfoField(fnDirCurrent, "size", emlib.MDL_XSIZE)
+
             if self.postSymmetryWithinMask:
                 if self.postMaskSymmetry!="c1":
                     fnMask=join(fnDirCurrent,"mask.vol")
@@ -1319,7 +1484,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     self.runJob("xmipp_transform_symmetrize","-i %s --sym %s --mask_in %s --dont_wrap"%\
                                 (fnVol,self.postSymmetryWithinMaskType.get(),fnMask),numberOfMpi=1)
                     cleanPath(fnMask)
-            
+
             if self.postSymmetryHelical:
                 z0=float(self.postSymmetryHelicalMinZ.get())
                 zF=float(self.postSymmetryHelicalMaxZ.get())
@@ -1335,7 +1500,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 self.runFineSearch(fnVol, self.postSymmetryHelicalDihedral, fnCoarse, fnFine, 0.9, z0, zF, rot0, rotF, 0, radius, height, TsCurrent)
                 cleanPath(fnCoarse)
                 self.runSymmetrize(fnVol, self.postSymmetryHelicalDihedral, fnFine, fnVol, 0.9, 0, radius, height, TsCurrent)
-    
+
             if self.postScript!="":
                 img = ImageHandler()
                 volXdim, _, _, _ =img.getDimensions((1,fnVol))
@@ -1354,12 +1519,12 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         self.runJob('xmipp_image_operate','-i %s --mult 0.5'%fnVolAvg,numberOfMpi=1)
         self.runJob('xmipp_volume_align','--i1 %s --i2 %s --local --apply'%(fnVolAvg,fnVol1),numberOfMpi=1)
         self.runJob('xmipp_volume_align','--i1 %s --i2 %s --local --apply'%(fnVolAvg,fnVol2),numberOfMpi=1)
-        
+
         # Generate mask if available
         if self.postAdHocMask.hasValue():
             fnMask=join(fnDirCurrent,"mask.vol")
             if not exists(fnMask):
-                volXdim = self.readInfoField(fnDirCurrent, "size", xmippLib.MDL_XSIZE)
+                volXdim = self.readInfoField(fnDirCurrent, "size", emlib.MDL_XSIZE)
                 self.prepareMask(self.postAdHocMask.get(), fnMask, TsCurrent, volXdim)
                 self.runJob('xmipp_transform_threshold',"-i %s --select below 0.5 --substitute binarize"%fnMask,numberOfMpi=1)
         else:
@@ -1371,21 +1536,27 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             args='--i1 %s --i2 %s --oroot %s --denoising 1'%(fnVol1,fnVol2,fnRootRestored)
             if fnMask!="":
                 args+=" --mask binary_file %s"%fnMask
-            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            if self.useGpu:
+                self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
             moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
-     
+
         # Filter bank denoising
         if self.postFilterBank:
             fnRootRestored=join(fnDirCurrent,"volumeRestored")
             args='--i1 %s --i2 %s --oroot %s --filterBank 0.01'%(fnVol1,fnVol2,fnRootRestored)
             if fnMask!="":
                 args+=" --mask binary_file %s"%fnMask
-            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            if self.useGpu:
+                self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
             moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
             cleanPath("%s_filterBank.vol"%fnRootRestored)
-     
+
         # Laplacian Denoising
         if self.postLaplacian:
             fnRootRestored=join(fnDirCurrent,"volumeRestored")
@@ -1401,7 +1572,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             args='--i1 %s --i2 %s --oroot %s --deconvolution 1'%(fnVol1,fnVol2,fnRootRestored)
             if fnMask!="":
                 args+=" --mask binary_file %s"%fnMask
-            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            if self.useGpu:
+                self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             moveFile("%s_restored1.vol"%fnRootRestored,fnVol1)
             moveFile("%s_restored2.vol"%fnRootRestored,fnVol2)
             self.runJob("xmipp_image_convert","-i %s_convolved.vol -o %s -t vol"%(fnRootRestored,fnVolAvg),numberOfMpi=1)
@@ -1433,7 +1607,10 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             args='--i1 %s --i2 %s --oroot %s --difference 2 2'%(fnVol1,fnVol2,fnRootRestored)
             if fnMask!="":
                 args+=" --mask binary_file %s"%fnMask
-            self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
+            if self.useGpu:
+                self.runJob('xmipp_cuda_volume_halves_restoration', args, numberOfMpi=1)
+            else:
+                self.runJob('xmipp_volume_halves_restoration',args,numberOfMpi=1)
             self.runJob("xmipp_image_convert","-i %s_avgDiff.vol -o %s -t vol"%(fnRootRestored,fnVolAvg),numberOfMpi=1)
             cleanPath("%s_avgDiff.vol"%fnRootRestored)
             cleanPath("%s_restored1.vol"%fnRootRestored)
@@ -1483,16 +1660,13 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if not self.doContinue and self.inputParticles.hasValue() and \
            self.alignmentMethod.get()==self.LOCAL_ALIGNMENT and not self.inputParticles.get().hasAlignmentProj():
             errors.append("If the first iteration is local, then the input particles must have an alignment")
-        if not self.inputParticles.get().isPhaseFlipped():
-            errors.append("The input particles must be phase flipped")
-        return errors    
+        if self.useGpu.get() and not isXmippCudaPresent():
+            errors.append("You have asked to use GPU, but I cannot find the Xmipp GPU programs in the path")
+        return errors
     
     def _warnings(self):
         warnings = []
-        if not self.doContinue and self.inputParticles.hasValue() and not self.inputParticles.get().isPhaseFlipped():
-            warnings.append("Highres is designed to work on phase flipped particles. The input particles are not phase flipped. "
-                            "Unless you work with phantoms, you need to extract particles with phase flip.")
-        return warnings    
+        return warnings
 
     def _summary(self):
         summary = []
@@ -1526,13 +1700,14 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         if self.postSymmetryHelical:
             summary.append("Looking for helical symmetry")
         return summary
-    
+
     def _methods(self):
         strline = ''
         if hasattr(self, 'outputVolume') or True:
-            strline += 'We processed %d particles from %s ' % (self.inputParticles.get().getSize(), 
+            strline += 'We processed %d particles from %s ' % (self.inputParticles.get().getSize(),
                                                                 self.getObjectTag('inputParticles'))
-            strline += 'using %s as reference and Xmipp highres procedure. ' % (self.getObjectTag('inputVolumes'))
+            if self.inputVolumes.get() is not None:
+                strline += 'using %s as reference and Xmipp highres procedure. ' % (self.getObjectTag('inputVolumes'))
             if self.symmetryGroup!="c1":
                 strline+="We imposed %s symmetry. "%self.symmetryGroup
             strline += "We performed %d iterations of "%self.numberOfIterations.get()

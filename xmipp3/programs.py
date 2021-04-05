@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # **************************************************************************
 # *
 # * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
@@ -117,7 +117,7 @@ def createProgramsDb(dbName=None):
     if dbName is None:
         dbName = getProgramsDbName()
     db = ProgramDb(dbName)
-    print 'Created db with name: %(dbName)s' % locals()
+    print('Created db with name: %(dbName)s' % locals())
     db.create()
     #Create categories dictionary to classify programs
     #looking in program name and category prefixes
@@ -132,25 +132,25 @@ def createProgramsDb(dbName=None):
     for p in programs:
         p = os.path.basename(p)
         try:
-            print greenStr(p), skipProgram(p)
+            print(greenStr(p), skipProgram(p))
             
             if not skipProgram(p):
                 cmd = [p, "--xmipp_write_definition"]
                 if p.find('_mpi') != -1:                    
                     cmd = ['mpirun', '-np', '1'] + cmd
-                print ' '.join(cmd)
+                print(' '.join(cmd))
                 from subprocess import Popen, PIPE
                 ps = Popen(cmd, stdout=PIPE, stderr=PIPE)
                 stderrdata = ps.communicate()[1]
                 if stderrdata != '':
                     raise Exception(stderrdata)
-                for prefix, category in categoryDict.iteritems():
+                for prefix, category in categoryDict.items():
                     if prefix in p:
                         db.updateProgramCategory(p, category)
                         break
-        except Exception, e:
-            print failStr("PROGRAM: " + p)
-            print failStr("ERROR: " + str(e))
+        except Exception as e:
+            print(failStr("PROGRAM: " + p))
+            print(failStr("ERROR: " + str(e)))
     labels = getXmippLabels()
     for l in labels:
         db.insertLabel(l)
@@ -167,21 +167,21 @@ def createProgramsAutocomplete(script='.xmipp_programs.autocomplete'):
     for p in programs:
         p = os.path.basename(p)
         try:
-            print greenStr(p), skipProgram(p)
+            print(greenStr(p), skipProgram(p))
             
             if not skipProgram(p):
                 cmd = [p, "--xmipp_write_autocomplete", script]
                 if '_mpi' in p:                    
                     cmd = ['mpirun', '-np', '1'] + cmd
-                print ' '.join(cmd)
+                print(' '.join(cmd))
                 from subprocess import Popen, PIPE
                 ps = Popen(cmd, stdout=PIPE, stderr=PIPE)
                 stderrdata = ps.communicate()[1]
                 if stderrdata != '':
                     raise Exception(stderrdata)                
-        except Exception, e:
-            print failStr("PROGRAM: " + p)
-            print failStr("ERROR: " + str(e))
+        except Exception as e:
+            print(failStr("PROGRAM: " + p))
+            print(failStr("ERROR: " + str(e)))
 
 class ProgramKeywordsRank():
     def __init__(self, keywords=None):
@@ -193,7 +193,7 @@ class ProgramKeywordsRank():
             return 1 
         rank = 0
         for k in self.keywords:
-            for wkey, wvalue in self.weights.iteritems():
+            for wkey, wvalue in self.weights.items():
                 if program[wkey].find(k) != -1:
                     rank += wvalue
         return rank

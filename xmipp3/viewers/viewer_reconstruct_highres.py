@@ -26,19 +26,17 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
-from glob import glob
+import os
 from os.path import exists, join
 
-from pyworkflow.protocol.params import EnumParam, NumericRangeParam, LabelParam, IntParam, FloatParam
+from pyworkflow.protocol.params import (EnumParam, NumericRangeParam,
+                                        LabelParam, IntParam, FloatParam)
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-from pyworkflow.em.viewers import ObjectView, DataView, ChimeraClientView
-import pyworkflow.em.viewers.showj as showj
+from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
+from pwem.viewers import (ObjectView, showj, EmProtocolViewer, ChimeraAngDist)
 
-from xmippLib import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
+from pwem.emlib import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
                    MDL_RESOLUTION_FREQ, MDL_RESOLUTION_FRC, MetaData)
-from xmipp3.convert import getImageLocation
 from xmipp3.protocols.protocol_reconstruct_highres import XmippProtReconstructHighRes
 from .plotter import XmippPlotter
 
@@ -47,11 +45,12 @@ ITER_SELECTION = 1
 
 ANGDIST_2DPLOT = 0
 ANGDIST_CHIMERA = 1
+ANGDIST_HEATMAP = 2
 
 VOLUME_SLICES = 0
 VOLUME_CHIMERA = 1
 
-class XmippReconstructHighResViewer(ProtocolViewer):
+class XmippReconstructHighResViewer(EmProtocolViewer):
     """ Visualize the output of protocol reconstruct highres """
     _label = 'viewer reconstruct highres'
     _targets = [XmippProtReconstructHighRes]
@@ -77,24 +76,18 @@ Examples:
   
         group = form.addGroup('Particles')
         group.addParam('showOutputParticles', LabelParam, default=False, label='Display output particles')
-        group.addParam('showInternalParticles', LabelParam, default=False, label='Display internal particles')
-        group.addParam('showAngDist', EnumParam, choices=['2D plot', 'chimera'],
-                       display=EnumParam.DISPLAY_HLIST, default=ANGDIST_2DPLOT,
+        group.addParam('showAngDist', EnumParam, choices=['2D plot', 'chimera', 'heatmap'],
+                       display=EnumParam.DISPLAY_HLIST, default=ANGDIST_HEATMAP,
                        label='Display angular distribution',
                        help='*2D plot*: display angular distribution as interative 2D in matplotlib.\n'
                             '*chimera*: display angular distribution using Chimera with red spheres.')
-        group.addParam('spheresScale', IntParam, default=50, 
+        group.addParam('spheresScale', IntParam, default=-1,
                        expertLevel=LEVEL_ADVANCED,
                        label='Spheres size')
         group.addParam('plotHistogramAngularMovement', LabelParam, default=False,
                       label='Plot histogram with angular changes',
                       help="""Plot histogram with angular changes from one iteration to next. 
                               Available from iteration 2""")
-        group.addParam('numberOfBins', IntParam, default=100, 
-                      condition='plotHistogramAngularMovement',
-                      expertLevel=LEVEL_ADVANCED,
-                      label='Number of bins',
-                      help='Number of bins in histograms')
 
         group = form.addGroup('Volumes')
         group.addParam('displayVolume', EnumParam, choices=['Reference', 'Reconstructed', 'Filtered'],
@@ -112,7 +105,6 @@ Examples:
         return {
                 'displayVolume' : self._showVolume,
                 'showOutputParticles' : self._showOutputParticles,
-                'showInternalParticles' : self._showInternalParticles,
                 'plotHistogramAngularMovement' : self._plotHistogramAngularMovement,
                 'showAngDist': self._showAngularDistribution,
                 'showResolutionPlots': self._showFSC
@@ -206,25 +198,16 @@ Examples:
                                                       showj.RENDER:'_filename'}))
         return views
 
-    def _showInternalParticles(self, paramName=None):
-        views = []
-        for it in self._iterations:
-            fnDir = self.protocol._getExtraPath("Iter%03d"%it)
-            fnAngles = join(fnDir,"angles.xmd")
-            if exists(fnAngles):
-                views.append(DataView(fnAngles, viewParams={showj.MODE: showj.MODE_MD}))
-        return views
-    
     def _plotHistogramAngularMovement(self, paramName=None):
         views = []
         for it in self._iterations:
             fnDir = self.protocol._getExtraPath("Iter%03d"%it)
             fnAngles = join(fnDir,"angles.xmd")
-            if self.protocol.weightJumper and it>1:
-                import xmippLib
-                xplotter = XmippPlotter(windowTitle="Jumper weight")
-                a = xplotter.createSubPlot("Jumper weight", "Weight", "Count")
-                xplotter.plotMdFile(fnAngles,xmippLib.MDL_WEIGHT_JUMPER,xmippLib.MDL_WEIGHT_JUMPER,nbins=100)
+            if it>1:
+                from pwem import emlib
+                xplotter = XmippPlotter(windowTitle="Angular difference")
+                a = xplotter.createSubPlot("Angular difference", "Angle", "Count")
+                xplotter.plotMdFile(fnAngles,emlib.MDL_ANGLE_DIFF,emlib.MDL_ANGLE_DIFF,nbins=100)
                 views.append(xplotter)
         return views
     
@@ -239,9 +222,9 @@ Examples:
                 if angDist is not None:
                     views.append(angDist)
                         
-        elif self.showAngDist == ANGDIST_2DPLOT:
+        elif self.showAngDist == ANGDIST_2DPLOT or self.showAngDist == ANGDIST_HEATMAP:
             for it in self._iterations:
-                angDist = self._createAngDist2D(it)
+                angDist = self._createAngDist2D(it, heatmap=self.showAngDist == ANGDIST_HEATMAP)
                 if angDist is not None:
                     views.append(angDist)
         return views
@@ -259,22 +242,37 @@ Examples:
         view=None
         if exists(fnAngles):
             fnAnglesSqLite = join(fnDir,"angles.sqlite")
-            from pyworkflow.em.metadata.utils import getSize
-            self.createAngDistributionSqlite(fnAnglesSqLite, getSize(fnAngles), itemDataIterator=self._iterAngles(fnAngles))
-            view = ChimeraClientView(join(fnDir,"volumeAvg.mrc"), showProjection=True, angularDistFile=fnAnglesSqLite, spheresDistance=self.spheresScale.get())
+            from pwem.emlib.metadata import getSize
+            self.createAngDistributionSqlite(fnAnglesSqLite, getSize(fnAngles),
+                                             itemDataIterator=self._iterAngles(fnAngles))
+            vol = os.path.join(fnDir, "volumeAvg.mrc")
+            extraFilesPath = self.protocol._getExtraPath()
+            volOrigin = self.protocol.outputVolume.getShiftsFromOrigin()
+            radius = self.spheresScale.get()
+            view = ChimeraAngDist(vol, extraFilesPath,
+                                  angularDistFile=fnAngles,
+                                  spheresDistance=radius,
+                                  voxelSize=self.protocol.outputVolume.getSamplingRate(),
+                                  volOrigin=volOrigin,
+                                  showProjection=True)
+
         return view
     
-    def _createAngDist2D(self, it):
+    def _createAngDist2D(self, it, heatmap):
         fnDir = self.protocol._getExtraPath("Iter%03d"%it)
         fnAngles = join(fnDir,"angles.xmd")
         view=None
         if exists(fnAngles):
             fnAnglesSqLite = join(fnDir,"angles.sqlite")
-            from pyworkflow.em.viewers import EmPlotter
+            from pwem.viewers import EmPlotter
             if not exists(fnAnglesSqLite):
-                from pyworkflow.em.metadata.utils import getSize
+                from pwem.emlib.metadata import getSize
                 self.createAngDistributionSqlite(fnAnglesSqLite, getSize(fnAngles), itemDataIterator=self._iterAngles(fnAngles))
             view = EmPlotter(x=1, y=1, mainTitle="Iteration %d" % it, windowTitle="Angular distribution")
-            view.plotAngularDistributionFromMd(fnAnglesSqLite, 'iter %d' % it)
+            if heatmap:
+                axis = view.plotAngularDistributionFromMd(fnAnglesSqLite, '', histogram=True)
+                view.getFigure().colorbar(axis)
+            else:
+                view.plotAngularDistributionFromMd(fnAnglesSqLite, '')
         return view
     

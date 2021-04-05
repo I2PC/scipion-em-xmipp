@@ -23,13 +23,15 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
-import pyworkflow
-import pyworkflow.object as pwobj
-from pyworkflow.em import *  
-from xmippLib import MetaData, MDL_ANGLE_ROT, MDL_ANGLE_TILT
+from pwem.emlib.image import ImageHandler
+from pyworkflow import VERSION_1_1
+from pyworkflow.protocol import PointerParam, StringParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
+from pwem.protocols import ProtAnalysis3D
+
+
+from pwem.emlib import MetaData, MDL_ANGLE_ROT, MDL_ANGLE_TILT
 from xmipp3.convert import readSetOfParticles
 
 
@@ -40,7 +42,7 @@ class XmippProtCreateGallery(ProtAnalysis3D):
     observed in the microscope.
     """
     _label = 'create gallery'
-    _version = pyworkflow.VERSION_1_1
+    _version = VERSION_1_1
     #--------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
         form.addSection(label='General parameters')
@@ -70,6 +72,9 @@ class XmippProtCreateGallery(ProtAnalysis3D):
         form.addParam('maxFreq',FloatParam, default=0.25,
                       expertLevel=LEVEL_ADVANCED,
                       label='Maximum frequency', help="Normalized to 0.5")
+        form.addParam('shiftSigma',FloatParam, default=0.0,
+                      expertLevel=LEVEL_ADVANCED,
+                      label='Shift sigma', help="In pixels")
 
     #--------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
@@ -96,7 +101,8 @@ _projTiltRange    '%f %f %d'
 _projTiltRandomness   even 
 _projPsiRange    '0 0 1'
 _projPsiRandomness   even 
-""" % (xdim, xdim, self.rot0, self.rotF,rotN, self.tilt0, self.tiltF, tiltN)
+_noiseCoord '%f 0'
+""" % (xdim, xdim, self.rot0, self.rotF,rotN, self.tilt0, self.tiltF, tiltN, self.shiftSigma)
         fhParam = open(self._getExtraPath("projectionParameters.xmd"), 'w')
         fhParam.write(paramContent)
         fhParam.close()

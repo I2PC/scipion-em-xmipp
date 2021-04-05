@@ -28,143 +28,91 @@
 This module contains utils functions for Xmipp protocols
 """
 
-from os.path import exists, join
-import subprocess
+from os.path import join, basename
 import numpy as np
+import math
+from pyworkflow import Config
+import pyworkflow.utils as pwutils
+from pwem import emlib
 
-import xmipp3
-import xmippLib
-from .base import XmippMdRow
 
 def validateXmippGpuBins():
     pass
 
-def getMdFirstRow(filename):
-    """ Create a MetaData but only read the first row.
-    This method should be used for validations of labels
-    or metadata size, but the full metadata is not needed.
-    """
-    md = xmippLib.MetaData()
-    md.read(filename, 1)
-    if md.getParsedLines():
-        row = XmippMdRow()
-        row.readFromMd(md, md.firstObject())
-    else:
-        row = None
-    
-    return row
-
-
-def getMdSize(filename):
-    """ Return the metadata size without parsing entirely. """
-    md = xmippLib.MetaData()
-    md.read(filename, 1)
-    return md.getParsedLines()
-
-
-def isMdEmpty(filename):
-    """ Use getMdSize to check if metadata is empty. """
-    return getMdSize(filename) == 0
-
-
-def iterMdRows(md):
-    """ Iterate over the rows of the given metadata. """
-    # If md is string, take as filename and create the metadata
-    if isinstance(md, basestring):
-        md = xmippLib.MetaData(md)
-        
-    row = XmippMdRow()
-    
-    for objId in md:
-        row.readFromMd(md, objId)
-        yield row
-
-def readInfoField(fnDir,block,label):
-    mdInfo = xmippLib.MetaData("%s@%s"%(block,join(fnDir,"iterInfo.xmd")))
-    return mdInfo.getValue(label,mdInfo.firstObject())
-
-def writeInfoField(fnDir,block,label, value):
-    mdInfo = xmippLib.MetaData()
-    objId=mdInfo.addObject()
-    mdInfo.setValue(label,value,objId)
-    mdInfo.write("%s@%s"%(block,join(fnDir,"iterInfo.xmd")),xmippLib.MD_APPEND)
-    
-def validateDLtoolkit(errors=None, **kwargs):
-    """ Validates if the deepLearningToolkit is installed.
-        Additionally, it assert if a certain models is present when
-        kwargs are present, following:
-          - assertModel: if models should be evaluated or not (default: True).
-          - errorMsg: a custom message error (default: '').
-          - model: a certain model name/route/list (default: no model assert)
-            + model='myModel': asserts if myModel exists
-            + model=('myModel', 'myFile.h5'): asserts is myModel/myFile.h5 exists
-            + model=['myModel1', 'myModel2', ('myModel3', 'myFile3.h5')]: a combination
-
-        usage (3 examples):
-          errors = validateDLtoolkit(errors, doAssert=self.useModel.get(),
-                                     model="myModel")
-
-          errors = validateDLtoolkit(model=("myModel2", "myFile.h5"))
-
-          errors = validateDLtoolkit(doAssert=self.mode.get()==PREDICT,
-                                     model=("myModel3", "subFolder", "model.h5"),
-                                     errorMsg="myModel3 is required for the "
-                                              "prediction mode")
-    """
-    # initialize errors if needed
-    errors = errors if errors is not None else []
-
-    # Trying to import keras to assert if DeepLearningToolkit works fine.
-    kerasError = False
-    try:
-        subprocess.check_output('python -c "import keras"', shell=True)
-    except subprocess.CalledProcessError:
-        errors.append("*Keras/Tensorflow not found*. Required to run this protocol.")
-        kerasError=True
-
-    # Asserting if the model exists only if the software is well installed
-    modelError = False
-    models = kwargs.get('model', '')
-    if not kerasError and kwargs.get('assertModel', True) and models != '':
-        models = models if isinstance(models, list) else [models]
-        for model in models:
-            if isinstance(model, str):
-                if not exists(xmipp3.Plugin.getModel(model, doRaise=False)):
-                    modelError = True
-            elif isinstance(model, tuple):
-                if not exists(xmipp3.Plugin.getModel(*model, doRaise=False)):
-                    modelError = True
-        if modelError:
-            errors.append("*Pre-trained model not found*. %s"
-                          % kwargs.get('errorMsg', ''))
-
-    # Hint to install the deepLearningToolkit
-    if kerasError or modelError:
-        errors.append("Please, *run* 'scipion installb deepLearningToolkit' "
-                      "or install the scipion-em-xmipp/deepLearningToolkit "
-                      "package using the *plugin manager*.")
-
-    return errors
 
 BAD_IMPORT_TENSORFLOW_KERAS_MSG='''
 Error, tensorflow/keras is probably not installed. Install it with:\n  ./scipion installb deepLearningToolkit
 If gpu version of tensorflow desired, install cuda 8.0 or cuda 9.0
 We will try to automatically install cudnn, if unsucesfully, install cudnn and add to LD_LIBRARY_PATH
-add to SCIPION_DIR/config/scipion.conf
+add to {0}
 CUDA = True
 CUDA_VERSION = 8.0 or 9.0
-CUDA_HOME = /path/to/cuda-%(CUDA_VERSION)
+CUDA_HOME = /path/to/cuda-%(CUDA_VERSION)s
 CUDA_BIN = %(CUDA_HOME)s/bin
 CUDA_LIB = %(CUDA_HOME)s/lib64
 CUDNN_VERSION = 6 or 7
-'''
+'''.format(Config.SCIPION_CONFIG)
+
+
+def writeImageFromArray(array, fn):
+    img = emlib.Image()
+    img.setData(array)
+    img.write(fn)
+
+def readImage(fn):
+    img = emlib.Image()
+    img.read(fn)
+    return img
+
+def applyTransform(imag_array, M, shape):
+  ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
+  '''
+  imag = emlib.Image()
+  imag.setData(imag_array)
+  imag = imag.applyWarpAffine(list(M.flatten()), shape, True)
+  return imag.getData()
+
+def rotation(imag, angle, shape, P):
+  '''Rotate a np.array and return also the transformation matrix
+  #imag: np.array
+  #angle: angle in degrees
+  #shape: output shape
+  #P: transform matrix (further transformation in addition to the rotation)'''
+  (hsrc, wsrc) = imag.shape
+  angle *= math.pi / 180
+  T = np.asarray([[1, 0, -wsrc / 2], [0, 1, -hsrc / 2], [0, 0, 1]])
+  R = np.asarray([[math.cos(angle), math.sin(angle), 0], [-math.sin(angle), math.cos(angle), 0], [0, 0, 1]])
+  M = np.matmul(np.matmul(np.linalg.inv(T), np.matmul(R, T)), P)
+
+  transformed = applyTransform(imag, M, shape)
+  return transformed, M
+
+def flipYImage(inFn, outFn=None, outDir=None):
+    '''Flips an image in the Y axis'''
+    if outFn == None:
+        if not '_flipped' in basename(inFn):
+            ext = pwutils.getExt(inFn)
+            outFn = inFn.replace(ext, '_flipped' + ext)
+        else:
+            outFn = inFn.replace('_flipped', '')
+    if outDir != None:
+        outFn = outDir + '/' + basename(outFn)
+    gainImg = readImage(inFn)
+    imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
+
+    # Flipped Y matrix
+    M, angle = np.asarray([[1, 0, 0], [0, -1, imag_array.shape[0]], [0, 0, 1]]), 0
+    flipped_array, M = rotation(imag_array, angle, imag_array.shape, M)
+    writeImageFromArray(flipped_array, outFn)
+    return outFn
 
 def copy_image(imag):
     ''' Return a copy of a xmipp_image
     '''
-    new_imag = xmippLib.Image()
+    new_imag = emlib.Image()
     new_imag.setData(imag.getData())
     return new_imag
+
 
 def matmul_serie(mat_list, size=4):
     '''Return the matmul of several numpy arrays'''
@@ -177,12 +125,14 @@ def matmul_serie(mat_list, size=4):
         res = np.identity(size)
     return res
 
+
 def normalize_array(ar):
     '''Normalize values in an array with mean 0 and std deviation 1
     '''
     ar -= np.mean(ar)
     ar /= np.std(ar)
     return ar
+
 
 def surrounding_values(a,ii,jj,depth=1):
     '''Return a list with the surrounding elements, given the indexs of the center, from an 2D numpy array
@@ -194,3 +144,165 @@ def surrounding_values(a,ii,jj,depth=1):
                 if i!=ii or j!=jj:
                     values+=[a[i][j]]
     return values
+
+
+class Point:
+    """ Return x, y 2d coordinates and some other properties
+    such as weight and state.
+    """
+    # Selection states
+    DISCARDED = -1
+    NORMAL = 0
+    SELECTED = 1
+
+    def __init__(self, pointId, data, weight, state=0):
+        self._id = pointId
+        self._data = data
+        self._weight = weight
+        self._state = state
+        self._container = None
+
+    def getId(self):
+        return self._id
+
+    def getX(self):
+        return self._data[self._container.XIND]
+
+    def setX(self, value):
+        self._data[self._container.XIND] = value
+
+    def getY(self):
+        return self._data[self._container.YIND]
+
+    def setY(self, value):
+        self._data[self._container.YIND] = value
+
+    def getZ(self):
+        return self._data[self._container.ZIND]
+
+    def setZ(self, value):
+        self._data[self._container.ZIND] = value
+
+    def getWeight(self):
+        return self._weight
+
+    def getState(self):
+        return self._state
+
+    def setState(self, newState):
+        self._state = newState
+
+    def eval(self, expression):
+        localDict = {}
+        for i, x in enumerate(self._data):
+            localDict['x%d' % (i + 1)] = x
+        return eval(expression, {"__builtins__": None}, localDict)
+
+    def setSelected(self):
+        self.setState(Point.SELECTED)
+
+    def isSelected(self):
+        return self.getState() == Point.SELECTED
+
+    def setDiscarded(self):
+        self.setState(Point.DISCARDED)
+
+    def isDiscarded(self):
+        return self.getState() == Point.DISCARDED
+
+    def getData(self):
+        return self._data
+
+
+class Data():
+    """ Store data points. """
+
+    def __init__(self, **kwargs):
+        # Indexes of data
+        self._dim = kwargs.get('dim')  # The points dimensions
+        self.clear()
+
+    def addPoint(self, point, position=None):
+        point._container = self
+        if position is None:
+            self._points.append(point)
+        else:
+            self._points.insert(position, point)
+
+    def getPoint(self, index):
+        return self._points[index]
+
+    def __iter__(self):
+        for point in self._points:
+            if not point.isDiscarded():
+                yield point
+
+    def iterAll(self):
+        """ Iterate over all points, including the discarded ones."""
+        return iter(self._points)
+
+    def getXData(self):
+        return [p.getX() for p in self]
+
+    def getYData(self):
+        return [p.getY() for p in self]
+
+    def getZData(self):
+        return [p.getZ() for p in self]
+
+    def getWeights(self):
+        return [p.getWeight() for p in self]
+
+    def getSize(self):
+        return len(self._points)
+
+    def getSelectedSize(self):
+        return len([p for p in self if p.isSelected()])
+
+    def getDiscardedSize(self):
+        return len([p for p in self.iterAll() if p.isDiscarded()])
+
+    def clear(self):
+        self.XIND = 0
+        self.YIND = 1
+        self.ZIND = 2
+        self._points = []
+
+
+class PathData(Data):
+    """ Just contains two list of x and y coordinates. """
+
+    def __init__(self, **kwargs):
+        Data.__init__(self, **kwargs)
+
+    def splitLongestSegment(self):
+        """ Split the longest segment by adding the midpoint. """
+        maxDist = 0
+        n = self.getSize()
+        # Find the longest segment and its index
+        for i in range(n - 1):
+            p1 = self.getPoint(i)
+            x1, y1 = p1.getX(), p1.getY()
+            p2 = self.getPoint(i + 1)
+            x2, y2 = p2.getX(), p2.getY()
+            dist = (x1 - x2) ** 2 + (y1 - y2) ** 2
+            if dist > maxDist:
+                maxDist = dist
+                maxIndex = i + 1
+                midX = (x1 + x2) / 2
+                midY = (y1 + y2) / 2
+        # Add a midpoint to it
+        point = self.createEmptyPoint()
+        point.setX(midX)
+        point.setY(midY)
+        self.addPoint(point, position=maxIndex)
+
+    def createEmptyPoint(self):
+        data = [0.] * self._dim  # create 0, 0...0 point
+        point = Point(0, data, 0)
+        point._container = self
+
+        return point
+
+    def removeLastPoint(self):
+        del self._points[-1]

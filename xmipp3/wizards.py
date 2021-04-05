@@ -26,11 +26,11 @@
 # *
 # **************************************************************************
 
-from pyworkflow.em.constants import *
-from pyworkflow.em.wizard import *
-from pyworkflow.em.protocol import ProtImportCoordinates
+from pwem.constants import *
+from pwem.wizards import *
+from pyworkflow.wizard import Wizard
+from xmipp3.viewers import XmippMonoResViewer, XmippMonoTomoViewer, XmippResDeepResViewer
 
-from .constants import *
 from .protocols.protocol_cl2d import IMAGES_PER_CLASS
 
 from .protocols import (
@@ -41,8 +41,7 @@ from .protocols import (
     XmippProtMaskVolumes, XmippProtAlignVolume, XmippProtCL2D,
     XmippProtHelicalParameters, XmippProtConsensusPicking, XmippProtMonoRes,
     XmippProtRotSpectra, XmippProtReconstructHighRes, XmippProtExtractUnit,
-    XmippProtReconstructHeterogeneous, XmippMetaProtDiscreteHeterogeneityScheduler,
-    XmippProtConnectedComponents)
+    XmippProtReconstructHeterogeneous, XmippMetaProtDiscreteHeterogeneityScheduler)
 
 
 #===============================================================================
@@ -168,22 +167,6 @@ class XmippParticleConsensusRadiusWizard(Wizard):
     def show(self, form):
         form.setVar('consensusRadius', self._getRadius(form.protocol))
 
-class XmippParticleRemoveDuplicatesRadiusWizard(Wizard):
-    _targets = [(XmippProtPickingRemoveDuplicates, ['consensusRadius'])]
-
-    def _getRadius(self, protocol):
-        if protocol.inputCoordinates.hasValue():
-            boxSize=protocol.inputCoordinates.get().getBoxSize()
-            radius = int(boxSize*0.25)
-            if radius<10:
-                radius=10
-        else:
-            radius = 10
-        return radius
-
-    def show(self, form):
-        form.setVar('consensusRadius', self._getRadius(form.protocol))
-
 #===============================================================================
 # NUMBER OF CLASSES
 #===============================================================================
@@ -233,7 +216,6 @@ class XmippParticleMaskRadiusWizard(ParticleMaskRadiusWizard):
         _value = params['value']
         _label = params['label']
         ParticleMaskRadiusWizard.show(self, form, _value, _label, UNIT_PIXEL)
-
 
 
 class XmippParticleMaskRadiiWizard(ParticlesMaskRadiiWizard):
@@ -515,22 +497,6 @@ class XmippGaussianVolumesWizard(GaussianVolumesWizard):
         _label = params['label']
         GaussianVolumesWizard.show(self, form, _value, _label, UNIT_PIXEL_FOURIER)
 
-#===============================================================================
-#  TOMO
-#===============================================================================
 
-class XmippConnectedCompWizard(Wizard):
-    _targets = [(XmippProtConnectedComponents, ['distance'])]
-
-    def show(self, form):
-        tomoCCProt = form.protocol
-        inputCoordinates = tomoCCProt.inputCoordinates.get()
-        if not inputCoordinates:
-            print('You must specify input coordinates')
-            return
-        boxSize = inputCoordinates.getBoxSize()
-        if not boxSize:
-            print('These coordinates do not have box size. Please, enter distance manually.')
-            return
-        distance = boxSize * 3
-        form.setVar('distance', distance)
+class ColorScaleWizard(ColorScaleWizardBase):
+        _targets = ColorScaleWizardBase.defineTargets(XmippMonoResViewer, XmippMonoTomoViewer, XmippResDeepResViewer)

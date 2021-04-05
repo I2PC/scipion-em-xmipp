@@ -25,47 +25,56 @@
 # *
 # **************************************************************************
 
-from __future__ import print_function
 import os
-import sys
-import platform
-from collections import OrderedDict
+import subprocess
 
-from pyworkflow.object import ObjectWrap
+from pyworkflow.protocol import Protocol
+from pyworkflow.utils.path import cleanPath
+from pwem import emlib
+import pwem
+from .constants import XMIPP_DLTK_NAME
 
-import xmippLib
-from xmippLib import (MetaData, MetaDataInfo, MDL_IMAGE, MDL_IMAGE1, MDL_IMAGE_REF,
-    MDL_ANGLE_ROT, MDL_ANGLE_TILT, MDL_ANGLE_PSI, MDL_REF, MDL_SHIFT_X,
-    MDL_SHIFT_Y, MDL_FLIP, MD_APPEND, MDL_MAXCC, MDL_ENABLED, MDL_CTF_MODEL,
-    MDL_SAMPLINGRATE, DT_DOUBLE, MDL_ANGLE_ROT, MDL_SHIFT_Z,
-    Euler_angles2matrix, Image, FileName, getBlocksInMetaDataFile, label2Str)
-from .constants import *
+try:  # If binding is not already done, this will fail.
+    from xmipp_base import *  # xmipp_base and xmippViz come from the binding and
+    from xmippViz import *    #  it is not available before installing the binaries
+except Exception as exc:  # TODO: catch exception by type and ensure it is caused by CondaEnvManager
+    error = exc
+    class CondaEnvManager:
+        """ Fake class to avoid very early fails (during installation). """
+        @classmethod
+        def yieldInstallAllCmds(*args, **kwargs):
+            yield ('echo "Some error occurred when importing xmipp_base '
+                   '(from Xmipp binding): %s"' % error, 'void.target')
+
+import xmipp3
 
 
 LABEL_TYPES = { 
-               xmippLib.LABEL_SIZET: long,
-               xmippLib.LABEL_DOUBLE: float,
-               xmippLib.LABEL_INT: int,
-               xmippLib.LABEL_BOOL: bool
+               emlib.LABEL_SIZET: int,
+               emlib.LABEL_DOUBLE: float,
+               emlib.LABEL_INT: int,
+               emlib.LABEL_BOOL: bool
                }
 
 
 def getXmippPath(*paths):
     '''Return the path the the Xmipp installation folder
     if a subfolder is provided, will be concatenated to the path'''
-    if os.environ.has_key(XMIPP_HOME):
-        return os.path.join(os.environ[XMIPP_HOME], *paths)
-    else:
-        raise Exception('XMIPP_HOME environment variable not set')
+    return os.path.join(pwem.Config.XMIPP_HOME, *paths)
 
+def isXmippCudaPresent(program=""):
+    if program=="":
+        return os.path.isfile(getXmippPath("bin","xmipp_cuda_reconstruct_fourier"))
+    else:
+        return os.path.isfile(getXmippPath("bin",program))
 
 def getLabelPythonType(label):
     """ From xmipp label to python variable type """
-    labelType = xmippLib.labelType(label)
+    labelType = emlib.labelType(label)
     return LABEL_TYPES.get(labelType, str)
 
 
-class XmippProtocol():
+class XmippProtocol:
     """ This class groups some common functionalities that
     share some Xmipp protocols, like converting steps.
     """
@@ -73,13 +82,14 @@ class XmippProtocol():
     def _insertConvertStep(self, inputName, xmippClass, resultFn):
         """ Insert the convertInputToXmipp if the inputName attribute
         is not an instance of xmippClass.
-        It will return the result filename, if the 
+        It will return the result filename, if the
         conversion is needed, this will be input resultFn.
         If not, it will be inputAttr.getFileName()
         """
         inputAttr = getattr(self, inputName)
         if not isinstance(inputAttr, xmippClass):
-            self._insertFunctionStep('convertInputToXmipp', inputName, xmippClass, resultFn)
+            self._insertFunctionStep('convertInputToXmipp', inputName, xmippClass,
+                                     resultFn)
             return resultFn
         return inputAttr.getFileName()
          
@@ -94,140 +104,106 @@ class XmippProtocol():
          
         if inputXmipp is not inputAttr:
             self._insertChild(inputName + 'Xmipp', inputXmipp)
-            return [resultFn] # validate resultFn was produced if converted
+            return [resultFn]  # validate resultFn was produced if converted
          
     def getConvertedInput(self, inputName):
         """ Retrieve the converted input, it can be the case that
-        it is the same as input, when not conversion was done. 
+        it is the same as input, when not conversion was done.
         """
         return getattr(self, inputName + 'Xmipp', getattr(self, inputName))
-        
 
-class XmippMdRow():
-    """ Support Xmipp class to store label and value pairs 
-    corresponding to a Metadata row. 
-    """
-    def __init__(self):
-        self._labelDict = OrderedDict() # Dictionary containing labels and values
-        self._objId = None # Set this id when reading from a metadata
-        
-    def getObjId(self):
-        return self._objId
-    
-    def hasLabel(self, label):
-        return self.containsLabel(label)
-    
-    def containsLabel(self, label):
-        # Allow getValue using the label string
-        if isinstance(label, basestring):
-            label = xmippLib.str2Label(label)
-        return label in self._labelDict
-    
-    def removeLabel(self, label):
-        if self.hasLabel(label):
-            del self._labelDict[label]
-    
-    def setValue(self, label, value):
-        """args: this list should contains tuples with 
-        MetaData Label and the desired value"""
-        # Allow setValue using the label string
-        if isinstance(label, basestring):
-            label = xmippLib.str2Label(label)
-        self._labelDict[label] = value
-            
-    def getValue(self, label, default=None):
-        """ Return the value of the row for a given label. """
-        # Allow getValue using the label string
-        if isinstance(label, basestring):
-            label = xmippLib.str2Label(label)
-        return self._labelDict.get(label, default)
-    
-    def getValueAsObject(self, label, default=None):
-        """ Same as getValue, but making an Object wrapping. """
-        return ObjectWrap(self.getValue(label, default))
-    
-    def readFromMd(self, md, objId):
-        """ Get all row values from a given id of a metadata. """
-        self._labelDict.clear()
-        self._objId = objId
-        
-        for label in md.getActiveLabels():
-            self._labelDict[label] = md.getValue(label, objId)
-            
-    def writeToMd(self, md, objId):
-        """ Set back row values to a metadata row. """
-        for label, value in self._labelDict.iteritems():
-            # TODO: Check how to handle correctly unicode type
-            # in Xmipp and Scipion
-            t = type(value)
-            
-            if t is unicode:
-                value = str(value)
-                
-            if t is int and xmippLib.labelType(label) == xmippLib.LABEL_SIZET:
-                value = long(value)
-                
-            try:
-                md.setValue(label, value, objId)
-            except Exception as ex:
-                print("XmippMdRow.writeToMd: Error writting value to metadata.",
-                      file=sys.stderr)
-                print("                     label: %s, value: %s, type(value): %s"
-                      % (label2Str(label), value, type(value)), file=sys.stderr)
-                raise ex
-            
-    def readFromFile(self, fn):
-        md = xmippLib.MetaData(fn)
-        self.readFromMd(md, md.firstObject())
-        
-    def copyFromRow(self, other):
-        for label, value in other._labelDict.iteritems():
-            self.setValue(label, value)
-            
-    def __str__(self):
-        s = '{'
-        for k, v in self._labelDict.iteritems():
-            s += '  %s = %s\n' % (xmippLib.label2Str(k), v)
-        return s + '}'
-    
-    def __iter__(self):
-        return self._labelDict.iteritems()
-            
-    def printDict(self):
-        """ Fancy printing of the row, mainly for debugging. """
-        print (str(self))
-    
-    
-class RowMetaData():
-    """ This class is a wrapper for MetaData in row mode.
-    Where only one object is used.
-    """
-    def __init__(self, filename=None):
-        self._md = xmippLib.MetaData()
-        self._md.setColumnFormat(False)
-        self._id = self._md.addObject()
-        
-        if filename:
-            self.read(filename)
-        
-    def setValue(self, label, value):
-        self._md.setValue(label, value, self._id)
-        
-    def getValue(self, label):
-        return self._md.getValue(label, self._id)
-        
-    def write(self, filename, mode=xmippLib.MD_APPEND):
-        self._md.write(filename, mode)
-        
-    def read(self, filename):
-        self._md.read(filename)
-        self._md.setColumnFormat(False)
-        self._id = self._md.firstObject()
-        
-    def __str__(self):
-        return str(self._md)
-    
-        
+    @classmethod
+    def getModel(cls, *modelPath, **kwargs):
+        """ Returns the path to the models folder followed by
+            the given relative path.
+        .../xmipp/models/myModel/myFile.h5 <= getModel('myModel', 'myFile.h5')
+
+            NOTE: it raise and exception when model not found, set doRaise=False
+                  in the arguments to skip that raise, especially in validation
+                  asserions!
+        """
+        os.environ['XMIPP_HOME'] = getXmippPath()
+        return getModel(*modelPath, **kwargs)
+
+    def validateDLtoolkit(self, errors=None, **kwargs):
+        """ Validates if the deepLearningToolkit is installed.
+            Additionally, it assert if a certain models is present when
+            kwargs are present, following:
+              - _conda_env: The conda env to be load
+                            (default: the protocol._conda_env or CONDA_DEFAULT_ENVIRON)
+              - assertModel: if models should be evaluated or not (default: True).
+              - errorMsg: a custom message error (default: '').
+              - model: a certain model name/route/list (default: no model assert)
+                + model='myModel': asserts if myModel exists
+                + model=('myModel', 'myFile.h5'): asserts is myModel/myFile.h5 exists
+                + model=['myModel1', 'myModel2', ('myModel3', 'myFile3.h5')]: a combination
+
+            usage (3 examples):
+              errors = validateDLtoolkit(errors, doAssert=self.useModel.get(),
+                                         model="myModel")
+
+              errors = validateDLtoolkit(model=("myModel2", "myFile.h5"))
+
+              errors = validateDLtoolkit(doAssert=self.mode.get()==PREDICT,
+                                         model=("myModel3", "subFolder", "model.h5"),
+                                         errorMsg="myModel3 is required for the "
+                                                  "prediction mode")
+        """
+        # initialize errors if needed
+        errors = errors if errors is not None else []
+
+        # Looking for the installation target for that conda environment.
+        kerasError = False
+        envName = CondaEnvManager.getCondaName(self, **kwargs)
+        if not os.path.isfile(os.path.join(pwem.Config.EM_ROOT,
+                                           XMIPP_DLTK_NAME,
+                                           envName+'.yml')):
+            errors.append("*%s environment not found*. "
+                          "Required to run this protocol." % envName)
+            kerasError = True
+
+        # Asserting if the model exists only if the software is well installed
+        models = kwargs.get('model', '')
+        failedModels = []
+        if not kerasError and kwargs.get('assertModel', True) and models != '':
+            models = models if isinstance(models, list) else [models]
+            for model in models:
+                if isinstance(model, str):
+                    modelFn = self.getModel(model, doRaise=False)
+                    modelName = model.split('/')[0]  # This differs from dirname
+                elif isinstance(model, tuple):
+                    modelFn = self.getModel(*model, doRaise=False)
+                    modelName = model[0]
+                else:
+                    print("Deep Learning model type unknown (%s validation):\n"
+                          " > %s %s" % (self, model, type(model)))
+                    continue
+                if not os.path.exists(modelFn):
+                    failedModels.append(modelName)
+            if failedModels:
+                errors.append("*Pre-trained model(s) not found*: %s"
+                              % ', '.join(failedModels))
+
+        # Hint to install the deepLearningToolkit
+        if kerasError or failedModels:
+            errors.append("Please, *run* 'scipion installb deepLearningToolkit' "
+                          "or install the scipion-em-xmipp > deepLearningToolkit "
+                          "package using the *plugin manager*.")
+        return errors
+
+    @classmethod
+    def getCondaEnv(cls, **kwargs):
+        """ Returns the environ corresponding to the condaEnv of the protocol.
+            kwargs can contain:
+               - 'env': Any environ (the xmipp one is the default)
+               - '_conda_env': An installed condaEnv name
+            > _conda_env preference: kwargs > protocol default > general default
+        """
+        envName = CondaEnvManager.getCondaName(cls, **kwargs)
+        env = kwargs.get('env', xmipp3.Plugin.getEnviron())
+        return CondaEnvManager.getCondaEnv(env, envName)
+
+# findRow() cannot go to xmipp_base (binding) because depends on emlib.metadata.Row()
 def findRow(md, label, value):
     """ Query the metadata for a row with label=value.
     Params:
@@ -235,39 +211,72 @@ def findRow(md, label, value):
         label: label to check value
         value: value for equal condition
     Returns:
-        XmippMdRow object of the row found.
+        Row object of the row found.
         None if no row is found with label=value
     """
-    mdQuery = xmippLib.MetaData() # store result
-    mdQuery.importObjects(md, xmippLib.MDValueEQ(label, value))
+    mdQuery = emlib.MetaData()  # store result
+    mdQuery.importObjects(md, emlib.MDValueEQ(label, value))
     n = mdQuery.size()
-    
+
     if n == 0:
         row = None
     elif n == 1:
-        row = XmippMdRow()
+        row = emlib.metadata.Row()
         row.readFromMd(mdQuery, mdQuery.firstObject())
     else:
-        raise Exception("findRow: more than one row found matching the query %s = %s" % (xmippLib.label2Str(label), value))
-    
+        raise Exception("findRow: more than one row found matching the query "
+                        "%s = %s" % (emlib.label2Str(label), value))
+
     return row
+
 
 def findRowById(md, value):
     """ Same as findRow, but using MDL_ITEM_ID for label. """
-    return findRow(md, xmippLib.MDL_ITEM_ID, long(value))
+    return findRow(md, emlib.MDL_ITEM_ID, int(value))
+
+
+# getMdFirstRow() cannot go to xmipp_base (binding) because depends on emlib.metadata.Row()
+def getMdFirstRow(filename):
+    """ Create a MetaData but only read the first row.
+    This method should be used for validations of labels
+    or metadata size, but the full metadata is not needed.
+    """
+    md = emlib.MetaData()
+    md.read(filename, 1)
+    if md.getParsedLines():
+        row = emlib.metadata.Row()
+        row.readFromMd(md, md.firstObject())
+    else:
+        row = None
+
+    return row
+
+# iterMdRows() cannot go to xmipp_base (binding) because depends on emlib.metadata.Row()
+def iterMdRows(md):
+    """ Iterate over the rows of the given metadata. """
+    # If md is string, take as filename and create the metadata
+    if isinstance(md, str):
+        md = emlib.MetaData(md)
+
+    row = emlib.metadata.Row()
+
+    for objId in md:
+        row.readFromMd(md, objId)
+        yield row
   
   
-class XmippSet():
+class XmippSet:
+    # FIXME: It seems unused...
     """ Support class to store sets in Xmipp base on a MetaData. """
     def __init__(self, itemClass):
         """ Create new set, base on a Metadata.
         itemClass: Class that represent the items.
         A method .getFileName should be available to store the md.
-        Items contained in XmippSet are supposed to inherit from XmippMdRow.
+        Items contained in XmippSet are supposed to inherit from Row.
         """
         self._itemClass = itemClass 
-        #self._fileName = fileName      
-        self._md = xmippLib.MetaData()
+        # self._fileName = fileName
+        self._md = emlib.MetaData()
         
         
     def __iter__(self):
@@ -277,9 +286,9 @@ class XmippSet():
         for objId in self._md:  
             item = self._itemClass()
             item.readFromMd(self._md, objId)  
-            #m = Image(md.getValue(xmippLib.MDL_IMAGE, objId))
+            #m = emib.Image(md.getValue(emlib.MDL_IMAGE, objId))
             #if self.hasCTF():
-            #    m.ctfModel = XmippCTFModel(md.getValue(xmippLib.MDL_CTF_MODEL, objId))
+            #    m.ctfModel = XmippCTFModel(md.getValue(emlib.MDL_CTF_MODEL, objId))
             yield item
         
 #        
@@ -337,95 +346,100 @@ class XmippSet():
         return setOut   
     
     
-class ProjMatcher():
+class ProjMatcher:
     """ Base class for protocols that use a projection """
     
     def projMatchStep(self, volume, angularSampling, symmetryGroup, images, fnAngles, Xdim):
-        from pyworkflow.utils.path import cleanPath
         # Generate gallery of projections        
         fnGallery = self._getExtraPath('gallery.stk')
         if volume.endswith('.mrc'):
             volume+=":mrc"
         
-        self.runJob("xmipp_angular_project_library", "-i %s -o %s --sampling_rate %f --sym %s --method fourier 1 0.25 bspline --compute_neighbors --angular_distance -1 --experimental_images %s"\
-                   % (volume, fnGallery, angularSampling, symmetryGroup, images))
+        self.runJob("xmipp_angular_project_library",
+                    "-i %s -o %s --sampling_rate %f --sym %s --method fourier 1 0.25 bspline "
+                    "--compute_neighbors --angular_distance -1 --experimental_images %s"
+                    % (volume, fnGallery, angularSampling, symmetryGroup, images))
     
         # Assign angles
-        self.runJob("xmipp_angular_projection_matching", "-i %s -o %s --ref %s --Ri 0 --Ro %s --max_shift 1000 --search5d_shift %s --search5d_step  %s --append"\
-                   % (images, fnAngles, fnGallery, str(Xdim/2), str(int(Xdim/10)), str(int(Xdim/25))))
+        self.runJob("xmipp_angular_projection_matching",
+                    "-i %s -o %s --ref %s --Ri 0 --Ro %s --max_shift 1000 "
+                    "--search5d_shift %s --search5d_step  %s --append"
+                    % (images, fnAngles, fnGallery, str(Xdim/2),
+                       str(int(Xdim/10)), str(int(Xdim/25))))
         
         cleanPath(self._getExtraPath('gallery_sampling.xmd'))
         cleanPath(self._getExtraPath('gallery_angles.doc'))
         cleanPath(self._getExtraPath('gallery.doc'))
     
         # Write angles in the original file and sort
-        MD=MetaData(fnAngles)
+        MD=emlib.MetaData(fnAngles)
         for id in MD:
-            galleryReference = MD.getValue(xmippLib.MDL_REF,id)
-            MD.setValue(xmippLib.MDL_IMAGE_REF, "%05d@%s" % (galleryReference+1,fnGallery), id)
+            galleryReference = MD.getValue(emlib.MDL_REF,id)
+            MD.setValue(emlib.MDL_IMAGE_REF, "%05d@%s" % (galleryReference+1, fnGallery), id)
         MD.write(fnAngles)
         
     def produceAlignedImagesStep(self, volumeIsCTFCorrected, fn, images):
         
         from numpy import array, dot
         fnOut = 'classes_aligned@' + fn
-        MDin = MetaData(images)
-        MDout = MetaData()
+        MDin = emlib.MetaData(images)
+        MDout = emlib.MetaData()
         n = 1
-        hasCTF = MDin.containsLabel(xmippLib.MDL_CTF_MODEL)
+        hasCTF = MDin.containsLabel(emlib.MDL_CTF_MODEL)
         for i in MDin:
-            fnImg = MDin.getValue(xmippLib.MDL_IMAGE,i)
-            fnImgRef = MDin.getValue(xmippLib.MDL_IMAGE_REF,i)
-            maxCC = MDin.getValue(xmippLib.MDL_MAXCC,i)
-            rot =  MDin.getValue(xmippLib.MDL_ANGLE_ROT,i)
-            tilt = MDin.getValue(xmippLib.MDL_ANGLE_TILT,i)
-            psi =-1.*MDin.getValue(xmippLib.MDL_ANGLE_PSI,i)
-            flip = MDin.getValue(xmippLib.MDL_FLIP,i)
+            fnImg = MDin.getValue(emlib.MDL_IMAGE,i)
+            fnImgRef = MDin.getValue(emlib.MDL_IMAGE_REF,i)
+            maxCC = MDin.getValue(emlib.MDL_MAXCC,i)
+            rot =  MDin.getValue(emlib.MDL_ANGLE_ROT,i)
+            tilt = MDin.getValue(emlib.MDL_ANGLE_TILT,i)
+            psi =-1.*MDin.getValue(emlib.MDL_ANGLE_PSI,i)
+            flip = MDin.getValue(emlib.MDL_FLIP,i)
             if flip:
                 psi = -psi
-            eulerMatrix = Euler_angles2matrix(0.,0.,psi)
-            x = MDin.getValue(xmippLib.MDL_SHIFT_X,i)
-            y = MDin.getValue(xmippLib.MDL_SHIFT_Y,i)
+            eulerMatrix = emlib.Euler_angles2matrix(0., 0., psi)
+            x = MDin.getValue(emlib.MDL_SHIFT_X,i)
+            y = MDin.getValue(emlib.MDL_SHIFT_Y,i)
             shift = array([x, y, 0])
             shiftOut = dot(eulerMatrix, shift)
             [x,y,z]= shiftOut
             if flip:
                 x = -x
             id = MDout.addObject()
-            MDout.setValue(xmippLib.MDL_IMAGE, fnImg, id)
-            MDout.setValue(xmippLib.MDL_IMAGE_REF, fnImgRef, id)
-            MDout.setValue(xmippLib.MDL_IMAGE1, "%05d@%s"%(n, self._getExtraPath("diff.stk")), id)
+            MDout.setValue(emlib.MDL_IMAGE, fnImg, id)
+            MDout.setValue(emlib.MDL_IMAGE_REF, fnImgRef, id)
+            MDout.setValue(emlib.MDL_IMAGE1, "%05d@%s"%(n, self._getExtraPath("diff.stk")), id)
             if hasCTF:
-                fnCTF = MDin.getValue(xmippLib.MDL_CTF_MODEL,i)
-                MDout.setValue(xmippLib.MDL_CTF_MODEL,fnCTF,id)
-            MDout.setValue(xmippLib.MDL_MAXCC, maxCC, id)
-            MDout.setValue(xmippLib.MDL_ANGLE_ROT, rot, id)
-            MDout.setValue(xmippLib.MDL_ANGLE_TILT, tilt, id)
-            MDout.setValue(xmippLib.MDL_ANGLE_PSI, psi, id)
-            MDout.setValue(xmippLib.MDL_SHIFT_X, x,id)
-            MDout.setValue(xmippLib.MDL_SHIFT_Y, y,id)
-            MDout.setValue(xmippLib.MDL_FLIP,flip,id)
-            MDout.setValue(xmippLib.MDL_ENABLED,1,id)
+                fnCTF = MDin.getValue(emlib.MDL_CTF_MODEL,i)
+                MDout.setValue(emlib.MDL_CTF_MODEL,fnCTF,id)
+            MDout.setValue(emlib.MDL_MAXCC, maxCC, id)
+            MDout.setValue(emlib.MDL_ANGLE_ROT, rot, id)
+            MDout.setValue(emlib.MDL_ANGLE_TILT, tilt, id)
+            MDout.setValue(emlib.MDL_ANGLE_PSI, psi, id)
+            MDout.setValue(emlib.MDL_SHIFT_X, x,id)
+            MDout.setValue(emlib.MDL_SHIFT_Y, y,id)
+            MDout.setValue(emlib.MDL_FLIP,flip,id)
+            MDout.setValue(emlib.MDL_ENABLED,1,id)
             n+=1
-        MDout.write(fnOut,xmippLib.MD_APPEND)
+        MDout.write(fnOut,emlib.MD_APPEND)
         
         # Actually create the differences
-        img = Image()
-        imgRef = Image()
+        img = emlib.Image()
+        imgRef = emlib.Image()
         if hasCTF and volumeIsCTFCorrected:
-            Ts = MDin.getValue(xmippLib.MDL_SAMPLINGRATE, MDin.firstObject())
+            Ts = MDin.getValue(emlib.MDL_SAMPLINGRATE, MDin.firstObject())
     
         for i in MDout:
             img.readApplyGeo(MDout,i)
-            imgRef.read(MDout.getValue(xmippLib.MDL_IMAGE_REF,i))
+            imgRef.read(MDout.getValue(emlib.MDL_IMAGE_REF,i))
             if hasCTF and volumeIsCTFCorrected:
-                fnCTF = MDout.getValue(xmippLib.MDL_CTF_MODEL,i)
-                applyCTF(imgRef, fnCTF,Ts)
-                img.convert2DataType(DT_DOUBLE)
+                fnCTF = MDout.getValue(emlib.MDL_CTF_MODEL,i)
+                emlib.applyCTF(imgRef, fnCTF, Ts)
+                img.convert2DataType(emlib.DT_DOUBLE)
             imgDiff = img-imgRef
-            imgDiff.write(MDout.getValue(xmippLib.MDL_IMAGE1,i))
+            imgDiff.write(MDout.getValue(emlib.MDL_IMAGE1,i))
 
-class HelicalFinder():
+
+class HelicalFinder:
     """ Base class for protocols that find helical symmetry """
 
     def getSymmetry(self,dihedral):
@@ -434,320 +448,60 @@ class HelicalFinder():
         else:
             return "helical"
 
-    def runCoarseSearch(self,fnVol,dihedral,heightFraction,z0,zF,zStep,rot0,rotF,rotStep,Nthr,fnOut,cylinderInnerRadius,cylinderOuterRadius,height,Ts):
-        args="-i %s --sym %s --heightFraction %f -z %f %f %f --rotHelical %f %f %f --thr %d -o %s --sampling %f"%(fnVol,self.getSymmetry(dihedral),heightFraction,
-                                                                                z0,zF,zStep,rot0,rotF,rotStep,Nthr,fnOut,Ts)
+    def runCoarseSearch(self, fnVol, dihedral, heightFraction, z0, zF, zStep,
+                        rot0, rotF, rotStep, Nthr, fnOut, cylinderInnerRadius,
+                        cylinderOuterRadius, height, Ts, Cn="c1"):
+        args = ("-i %s --sym %s --heightFraction %f -z %f %f %f "
+                "--rotHelical %f %f %f --thr %d -o %s --sampling %f"
+                %(fnVol, self.getSymmetry(dihedral), heightFraction, z0, zF, zStep,
+                  rot0, rotF, rotStep, Nthr, fnOut, Ts))
+        if Cn!="c1":
+            args += " --sym2 %s"%Cn
+        if cylinderOuterRadius > 0 and cylinderInnerRadius < 0:
+            args += " --mask cylinder %d %d"%(-cylinderOuterRadius, -height)
+        elif cylinderOuterRadius > 0 and cylinderInnerRadius > 0:
+            args += " --mask tube %d %d %d" % (-cylinderInnerRadius, -cylinderOuterRadius, -height)
+        self.runJob('xmipp_volume_find_symmetry', args, numberOfMpi=1)
+
+    def runFineSearch(self, fnVol, dihedral, fnCoarse, fnFine, heightFraction,
+                      z0, zF, rot0, rotF, cylinderInnerRadius, cylinderOuterRadius,
+                      height, Ts, Cn="c1"):
+        md=emlib.MetaData(fnCoarse)
+        objId=md.firstObject()
+        rotInit=md.getValue(emlib.MDL_ANGLE_ROT,objId)
+        zInit=md.getValue(emlib.MDL_SHIFT_Z,objId)
+        args=("-i %s --sym %s --heightFraction %f --localHelical %f %f -o %s "
+              "-z %f %f 1 --rotHelical %f %f 1 --sampling %f"
+              %(fnVol, self.getSymmetry(dihedral), heightFraction, zInit, rotInit,
+                fnFine, z0, zF, rot0, rotF, Ts))
+        if Cn!="c1":
+            args += " --sym2 %s"%Cn
         if cylinderOuterRadius>0 and cylinderInnerRadius<0:
             args+=" --mask cylinder %d %d"%(-cylinderOuterRadius,-height)
         elif cylinderOuterRadius>0 and cylinderInnerRadius>0:
             args+=" --mask tube %d %d %d"%(-cylinderInnerRadius,-cylinderOuterRadius,-height)
         self.runJob('xmipp_volume_find_symmetry',args, numberOfMpi=1)
 
-    def runFineSearch(self, fnVol, dihedral, fnCoarse, fnFine, heightFraction, z0, zF, rot0, rotF, cylinderInnerRadius, cylinderOuterRadius, height, Ts):
-        md=MetaData(fnCoarse)
+    def runSymmetrize(self, fnVol, dihedral, fnParams, fnOut, heightFraction,
+                      cylinderInnerRadius, cylinderOuterRadius, height, Ts, Cn="c1"):
+        md=emlib.MetaData(fnParams)
         objId=md.firstObject()
-        rotInit=md.getValue(MDL_ANGLE_ROT,objId)
-        zInit=md.getValue(MDL_SHIFT_Z,objId)
-        args="-i %s --sym %s --heightFraction %f --localHelical %f %f -o %s -z %f %f 1 --rotHelical %f %f 1 --sampling %f"%(fnVol,self.getSymmetry(dihedral),heightFraction,
-                                                                                           zInit,rotInit,fnFine,z0,zF,rot0,rotF,Ts)
-        if cylinderOuterRadius>0 and cylinderInnerRadius<0:
-            args+=" --mask cylinder %d %d"%(-cylinderOuterRadius,-height)
-        elif cylinderOuterRadius>0 and cylinderInnerRadius>0:
-            args+=" --mask tube %d %d %d"%(-cylinderInnerRadius,-cylinderOuterRadius,-height)
-        self.runJob('xmipp_volume_find_symmetry',args, numberOfMpi=1)
-
-    def runSymmetrize(self, fnVol, dihedral, fnParams, fnOut, heightFraction, cylinderInnerRadius, cylinderOuterRadius, height, Ts):
-        md=MetaData(fnParams)
-        objId=md.firstObject()
-        rot0=md.getValue(MDL_ANGLE_ROT,objId)
-        z0=md.getValue(MDL_SHIFT_Z,objId)
-        args="-i %s --sym %s --helixParams %f %f --heightFraction %f -o %s --sampling %f --dont_wrap"%(fnVol,self.getSymmetry(dihedral),z0,rot0,heightFraction,fnOut,Ts)
+        rot0=md.getValue(emlib.MDL_ANGLE_ROT,objId)
+        z0=md.getValue(emlib.MDL_SHIFT_Z,objId)
+        args=("-i %s --sym %s --helixParams %f %f --heightFraction %f -o %s "
+              "--sampling %f --dont_wrap"
+              % (fnVol,self.getSymmetry(dihedral),z0,rot0,heightFraction,fnOut,Ts))
+        if Cn!="c1":
+            args += " --sym2 %s"%Cn
         self.runJob('xmipp_transform_symmetrize',args,numberOfMpi=1)
         doMask=False
         if cylinderOuterRadius>0 and cylinderInnerRadius<0:
             args="-i %s --mask cylinder %d %d"%(fnVol,-cylinderOuterRadius,-height)
             doMask=True
         elif cylinderOuterRadius>0 and cylinderInnerRadius>0:
-            args="-i %s --mask tube %d %d %d"%(fnVol,-cylinderInnerRadius,-cylinderOuterRadius,-height)
+            args="-i %s --mask tube %d %d %d"%(fnVol,-cylinderInnerRadius,
+                                               -cylinderOuterRadius,-height)
             doMask=True
         if doMask:
             self.runJob('xmipp_transform_mask',args,numberOfMpi=1)
-            
 
-# ---------------- Legacy code from 'protlib_xmipp.py' ----------------------
-
-def xmippExists(path):
-    return xmippLib.FileName(path).exists()
-            
-            
-class XmippScript():
-    ''' This class will serve as wrapper around the XmippProgram class
-    to have same facilities from Python scripts'''
-    def __init__(self, runWithoutArgs=False):
-        self._prog = xmippLib.Program(runWithoutArgs)
-        
-    def defineParams(self):
-        ''' This function should be overwrited by subclasses for 
-        define its own parameters'''
-        pass
-    
-    def readParams(self):
-        ''' This function should be overwrited by subclasses for 
-        and take desired params from command line'''
-        pass
-    
-    def checkParam(self, param):
-        return self._prog.checkParam(param)
-    
-    def getParam(self, param, index=0):
-        return self._prog.getParam(param, index)
-    
-    def getIntParam(self, param, index=0):
-        return int(self._prog.getParam(param, index))
-    
-    def getDoubleParam(self, param, index=0):
-        return float(self._prog.getParam(param, index))
-    
-    def getListParam(self, param):
-        return self._prog.getListParam(param)
-    
-    def addUsageLine(self, line, verbatim=False):
-        self._prog.addUsageLine(line, verbatim)
-
-    def addExampleLine(self, line, verbatim=True):
-        self._prog.addExampleLine(line, verbatim)
-        
-    def addParamsLine(self, line):
-        self._prog.addParamsLine(line)
-    
-    def run(self):
-        ''' This function should be overwrited by subclasses and
-        it the main body of the script'''   
-        pass
-     
-    def tryRun(self):
-        ''' This function should be overwrited by subclasses and
-        it the main body of the script'''
-        try:
-            self.defineParams()
-            doRun = self._prog.read(sys.argv)
-            if doRun:
-                self.readParams()
-                self.run()
-        except Exception:
-            import traceback
-            traceback.print_exc(file=sys.stderr)
-            
-        
-class ScriptIJBase(XmippScript):
-    def __init__(self, name):
-        XmippScript.__init__(self)
-        self.name = name
-    
-    def defineOtherParams(self):
-        pass
-    
-    def readOtherParams(self):
-        pass
-    
-    def defineParams(self):
-        self.addParamsLine('  --input <...>            : Input files to show');
-        self.addParamsLine('         alias -i;');
-        self.addParamsLine('  [--memory <mem="2g">]    : Memory amount for JVM');
-        self.addParamsLine('         alias -m;');
-        self.defineOtherParams()
-    
-    def readInputFiles(self):
-        self.inputFiles = self.getListParam('-i')
-        
-    def readParams(self):
-        self.readInputFiles()
-        self.memory = self.getParam('--memory')
-        files = []
-        missingFiles = []
-        for f in self.inputFiles:
-            if xmippExists(f):
-                files.append('"%s"' % f) # Escape with " for filenames containing spaces
-            else:
-                missingFiles.append(f)
-        self.inputFiles = files
-        if len(missingFiles):
-            print ("Missing files: \n %s" % '  \n'.join(missingFiles))
-        
-        self.args = "-i %s" % ' '.join(self.inputFiles)
-        self.readOtherParams()
- 
- 
-class ScriptPluginIJ(ScriptIJBase):
-    def __init__(self, macro):
-        ScriptIJBase.__init__(self, macro)
-                  
-    def run(self):
-        runImageJPlugin(self.memory, self.name, self.args)
-     
-     
-class ScriptAppIJ(ScriptIJBase):
-    def __init__(self, name):
-        ScriptIJBase.__init__(self, name)
-                  
-    def run(self):
-        if len(self.inputFiles) > 0:
-            runJavaIJapp(self.memory, self.name, self.args, batchMode=False)
-        else:
-            print ("No input files. Exiting...")
-            
-    
-def getImageJPluginCmd(memory, macro, args, batchMode=False):
-    if len(memory) == 0:
-        memory = "1g"
-        print ("No memory size provided. Using default: " + memory)
-    imagej_home = getXmippPath('external', 'imagej')
-    plugins_dir = os.path.join(imagej_home, "plugins")
-    macro = os.path.join(imagej_home, "macros", macro)
-    imagej_jar = os.path.join(imagej_home, "ij.jar")
-    cmd = """ java -Xmx%s -Dplugins.dir=%s -jar %s -macro %s "%s" """ % (memory, plugins_dir, imagej_jar, macro, args)
-    if batchMode:
-        cmd += " &"
-    return cmd
-
-
-def runImageJPlugin(memory, macro, args, batchMode=False):
-    os.system(getImageJPluginCmd(memory, macro, args, batchMode))
-
-
-def getArchitecture():
-    arch = platform.architecture()[0]
-    for a in ['32', '64']:
-        if a in arch:
-            return a
-    return 'NO_ARCH' 
-
-
-def getJavaIJappCmd(memory, appName, args, batchMode=False):
-    '''Launch an Java application based on ImageJ '''
-    if len(memory) == 0:
-        memory = "2g"
-        print ("No memory size provided. Using default: " + memory)
-    imagej_home = getXmippPath("external", "imagej")
-    lib = getXmippPath("lib")
-    javaLib = getXmippPath('java', 'lib')
-    plugins_dir = os.path.join(imagej_home, "plugins")
-    arch = getArchitecture()
-    cmd = "java -Xmx%(memory)s -d%(arch)s -Djava.library.path=%(lib)s -Dplugins.dir=%(plugins_dir)s -cp %(imagej_home)s/*:%(javaLib)s/* %(appName)s %(args)s" % locals()
-    if batchMode:
-        cmd += " &"
-    return cmd
-    
-
-def runJavaIJapp(memory, appName, args, batchMode=True):
-    cmd = getJavaIJappCmd(memory, appName, args, batchMode)
-    print(cmd)
-    os.system(cmd)
-    
-
-def runJavaJar(memory, jarName, args, batchMode=True):
-    jarPath = getXmippPath(jarName)
-    runJavaIJapp(memory, '-jar %s' % jarPath, args, batchMode)
-
-
-class ScriptShowJ(ScriptAppIJ):
-    def __init__(self, viewer='xmipp.viewer.Viewer'):
-        ScriptAppIJ.__init__(self, viewer)
-        
-    def defineOtherParams(self):
-        self.addParamsLine('  [--mode <mode_value=image>]           : List of params ')
-        self.addParamsLine('     where <mode_value> image gallery metadata rotspectra')
-        self.addParamsLine('         alias -d;')
-        self.addParamsLine('  [--poll]                            : Keeps checking for changes on input files  (for image mode only!)')
-        self.addParamsLine('         alias -p;')
-        self.addParamsLine('  [--render <...>]    : Specifies image columns to render (for metadata mode only)')
-        self.addParamsLine('                          : by default the first one that can be visualized is rendered')
-        self.addParamsLine('  [--visible <...>]    : Specifies visible labels')
-        self.addParamsLine('  [--order <...>]    : Specifies labels order')
-        self.addParamsLine('  [--labels <...>]    : Specifies labels to display')
-        self.addParamsLine('  [--sortby <...>]    : Specifies label to sort by. asc or desc mode can be added')
-        
-        self.addParamsLine('         alias -e;')
-        self.addParamsLine('  [--rows <rows>]                            : number of rows in table')
-        self.addParamsLine('         alias -r;')
-        self.addParamsLine('  [--columns <columns>]                            : number of columns in table')
-        self.addParamsLine('         alias -c;')
-        self.addParamsLine('  [--zoom <zoom>]                            : zoom for images')
-        self.addParamsLine('         alias -z;')
-        self.addParamsLine('  [--view <axis="z">]                        : Viewer position (for volumes only)')
-        self.addParamsLine('     where <axis> z y x z_pos y_pos x_pos')
-        self.addParamsLine('  [--dont_apply_geo]                        : Does not read geometrical information(for metadata only)')
-        self.addParamsLine('  [--dont_wrap]                             : Does not wrap (for metadata only)')
-        self.addParamsLine('  [--debug] : debug')
-        self.addParamsLine('  [--mask_toolbar] : Open mask toolbar (only valid for images)')
-        self.addParamsLine('  [--label_alias <alias_string>]  : Activate some metadata label alias, for example')
-        self.addParamsLine('                                  : anglePsi=aPsi;shiftX=sX;shiftY:sY')
-        self.addParamsLine('  [--label_relion]                : Activates the mapping to Relion labels')
-        self.addParamsLine('  [--label_bsoft]                 : Activates the mapping to Bsoft labels')
-        
-    def readOtherParams(self):
-        #FIXME: params seems to be they cannot be passed directly to java
-        params = ['--mode', '--rows', '--columns', '--zoom', '--view', '--sortby']
-        for p in params:
-            if self.checkParam(p):
-                self.args += " %s %s" % (p, self.getParam(p))
-        params = [ '--render', '--visible', '--order', '--labels']
-        pvalues = ''
-        for p in params:
-            if self.checkParam(p):
-                for pvalue in self.getListParam(p):
-                    pvalues = '%s %s'%(pvalues, pvalue)
-                    
-                self.args += " %s %s" % (p, pvalues)
-        params = ['--poll', '--debug', '--dont_apply_geo', '--dont_wrap', '--mask_toolbar']
-        for p in params:
-            if self.checkParam(p):
-                self.args += " %s" % p
-                
-        # Set environment var for extra label alias
-        if self.checkParam('--label_alias'):
-            os.environ['XMIPP_EXTRA_ALIASES'] = self.getParam('--label_alias')
-        elif self.checkParam('--label_bsoft'):
-            from protlib_import import bsoftLabelString
-            os.environ['XMIPP_EXTRA_ALIASES'] = bsoftLabelString()
-        elif self.checkParam('--label_relion') or self.getParam('-i').endswith('.star'):
-            from protlib_import import relionLabelString
-            os.environ['XMIPP_EXTRA_ALIASES'] = relionLabelString()
-            
-
-def createMetaDataFromPattern(pattern, isStack=False, label="image"):
-    ''' Create a metadata from files matching pattern'''
-    import glob
-    if isinstance(pattern, list):
-      files=[]
-      for pat in pattern:
-        files+= glob.glob(pat)
-    else:
-      files = glob.glob(pattern)
-    files.sort()
-
-    label = xmippLib.str2Label(label) #Check for label value
-    
-    mD = xmippLib.MetaData()
-    inFile = xmippLib.FileName()
-    
-    nSize = 1
-    for file in files:
-        fileAux=file
-        if isStack:
-            if file.endswith(".mrc"):
-                fileAux=file+":mrcs"
-            x, x, x, nSize = xmippLib.getImageSize(fileAux)
-        if nSize != 1:
-            counter = 1
-            for jj in range(nSize):
-                inFile.compose(counter, fileAux)
-                objId = mD.addObject()
-                mD.setValue(label, inFile, objId)
-                mD.setValue(xmippLib.MDL_ENABLED, 1, objId)
-                counter += 1
-        else:
-            objId = mD.addObject()
-            mD.setValue(label, fileAux, objId)
-            mD.setValue(xmippLib.MDL_ENABLED, 1, objId)
-    return mD            
