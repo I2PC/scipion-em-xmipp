@@ -176,6 +176,7 @@ class Plugin(pwem.Plugin):
                            deps=xmippDeps, default=False)
 
         avoidConfig = os.environ.get('XMIPP_NOCONFIG', 'False') == 'True'
+        alreadyCompiled = os.path.isfile(getXmippPath('v'+_currentVersion))  # compilation token (see the xmipp script)
         configSrc = ('./xmipp check_config' if avoidConfig
                      else './xmipp config noAsk && ./xmipp check_config')
         env.addPackage('xmippSrc', version=_currentVersion,
@@ -187,7 +188,7 @@ class Plugin(pwem.Plugin):
                                   installTgt + sourceTgt),
                                  (bindingsAndLibsCmd.format(**installVars),
                                   bindingsAndLibsTgt)],
-                       deps=xmippDeps, default=not develMode)
+                       deps=xmippDeps, default=not (develMode or alreadyCompiled))
 
         ## EXTRA PACKAGES ##
         installDeepLearningToolkit(cls, env)
