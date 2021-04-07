@@ -127,3 +127,4 @@ from .protocol_apply_deformation_sph import XmippProtApplySPH
 from .protocol_kmeans_clustering import XmippProtKmeansSPH
 from .protocol_structure_map import XmippProtStructureMap
 from .protocol_pdb_deform_sph import XmippProtDeformPDB
+from .protocol_angular_density_align_pdb import XmippProtAngularDensityAlign
