@@ -144,7 +144,7 @@ class Plugin(pwem.Plugin):
 
         ## Linking bindings (removing installationToken)
         bindingsAndLibsCmd = ("find {bindingsSrc} -maxdepth 1 -mindepth 1 "
-                              "! -name __pycache__ -exec ln -srfn {{}} {bindingsDst} \; && "
+                              r"! -name __pycache__ -exec ln -srfn {{}} {bindingsDst} \; && "
                               "ln -srfn {coreLib} {libsDst} && "
                               "touch {bindingsToken} && "
                               "rm {installedToken} 2> /dev/null")
@@ -157,7 +157,7 @@ class Plugin(pwem.Plugin):
         ## Allowing xmippDev if devel mode detected
         # plugin  = scipion-em-xmipp  <--  xmipp3    <--     __init__.py
         pluginDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        # bundle  = xmipp-bundle  <-  src  <-  scipion-em-xmipp
+        # bundle  = xmipp-bundle  <-  src   <-  scipion-em-xmipp
         bundleDir = os.path.dirname(os.path.dirname(pluginDir))
 
         isPypiDev = os.path.isfile(os.path.join(pluginDir, 'setup.py'))
@@ -176,6 +176,7 @@ class Plugin(pwem.Plugin):
                            deps=xmippDeps, default=False)
 
         avoidConfig = os.environ.get('XMIPP_NOCONFIG', 'False') == 'True'
+        alreadyCompiled = os.path.isfile(getXmippPath('v'+_currentVersion))  # compilation token (see the xmipp script)
         configSrc = ('./xmipp check_config' if avoidConfig
                      else './xmipp config noAsk && ./xmipp check_config')
         env.addPackage('xmippSrc', version=_currentVersion,
@@ -187,7 +188,7 @@ class Plugin(pwem.Plugin):
                                   installTgt + sourceTgt),
                                  (bindingsAndLibsCmd.format(**installVars),
                                   bindingsAndLibsTgt)],
-                       deps=xmippDeps, default=not develMode)
+                       deps=xmippDeps, default=not (develMode or alreadyCompiled))
 
         ## EXTRA PACKAGES ##
         installDeepLearningToolkit(cls, env)
@@ -240,7 +241,7 @@ def installDeepLearningToolkit(plugin, env):
                      'xmippLibToken': 'xmippLibToken',
                      'libXmipp': plugin.getHome('lib/libXmipp.so'),
                      'preMsgsStr': ' ; '.join(preMsgs),
-                     'afterMsgs': "\n > ".join(cudaMsgs)}
+                     'afterMsgs': ", > ".join(cudaMsgs)}
 
     installDLvars.update({'modelsTarget': "%s_%s_%s_%s"
                                           % (installDLvars['modelsPrefix'],
