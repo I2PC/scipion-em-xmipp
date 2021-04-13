@@ -43,11 +43,15 @@ import pyworkflow.protocol.constants as cons
 from xmipp3.convert import setXmippAttribute, getScipionObj, prefixAttribute
 from xmipp3 import emlib
 
+SAMPLING_RATE1 = 1
+SAMPLING_RATE2 = 1.75
+SAMPLING_RATE3 = 2.75
+
 
 class XmippProtDeepDefocusMicrograph(ProtMicrographs):
-    """Protocol to remove coordinates in carbon zones or large impurities"""
+    """Protocol to calcute the defocus Value"""
+
     _label = 'deep micrograph defocus'
-    _conda_env = "xmipp_MicCleaner"
 
     def __init__(self, **kwargs):
         ProtMicrographs.__init__(self, **kwargs)
@@ -62,7 +66,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
                       pointerClass='SetOfMicrographs',
                       important=True,
                       label="Input micrographs",
-                      help='Select the SetOfMicrogrsphs ')
+                      help='Select the SetOfMicrogrsphs')
 
         form.addParam('defocusU_threshold', params.FloatParam, label='Defocus in U axis',
                       default=0.6, expertLevel=params.LEVEL_ADVANCED,
@@ -74,11 +78,9 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
                       help='''By default, micrographs will be divided into an output set and a discarded set based
                                             on the defocus double threshold''')
 
-        form.addParam('test',
-                      params.BooleanParam,
-                      important=False,
-                      label="Input micrographs",
-                      help='If selected the micrographs need to have a defocus value associated')
+        form.addParam('test', params.BooleanParam, label="test model",
+                      default=False, expertLevel=params.LEVEL_ADVANCED,
+                      help='TThe selected micrographs need to have a defocus value associated')
 
         form.addParallelSection(threads=4, mpi=1)
 
@@ -125,7 +127,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         # Input micrograph set can be loaded or None when checked for new inputs
         # If None, we load it
         self._checkNewInput()
-        self._checkNewOutput()
+        #self._checkNewOutput()
 
 
     def _getFirstJoinStepName(self):
@@ -262,7 +264,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         micrograph = Micrograph()
         micrograph.setAcquisition(Acquisition())
         micrograph.setAttributesFromDict(micDict, setBasic=True, ignoreMissing=True)
-        micFolderTmp = self._getOutputMicFolder(micrograph)  # tmp/micID
+        micFolderTmp = self._getTmpMicFolder(micrograph)  # tmp/micID
         micFn = micrograph.getFileName()
         micID = micrograph.getObjId()
         micName = basename(micFn)
@@ -303,16 +305,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
     def _processMicrograph(self, micrograph):
         micrographId = micrograph.getObjId()
 
-        correlations = self.calculateTiltCorrelationStep(micrograph)
-
-        # Numpy array to compute all the
-        correlations = np.asarray(correlations)
-        # Calculate the mean, dev of the correlation
-        stats = computeStats(correlations)
-        self.mean_correlations.append(stats['mean'])
-        self.stats[micrographId] = stats
-
-
+        input_NN = self.inputPreparationStep(micrograph)
 
 
 
@@ -334,7 +327,42 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
          #                      (micrographId, stats['mean'], stats['std'], stats['min'], stats['max']))
         fnMonitorSummary.close()
 
+    def inputPreparationStep(self, micrograph):
+        micFn = micrograph.getFileName()
+        micID = micrograph.getMicName()
+        micFolder = self._getTmpMicFolder(micrograph)  # tmp/micID
+        samplingRate1 = SAMPLING_RATE1
+        samplingRate2 = SAMPLING_RATE2
+        samplingRate3 = SAMPLING_RATE3
 
+        #Downsample into 1 A/px, 1.75 A/px, 2.75 A/px
+        factor1 = samplingRate1/self.samplingRate
+        factor2 = samplingRate2/self.samplingRate
+        factor3 = samplingRate3/self.samplingRate
+
+        filename_mic1 = os.path.join(micFolder,"tmp_mic1_" + str(micID) + '.mrc')
+        filename_mic2 = os.path.join(micFolder, "tmp_mic2_" + str(micID) + '.mrc')
+        filename_mic3 = os.path.join(micFolder, "tmp_mic3_" + str(micID)  + '.mrc')
+
+        args1 = "-i %s -o %s --step %f --method fourier" \
+                % (micFn, filename_mic1 ,factor1)
+        print(args1)
+
+        args2 = "-i %s -o %s --step %f --method fourier" \
+                % (micFn, filename_mic2, factor2)
+        print(args2)
+
+        args3 = "-i %s -o %s --step %f --method fourier" \
+                % (micFn, filename_mic3, factor3)
+
+        self.runJob("xmipp_transform_downsample" , args1)
+        self.runJob("xmipp_transform_downsample", args2)
+        self.runJob("xmipp_transform_downsample", args3)
+
+
+
+
+        return None #3D-output array
 
     def _computeMaskForMicrographList(self, micList):
         """ Functional Step. Overrided in general protExtracParticle """
@@ -373,19 +401,19 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
 
 
     # --------------------------- INFO functions --------------------------------
-    def _validate(self):
-        errors = self.validateDLtoolkit(assertModel=True,
-                                        model=('deepMicrographCleaner', 'defaultModel.keras'))
+    #def _validate(self):
+    #    errors = self.validateDLtoolkit(assertModel=True,
+    #                                    model=('deepMicrographCleaner', 'defaultModel.keras'))
 
-        batchSize = self.streamingBatchSize.get()
-        if batchSize == 1:
-            errors.append('Batch size must be 0 (all at once) or larger than 1.')
-        elif not self.isInStreaming() and batchSize > len(self.inputCoordinates.get().getMicrographs()):
-            errors.append('Batch size (%d) must be <= that the number of micrographs '
-                          '(%d) in static mode. Set it to 0 to use only one batch'
-                          % (batchSize, self._getNumPickedMics()))
+    #    batchSize = self.streamingBatchSize.get()
+    #    if batchSize == 1:
+    #        errors.append('Batch size must be 0 (all at once) or larger than 1.')
+    #   elif not self.isInStreaming() and batchSize > len(self.inputCoordinates.get().getMicrographs()):
+    #        errors.append('Batch size (%d) must be <= that the number of micrographs '
+    #                      '(%d) in static mode. Set it to 0 to use only one batch'
+    #                      % (batchSize, self._getNumPickedMics()))
 
-        return errors
+    #    return errors
 
 
     def _citations(self):
@@ -403,8 +431,6 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
                 summary.append(line.rstrip())
             fhSummary.close()
         return summary
-
-
 
     # --------------------------- UTILS functions ------------------------------
     def _correctFormat(self, micName, micFn, micFolderTmp):
@@ -443,13 +469,11 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         """ This should be implemented in subclasses"""
         return deps
 
-
-    def _getOutputMicFolder(self, micrograph):
+    def _getTmpMicFolder(self, micrograph):
         """ Create a Mic folder where to work with it. """
         return self._getTmpPath('mic_%06d' % micrograph.getObjId())
 
-
-    def _getResultsMicFolder(self, micrograph):
+    def _getOutputMicFolder(self, micrograph):
         """ Create a Mic folder where to work with it. """
         return self._getExtraPath('mic_%06d' % micrograph.getObjId())
 
@@ -502,4 +526,9 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
     def getDefocusVLabel(): #Cambiar a una constante que exista
         return prefixAttribute(emlib.label2Str(emlib.MDL_TILT_ANALYSIS_PSDs))
 
+    # --------------------------- OVERRIDE functions --------------------------
 
+    def _filterMicrograph(self, micrograph):
+        """ Check if process or not this movie.
+        """
+        return True
