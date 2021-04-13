@@ -241,7 +241,7 @@ class TestXmippPreprocessMicrographs(TestXmippBase):
 
         # create input micrographs
         protStream = self.newProtocol(ProtCreateStreamData, **kwargs)
-        self.launchProtocol(protStream)
+        self.proj.launchProtocol(protStream, wait=False)
 
         self._waitOutput(protStream,'outputMicrographs')
 
