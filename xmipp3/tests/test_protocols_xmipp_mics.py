@@ -908,18 +908,15 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
                         "Output sets size does not much the input set size.")
 
         kwargs = {'nDim': 20,  # 20 objects/particles
-                  'creationInterval': 1,  # wait 1 sec. after creation
+                  'creationInterval': 10,  # wait 1 sec. after creation
+                  'groups': 10,
                   'setof': 3,  # create SetOfParticles
                   'inputParticles': protExtract.outputParticles
                   }
 
         protStream = self.newProtocol(ProtCreateStreamData, **kwargs)
         self.proj.launchProtocol(protStream, wait=False)
-
-        count = 0
-        while not protStream.hasAttribute('outputParticles') and count < 600:
-            time.sleep(1)
-            protStream = self._updateProtocol(protStream)
+        self._waitOutput(protStream, "outputParticles")
 
         protElimination2 = self.newProtocol(XmippProtEliminateEmptyParticles)
         protElimination2.inputParticles.set(protStream.outputParticles)
