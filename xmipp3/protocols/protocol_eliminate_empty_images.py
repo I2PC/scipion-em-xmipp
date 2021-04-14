@@ -182,7 +182,7 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
         if getattr(self, 'finished', False):
             return
 
-        self.finished = self.streamClosed and self.outputSize == self.lenPartsSet
+        self.finished = self.inputImages.isStreamClosed() and self.outputSize == self.lenPartsSet
 
         self.createOutputs()
 
