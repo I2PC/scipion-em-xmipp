@@ -877,14 +877,21 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
         cls.protPP = cls.runFakedPicking(cls.protDown.outputMicrographs,
                                          cls.allCrdsDir)
 
-    def _updateProtocol(self, prot):
-        prot2 = getProtocolFromDb(prot.getProject().path,
-                                  prot.getDbPath(),
-                                  prot.getObjId())
+    def _updateProtocol(self, protocol):
+        jobId = protocol.getJobId()
+        label = protocol.getObjLabel()
+        comment = protocol.getObjComment()
+
+        prot2 = getProtocolFromDb(protocol.getProject().path,
+                                  protocol.getDbPath(),
+                                  protocol.getObjId())
+        protocol.copy(prot2, copyId=False, excludeInputs=True)
+        protocol.setJobId(jobId)
+        protocol.setObjLabel(label)
+        protocol.setObjComment(comment)
         # Close DB connections
         prot2.getProject().closeMapper()
         prot2.closeMappers()
-        return prot2
 
     def testStreamingAndNonStreaming(self):
         protExtract = self.newProtocol(XmippProtExtractParticles,
@@ -916,10 +923,9 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
         protStream = self.newProtocol(ProtCreateStreamData, **kwargs)
         self.proj.launchProtocol(protStream, wait=False)
 
-        count = 0
-        while not protStream.hasAttribute('outputParticles') and count < 600:
-            time.sleep(1)
-            protStream = self._updateProtocol(protStream)
+        while not protStream.hasAttribute('outputParticles'):
+            time.sleep(2)
+            self._updateProtocol(protStream)
 
         protElimination2 = self.newProtocol(XmippProtEliminateEmptyParticles)
         protElimination2.inputParticles.set(protStream.outputParticles)
