@@ -1049,7 +1049,7 @@ class TestXmippPdbConvert(TestXmippBase):
         self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
         self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
                                msg="wrong sampling rate")
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size.get(), places=1, msg="wrong size")
+        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1, msg="wrong size")
         
     def testXmippPdbConvertFromObj(self):
         print("Run convert a pdb from import")
@@ -1067,7 +1067,7 @@ class TestXmippPdbConvert(TestXmippBase):
         self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
         self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
                                msg="wrong sampling rate")
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size.get(), places=1, msg="wrong size")
+        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1, msg="wrong size")
 
     def testXmippPdbConvertFromFn(self):
         print("Run convert a pdb from file")
