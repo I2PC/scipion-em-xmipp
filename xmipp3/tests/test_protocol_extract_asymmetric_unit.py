@@ -491,12 +491,12 @@ class TestProtModelBuilding(BaseTest):
 
     # general function to extract the unit cell
     def extractunitCell(self, sym, offset=0, cropZ=False):
-        FlexProtConvertToPseudoAtoms = Domain.importFromPlugin("continuousflex.protocols",
-                                                               "FlexProtConvertToPseudoAtoms",
-                                                                doRaise=True)
-        NMA_MASK_THRE = Domain.importFromPlugin("continuousflex.protocols.pdb.protocol_pseudoatoms_base",
-                                                "NMA_MASK_THRE",
-                                                doRaise=True)
+        # FlexProtConvertToPseudoAtoms = Domain.importFromPlugin("continuousflex.protocols",
+        #                                                        "FlexProtConvertToPseudoAtoms",
+        #                                                         doRaise=True)
+        # NMA_MASK_THRE = Domain.importFromPlugin("continuousflex.protocols.pdb.protocol_pseudoatoms_base",
+        #                                         "NMA_MASK_THRE",
+        #                                         doRaise=True)
         """ extract unit cell from icosahedral phantom
             using xmipp_i2 symmetry
         """
@@ -580,18 +580,18 @@ class TestProtModelBuilding(BaseTest):
         self.assertTrue(abs(zdim - self.box[sym][2])<2)
 
         # create pdb fileoutput
-        args = {'inputStructure': prot.outputVolume,
-                'maskMode': NMA_MASK_THRE,
-                'maskThreshold': 0.5,
-                'pseudoAtomRadius': 1.5
-                }
-        prot = self.newProtocol(FlexProtConvertToPseudoAtoms, **args)
-        prot.setObjLabel('get pdb')
-        self.launchProtocol(prot)
+        # args = {'inputStructure': prot.outputVolume,
+        #         'maskMode': NMA_MASK_THRE,
+        #         'maskThreshold': 0.5,
+        #         'pseudoAtomRadius': 1.5
+        #         }
+        # prot = self.newProtocol(FlexProtConvertToPseudoAtoms, **args)
+        # prot.setObjLabel('get pdb')
+        # self.launchProtocol(prot)
 
         # check results
-        filenamePdb = prot._getPath('pseudoatoms.pdb')
-        self.assertTrue(os.path.isfile(filenamePdb))
+        # filenamePdb = prot._getPath('pseudoatoms.pdb')
+        # self.assertTrue(os.path.isfile(filenamePdb))
         # delete temporary files
         os.remove(self.filename[sym])
         os.remove(outputFile)
