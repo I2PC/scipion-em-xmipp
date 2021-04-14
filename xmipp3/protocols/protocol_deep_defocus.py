@@ -30,6 +30,7 @@ import numpy as np
 from datetime import datetime
 from os.path import join, basename, exists
 
+from pwem import RELATION_CTF
 import pyworkflow.utils as pwutils
 from pyworkflow.protocol.constants import (STEPS_PARALLEL, STATUS_NEW)
 import pyworkflow.protocol.params as params
@@ -42,10 +43,16 @@ from collections import OrderedDict
 import pyworkflow.protocol.constants as cons
 from xmipp3.convert import setXmippAttribute, getScipionObj, prefixAttribute
 from xmipp3 import emlib
+from sklearn.metrics import mean_absolute_error
+#from keras.models import load_model
+
+
 
 SAMPLING_RATE1 = 1
 SAMPLING_RATE2 = 1.75
 SAMPLING_RATE3 = 2.75
+DIMENSION_X = 512
+DIMENSION_Y = 512
 
 
 class XmippProtDeepDefocusMicrograph(ProtMicrographs):
@@ -80,7 +87,27 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
 
         form.addParam('test', params.BooleanParam, label="test model",
                       default=False, expertLevel=params.LEVEL_ADVANCED,
-                      help='TThe selected micrographs need to have a defocus value associated')
+                      help='Use defoci from a previous CTF estimation to test the model')
+
+        form.addParam('ctfRelations', params.RelationParam, allowsNull=True,
+                      condition='test',
+                      relationName=RELATION_CTF,
+                      attributeName='inputMicrographs',
+                      label='Previous CTF estimation',
+                      help='Choose some CTF estimation related to input '
+                           'micrographs, in case you want to use the defocus '
+                           'values found previously to test the method')
+
+        form.addParam('ownModel_boolean', params.BooleanParam, default=True,
+                     label='Use your own model', help='Setting "yes" '
+                                                      'you can choose your own model trained. If you choose'
+                                                      '"no" a general model pretrained will be assign')
+
+        form.addParam('ownModel', params.FileParam,
+                      condition= 'ownModel_boolean',
+                      label='Set your model',
+                      help='Choose the protocol where your model is trained')
+
 
         form.addParallelSection(threads=4, mpi=1)
 
@@ -109,7 +136,6 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
     def createOutputStep(self):
         pass
 
-
     def _loadInputList(self):
         """ Load the input set of mics and create a list. """
         micsFile = self.inputMicrographs.get().getFileName()
@@ -121,6 +147,34 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         self.streamClosed = micSet.isStreamClosed()
         micSet.close()
         self.debug("Closed db.")
+
+    #You would need this to use the CTF estimation from a previous method
+
+    # def _loadSet(self, inputSet, SetClass, getKeyFunc):
+    #     """ method overrided in order to check if the previous CTF estimation
+    #         is ready when doInitialCTF=True and streaming is activated
+    #     """
+    #     setFn = inputSet.getFileName()
+    #     self.debug("Loading input db: %s" % setFn)
+    #     updatedSet = SetClass(filename=setFn)
+    #     updatedSet.loadAllProperties()
+    #     streamClosed = updatedSet.isStreamClosed()
+    #     initCtfCheck = lambda idItem: True
+    #     if self.doInitialCTF.get():
+    #         ctfSet = SetOfCTF(filename=self.ctfRelations.get().getFileName())
+    #         ctfSet.loadAllProperties()
+    #         streamClosed = streamClosed and ctfSet.isStreamClosed()
+    #         if not streamClosed:
+    #             initCtfCheck = lambda idItem: idItem in ctfSet
+    #
+    #     newItemDict = OrderedDict()
+    #     for item in updatedSet:
+    #         micKey = item.getObjId()  # getKeyFunc(item)
+    #         if micKey not in self.micDict and initCtfCheck(micKey):
+    #             newItemDict[micKey] = item.clone()
+    #     updatedSet.close()
+    #     self.debug("Closed db.")
+    #     return newItemDict, streamClosed
 
 
     def _stepsCheck(self):
@@ -302,12 +356,16 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         # Mark this movie as finished
         open(micDoneFn, 'w').close()
 
+
     def _processMicrograph(self, micrograph):
         micrographId = micrograph.getObjId()
 
         input_NN = self.inputPreparationStep(micrograph)
 
+        modelFname = self.getModel('deepDefocus', 'ModelTrained.h5') #deepDefocus is the directory and ModelTrained.h5 is the model
 
+        #imagPrediction = model.predict(input_NN)
+        #mae = mean_absolute_error(defocusVector, imagPrediction)
 
         fnSummary = self._getPath("summary.txt")
         fnMonitorSummary = self._getPath("summaryForMonitor.txt")
@@ -327,13 +385,15 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
          #                      (micrographId, stats['mean'], stats['std'], stats['min'], stats['max']))
         fnMonitorSummary.close()
 
+
     def inputPreparationStep(self, micrograph):
         micFn = micrograph.getFileName()
-        micID = micrograph.getMicName()
+        micID = micrograph.getObjId()
         micFolder = self._getTmpMicFolder(micrograph)  # tmp/micID
         samplingRate1 = SAMPLING_RATE1
         samplingRate2 = SAMPLING_RATE2
         samplingRate3 = SAMPLING_RATE3
+        imagMatrix = np.zeros((DIMENSION_X, DIMENSION_Y, 3), dtype=np.float64)
 
         #Downsample into 1 A/px, 1.75 A/px, 2.75 A/px
         factor1 = samplingRate1/self.samplingRate
@@ -359,10 +419,73 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         self.runJob("xmipp_transform_downsample", args2)
         self.runJob("xmipp_transform_downsample", args3)
 
+        #Compute PSDs
+        ih = ImageHandler()
+        image1 = ih.read(filename_mic1)
+        image2 = ih.read(filename_mic2)
+        image3 = ih.read(filename_mic3)
 
+         # Compute PSD
+        # x_dim1, y_dim1, _, _ = image1.getDimensions()
+        # x_dim2, y_dim2, _, _ = image2.getDimensions()
+        # x_dim3, y_dim3, _, _ = image3.getDimensions()
 
+        psd1 = image1.computePSD(0.4, DIMENSION_X, DIMENSION_Y, 1)
+        psd1.convertPSD()
+        psd2 = image2.computePSD(0.4, DIMENSION_X, DIMENSION_Y, 1)
+        psd2.convertPSD()
+        psd3 = image3.computePSD(0.4, DIMENSION_X, DIMENSION_Y, 1)
+        psd3.convertPSD()
 
-        return None #3D-output array
+        #Store data to check
+        filename_psd1 = os.path.join(micFolder, "tmp_psd1_" + str(micID) + '.mrc')
+        filename_psd2 = os.path.join(micFolder, "tmp_psd2_" + str(micID) + '.mrc')
+        filename_psd3 = os.path.join(micFolder, "tmp_psd3_" + str(micID) + '.mrc')
+
+        psd1.write(filename_psd1)
+        psd2.write(filename_psd2)
+        psd3.write(filename_psd3)
+
+        #Filter the PSD OJO:no parece haber mucha diff probar con ambos
+        filename_filt_psd1 = os.path.join(micFolder, "tmp_filt_psd1_" + str(micID) + '.mrc')
+        filename_filt_psd2 = os.path.join(micFolder, "tmp_filt_psd2_filt_" + str(micID) + '.mrc')
+        filename_filt_psd3 = os.path.join(micFolder, "tmp_filt_psd3_filt_" + str(micID) + '.mrc')
+
+        args1 = '-i %s -o %s --fourier low_pass 0.1' % (filename_psd1, filename_filt_psd1)
+        args2 = '-i %s -o %s --fourier low_pass 0.1' % (filename_psd2,filename_filt_psd2)
+        args3 = '-i %s -o %s --fourier low_pass 0.1' % (filename_psd3,filename_filt_psd3)
+
+        self.runJob("xmipp_transform_filter", args1)
+        self.runJob("xmipp_transform_filter", args2)
+        self.runJob("xmipp_transform_filter", args3)
+
+        img1 = ih.read(filename_filt_psd1).getData()
+        img2 = ih.read(filename_filt_psd2).getData()
+        img3 = ih.read(filename_filt_psd3).getData()
+
+        imagMatrix[:, :, 0] = img1
+        imagMatrix[:, :, 1] = img2
+        imagMatrix[:, :, 2] = img3
+
+        if self.test.get():
+            #md = xmipp.MetaData(fnRoot.replace("_xmipp_ctf_enhanced_psd.xmp", "_xmipp_ctf.xmd"))
+            #objId = md.firstObject()
+            #dU = md.getValue(xmipp.MDL_CTF_DEFOCUSU, objId)
+            #dV = md.getValue(xmipp.MDL_CTF_DEFOCUSV, objId)
+
+            #prevValues = (self.ctfDict[micName] if micName in self.ctfDict
+             #             else self.getSinglePreviousParameters(mic.getObjId()))
+            #localParams['defocusU'], localParams['defocusV'], localParams['defocusAngle'], localParams['phaseShift0'] = \
+            #prevValues
+
+            #dU = localParams['defocusU']
+            #dV = localParams['defocusV']
+
+            #defocus = 0.5*(dU+dV)
+            #self.defocusVector[micId] = defocus
+            pass
+
+        return imagMatrix
 
     def _computeMaskForMicrographList(self, micList):
         """ Functional Step. Overrided in general protExtracParticle """
@@ -433,6 +556,25 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         return summary
 
     # --------------------------- UTILS functions ------------------------------
+    def getPreviousValues(self, ctf):
+        phaseShift0 = 0.0
+        if self.findPhaseShift:
+            if ctf.hasPhaseShift():
+                phaseShift0 = ctf.getPhaseShift()
+            else:
+                phaseShift0 = 1.57079  # pi/2
+            ctfValues = (ctf.getDefocusU(), ctf.getDefocusV(), ctf.getDefocusAngle(), phaseShift0)
+        else:
+            ctfValues = (ctf.getDefocusU(), ctf.getDefocusV(), ctf.getDefocusAngle(), phaseShift0)
+
+        return ctfValues
+
+    def getSinglePreviousParameters(self, micId):
+        if self.ctfRelations.hasValue():
+            ctf = self.ctfRelations.get()[micId]
+            return self.getPreviousValues(ctf)
+
+
     def _correctFormat(self, micName, micFn, micFolderTmp):
         if micName.endswith('bz2'):
             newMicName = micName.replace('.bz2', '')
