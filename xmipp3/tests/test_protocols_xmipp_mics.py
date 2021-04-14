@@ -188,7 +188,7 @@ class TestXmippPreprocessMicrographs(TestXmippBase):
     def testDownsampling(self):
         # test downsampling a set of micrographs
         downFactorValue = 2
-        protDown = XmippProtPreprocessMicrographs(doDownsample=True, downFactor=downFactorValue)
+        protDown = XmippProtPreprocessMicrographs(doDownsample=True, downFactor=downFactorValue, objLabel='Downsampling')
         protDown.inputMicrographs.set(self.protImport.outputMicrographs)
         self.proj.launchProtocol(protDown, wait=True)
         # check that output micrographs have double sampling rate than input micrographs
@@ -198,21 +198,22 @@ class TestXmippPreprocessMicrographs(TestXmippBase):
     def testPreprocessing(self):
         # test Crop, Take logarithm and Remove bad pixels on a set of micrographs
         cropPixels = 100
-        protPreprocess = XmippProtPreprocessMicrographs(doCrop=True, doLog=True, doRemoveBadPix=True, cropPixels=cropPixels)
+        protPreprocess = XmippProtPreprocessMicrographs(doCrop=True, doLog=True, doRemoveBadPix=True,
+                                                        cropPixels=cropPixels, objLabel='Crop, Log and bad pixels')
         protPreprocess.inputMicrographs.set(self.protImport.outputMicrographs)
         self.proj.launchProtocol(protPreprocess, wait=True)
         self.assertIsNotNone(protPreprocess.outputMicrographs, "SetOfMicrographs has not been preprocessed.")
 
     def testInvertNormalize(self):
         # test invert and normalize a set of micrographs
-        protInvNorm = XmippProtPreprocessMicrographs(doInvert=True, doNormalize=True)
+        protInvNorm = XmippProtPreprocessMicrographs(doInvert=True, doNormalize=True, objLabel='Invert and normalize')
         protInvNorm.inputMicrographs.set(self.protImport.outputMicrographs)
         self.proj.launchProtocol(protInvNorm, wait=True)
         self.assertIsNotNone(protInvNorm.outputMicrographs, "SetOfMicrographs has not been preprocessed.")
 
     def testSmooth(self):
         # test smooth a set of micrographs
-        protSmooth = XmippProtPreprocessMicrographs(doSmooth=True, sigmaConvolution=3)
+        protSmooth = XmippProtPreprocessMicrographs(doSmooth=True, sigmaConvolution=3, objLabel='Smooth')
         protSmooth.inputMicrographs.set(self.protImport.outputMicrographs)
         self.proj.launchProtocol(protSmooth, wait=True)
         self.assertIsNotNone(protSmooth.outputMicrographs, "SetOfMicrographs has not been preprocessed.")
@@ -242,13 +243,13 @@ class TestXmippPreprocessMicrographs(TestXmippBase):
         protStream = self.newProtocol(ProtCreateStreamData, **kwargs)
         self.proj.launchProtocol(protStream, wait=False)
 
-        while not protStream.hasAttribute('outputMicrographs'):
-            time.sleep(3)
-            protStream = self._updateProtocol(protStream)
+        self._waitOutput(protStream,'outputMicrographs')
 
         protDenoise = self.newProtocol(XmippProtPreprocessMicrographs,
-                                       doDenoise=True, maxIteration=50)
-        protDenoise.inputMicrographs.set(protStream.outputMicrographs)
+                                       doDenoise=True, maxIteration=50,
+                                       objLabel= 'denoise in streaming')
+        protDenoise.inputMicrographs.set(protStream)
+        protDenoise.inputMicrographs.setExtended('outputMicrographs')
         self.proj.launchProtocol(protDenoise)
 
 

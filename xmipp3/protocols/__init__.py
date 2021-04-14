@@ -50,7 +50,6 @@ from .protocol_ctf_consensus import XmippProtCTFConsensus
 from .protocol_ctf_micrographs import XmippProtCTFMicrographs
 from .protocol_ctf_correct_wiener2d import XmippProtCTFCorrectWiener2D
 from .protocol_consensus_classes3D import XmippProtConsensusClasses3D
-from .protocol_subtract_projection import XmippProtSubtractProjection
 from .protocol_denoise_particles import XmippProtDenoiseParticles
 from .protocol_deep_micrograph_screen import  XmippProtDeepMicrographScreen
 from .protocol_eliminate_empty_images import (XmippProtEliminateEmptyParticles,
@@ -91,7 +90,6 @@ from .protocol_resolution3d import XmippProtResolution3D
 from .protocol_resolution_directional import XmippProtMonoDir
 from .protocol_resolution_fso import XmippProtFSO
 from .protocol_resolution_monogenic_signal import XmippProtMonoRes
-from .protocol_resolution_monotomo import XmippProtMonoTomo
 from .protocol_resolution_deepres import XmippProtDeepRes
 from .protocol_postProcessing_deepPostProcessing import XmippProtDeepVolPostProc
 from .protocol_rotational_spectra import XmippProtRotSpectra
@@ -128,3 +126,4 @@ from .protocol_particle_pick_remove_duplicates import XmippProtPickingRemoveDupl
 from .protocol_metaprotocol_golden_highres import XmippMetaProtGoldenHighRes
 from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtraction
 from .protocol_volume_consensus import XmippProtVolConsensus
+
