@@ -44,8 +44,7 @@ import pyworkflow.protocol.constants as cons
 from xmipp3.convert import setXmippAttribute, getScipionObj, prefixAttribute
 from xmipp3 import emlib
 from sklearn.metrics import mean_absolute_error
-#from keras.models import load_model
-
+from keras.models import load_model
 
 
 SAMPLING_RATE1 = 1
@@ -121,6 +120,12 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         self.listOfMicrographs = []
         self._loadInputList()
         pwutils.makePath(self._getExtraPath('DONE'))
+        #Load the model one time only-----
+        modelFname = self.ownModel.get()
+        # modelFname = self.getModel('deepDefocus', 'ModelTrained.h5') #deepDefocus is the directory and ModelTrained.h5 is the model
+        self.model = load_model(modelFname)
+        print(self.model.summary())
+        ##---------------------------------
         fDeps = self._insertNewMicrographSteps(self.insertedDict,
                                                self.listOfMicrographs)
         # For the streaming mode, the steps function have a 'wait' flag that can be turned on/off. For example, here we insert the
@@ -361,10 +366,12 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         micrographId = micrograph.getObjId()
 
         input_NN = self.inputPreparationStep(micrograph)
-
-        modelFname = self.getModel('deepDefocus', 'ModelTrained.h5') #deepDefocus is the directory and ModelTrained.h5 is the model
-
+        print(np.shape(input_NN))
+        print(type(input_NN))
+        model = self.model
+        print('------------New prediction')
         #imagPrediction = model.predict(input_NN)
+        #print(imagPrediction)
         #mae = mean_absolute_error(defocusVector, imagPrediction)
 
         fnSummary = self._getPath("summary.txt")
@@ -393,7 +400,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         samplingRate1 = SAMPLING_RATE1
         samplingRate2 = SAMPLING_RATE2
         samplingRate3 = SAMPLING_RATE3
-        imagMatrix = np.zeros((DIMENSION_X, DIMENSION_Y, 3), dtype=np.float64)
+        imagMatrix = np.zeros((DIMENSION_X, DIMENSION_Y, 3), dtype=np.float64)  #np.float64)
 
         #Downsample into 1 A/px, 1.75 A/px, 2.75 A/px
         factor1 = samplingRate1/self.samplingRate
