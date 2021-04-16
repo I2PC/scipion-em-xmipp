@@ -56,13 +56,16 @@ class XmippProtApplySPH(ProtAnalysis3D):
 
     # --------------------------- STEPS functions ------------------------------
     def deformStep(self):
-        self.samplingRate = self.inputVol.get().getSamplingRate()
+        self.samplingRate_Volume = self.inputVol.get().getSamplingRate()
         self.outParams = []
         classes = self.inputClasses.get()
+        self.samplingRate_Coefficients = classes.getSamplingRate()
+        correctionFactor = self.samplingRate_Coefficients / self.samplingRate_Volume
         for rep in classes.iterItems():
             basisParams = [rep.L1, rep.L2, rep.Rmax]
             coeffs = rep.getRepresentative().get()
             coeffs = np.fromstring(coeffs, sep=',')
+            coeffs = correctionFactor * coeffs
             idx = rep.getObjId() + 1
             file = self._getTmpPath('coeffs.txt')
             # np.savetxt(file, coeffs)
@@ -73,7 +76,7 @@ class XmippProtApplySPH(ProtAnalysis3D):
             params = ' -i %s --clnm %s -o %s' % \
                      (self.inputVol.get().getFileName(), file, self._getExtraPath(outFile))
             self.runJob("xmipp_volume_apply_deform_sph", params)
-            params = ' -i %s --sampling_rate %f' %(self._getExtraPath(outFile), self.samplingRate)
+            params = ' -i %s --sampling_rate %f' % (self._getExtraPath(outFile), self.samplingRate_Volume)
             self.runJob("xmipp_image_header", params)
             self.outParams.append((self._getExtraPath(outFile), rep.getSize()))
 
@@ -97,7 +100,7 @@ class XmippProtApplySPH(ProtAnalysis3D):
         volumeFile = pwutils.removeBaseExt(self.inputVol.get().getFileName()) + '_%d_deformed.vol' \
                      % (item.getObjId() + 1)
         volumeFile = self._getExtraPath(volumeFile)
-        representative.setSamplingRate(self.samplingRate)
+        representative.setSamplingRate(self.samplingRate_Volume)
         representative.setLocation(volumeFile)
 
     def iterClassesId(self):
