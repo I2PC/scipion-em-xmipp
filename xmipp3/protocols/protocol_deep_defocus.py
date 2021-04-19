@@ -44,7 +44,7 @@ import pyworkflow.protocol.constants as cons
 from xmipp3.convert import setXmippAttribute, getScipionObj, prefixAttribute
 from xmipp3 import emlib
 from sklearn.metrics import mean_absolute_error
-from keras.models import load_model
+from tensorflow.keras.models import load_model
 
 
 SAMPLING_RATE1 = 1
@@ -121,8 +121,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         self._loadInputList()
         pwutils.makePath(self._getExtraPath('DONE'))
         #Load the model one time only-----
-        modelFname = self.ownModel.get()
-        # modelFname = self.getModel('deepDefocus', 'ModelTrained.h5') #deepDefocus is the directory and ModelTrained.h5 is the model
+        modelFname = self.ownModel.get()  # modelFname = self.getModel('deepDefocus', 'ModelTrained.h5') #deepDefocus is the directory and ModelTrained.h5 is the model
         self.model = load_model(modelFname)
         print(self.model.summary())
         ##---------------------------------
@@ -370,8 +369,8 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         print(type(input_NN))
         model = self.model
         print('------------New prediction')
-        #imagPrediction = model.predict(input_NN)
-        #print(imagPrediction)
+        imagPrediction = model.predict(input_NN)
+        print(imagPrediction)
         #mae = mean_absolute_error(defocusVector, imagPrediction)
 
         fnSummary = self._getPath("summary.txt")
@@ -400,7 +399,15 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         samplingRate1 = SAMPLING_RATE1
         samplingRate2 = SAMPLING_RATE2
         samplingRate3 = SAMPLING_RATE3
-        imagMatrix = np.zeros((DIMENSION_X, DIMENSION_Y, 3), dtype=np.float64)  #np.float64)
+        imagMatrix = np.zeros((1, DIMENSION_X, DIMENSION_Y, 3), dtype=np.float64)
+        ih = ImageHandler()
+
+        #Normalize the micrograph
+        filename_micNormalized = os.path.join(micFolder, "micNormalized_" + str(micID) + '.mrc')
+        micImage =  ih.read(micFn)
+        normalizedMatrix = normalizeData(micImage.getData())
+        micImage.setData(normalizedMatrix)
+        micImage.write(filename_micNormalized)
 
         #Downsample into 1 A/px, 1.75 A/px, 2.75 A/px
         factor1 = samplingRate1/self.samplingRate
@@ -412,13 +419,9 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         filename_mic3 = os.path.join(micFolder, "tmp_mic3_" + str(micID)  + '.mrc')
 
         args1 = "-i %s -o %s --step %f --method fourier" \
-                % (micFn, filename_mic1 ,factor1)
-        print(args1)
-
+                % (micFn, filename_mic1 ,factor1)   #Aqui habria que poner filename_micNormalized en lugar de micFn
         args2 = "-i %s -o %s --step %f --method fourier" \
                 % (micFn, filename_mic2, factor2)
-        print(args2)
-
         args3 = "-i %s -o %s --step %f --method fourier" \
                 % (micFn, filename_mic3, factor3)
 
@@ -426,16 +429,11 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         self.runJob("xmipp_transform_downsample", args2)
         self.runJob("xmipp_transform_downsample", args3)
 
-        #Compute PSDs
-        ih = ImageHandler()
+        # Compute PSDs
+
         image1 = ih.read(filename_mic1)
         image2 = ih.read(filename_mic2)
         image3 = ih.read(filename_mic3)
-
-         # Compute PSD
-        # x_dim1, y_dim1, _, _ = image1.getDimensions()
-        # x_dim2, y_dim2, _, _ = image2.getDimensions()
-        # x_dim3, y_dim3, _, _ = image3.getDimensions()
 
         psd1 = image1.computePSD(0.4, DIMENSION_X, DIMENSION_Y, 1)
         psd1.convertPSD()
@@ -470,9 +468,10 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         img2 = ih.read(filename_filt_psd2).getData()
         img3 = ih.read(filename_filt_psd3).getData()
 
-        imagMatrix[:, :, 0] = img1
-        imagMatrix[:, :, 1] = img2
-        imagMatrix[:, :, 2] = img3
+        imagMatrix[0, :, :, 0] = img1
+        imagMatrix[0, :, :, 1] = img2
+        imagMatrix[0, :, :, 2] = img3
+
 
         if self.test.get():
             #md = xmipp.MetaData(fnRoot.replace("_xmipp_ctf_enhanced_psd.xmp", "_xmipp_ctf.xmd"))
@@ -681,3 +680,8 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         """ Check if process or not this movie.
         """
         return True
+
+
+# --------------------- WORKERS --------------------------------------
+def normalizeData(data):
+    return (data - np.min(data)) / (np.max(data) - np.min(data))
