@@ -29,7 +29,7 @@
 from pwem.constants import *
 from pwem.wizards import *
 from pyworkflow.wizard import Wizard
-from xmipp3.viewers import XmippMonoResViewer, XmippMonoTomoViewer, XmippResDeepResViewer
+from xmipp3.viewers import XmippMonoResViewer, XmippResDeepResViewer
 
 from .protocols.protocol_cl2d import IMAGES_PER_CLASS
 
@@ -499,4 +499,4 @@ class XmippGaussianVolumesWizard(GaussianVolumesWizard):
 
 
 class ColorScaleWizard(ColorScaleWizardBase):
-        _targets = ColorScaleWizardBase.defineTargets(XmippMonoResViewer, XmippMonoTomoViewer, XmippResDeepResViewer)
+        _targets = ColorScaleWizardBase.defineTargets(XmippMonoResViewer, XmippResDeepResViewer)
