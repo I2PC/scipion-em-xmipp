@@ -35,9 +35,8 @@ from xmipp3.protocols.protocol_classification_gpuCorr_full import *
 
 ProtCTFFind = Domain.importFromPlugin('cistem.protocols', 'CistemProtCTFFind',
                                       doRaise=True)
-
-SparxGaussianProtPicking = Domain.importFromPlugin('eman2.protocols',
-                                                   'SparxGaussianProtPicking',
+EmanProtAutopick = Domain.importFromPlugin('eman2.protocols',
+                                                   'EmanProtAutopick',
                                                    doRaise=True)
 
 
@@ -95,7 +94,7 @@ class TestGpuCorrFullStreaming(BaseTest):
 
     def runPicking(self, inputMicrographs):
         """ Run a particle picking. """
-        protPicking = SparxGaussianProtPicking(boxSize=64, lowerThreshold=0.01)
+        protPicking = EmanProtAutopick(boxSize=64, boxerMode=3, gaussLow=0.01)
         protPicking.inputMicrographs.set(inputMicrographs)
         self.proj.launchProtocol(protPicking, wait=False)
 
@@ -184,9 +183,9 @@ class TestGpuCorrFullStreaming(BaseTest):
             if counter > 100:
                 break
             counter += 1
-        self.assertFalse(protPicking.isFailed(), 'Eman Sparx has failed.')
+        self.assertFalse(protPicking.isFailed(), 'Eman Picker has failed.')
         self.assertTrue(protPicking.hasAttribute('outputCoordinates'),
-                        'Eman Sparx has no outputCoordinates in more than 3min.')
+                        'Eman Picker has no outputCoordinates in more than 3min.')
 
         protExtract = self.runExtractParticles(protPicking.outputCoordinates,
                                                protCtf.outputCTF)
