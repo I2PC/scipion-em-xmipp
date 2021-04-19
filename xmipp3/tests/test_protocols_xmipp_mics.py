@@ -923,10 +923,7 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
 
         protStream = self.newProtocol(ProtCreateStreamData, **kwargs)
         self.proj.launchProtocol(protStream, wait=False)
-
-        while not protStream.hasAttribute('outputParticles'):
-            time.sleep(2)
-            self._updateProtocol(protStream)
+        self._waitOutput(protStream, "outputParticles")
 
         protElimination2 = self.newProtocol(XmippProtEliminateEmptyParticles)
         protElimination2.inputParticles.set(protStream.outputParticles)
