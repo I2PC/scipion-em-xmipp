@@ -241,7 +241,7 @@ class TestXmippPreprocessMicrographs(TestXmippBase):
 
         # create input micrographs
         protStream = self.newProtocol(ProtCreateStreamData, **kwargs)
-        self.launchProtocol(protStream)
+        self.proj.launchProtocol(protStream, wait=False)
 
         self._waitOutput(protStream,'outputMicrographs')
 
@@ -908,18 +908,15 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
                         "Output sets size does not much the input set size.")
 
         kwargs = {'nDim': 20,  # 20 objects/particles
-                  'creationInterval': 1,  # wait 1 sec. after creation
+                  'creationInterval': 10,  # wait 1 sec. after creation
+                  'groups': 10,
                   'setof': 3,  # create SetOfParticles
                   'inputParticles': protExtract.outputParticles
                   }
 
         protStream = self.newProtocol(ProtCreateStreamData, **kwargs)
         self.proj.launchProtocol(protStream, wait=False)
-
-        count = 0
-        while not protStream.hasAttribute('outputParticles') and count < 600:
-            time.sleep(1)
-            protStream = self._updateProtocol(protStream)
+        self._waitOutput(protStream, "outputParticles")
 
         protElimination2 = self.newProtocol(XmippProtEliminateEmptyParticles)
         protElimination2.inputParticles.set(protStream.outputParticles)
@@ -999,19 +996,6 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         self.assertSetSize(protConsOr.consensusCoordinates, 432,
                         "Output coordinates size for OR consensus is wrong.")
 
-
-        # STREAMING tests
-        def waitForOutput(prot, output, timeout=600):
-            """ Waits until the output is ready
-                or till timeout (in seconds) is reached (10min by default).
-            """
-            count = 0
-            while not prot.hasAttribute(output) and count < timeout:
-                prot = self._updateProtocol(prot)
-                time.sleep(1)
-                count += 1
-            return prot
-
         kwargs = {'nDim': 3,  # 3 objects
                   'creationInterval': 20,  # wait 1 sec. after creation
                   'setof': 1,  # create SetOfMicrographs
@@ -1020,15 +1004,14 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
 
         protStream = self.newProtocol(ProtCreateStreamData, **kwargs)
         self.proj.launchProtocol(protStream, wait=False)
-
-        protStream = waitForOutput(protStream, 'outputMicrographs')
+        self._waitOutput(protStream, 'outputMicrographs')
 
         protAutoPP = XmippParticlePickingAutomatic()
         protAutoPP.xmippParticlePicking.set(self.protFaPi)
         protAutoPP.micsToPick.set(1)
         protAutoPP.inputMicrographs.set(protStream.outputMicrographs)
         self.proj.launchProtocol(protAutoPP, wait=False)
-        protAutoPP = waitForOutput(protAutoPP, 'outputCoordinates')
+        self._waitOutput(protAutoPP, 'outputCoordinates')
 
         # Consensus Picking launching
         protCons2 = self.newProtocol(XmippProtConsensusPicking,
