@@ -107,6 +107,22 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
                       label='Set your model',
                       help='Choose the protocol where your model is trained')
 
+        form.addParam("streamingBatchSize", params.IntParam, default=1,
+                      label="Batch size",  expertLevel=params.LEVEL_ADVANCED,
+                      help="This value allows to group several items to be "
+                           "processed inside the same protocol step. You can "
+                           "use the following values: \n"
+                           "*1*    The default behavior, the items will be "
+                           "processed one by one.\n"
+                           "*0*    Put in the same step all the items "
+                           "available. If the sleep time is short, it could be "
+                           "practically the same of one by one. If not, you "
+                           "could have steps with more items. If the steps will "
+                           "be executed in parallel, it is better not to use "
+                           "this option.\n"
+                           "*>1*   The number of items that will be grouped into "
+                           "a step.")
+
 
         form.addParallelSection(threads=4, mpi=1)
 
@@ -118,6 +134,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         self.insertedDict = OrderedDict()
         self.samplingRate = self.inputMicrographs.get().getSamplingRate()
         self.listOfMicrographs = []
+        self.batchSize = self.streamingBatchSize.get()
         self._loadInputList()
         pwutils.makePath(self._getExtraPath('DONE'))
         #Load the model one time only-----
@@ -290,7 +307,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
 
     # --------------------------- STEPS functions ------------------------------
 
-    def _insertNewMicrographSteps(self, insertedDict, inputMics):
+    def _insertNewMicrographSteps(self, insertedDict, newMics):
         """ Insert steps to process new micrographs (from streaming)
         Params:
             insertedDict: contains already processed micrographs
@@ -298,11 +315,10 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         """
         deps = []
         # For each micrograph insert the step to process it
-        for micrograph in inputMics:
-            if micrograph.getObjId() not in insertedDict:
-                tiltStepId = self._insertMicrographStep(micrograph)
-                deps.append(tiltStepId)
-                insertedDict[micrograph.getObjId()] = tiltStepId
+        for micrograph in newMics:
+            tiltStepId = self._insertMicrographStep(micrograph)
+            deps.append(tiltStepId)
+            insertedDict[micrograph.getObjId()] = tiltStepId
 
         return deps
 
@@ -316,6 +332,48 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         micDict = micrograph.getObjDict(includeBasic=True)
         micStepId = self._insertFunctionStep('processMicrographStep', micDict, prerequisites=[])
         return micStepId
+
+    def _insertNewMicsSteps(self, insertedDict, newMics):
+        """ Insert steps to process new mics (from streaming)
+        Params:
+            inputMics: input mics set to be inserted
+        """
+        deps = []
+
+        def _insertSubset(micSubset, insertedDict):
+            stepId = self._insertMicrographListStep(micSubset, insertedDict)
+            deps.append(stepId)
+
+        # Now handle the steps depending on the streaming batch size
+        if self.batchSize == 1:  # This is one by one, as before the batch size
+            for micrograph in newMics:
+                tiltStepId = self._insertMicrographStep(micrograph)
+                deps.append(tiltStepId)
+                insertedDict[micrograph.getObjId()] = tiltStepId
+
+        elif self.batchSize == 0:  # Greedy, take all available ones
+            _insertSubset(newMics)
+
+        else:  # batchSize > 0, insert only batches of this size
+            n = len(newMics)
+            d = int(n / self.batchSize)  # number of batches to insert
+            nd = d * self.batchSize
+            for i in range(d):
+                _insertSubset(newMics[i * self.batchSize:(i + 1) * self.batchSize] )
+
+            if n > nd and self.streamClosed:  # insert last ones
+                _insertSubset(newMics[nd:])
+
+        self.updateLastMicIdFound(newMics)
+
+        return deps
+
+    def _insertMicrographListStep(self, micSubset, insertedDict):
+        """ Basic method to insert an estimation step for a given micrograph. """
+        micStepId = self._insertFunctionStep('processMicrographListStep',
+                                             micSubset, insertedDict, prerequisites=prerequisites)
+        return micStepId
+
 
 
     def processMicrographStep(self, micDict):
