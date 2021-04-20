@@ -377,6 +377,21 @@ class XmippProtMonoRes(ProtAnalysis3D):
                                                          self.max_res_init))
         return summary
 
+    def _validate(self):
+        errors = []
+
+        if not self.halfVolumes.get():
+            if not self.inputVolumes.get():
+                errors.append("You need to select an input volume")
+        elif self.halfVolumesFile.get():
+            if not self.inputVolumes.get():
+                errors.append("You need to select an input volume")
+        else:
+            if not self.inputVolume.get() or not self.inputVolume2.get():
+                errors.append("You need to select the volumes half")
+
+        return errors
+
     def _citations(self):
         return ['Vilas2018']
 

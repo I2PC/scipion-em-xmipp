@@ -1043,11 +1043,13 @@ class TestXmippPdbConvert(TestXmippBase):
     
     def testXmippPdbConvertFromDb(self):
         print("Run convert a pdb from database")
-        protConvert = self.newProtocol(XmippProtConvertPdb, pdbId="3j3i", sampling=4, setSize=True, size=100)
+        protConvert = self.newProtocol(XmippProtConvertPdb, pdbId="3j3i", sampling=4, setSize=True,
+                                       size_z=100, size_y=100, size_x=100)
         self.launchProtocol(protConvert)
         self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
-        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1, msg="wrong sampling rate")
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size.get(), places=1, msg="wrong size")
+        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
+                               msg="wrong sampling rate")
+        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1, msg="wrong size")
         
     def testXmippPdbConvertFromObj(self):
         print("Run convert a pdb from import")
@@ -1059,19 +1061,21 @@ class TestXmippPdbConvert(TestXmippBase):
         
         protConvert = self.newProtocol(XmippProtConvertPdb, 
                                        inputPdbData=XmippProtConvertPdb.IMPORT_OBJ, 
-                                       sampling=3, setSize=True, size=20)
+                                       sampling=3, setSize=True, size_z=20, size_y=20, size_x=20)
         protConvert.pdbObj.set(protImport.outputPdb)
         self.launchProtocol(protConvert)
         self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
-        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1, msg="wrong sampling rate")
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size.get(), places=1, msg="wrong size")
+        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
+                               msg="wrong sampling rate")
+        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1, msg="wrong size")
 
     def testXmippPdbConvertFromFn(self):
         print("Run convert a pdb from file")
-        protConvert = self.newProtocol(XmippProtConvertPdb,inputPdbData=2, pdbFile=self.pdb, sampling=2, setSize=True)
+        protConvert = self.newProtocol(XmippProtConvertPdb,inputPdbData=2, pdbFile=self.pdb, sampling=2, setSize=False)
         self.launchProtocol(protConvert)
         self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
-        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1, msg="wrong sampling rate")
+        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
+                               msg="wrong sampling rate")
         self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], 48, places=1, msg="wrong size")
 
 

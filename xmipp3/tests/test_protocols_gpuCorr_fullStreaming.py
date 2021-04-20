@@ -1,6 +1,7 @@
 # ***************************************************************************
 # *
 # * Authors:     Amaya Jimenez (ajimenez@cnb.csic.es)
+# *              David Strelak (dstrelak@cnb.csic.es)
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -35,16 +36,15 @@ from xmipp3.protocols.protocol_classification_gpuCorr_full import *
 
 ProtCTFFind = Domain.importFromPlugin('cistem.protocols', 'CistemProtCTFFind',
                                       doRaise=True)
-
-SparxGaussianProtPicking = Domain.importFromPlugin('eman2.protocols',
-                                                   'SparxGaussianProtPicking',
+EmanProtAutopick = Domain.importFromPlugin('eman2.protocols',
+                                                   'EmanProtAutopick',
                                                    doRaise=True)
 
 
 # Number of mics to be processed
 NUM_MICS = 5
 
-class TestGpuCorrFullStreaming(BaseTest):
+class GpuCorrCommon():
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
@@ -95,24 +95,24 @@ class TestGpuCorrFullStreaming(BaseTest):
 
     def runPicking(self, inputMicrographs):
         """ Run a particle picking. """
-        protPicking = SparxGaussianProtPicking(boxSize=64, lowerThreshold=0.01)
+        protPicking = EmanProtAutopick(boxSize=64, boxerMode=3, gaussLow=0.01)
         protPicking.inputMicrographs.set(inputMicrographs)
         self.proj.launchProtocol(protPicking, wait=False)
 
         return protPicking
 
     def runExtractParticles(self, inputCoord, setCtfs):
-        protExtract = self.newProtocol(XmippProtExtractParticles,
+        self.protExtract = self.newProtocol(XmippProtExtractParticles,
                                        boxSize=64,
                                        doInvert = False,
                                        doFlip = False)
 
-        protExtract.inputCoordinates.set(inputCoord)
-        protExtract.ctfRelations.set(setCtfs)
+        self.protExtract.inputCoordinates.set(inputCoord)
+        self.protExtract.ctfRelations.set(setCtfs)
 
-        self.proj.launchProtocol(protExtract, wait=False)
+        self.proj.launchProtocol(self.protExtract, wait=False)
 
-        return protExtract
+        return self.protExtract
 
     def runClassify(self, inputParts):
         protClassify = self.newProtocol(XmippProtStrGpuCrrCL2D)
@@ -135,7 +135,6 @@ class TestGpuCorrFullStreaming(BaseTest):
 
 
     def test_pattern(self):
-
         protImportMics = self.importMicrographs()
         self.assertFalse(protImportMics.isFailed(), 'ImportMics has failed.')
 
@@ -184,24 +183,29 @@ class TestGpuCorrFullStreaming(BaseTest):
             if counter > 100:
                 break
             counter += 1
-        self.assertFalse(protPicking.isFailed(), 'Eman Sparx has failed.')
+        self.assertFalse(protPicking.isFailed(), 'Eman Picker has failed.')
         self.assertTrue(protPicking.hasAttribute('outputCoordinates'),
-                        'Eman Sparx has no outputCoordinates in more than 3min.')
+                        'Eman Picker has no outputCoordinates in more than 3min.')
 
-        protExtract = self.runExtractParticles(protPicking.outputCoordinates,
+        self.runExtractParticles(protPicking.outputCoordinates,
                                                protCtf.outputCTF)
         counter = 1
-        while not protExtract.hasAttribute('outputParticles'):
+        while not self.protExtract.hasAttribute('outputParticles'):
             time.sleep(2)
-            protExtract = self._updateProtocol(protExtract)
+            self.protExtract = self._updateProtocol(self.protExtract)
             if counter > 100:
                 break
             counter += 1
-        self.assertFalse(protExtract.isFailed(), 'Extract particles has failed.')
-        self.assertTrue(protExtract.hasAttribute('outputParticles'),
+        self.assertFalse(self.protExtract.isFailed(), 'Extract particles has failed.')
+        self.assertTrue(self.protExtract.hasAttribute('outputParticles'),
                         'Extract particles has no outputParticles in more than 3min.')
 
-        protClassify = self.runClassify(protExtract.outputParticles)
+        self.verify_classification()
+
+
+class TestGpuCorrFullStreaming(GpuCorrCommon, BaseTest):
+    def verify_classification(self):
+        protClassify = self.runClassify(self.protExtract.outputParticles)
         counter = 1
         while protClassify.getStatus() != STATUS_FINISHED:
             time.sleep(2)

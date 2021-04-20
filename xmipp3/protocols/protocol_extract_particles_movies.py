@@ -166,6 +166,7 @@ class XmippProtExtractMovieParticles(ProtExtractMovieParticles):
         # Build the list of all processMovieStep ids by
         # inserting each of the steps for each movie
         self.insertedDict = {}
+        makePath(self._getExtraPath('DONE'))
         
         # Conversion step is part of processMovieStep.
         movieSteps = self._insertNewMoviesSteps(self.insertedDict,
