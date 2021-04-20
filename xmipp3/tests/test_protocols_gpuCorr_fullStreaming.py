@@ -65,7 +65,7 @@ class GpuCorrCommon():
     def importMicrographsStr(self, fnMics):
         kwargs = {'inputMics': fnMics,
                   'nDim': NUM_MICS,
-                  'creationInterval': 30,
+                  'creationInterval': 15,
                   'delay': 10,
                   'setof': SET_OF_MICROGRAPHS  # SetOfMics
                   }
@@ -133,72 +133,25 @@ class GpuCorrCommon():
             return prot2
 
 
-
     def test_pattern(self):
         protImportMics = self.importMicrographs()
         self.assertFalse(protImportMics.isFailed(), 'ImportMics has failed.')
 
-        protImportMicsStr = self.importMicrographsStr\
-            (protImportMics.outputMicrographs)
-        counter = 1
-        while not protImportMicsStr.hasAttribute('outputMicrographs'):
-            time.sleep(2)
-            protImportMicsStr = self._updateProtocol(protImportMicsStr)
-            if counter > 100:
-                break
-            counter += 1
-        self.assertFalse(protImportMicsStr.isFailed(), 'Create stream data has failed.')
-        self.assertTrue(protImportMicsStr.hasAttribute('outputMicrographs'),
-                        'Create stream data has no outputMicrographs in more than 3min.')
+        protImportMicsStr = self.importMicrographsStr(protImportMics.outputMicrographs)
+        self._waitOutput(protImportMicsStr,'outputMicrographs')
 
         protInvContr = self.invertContrast(protImportMicsStr.outputMicrographs)
-        counter = 1
-        while not protInvContr.hasAttribute('outputMicrographs'):
-            time.sleep(2)
-            protInvContr = self._updateProtocol(protInvContr)
-            if counter > 100:
-                break
-            counter += 1
-        self.assertFalse(protInvContr.isFailed(), 'protInvContr has failed.')
-        self.assertTrue(protInvContr.hasAttribute('outputMicrographs'),
-                        'protInvContr has no outputMicrographs in more than 3min.')
+        self._waitOutput(protInvContr,'outputMicrographs')
 
         protCtf = self.calculateCtf(protInvContr.outputMicrographs)
-        counter = 1
-        while not protCtf.hasAttribute('outputCTF'):
-            time.sleep(2)
-            protCtf = self._updateProtocol(protCtf)
-            if counter > 100:
-                break
-            counter += 1
-        self.assertFalse(protCtf.isFailed(), 'CTFfind4 has failed.')
-        self.assertTrue(protCtf.hasAttribute('outputCTF'),
-                        'CTFfind4 has no outputCTF in more than 3min.')
+        self._waitOutput(protCtf,'outputCTF')
 
         protPicking = self.runPicking(protInvContr.outputMicrographs)
-        counter = 1
-        while not protPicking.hasAttribute('outputCoordinates'):
-            time.sleep(2)
-            protPicking = self._updateProtocol(protPicking)
-            if counter > 100:
-                break
-            counter += 1
-        self.assertFalse(protPicking.isFailed(), 'Eman Picker has failed.')
-        self.assertTrue(protPicking.hasAttribute('outputCoordinates'),
-                        'Eman Picker has no outputCoordinates in more than 3min.')
+        self._waitOutput(protPicking,'outputCoordinates')
 
         self.runExtractParticles(protPicking.outputCoordinates,
                                                protCtf.outputCTF)
-        counter = 1
-        while not self.protExtract.hasAttribute('outputParticles'):
-            time.sleep(2)
-            self.protExtract = self._updateProtocol(self.protExtract)
-            if counter > 100:
-                break
-            counter += 1
-        self.assertFalse(self.protExtract.isFailed(), 'Extract particles has failed.')
-        self.assertTrue(self.protExtract.hasAttribute('outputParticles'),
-                        'Extract particles has no outputParticles in more than 3min.')
+        self._waitOutput(self.protExtract,'outputParticles')
 
         self.verify_classification()
 
