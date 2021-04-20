@@ -419,11 +419,11 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         filename_mic3 = os.path.join(micFolder, "tmp_mic3_" + str(micID)  + '.mrc')
 
         args1 = "-i %s -o %s --step %f --method fourier" \
-                % (micFn, filename_mic1 ,factor1)   #Aqui habria que poner filename_micNormalized en lugar de micFn
+                % (filename_micNormalized, filename_mic1 ,factor1)   #Aqui habria que poner filename_micNormalized en lugar de micFn
         args2 = "-i %s -o %s --step %f --method fourier" \
-                % (micFn, filename_mic2, factor2)
+                % (filename_micNormalized, filename_mic2, factor2)
         args3 = "-i %s -o %s --step %f --method fourier" \
-                % (micFn, filename_mic3, factor3)
+                % (filename_micNormalized, filename_mic3, factor3)
 
         self.runJob("xmipp_transform_downsample" , args1)
         self.runJob("xmipp_transform_downsample", args2)
