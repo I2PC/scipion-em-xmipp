@@ -211,8 +211,8 @@ class XmippViewer(DataViewer):
                                                ' ' + XmippProtTiltAnalysis.getTiltMinLabel() + \
                                                ' ' + XmippProtTiltAnalysis.getTiltMaxLabel()
 
-            micView.getViewParams()[RENDER] = micView.getViewParams()[RENDER] + \
-                                               ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename'
+         #   micView.getViewParams()[RENDER] = micView.getViewParams()[RENDER] + \
+         #                                      ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename'
 
             micView.getViewParams()[ORDER] = micView.getViewParams()[ORDER] + \
                                                ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename' + \
@@ -232,8 +232,8 @@ class XmippViewer(DataViewer):
                                                    ' ' + XmippProtTiltAnalysis.getTiltMinLabel() + \
                                                    ' ' + XmippProtTiltAnalysis.getTiltMaxLabel()
 
-                micView2.getViewParams()[RENDER] = micView2.getViewParams()[RENDER] + \
-                                                  ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename'
+                #micView2.getViewParams()[RENDER] = micView2.getViewParams()[RENDER] + \
+                 #                                 ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename'
 
                 micView2.getViewParams()[ORDER] = micView2.getViewParams()[ORDER] + \
                                                     ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename' + \
