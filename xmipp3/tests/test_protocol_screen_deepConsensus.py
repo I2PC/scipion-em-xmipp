@@ -97,12 +97,9 @@ class TestXmippProtScreenDeepConsensus(BaseTest):
       return prot
 
     def getDeepConsensusKwargs(self, case=1):
-      ADD_MODEL_TRAIN_NEW = 0
       ADD_MODEL_TRAIN_PRETRAIN = 1
       ADD_MODEL_TRAIN_PREVRUN = 2
 
-      ADD_DATA_TRAIN_NONE = 0
-      ADD_DATA_TRAIN_PRECOMP = 1
       ADD_DATA_TRAIN_CUST = 2
 
       ADD_DATA_TRAIN_CUSTOM_OPT_PARTS = 0
