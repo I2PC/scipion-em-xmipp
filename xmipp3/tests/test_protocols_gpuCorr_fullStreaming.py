@@ -44,7 +44,7 @@ EmanProtAutopick = Domain.importFromPlugin('eman2.protocols',
 # Number of mics to be processed
 NUM_MICS = 5
 
-class GpuCorrCommon():
+class GpuCorrCommon(BaseTest):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
@@ -115,7 +115,8 @@ class GpuCorrCommon():
         return self.protExtract
 
     def runClassify(self, inputParts):
-        protClassify = self.newProtocol(XmippProtStrGpuCrrCL2D)
+        protClassify = self.newProtocol(XmippProtStrGpuCrrCL2D,
+                                        numberOfMpi=4)
 
         protClassify.inputParticles.set(inputParts)
         self.proj.launchProtocol(protClassify, wait=False)
@@ -156,19 +157,11 @@ class GpuCorrCommon():
         self.verify_classification()
 
 
-class TestGpuCorrFullStreaming(GpuCorrCommon, BaseTest):
+class TestGpuCorrFullStreaming(GpuCorrCommon):
     def verify_classification(self):
         protClassify = self.runClassify(self.protExtract.outputParticles)
-        counter = 1
-        while protClassify.getStatus() != STATUS_FINISHED:
-            time.sleep(2)
-            protClassify = self._updateProtocol(protClassify)
-            self.assertFalse(protClassify.isFailed(), 'GL2D-streaming has failed.')
 
-            if counter > 100:
-                self.assertTrue(protClassify.hasAttribute('outputAverages'),
-                                'GL2D-streaming has no outputAverages in more than 3min.')
-            counter += 1
+        self._waitOutput(protClassify, "outputClasses", timeOut=180)
 
         self.assertTrue(protClassify.hasAttribute('outputAverages'),
                         'GL2D-streaming has no outputAverages at the end.')
