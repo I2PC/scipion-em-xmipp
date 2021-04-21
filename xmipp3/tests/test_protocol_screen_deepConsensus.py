@@ -109,7 +109,7 @@ class TestXmippProtScreenDeepConsensus(BaseTest):
       ADD_DATA_TRAIN_CUSTOM_OPT_COORS = 1
 
       kwargs = {
-        'nEpochs' : 2.0,
+        'nEpochs' : 1.0,
         'nModels' :2,
         'extractingBatch':3,
         'trainingBatch':3,
@@ -150,7 +150,7 @@ class TestXmippProtScreenDeepConsensus(BaseTest):
       nCoordinateSets = 3
       protImpMics = self._runInportMicrographs()
 
-      for case in range(1,4):
+      for case in range(1,3):
         protImpCoords = self._runImportCoordinates(protImpMics, case)
 
         protsStreamCoords = []
