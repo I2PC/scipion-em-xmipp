@@ -33,18 +33,14 @@ from pwem.emlib.metadata import MetaData
 from pwem.wizards import ColorScaleWizardBase
 from pwem.emlib.image import ImageHandler
 from pwem.viewers import ChimeraView, DataView, LocalResolutionViewer
+from pwem import emlib
+
 
 import numpy as np
 
-from math import sqrt
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib.ticker import FuncFormatter
-from matplotlib.pyplot import hlines
-import matplotlib.colors as mcolors
-
-from os.path import abspath, exists
-from collections import OrderedDict
 
 from xmipp3.protocols.protocol_resolution_fso import \
     XmippProtFSO, OUTPUT_3DFSC, OUTPUT_DIRECTIONAL_FILTER
@@ -151,8 +147,8 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         title = 'Global FSC'
         xTitle = 'Resolution (1/A)'
         yTitle = 'FSC (a.u.)'
-        mdLabelX = xmippLib.MDL_RESOLUTION_FREQ
-        mdLabelY = xmippLib.MDL_RESOLUTION_FRC
+        mdLabelX = emlib.MDL_RESOLUTION_FREQ
+        mdLabelY = emlib.MDL_RESOLUTION_FRC
         self._plotCurveFSC(fnmd, title, xTitle, yTitle, mdLabelX, mdLabelY)
 
     def _show3DFSCcolorSlices(self, param=None):
@@ -186,8 +182,8 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         title = 'Anisotropy Curve'
         xTitle = 'Resolution (1/A)'
         yTitle = 'Anisotropy (a.u.)'
-        mdLabelX = xmippLib.MDL_RESOLUTION_FREQ
-        mdLabelY = xmippLib.MDL_RESOLUTION_FRC
+        mdLabelX = emlib.MDL_RESOLUTION_FREQ
+        mdLabelY = emlib.MDL_RESOLUTION_FRC
         self._plotCurveAnisotropy(fnmd, title, xTitle, yTitle, mdLabelX, mdLabelY)
 
     def _showDirectionalFilter(self, param=None):
@@ -352,14 +348,14 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         It is called by _showDirectionalResolution
         This function shows the angular distribution of the resolution
         """
-        md = xmippLib.MetaData(fnmd)
+        md = emlib.MetaData(fnmd)
         radius = []
         azimuth = []
         counts = []
         for objId in md:
-            radius.append(md.getValue(MDL_ANGLE_ROT, objId))
-            azimuth.append(md.getValue(MDL_ANGLE_TILT, objId))
-            counts.append(md.getValue(MDL_RESOLUTION_FRC, objId))
+            radius.append(md.getValue(emlib.MDL_ANGLE_ROT, objId))
+            azimuth.append(md.getValue(emlib.MDL_ANGLE_TILT, objId))
+            counts.append(md.getValue(emlib.MDL_RESOLUTION_FRC, objId))
 
         # define binning
         azimuths = np.radians(np.linspace(0, 360, 360))

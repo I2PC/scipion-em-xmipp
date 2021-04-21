@@ -36,7 +36,7 @@ from .viewer_mltomo import XmippMLTomoViewer
 from .viewer_movie_alignment import XmippMovieAlignViewer, XmippMovieMaxShiftViewer
 from .viewer_normalize_strain import XmippNormalizeStrainViewer
 from .viewer_resolution3d import XmippResolution3DViewer
-#from .viewer_resolution_bfactor import XmippBfactorResolutionViewer
+from .viewer_resolution_bfactor import XmippBfactorResolutionViewer
 from .viewer_resolution_directional import XmippMonoDirViewer
 from .viewer_resolution_fso import XmippProtFSOViewer
 from .viewer_resolution_monogenic_signal import XmippMonoResViewer
