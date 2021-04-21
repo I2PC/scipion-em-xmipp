@@ -25,29 +25,18 @@
 # *
 # **************************************************************************
 
-import numpy as np
 
-from pwem.emlib.image import ImageHandler
-from pwem.objects import FSC
-from pwem.protocols import ProtAnalysis3D
 from pyworkflow import VERSION_2_0
-from pyworkflow.protocol.constants import STEPS_PARALLEL
-import pyworkflow.protocol.params as params
-import pwem.emlib.metadata as md
-
-from xmipp3.convert import locationToXmipp, writeSetOfParticles
-
+from pyworkflow.object import Float
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
                                         LEVEL_ADVANCED)
-from pyworkflow.object import Float
-from pyworkflow.utils import getExt
-from pwem.objects import Volume, SetOfParticles
-
+from pwem.objects import Volume
+from pwem.protocols import ProtAnalysis3D
 
 
 OUTPUT_3DFSC = '3dFSC.mrc'
-OUTPUT_SPHERE = 'fsc/sphere.mrc'
-OUTPUT_DIRECTIONAL_FILTER = 'fsc/filteredMap.mrc'
+OUTPUT_DIRECTIONAL_FILTER = 'filteredMap.mrc'
+OUTPUT_DIRECTIONAL_DISTRIBUTION = 'Resolution_Distribution.xmd'
 
 
 class XmippProtFSO(ProtAnalysis3D):
@@ -59,17 +48,33 @@ class XmippProtFSO(ProtAnalysis3D):
     
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
+        self.min_res_init = Float()
+        self.max_res_init = Float()
     
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
 
+        form.addParam('halfVolumesFile', BooleanParam, default=True,
+                      label="Are the half volumes stored with the input volume?",
+                      help='Usually, the half volumes are stored as properties of '
+                      'the input volume. If this is not the case, set this to '
+                      'False and specify the two halves you want to use.')
+
+        form.addParam('inputHalves', PointerParam, pointerClass='Volume',
+                      label="Input Half Maps",
+                      condition = 'halfVolumesFile',
+                      help='Select a half maps for determining its '
+                      ' resolution anisotropy and resolution.')
+
         form.addParam('half1', PointerParam, pointerClass='Volume',
+                      condition = "not halfVolumesFile",
                       label="Half Map 1", important=True,
                       help='Select one map for determining the '
 		      'directional FSC resolution.')
 
         form.addParam('half2', PointerParam, pointerClass='Volume',
+                      condition = "not halfVolumesFile",
                       label="Half Map 2", important=True,
                       help='Select the second map for determining the '
                       'directional FSC resolution.')
@@ -80,17 +85,21 @@ class XmippProtFSO(ProtAnalysis3D):
                       help='The mask determines which points are specimen'
                       ' and which are not')
 
-        form.addParam('bestAngle', BooleanParam, default=True, 
-                      label="Find Best Cone angle",
-                      help='The algorithm will try to determine by cross validation'
-			   'the best cone angle to then determine the directional FSC'
-			   'Note that the cone angle is the angle between the axis '
-			   'of the cone and the generatrix')
-
-        form.addParam('coneAngle', FloatParam, default=20.0, 
-		      condition = 'not bestAngle ',
+        form.addParam('coneAngle', FloatParam, default=17.0,
+                      expertLevel=LEVEL_ADVANCED, 
                       label="Cone Angle",
                       help='Angle between the axis of the cone and the generatrix')
+        
+        form.addParam('estimate3DFSC', BooleanParam, default=True, 
+                      label="Estimate 3DFSC and directional filtered map",
+                      help='Set to to estimate the 3DFSCD map, and applyting the '
+                           ' 3DFSC as anisotropic filter to obtain a directional'
+                           'filtered map.')
+
+        form.addParam('threshold', FloatParam, expertLevel=LEVEL_ADVANCED, 
+                      default=0.143, 
+                      label="Threshold",
+                      help='Threshold for the fsc')
         
         form.addParallelSection(threads = 4, mpi = 0)
 
@@ -99,9 +108,8 @@ class XmippProtFSO(ProtAnalysis3D):
     def _createFilenameTemplates(self):
         """ Centralize how files are called """
         myDict = {OUTPUT_3DFSC: self._getExtraPath("3dFSC.mrc"),
-                 OUTPUT_SPHERE: self._getExtraPath("fsc/sphere.mrc"),
-		 OUTPUT_DIRECTIONAL_FILTER: self._getExtraPath("fsc/filteredMap.mrc"),
-                 }
+                  OUTPUT_DIRECTIONAL_FILTER: self._getExtraPath("filteredMap.mrc"),
+                  }
         self._updateFilenamesDict(myDict)
 
 
@@ -109,33 +117,34 @@ class XmippProtFSO(ProtAnalysis3D):
         self._createFilenameTemplates() 
         # Convert input into xmipp Metadata format
         self._insertFunctionStep('convertInputStep')
-        self._insertFunctionStep('resolutionDirectionalFSCStep')
+        self._insertFunctionStep('FSOestimationStep')
         self._insertFunctionStep('createOutputStep')
 
     def mrc_convert(self, fileName, outputFileName):
         """Check if the extension is .mrc, if not then uses xmipp to convert it
         """
-        ext = getExt(fileName)
-        if (ext !='.mrc'):
-            params = ' -i %s' % fileName
-            params += ' -o %s' % outputFileName
-            self.runJob('xmipp_image_convert', params)
-            #outputFileName = outputFileName # +':mrc'
-            return outputFileName
-        else:
-            return fileName
+        params = ' -i %s' % fileName
+        params += ' -o %s' % outputFileName
+        self.runJob('xmipp_image_convert', params)
+        outputFileName = outputFileName+':mrc'
+        return outputFileName
 
     def convertInputStep(self):
         """ Read the input volume.
         """
-        self.vol1Fn = self.mrc_convert(self.half1.get().getFileName(),
+
+        if (self.halfVolumesFile):
+            self.vol1Fn, self.vol2Fn = self.inputHalves.get().getHalfMaps().split(',')
+        else:
+            self.vol1Fn = self.mrc_convert(self.half1.get().getFileName(),
                                   self._getTmpPath('half1.mrc'))
-        self.vol2Fn = self.mrc_convert(self.half2.get().getFileName(),
+            self.vol2Fn = self.mrc_convert(self.half2.get().getFileName(), 
                                   self._getTmpPath('half2.mrc'))
-        self.maskFn = self.mrc_convert(self.mask.get().getFileName(),
+        if (self.mask.hasValue()):
+            self.maskFn = self.mrc_convert(self.mask.get().getFileName(), 
                                   self._getExtraPath('mask.mrc'))
 
-    def resolutionDirectionalFSCStep(self):
+    def FSOestimationStep(self):
         import os
         fndir = self._getExtraPath("fsc") 
 
@@ -143,16 +152,22 @@ class XmippProtFSO(ProtAnalysis3D):
 
         params = ' --half1 %s' % self.vol1Fn
         params += ' --half2 %s' % self.vol2Fn
+        params += ' -o %s' % self._getExtraPath()
+        if (self.halfVolumesFile):
+            params += ' --sampling %f' % self.inputHalves.get().getSamplingRate()
+        else:
+            params += ' --sampling %f' % self.half1.get().getSamplingRate()
 
         if self.mask.hasValue():
             params += ' --mask %s' % self.maskFn
 
-        params += ' --sampling %f' % self.half1.get().getSamplingRate()
-        if self.bestAngle.get() is False:
-            params += ' --anglecone %f' % self.coneAngle.get()
-        params += ' --threedfsc %s' % self._getExtraPath("3dFSC.mrc")
-        params += ' --fscfolder %s' % (fndir+'/')
-        params += ' --anisotropy %s' % self._getExtraPath("fso.xmd")
+        params += ' --anglecone %f' % self.coneAngle.get()
+
+        if self.estimate3DFSC.get() is True:
+            params += ' --threedfsc_filter'
+        
+        params += ' --threshold %s' % self.threshold.get()
+        params += ' --threads %s' % self.numberOfThreads.get()
         
         self.runJob('xmipp_resolution_fso', params)
       
@@ -165,6 +180,11 @@ class XmippProtFSO(ProtAnalysis3D):
         self._defineOutputs(fsc3D=volume)
         self._defineSourceRelation(self.half1, volume)
 
+        volume.setFileName(self._getExtraPath("filteredMap.mrc"))
+
+        volume.setSamplingRate(self.half1.get().getSamplingRate())
+        self._defineOutputs(directionalFilteredMap=volume)
+        self._defineSourceRelation(self.half1, volume)
 
 
     # --------------------------- INFO functions ------------------------------
@@ -182,4 +202,4 @@ class XmippProtFSO(ProtAnalysis3D):
         return summary
 
     def _citations(self):
-        return ['Vilas2020']
+        return ['Vilas2021']

@@ -25,155 +25,129 @@
 # **************************************************************************
 
 from pyworkflow.gui.plotter import Plotter
-from xmipp3.viewers.plotter import XmippPlotter
-from pyworkflow.protocol.params import LabelParam, StringParam, EnumParam, IntParam
+from pyworkflow.protocol.params import LabelParam, StringParam, EnumParam, IntParam, LEVEL_ADVANCED
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
+from pyworkflow.utils import getExt, removeExt
+
+from pwem.emlib.metadata import MetaData
+from pwem.wizards import ColorScaleWizardBase
+from pwem.emlib.image import ImageHandler
 from pwem.viewers import ChimeraView, DataView, LocalResolutionViewer
+
+import numpy as np
+
+from math import sqrt
+import matplotlib.pyplot as plt
+from matplotlib import cm
 from matplotlib.ticker import FuncFormatter
 from matplotlib.pyplot import hlines
-from xmipp3.protocols.protocol_resolution_fso import \
-        XmippProtFSO, OUTPUT_3DFSC, OUTPUT_SPHERE, OUTPUT_DIRECTIONAL_FILTER
-from pwem.emlib.metadata import MetaData
-from xmippLib import *
-from pwem.emlib.image import ImageHandler
-import numpy as np
-import matplotlib.pyplot as plt
-from math import sqrt
-from matplotlib import cm
 import matplotlib.colors as mcolors
-from pyworkflow.utils import getExt, removeExt
+
 from os.path import abspath, exists
 from collections import OrderedDict
+
+from xmipp3.protocols.protocol_resolution_fso import \
+    XmippProtFSO, OUTPUT_3DFSC, OUTPUT_DIRECTIONAL_FILTER
+from xmipp3.viewers.plotter import XmippPlotter
+from xmippLib import *
 import xmippLib
 
-# Color maps
-COLOR_JET = 0
-COLOR_TERRAIN = 1
-COLOR_GIST_EARTH = 2
-COLOR_GIST_NCAR = 3
-COLOR_GNU_PLOT = 4
-COLOR_GNU_PLOT2 = 5
-COLOR_OTHER = 6
-
-COLOR_CHOICES = OrderedDict() #[-1]*(OP_RESET+1)
-
-COLOR_CHOICES[COLOR_JET]  = 'jet'
-COLOR_CHOICES[COLOR_TERRAIN] = 'terrain'
-COLOR_CHOICES[COLOR_GIST_EARTH] = 'gist_earth'
-COLOR_CHOICES[COLOR_GIST_NCAR] = 'gist_ncar'
-COLOR_CHOICES[COLOR_GNU_PLOT] = 'gnuplot'
-COLOR_CHOICES[COLOR_GNU_PLOT2] = 'gnuplot2'
-COLOR_CHOICES[COLOR_OTHER] = 'other'
-
-binaryCondition = ('(colorMap == %d) ' % (COLOR_OTHER))
-
-#Axis code
+# Axis code
 AX_X = 0
 AX_Y = 1
 AX_Z = 2
 
-class XmippProtFSOViewer(ProtocolViewer):
+
+class XmippProtFSOViewer(LocalResolutionViewer):
     """
     Visualization tools for the FSO, FSC, and 3DFSC.
     
     """
     _label = 'viewer FSO'
-    _targets = [XmippProtFSO]      
+    _targets = [XmippProtFSO]
     _environments = [DESKTOP_TKINTER]
-    
+
     @staticmethod
     def getColorMapChoices():
         return plt.colormaps()
-   
-    def __init__(self, *args, **kwargs):
-        ProtocolViewer.__init__(self, *args, **kwargs)
 
+    # def __init__(self, *args, **kwargs):
+    #     ProtocolViewer.__init__(self, *args, **kwargs)
+    # #     super().__init__(*args, **kwargs)
 
     def _defineParams(self, form):
         form.addSection(label='Visualization')
-        
+
         form.addParam('doShowOriginalVolumeSlices', LabelParam,
-              label="Original Half Maps slices")
+                      label="Original Half Maps slices")
 
-        form.addParam('doShow3DFSC', LabelParam, label="3DFSC map")
+        form.addParam('doShowDirectionalFilter', LabelParam,
+                      label="Directionally filtered map")
 
-        form.addParam('doShowDirectionalFilter', LabelParam, 
-              label="Directionally filtered map")
-        
-        form.addParam('doShowFSC', LabelParam, label="Global FSC")
-
-        form.addParam('doShowDirectionalResolution', LabelParam, 
-              label="Show Directional Resolution on sphere")
-
-        form.addParam('doCrossValidation', LabelParam, 
-              label="Show Cross validation curve")
-
-        groupDirFSC = form.addGroup('FSC Anisotropy')
-        
-        groupDirFSC.addParam('doShow3DFSCcolorSlices', LabelParam,
-               label="Show 3DFSC Color slices")
-        
-        groupDirFSC.addParam('doShowChimera3DFSC', LabelParam,
-               label="Show 3DFSC in Chimera")
-        
-        groupDirFSC.addParam('doShowDirectionalFSCCurve', LabelParam,
-               label="Show directional FSC curve")
-
-        groupDirFSC.addParam('fscNumber', IntParam, default=0,
-               label='Show FSC direction')
+        groupDirFSC = form.addGroup('FSO and Resolution Analysis')
 
         groupDirFSC.addParam('doShowAnisotropyCurve', LabelParam,
-               label="Show FSO curve")
+                             label="Show FSO curve")
+
+        groupDirFSC.addParam('doShowFSC', LabelParam, label="Global FSC")
+
+        groupDirFSC.addParam('doShow3DFSC', LabelParam, label="3DFSC map")
+
+        groupDirFSC.addParam('doShow3DFSCcolorSlices', LabelParam,
+                             label="Show 3DFSC Color slices")
+
+        groupDirFSC.addParam('doShowDirectionalResolution', LabelParam,
+                             label="Show Directional Resolution on sphere")
 
         group = form.addGroup('Choose a Color Map')
-
-        group.addParam('colorMap', EnumParam, choices=list(COLOR_CHOICES.values()),
-               default=COLOR_JET, label='Color map', 
-               help='Select the color map to be applied'
-                    'http://matplotlib.org/1.3.0/examples/color/colormaps_reference.html.')
-
-        group.addParam('otherColorMap', StringParam, default='jet',
-                      condition = binaryCondition, label='Customized Color map',
-                      help='Name of a color map to apply to be applied. Valid names can be found at '
-                            'http://matplotlib.org/1.3.0/examples/color/colormaps_reference.html')
 
         group.addParam('sliceAxis', EnumParam, default=AX_Z,
                        choices=['x', 'y', 'z'],
                        display=EnumParam.DISPLAY_HLIST,
                        label='Slice axis')
-        group.addParam('doShowOneColorslice', LabelParam,  
-                      label='Show selected slice')
+        group.addParam('doShowOneColorslice', LabelParam,
+                       expertLevel=LEVEL_ADVANCED,
+                       label='Show selected slice')
         group.addParam('sliceNumber', IntParam, default=-1,
-               label='Show slice number')
+                       expertLevel=LEVEL_ADVANCED,
+                       label='Show slice number')
+        ColorScaleWizardBase.defineColorScaleParams(group, defaultLowest=0.0,
+                                                    defaultHighest=1.0)
 
-        
     def _getVisualizeDict(self):
         self.protocol._createFilenameTemplates()
         return {'doShowOriginalVolumeSlices': self._showOriginalVolumeSlices,
                 'doShow3DFSC': self._show3DFSC,
-		'doShowFSC': self._showFSCCurve,
-		'doShowDirectionalResolution': self._showDirectionalResolution,
-		'doCrossValidation': self._showCrossValidationCurve,
+                'doShowFSC': self._showFSCCurve,
                 'doShow3DFSCcolorSlices': self._show3DFSCcolorSlices,
-		'doShowOneColorslice': self._showOneColorslice,
-                'doShowChimera3DFSC': self._showChimera3DFSC,
-                'doShowDirectionalFSCCurve': self._showDirectionalFSCCurve,
-		'doShowAnisotropyCurve': self._showAnisotropyCurve,
-		'doShowDirectionalFilter': self._showDirectionalFilter,
-     }
-
+                'doShowOneColorslice': self._showOneColorslice,
+                'doShowAnisotropyCurve': self._showAnisotropyCurve,
+                'doShowDirectionalFilter': self._showDirectionalFilter,
+                'doShowDirectionalResolution': self._showDirectionalResolution,
+                }
 
     def _showOriginalVolumeSlices(self, param=None):
+        """
+        This function opens the two half maps to visualize the slices 
+        """
         cm = DataView(self.protocol.half1.get().getFileName())
         cm2 = DataView(self.protocol.half2.get().getFileName())
         return [cm, cm2]
 
     def _show3DFSC(self, param=None):
+        """
+        This function opens the slices of the 3DFSC
+        """
         cm = DataView(self.protocol._getExtraPath(OUTPUT_3DFSC))
         return [cm]
 
     def _showFSCCurve(self, paramName=None):
-        fnmd = self.protocol._getExtraPath('fsc/'+'GlobalFSC.xmd')
+        """
+        It shows the FSC curve in terms of the resolution
+        The horizontal axis is linear in this plot. Note
+        That this is not the normal representation of hte FSC
+        """
+        fnmd = self.protocol._getExtraPath('GlobalFSC.xmd')
         title = 'Global FSC'
         xTitle = 'Resolution (1/A)'
         yTitle = 'FSC (a.u.)'
@@ -181,45 +155,33 @@ class XmippProtFSOViewer(ProtocolViewer):
         mdLabelY = xmippLib.MDL_RESOLUTION_FRC
         self._plotCurveFSC(fnmd, title, xTitle, yTitle, mdLabelX, mdLabelY)
 
-    def _showCrossValidationCurve(self, paramName=None):
-        fnmd = self.protocol._getExtraPath('fsc/'+'crossValidation.xmd')
-        title = 'Cross Validation'
-        xTitle = 'Angle (degrees)'
-        yTitle = 'Score'
-        mdLabelX = xmippLib.MDL_ANGLE_Y
-        mdLabelY = xmippLib.MDL_SUM
-
-        md = xmippLib.MetaData(fnmd)
-        xplotter = XmippPlotter(figure=None)
-        xplotter.plot_title_fontsize = 11
-	
-        a = xplotter.createSubPlot(title, xTitle, yTitle, 1, 1)
-        xplotter.plotMdFile(md, mdLabelX, mdLabelY, 'g')
-        a.grid(True)
-	
-        return plt.show(xplotter)
-
     def _show3DFSCcolorSlices(self, param=None):
-        self._showColorSlices(OUTPUT_3DFSC, 1, '3DFSC Color Slices', 1, 1)
+        """
+        It opens 4 colores slices of the 3DFSC
+        """
+        img = ImageHandler().read(self.protocol._getExtraPath(OUTPUT_3DFSC))
+        imgData = img.getData()
 
-    def _showChimera3DFSC(self, param=None):
-        fnmap = abspath(self.protocol._getFileName(OUTPUT_3DFSC)) #'extra/'+
-        fnsphere = abspath(self.protocol._getFileName(OUTPUT_SPHERE)) #'extra/fsc/'
-        self.createChimeraScript(fnmap, fnsphere)
-        cmdFile = self.protocol._getExtraPath('chimeraVisualization.cmd')
-        view = ChimeraView(cmdFile)
-        return [view]
-
-    def _showDirectionalFSCCurve(self, paramName=None):
-        fnmd = self.protocol._getExtraPath('fsc/'+'fscDirection_%i.xmd'% self.fscNumber.get())
-        title = 'Directional FSC'
-        xTitle = 'Resolution (1/A)'
-        yTitle = 'FSC (a.u.)'
-        mdLabelX = xmippLib.MDL_RESOLUTION_FREQ
-        mdLabelY = xmippLib.MDL_RESOLUTION_FRC
-        self._plotCurveFSC(fnmd, title, xTitle, yTitle, mdLabelX, mdLabelY)
+        xplotter = XmippPlotter(x=2, y=2, mainTitle="3DFSC Color Slices"
+                                                    "along %s-axis."
+                                                    % self._getAxis())
+        # The slices to be shown are close to the center. Volume size is divided in
+        # 9 segments, the fouth central ones are selected i.e. 3,4,5,6
+        for i in range(3, 7):
+            sliceNumber = self.getSlice(i, imgData)
+            a = xplotter.createSubPlot("Slice %s" % (sliceNumber + 1), '', '')
+            matrix = self.getSliceImage(imgData, sliceNumber, self._getAxis())
+            plot = xplotter.plotMatrix(a, matrix, 0, 1,
+                                       cmap=self.getColorMap(),
+                                       interpolation="nearest")
+        xplotter.getColorBar(plot)
+        return [xplotter]
 
     def _showAnisotropyCurve(self, paramName=None):
+        """
+        It shows the FSO curve in terms of the resolution
+        The horizontal axis is linear in this plot.
+        """
         fnmd = self.protocol._getExtraPath('fso.xmd')
         title = 'Anisotropy Curve'
         xTitle = 'Resolution (1/A)'
@@ -228,35 +190,36 @@ class XmippProtFSOViewer(ProtocolViewer):
         mdLabelY = xmippLib.MDL_RESOLUTION_FRC
         self._plotCurveAnisotropy(fnmd, title, xTitle, yTitle, mdLabelX, mdLabelY)
 
-
     def _showDirectionalFilter(self, param=None):
+        """
+        The directionally filtered map using the 3DFSC as los pass filter
+        """
         cm = DataView(self.protocol._getExtraPath(OUTPUT_DIRECTIONAL_FILTER))
-        return [cm, cm2]
+        return [cm]
 
     def _showOneColorslice(self, param=None):
-        img = ImageHandler().read(self.protocol._getExtraPath(OUTPUT_3DFSC))
+        """
+        It shows a single colored slice of the 3DFSC
+        """
+        imageFile = self.protocol._getExtraPath(OUTPUT_3DFSC)
+        img = ImageHandler().read(imageFile)
         imgData = img.getData()
-        #imgData2 = np.ma.masked_where(imgData < 0.001, imgData, copy=True)
-        max_Res = np.nanmax(imgData)
-        min_Res = np.nanmin(imgData)
-	#imageFile = self.protocol._getExtraPath(OUTPUT_3DFSC)
-        #imgData, min_Res, max_Res = self.getImgData(imageFile)
 
         xplotter = XmippPlotter(x=1, y=1, mainTitle="3DFSC Slices "
-                                                     "along %s-axis."
-                                                     %self._getAxis())
+                                                    "along %s-axis."
+                                                    % self._getAxis())
         sliceNumber = self.sliceNumber.get()
         if sliceNumber < 0:
-            x ,_ ,_ ,_ = ImageHandler().getDimensions(imageFile)
-            sliceNumber = x/2
+            x, _, _, _ = ImageHandler().getDimensions(imageFile)
+            sliceNumber = int(x / 2)
         else:
             sliceNumber -= 1
-        #sliceNumber has no sense to start in zero 
-        a = xplotter.createSubPlot("Slice %s" % (sliceNumber+1), '', '')
+        # sliceNumber has no sense to start in zero
+        a = xplotter.createSubPlot("Slice %s" % (sliceNumber + 1), '', '')
         matrix = self.getSliceImage(imgData, sliceNumber, self._getAxis())
-        plot = xplotter.plotMatrix(a, matrix, min_Res, max_Res,
-                                       cmap=self.getColorMap(),
-                                       interpolation="nearest")
+        plot = xplotter.plotMatrix(a, matrix, 0, 1,
+                                   cmap=self.getColorMap(),
+                                   interpolation="nearest")
         xplotter.getColorBar(plot)
 
         return [plt.show(xplotter)]
@@ -269,37 +232,97 @@ class XmippProtFSOViewer(ProtocolViewer):
         return "1/%0.2f" % inv
 
     def _plotCurveFSC(self, fnmd, title, xTitle, yTitle, mdLabelX, mdLabelY):
+        """
+        This function is called by _showFSCCurve.
+        It shows the FSC curve in terms of the resolution
+        The horizontal axis is linear in this plot. Note
+        That this is not the normal representation of hte FSC
+        """
         md = xmippLib.MetaData(fnmd)
         xplotter = XmippPlotter(figure=None)
         xplotter.plot_title_fontsize = 11
-	
+
         a = xplotter.createSubPlot(title, xTitle, yTitle, 1, 1)
         xplotter.plotMdFile(md, mdLabelX, mdLabelY, 'g')
 
         a.xaxis.set_major_formatter(FuncFormatter(self._formatFreq))
-        xx, yy = self._prepareDataForPlot( md, mdLabelX, mdLabelY)
-        a.hlines(0.143, xx[0], xx[-1], colors = 'k', linestyles = 'dashed')
+        xx, yy = self._prepareDataForPlot(md, mdLabelX, mdLabelY)
+        a.hlines(0.143, xx[0], xx[-1], colors='k', linestyles='dashed')
         a.grid(True)
-	
+
         return plt.show(xplotter)
+
+    def interpolRes(self, thr, x, y):
+        """
+        This function is called by _showAnisotropyCurve.
+        It provides the cut point of the curve defined
+        by the points (x,y) with a threshold thr.
+        The flag okToPlot shows if there is no intersection points
+        """
+        idx = np.arange(0, len(x))
+        aux = np.array(y) <= thr
+        idx_x = idx[aux]
+        okToPlot = True
+        resInterp = []
+        if (not idx_x.any()):
+            okToPlot = False
+        else:
+            if (len(idx_x) > 1):
+                idx_2 = idx_x[0]
+                idx_1 = idx_2 - 1
+                if (idx_1 < 0):
+                    idx_2 = idx_x[1]
+                    idx_1 = idx_2 - 1
+                y2 = x[idx_2]
+                y1 = x[idx_1]
+                x2 = y[idx_2]
+                x1 = y[idx_1]
+                slope = (y2 - y1) / (x2 - x1)
+                ny = y2 - slope * x2
+                resInterp = 1.0 / (slope * thr + ny)
+            else:
+                okToPlot = False
+
+        return resInterp, okToPlot
 
     def _plotCurveAnisotropy(self, fnmd, title, xTitle, yTitle, mdLabelX, mdLabelY):
+        """
+        This function is called by _showAnisotropyCurve
+        It shows the FSO curve in terms of the resolution
+        The horizontal axis is linear in this plot.
+        """
         md = xmippLib.MetaData(fnmd)
         xplotter = XmippPlotter(figure=None)
         xplotter.plot_title_fontsize = 11
-	
+
         a = xplotter.createSubPlot(title, xTitle, yTitle, 1, 1)
         xplotter.plotMdFile(md, mdLabelX, mdLabelY, 'g')
 
-        a.xaxis.set_major_formatter(FuncFormatter(self._formatFreq))
-        xx, yy = self._prepareDataForPlot( md, mdLabelX, mdLabelY)
-        a.hlines(0.9, xx[0], xx[-1], colors = 'k', linestyles = 'dashed')
-        a.hlines(0.5, xx[0], xx[-1], colors = 'k', linestyles = 'dashed')
-        a.hlines(0.1, xx[0], xx[-1], colors = 'k', linestyles = 'dashed')
-        a.grid(True)
-	
-        return plt.show(xplotter)
+        xx, yy = self._prepareDataForPlot(md, mdLabelX, mdLabelY)
+        from matplotlib.ticker import FuncFormatter
+        a.axes.xaxis.set_major_formatter(FuncFormatter(self._formatFreq))
+        a.axes.set_ylim([-0.1, 1.1])
+        a.axes.plot(xx, yy, 'g')
+        a.axes.set_xlabel('Resolution (A)')
+        a.axes.set_ylabel('FSO (a.u)')
+        hthresholds = [0.1, 0.5, 0.9]
+        a.axes.hlines(hthresholds, xx[0], xx[-1], colors='k', linestyles='dashed')
+        a.axes.grid(True)
+        textstr = ''
 
+        res_01, okToPlot_01 = self.interpolRes(0.1, xx, yy)
+        res_05, okToPlot_05 = self.interpolRes(0.5, xx, yy)
+        res_09, okToPlot_09 = self.interpolRes(0.9, xx, yy)
+
+        if ((okToPlot_01 and okToPlot_05 and okToPlot_01) is True):
+            textstr = str(0.9) + ' --> ' + str("{:.2f}".format(res_09)) + 'A\n' + str(0.5) + ' --> ' + str(
+                "{:.2f}".format(res_05)) + 'A\n' + str(0.1) + ' --> ' + str("{:.2f}".format(res_01)) + 'A'
+            a.axes.axvspan(1.0 / res_09, 1.0 / res_01, alpha=0.3, color='green')
+
+            props = dict(boxstyle='round', facecolor='white')
+            a.axes.text(0.0, 0.0, textstr, fontsize=12, ha="left", va="bottom", bbox=props)
+
+        return plt.show(xplotter)
 
     def _prepareDataForPlot(self, md, mdLabelX, mdLabelY):
         """ plot metadata columns mdLabelX and mdLabelY
@@ -316,158 +339,63 @@ class XmippProtFSOViewer(ProtocolViewer):
             yy.append(md.getValue(mdLabelY, objId))
         return xx, yy
 
-
-    def _showDirectionalResolution(self,zparam=None):
-        fnmd = self.protocol._getExtraPath('fsc/Resolution_Distribution.xmd')
+    def _showDirectionalResolution(self, zparam=None):
+        """
+        This function shows the angular distribution of the resolution
+        """
+        fnmd = self.protocol._getExtraPath('Resolution_Distribution.xmd')
         titleName = 'Directional FSC distribution'
-        self._showPolarPlotNew(fnmd, titleName, 'ResDist')
+        self._showPolarPlot(fnmd)
 
+    def _showPolarPlot(self, fnmd):
+        """
+        It is called by _showDirectionalResolution
+        This function shows the angular distribution of the resolution
+        """
+        md = xmippLib.MetaData(fnmd)
+        radius = []
+        azimuth = []
+        counts = []
+        for objId in md:
+            radius.append(md.getValue(MDL_ANGLE_ROT, objId))
+            azimuth.append(md.getValue(MDL_ANGLE_TILT, objId))
+            counts.append(md.getValue(MDL_RESOLUTION_FRC, objId))
 
-    def _showPolarPlotNew(self, fnmd, titleName, kind):
-        pass
+        # define binning
+        azimuths = np.radians(np.linspace(0, 360, 360))
+        zeniths = np.arange(0, 91, 1)
 
-    def _showColorSlices(self, fileName, setrangelimits, titleFigure, lowlim, highlim):
-        
-        img = ImageHandler().read(self.protocol._getExtraPath(fileName))
-        imgData = img.getData()
-        #imgData2 = np.ma.masked_where(imgData < 0.001, imgData, copy=True)
-        max_Res = np.nanmax(imgData)
-        min_Res = np.nanmin(imgData)
-        fig, im = self._plotVolumeSlices(titleFigure, imgData,
-                                         min_Res, max_Res, self.getColorMap(), dataAxis=self._getAxis())
-        cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
-        cbar = fig.colorbar(im, cax=cax)
-        cbar.ax.invert_yaxis()
+        r, theta = np.meshgrid(zeniths, azimuths)
 
-        return plt.show(fig)
-        
-    def _createAngDist2D(self, path):
-        view = XmippPlotter(x=1, y=1, mainTitle="Highest Resolution per Direction", windowTitle="Angular distribution")
-        return view.plotAngularDistributionFromMd(path, 'directional resolution distribution',  min_w=0)
-    
+        values = np.zeros((len(azimuths), len(zeniths)))
+
+        for i in np.arange(0, len(azimuth)):
+            print(i)
+            print(azimuth[i])
+            print(azimuth[i])
+            print(radius[i])
+            values[int(radius[i]), int(azimuth[i])] = counts[i]
+
+        # ------ Plot ------
+        stp = 0.1
+        lowlim = values.min()
+        if ((lowlim - stp) < 0):
+            lowlim = 0.0
+        else:
+            lowlim = lowlim - stp
+
+        highlim = values.max() + stp
+        fig, ax = plt.subplots(subplot_kw=dict(projection='polar'))
+        pc = plt.contourf(theta, r, values, np.arange(values.min(), highlim, stp))
+
+        plt.colorbar(pc)
+        plt.show()
+
     def _getAxis(self):
         return self.getEnumText('sliceAxis')
 
-
-    def _plotVolumeSlices(self, title, volumeData, vminData, vmaxData, cmap, **kwargs):
-        """ Helper function to create plots of volumes slices. 
-        Params:
-            title: string that will be used as title for the figure.
-            volumeData: numpy array representing a volume from where to take the slices.
-            cmap: color map to represent the slices.
-        """
-        # Get some customization parameters, by providing with default values
-        titleFontSize = kwargs.get('titleFontSize', 14)
-        titleColor = kwargs.get('titleColor','#104E8B')
-        sliceFontSize = kwargs.get('sliceFontSize', 10)
-        sliceColor = kwargs.get('sliceColor', '#104E8B')
-        size = kwargs.get('n', volumeData.shape[0])
-        origSize = kwargs.get('orig_n', size)
-        dataAxis = kwargs.get('dataAxis', 'z')
-    
-        f, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2)
-        f.suptitle(title, fontsize=titleFontSize, color=titleColor, fontweight='bold')
-    
-        def getSlice(slice):
-            if dataAxis == 'y':
-                return volumeData[:,slice,:]
-            elif dataAxis == 'x':
-                return volumeData[:,:,slice]
-            else:
-                return volumeData[slice,:,:]
-    
-        def showSlice(ax, index):
-            sliceTitle = 'Slice %s' % int(index*size/9)
-            slice = int(index*origSize/9)
-            ax.set_title(sliceTitle, fontsize=sliceFontSize, color=sliceColor)
-            return ax.imshow(getSlice(slice), vmin=vminData, vmax=vmaxData,
-                             cmap=self.getColorMap(), interpolation="nearest")
-        
-        im = showSlice(ax1, 3)
-        showSlice(ax2, 4)
-        showSlice(ax3, 5)
-        showSlice(ax4, 6)
-        
-        return f, im 
-
-    def _showChimera(self,  param=None):
-        self.createChimeraScript(OUTPUT_DOA_FILE_CHIMERA, CHIMERA_CMD_DOA, CHIMERA_ELLIP)
-        cmdFile = self.protocol._getPath('chimera_DoA.cmd')
-        view = ChimeraView(cmdFile)
-        return [view]
-    
-
-    def numberOfColors(self, min_Res, max_Res, numberOfColors):
-        inter = (max_Res - min_Res)/(numberOfColors-1)
-        colors_labels = ()
-        for step in range(0,numberOfColors):
-            colors_labels += round(min_Res + step*inter,2),
-        return colors_labels
-
-
-    def createChimeraScript(self, map1, map2):
-        scriptFile = self.protocol._getExtraPath('chimeraVisualization.cmd')
-        fhCmd = open(scriptFile, 'w')
-        min_Val = 0.0
-        max_Val = 1.0
-
-        numberOfColors = 21
-        colors_labels = self.numberOfColors(min_Val, max_Val, numberOfColors)
-        colorList = self.colorMapToColorList(colors_labels, self.getColorMap())
-
-        fhCmd.write("open %s\n" % map1)
-        fhCmd.write("open %s\n" % map2)
-        
-        smprt = self.protocol.half1.get().getSamplingRate()
-        fhCmd.write("volume #0 voxelSize %s\n" % (str(smprt)))
-        fhCmd.write("volume #1 voxelSize %s\n" % (str(smprt)))
-        fhCmd.write("volume #1 style mesh\n")
-        fhCmd.write("vol #1 hide\n")
-        
-        scolorStr = '%s,%s:' * numberOfColors
-        scolorStr = scolorStr[:-1]
-
-        line = ("scolor #0 volume #0 perPixel false cmap " + scolorStr + "\n") % colorList
-        fhCmd.write(line)
-
-        scolorStr = '%s %s ' * numberOfColors
-        str_colors = ()
-        for idx, elem in enumerate(colorList):
-            if (idx % 2 == 0):
-                if ((idx % 8) == 0):
-                    str_colors +=  str(elem),
-                else:
-                    str_colors += '" "',
-            else:
-                str_colors += elem,
-        
-        line = ("colorkey 0.01,0.05 0.02,0.95 " + scolorStr + "\n") % str_colors
-        fhCmd.write(line)
-
-        fhCmd.close()
-
-    @staticmethod
-    def colorMapToColorList(steps, colorMap):
-        """ Returns a list of pairs resolution, hexColor to be used in chimera scripts for coloring the volume and
-        the colorKey """
-
-        # Get the map used by monoRes
-        colors = ()
-        ratio = 255.0/(len(steps)-1)
-        for index, step in enumerate(steps):
-            colorPosition = int(round(index*ratio))
-            rgb = colorMap(colorPosition)[:3]
-            colors += step,
-            rgbColor = mcolors.rgb2hex(rgb)
-            colors += rgbColor,
-
-        return colors
-    
     def getColorMap(self):
-        if (COLOR_CHOICES[self.colorMap.get()] == 'other'):
-            cmap = cm.get_cmap(self.otherColorMap.get())
-        else:
-            cmap = cm.get_cmap(COLOR_CHOICES[self.colorMap.get()])
+        cmap = cm.get_cmap(self.colorMap.get())
         if cmap is None:
             cmap = cm.jet
         return cmap

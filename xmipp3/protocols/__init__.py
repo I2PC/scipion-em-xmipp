@@ -87,6 +87,7 @@ from .protocol_reconstruct_highres import XmippProtReconstructHighRes
 from .protocol_reconstruct_significant import XmippProtReconstructSignificant
 from .protocol_reconstruct_swarm import XmippProtReconstructSwarm
 from .protocol_resolution3d import XmippProtResolution3D
+from .protocol_resolution_bfactor import XmippProtbfactorResolution
 from .protocol_resolution_directional import XmippProtMonoDir
 from .protocol_resolution_fso import XmippProtFSO
 from .protocol_resolution_monogenic_signal import XmippProtMonoRes
