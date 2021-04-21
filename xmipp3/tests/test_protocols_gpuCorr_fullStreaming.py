@@ -134,7 +134,7 @@ class GpuCorrCommon(BaseTest):
             return prot2
 
 
-    def test_pattern(self):
+    def run_common_workflow(self):
         protImportMics = self.importMicrographs()
         self.assertFalse(protImportMics.isFailed(), 'ImportMics has failed.')
 
@@ -158,6 +158,9 @@ class GpuCorrCommon(BaseTest):
 
 
 class TestGpuCorrFullStreaming(GpuCorrCommon):
+    def test_full_streaming(self):
+        self.run_common_workflow()
+
     def verify_classification(self):
         protClassify = self.runClassify(self.protExtract.outputParticles)
 

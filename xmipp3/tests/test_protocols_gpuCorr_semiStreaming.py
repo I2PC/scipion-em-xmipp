@@ -30,6 +30,9 @@ from xmipp3.tests.test_protocols_gpuCorr_fullStreaming import GpuCorrCommon
 from xmipp3.protocols.protocol_classification_gpuCorr_semi import *
 
 class TestGpuCorrSemiStreaming(GpuCorrCommon):
+    def test_semi_streaming(self):
+        self.run_common_workflow()
+
     def importAverages(self):
         prot = self.newProtocol(ProtImportAverages,
                                 filesPath=self.dsRelion.getFile(
