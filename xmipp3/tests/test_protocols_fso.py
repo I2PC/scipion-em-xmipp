@@ -81,7 +81,7 @@ class Testfso(TestfsoBase):
         cls.protCreateMask = cls.runCreateMask(cls.protImportVol.outputVolume, 0.02)
 
     def testfso1(self):
-        fso = self.newProtocol(XmippProtFSO, half1=self.protImportHalf1.outputVolume, half2=self.protImportHalf2.outputVolume, mask=self.protCreateMask.outputMask, bestAngle=True)
+        fso = self.newProtocol(XmippProtFSO, halfVolumesFile=False, half1=self.protImportHalf1.outputVolume, half2=self.protImportHalf2.outputVolume, mask=self.protCreateMask.outputMask, estimate3DFSC=True, )
         self.launchProtocol(fso)
         self.assertTrue(exists(fso._getExtraPath("fso.xmd")), "fso without mask has failed")
         
