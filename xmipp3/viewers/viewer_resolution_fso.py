@@ -183,7 +183,7 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         xTitle = 'Resolution (1/A)'
         yTitle = 'Anisotropy (a.u.)'
         mdLabelX = emlib.MDL_RESOLUTION_FREQ
-        mdLabelY = emlib.MDL_RESOLUTION_FRC
+        mdLabelY = emlib.MDL_RESOLUTION_FSO
         self._plotCurveAnisotropy(fnmd, title, xTitle, yTitle, mdLabelX, mdLabelY)
 
     def _showDirectionalFilter(self, param=None):
@@ -246,7 +246,7 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         a.hlines(0.143, xx[0], xx[-1], colors='k', linestyles='dashed')
         a.grid(True)
 
-        return plt.show(xplotter)
+        return plt.show()
 
     def interpolRes(self, thr, x, y):
         """
@@ -318,7 +318,7 @@ class XmippProtFSOViewer(LocalResolutionViewer):
             props = dict(boxstyle='round', facecolor='white')
             a.axes.text(0.0, 0.0, textstr, fontsize=12, ha="left", va="bottom", bbox=props)
 
-        return plt.show(xplotter)
+        return plt.show()
 
     def _prepareDataForPlot(self, md, mdLabelX, mdLabelY):
         """ plot metadata columns mdLabelX and mdLabelY
@@ -366,10 +366,6 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         values = np.zeros((len(azimuths), len(zeniths)))
 
         for i in np.arange(0, len(azimuth)):
-            print(i)
-            print(azimuth[i])
-            print(azimuth[i])
-            print(radius[i])
             values[int(radius[i]), int(azimuth[i])] = counts[i]
 
         # ------ Plot ------
