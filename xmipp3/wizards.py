@@ -40,7 +40,7 @@ from .protocols import (
     XmippProtHelicalParameters, XmippProtConsensusPicking, XmippProtMonoRes,
     XmippProtRotSpectra, XmippProtReconstructHighRes, XmippProtExtractUnit,
     XmippProtReconstructHeterogeneous, XmippMetaProtDiscreteHeterogeneityScheduler,
-    XmippProtVolumeDeformSPH, XmippProtStructureMapSPH)
+    XmippProtVolumeDeformZernike3D, XmippProtStructureMapZernike3D)
 
 
 #===============================================================================
@@ -366,7 +366,7 @@ class XmippVolumeRadiiProjMWizard(XmippVolumeRadiiWizard):
         return protParams
 
 class SphMaskWizard(VolumeMaskRadiusWizard):
-    _targets = [(XmippProtVolumeDeformSPH, ['Rmax'])]
+    _targets = [(XmippProtVolumeDeformZernike3D, ['Rmax'])]
 
     def _getParameters(self, protocol):
 
@@ -389,7 +389,7 @@ class SphMaskWizard(VolumeMaskRadiusWizard):
         VolumeMaskRadiusWizard.show(self, form, _value, _label, UNIT_PIXEL)
 
 class StructMapSphMaskWizard(VolumeMaskRadiusWizard):
-    _targets = [(XmippProtStructureMapSPH, ['Rmax'])]
+    _targets = [(XmippProtStructureMapZernike3D, ['Rmax'])]
 
     def _getParameters(self, protocol):
 
