@@ -926,8 +926,10 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
         self._waitOutput(protStream, "outputParticles")
 
         protElimination2 = self.newProtocol(XmippProtEliminateEmptyParticles)
-        protElimination2.inputParticles.set(protStream.outputParticles)
+        protElimination2.inputParticles.set(protStream)
+        protElimination2.inputParticles.setExtended("outputParticles")
         self.launchProtocol(protElimination2)
+
 
         partSet = SetOfParticles(
             filename=protStream._getPath("particles.sqlite"))
@@ -935,7 +937,7 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
             filename=protElimination2._getPath('outputParticles.sqlite'))
         elimSet = SetOfParticles(
             filename=protElimination2._getPath('eliminatedParticles.sqlite'))
-        self.assertTrue(outSet.getSize() + elimSet.getSize() ==
+        self.assertEquals(outSet.getSize() + elimSet.getSize(),
                         partSet.getSize(),
                         "Output sets size does not much the input set size.")
 
