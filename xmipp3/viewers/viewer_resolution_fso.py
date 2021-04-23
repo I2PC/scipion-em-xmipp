@@ -67,10 +67,6 @@ class XmippProtFSOViewer(LocalResolutionViewer):
     def getColorMapChoices():
         return plt.colormaps()
 
-    # def __init__(self, *args, **kwargs):
-    #     ProtocolViewer.__init__(self, *args, **kwargs)
-    # #     super().__init__(*args, **kwargs)
-
     def _defineParams(self, form):
         form.addSection(label='Visualization')
 
