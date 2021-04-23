@@ -154,15 +154,6 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
 
         self.runJob('xmipp_resolution_pdb_bfactor', params)
 
-    """ 
-    def createOutputStep(self):
-        volume=Volume()
-        volume.setFileName(self._getExtraPath("3dFSC.mrc"))
-
-        volume.setSamplingRate(self.half1.get().getSamplingRate())
-        self._defineOutputs(fsc3D=volume)
-        self._defineSourceRelation(self.half1, volume)
-    """
 
     # --------------------------- INFO functions ------------------------------
 

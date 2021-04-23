@@ -340,7 +340,6 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         This function shows the angular distribution of the resolution
         """
         fnmd = self.protocol._getExtraPath('Resolution_Distribution.xmd')
-        titleName = 'Directional FSC distribution'
         self._showPolarPlot(fnmd)
 
     def _showPolarPlot(self, fnmd):
