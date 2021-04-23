@@ -112,7 +112,7 @@ class XmippProtSubtractProjection(EMProtocol):
         if self.mask:
             args += ' --mask %s' % self.mask.get().getFileName()
         if self.saveFiles:
-            args += ' --savePart %s --saveProj %s' % (self._getExtraPath('particle_filtered.mrc'),
+            args += ' --savePart %s --saveProj %s' % (self._getExtraPath('particle_volMask.mrc'),
                                                       self._getExtraPath('projection_adjusted.mrc'))
         self.runJob(program, args)
 
