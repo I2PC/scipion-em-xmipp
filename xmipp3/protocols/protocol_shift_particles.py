@@ -46,7 +46,7 @@ class XmippProtShiftParticles(EMProtocol):
         form.addSection(label='Input')
         form.addParam('inputParticles', PointerParam, pointerClass='SetOfParticles', label="Particles",
                       help='Select the SetOfParticles with transformation matrix to be shifted.')
-        form.addParam('inputVol', PointerParam, pointerClass='Volume', label="Volume", allowsNull=True,
+        form.addParam('inputVol', PointerParam, pointerClass='Volume', label="Volume",
                       help='Volume to select the point (by clicking in the wizard for selecting the new center) that '
                            'will be the new center of the particles.')
         form.addParam('x', FloatParam, label="x", help='Use the wizard to select by clicking in the volume the new '
@@ -89,9 +89,9 @@ class XmippProtShiftParticles(EMProtocol):
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
         program = "xmipp_shift_particles"
-        args = '-i %s --vol %s --newCenter %f %f %f -o %s' % (self._getExtraPath("input_particles.xmd"), fnVol,
-                                                              self.x.get(), self.y.get(), self.z.get(),
-                                                              self._getExtraPath("output_particles"))
+        args = '-i %s --ref %s --x0 %f --y0 %f --z0 %f -o %s' % \
+               (self._getExtraPath("input_particles.xmd"), fnVol, self.x.get(), self.y.get(), self.z.get(),
+                self._getExtraPath("output_particles"))
         self.runJob(program, args)
 
     def createOutputStep(self):
