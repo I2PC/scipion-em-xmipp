@@ -29,11 +29,11 @@
 from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, FloatParam
 
 from pwem import ALIGN_3D
-from pwem.emlib import MDL_IMAGE
+from pwem.emlib import lib
 import pwem.emlib.metadata as md
 from pwem.protocols import EMProtocol
 
-from xmipp3.convert import xmippToLocation, writeSetOfVolumes, alignmentToRow
+from xmipp3.convert import alignmentToRow, ctfModelToRow
 
 
 class XmippProtShiftParticles(EMProtocol):
@@ -62,18 +62,46 @@ class XmippProtShiftParticles(EMProtocol):
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
+        self._insertFunctionStep('convertStep')
         self._insertFunctionStep('shiftStep')
         self._insertFunctionStep('createOutputStep')
 
     # --------------------------- STEPS functions --------------------------------------------
+    def convertStep(self):
+        """convert input particles into .xmd file """
+        mdParticles = lib.MetaData()
+        for part in self.inputParticles.get():
+            id = part.getObjId()
+            ix = part.getIndex()
+            fn = "%s@%s" % (ix, part.getFileName())
+            nRow = md.Row()
+            nRow.setValue(lib.MDL_ITEM_ID, int(id))
+            nRow.setValue(lib.MDL_IMAGE, fn)
+            alignmentToRow(part.getTransform(), nRow, ALIGN_3D)
+            ctfModelToRow(part.getCTF(), nRow)
+            nRow.addToMd(mdParticles)
+        mdParticles.write(self._getExtraPath("input_particles.xmd"))
+
     def shiftStep(self):
-        pass
+        """call xmipp program to shift the particles"""
+        vol = self.inputVol.get().clone()
+        fnVol = vol.getFileName()
+        if fnVol.endswith('.mrc'):
+            fnVol += ':mrc'
+        program = "xmipp_shift_particles"
+        args = '-i %s --vol %s --newCenter %f %f %f -o %s' % (self._getExtraPath("input_particles.xmd"), fnVol,
+                                                              self.x.get(), self.y.get(), self.z.get(),
+                                                              self._getExtraPath("output_particles"))
+        self.runJob(program, args)
 
     def createOutputStep(self):
+        """create output with the new particles"""
+        self.ix = 0
         inputParticles = self.inputParticles.get()
         outputSet = self._createSetOfParticles()
-        # outputSet.copyInfo(inputParticles)
-        # outputSet.copyItems(inputParticles, updateItemCallback=self._updateItemOutput)
+        outputSet.copyInfo(inputParticles)
+        outputSet.copyItems(inputParticles, updateItemCallback=self._updateItem,
+                            itemDataIterator=md.iterRows(self._getExtraPath("input_particles.xmd")))
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(inputParticles, outputSet)
 
@@ -97,6 +125,8 @@ class XmippProtShiftParticles(EMProtocol):
                 return validatemsg
 
     # --------------------------- UTLIS functions --------------------------------------------
-    def _updateItemOutput(self, item, row):
-        item.setFileName(self._getExtraPath("output_subtomo%d.mrc" % item.getObjId()))
-
+    def _updateItem(self, item, row):
+        newFn = row.getValue(md.MDL_IMAGE)
+        self.ix = self.ix + 1
+        newFn = newFn.split('@')[1]
+        item.setLocation(self.ix, newFn)
