@@ -64,9 +64,9 @@ class XmippProtML2D(ProtClassify2D):
         myDict = {
                   'input_particles': self._getTmpPath('input_particles.xmd'),
                   'input_references': self._getTmpPath('input_references.xmd'),
-                  'output_classes': self._getOroot() + 'classes.xmd',
+                  'output_classes': self._getOroot() + 'classes.xmd', #self._getExtraPath('classes.xmd')
                   'final_classes': self._getPath('classes2D.sqlite'),
-                  'output_particles': self._getOroot() + 'images.xmd',
+                  'output_particles': self._getOroot() + 'images.xmd', #self._getExtraPath('images.xmd')
                   'classes_scipion': self._getPath('classes_scipion_iter_%(iter)02d.sqlite')
                   }
         self._updateFilenamesDict(myDict)
@@ -243,7 +243,7 @@ class XmippProtML2D(ProtClassify2D):
     #--------------------------- UTILS functions --------------------------------------------
     def _getMLParams(self):
         """ Mainly prepare the command line for call ml(f)2d program"""
-        params = ' -i %s --oroot %s' % (self._getFileName('input_particles'), self._getOroot())
+        params = ' -i %s --oroot %s' % (self._getFileName('input_particles'), self._getOroot()) #self._getExtraPath()
         if self.doGenerateReferences:
             params += ' --nref %d' % self.numberOfClasses.get()
             self.inputReferences.set(None)
@@ -294,7 +294,7 @@ class XmippProtML2D(ProtClassify2D):
     def _getIterMdFile(self, fn, it, block):
         if it is None:
             it = self._lastIteration()
-        extra = self._getOroot() + 'extra'
+        extra = self._getOroot() + 'extra' #self._getExtraPath()
         mdFile = join(extra, 'iter%03d' % it, 'iter_%s.xmd' %fn)
         if block:
             mdFile = block + '@' + mdFile
