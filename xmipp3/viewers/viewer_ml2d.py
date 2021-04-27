@@ -188,7 +188,7 @@ def createPlots(protML, selectedPlots):
         a.xaxis.set_major_formatter(FormatStrFormatter('%1.0f'))
         a.bar(ind, mirrors, width, color='b')
         a.set_ylim([0, 1.])
-        a.set_xlim([0.8, nrefs + 1])
+        #a.set_xlim([0.3, nrefs + 1])
         
     if doPlot('doShowPmax'):
         a = xplotter.createSubPlot('Probabilities distribution', 'iterations', 'Pmax/Psum') 
