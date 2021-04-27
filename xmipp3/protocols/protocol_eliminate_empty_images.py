@@ -153,13 +153,14 @@ class XmippProtEliminateEmptyBase(ProtClassify2D):
     def _checkNewInput(self):
         # Check if there are new particles to process from the input set
         partsFile = self.getInput().getFileName()
-        self.lastCheck = getattr(self, 'lastCheck', datetime.now())
+        self.lastmTime = getattr(self, 'lastmTime', None)
         mTime = datetime.fromtimestamp(os.path.getmtime(partsFile))
         # If the input movies.sqlite have not changed since our last check,
         # it does not make sense to check for new input data
-        if self.lastCheck > mTime:
-            return None
-        self.lastCheck = datetime.now()
+        if self.lastmTime == mTime:
+            return
+
+        self.lastmTime = mTime
 
         outputStep = self._getFirstJoinStep()
 

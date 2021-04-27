@@ -26,12 +26,13 @@ import time
 
 from pwem.protocols import ProtImportAverages
 
-from pyworkflow.protocol.constants import STATUS_FINISHED
-from pyworkflow.tests import BaseTest
 from xmipp3.tests.test_protocols_gpuCorr_fullStreaming import GpuCorrCommon
 from xmipp3.protocols.protocol_classification_gpuCorr_semi import *
 
-class TestGpuCorrSemiStreaming(GpuCorrCommon, BaseTest):
+class TestGpuCorrSemiStreaming(GpuCorrCommon):
+    def test_semi_streaming(self):
+        self.run_common_workflow()
+
     def importAverages(self):
         prot = self.newProtocol(ProtImportAverages,
                                 filesPath=self.dsRelion.getFile(
@@ -57,18 +58,8 @@ class TestGpuCorrSemiStreaming(GpuCorrCommon, BaseTest):
         self.assertFalse(protImportAvgs.isFailed())
         protClassify = self.runClassify(self.protExtract.outputParticles,
                                         protImportAvgs.outputAverages)
-        counter = 1
-        while protClassify.getStatus()!=STATUS_FINISHED:
-            time.sleep(2)
-            protClassify = self._updateProtocol(protClassify)
-            self.assertFalse(protClassify.isFailed(), 'GL2D-static has failed.')
-            if counter > 100:
-                self.assertTrue(protClassify.hasAttribute('outputClasses'),
-                                'GL2D-static has no outputClasses in more than 3min.')
-                self.assertEqual(protClassify.outputClasses.getSize(),
-                                 protImportAvgs.outputAverages.getSize(),
-                                 'GL2D-static returned a wrong number of classes.')
-            counter += 1
+
+        self._waitOutput(protClassify, "outputClasses", timeOut=200)
 
         self.assertTrue(protClassify.hasAttribute('outputClasses'),
                         'GL2D-static has no outputClasses at the end')
