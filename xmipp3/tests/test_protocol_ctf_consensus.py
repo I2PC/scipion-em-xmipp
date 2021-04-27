@@ -26,7 +26,7 @@ import time
 from pyworkflow.tests import BaseTest, DataSet
 import pyworkflow.tests as tests
 
-from pwem.objects import SetOfCTF, CTFModel, Micrograph, SetOfMicrographs
+from pwem.objects import SetOfCTF, CTFModel, Micrograph, SetOfMicrographs, Pointer
 from pwem.protocols import (ProtImportMicrographs, ProtImportCTF,
                             ProtCreateStreamData)
 from pwem.protocols.protocol_create_stream_data import SET_OF_MICROGRAPHS
@@ -157,14 +157,14 @@ class TestXmippCTFConsensusBase(BaseTest):
                   'setof': SET_OF_MICROGRAPHS
                   }
         protStream = self.newProtocol(ProtCreateStreamData, **kwargs)
-        protStream.inputMics.set(protImport.outputMicrographs)
+        protStream.inputMics = Pointer(protImport, extended="outputMicrographs")
         protStream.setObjLabel('create Stream Mic')
         self.proj.launchProtocol(protStream, wait=False)
 
         self._waitOutput(protStream, 'outputMicrographs')
 
         protCTF = self.newProtocol(XmippProtCTFMicrographs)
-        protCTF.inputMicrographs.set(protStream.outputMicrographs)
+        protCTF.inputMicrographs = Pointer(protStream, extended="outputMicrographs")
         self.proj.launchProtocol(protCTF, wait=False)
 
         self._waitOutput(protCTF, 'outputCTF')
@@ -177,7 +177,7 @@ class TestXmippCTFConsensusBase(BaseTest):
             'resolution': 6
         }
         protCTFSel = self.newProtocol(XmippProtCTFConsensus, **kwargsCons1)
-        protCTFSel.inputCTF.set(protCTF.outputCTF)
+        protCTFSel.inputCTF = Pointer(protCTF, extended="outputCTF")
         self.proj.launchProtocol(protCTFSel, wait=False)
 
         self._waitOutput(protCTFSel, 'outputCTF')
@@ -190,7 +190,7 @@ class TestXmippCTFConsensusBase(BaseTest):
             'resolution': 7,
         }
         protCTFSel2 = self.newProtocol(XmippProtCTFConsensus, **kwargsCons2)
-        protCTFSel2.inputCTF.set(protCTFSel.outputCTF)
+        protCTFSel2.inputCTF = Pointer(protCTFSel, extended="outputCTF")
         self.proj.launchProtocol(protCTFSel2)
 
         self._waitOutput(protCTFSel2, 'outputCTF')

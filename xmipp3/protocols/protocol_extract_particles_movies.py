@@ -34,7 +34,7 @@ from pwem.objects import SetOfCoordinates
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 from pyworkflow.protocol.params import (PointerParam, IntParam, BooleanParam,
                                         Positive, FloatParam, EnumParam)
-from pyworkflow.utils.path import cleanPath
+from pyworkflow.utils.path import cleanPath, makePath
 
 import pwem.emlib.metadata as md
 from pwem.emlib.image import ImageHandler
@@ -162,9 +162,11 @@ class XmippProtExtractMovieParticles(ProtExtractMovieParticles):
     def _insertAllSteps(self):
         self._createFilenameTemplates()
 
+        makePath(self._getExtraPath('DONE'))
         # Build the list of all processMovieStep ids by
         # inserting each of the steps for each movie
         self.insertedDict = {}
+        makePath(self._getExtraPath('DONE'))
         
         # Conversion step is part of processMovieStep.
         movieSteps = self._insertNewMoviesSteps(self.insertedDict,

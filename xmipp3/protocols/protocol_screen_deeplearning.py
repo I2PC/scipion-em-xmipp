@@ -223,7 +223,7 @@ class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
           elif fname== self._getExtraPath("testFalseParticlesSet.xmd"):
             return self.testNegSetOfParticles.get()
           else:
-            matchOjb= re.match( self._getExtraPath("negativeSet_(\d+).xmd"), fname)
+            matchOjb= re.match( self._getExtraPath(r"negativeSet_(\d+).xmd"), fname)
             if matchOjb:
               num= matchOjb.group(1)
               return self.__dict__["negativeSet_%s"%num].get()

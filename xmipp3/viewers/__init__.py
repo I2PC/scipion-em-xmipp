@@ -40,7 +40,7 @@ from .viewer_resolution_directional import XmippMonoDirViewer
 from .viewer_resolution_fso import XmippProtFSOViewer
 from .viewer_resolution_monogenic_signal import XmippMonoResViewer
 from .viewer_resolution_deepres import XmippResDeepResViewer
-from .viewer_resolution_monotomo import XmippMonoTomoViewer
+#from .viewer_resolution_monotomo import XmippMonoTomoViewer
 from .viewer_validate_nontilt import XmippValidateNonTiltViewer
 from .viewer_validate_fscq import XmippProtValFitViewer
 from .viewer_split_volume import XmippViewerSplitVolume
@@ -51,7 +51,8 @@ from .viewer_solid_angles import SolidAnglesViewer
 from .viewer_extract_asymmetric_unit import viewerXmippProtExtractUnit
 from .viewer_deepEMHancer import viewerXmippProtDeepVolPostProc
 from .viewer_local_sharpening import viewerXmippProtLocSharp
-
+from .viewer_volume_subtraction import XmippProtVolSubtractionViewer
+from .viewer_volume_consensus import XmippVolumeConsensusViewer
 
 #from .viewer_combine_pdb import XmippProtCombinePdbViewer
 
@@ -61,6 +62,7 @@ from .viewer_projmatch import XmippProjMatchViewer
 from .viewer_structure_map_sph import XmippProtStructureMapSphViewer
 from .viewer_volume_deform_sph import XmippVolumeDeformSphViewer
 from .viewer_metaprotocol_golden_highres import XmippMetaprotocolGoldenHighResViewer
+from .viewer_deep_align import XmippDeepAlignViewer
 
 # TODO: Import from continuousflex the modules needed to create clusters (soft dependency)
 from .viewer_angular_alignment_sph import XmippAngularAlignmentSphViewer

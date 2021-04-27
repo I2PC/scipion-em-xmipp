@@ -53,6 +53,20 @@ class TestDeepVolPostProcessingBase(BaseTest):
         cls.launchProtocol(cls.protImport)
         return cls.protImport
 
+
+    @classmethod
+    def runImportVolAndHalf(cls, patternVol, fnameHalf1, fnameHalf2, samplingRate):
+        """ Run an Import volumes protocol. """
+        cls.protImport = cls.newProtocol(ProtImportVolumes,
+                                         filesPath=patternVol,
+                                         setHalfMaps=True,
+                                         half1map=fnameHalf1,
+                                         half2map=fnameHalf2,
+                                         samplingRate=samplingRate
+                                         )
+        cls.launchProtocol(cls.protImport)
+        return cls.protImport
+
     @classmethod
     def runCreateMask(cls, pattern, thr):
         """ Create a volume mask. """
@@ -73,15 +87,26 @@ class TestDeepVolPostProcessingBase(BaseTest):
         return cls.msk
 
 
+
 class TestDeepVolPostProcessing(TestDeepVolPostProcessingBase):
     @classmethod
-    def setUpClass(cls):
+    def setUpClass(cls, samplingRate=1): # Actual samplingRate=3.54 but using 1 to speed up computations
         setupTestProject(cls)
         TestDeepVolPostProcessingBase.setData()
-        cls.protImportVol = cls.runImportVolumes(cls.map3D, 3.54)
-        cls.protImportHalf1 = cls.runImportVolumes(cls.half1, 3.54)
-        cls.protImportHalf2 = cls.runImportVolumes(cls.half2, 3.54)
-        cls.protCreateMask = cls.runCreateMask(cls.protImportVol.outputVolume, 0.02)
+        cls.protImportVol = cls.runImportVolumes(cls.map3D, samplingRate)
+        cls.protImportHalf1 = cls.runImportVolumes(cls.half1, samplingRate)
+        cls.protImportHalf2 = cls.runImportVolumes(cls.half2, samplingRate)
+        cls.protImportVolWithHalfs= cls.runImportVolAndHalf(cls.map3D, cls.half1, cls.half2, samplingRate)
+        # cls.protCreateMask = cls.runCreateMask(cls.protImportVol.outputVolume, 0.02)
+
+    def _checkMeanVal(self, fname, expectedMean, r_delta=0.5):
+      import numpy as np
+      from pwem.emlib import Image
+      imgHandler = Image()
+      imgHandler.read(fname)
+      obtainedVol = imgHandler.getData()
+      central_cube_slice= obtainedVol[40:60,40:60,40:60]
+      self.assertAlmostEqual( np.mean(central_cube_slice), expectedMean, delta=r_delta*abs(expectedMean), msg="Error expected mean volume does not match")
 
     def testDeepVolPostpro1(self):
         deepPostProc = self.newProtocol(XmippProtDeepVolPostProc,
@@ -91,3 +116,31 @@ class TestDeepVolPostProcessing(TestDeepVolPostProcessingBase):
         self.launchProtocol(deepPostProc)
         self.assertTrue(exists(deepPostProc._getExtraPath(POSTPROCESS_VOL_BASENAME)),
                         "Deep Volume Postprocessing has failed")
+
+        self._checkMeanVal( deepPostProc._getExtraPath(POSTPROCESS_VOL_BASENAME), 0.1224, r_delta=0.5)
+
+    def testDeepVolPostpro2(self):
+        deepPostProc = self.newProtocol(XmippProtDeepVolPostProc,
+                                        useHalfMapsInsteadVol=True,
+                                        halfMapsAttached=False,
+                                        inputHalf1=self.protImportHalf1.outputVolume,
+                                        inputHalf2=self.protImportHalf1.outputVolume,
+                                        normalization= XmippProtDeepVolPostProc.NORMALIZATION_AUTO
+                                   )
+        self.launchProtocol(deepPostProc)
+        self.assertTrue(exists(deepPostProc._getExtraPath(POSTPROCESS_VOL_BASENAME)),
+                        "Deep Volume Postprocessing has failed")
+
+        self._checkMeanVal(deepPostProc._getExtraPath(POSTPROCESS_VOL_BASENAME), 0.1102, r_delta=0.25)
+
+    def testDeepVolPostpro3(self):
+        deepPostProc = self.newProtocol(XmippProtDeepVolPostProc,
+                                        useHalfMapsInsteadVol=True,
+                                        halfMapsAttached=True,
+                                        inputVolume=self.protImportVolWithHalfs.outputVolume,
+                                        normalization= XmippProtDeepVolPostProc.NORMALIZATION_AUTO
+                                   )
+        self.launchProtocol(deepPostProc)
+        self.assertTrue(exists(deepPostProc._getExtraPath(POSTPROCESS_VOL_BASENAME)),
+                        "Deep Volume Postprocessing has failed")
+        self._checkMeanVal( deepPostProc._getExtraPath(POSTPROCESS_VOL_BASENAME), 0.1102, r_delta=0.5)
