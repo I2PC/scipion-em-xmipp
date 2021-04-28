@@ -150,12 +150,13 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         self.insertedDict = OrderedDict()
         self.samplingRate = self.inputMicrographs.get().getSamplingRate()
         self.listOfMicrographs = []
+        self.predictions = {}
         self.batchSize = self.streamingBatchSize.get()
         self._loadInputList()
         pwutils.makePath(self._getExtraPath('DONE'))
         # Load the model one time only-----
-        modelFname = self.ownModel.get()  # modelFname = self.getModel('deepDefocus', 'ModelTrained.h5') #deepDefocus is the directory and ModelTrained.h5 is the model
-        self.model = load_model(modelFname)
+        # modelFname = self.getModel('deepDefocus', 'ModelTrained.h5') #deepDefocus is the directory and ModelTrained.h5 is the model
+        self.model = load_model(self.ownModel.get())
         print(self.model.summary())
 
         return []
@@ -346,7 +347,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
             if n > nd and self.streamClosed:  # insert last ones
                 _insertSubset(newMics[nd:])
 
-        #self.updateLastMicIdFound(newMics)
+        # self.updateLastMicIdFound(newMics) This is done with the self.insertedDict
 
         return deps
 
@@ -406,7 +407,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
                     #    moveFile(self.getPSDs(micFolderTmp, micID), self._getExtraPath())
                 # Mark this mic as finished
 
-        self.info("Estimating CTF for micrographs: %s"
+        self.info("Estimating CTF defocus for micrographs: %s"
                   % [mic.getObjId() for mic in micList])
         self._processMicrographList(micList)
 
@@ -457,7 +458,10 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         model = self.model
         print('------------New prediction')
         imagPrediction = model.predict(input_NN)
-        print(imagPrediction)
+        #print(imagPrediction)
+        self.predictions[micrograph.getObjId()] = float(imagPrediction[[0]])
+        print('The prediction for mic %s is %f' %(micrograph.getObjId(), self.predictions[micrograph.getObjId()]))
+
         #mae = mean_absolute_error(defocusVector, imagPrediction)
 
         fnSummary = self._getPath("summary.txt")
@@ -489,8 +493,13 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         model = self.model
         print('------------New prediction')
         imagPrediction = model.predict(input_NN)
-        print(imagPrediction)
+        #print(imagPrediction)
         # mae = mean_absolute_error(defocusVector, imagPrediction)
+        i = 0
+        for mic in micList:
+            self.predictions[mic.getObjId()] = float(imagPrediction[[i]])
+            i = i + 1
+            print('The prediction for mic %s is %f' %(mic.getObjId(), self.predictions[mic.getObjId()]))
 
         fnSummary = self._getPath("summary.txt")
         fnMonitorSummary = self._getPath("summaryForMonitor.txt")
