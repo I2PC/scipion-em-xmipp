@@ -67,22 +67,18 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
     def _defineParams(self, form):
         form.addSection(label='Input')
 
-        form.addParam('inputMicrographs',
-                      params.PointerParam,
-                      pointerClass='SetOfMicrographs',
-                      important=True,
-                      label="Input micrographs",
-                      help='Select the SetOfMicrogrsphs')
+        form.addParam('inputMicrographs', params.PointerParam, pointerClass='SetOfMicrographs',
+                      important=True, label="Input micrographs", help='Select the SetOfMicrogrsphs')
 
         form.addParam('defocusU_threshold', params.FloatParam, label='Defocus in U axis',
                       default=0.6, expertLevel=params.LEVEL_ADVANCED,
                       help='''By default, micrographs will be divided into an output set and a discarded set based
-                                    on the defocus double threshold''')
+                              on the defocus double threshold''')
 
         form.addParam('defocusV_threshold', params.FloatParam, label='Defocus in V axis',
                       default=0.1, expertLevel=params.LEVEL_ADVANCED,
                       help='''By default, micrographs will be divided into an output set and a discarded set based
-                                            on the defocus double threshold''')
+                              on the defocus double threshold''')
 
         form.addParam('test', params.BooleanParam, label="test model",
                       default=False, expertLevel=params.LEVEL_ADVANCED,
@@ -98,9 +94,10 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
                            'values found previously to test the method')
 
         form.addParam('ownModel_boolean', params.BooleanParam, default=True,
-                     label='Use your own model', help='Setting "yes" '
-                                                      'you can choose your own model trained. If you choose'
-                                                      '"no" a general model pretrained will be assign')
+                      label='Use your own model',
+                      help='Setting "yes" '
+                            'you can choose your own model trained. If you choose'
+                            '"no" a general model pretrained will be assign')
 
         form.addParam('ownModel', params.FileParam,
                       condition= 'ownModel_boolean',
@@ -131,19 +128,12 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
     def _insertAllSteps(self):
         """ Insert the steps to perform CTF estimation, or re-estimation,
                 on a set of micrographs. """
-        self.insertedDict = OrderedDict()
-        self.samplingRate = self.inputMicrographs.get().getSamplingRate()
-        self.listOfMicrographs = []
-        self.batchSize = self.streamingBatchSize.get()
-        self._loadInputList()
-        pwutils.makePath(self._getExtraPath('DONE'))
-        #Load the model one time only-----
-        modelFname = self.ownModel.get()  # modelFname = self.getModel('deepDefocus', 'ModelTrained.h5') #deepDefocus is the directory and ModelTrained.h5 is the model
-        self.model = load_model(modelFname)
-        print(self.model.summary())
-        ##---------------------------------
+
+        self.initialIds = self._insertInitialSteps()
+
         fDeps = self._insertNewMicrographSteps(self.insertedDict,
                                                self.listOfMicrographs)
+
         # For the streaming mode, the steps function have a 'wait' flag that can be turned on/off. For example, here we insert the
         # createOutputStep but it wait=True, which means that can not be executed until it is set to False
         # (when the input micrographs stream is closed)
@@ -153,6 +143,22 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         self._insertFunctionStep('createOutputStep',
                                  prerequisites=finalSteps, wait=waitCondition)
 
+    def _insertInitialSteps(self):
+        """ Override this function to insert some steps before the
+        estimate ctfs steps.
+        Should return a list of ids of the initial steps. """
+        self.insertedDict = OrderedDict()
+        self.samplingRate = self.inputMicrographs.get().getSamplingRate()
+        self.listOfMicrographs = []
+        self.batchSize = self.streamingBatchSize.get()
+        self._loadInputList()
+        pwutils.makePath(self._getExtraPath('DONE'))
+        # Load the model one time only-----
+        modelFname = self.ownModel.get()  # modelFname = self.getModel('deepDefocus', 'ModelTrained.h5') #deepDefocus is the directory and ModelTrained.h5 is the model
+        self.model = load_model(modelFname)
+        print(self.model.summary())
+
+        return []
 
     def createOutputStep(self):
         pass
@@ -306,43 +312,19 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
                 outputStep.setStatus(cons.STATUS_NEW)
 
     # --------------------------- STEPS functions ------------------------------
-
     def _insertNewMicrographSteps(self, insertedDict, newMics):
-        """ Insert steps to process new micrographs (from streaming)
-        Params:
-            insertedDict: contains already processed micrographs
-            inputMics: input mics set to be check
-        """
-        deps = []
-        # For each micrograph insert the step to process it
-        for micrograph in newMics:
-            tiltStepId = self._insertMicrographStep(micrograph)
-            deps.append(tiltStepId)
-            insertedDict[micrograph.getObjId()] = tiltStepId
-
-        return deps
-
-    def _insertMicrographStep(self, micrograph):
-        """ Insert the processMicStep for a given movie. """
-        # Note1: At this point is safe to pass the micrograph, since this
-        # is not executed in parallel, here we get the params
-        # to pass to the actual step that is gone to be executed later on
-        # Note2: We are serializing the Movie as a dict that can be passed
-        # as parameter for a functionStep
-        micDict = micrograph.getObjDict(includeBasic=True)
-        micStepId = self._insertFunctionStep('processMicrographStep', micDict, prerequisites=[])
-        return micStepId
-
-    def _insertNewMicsSteps(self, insertedDict, newMics):
         """ Insert steps to process new mics (from streaming)
         Params:
             inputMics: input mics set to be inserted
+            insertedDict: contains already processed micrographs
         """
         deps = []
 
-        def _insertSubset(micSubset, insertedDict):
-            stepId = self._insertMicrographListStep(micSubset, insertedDict)
+        def _insertSubset(micSubset):
+            stepId = self._insertMicrographListStep(micSubset, self.initialIds)
             deps.append(stepId)
+            for mic in micSubset:
+                insertedDict[mic.getObjId()] = stepId
 
         # Now handle the steps depending on the streaming batch size
         if self.batchSize == 1:  # This is one by one, as before the batch size
@@ -359,22 +341,78 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
             d = int(n / self.batchSize)  # number of batches to insert
             nd = d * self.batchSize
             for i in range(d):
-                _insertSubset(newMics[i * self.batchSize:(i + 1) * self.batchSize] )
+                _insertSubset(newMics[i * self.batchSize:(i + 1) * self.batchSize])
 
             if n > nd and self.streamClosed:  # insert last ones
                 _insertSubset(newMics[nd:])
 
-        self.updateLastMicIdFound(newMics)
+        #self.updateLastMicIdFound(newMics)
 
         return deps
 
-    def _insertMicrographListStep(self, micSubset, insertedDict):
-        """ Basic method to insert an estimation step for a given micrograph. """
-        micStepId = self._insertFunctionStep('processMicrographListStep',
-                                             micSubset, insertedDict, prerequisites=prerequisites)
+    def _insertMicrographStep(self, micrograph):
+        """ Insert the processMicStep for a given movie. """
+        # Note1: At this point is safe to pass the micrograph, since this
+        # is not executed in parallel, here we get the params
+        # to pass to the actual step that is gone to be executed later on
+        # Note2: We are serializing the Movie as a dict that can be passed
+        # as parameter for a functionStep
+        micDict = micrograph.getObjDict(includeBasic=True)
+        micStepId = self._insertFunctionStep('processMicrographStep', micDict, prerequisites=[])
         return micStepId
 
+    def _insertMicrographListStep(self, micSubset, prerequisites):
+        """ Basic method to insert an estimation step for a given micrograph. """
+        micDictList = [mic.getObjDict(includeBasic=True) for mic in micSubset]
+        micStepId = self._insertFunctionStep('processMicrographListStep',
+                                             micDictList,
+                                             prerequisites=prerequisites)
+        return micStepId
 
+    def processMicrographListStep(self, micDictList):
+        micList = []
+        for micDict in micDictList:
+            micrograph = Micrograph()
+            micrograph.setAcquisition(Acquisition())
+            micrograph.setAttributesFromDict(micDict, setBasic=True, ignoreMissing=True)
+            micFolderTmp = self._getTmpMicFolder(micrograph)  # tmp/micID
+            micFn = micrograph.getFileName()
+            micID = micrograph.getObjId()
+            micName = basename(micFn)
+            micDoneFn = self._getMicrographDone(micrograph)  # EXTRAPath/Done/micrograph_ID.TXT
+
+            if self.isContinued() and os.path.exists(micDoneFn):
+                self.info("Skipping micrograph: %s, seems to be done"
+                          % micrograph.getFileName())
+            else:
+                # Clean old finished files
+                pwutils.cleanPath(micDoneFn)
+                if self._filterMicrograph(micrograph):
+                    pwutils.makePath(micFolderTmp)
+                    pwutils.createLink(micFn, join(micFolderTmp, micName))
+                    newMicName = self._correctFormat(micName, micFn, micFolderTmp)
+                    # Just store the original name in case it is needed in _processMovie
+                    micrograph._originalFileName = String(objDoStore=False)
+                    micrograph._originalFileName.set(micrograph.getFileName())
+                    # Now set the new filename (either linked or converted)
+                    micrograph.setFileName(os.path.join(micFolderTmp, newMicName))
+                    micList.append(micrograph)
+                    # if self.saveIntermediateResults.get():
+                    #    micOutputFn = self._getResultsMicFolder(micrograph)  # ExtraPath/micID
+                    #    pwutils.makePath(micOutputFn)
+                    #    for file in getFiles(micFolderTmp):
+                    #       moveFile(file, micOutputFn)
+                    # else:
+                    #    moveFile(self.getPSDs(micFolderTmp, micID), self._getExtraPath())
+                # Mark this mic as finished
+
+        self.info("Estimating CTF for micrographs: %s"
+                  % [mic.getObjId() for mic in micList])
+        self._processMicrographList(micList)
+
+        for mic in micList:
+            # Mark this mic as finished
+            open(self._getMicrographDone(mic), 'w').close()
 
     def processMicrographStep(self, micDict):
         micrograph = Micrograph()
@@ -382,7 +420,6 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         micrograph.setAttributesFromDict(micDict, setBasic=True, ignoreMissing=True)
         micFolderTmp = self._getTmpMicFolder(micrograph)  # tmp/micID
         micFn = micrograph.getFileName()
-        micID = micrograph.getObjId()
         micName = basename(micFn)
         micDoneFn = self._getMicrographDone(micrograph)  # EXTRAPath/Done/micrograph_ID.TXT
 
@@ -395,18 +432,14 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         if self._filterMicrograph(micrograph):
             pwutils.makePath(micFolderTmp)
             pwutils.createLink(micFn, join(micFolderTmp, micName))
-
             newMicName = self._correctFormat(micName, micFn, micFolderTmp)
-
             # Just store the original name in case it is needed in _processMovie
             micrograph._originalFileName = String(objDoStore=False)
             micrograph._originalFileName.set(micrograph.getFileName())
             # Now set the new filename (either linked or converted)
             micrograph.setFileName(os.path.join(micFolderTmp, newMicName))
             self.info("Processing micrograph: %s" % micrograph.getFileName())
-
             self._processMicrograph(micrograph)
-
             #if self.saveIntermediateResults.get():
             #    micOutputFn = self._getResultsMicFolder(micrograph)  # ExtraPath/micID
             #    pwutils.makePath(micOutputFn)
@@ -414,14 +447,10 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
             #       moveFile(file, micOutputFn)
             #else:
             #    moveFile(self.getPSDs(micFolderTmp, micID), self._getExtraPath())
-
         # Mark this movie as finished
         open(micDoneFn, 'w').close()
 
-
     def _processMicrograph(self, micrograph):
-        micrographId = micrograph.getObjId()
-
         input_NN = self.inputPreparationStep(micrograph)
         print(np.shape(input_NN))
         print(type(input_NN))
@@ -450,45 +479,78 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         fnMonitorSummary.close()
 
 
+    def _processMicrographList(self, micList):
+        """ This function can be implemented by subclasses if it is a more
+        efficient way to estimate many micrographs at once.
+         Default implementation will just call the _estimateCTF. """
+        input_NN = self.inputPreparationListStep(micList)
+        print(np.shape(input_NN))
+        print(type(input_NN))
+        model = self.model
+        print('------------New prediction')
+        imagPrediction = model.predict(input_NN)
+        print(imagPrediction)
+        # mae = mean_absolute_error(defocusVector, imagPrediction)
+
+        fnSummary = self._getPath("summary.txt")
+        fnMonitorSummary = self._getPath("summaryForMonitor.txt")
+
+        if not os.path.exists(fnSummary):
+            fhSummary = open(fnSummary, "w")
+            fnMonitorSummary = open(fnMonitorSummary, "w")
+        else:
+            fhSummary = open(fnSummary, "a")
+            fnMonitorSummary = open(fnMonitorSummary, "a")
+
+        # fhSummary.write("micrograph_%06d: mean=%f std=%f [min=%f,max=%f] \n" %
+        #               (micrographId, stats['mean'], stats['std'], stats['min'], stats['max']))
+        # fhSummary.close()
+
+        # fnMonitorSummary.write("micrograph_%06d: mean=%f std=%f [min=%f,max=%f] \n" %
+        #                      (micrographId, stats['mean'], stats['std'], stats['min'], stats['max']))
+        fnMonitorSummary.close()
+
+
+
     def inputPreparationStep(self, micrograph):
-        micFn = micrograph.getFileName()
-        micID = micrograph.getObjId()
-        micFolder = self._getTmpMicFolder(micrograph)  # tmp/micID
         samplingRate1 = SAMPLING_RATE1
         samplingRate2 = SAMPLING_RATE2
         samplingRate3 = SAMPLING_RATE3
-        imagMatrix = np.zeros((1, DIMENSION_X, DIMENSION_Y, 3), dtype=np.float64)
         ih = ImageHandler()
+        micFn = micrograph.getFileName()
+        micID = micrograph.getObjId()
+        micFolder = self._getTmpMicFolder(micrograph)  # tmp/micID
 
-        #Normalize the micrograph
+        imagMatrix = np.zeros((1, DIMENSION_X, DIMENSION_Y, 3), dtype=np.float64)
+        # Normalize the micrograph
         filename_micNormalized = os.path.join(micFolder, "micNormalized_" + str(micID) + '.mrc')
-        micImage =  ih.read(micFn)
+        micImage = ih.read(micFn)
         normalizedMatrix = normalizeData(micImage.getData())
         micImage.setData(normalizedMatrix)
         micImage.write(filename_micNormalized)
 
-        #Downsample into 1 A/px, 1.75 A/px, 2.75 A/px
-        factor1 = samplingRate1/self.samplingRate
-        factor2 = samplingRate2/self.samplingRate
-        factor3 = samplingRate3/self.samplingRate
+        # Downsample into 1 A/px, 1.75 A/px, 2.75 A/px
+        factor1 = samplingRate1 / self.samplingRate
+        factor2 = samplingRate2 / self.samplingRate
+        factor3 = samplingRate3 / self.samplingRate
 
-        filename_mic1 = os.path.join(micFolder,"tmp_mic1_" + str(micID) + '.mrc')
+        filename_mic1 = os.path.join(micFolder, "tmp_mic1_" + str(micID) + '.mrc')
         filename_mic2 = os.path.join(micFolder, "tmp_mic2_" + str(micID) + '.mrc')
-        filename_mic3 = os.path.join(micFolder, "tmp_mic3_" + str(micID)  + '.mrc')
+        filename_mic3 = os.path.join(micFolder, "tmp_mic3_" + str(micID) + '.mrc')
 
         args1 = "-i %s -o %s --step %f --method fourier" \
-                % (filename_micNormalized, filename_mic1 ,factor1)   #Aqui habria que poner filename_micNormalized en lugar de micFn
+                % (filename_micNormalized, filename_mic1,
+                   factor1)  # Aqui habria que poner filename_micNormalized en lugar de micFn
         args2 = "-i %s -o %s --step %f --method fourier" \
                 % (filename_micNormalized, filename_mic2, factor2)
         args3 = "-i %s -o %s --step %f --method fourier" \
                 % (filename_micNormalized, filename_mic3, factor3)
 
-        self.runJob("xmipp_transform_downsample" , args1)
+        self.runJob("xmipp_transform_downsample", args1)
         self.runJob("xmipp_transform_downsample", args2)
         self.runJob("xmipp_transform_downsample", args3)
 
         # Compute PSDs
-
         image1 = ih.read(filename_mic1)
         image2 = ih.read(filename_mic2)
         image3 = ih.read(filename_mic3)
@@ -500,7 +562,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         psd3 = image3.computePSD(0.4, DIMENSION_X, DIMENSION_Y, 1)
         psd3.convertPSD()
 
-        #Store data to check
+        # Store data to check
         filename_psd1 = os.path.join(micFolder, "tmp_psd1_" + str(micID) + '.mrc')
         filename_psd2 = os.path.join(micFolder, "tmp_psd2_" + str(micID) + '.mrc')
         filename_psd3 = os.path.join(micFolder, "tmp_psd3_" + str(micID) + '.mrc')
@@ -509,14 +571,14 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         psd2.write(filename_psd2)
         psd3.write(filename_psd3)
 
-        #Filter the PSD OJO:no parece haber mucha diff probar con ambos
+        # Filter the PSD OJO:no parece haber mucha diff probar con ambos
         filename_filt_psd1 = os.path.join(micFolder, "tmp_filt_psd1_" + str(micID) + '.mrc')
         filename_filt_psd2 = os.path.join(micFolder, "tmp_filt_psd2_filt_" + str(micID) + '.mrc')
         filename_filt_psd3 = os.path.join(micFolder, "tmp_filt_psd3_filt_" + str(micID) + '.mrc')
 
         args1 = '-i %s -o %s --fourier low_pass 0.1' % (filename_psd1, filename_filt_psd1)
-        args2 = '-i %s -o %s --fourier low_pass 0.1' % (filename_psd2,filename_filt_psd2)
-        args3 = '-i %s -o %s --fourier low_pass 0.1' % (filename_psd3,filename_filt_psd3)
+        args2 = '-i %s -o %s --fourier low_pass 0.1' % (filename_psd2, filename_filt_psd2)
+        args3 = '-i %s -o %s --fourier low_pass 0.1' % (filename_psd3, filename_filt_psd3)
 
         self.runJob("xmipp_transform_filter", args1)
         self.runJob("xmipp_transform_filter", args2)
@@ -530,24 +592,127 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         imagMatrix[0, :, :, 1] = img2
         imagMatrix[0, :, :, 2] = img3
 
-
         if self.test.get():
-            #md = xmipp.MetaData(fnRoot.replace("_xmipp_ctf_enhanced_psd.xmp", "_xmipp_ctf.xmd"))
-            #objId = md.firstObject()
-            #dU = md.getValue(xmipp.MDL_CTF_DEFOCUSU, objId)
-            #dV = md.getValue(xmipp.MDL_CTF_DEFOCUSV, objId)
+            # md = xmipp.MetaData(fnRoot.replace("_xmipp_ctf_enhanced_psd.xmp", "_xmipp_ctf.xmd"))
+            # objId = md.firstObject()
+            # dU = md.getValue(xmipp.MDL_CTF_DEFOCUSU, objId)
+            # dV = md.getValue(xmipp.MDL_CTF_DEFOCUSV, objId)
 
-            #prevValues = (self.ctfDict[micName] if micName in self.ctfDict
-             #             else self.getSinglePreviousParameters(mic.getObjId()))
-            #localParams['defocusU'], localParams['defocusV'], localParams['defocusAngle'], localParams['phaseShift0'] = \
-            #prevValues
+            # prevValues = (self.ctfDict[micName] if micName in self.ctfDict
+            #             else self.getSinglePreviousParameters(mic.getObjId()))
+            # localParams['defocusU'], localParams['defocusV'], localParams['defocusAngle'], localParams['phaseShift0'] = \
+            # prevValues
 
-            #dU = localParams['defocusU']
-            #dV = localParams['defocusV']
+            # dU = localParams['defocusU']
+            # dV = localParams['defocusV']
 
-            #defocus = 0.5*(dU+dV)
-            #self.defocusVector[micId] = defocus
+            # defocus = 0.5*(dU+dV)
+            # self.defocusVector[micId] = defocus
             pass
+
+        return imagMatrix
+
+    def inputPreparationListStep(self, micList):
+        samplingRate1 = SAMPLING_RATE1
+        samplingRate2 = SAMPLING_RATE2
+        samplingRate3 = SAMPLING_RATE3
+        ih = ImageHandler()
+        imagMatrix = np.zeros((len(micList), DIMENSION_X, DIMENSION_Y, 3), dtype=np.float64)
+        i = 0
+        for micrograph in micList:
+            micFn = micrograph.getFileName()
+            micID = micrograph.getObjId()
+            micFolder = self._getTmpMicFolder(micrograph)  # tmp/micID
+
+            # Normalize the micrograph
+            filename_micNormalized = os.path.join(micFolder, "micNormalized_" + str(micID) + '.mrc')
+            micImage = ih.read(micFn)
+            normalizedMatrix = normalizeData(micImage.getData())
+            micImage.setData(normalizedMatrix)
+            micImage.write(filename_micNormalized)
+
+            # Downsample into 1 A/px, 1.75 A/px, 2.75 A/px
+            factor1 = samplingRate1 / self.samplingRate
+            factor2 = samplingRate2 / self.samplingRate
+            factor3 = samplingRate3 / self.samplingRate
+
+            filename_mic1 = os.path.join(micFolder, "tmp_mic1_" + str(micID) + '.mrc')
+            filename_mic2 = os.path.join(micFolder, "tmp_mic2_" + str(micID) + '.mrc')
+            filename_mic3 = os.path.join(micFolder, "tmp_mic3_" + str(micID) + '.mrc')
+
+            args1 = "-i %s -o %s --step %f --method fourier" \
+                    % (filename_micNormalized, filename_mic1,
+                       factor1)  # Aqui habria que poner filename_micNormalized en lugar de micFn
+            args2 = "-i %s -o %s --step %f --method fourier" \
+                    % (filename_micNormalized, filename_mic2, factor2)
+            args3 = "-i %s -o %s --step %f --method fourier" \
+                    % (filename_micNormalized, filename_mic3, factor3)
+
+            self.runJob("xmipp_transform_downsample", args1)
+            self.runJob("xmipp_transform_downsample", args2)
+            self.runJob("xmipp_transform_downsample", args3)
+
+            # Compute PSDs
+            image1 = ih.read(filename_mic1)
+            image2 = ih.read(filename_mic2)
+            image3 = ih.read(filename_mic3)
+
+            psd1 = image1.computePSD(0.4, DIMENSION_X, DIMENSION_Y, 1)
+            psd1.convertPSD()
+            psd2 = image2.computePSD(0.4, DIMENSION_X, DIMENSION_Y, 1)
+            psd2.convertPSD()
+            psd3 = image3.computePSD(0.4, DIMENSION_X, DIMENSION_Y, 1)
+            psd3.convertPSD()
+
+            # Store data to check
+            filename_psd1 = os.path.join(micFolder, "tmp_psd1_" + str(micID) + '.mrc')
+            filename_psd2 = os.path.join(micFolder, "tmp_psd2_" + str(micID) + '.mrc')
+            filename_psd3 = os.path.join(micFolder, "tmp_psd3_" + str(micID) + '.mrc')
+
+            psd1.write(filename_psd1)
+            psd2.write(filename_psd2)
+            psd3.write(filename_psd3)
+
+            # Filter the PSD OJO:no parece haber mucha diff probar con ambos
+            filename_filt_psd1 = os.path.join(micFolder, "tmp_filt_psd1_" + str(micID) + '.mrc')
+            filename_filt_psd2 = os.path.join(micFolder, "tmp_filt_psd2_filt_" + str(micID) + '.mrc')
+            filename_filt_psd3 = os.path.join(micFolder, "tmp_filt_psd3_filt_" + str(micID) + '.mrc')
+
+            args1 = '-i %s -o %s --fourier low_pass 0.1' % (filename_psd1, filename_filt_psd1)
+            args2 = '-i %s -o %s --fourier low_pass 0.1' % (filename_psd2, filename_filt_psd2)
+            args3 = '-i %s -o %s --fourier low_pass 0.1' % (filename_psd3, filename_filt_psd3)
+
+            self.runJob("xmipp_transform_filter", args1)
+            self.runJob("xmipp_transform_filter", args2)
+            self.runJob("xmipp_transform_filter", args3)
+
+            img1 = ih.read(filename_filt_psd1).getData()
+            img2 = ih.read(filename_filt_psd2).getData()
+            img3 = ih.read(filename_filt_psd3).getData()
+
+            imagMatrix[i, :, :, 0] = img1
+            imagMatrix[i, :, :, 1] = img2
+            imagMatrix[i, :, :, 2] = img3
+
+            i = i + 1
+
+            if self.test.get():
+                # md = xmipp.MetaData(fnRoot.replace("_xmipp_ctf_enhanced_psd.xmp", "_xmipp_ctf.xmd"))
+                # objId = md.firstObject()
+                # dU = md.getValue(xmipp.MDL_CTF_DEFOCUSU, objId)
+                # dV = md.getValue(xmipp.MDL_CTF_DEFOCUSV, objId)
+
+                # prevValues = (self.ctfDict[micName] if micName in self.ctfDict
+                #             else self.getSinglePreviousParameters(mic.getObjId()))
+                # localParams['defocusU'], localParams['defocusV'], localParams['defocusAngle'], localParams['phaseShift0'] = \
+                # prevValues
+
+                # dU = localParams['defocusU']
+                # dV = localParams['defocusV']
+
+                # defocus = 0.5*(dU+dV)
+                # self.defocusVector[micId] = defocus
+                pass
 
         return imagMatrix
 
