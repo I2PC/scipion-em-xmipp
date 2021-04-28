@@ -46,14 +46,14 @@ class XmippProtShiftParticles(EMProtocol):
         form.addSection(label='Input')
         form.addParam('inputParticles', PointerParam, pointerClass='SetOfParticles', label="Particles",
                       help='Select the SetOfParticles with transformation matrix to be shifted.')
-        form.addParam('inputVol', PointerParam, pointerClass='Volume', label="Volume",
+        form.addParam('inputVol', PointerParam, pointerClass='Volume', label="Volume", allowsNull=True,
                       help='Volume to select the point (by clicking in the wizard for selecting the new center) that '
                            'will be the new center of the particles.')
-        form.addParam('x', FloatParam, label="x", help='Use the wizard to select by clicking in the volume the new '
+        form.addParam('z', FloatParam, label="z", help='Use the wizard to select by clicking in the volume the new '
                                                        'center for the shifted particles')
         form.addParam('y', FloatParam, label="y", help='Use the wizard to select by clicking in the volume the new '
                                                        'center for the shifted particles')
-        form.addParam('z', FloatParam, label="z", help='Use the wizard to select by clicking in the volume the new '
+        form.addParam('x', FloatParam, label="x", help='Use the wizard to select by clicking in the volume the new '
                                                        'center for the shifted particles')
         form.addParam('boxSizeBool', BooleanParam, label='Use original boxsize for the shifted particles?',
                       default='True', help='Use input particles boxsize for the shifted particles.')
@@ -84,25 +84,16 @@ class XmippProtShiftParticles(EMProtocol):
 
     def shiftStep(self):
         """call xmipp program to shift the particles"""
-        vol = self.inputVol.get().clone()
-        fnVol = vol.getFileName()
-        if fnVol.endswith('.mrc'):
-            fnVol += ':mrc'
-        refVol = self._getExtraPath("reference_vol.vol")
-        x = self.x.get()
-        y = self.y.get()
-        z = self.z.get()
+        # vol = self.inputVol.get().clone()
+        # fnVol = vol.getFileName()
+        # if fnVol.endswith('.mrc'):
+        #     fnVol += ':mrc'
+        # refVol = self._getExtraPath("reference_vol.vol")
 
-        # make a mask of the selected point:
-        program = "xmipp_transform_mask"
-        args = '-i %s -o %s --create_mask %s --mask circular -0.5 --center %f %f %f' % \
-               (fnVol, self._getExtraPath("input_vol.vol"), refVol, x, y, z)
-        self.runJob(program, args)
-
-        # pass mask as reference volume
         program = "xmipp_shift_particles"
-        args = '-i %s --ref %s --center %f %f %f -o %s' % \
-               (self._getExtraPath("input_particles.xmd"), refVol, x, y, z, self._getExtraPath("output_particles"))
+        args = '-i %s --center %f %f %f -o %s' % \
+               (self._getExtraPath("input_particles.xmd"), self.x.get(), self.y.get(), self.z.get(),
+                self._getExtraPath("output_particles"))
         self.runJob(program, args)
 
     def createOutputStep(self):
@@ -141,3 +132,9 @@ class XmippProtShiftParticles(EMProtocol):
         self.ix = self.ix + 1
         newFn = newFn.split('@')[1]
         item.setLocation(self.ix, newFn)
+        nwshiftx = row.getValue(md.MDL_SHIFT_X)
+        nwshifty = row.getValue(md.MDL_SHIFT_Y)
+        A = item.getTransform().getMatrix()
+        A[0, 3] = nwshiftx
+        A[1, 3] = nwshifty
+        item.getTransform().setMatrix(A)
