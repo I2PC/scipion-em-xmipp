@@ -34,7 +34,7 @@ from pwem import RELATION_CTF
 import pyworkflow.utils as pwutils
 from pyworkflow.protocol.constants import (STEPS_PARALLEL, STATUS_NEW)
 import pyworkflow.protocol.params as params
-from pwem.objects import SetOfMicrographs, Image, Micrograph, Acquisition, String, Set, Float
+from pwem.objects import SetOfMicrographs, Image, Micrograph, Acquisition, String, Set, Float, Integer
 from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtMicrographs
 
@@ -45,6 +45,7 @@ from xmipp3.convert import setXmippAttribute, getScipionObj, prefixAttribute
 from xmipp3 import emlib
 from sklearn.metrics import mean_absolute_error
 from tensorflow.keras.models import load_model
+from pyworkflow.mapper.sqlite import ID
 
 
 SAMPLING_RATE1 = 1
@@ -80,6 +81,17 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
                       help='''By default, micrographs will be divided into an output set and a discarded set based
                               on the defocus double threshold''')
 
+        form.addParam('ownModel_boolean', params.BooleanParam, default=True,
+                      label='Use your own model',
+                      help='Setting "yes" '
+                            'you can choose your own model trained. If you choose'
+                            '"no" a general model pretrained will be assign')
+
+        form.addParam('ownModel', params.FileParam,
+                      condition= 'ownModel_boolean',
+                      label='Set your model',
+                      help='Choose the protocol where your model is trained')
+
         form.addParam('test', params.BooleanParam, label="test model",
                       default=False, expertLevel=params.LEVEL_ADVANCED,
                       help='Use defoci from a previous CTF estimation to test the model')
@@ -92,17 +104,6 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
                       help='Choose some CTF estimation related to input '
                            'micrographs, in case you want to use the defocus '
                            'values found previously to test the method')
-
-        form.addParam('ownModel_boolean', params.BooleanParam, default=True,
-                      label='Use your own model',
-                      help='Setting "yes" '
-                            'you can choose your own model trained. If you choose'
-                            '"no" a general model pretrained will be assign')
-
-        form.addParam('ownModel', params.FileParam,
-                      condition= 'ownModel_boolean',
-                      label='Set your model',
-                      help='Choose the protocol where your model is trained')
 
         form.addParam("streamingBatchSize", params.IntParam, default=1,
                       label="Batch size",  expertLevel=params.LEVEL_ADVANCED,
@@ -147,6 +148,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         """ Override this function to insert some steps before the
         estimate ctfs steps.
         Should return a list of ids of the initial steps. """
+        self.lastMicIdFound = Integer(0)  # Last micId found in the input set
         self.insertedDict = OrderedDict()
         self.samplingRate = self.inputMicrographs.get().getSamplingRate()
         self.listOfMicrographs = []
@@ -170,7 +172,11 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         self.debug("Loading input db: %s" % micsFile)
         micSet = SetOfMicrographs(filename=micsFile)
         micSet.loadAllProperties()
-        newMics = [m.clone() for m in micSet if m.getObjId() not in self.insertedDict]
+        # ---- Esto funciona no me preguntes porque
+        newMicIds = self._getNewMics()
+        newMics = [m.clone() for m in micSet if m.getObjId() in newMicIds]
+        #------
+        #newMics = [m.clone() for m in micSet if m.getObjId() not in self.insertedDict]
         self.listOfMicrographs.extend(newMics)
         self.streamClosed = micSet.isStreamClosed()
         micSet.close()
@@ -246,7 +252,8 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         self._loadInputList()
 
         newMics = [m for m in self.listOfMicrographs if m.getObjId() not in self.insertedDict]  # SOLUTION
-        newMicsBool = [len(newMics) > 0]
+
+        newMicsBool = [len(newMics) > 0 ]#and (len(newMics) >= self.batchSize)]
         outputStep = self._getFirstJoinStep()
 
         if newMicsBool:
@@ -256,6 +263,11 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
                 outputStep.addPrerequisites(*fDeps)
 
             self.updateSteps()
+
+    def _getNewMics(self):
+        """ Returns a list of unique micNames."""
+        micSet = self.getInputMicrographs()
+        return micSet.getUniqueValues(ID, where="%s>%s" % (ID, self.lastMicIdFound))
 
 
     def _checkNewOutput(self):
@@ -320,6 +332,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
             insertedDict: contains already processed micrographs
         """
         deps = []
+        #newSubset = [m for m in newMics if m.getObjId() not in insertedDict]
 
         def _insertSubset(micSubset):
             stepId = self._insertMicrographListStep(micSubset, self.initialIds)
@@ -330,6 +343,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         # Now handle the steps depending on the streaming batch size
         if self.batchSize == 1:  # This is one by one, as before the batch size
             for micrograph in newMics:
+                #if micrograph.getObjId() not in insertedDict:
                 tiltStepId = self._insertMicrographStep(micrograph)
                 deps.append(tiltStepId)
                 insertedDict[micrograph.getObjId()] = tiltStepId
@@ -347,7 +361,8 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
             if n > nd and self.streamClosed:  # insert last ones
                 _insertSubset(newMics[nd:])
 
-        # self.updateLastMicIdFound(newMics) This is done with the self.insertedDict
+        self.updateLastMicIdFound(newMics)
+        print(insertedDict)
 
         return deps
 
@@ -806,6 +821,11 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
             ctfValues = (ctf.getDefocusU(), ctf.getDefocusV(), ctf.getDefocusAngle(), phaseShift0)
 
         return ctfValues
+
+    def updateLastMicIdFound(self, mics):
+        """ Updates the last input check attribute with the maximum id in the micSet"""
+        micIds = [m.getObjId() for m in mics]
+        self.lastMicIdFound.set(max(micIds))
 
     def getSinglePreviousParameters(self, micId):
         if self.ctfRelations.hasValue():
