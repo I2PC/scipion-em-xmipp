@@ -89,11 +89,15 @@ class XmippProtShiftParticles(EMProtocol):
         # if fnVol.endswith('.mrc'):
         #     fnVol += ':mrc'
         # refVol = self._getExtraPath("reference_vol.vol")
+        if self.boxSizeBool.get():
+            boxSize = self.inputParticles.get().getFirstItem().getXDim()
+        else:
+            boxSize = self.boxSize.get()
 
         program = "xmipp_shift_particles"
-        args = '-i %s --center %f %f %f -o %s' % \
+        args = '-i %s --center %f %f %f -o %s --boxSize %d' % \
                (self._getExtraPath("input_particles.xmd"), self.x.get(), self.y.get(), self.z.get(),
-                self._getExtraPath("output_particles"))
+                self._getExtraPath("output_particles"), boxSize)
         self.runJob(program, args)
 
     def createOutputStep(self):
