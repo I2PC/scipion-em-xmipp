@@ -40,9 +40,7 @@ from xmipp3.protocols.protocol_resolution_bfactor import (XmippProtbfactorResolu
 
 class XmippBfactorResolutionViewer(ProtocolViewer):
     """
-    Visualization tools for bfactor local resolution matching results.
-    
-    The local resolution and b-factor should present a correlation.
+    The local resolution and local b-factor should present a correlation.
     This viewer provides the matching between them per residue.
     """
     _label = 'viewer resolution bfactor'
@@ -55,7 +53,18 @@ class XmippBfactorResolutionViewer(ProtocolViewer):
     def _defineParams(self, form):
         form.addSection(label='Visualization')
 
-        form.addParam('doShowColorBands', LabelParam,
+        line = form.addLine("Color scale options:",
+                            help="Options to define the color scale limits and color set")
+
+        line.addParam('highest', FloatParam, default=self.maxNormRes,
+                      label="Highest",
+                      help="Highest value for the scale")
+
+        line.addParam('lowest', FloatParam, default=self.minNormRes,
+                      label="Lowest",
+                      help="lowest value of the scale.")
+
+        line.addParam('doShowColorBands', LabelParam,
                       label="Show bfactor-local resolution comparison")
 
     def _getVisualizeDict(self):
@@ -63,6 +72,9 @@ class XmippBfactorResolutionViewer(ProtocolViewer):
                 }
 
     def _showColorBands(self, param=None):
+        """
+        The local resolution and local b-factor are represented as color bands.
+        """
         md = emlib.MetaData()
         md.read(self.protocol._getExtraPath(FN_METADATA_BFACTOR_RESOLUTION))
         lr = []
@@ -70,17 +82,15 @@ class XmippBfactorResolutionViewer(ProtocolViewer):
         r = []
 
         for idx in md:
-            lr_aux = md.getValue(emlib.MDL_RESOLUTION_LOCAL_RESIDUE, idx)
-            bf_aux = md.getValue(emlib.MDL_BFACTOR, idx)
-            r_aux = md.getValue(emlib.MDL_RESIDUE, idx)
+            lr.append(md.getValue(emlib.MDL_RESOLUTION_LOCAL_RESIDUE, idx))
+            bf.append(md.getValue(emlib.MDL_BFACTOR, idx))
+            r.append(md.getValue(emlib.MDL_RESIDUE, idx))
 
-            lr.append(lr_aux)
-            bf.append(bf_aux)
-            r.append(r_aux)
         lr = np.array(lr)
         bf = np.array(bf)
         r = np.array(r)
         plt.subplot(211)
+        #The magic numbers of 0 and 40 define the size of the vertical bands, they provide good visualization aspect
         plt.imshow(lr.reshape(1, len(lr)), cmap=plt.cm.viridis, extent=[r[0], r[-1], 0, 40])
         plt.xlabel('Residue')
         plt.title('Normalized Local Resolution')

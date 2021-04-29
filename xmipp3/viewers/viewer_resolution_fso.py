@@ -45,7 +45,6 @@ from matplotlib.ticker import FuncFormatter
 from xmipp3.protocols.protocol_resolution_fso import \
     XmippProtFSO, OUTPUT_3DFSC, OUTPUT_DIRECTIONAL_FILTER
 from xmipp3.viewers.plotter import XmippPlotter
-from xmippLib import *
 import xmippLib
 
 # Axis code
@@ -184,7 +183,7 @@ class XmippProtFSOViewer(LocalResolutionViewer):
 
     def _showDirectionalFilter(self, param=None):
         """
-        The directionally filtered map using the 3DFSC as los pass filter
+        The directionally filtered map using the 3DFSC as low pass filter
         """
         cm = DataView(self.protocol._getExtraPath(OUTPUT_DIRECTIONAL_FILTER))
         return [cm]
@@ -227,8 +226,7 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         """
         This function is called by _showFSCCurve.
         It shows the FSC curve in terms of the resolution
-        The horizontal axis is linear in this plot. Note
-        That this is not the normal representation of hte FSC
+        That this is not the normal representation of the FSC
         """
         md = xmippLib.MetaData(fnmd)
         xplotter = XmippPlotter(figure=None)
@@ -256,13 +254,13 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         idx_x = idx[aux]
         okToPlot = True
         resInterp = []
-        if (not idx_x.any()):
+        if not idx_x.any():
             okToPlot = False
         else:
-            if (len(idx_x) > 1):
+            if len(idx_x) > 1:
                 idx_2 = idx_x[0]
                 idx_1 = idx_2 - 1
-                if (idx_1 < 0):
+                if idx_1 < 0:
                     idx_2 = idx_x[1]
                     idx_1 = idx_2 - 1
                 y2 = x[idx_2]
@@ -306,7 +304,7 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         res_05, okToPlot_05 = self.interpolRes(0.5, xx, yy)
         res_09, okToPlot_09 = self.interpolRes(0.9, xx, yy)
 
-        if ((okToPlot_01 and okToPlot_05 and okToPlot_01) is True):
+        if (okToPlot_01 and okToPlot_05 and okToPlot_09):
             textstr = str(0.9) + ' --> ' + str("{:.2f}".format(res_09)) + 'A\n' + str(0.5) + ' --> ' + str(
                 "{:.2f}".format(res_05)) + 'A\n' + str(0.1) + ' --> ' + str("{:.2f}".format(res_01)) + 'A'
             a.axes.axvspan(1.0 / res_09, 1.0 / res_01, alpha=0.3, color='green')
@@ -320,15 +318,8 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         """ plot metadata columns mdLabelX and mdLabelY
             if nbins is in args then and histogram over y data is made
         """
-        if mdLabelX:
-            xx = []
-        else:
-            xx = range(1, md.size() + 1)
-        yy = []
-        for objId in md:
-            if mdLabelX:
-                xx.append(md.getValue(mdLabelX, objId))
-            yy.append(md.getValue(mdLabelY, objId))
+        xx = md.getColumnValues(mdLabelX)
+        yy = md.getColumnValues(mdLabelY)
         return xx, yy
 
     def _showDirectionalResolution(self, zparam=None):
@@ -344,13 +335,10 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         This function shows the angular distribution of the resolution
         """
         md = emlib.MetaData(fnmd)
-        radius = []
-        azimuth = []
-        counts = []
-        for objId in md:
-            radius.append(md.getValue(emlib.MDL_ANGLE_ROT, objId))
-            azimuth.append(md.getValue(emlib.MDL_ANGLE_TILT, objId))
-            counts.append(md.getValue(emlib.MDL_RESOLUTION_FRC, objId))
+
+        radius = md.getColumnValues(emlib.MDL_ANGLE_ROT)
+        azimuth = md.getColumnValues(emlib.MDL_ANGLE_TILT)
+        counts = md.getColumnValues(emlib.MDL_RESOLUTION_FRC)
 
         # define binning
         azimuths = np.radians(np.linspace(0, 360, 360))
@@ -360,20 +348,16 @@ class XmippProtFSOViewer(LocalResolutionViewer):
 
         values = np.zeros((len(azimuths), len(zeniths)))
 
-        for i in np.arange(0, len(azimuth)):
+        for i in range(0, len(azimuth)):
             values[int(radius[i]), int(azimuth[i])] = counts[i]
 
         # ------ Plot ------
         stp = 0.1
-        lowlim = values.min()
-        if ((lowlim - stp) < 0):
-            lowlim = 0.0
-        else:
-            lowlim = lowlim - stp
+        lowlim = max(0.0, values.min())
 
         highlim = values.max() + stp
         fig, ax = plt.subplots(subplot_kw=dict(projection='polar'))
-        pc = plt.contourf(theta, r, values, np.arange(values.min(), highlim, stp))
+        pc = plt.contourf(theta, r, values, np.arange(lowlim, highlim, stp))
 
         plt.colorbar(pc)
         plt.show()

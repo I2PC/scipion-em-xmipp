@@ -88,18 +88,20 @@ class XmippProtFSO(ProtAnalysis3D):
         form.addParam('coneAngle', FloatParam, default=17.0,
                       expertLevel=LEVEL_ADVANCED, 
                       label="Cone Angle",
-                      help='Angle between the axis of the cone and the generatrix')
+                      help='Angle between the axis of the cone and the generatrix. '
+                           'An angle of 17 degrees is the best angle to measuare directional FSCs')
         
         form.addParam('estimate3DFSC', BooleanParam, default=True, 
                       label="Estimate 3DFSC and directional filtered map",
-                      help='Set to to estimate the 3DFSCD map, and applyting the '
+                      help='Set to estimate the 3DFSCD map, and applyting the '
                            ' 3DFSC as anisotropic filter to obtain a directional'
                            'filtered map.')
 
         form.addParam('threshold', FloatParam, expertLevel=LEVEL_ADVANCED, 
                       default=0.143, 
-                      label="Threshold",
-                      help='Threshold for the fsc')
+                      label="FSC Threshold",
+                      help='Threshold for the fsc. By default the standard 0.143. '
+                           'Other common thresholds are 0.5 and 0.3.')
         
         form.addParallelSection(threads = 4, mpi = 0)
 
@@ -123,11 +125,14 @@ class XmippProtFSO(ProtAnalysis3D):
     def mrc_convert(self, fileName, outputFileName):
         """Check if the extension is .mrc, if not then uses xmipp to convert it
         """
-        params = ' -i %s' % fileName
-        params += ' -o %s' % outputFileName
-        self.runJob('xmipp_image_convert', params)
-        outputFileName = outputFileName+':mrc'
-        return outputFileName
+        ext = getExt(fileName)
+        if ((ext != '.mrc') and (ext != '.map')):
+            params = ' -i %s' % fileName
+            params += ' -o %s' % outputFileName
+            self.runJob('xmipp_image_convert', params)
+            return outputFileName
+        else:
+            return fileName
 
     def convertInputStep(self):
         """ Read the input volume.
@@ -150,8 +155,8 @@ class XmippProtFSO(ProtAnalysis3D):
 
         os.mkdir(fndir) 	
 
-        params = ' --half1 %s' % self.vol1Fn
-        params += ' --half2 %s' % self.vol2Fn
+        params = ' --half1 "%s"' % self.vol1Fn
+        params += ' --half2 "%s"' % self.vol2Fn
         params += ' -o %s' % self._getExtraPath()
         if (self.halfVolumesFile):
             params += ' --sampling %f' % self.inputHalves.get().getSamplingRate()
@@ -159,11 +164,11 @@ class XmippProtFSO(ProtAnalysis3D):
             params += ' --sampling %f' % self.half1.get().getSamplingRate()
 
         if self.mask.hasValue():
-            params += ' --mask %s' % self.maskFn
+            params += ' --mask "%s"' % self.maskFn
 
         params += ' --anglecone %f' % self.coneAngle.get()
 
-        if self.estimate3DFSC.get() is True:
+        if self.estimate3DFSC.get():
             params += ' --threedfsc_filter'
         
         params += ' --threshold %s' % self.threshold.get()

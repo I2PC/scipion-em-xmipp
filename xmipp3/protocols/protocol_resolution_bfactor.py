@@ -48,11 +48,10 @@ FN_METADATA_BFACTOR_RESOLUTION = 'bfactor_resolution.xmd'
 
 class XmippProtbfactorResolution(ProtAnalysis3D):
     """    
-    Given a local resolution map the matching of the local resolution with the bfactor of each atom
-    taken from an atomic model is estimated. In particular, the matching of the bfactor and local resolution
-    per residue.
+    Given a local resolution map and an atomic model, this protocols provides the matching between the
+    local resolution with the local bfactor per residue.
     """
-    _label = 'resolution bfactor'
+    _label = 'local resolution/local bfactor'
     _lastUpdateVersion = VERSION_2_0
 
     def __init__(self, **args):
@@ -70,13 +69,15 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
 
         form.addParam('normalizeResolution', BooleanParam, default=True,
                       label="Normalize Resolution",
-                      help='The local resolution normalized map is defined as'
+                      help='The normalizedlocal resolution map is defined as'
                            '(LR - FSC)/FSC, where LR is the local resolution of a'
                            'given voxel, and FSC is the FSC resolution in A. This '
-                           'map provides information about if the local resolution'
+                           'map provides information about whether the local resolution is'
                            'greater or lesser than the FSC. The local resolution '
                            'normalized map is used to carry out the matching with the local'
-                           'bfactor per residue.')
+                           'bfactor per residue. Yes means that the local resolution will be'
+                           'normalized by the algorithm. No means that the input local '
+                           'resolution map is already a normalized local resolution map.')
 
         form.addParam('localResolutionMap', PointerParam, pointerClass='Volume',
                       label="Local Resolution Map", important=True,
@@ -101,7 +102,7 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
         form.addParam('medianEstimation', BooleanParam, default=True,
                       label="Use median",
                       help='The local resolution per residue can be estimated using'
-                           'the mean (by default) or the median')
+                           'the mean (by default - No) or the median (yes)')
 
         form.addParallelSection(threads=4, mpi=0)
 
@@ -112,17 +113,14 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
         # 1 Check the input and convert to mrc if it is the case
         self._insertFunctionStep('convertInputStep')
 
-        # 2 Carry out the mathing betweent he local resolution per residue and bfactor
+        # 2 Carry out the matching betweent the local resolution per residue and bfactor
         self._insertFunctionStep('matchingBfactorLocalResolution')
-
-        # Create the scipion output
-        # self._insertFunctionStep('createOutputStep')
 
     def mrc_convert(self, fileName, outputFileName):
         """Check if the extension is .mrc, if not then uses xmipp to convert it
         """
         ext = getExt(fileName)
-        if ((ext != '.mrc') or (ext != '.map')):
+        if ((ext != '.mrc') and (ext != '.map')):
             params = ' -i %s' % fileName
             params += ' -o %s' % outputFileName
             self.runJob('xmipp_image_convert', params)
@@ -143,31 +141,13 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
         resolution - fscResolution)/fscResolution.
         """
 
-        params = ' --atmodel %s' % self.pdbfile.get().getFileName()
+        params = ' --atmodel "%s"' % self.pdbfile.get().getFileName()
         params += ' --vol %s' % self.vol
-        if self.normalizeResolution.get() is True:
+        if self.normalizeResolution.get():
             params += ' --fscResolution %s' % self.fscResolution.get()
         params += ' --sampling %f' % self.localResolutionMap.get().getSamplingRate()
-        if self.medianEstimation.get() is True:
-            params += ' --hasMedian '
+        if self.medianEstimation.get():
+            params += ' --useMedian '
         params += ' -o %s' % self._getExtraPath()
 
         self.runJob('xmipp_resolution_pdb_bfactor', params)
-
-
-    # --------------------------- INFO functions ------------------------------
-
-    def _methods(self):
-        messages = []
-        if hasattr(self, 'Volume'):
-            messages.append(
-                'Information about the method/article in ')
-        return messages
-
-    def _summary(self):
-        summary = []
-        summary.append(" ")
-        return summary
-
-    def _citations(self):
-        return ['Vilas2020']
