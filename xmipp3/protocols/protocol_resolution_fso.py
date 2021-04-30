@@ -28,11 +28,11 @@
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.object import Float
+from pyworkflow.utils import getExt
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
                                         LEVEL_ADVANCED)
 from pwem.objects import Volume
 from pwem.protocols import ProtAnalysis3D
-
 
 OUTPUT_3DFSC = '3dFSC.mrc'
 OUTPUT_DIRECTIONAL_FILTER = 'filteredMap.mrc'
@@ -126,19 +126,19 @@ class XmippProtFSO(ProtAnalysis3D):
         """Check if the extension is .mrc, if not then uses xmipp to convert it
         """
         ext = getExt(fileName)
-        if ((ext != '.mrc') and (ext != '.map')):
+        if (ext != '.mrc') and (ext != '.map'):
             params = ' -i %s' % fileName
             params += ' -o %s' % outputFileName
             self.runJob('xmipp_image_convert', params)
             return outputFileName
         else:
-            return fileName
+            return fileName+':mrc'
 
     def convertInputStep(self):
         """ Read the input volume.
         """
 
-        if (self.halfVolumesFile):
+        if self.halfVolumesFile:
             self.vol1Fn, self.vol2Fn = self.inputHalves.get().getHalfMaps().split(',')
         else:
             self.vol1Fn = self.mrc_convert(self.half1.get().getFileName(),
