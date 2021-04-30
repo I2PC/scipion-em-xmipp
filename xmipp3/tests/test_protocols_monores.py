@@ -49,6 +49,20 @@ class TestMonoResBase(BaseTest):
         return cls.protImport
 
     @classmethod
+    def runImportHalfMaps(cls, pathFullVolume, half1, half2, samplingRate):
+        """ Run an Import volumes protocol. """
+        cls.protImport = cls.newProtocol(ProtImportVolumes,
+                                         filesPath=pathFullVolume,
+                                         filesPattern = '',
+                                         setHalfMaps = True,
+                                         half1map=half1,
+                                         half2map=half2,
+                                         samplingRate=samplingRate
+                                         )
+        cls.launchProtocol(cls.protImport)
+        return cls.protImport
+
+    @classmethod
     def runCreateMask(cls, pattern, thr):
         """ Create a volume mask. """
         cls.msk = cls.newProtocol(XmippProtCreateMask3D,
@@ -76,6 +90,7 @@ class TestMonoRes(TestMonoResBase):
         cls.protImportVol = cls.runImportVolumes(cls.map3D, 3.54)
         cls.protImportHalf1 = cls.runImportVolumes(cls.half1, 3.54)
         cls.protImportHalf2 = cls.runImportVolumes(cls.half2, 3.54)
+        cls.protImportHalves = cls.runImportHalfMaps(cls.map3D , cls.half1, cls.half2, 3.54)
         cls.protCreateMask = cls.runCreateMask(cls.protImportVol.outputVolume, 0.02)
 
     def testMonoRes1(self):
@@ -89,12 +104,28 @@ class TestMonoRes(TestMonoResBase):
                                    )
         self.launchProtocol(MonoRes)
         self.assertTrue(exists(MonoRes._getExtraPath('monoresResolutionMap.mrc')),
-                        "MonoRes (no split, no premasked) has failed")
+                        "MonoRes has failed")
  
     def testMonoRes2(self):
         MonoRes = self.newProtocol(XmippProtMonoRes,
                                    objLabel='two halves monores',
                                    halfVolumes=True,
+                                   halfVolumesFile=True,
+                                   inputVolumes=self.protImportHalves.outputVolume,
+                                   provideMaskInHalves=True,
+                                   Mask=self.protCreateMask.outputMask,
+                                   minRes=1,
+                                   maxRes=25,
+                                   )
+        self.launchProtocol(MonoRes)
+        self.assertTrue(exists(MonoRes._getExtraPath('monoresResolutionMap.mrc')),
+                        "MonoRes (with associated halves) has failed")
+ 
+    def testMonoRes3(self):
+        MonoRes = self.newProtocol(XmippProtMonoRes,
+                                   objLabel='two halves monores',
+                                   halfVolumes=True,
+                                   halfVolumesFile=False,
                                    inputVolume=self.protImportHalf1.outputVolume,
                                    inputVolume2=self.protImportHalf2.outputVolume,
                                    provideMaskInHalves=True,
@@ -104,6 +135,4 @@ class TestMonoRes(TestMonoResBase):
                                    )
         self.launchProtocol(MonoRes)
         self.assertTrue(exists(MonoRes._getExtraPath('monoresResolutionMap.mrc')),
-                        "MonoRes (split, pre-masked, no filter) has failed")
- 
-
+                        "MonoRes (half maps imported) has failed")
