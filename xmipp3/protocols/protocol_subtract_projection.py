@@ -89,7 +89,8 @@ class XmippProtSubtractProjection(EMProtocol):
             nRow.setValue(lib.MDL_ITEM_ID, int(id))
             nRow.setValue(lib.MDL_IMAGE, fn)
             alignmentToRow(part.getTransform(), nRow, ALIGN_3D)
-            ctfModelToRow(part.getCTF(), nRow)
+            if part.hasCTF():
+                ctfModelToRow(part.getCTF(), nRow)
             nRow.addToMd(mdParticles)
         mdParticles.write(self._getExtraPath("input_particles.xmd"))
         
