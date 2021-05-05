@@ -435,7 +435,6 @@ _noiseCoord   '0'
         fnLabels = self._getExtraPath('labels.txt')
         mdIn = emlib.MetaData(fnProj)
         mdExp = emlib.MetaData()
-        newImage = emlib.Image()
         maxPsi = 180
         maxShift = round(newXdim / 10)
         idx = 1
@@ -468,12 +467,7 @@ _noiseCoord   '0'
                     s = math.sin(psi)
                     M = np.float32([[c, s, (1 - c) * Xdim2 - s * Ydim2 + deltaX],
                                     [-s, c, s * Xdim2 + (1 - c) * Ydim2 + deltaY]])
-                    #newImg = cv2.warpAffine(I.getData(), M, (Xdim, Ydim),
-                    #                        borderMode=cv2.BORDER_REFLECT_101)
-                    #newFn = ('%06d@' % idx) + fnExp[:-3] + 'stk'
-                    #newImage.setData(newImg)
-                    #newImage.write(newFn)
-
+                    newFn = ('%06d@' % idx) + fnExp[:-3] + 'stk'
                     self._ih.applyTransform(fnImg, newFn, M, (Ydim, Xdim), doWrap=True)
 
                     myRow.setValue(emlib.MDL_IMAGE, newFn)
