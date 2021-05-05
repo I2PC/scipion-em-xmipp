@@ -78,7 +78,7 @@ class XmippProtShiftParticles(EMProtocol):
             nRow.setValue(lib.MDL_ITEM_ID, int(id))
             nRow.setValue(lib.MDL_IMAGE, fn)
             alignmentToRow(part.getTransform(), nRow, ALIGN_3D)
-            ctfModelToRow(part.getCTF(), nRow)
+            # ctfModelToRow(part.getCTF(), nRow)
             nRow.addToMd(mdParticles)
         mdParticles.write(self._getExtraPath("input_particles.xmd"))
 
