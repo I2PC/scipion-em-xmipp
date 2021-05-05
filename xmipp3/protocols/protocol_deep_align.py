@@ -37,11 +37,11 @@ import pwem.emlib.metadata as md
 from xmipp3.convert import createItemMatrix, setXmippAttributes, readSetOfParticles
 from pwem import ALIGN_PROJ
 from pwem import emlib
+from pwem.emlib.image import ImageHandler
 import os
 import sys
 import numpy as np
 import math
-import cv2
 from shutil import copy
 from os import remove
 from os.path import exists, join
@@ -52,6 +52,7 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
     _label = 'deep align'
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_DLTK_v0.3'
+    _ih = ImageHandler()
 
     def __init__(self, **args):
         ProtRefine3D.__init__(self, **args)
@@ -222,10 +223,8 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
             remove(self._getExtraPath('corrected_particles.stk'))
             remove(self._getExtraPath('corrected_particles.xmd'))
 
-        from pwem.emlib.image import ImageHandler
-        ih = ImageHandler()
         fnVol = self._getTmpPath("volume.vol")
-        ih.convert(self.inputVolume.get(), fnVol)
+        self._ih.convert(self.inputVolume.get(), fnVol)
         Xdim = self.inputVolume.get().getDim()[0]
         if Xdim != self.newXdim:
             self.runJob("xmipp_image_resize",
@@ -436,7 +435,6 @@ _noiseCoord   '0'
         fnLabels = self._getExtraPath('labels.txt')
         mdIn = emlib.MetaData(fnProj)
         mdExp = emlib.MetaData()
-        newImage = emlib.Image()
         maxPsi = 180
         maxShift = round(newXdim / 10)
         idx = 1
@@ -469,11 +467,9 @@ _noiseCoord   '0'
                     s = math.sin(psi)
                     M = np.float32([[c, s, (1 - c) * Xdim2 - s * Ydim2 + deltaX],
                                     [-s, c, s * Xdim2 + (1 - c) * Ydim2 + deltaY]])
-                    newImg = cv2.warpAffine(I.getData(), M, (Xdim, Ydim),
-                                            borderMode=cv2.BORDER_REFLECT_101)
                     newFn = ('%06d@' % idx) + fnExp[:-3] + 'stk'
-                    newImage.setData(newImg)
-                    newImage.write(newFn)
+                    self._ih.applyTransform(fnImg, newFn, M, (Ydim, Xdim), doWrap=True)
+
                     myRow.setValue(emlib.MDL_IMAGE, newFn)
                     myRow.setValue(emlib.MDL_ANGLE_PSI, psiDeg)
                     myRow.setValue(emlib.MDL_SHIFT_X, deltaX)
