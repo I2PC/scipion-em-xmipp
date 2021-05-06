@@ -519,7 +519,7 @@ class XmippSelectPointinVolWizard(EmWizard):
         #     volume.setFileName(fileName)
         plt = MaskVolumeWizard(volume.getFileName())
         plt.initializePlot()
-        form.setVar('x', plt.origin[0])
+        form.setVar('x', plt.origin[2])
         form.setVar('y', plt.origin[1])
-        form.setVar('z', plt.origin[2])
+        form.setVar('z', plt.origin[0])
         del plt

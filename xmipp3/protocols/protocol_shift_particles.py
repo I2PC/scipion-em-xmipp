@@ -49,11 +49,11 @@ class XmippProtShiftParticles(EMProtocol):
         form.addParam('inputVol', PointerParam, pointerClass='Volume', label="Volume", allowsNull=True,
                       help='Volume to select the point (by clicking in the wizard for selecting the new center) that '
                            'will be the new center of the particles.')
-        form.addParam('z', FloatParam, label="z", help='Use the wizard to select by clicking in the volume the new '
+        form.addParam('x', FloatParam, label="x", help='Use the wizard to select by clicking in the volume the new '
                                                        'center for the shifted particles')
         form.addParam('y', FloatParam, label="y", help='Use the wizard to select by clicking in the volume the new '
                                                        'center for the shifted particles')
-        form.addParam('x', FloatParam, label="x", help='Use the wizard to select by clicking in the volume the new '
+        form.addParam('z', FloatParam, label="z", help='Use the wizard to select by clicking in the volume the new '
                                                        'center for the shifted particles')
         form.addParam('boxSizeBool', BooleanParam, label='Use original boxsize for the shifted particles?',
                       default='True', help='Use input particles boxsize for the shifted particles.')
@@ -78,7 +78,8 @@ class XmippProtShiftParticles(EMProtocol):
             nRow.setValue(lib.MDL_ITEM_ID, int(id))
             nRow.setValue(lib.MDL_IMAGE, fn)
             alignmentToRow(part.getTransform(), nRow, ALIGN_3D)
-            # ctfModelToRow(part.getCTF(), nRow)
+            if part.hasCTF():
+                ctfModelToRow(part.getCTF(), nRow)
             nRow.addToMd(mdParticles)
         mdParticles.write(self._getExtraPath("input_particles.xmd"))
 
