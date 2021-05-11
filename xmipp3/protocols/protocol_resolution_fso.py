@@ -89,7 +89,8 @@ class XmippProtFSO(ProtAnalysis3D):
                       expertLevel=LEVEL_ADVANCED, 
                       label="Cone Angle",
                       help='Angle between the axis of the cone and the generatrix. '
-                           'An angle of 17 degrees is the best angle to measuare directional FSCs')
+                           'An angle of 17 degrees is the best angle (see publication
+                           'Vilas 2021) to measuare directional FSCs')
         
         form.addParam('estimate3DFSC', BooleanParam, default=True, 
                       label="Estimate 3DFSC and directional filtered map",
@@ -127,8 +128,8 @@ class XmippProtFSO(ProtAnalysis3D):
         """
         ext = getExt(fileName)
         if (ext != '.mrc') and (ext != '.map'):
-            params = ' -i %s' % fileName
-            params += ' -o %s' % outputFileName
+            params = ' -i "%s"' % fileName
+            params += ' -o "%s"' % outputFileName
             self.runJob('xmipp_image_convert', params)
             return outputFileName
         else:
