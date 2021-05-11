@@ -41,7 +41,7 @@ import os
 import sys
 import numpy as np
 import math
-# import cv2
+import cv2
 from shutil import copy
 from os import remove
 from os.path import exists, join
