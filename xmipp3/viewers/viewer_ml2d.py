@@ -80,7 +80,7 @@ class XmippML2DViewer(ProtocolViewer):
                        help='Should approach to zero when convergence.')
         group.addParam('doShowMirror', LabelParam,
                        label="Show mirror fraction for last iteration?",
-                       help='he the mirror fraction of each class in last iteration.')
+                       help='the mirror fraction of each class in last iteration.')
         
     
     def _getVisualizeDict(self):
@@ -132,7 +132,7 @@ def createPlots(protML, selectedPlots):
     lastIter = protML._lastIteration()
     if lastIter == 0:
         return
-    refs = protML._getIterClasses(it=lastIter, block='classes')
+    refs = protML._getIterMdClasses(it=lastIter, block='classes')
 #    if not exists(refs):
 #        return 
 #    blocks = getBlocksInMetaDataFile(refs)
@@ -160,11 +160,11 @@ def createPlots(protML, selectedPlots):
     xplotter = XmippPlotter(x=gridsize[0], y=gridsize[1])
         
     # Create data to plot
-    iters = range(1, lastIter+1)
+    iters = range(0, lastIter+1, 1)
     ll = []
     pmax = []
     for iter in iters:
-        logs = protML._getIterClasses(it=iter, block='info')
+        logs = protML._getIterMdImages(it=iter, block='info')
         md = emlib.MetaData(logs)
         id = md.firstObject()
         ll.append(md.getValue(emlib.MDL_LL, id))
@@ -188,7 +188,7 @@ def createPlots(protML, selectedPlots):
         a.xaxis.set_major_formatter(FormatStrFormatter('%1.0f'))
         a.bar(ind, mirrors, width, color='b')
         a.set_ylim([0, 1.])
-        a.set_xlim([0.8, nrefs + 1])
+        #a.set_xlim([0.3, nrefs + 1])
         
     if doPlot('doShowPmax'):
         a = xplotter.createSubPlot('Probabilities distribution', 'iterations', 'Pmax/Psum') 
@@ -197,7 +197,7 @@ def createPlots(protML, selectedPlots):
     if doPlot('doShowSignalChange'):
         md = emlib.MetaData()
         for iter in iters:
-            fn = protML._getIterClasses(it=iter, block='classes')
+            fn = protML._getIterMdClasses(it=iter, block='classes')
             md2 = emlib.MetaData(fn)
             md2.fillConstant(emlib.MDL_ITER, str(iter))
             md.unionAll(md2)
@@ -211,4 +211,3 @@ def createPlots(protML, selectedPlots):
         xplotter.plot(iters, signal_change, color='green')
     
     return [xplotter]
-    
