@@ -27,6 +27,7 @@
 # **************************************************************************
 
 from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam
+import pyworkflow.object as pwobj
 from pwem import ALIGN_3D
 from pwem.emlib import lib
 import pwem.emlib.metadata as md
@@ -102,6 +103,9 @@ class XmippProtShiftParticles(EMProtocol):
         outputSet.copyItems(inputParticles, updateItemCallback=self._updateItem,
                             itemDataIterator=md.iterRows(self._getExtraPath("input_particles.xmd")))
         self._defineOutputs(outputParticles=outputSet)
+        self._defineOutputs(shiftX=pwobj.Float(self.x.get()),
+                            shiftY=pwobj.Float(self.y.get()),
+                            shiftZ=pwobj.Float(self.z.get()))
         self._defineSourceRelation(inputParticles, outputSet)
 
     # --------------------------- INFO functions --------------------------------------------
