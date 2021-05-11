@@ -26,13 +26,11 @@
 # *
 # **************************************************************************
 
-from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, FloatParam
-
+from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam
 from pwem import ALIGN_3D
 from pwem.emlib import lib
 import pwem.emlib.metadata as md
 from pwem.protocols import EMProtocol
-
 from xmipp3.convert import alignmentToRow, ctfModelToRow
 
 
@@ -49,16 +47,16 @@ class XmippProtShiftParticles(EMProtocol):
         form.addParam('inputVol', PointerParam, pointerClass='Volume', label="Volume", allowsNull=True,
                       help='Volume to select the point (by clicking in the wizard for selecting the new center) that '
                            'will be the new center of the particles.')
-        form.addParam('x', FloatParam, label="x", help='Use the wizard to select by clicking in the volume the new '
-                                                       'center for the shifted particles')
-        form.addParam('y', FloatParam, label="y", help='Use the wizard to select by clicking in the volume the new '
-                                                       'center for the shifted particles')
-        form.addParam('z', FloatParam, label="z", help='Use the wizard to select by clicking in the volume the new '
-                                                       'center for the shifted particles')
-        form.addParam('boxSizeBool', BooleanParam, label='Use original boxsize for the shifted particles?',
-                      default='True', help='Use input particles boxsize for the shifted particles.')
-        form.addParam('boxSize', IntParam, label='Final boxsize', condition='not boxSizeBool',
-                      help='Boxsize for the shifted particles.')
+        form.addParam('x', IntParam, label="x", help='Use the wizard to select by clicking in the volume the new '
+                                                     'center for the shifted particles')
+        form.addParam('y', IntParam, label="y", help='Use the wizard to select by clicking in the volume the new '
+                                                     'center for the shifted particles')
+        form.addParam('z', IntParam, label="z", help='Use the wizard to select by clicking in the volume the new '
+                                                     'center for the shifted particles')
+        form.addParam('boxSizeBool', BooleanParam, label='Use original box size for the shifted particles?',
+                      default='True', help='Use input particles box size for the shifted particles.')
+        form.addParam('boxSize', IntParam, label='Final box size', condition='not boxSizeBool',
+                      help='Box size for the shifted particles.')
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -85,16 +83,10 @@ class XmippProtShiftParticles(EMProtocol):
 
     def shiftStep(self):
         """call xmipp program to shift the particles"""
-        # vol = self.inputVol.get().clone()
-        # fnVol = vol.getFileName()
-        # if fnVol.endswith('.mrc'):
-        #     fnVol += ':mrc'
-        # refVol = self._getExtraPath("reference_vol.vol")
         if self.boxSizeBool.get():
             boxSize = self.inputParticles.get().getFirstItem().getXDim()
         else:
             boxSize = self.boxSize.get()
-
         program = "xmipp_shift_particles"
         args = '-i %s --center %f %f %f -o %s --boxSize %d' % \
                (self._getExtraPath("input_particles.xmd"), self.x.get(), self.y.get(), self.z.get(),

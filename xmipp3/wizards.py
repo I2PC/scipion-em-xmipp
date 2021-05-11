@@ -513,13 +513,9 @@ class XmippSelectPointinVolWizard(EmWizard):
         if not volume:
             print('You must specify input volume')
             return
-        # fileName = volume.getFileName()
-        # if fileName.endswith('.mrc'):
-        #     fileName += ':mrc'
-        #     volume.setFileName(fileName)
         plt = MaskVolumeWizard(volume.getFileName())
         plt.initializePlot()
-        form.setVar('x', plt.origin[2])
-        form.setVar('y', plt.origin[1])
-        form.setVar('z', plt.origin[0])
+        form.setVar('x', int(plt.origin[2]))
+        form.setVar('y', int(plt.origin[1]))
+        form.setVar('z', int(plt.origin[0]))
         del plt
