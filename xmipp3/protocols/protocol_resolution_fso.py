@@ -89,7 +89,7 @@ class XmippProtFSO(ProtAnalysis3D):
                       expertLevel=LEVEL_ADVANCED, 
                       label="Cone Angle",
                       help='Angle between the axis of the cone and the generatrix. '
-                           'An angle of 17 degrees is the best angle (see publication
+                           'An angle of 17 degrees is the best angle (see publication'
                            'Vilas 2021) to measuare directional FSCs')
         
         form.addParam('estimate3DFSC', BooleanParam, default=True, 
