@@ -34,7 +34,8 @@ from pwem import RELATION_CTF
 import pyworkflow.utils as pwutils
 from pyworkflow.protocol.constants import (STEPS_PARALLEL, STATUS_NEW)
 import pyworkflow.protocol.params as params
-from pwem.objects import SetOfMicrographs, Image, Micrograph, Acquisition, String, Set, Float, Integer
+from pwem.objects import SetOfMicrographs, SetOfCTF, Image, Micrograph,\
+                         Acquisition, String, Set, Float, Integer, Boolean
 from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtMicrographs
 
@@ -46,6 +47,7 @@ from xmipp3 import emlib
 from sklearn.metrics import mean_absolute_error
 from tensorflow.keras.models import load_model
 from pyworkflow.mapper.sqlite import ID
+from xmipp3.convert import setXmippAttribute, getXmippAttribute
 
 
 SAMPLING_RATE1 = 1
@@ -63,6 +65,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
     def __init__(self, **kwargs):
         ProtMicrographs.__init__(self, **kwargs)
         self.stepsExecutionMode = STEPS_PARALLEL
+        self.isFirstTime = Boolean(False)
 
     # --------------------------- DEFINE param functions ------------------------
     def _defineParams(self, form):
@@ -71,15 +74,15 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         form.addParam('inputMicrographs', params.PointerParam, pointerClass='SetOfMicrographs',
                       important=True, label="Input micrographs", help='Select the SetOfMicrogrsphs')
 
-        form.addParam('defocusU_threshold', params.FloatParam, label='Defocus in U axis',
-                      default=0.6, expertLevel=params.LEVEL_ADVANCED,
-                      help='''By default, micrographs will be divided into an output set and a discarded set based
-                              on the defocus double threshold''')
+        # form.addParam('defocusU_threshold', params.FloatParam, label='Defocus in U axis',
+        #               default=0.6, expertLevel=params.LEVEL_ADVANCED,
+        #               help='''By default, micrographs will be divided into an output set and a discarded set based
+        #                   on the defocus double threshold''')
 
-        form.addParam('defocusV_threshold', params.FloatParam, label='Defocus in V axis',
-                      default=0.1, expertLevel=params.LEVEL_ADVANCED,
-                      help='''By default, micrographs will be divided into an output set and a discarded set based
-                              on the defocus double threshold''')
+        # form.addParam('defocusV_threshold', params.FloatParam, label='Defocus in V axis',
+        #              default=0.1, expertLevel=params.LEVEL_ADVANCED,
+        #              help='''By default, micrographs will be divided into an output set and a discarded set based
+        #                      on the defocus double threshold''')
 
         form.addParam('ownModel_boolean', params.BooleanParam, default=True,
                       label='Use your own model',
@@ -92,18 +95,19 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
                       label='Set your model',
                       help='Choose the protocol where your model is trained')
 
-        form.addParam('test', params.BooleanParam, label="test model",
+        form.addParam('doTest', params.BooleanParam, label="test model",
                       default=False, expertLevel=params.LEVEL_ADVANCED,
                       help='Use defoci from a previous CTF estimation to test the model')
 
         form.addParam('ctfRelations', params.RelationParam, allowsNull=True,
-                      condition='test',
+                      condition='doTest',
                       relationName=RELATION_CTF,
                       attributeName='inputMicrographs',
                       label='Previous CTF estimation',
                       help='Choose some CTF estimation related to input '
                            'micrographs, in case you want to use the defocus '
-                           'values found previously to test the method')
+                           'values found previously to test the method',
+                      expertLevel=params.LEVEL_ADVANCED)
 
         form.addParam("streamingBatchSize", params.IntParam, default=1,
                       label="Batch size",  expertLevel=params.LEVEL_ADVANCED,
@@ -124,38 +128,48 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
 
         form.addParallelSection(threads=4, mpi=1)
 
+    def _getStreamingBatchSize(self):
+        return self.getAttributeValue('streamingBatchSize', 1)
+
 
     # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
         """ Insert the steps to perform CTF estimation, or re-estimation,
                 on a set of micrographs. """
 
+        self.micDict = OrderedDict()
         self.initialIds = self._insertInitialSteps()
-
-        fDeps = self._insertNewMicrographSteps(self.insertedDict,
-                                               self.listOfMicrographs)
-
+        micDict, self.streamClosed = self._loadInputList()
+        fDeps = self._insertNewMicSteps(micDict.values())
+        self._insertFinalSteps(fDeps)
         # For the streaming mode, the steps function have a 'wait' flag that can be turned on/off. For example, here we insert the
         # createOutputStep but it wait=True, which means that can not be executed until it is set to False
         # (when the input micrographs stream is closed)
         waitCondition = self._getFirstJoinStepName() == 'createOutputStep'
-        finalSteps = self._insertFinalSteps(fDeps)
+
+        # Comentar esto como segunda opcion a ver que pasa
+        if self.isFirstTime:
+            # Insert previous estimation
+            self._insertPreviousSteps()
+            self.isFirstTime.set(False)
 
         self._insertFunctionStep('createOutputStep',
-                                 prerequisites=finalSteps, wait=waitCondition)
+                                 prerequisites=fDeps, wait=waitCondition)
 
     def _insertInitialSteps(self):
         """ Override this function to insert some steps before the
         estimate ctfs steps.
         Should return a list of ids of the initial steps. """
-        self.lastMicIdFound = Integer(0)  # Last micId found in the input set
-        self.insertedDict = OrderedDict()
+
+        #self.lastMicIdFound = Integer(0)  # Last micId found in the input set
         self.samplingRate = self.inputMicrographs.get().getSamplingRate()
-        self.listOfMicrographs = []
+        #self.listOfMicrographs = []
         self.predictions = {}
-        self.batchSize = self.streamingBatchSize.get()
-        self._loadInputList()
+        self.real = {}
+        self.errors = {}
         pwutils.makePath(self._getExtraPath('DONE'))
+        if not hasattr(self, "ctfDict"):
+            self.getPreviousParameters()
         # Load the model one time only-----
         # modelFname = self.getModel('deepDefocus', 'ModelTrained.h5') #deepDefocus is the directory and ModelTrained.h5 is the model
         self.model = load_model(self.ownModel.get())
@@ -167,55 +181,43 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         pass
 
     def _loadInputList(self):
-        """ Load the input set of mics and create a list. """
-        micsFile = self.inputMicrographs.get().getFileName()
-        self.debug("Loading input db: %s" % micsFile)
-        micSet = SetOfMicrographs(filename=micsFile)
-        micSet.loadAllProperties()
-        # ---- Esto funciona no me preguntes porque
-        newMicIds = self._getNewMics()
-        newMics = [m.clone() for m in micSet if m.getObjId() in newMicIds]
-        #------
-        #newMics = [m.clone() for m in micSet if m.getObjId() not in self.insertedDict]
-        self.listOfMicrographs.extend(newMics)
-        self.streamClosed = micSet.isStreamClosed()
-        micSet.close()
+        """ Load the input set of micrographs that are ready to be estimated. """
+        return self._loadSet(self.getInputMicrographs(), SetOfMicrographs,
+                             lambda mic: mic.getMicName())
+
+
+    def _loadSet(self, inputSet, SetClass, getKeyFunc):
+        """ method overrided in order to check if the previous CTF estimation
+            is ready when doInitialCTF=True and streaming is activated
+        """
+        setFn = inputSet.getFileName()
+        self.debug("Loading input db: %s" % setFn)
+        updatedSet = SetClass(filename=setFn)
+        updatedSet.loadAllProperties()
+        streamClosed = updatedSet.isStreamClosed()
+        initCtfCheck = lambda idItem: True
+        if self.doTest.get():
+            ctfSet = SetOfCTF(filename=self.ctfRelations.get().getFileName())
+            ctfSet.loadAllProperties()
+            streamClosed = streamClosed and ctfSet.isStreamClosed()
+            if not streamClosed:
+                initCtfCheck = lambda idItem: idItem in ctfSet
+
+        newItemDict = OrderedDict()
+        for item in updatedSet:
+            micKey = item.getObjId()  # getKeyFunc(item)
+            if micKey not in self.micDict and initCtfCheck(micKey):
+                newItemDict[micKey] = item.clone()
+        updatedSet.close()
         self.debug("Closed db.")
-
-    #You would need this to use the CTF estimation from a previous method
-
-    # def _loadSet(self, inputSet, SetClass, getKeyFunc):
-    #     """ method overrided in order to check if the previous CTF estimation
-    #         is ready when doInitialCTF=True and streaming is activated
-    #     """
-    #     setFn = inputSet.getFileName()
-    #     self.debug("Loading input db: %s" % setFn)
-    #     updatedSet = SetClass(filename=setFn)
-    #     updatedSet.loadAllProperties()
-    #     streamClosed = updatedSet.isStreamClosed()
-    #     initCtfCheck = lambda idItem: True
-    #     if self.doInitialCTF.get():
-    #         ctfSet = SetOfCTF(filename=self.ctfRelations.get().getFileName())
-    #         ctfSet.loadAllProperties()
-    #         streamClosed = streamClosed and ctfSet.isStreamClosed()
-    #         if not streamClosed:
-    #             initCtfCheck = lambda idItem: idItem in ctfSet
-    #
-    #     newItemDict = OrderedDict()
-    #     for item in updatedSet:
-    #         micKey = item.getObjId()  # getKeyFunc(item)
-    #         if micKey not in self.micDict and initCtfCheck(micKey):
-    #             newItemDict[micKey] = item.clone()
-    #     updatedSet.close()
-    #     self.debug("Closed db.")
-    #     return newItemDict, streamClosed
+        return newItemDict, streamClosed
 
 
-    def _stepsCheck(self):
-        # Input micrograph set can be loaded or None when checked for new inputs
-        # If None, we load it
-        self._checkNewInput()
-        #self._checkNewOutput()
+    def _getFirstJoinStep(self):
+        for s in self._steps:
+            if s.funcName == self._getFirstJoinStepName():
+                return s
+        return None
 
 
     def _getFirstJoinStepName(self):
@@ -226,12 +228,13 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         return 'createOutputStep'
 
 
-    def _getFirstJoinStep(self):
-        for s in self._steps:
-            if s.funcName == self._getFirstJoinStepName():
-                return s
-        return None
     # ---------------------------STEPS checks ----------------------------------
+    def _stepsCheck(self):
+        # Input micrograph set can be loaded or None when checked for new inputs
+        # If None, we load it
+        self._checkNewInput()
+        self._checkNewOutput()
+
 
     def _checkNewInput(self):
         # Check if there are new micrographs to process from the input set
@@ -249,25 +252,15 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
 
         self.lastCheck = now
         # Open input micrographs.sqlite and close it as soon as possible
-        self._loadInputList()
-
-        newMics = [m for m in self.listOfMicrographs if m.getObjId() not in self.insertedDict]  # SOLUTION
-
-        newMicsBool = [len(newMics) > 0 ]#and (len(newMics) >= self.batchSize)]
+        micDict, self.streamClosed = self._loadInputList()
+        newMics = micDict.values()
         outputStep = self._getFirstJoinStep()
 
-        if newMicsBool:
-            fDeps = self._insertNewMicrographSteps(self.insertedDict, newMics)  # SOLUTION
-
+        if newMics:
+            fDeps = self._insertNewMicSteps(newMics)
             if outputStep is not None:
                 outputStep.addPrerequisites(*fDeps)
-
             self.updateSteps()
-
-    def _getNewMics(self):
-        """ Returns a list of unique micNames."""
-        micSet = self.getInputMicrographs()
-        return micSet.getUniqueValues(ID, where="%s>%s" % (ID, self.lastMicIdFound))
 
 
     def _checkNewOutput(self):
@@ -276,143 +269,331 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         # Load previously done items (from text file)
         doneList = self._readDoneList()
         # Check for newly done items
-        newDone = [m.clone() for m in self.listOfMicrographs if
-                   int(m.getObjId()) not in doneList and self._isMicDone(m)]
+        listOfMics = self.micDict.values()
+        nMics = len(listOfMics)
+        newDone = [m for m in listOfMics
+                   if m.getObjId() not in doneList and self._isMicDone(m)]
+
+        # Update the file with the newly done mics
+        # or exit from the function if no new done mics
+        self.debug('_checkNewOutput: ')
+        self.debug('   listOfMics: %s, doneList: %s, newDone: %s'
+                   % (nMics, len(doneList), len(newDone)))
 
         allDone = len(doneList) + len(newDone)
-        # We have finished when there is not more input movies
-        # (stream closed) and the number of processed movies is
-        # equal to the number of inputs
-        self.finished = self.streamClosed and allDone == len(self.listOfMicrographs)
+        # We have finished when there is not more input mics (stream closed)
+        # and the number of processed mics is equal to the number of inputs
+        self.finished = self.streamClosed and allDone == nMics
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
+        self.debug('   streamMode: %s newDone: %s' % (streamMode,
+                                                      not (newDone == [])))
 
         if newDone:
-            self._writeDoneList(newDone)
+            newDone_tagged = []
+            for mic in newDone:
+                id = mic.getObjId()
+                #defocusU, defocusV = self.predictions[id]
+                defocusU = self.predictions[id]
+                defocusV = self.predictions[id]
+                newMic = mic.clone()
+                #setXmippAttribute(newMic, getXmippAttribute('DEFOCUS_U'), defocusU)
+                #setXmippAttribute(newMic, getXmippAttribute('DEFOCUS_V'), defocusU)
+
+                #setXmippAttribute(newMic, prefixAttribute('DEFOCUS_U'), defocusU)
+                #setXmippAttribute(newMic, prefixAttribute('DEFOCUS_V'), defocusV)
+
+                setAttribute(newMic, 'DEFOCUS_U', defocusU)
+                setAttribute(newMic, 'DEFOCUS_V', defocusV)
+
+                newDone_tagged.append(newMic)
+
+            #newDoneUpdated = self._updateOutputMicSet(newDone, streamMode)
+            #print('Writing the mic finished')
+            #self._writeDoneList(newDoneUpdated)
+            newDoneUpdated = self._updateOutputMicSet(newDone_tagged, streamMode)
+            print('Writing the mic finished')
+            self._writeDoneList(newDoneUpdated)
+
+
+
         elif not self.finished:
             # If we are not finished and no new output have been produced
             # it does not make sense to proceed and updated the outputs
             # so we exit from the function here
+            if allDone == nMics:
+                self._streamingSleepOnWait()
+
             return
 
-        micSet = self._loadOutputSet(SetOfMicrographs, 'micrograph.sqlite')
-        if self.tilt:
-            micSet_discarded = self._loadOutputSet(SetOfMicrographs, 'micrograph' + 'DISCARDED' + '.sqlite')
+        self.debug('   finished: %s ' % self.finished)
+        self.debug('        self.streamClosed (%s) AND' % self.streamClosed)
+        self.debug('        allDone (%s) == len(self.listOfMics (%s)'
+                   % (allDone, nMics))
 
-        for mic in newDone:
-            id = mic.getObjId()
-            defocusU, defocusV = Float(self.defocus[id])
-            new_Mic = mic.clone()
+        #micSet = self._loadOutputSet(SetOfMicrographs, 'micrograph.sqlite')
+        #if self.tilt:
+            #micSet_discarded = self._loadOutputSet(SetOfMicrographs, 'micrograph' + 'DISCARDED' + '.sqlite')
+
+        #for mic in newDone:
+        #   id = mic.getObjId()
+        #    defocusU, defocusV = Float(self.defocus[id])
+        #    new_Mic = mic.clone()
             #setattr(new_Mic, self.getDefocusULabel(), defocusU)
             #setattr(new_Mic, self.getDefocusVLabel(), defocusV)
             # Double threshold
-            if defocusU > self.defocusU_threshold.get() and defocusV < self.defocusV_threshold.get():  # AND or OR
-                micSet.append(new_Mic)
-            else:
-                if not self.tilt:
-                    micSet_discarded = self._loadOutputSet(SetOfMicrographs, 'micrograph' + 'DISCARDED' + '.sqlite')
-                    self.tilt = True
+        #    if defocusU > self.defocusU_threshold.get() and defocusV < self.defocusV_threshold.get():  # AND or OR
+        #        micSet.append(new_Mic)
+        #    else:
+        #        if not self.tilt:
+        #            micSet_discarded = self._loadOutputSet(SetOfMicrographs, 'micrograph' + 'DISCARDED' + '.sqlite')
+        #            self.tilt = True
 
-                micSet_discarded.append(new_Mic)
+        #        micSet_discarded.append(new_Mic)
 
-        self._updateOutputSet('outputMicrographs', micSet, streamMode)
+        #self._updateOutputSet('outputMicrographs', micSet, streamMode)
 
-        if self.tilt:
-            self._updateOutputSet('discardedMicrographs', micSet_discarded, streamMode)
+        #if self.tilt:
+        #    self._updateOutputSet('discardedMicrographs', micSet_discarded, streamMode)
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
+            print('WE FINISHED')
+            if self.doTest.get():
+                # print(type(np.concatenate(list(self.predictions.values()))))
+                print(list(self.predictions.values()))
+                print(list(self.real.values()))
+                # print(np.concatenate(list(self.predictions.values())))
+
+                mae = mean_absolute_error(np.array(list(self.predictions.values())),
+                                          np.array(list(self.real.values())))
+                print(mae)
+
+            self._updateStreamState(streamMode)
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(cons.STATUS_NEW)
 
+
+
+    def _updateOutputMicSet(self, micList, streamMode):
+        doneFailed = []
+        micDoneList = [mic for mic in micList]
+        # Do no proceed if there is not micrograph ready
+        if not micDoneList:
+            return []
+
+        outputName = 'outputMicrographs'
+        outputMics = getattr(self, outputName, None)
+
+        # If there is not outputCTF yet, it means that is the first
+        # time we are updating output CTFs, so we need to first create
+        # the output set
+        firstTime = outputMics is None
+
+        if firstTime:
+            outputMics = self._createSetOfMicrographs()
+            inputMicrographs = self.getInputMicrographs()
+            outputMics.copyInfo(inputMicrographs)
+
+        else:
+            outputMics.enableAppend()
+
+        for micFn, mic in self._iterMicrographs(micList):
+            try:
+                #ctf = self._createCtfModel(mic)
+                # OJOOOO Here we should add the values of the defocus to the mic
+                outputMics.append(mic)
+            except Exception as ex:
+                print(pwutils.yellowStr("Missing CTF?: Couldn't update CTF set with mic: %s" % micFn))
+                doneFailed.append(mic)
+
+        self.debug(" _updateOutputMicSet Stream Mode: %s " % streamMode)
+        self._updateOutputSet(outputName, outputMics, streamMode)
+        if doneFailed:
+            self._writeFailedList(doneFailed)
+
+        if firstTime:  # define relation just once
+            # Using a pointer to define the relations is more robust to
+            # scheduling and id changes between the protocol run.db and
+            # the main project database.get
+            pass
+            #self._defineCtfRelation(self.getInputMicrographsPointer(),
+             #                       outputMics)
+
+        return micDoneList
+
+    # DEPENDE DEL SET QUE QUIERAS SACAR
+    def _updateStreamState(self, streamMode):
+        outputName = 'outputMicrographs'
+        outputMics = getattr(self, outputName, None)
+
+        # If there are not outputCTFs yet, it means that is the first
+        # time we are updating output CTF, so we need to first create
+        # the output set
+        firstTime = outputMics is None
+
+        if firstTime:
+            outputMics = self._createSetOfMicrographs()
+        else:
+            outputMics.enableAppend()
+
+        self.debug(" _updateStreamState Stream Mode: %s " % streamMode)
+        self._updateOutputSet(outputName, outputMics, streamMode)
+
     # --------------------------- STEPS functions ------------------------------
-    def _insertNewMicrographSteps(self, insertedDict, newMics):
+    def _insertNewMicSteps(self, inputMics):
         """ Insert steps to process new mics (from streaming)
         Params:
             inputMics: input mics set to be inserted
-            insertedDict: contains already processed micrographs
         """
-        deps = []
-        #newSubset = [m for m in newMics if m.getObjId() not in insertedDict]
+        return self._insertNewMics(inputMics,
+                                   lambda mic: mic.getMicName(),
+                                   self._insertMicrographStep,
+                                   self._insertMicrographListStep)
 
-        def _insertSubset(micSubset):
-            stepId = self._insertMicrographListStep(micSubset, self.initialIds)
-            deps.append(stepId)
-            for mic in micSubset:
-                insertedDict[mic.getObjId()] = stepId
 
-        # Now handle the steps depending on the streaming batch size
-        if self.batchSize == 1:  # This is one by one, as before the batch size
-            for micrograph in newMics:
-                #if micrograph.getObjId() not in insertedDict:
-                tiltStepId = self._insertMicrographStep(micrograph)
-                deps.append(tiltStepId)
-                insertedDict[micrograph.getObjId()] = tiltStepId
-
-        elif self.batchSize == 0:  # Greedy, take all available ones
-            _insertSubset(newMics)
-
-        else:  # batchSize > 0, insert only batches of this size
-            n = len(newMics)
-            d = int(n / self.batchSize)  # number of batches to insert
-            nd = d * self.batchSize
-            for i in range(d):
-                _insertSubset(newMics[i * self.batchSize:(i + 1) * self.batchSize])
-
-            if n > nd and self.streamClosed:  # insert last ones
-                _insertSubset(newMics[nd:])
-
-        self.updateLastMicIdFound(newMics)
-        print(insertedDict)
-
-        return deps
-
-    def _insertMicrographStep(self, micrograph):
+    def _insertMicrographStep(self, mic, prerequisites):
         """ Insert the processMicStep for a given movie. """
-        # Note1: At this point is safe to pass the micrograph, since this
-        # is not executed in parallel, here we get the params
-        # to pass to the actual step that is gone to be executed later on
-        # Note2: We are serializing the Movie as a dict that can be passed
-        # as parameter for a functionStep
-        micDict = micrograph.getObjDict(includeBasic=True)
-        micStepId = self._insertFunctionStep('processMicrographStep', micDict, prerequisites=[])
+        micStepId = self._insertFunctionStep('processMicrographStep',
+                                             mic.getMicName(),
+                                             prerequisites=prerequisites)
         return micStepId
+
 
     def _insertMicrographListStep(self, micSubset, prerequisites):
         """ Basic method to insert an estimation step for a given micrograph. """
-        micDictList = [mic.getObjDict(includeBasic=True) for mic in micSubset]
+        micDictList = [mic.getMicName() for mic in micSubset]
         micStepId = self._insertFunctionStep('processMicrographListStep',
                                              micDictList,
                                              prerequisites=prerequisites)
         return micStepId
 
+
+    def _insertNewMics(self, inputMics, getMicKeyFunc,
+                       insertStepFunc, insertStepListFunc, *args):
+        """ Insert steps of new micrographs taking into account the batch size.
+        It is assumed that a self.micDict exists mapping between micKey and mic.
+        It is also assumed that self.streamClosed is defined...with True value
+        if the input stream is closed.
+        This function can be used from several base protocols that support
+        streaming and batch:
+
+        - ProtCTFMicrographs
+        - ProtParticlePickingAuto
+        - ProtExtractParticles
+        - ProtDeepDefocus
+
+        Params:
+            inputMics: the input micrographs to be inserted into steps
+            getMicKeyFunc: function to get the key of a micrograph
+                (usually mic.getMicName()
+            insertStepFunc: function used to insert a single step
+            insertStepListFunc: function used to insert many steps.
+            *args: argument list to be passed to step functions
+        Returns:
+            The list of step Ids that can be used as dependencies.
+        """
+        deps = []
+        insertedMics = inputMics
+
+        # Despite this function only should insert new micrographs
+        # let's double check that they are not inserted already
+        micList = [mic for mic in inputMics
+                   if getMicKeyFunc(mic) not in self.micDict]
+
+        def _insertSubset(micSubset):
+            stepId = insertStepListFunc(micSubset, self.initialIds, *args)
+            deps.append(stepId)
+
+        # Now handle the steps depending on the streaming batch size
+        batchSize = self._getStreamingBatchSize()
+
+        if batchSize == 1:  # This is one by one, as before the batch size
+            for mic in micList:
+                stepId = insertStepFunc(mic, self.initialIds, *args)
+                deps.append(stepId)
+        elif batchSize == 0:  # Greedy, take all available ones
+            _insertSubset(micList)
+        else:  # batchSize > 0, insert only batches of this size
+            n = len(inputMics)
+            d = int(n / batchSize)  # number of batches to insert
+            nd = d * batchSize
+            for i in range(d):
+                _insertSubset(micList[i * batchSize:(i + 1) * batchSize])
+
+            if n > nd and self.streamClosed:  # insert last ones
+                _insertSubset(micList[nd:])
+            else:
+                insertedMics = micList[:nd]
+
+        for mic in insertedMics:
+            self.micDict[getMicKeyFunc(mic)] = mic
+
+        return deps
+
+    def processMicrographStep(self, micName):
+        micrograph = self.micDict[micName]
+        # micrograph.setAcquisition(Acquisition())
+        # micrograph.setAttributesFromDict(micDict, setBasic=True, ignoreMissing=True)
+        micDoneFn = self._getMicrographDone(micrograph)  # EXTRAPath/Done/micrograph_ID.TXT
+        micFolderTmp = self._getTmpMicFolder(micrograph)  # tmp/micID
+        micFn = micrograph.getFileName()
+        # micName = basename(micFn)
+
+        if self.isContinued() and os.path.exists(micDoneFn):
+            self.info("Skipping micrograph: %s, seems to be done" % micFn)
+            return
+
+        # Clean old finished files
+        pwutils.cleanPath(micDoneFn)
+
+        if self._filterMicrograph(micrograph):
+            pwutils.makePath(micFolderTmp)
+            self.info("Processing micrograph: %s" % micrograph.getFileName())
+            self._processMicrograph(micrograph)
+
+            # Quitar esto, es solo prueba para ver que se guarda el attr ---
+            if hasattr(micrograph, 'DEFOCUS_U'):
+                print('TENGO EL ATRIBUTO DEFOCUS_U')
+                print(getattr(micrograph, 'DEFOCUS_U'))
+
+            if hasattr(micrograph, 'DEFOCUS_V'):
+                print('TENGO EL ATRIBUTO DEFOCUS_V')
+                print(getattr(micrograph, 'DEFOCUS_V'))
+
+            # Quitar esto, es solo prueba para ver que se guarda el attr ---
+
+            # if self.saveIntermediateResults.get():
+            #    micOutputFn = self._getResultsMicFolder(micrograph)  # ExtraPath/micID
+            #    pwutils.makePath(micOutputFn)
+            #    for file in getFiles(micFolderTmp):
+            #       moveFile(file, micOutputFn)
+            # else:
+            #    moveFile(self.getPSDs(micFolderTmp, micID), self._getExtraPath())
+
+        # Mark this movie as finished
+        open(micDoneFn, 'w').close()
+
     def processMicrographListStep(self, micDictList):
         micList = []
-        for micDict in micDictList:
-            micrograph = Micrograph()
-            micrograph.setAcquisition(Acquisition())
-            micrograph.setAttributesFromDict(micDict, setBasic=True, ignoreMissing=True)
-            micFolderTmp = self._getTmpMicFolder(micrograph)  # tmp/micID
-            micFn = micrograph.getFileName()
-            micID = micrograph.getObjId()
-            micName = basename(micFn)
-            micDoneFn = self._getMicrographDone(micrograph)  # EXTRAPath/Done/micrograph_ID.TXT
 
-            if self.isContinued() and os.path.exists(micDoneFn):
+        for micName in micDictList:
+            micrograph = self.micDict[micName]
+            #micrograph.setAcquisition(Acquisition())
+            micDoneFn = self._getMicrographDone(micrograph) # EXTRAPath/Done/micrograph_ID.TXT
+            micFolderTmp = self._getTmpMicFolder(micrograph)  # tmp/micID
+
+            if self.isContinued() and self._isMicDone(micrograph):
                 self.info("Skipping micrograph: %s, seems to be done"
                           % micrograph.getFileName())
             else:
                 # Clean old finished files
                 pwutils.cleanPath(micDoneFn)
+
                 if self._filterMicrograph(micrograph):
                     pwutils.makePath(micFolderTmp)
-                    pwutils.createLink(micFn, join(micFolderTmp, micName))
-                    newMicName = self._correctFormat(micName, micFn, micFolderTmp)
-                    # Just store the original name in case it is needed in _processMovie
-                    micrograph._originalFileName = String(objDoStore=False)
-                    micrograph._originalFileName.set(micrograph.getFileName())
-                    # Now set the new filename (either linked or converted)
-                    micrograph.setFileName(os.path.join(micFolderTmp, newMicName))
+                    print('HEllo world')
                     micList.append(micrograph)
+
                     # if self.saveIntermediateResults.get():
                     #    micOutputFn = self._getResultsMicFolder(micrograph)  # ExtraPath/micID
                     #    pwutils.makePath(micOutputFn)
@@ -420,64 +601,44 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
                     #       moveFile(file, micOutputFn)
                     # else:
                     #    moveFile(self.getPSDs(micFolderTmp, micID), self._getExtraPath())
-                # Mark this mic as finished
 
         self.info("Estimating CTF defocus for micrographs: %s"
                   % [mic.getObjId() for mic in micList])
+
         self._processMicrographList(micList)
 
         for mic in micList:
             # Mark this mic as finished
             open(self._getMicrographDone(mic), 'w').close()
 
-    def processMicrographStep(self, micDict):
-        micrograph = Micrograph()
-        micrograph.setAcquisition(Acquisition())
-        micrograph.setAttributesFromDict(micDict, setBasic=True, ignoreMissing=True)
-        micFolderTmp = self._getTmpMicFolder(micrograph)  # tmp/micID
-        micFn = micrograph.getFileName()
-        micName = basename(micFn)
-        micDoneFn = self._getMicrographDone(micrograph)  # EXTRAPath/Done/micrograph_ID.TXT
-
-        if self.isContinued() and os.path.exists(micDoneFn):
-            self.info("Skipping micrograph: %s, seems to be done" % micFn)
-            return
-
-        pwutils.cleanPath(micDoneFn)
-
-        if self._filterMicrograph(micrograph):
-            pwutils.makePath(micFolderTmp)
-            pwutils.createLink(micFn, join(micFolderTmp, micName))
-            newMicName = self._correctFormat(micName, micFn, micFolderTmp)
-            # Just store the original name in case it is needed in _processMovie
-            micrograph._originalFileName = String(objDoStore=False)
-            micrograph._originalFileName.set(micrograph.getFileName())
-            # Now set the new filename (either linked or converted)
-            micrograph.setFileName(os.path.join(micFolderTmp, newMicName))
-            self.info("Processing micrograph: %s" % micrograph.getFileName())
-            self._processMicrograph(micrograph)
-            #if self.saveIntermediateResults.get():
-            #    micOutputFn = self._getResultsMicFolder(micrograph)  # ExtraPath/micID
-            #    pwutils.makePath(micOutputFn)
-            #    for file in getFiles(micFolderTmp):
-            #       moveFile(file, micOutputFn)
-            #else:
-            #    moveFile(self.getPSDs(micFolderTmp, micID), self._getExtraPath())
-        # Mark this movie as finished
-        open(micDoneFn, 'w').close()
 
     def _processMicrograph(self, micrograph):
+        micName = micrograph.getMicName()
+        micId =micrograph.getObjId()
         input_NN = self.inputPreparationStep(micrograph)
         print(np.shape(input_NN))
         print(type(input_NN))
         model = self.model
         print('------------New prediction')
         imagPrediction = model.predict(input_NN)
-        #print(imagPrediction)
-        self.predictions[micrograph.getObjId()] = float(imagPrediction[[0]])
+        defocus_pred = np.abs(float(imagPrediction[[0]]))
+        #print(defocus_pred)
+        self.predictions[micrograph.getObjId()] = defocus_pred
         print('The prediction for mic %s is %f' %(micrograph.getObjId(), self.predictions[micrograph.getObjId()]))
 
-        #mae = mean_absolute_error(defocusVector, imagPrediction)
+        if self.doTest.get():
+            prevValues = (self.ctfDict[micName] if micName in self.ctfDict
+                          else self.getSinglePreviousParameters(micId))
+
+            defocusU, defocusV, defocusAngle, phaseShift0 = prevValues
+            defocus_real = (defocusU + defocusV) * 0.5
+            print(defocusU)
+            print(defocusV)
+            print(defocus_real)
+            self.real[micrograph.getObjId()] = defocus_real
+            self.errors[micId] = np.abs(defocus_real-defocus_pred)
+            print(self.errors[micId])
+
 
         fnSummary = self._getPath("summary.txt")
         fnMonitorSummary = self._getPath("summaryForMonitor.txt")
@@ -495,6 +656,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
 
         #fnMonitorSummary.write("micrograph_%06d: mean=%f std=%f [min=%f,max=%f] \n" %
          #                      (micrographId, stats['mean'], stats['std'], stats['min'], stats['max']))
+
         fnMonitorSummary.close()
 
 
@@ -535,7 +697,6 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         fnMonitorSummary.close()
 
 
-
     def inputPreparationStep(self, micrograph):
         samplingRate1 = SAMPLING_RATE1
         samplingRate2 = SAMPLING_RATE2
@@ -570,6 +731,17 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         args3 = "-i %s -o %s --step %f --method fourier" \
                 % (filename_micNormalized, filename_mic3, factor3)
 
+        #TAKE THIS IN MIND
+        #if downFactor > 1:
+        #    self.runJob("xmipp_transform_downsample",
+        #                "-i %s -o %s --step %f --method fourier"
+        #                % (micFn, finalName, downFactor))
+        #else:
+        #    self.runJob("xmipp_image_resize",
+        #                "-i %s -o %s --factor %f --interp linear"
+        #                % (micFn, finalName, 1.0 / downFactor))
+
+
         self.runJob("xmipp_transform_downsample", args1)
         self.runJob("xmipp_transform_downsample", args2)
         self.runJob("xmipp_transform_downsample", args3)
@@ -596,9 +768,9 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         psd3.write(filename_psd3)
 
         # Filter the PSD OJO:no parece haber mucha diff probar con ambos
-        filename_filt_psd1 = os.path.join(micFolder, "tmp_filt_psd1_" + str(micID) + '.mrc')
-        filename_filt_psd2 = os.path.join(micFolder, "tmp_filt_psd2_filt_" + str(micID) + '.mrc')
-        filename_filt_psd3 = os.path.join(micFolder, "tmp_filt_psd3_filt_" + str(micID) + '.mrc')
+        filename_filt_psd1 = os.path.join(micFolder, "tmp_psd1_filt" + str(micID) + '.mrc')
+        filename_filt_psd2 = os.path.join(micFolder, "tmp_psd2_filt" + str(micID) + '.mrc')
+        filename_filt_psd3 = os.path.join(micFolder, "tmp_psd3_filt_" + str(micID) + '.mrc')
 
         args1 = '-i %s -o %s --fourier low_pass 0.1' % (filename_psd1, filename_filt_psd1)
         args2 = '-i %s -o %s --fourier low_pass 0.1' % (filename_psd2, filename_filt_psd2)
@@ -616,7 +788,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         imagMatrix[0, :, :, 1] = img2
         imagMatrix[0, :, :, 2] = img3
 
-        if self.test.get():
+        if self.doTest.get():
             # md = xmipp.MetaData(fnRoot.replace("_xmipp_ctf_enhanced_psd.xmp", "_xmipp_ctf.xmd"))
             # objId = md.firstObject()
             # dU = md.getValue(xmipp.MDL_CTF_DEFOCUSU, objId)
@@ -720,7 +892,7 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
 
             i = i + 1
 
-            if self.test.get():
+            if self.doTest.get():
                 # md = xmipp.MetaData(fnRoot.replace("_xmipp_ctf_enhanced_psd.xmp", "_xmipp_ctf.xmd"))
                 # objId = md.firstObject()
                 # dU = md.getValue(xmipp.MDL_CTF_DEFOCUSU, objId)
@@ -809,18 +981,42 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
         return summary
 
     # --------------------------- UTILS functions ------------------------------
+    def getSinglePreviousParameters(self, micId):
+        if self.ctfRelations.hasValue():
+            ctf = self.ctfRelations.get()[micId]
+            return self.getPreviousValues(ctf)
+
     def getPreviousValues(self, ctf):
         phaseShift0 = 0.0
-        if self.findPhaseShift:
-            if ctf.hasPhaseShift():
-                phaseShift0 = ctf.getPhaseShift()
-            else:
-                phaseShift0 = 1.57079  # pi/2
-            ctfValues = (ctf.getDefocusU(), ctf.getDefocusV(), ctf.getDefocusAngle(), phaseShift0)
+        if ctf.hasPhaseShift():
+            phaseShift0 = ctf.getPhaseShift()
         else:
-            ctfValues = (ctf.getDefocusU(), ctf.getDefocusV(), ctf.getDefocusAngle(), phaseShift0)
+            phaseShift0 = 1.57079  # pi/2
 
+        ctfValues = (ctf.getDefocusU(), ctf.getDefocusV(), ctf.getDefocusAngle(), phaseShift0)
         return ctfValues
+
+    def getPreviousParameters(self):
+        if self.ctfRelations.hasValue():
+            self.ctfDict = {}
+            for ctf in self.ctfRelations.get():
+                ctfName = ctf.getMicrograph().getMicName()
+                self.ctfDict[ctfName] = self.getPreviousValues(ctf)
+
+
+    def _iterMicrographs(self, inputMics=None):
+        """ Iterate over micrographs and yield
+        micrograph name. """
+        if inputMics is None:
+            inputMics = self.getInputMicrographs()
+
+        for mic in inputMics:
+            micFn = mic.getFileName()
+            yield micFn, mic
+
+
+
+
 
     def updateLastMicIdFound(self, mics):
         """ Updates the last input check attribute with the maximum id in the micSet"""
@@ -903,7 +1099,12 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
 
     def _writeDoneList(self, micList):
         """ Write to a text file the items that have been done. """
-        with open(self._getAllDone(), 'a') as f:
+        doneFile = self._getAllDone()
+
+        if not exists(doneFile):
+            pwutils.makeFilePath(doneFile)
+
+        with open(doneFile, 'a') as f:
             for mic in micList:
                 f.write('%d\n' % mic.getObjId())
 
@@ -937,3 +1138,8 @@ class XmippProtDeepDefocusMicrograph(ProtMicrographs):
 # --------------------- WORKERS --------------------------------------
 def normalizeData(data):
     return (data - np.min(data)) / (np.max(data) - np.min(data))
+
+def setAttribute(obj, label, value):
+    if value is None:
+        return
+    setattr(obj, label, getScipionObj(value))
