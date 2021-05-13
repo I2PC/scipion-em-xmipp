@@ -28,15 +28,16 @@
 
 from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam
 import pyworkflow.object as pwobj
-from pwem import ALIGN_3D
+from pwem import ALIGN_3D, ALIGN_2D
 from pwem.emlib import lib
 import pwem.emlib.metadata as md
 from pwem.protocols import EMProtocol
-from xmipp3.convert import alignmentToRow, ctfModelToRow
+from xmipp3.convert import alignmentToRow, ctfModelToRow, rowToAlignment
 
 
 class XmippProtShiftParticles(EMProtocol):
-    """ This protocol shifts particles to center them into a point selected in a volume."""
+    """ This protocol shifts particles to center them into a point selected in a volume. To do so, it generates new
+    shifted images and modify the transformation matrix according to the shift performed."""
 
     _label = 'shift particles'
 
@@ -50,10 +51,8 @@ class XmippProtShiftParticles(EMProtocol):
                            'will be the new center of the particles.')
         form.addParam('x', IntParam, label="x", help='Use the wizard to select by clicking in the volume the new '
                                                      'center for the shifted particles')
-        form.addParam('y', IntParam, label="y", help='Use the wizard to select by clicking in the volume the new '
-                                                     'center for the shifted particles')
-        form.addParam('z', IntParam, label="z", help='Use the wizard to select by clicking in the volume the new '
-                                                     'center for the shifted particles')
+        form.addParam('y', IntParam, label="y")
+        form.addParam('z', IntParam, label="z")
         form.addParam('boxSizeBool', BooleanParam, label='Use original box size for the shifted particles?',
                       default='True', help='Use input particles box size for the shifted particles.')
         form.addParam('boxSize', IntParam, label='Final box size', condition='not boxSizeBool',
@@ -91,7 +90,7 @@ class XmippProtShiftParticles(EMProtocol):
         program = "xmipp_shift_particles"
         args = '-i %s --center %f %f %f -o %s --boxSize %d' % \
                (self._getExtraPath("input_particles.xmd"), self.x.get(), self.y.get(), self.z.get(),
-                self._getExtraPath("output_particles"), boxSize)
+                self._getExtraPath("output_particles.mrcs"), boxSize)
         self.runJob(program, args)
 
     def createOutputStep(self):
@@ -133,9 +132,4 @@ class XmippProtShiftParticles(EMProtocol):
         self.ix = self.ix + 1
         newFn = newFn.split('@')[1]
         item.setLocation(self.ix, newFn)
-        nwshiftx = row.getValue(md.MDL_SHIFT_X)
-        nwshifty = row.getValue(md.MDL_SHIFT_Y)
-        A = item.getTransform().getMatrix()
-        A[0, 3] = nwshiftx
-        A[1, 3] = nwshifty
-        item.getTransform().setMatrix(A)
+        item.setTransform(rowToAlignment(row, ALIGN_2D))
