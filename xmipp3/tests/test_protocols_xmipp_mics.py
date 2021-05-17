@@ -877,14 +877,21 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
         cls.protPP = cls.runFakedPicking(cls.protDown.outputMicrographs,
                                          cls.allCrdsDir)
 
-    def _updateProtocol(self, prot):
-        prot2 = getProtocolFromDb(prot.getProject().path,
-                                  prot.getDbPath(),
-                                  prot.getObjId())
+    def _updateProtocol(self, protocol):
+        jobId = protocol.getJobId()
+        label = protocol.getObjLabel()
+        comment = protocol.getObjComment()
+
+        prot2 = getProtocolFromDb(protocol.getProject().path,
+                                  protocol.getDbPath(),
+                                  protocol.getObjId())
+        protocol.copy(prot2, copyId=False, excludeInputs=True)
+        protocol.setJobId(jobId)
+        protocol.setObjLabel(label)
+        protocol.setObjComment(comment)
         # Close DB connections
         prot2.getProject().closeMapper()
         prot2.closeMappers()
-        return prot2
 
     def testStreamingAndNonStreaming(self):
         protExtract = self.newProtocol(XmippProtExtractParticles,
@@ -919,8 +926,10 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
         self._waitOutput(protStream, "outputParticles")
 
         protElimination2 = self.newProtocol(XmippProtEliminateEmptyParticles)
-        protElimination2.inputParticles.set(protStream.outputParticles)
+        protElimination2.inputParticles.set(protStream)
+        protElimination2.inputParticles.setExtended("outputParticles")
         self.launchProtocol(protElimination2)
+
 
         partSet = SetOfParticles(
             filename=protStream._getPath("particles.sqlite"))
@@ -928,7 +937,7 @@ class TestXmippEliminatingEmptyParticles(TestXmippBase):
             filename=protElimination2._getPath('outputParticles.sqlite'))
         elimSet = SetOfParticles(
             filename=protElimination2._getPath('eliminatedParticles.sqlite'))
-        self.assertTrue(outSet.getSize() + elimSet.getSize() ==
+        self.assertEquals(outSet.getSize() + elimSet.getSize(),
                         partSet.getSize(),
                         "Output sets size does not much the input set size.")
 
