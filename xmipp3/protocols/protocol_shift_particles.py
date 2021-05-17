@@ -27,12 +27,13 @@
 # **************************************************************************
 
 from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam
+from pyworkflow.protocol.constants import LEVEL_ADVANCED
 import pyworkflow.object as pwobj
 from pwem import ALIGN_3D, ALIGN_2D
 from pwem.emlib import lib
 import pwem.emlib.metadata as md
 from pwem.protocols import EMProtocol
-from xmipp3.convert import alignmentToRow, ctfModelToRow, rowToAlignment
+from xmipp3.convert import alignmentToRow, ctfModelToRow, xmippToLocation
 
 
 class XmippProtShiftParticles(EMProtocol):
@@ -57,6 +58,8 @@ class XmippProtShiftParticles(EMProtocol):
                       default='True', help='Use input particles box size for the shifted particles.')
         form.addParam('boxSize', IntParam, label='Final box size', condition='not boxSizeBool',
                       help='Box size for the shifted particles.')
+        form.addParam('inv', BooleanParam, label='Inverse',  expertLevel=LEVEL_ADVANCED,
+                      default='True', help='Use inverse transformation matrix')
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -83,15 +86,18 @@ class XmippProtShiftParticles(EMProtocol):
 
     def shiftStep(self):
         """call xmipp program to shift the particles"""
-        if self.boxSizeBool.get():
-            boxSize = self.inputParticles.get().getFirstItem().getXDim()
-        else:
-            boxSize = self.boxSize.get()
-        program = "xmipp_shift_particles"
-        args = '-i %s --center %f %f %f -o %s --boxSize %d' % \
-               (self._getExtraPath("input_particles.xmd"), self.x.get(), self.y.get(), self.z.get(),
-                self._getExtraPath("output_particles.mrcs"), boxSize)
+        program = "xmipp_transform_geometry"
+        args = '-i %s -o %s --shift_to %f %f %f --apply_transform --dont_wrap ' % \
+               (self._getExtraPath("input_particles.xmd"), self._getExtraPath("output_particles.xmd"),
+                self.x.get(), self.y.get(), self.z.get())
+        if self.inv.get():
+            args += ' --inverse'
         self.runJob(program, args)
+        if not self.boxSizeBool.get():
+            # outboxsize = (self.inputParticles.get().getFirstItem().getXDim() - self.boxSize.get())/2
+            self.runJob('xmipp_transform_window', '-i %s -o %s --size %d %d %d' %
+                        (self._getExtraPath("output_particles.xmd"), self._getExtraPath("output_particles.xmd"),
+                         self.boxSize.get(), self.boxSize.get(), 1))
 
     def createOutputStep(self):
         """create output with the new particles"""
@@ -100,7 +106,7 @@ class XmippProtShiftParticles(EMProtocol):
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputParticles)
         outputSet.copyItems(inputParticles, updateItemCallback=self._updateItem,
-                            itemDataIterator=md.iterRows(self._getExtraPath("input_particles.xmd")))
+                            itemDataIterator=md.iterRows(self._getExtraPath("output_particles.xmd")))
         self._defineOutputs(outputParticles=outputSet)
         self._defineOutputs(shiftX=pwobj.Float(self.x.get()),
                             shiftY=pwobj.Float(self.y.get()),
@@ -129,7 +135,5 @@ class XmippProtShiftParticles(EMProtocol):
     # --------------------------- UTLIS functions --------------------------------------------
     def _updateItem(self, item, row):
         newFn = row.getValue(md.MDL_IMAGE)
-        self.ix = self.ix + 1
-        newFn = newFn.split('@')[1]
-        item.setLocation(self.ix, newFn)
-        item.setTransform(rowToAlignment(row, ALIGN_2D))
+        newLoc = xmippToLocation(newFn)
+        item.setLocation(newLoc)
