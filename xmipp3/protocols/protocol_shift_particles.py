@@ -30,10 +30,9 @@ from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, Enu
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 import pyworkflow.object as pwobj
 from pwem import ALIGN_3D, ALIGN_2D
-from pwem.emlib import lib
 import pwem.emlib.metadata as md
 from pwem.protocols import EMProtocol
-from xmipp3.convert import alignmentToRow, ctfModelToRow, xmippToLocation
+from xmipp3.convert import xmippToLocation, writeSetOfParticles
 
 
 class XmippProtShiftParticles(EMProtocol):
@@ -73,19 +72,8 @@ class XmippProtShiftParticles(EMProtocol):
     # --------------------------- STEPS functions --------------------------------------------
     def convertStep(self):
         """convert input particles into .xmd file """
-        mdParticles = lib.MetaData()
-        for part in self.inputParticles.get():
-            id = part.getObjId()
-            ix = part.getIndex()
-            fn = "%s@%s" % (ix, part.getFileName())
-            nRow = md.Row()
-            nRow.setValue(lib.MDL_ITEM_ID, int(id))
-            nRow.setValue(lib.MDL_IMAGE, fn)
-            alignmentToRow(part.getTransform(), nRow, ALIGN_3D)
-            if part.hasCTF():
-                ctfModelToRow(part.getCTF(), nRow)
-            nRow.addToMd(mdParticles)
-        mdParticles.write(self._getExtraPath("input_particles.xmd"))
+        writeSetOfParticles(self.inputParticles.get(), self._getExtraPath("input_particles.xmd"),
+                            alignType=ALIGN_3D)
 
     def shiftStep(self):
         """call xmipp program to shift the particles"""
