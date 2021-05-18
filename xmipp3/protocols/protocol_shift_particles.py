@@ -26,7 +26,7 @@
 # *
 # **************************************************************************
 
-from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam
+from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, EnumParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 import pyworkflow.object as pwobj
 from pwem import ALIGN_3D, ALIGN_2D
@@ -58,8 +58,11 @@ class XmippProtShiftParticles(EMProtocol):
                       default='True', help='Use input particles box size for the shifted particles.')
         form.addParam('boxSize', IntParam, label='Final box size', condition='not boxSizeBool',
                       help='Box size for the shifted particles.')
-        form.addParam('inv', BooleanParam, label='Inverse',  expertLevel=LEVEL_ADVANCED,
-                      default='True', help='Use inverse transformation matrix')
+        form.addParam('inv', BooleanParam, label='Inverse', expertLevel=LEVEL_ADVANCED, default='True',
+                      help='Use inverse transformation matrix')
+        form.addParam('interp', EnumParam, default=0, choices=['Linear', 'Spline'], expertLevel=LEVEL_ADVANCED,
+                      display=EnumParam.DISPLAY_HLIST , label='Interpolation',
+                      help='Linear: Use bilinear/trilinear interpolation\nSpline: Use spline interpolation')
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -87,17 +90,21 @@ class XmippProtShiftParticles(EMProtocol):
     def shiftStep(self):
         """call xmipp program to shift the particles"""
         program = "xmipp_transform_geometry"
-        args = '-i %s -o %s --shift_to %f %f %f --apply_transform --dont_wrap ' % \
-               (self._getExtraPath("input_particles.xmd"), self._getExtraPath("output_particles.xmd"),
-                self.x.get(), self.y.get(), self.z.get())
+        centermd = self._getExtraPath("center_particles.xmd")
+        if not self.interp.get():
+            interp = 'linear'
+        else:
+            interp = 'spline'
+        args = '-i %s -o %s --shift_to %f %f %f --apply_transform --dont_wrap --interp %s' % \
+               (self._getExtraPath("input_particles.xmd"), centermd, self.x.get(), self.y.get(), self.z.get(), interp)
         if self.inv.get():
             args += ' --inverse'
         self.runJob(program, args)
+
         if not self.boxSizeBool.get():
-            # outboxsize = (self.inputParticles.get().getFirstItem().getXDim() - self.boxSize.get())/2
-            self.runJob('xmipp_transform_window', '-i %s -o %s --size %d %d %d' %
-                        (self._getExtraPath("output_particles.xmd"), self._getExtraPath("output_particles.xmd"),
-                         self.boxSize.get(), self.boxSize.get(), 1))
+            box = self.boxSize.get()
+            self.runJob('xmipp_transform_window', '-i %s -o %s --size %d %d %d --save_metadata_stack' %
+                        (centermd, self._getExtraPath("crop_particles.stk"), box, box, 1))
 
     def createOutputStep(self):
         """create output with the new particles"""
@@ -105,8 +112,12 @@ class XmippProtShiftParticles(EMProtocol):
         inputParticles = self.inputParticles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputParticles)
+        if self.boxSizeBool.get():
+            outputmd = self._getExtraPath("center_particles.xmd")
+        else:
+            outputmd = self._getExtraPath("crop_particles.xmd")
         outputSet.copyItems(inputParticles, updateItemCallback=self._updateItem,
-                            itemDataIterator=md.iterRows(self._getExtraPath("output_particles.xmd")))
+                            itemDataIterator=md.iterRows(outputmd))
         self._defineOutputs(outputParticles=outputSet)
         self._defineOutputs(shiftX=pwobj.Float(self.x.get()),
                             shiftY=pwobj.Float(self.y.get()),
@@ -119,12 +130,18 @@ class XmippProtShiftParticles(EMProtocol):
         if not hasattr(self, 'outputParticles'):
             summary.append("Output particles not ready yet.")
         else:
-            summary.append("%d particles shifted to %d %d %d." % (self.inputParticles.get().getSize(),
-                                                                  self.x.get(), self.y.get(), self.z.get()))
+            if not self.interp.get():
+                interp = 'linear'
+            else:
+                interp = 'spline'
+            summary.append("%d particles shifted\ninterpolation: %s" % (self.inputParticles.get().getSize(), interp))
+            if self.inv.get():
+                summary.append("inverse matrix applied")
         return summary
 
     def _methods(self):
-        pass
+        return ["%d particles shifted to x = %d, y = %d, z = %d." % (self.inputParticles.get().getSize(),
+                                                                     self.x.get(), self.y.get(), self.z.get())]
 
     def _validate(self):
         for part in self.inputParticles.get().iterItems():
