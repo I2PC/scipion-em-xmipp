@@ -83,7 +83,7 @@ class XmippProtShiftParticles(EMProtocol):
             interp = 'linear'
         else:
             interp = 'spline'
-        args = '-i %s -o %s --shift_to %f %f %f --apply_transform --dont_wrap --interp %s' % \
+        args = '-i "%s" -o "%s" --shift_to %f %f %f --apply_transform --dont_wrap --interp %s' % \
                (self._getExtraPath("input_particles.xmd"), centermd, self.x.get(), self.y.get(), self.z.get(), interp)
         if self.inv.get():
             args += ' --inverse'
@@ -91,7 +91,7 @@ class XmippProtShiftParticles(EMProtocol):
 
         if not self.boxSizeBool.get():
             box = self.boxSize.get()
-            self.runJob('xmipp_transform_window', '-i %s -o %s --size %d %d %d --save_metadata_stack' %
+            self.runJob('xmipp_transform_window', '-i "%s" -o "%s" --size %d %d %d --save_metadata_stack' %
                         (centermd, self._getExtraPath("crop_particles.stk"), box, box, 1))
 
     def createOutputStep(self):
