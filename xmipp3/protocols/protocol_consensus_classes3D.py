@@ -146,6 +146,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
             # newClass.copyInfo(clRep)
             newClass.setAcquisition(clRep.getAcquisition())
             newClass.setRepresentative(clRep.getRepresentative())
+            newClass.setSamplingRate(clRep.getSamplingRate())
 
             outputClasses.append(newClass)
 
