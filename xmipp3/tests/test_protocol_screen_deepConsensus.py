@@ -97,19 +97,16 @@ class TestXmippProtScreenDeepConsensus(BaseTest):
       return prot
 
     def getDeepConsensusKwargs(self, case=1):
-      ADD_MODEL_TRAIN_NEW = 0
       ADD_MODEL_TRAIN_PRETRAIN = 1
       ADD_MODEL_TRAIN_PREVRUN = 2
 
-      ADD_DATA_TRAIN_NONE = 0
-      ADD_DATA_TRAIN_PRECOMP = 1
       ADD_DATA_TRAIN_CUST = 2
 
       ADD_DATA_TRAIN_CUSTOM_OPT_PARTS = 0
       ADD_DATA_TRAIN_CUSTOM_OPT_COORS = 1
 
       kwargs = {
-        'nEpochs' : 2.0,
+        'nEpochs' : 1.0,
         'nModels' :2,
         'extractingBatch':3,
         'trainingBatch':3,
@@ -150,7 +147,7 @@ class TestXmippProtScreenDeepConsensus(BaseTest):
       nCoordinateSets = 3
       protImpMics = self._runInportMicrographs()
 
-      for case in range(1,4):
+      for case in range(1,3):
         protImpCoords = self._runImportCoordinates(protImpMics, case)
 
         protsStreamCoords = []
