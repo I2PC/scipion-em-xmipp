@@ -83,12 +83,12 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
                            'the movie gain. If you set this parameter to '
                            '2, 3, ..., then only every 2nd, 3rd, ... '
                            'frame will be used.')
-        # form.addParam('movieStep', IntParam, default=250,
-        #               label="Movie step", expertLevel=LEVEL_ADVANCED,
-        #               help='By default, every movie (movieStep=1) is used to '
-        #                    'compute the movie gain. If you set '
-        #                    'this parameter to 2, 3, ..., then only every 2nd, '
-        #                    '3rd, ... movie will be used.')
+        form.addParam('movieStep', IntParam, default=5,
+                      label="Movie step", expertLevel=LEVEL_ADVANCED,
+                      help='By default, every movie (movieStep=1) is used to '
+                           'compute the movie gain. If you set '
+                           'this parameter to 2, 3, ..., then only every 2nd, '
+                           '3rd, ... movie will be used.')
 
         # It should be in parallel (>2) in order to be able of attaching
         #  new movies to the output while estimating residual gain
@@ -97,13 +97,7 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
     # -------------------------- STEPS functions ------------------------------
     def createOutputStep(self):
         pass
-        # if self.estimateGain.get():
-        #     estGainsSet = self._loadOutputSet(SetOfImages, self.estimatedDatabase)
-        #     self._updateOutputSet('estimatedGains', estGainsSet, Set.STREAM_CLOSED)
-        #
-        # if self.estimateResidualGain.get():
-        #     resGainsSet = self._loadOutputSet(SetOfImages, self.residualDatabase)
-        #     self._updateOutputSet('residualGains', resGainsSet, Set.STREAM_CLOSED)
+
 
     def _insertNewMoviesSteps(self, insertedDict, inputMovies):
         """ Insert steps to process new movies (from streaming)
@@ -112,19 +106,12 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
             inputMovies: input movies set to be check
         """
         deps = []
-        if isinstance(self.inputMovies.get(), Movie):
-            movie = self.inputMovies.get()
+        for movie in self.inputMovies.get():
             if movie.getObjId() not in insertedDict:
                 stepId = self._insertMovieStep(movie)
                 deps.append(stepId)
                 insertedDict[movie.getObjId()] = stepId
-        else:
-            # For each movie insert the step to process it
-            for movie in self.inputMovies.get():
-                if movie.getObjId() not in insertedDict:
-                    stepId = self._insertMovieStep(movie)
-                    deps.append(stepId)
-                    insertedDict[movie.getObjId()] = stepId
+
         return deps
 
 
@@ -136,7 +123,6 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
         if movieId not in self.estimatedIds:
             self.estimatedIds.append(movieId)
             stats = self.estimatePoissonCount(movie)
-
             self.stats[movieId] = stats
 
         fnSummary = self._getPath("summary.txt")
@@ -148,34 +134,36 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
             fhSummary = open(fnSummary, "a")
             fnMonitorSummary = open(fnMonitorSummary, "a")
 
-        mean = 0
-        dev = 0
-        min = 0
-        max = 0
-        fhSummary.write("movie_%06d_poisson_count: mean=%f std=%f [min=%f,max=%f]\n" %
-                        (movieId, mean, dev, min, max))
-        fhSummary.close()
 
-        # G = emlib.Image()
-        # G.read(resid_gain)
-        # mean, dev, min, max = G.computeStats()
+        fhSummary.write("movie_%06d_poisson_count: mean=%f std=%f [min=%f,max=%f]\n" %
+                        (movieId, stats['mean'], stats['std'], stats['min'], stats['max']))
+
+        fhSummary.close()
 
         fnMonitorSummary.close()
 
     def estimatePoissonCount(self, movie):
-        stats = {}
         movieImages = ImageHandler().read(movie.getLocation())  # This is an Xmipp Image DATA
-        print(type(movieImages))
-        print(np.shape(movieImages))
+        steps = self.frameStep.get()
+        mean_frames = []
+        movieFrames = movieImages.getData()
+        print(np.shape(movieImages.getData()))
         dimx, dimy, z, n = movieImages.getDimensions()
-        print(dimx)
-        print(dimy)
+
+        for frame in range(n):
+            if (frame % steps) == 0:
+                mean = np.mean(movieFrames[frame, 0, :, :])
+                mean_frames.append(mean)
+                print(frame)
+                print(mean)
+
+        stats = computeStats(np.asarray(mean_frames))
 
 
         return stats
 
 
-    def _loadOutputSet(self, SetClass, baseName, fixGain=False):
+    def _loadOutputSet(self, SetClass, baseName):
         """
         Load the output set if it exists or create a new one.
         fixSampling: correct the output sampling rate if binning was used,
@@ -195,8 +183,6 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
                 inputMovies = self.inputMovies.get()
                 outputSet.copyInfo(inputMovies)
 
-                if fixGain:
-                    outputSet.setGain(self.getFinalGainPath(tifFlipped=True))
 
         return outputSet
 
@@ -212,7 +198,7 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
             movieId = movie.getObjId()
             streamMode = Set.STREAM_CLOSED
             saveMovie = self.getAttributeValue('doSaveMovie', False)
-            moviesSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite', fixGain=True)
+            moviesSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite')
 
             # Here we need to pass the statistical study of the mean per frame of each movie, std, max, min
             # movie.....
@@ -248,7 +234,7 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
                 # so we exit from the function here
                 return
 
-            moviesSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite', fixGain=True)
+            moviesSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite')
             for movie in newDone:
                 moviesSet.append(movie)
             self._updateOutputSet('outputMovies', moviesSet, streamMode)
@@ -277,126 +263,9 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
         # Close set databaset to avoid locking it
         outputSet.close()
 
-    def match_orientation(self, exp_gain, est_gain):
-        ''' Calculates the correct orientation of the experimental gain image
-            with respect to the estimated
-            Input: 2 Xmipp Images
-        '''
-        print('\nEstimating best orientation')
-        sys.stdout.flush()
-        best_cor = 0
-        # Building conjugate of FT of estimated gain for correlations
-        est_gain_array = est_gain.getData()
-        est_gain_array = xmutils.normalize_array(est_gain_array)
-        est_gain_array_FT_conj = np.conj(np.fft.fft2(est_gain_array))
 
-        # Iterating for mirrors
-        for imir in range(2):
-            # Iterating for 90 rotations
-            for irot in range(4):
-                imag_array = np.asarray(exp_gain.getData(), dtype=np.float64)
-                if imir == 1:
-                    # Matrix for MirrorX
-                    M = np.asarray([[-1, 0, imag_array.shape[1]], [0, 1, 0], [0, 0, 1]])
-                else:
-                    M = np.identity(3)
-                angle = irot * 90
-                # Transformating the imag array (mirror + rotation)
-                imag_array, R = xmutils.rotation(imag_array, angle, est_gain_array.shape, M)
-
-                # calculating correlation
-                correlationFunction = arrays_correlation_FT(imag_array, est_gain_array_FT_conj)
-
-                minVal = np.amin(correlationFunction)
-                maxVal = np.amax(correlationFunction)
-                minLoc = np.where(correlationFunction == minVal)
-                maxLoc = np.where(correlationFunction == maxVal)
-
-                if abs(minVal) > abs(best_cor):
-                    corLoc = translation_correction(minLoc, est_gain_array.shape)
-                    best_cor = minVal
-                    best_transf = (angle, imir)
-                    best_R = R
-                    T = np.asarray([[1, 0, np.asscalar(corLoc[1])], [0, 1, np.asscalar(corLoc[0])], [0, 0, 1]])
-                if abs(maxVal) > abs(best_cor):
-                    corLoc = translation_correction(maxLoc, est_gain_array.shape)
-                    best_cor = maxVal
-                    best_transf = (angle, imir)
-                    best_R = R
-                    T = np.asarray([[1, 0, np.asscalar(corLoc[1])], [0, 1, np.asscalar(corLoc[0])], [0, 0, 1]])
-
-        # Multiply by inverse of translation matrix
-        best_M = np.matmul(np.linalg.inv(T), best_R)
-        best_gain_array = xmutils.applyTransform(np.asarray(exp_gain.getData(), dtype=np.float64), best_M,
-                                                 est_gain_array.shape)
-
-        print('Best correlation: ', best_cor)
-        print('Rotation angle: {}\nHorizontal mirror: {}'.format(best_transf[0], best_transf[1] == 1))
-
-        inv_best_gain_array = invert_array(best_gain_array)
-        if best_cor > 0:
-            xmutils.writeImageFromArray(best_gain_array, self.getOrientedGainPath())
-            # xmutils.writeImageFromArray(inv_best_gain_array, self.getBestCorrectionPath())
-        else:
-            xmutils.writeImageFromArray(inv_best_gain_array, self.getOrientedGainPath())
-            # xmutils.writeImageFromArray(best_gain_array, self.getBestCorrectionPath())
 
     # ------------------------- UTILS functions --------------------------------
-    def invertImage(self, img, outFn):
-        array = img.getData()
-        inv_array = invert_array(array)
-        xmutils.writeImageFromArray(inv_array, outFn)
-
-    def getInputGain(self):
-        return self.inputMovies.get().getGain()
-
-    def getEstimatedGainPath(self, movieId):
-        return self._getExtraPath("movie_%06d_gain.xmp" % movieId)
-
-    def getResidualGainPath(self, movieId):
-        return self._getExtraPath("movie_%06d_residual_gain.xmp" % movieId)
-
-
-    def getFinalGainPath(self, tifFlipped=False):
-        fnBest = self.getOrientedGainPath()
-        if os.path.exists(fnBest):
-            # If the best orientatin has been calculated, take it
-            finalGainFn = fnBest
-        elif self.getInputGain() != None:
-            # Elif, take the input gain provided
-            finalGainFn = self.getInputGain()
-        else:
-            # Elif, take the estimated gain
-            finalGainFn = self.searchEstimatedGainPath()
-            if finalGainFn == None:
-                # If no gains have been estimated, estimate one and use that
-                firstMovie = self.inputMovies.get().getFirstItem()
-                movieId = firstMovie.getObjId()
-                if not movieId in self.estimatedIds:
-                    self.estimatedIds.append(movieId)
-                    self.estimateGainFun(firstMovie)
-                finalGainFn = self.getEstimatedGainPath(movieId)
-
-        ext = pwutils.getExt(self.inputMovies.get().getFirstItem().getFileName()).lower()
-        if ext in ['.tif', '.tiff'] and tifFlipped:
-            finalGainFn = xmutils.flipYImage(finalGainFn, outDir=self._getExtraPath())
-
-        return finalGainFn
-
-    def searchEstimatedGainPath(self):
-        for fn in os.listdir(self._getExtraPath()):
-            if fn.endswith('gain.xmp') and not 'residual' in fn:
-                return self._getExtraPath(fn)
-        return None
-
-    def getArgs(self, movieFn, movieId, extraArgs='', residual=False):
-        if residual:
-            outbase = self._getExtraPath("movie_%06d_residual" % movieId)
-        else:
-            outbase = self._getExtraPath("movie_%06d" % movieId)
-        return ("-i %s --oroot %s --iter 1 --singleRef --frameStep %d %s"
-                % (movieFn, outbase, self.frameStep, extraArgs))
-
     def doPoissonCountProcess(self, movieId):
         return (movieId - 1) % self.movieStep.get() == 0
 
@@ -437,31 +306,23 @@ def arrays_correlation_FT(ar1, ar2_ft_conj, normalize=True):
     return correlationFunction
 
 
-def translation_correction(Loc, shape):
-    '''Return translation corrections given the max/min Location and the image shape
-    '''
-    correcs = []
-    for i in range(2):
-        if Loc[i] > shape[i] / 2:
-            correcs += [Loc[i] - shape[i]]
-        else:
-            correcs += [Loc[i]]
-    return correcs
+def computeStats(mean_frames):
+    p = np.percentile(mean_frames, [25, 50, 75, 97.5])
+    mean = np.mean(mean_frames)
+    std = np.std(mean_frames)
+    var = np.var(mean_frames)
+    max = np.max(mean_frames)
+    min = np.min(mean_frames)
 
+    stats = {'mean': mean,
+             'std': std,
+             'var': var,
+             'max': max,
+             'min': min,
+             'per25': p[0],
+             'per50': p[1],
+             'per75': p[2],
+             'per97.5': p[3]
+             }
+    return stats
 
-def invert_array(gain, thres=0.01, depth=1):
-    '''Return the inverted array by first converting the values under the threshold to the median of the surrounding'''
-    gain = array_zeros_to_median(gain, thres, depth)
-    return 1.0 / gain
-
-
-def array_zeros_to_median(a, thres=0.01, depth=1):
-    '''Return an array, replacing the zeros (values under a threshold) with the median of
-    its surrounding values (with a depth)'''
-    idxs = np.where(np.abs(a) < thres)[0]
-    idys = np.where(np.abs(a) < thres)[1]
-
-    for i in range(len(idxs)):
-        sur_values = surrounding_values(a, idxs[i], idys[i], depth)
-        a[idxs[i]][idys[i]] = np.median(sur_values)
-    return a
