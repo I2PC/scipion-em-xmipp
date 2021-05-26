@@ -31,7 +31,7 @@ import sys
 
 from pyworkflow import VERSION_1_1
 import pyworkflow.utils as pwutils
-from pyworkflow.object import Set
+from pyworkflow.object import Set, Float
 from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow.protocol.params import (PointerParam, IntParam,
                                         BooleanParam, LEVEL_ADVANCED)
@@ -43,8 +43,16 @@ from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfMovies, Movie
 from pwem.protocols import EMProtocol, ProtProcessMovies
 
-from pwem import emlib
-import xmipp3.utils as xmutils
+from xmipp3.convert import setXmippAttribute, getScipionObj
+
+
+### TO DO
+# - Comparar con el dose per frame de cada movie
+# - Arreglar que los steps de mas de 1 movie no de error
+# - Investigar sobre como hacer clusters distintos segun la distribucion de nuestros datos. UNa gaussiana y en base a ella los valores que se queden fueran se les pone una flag
+# - El monitor va revisar el umbral en ventanas temporales por si coincide que un grupo de movies ha fallado
+# - Optimizar protocolo
+###
 
 
 class XmippProtMoviePoissonCount(ProtProcessMovies):
@@ -61,6 +69,7 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
     estimatedDatabase = 'estGains.sqlite'
     residualDatabase = 'resGains.sqlite'
     stats = {}
+    estimatedIds2 = []
 
 
     def __init__(self, **args):
@@ -80,13 +89,13 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
         form.addParam('frameStep', IntParam, default=5,
                       label="Frame step", expertLevel=LEVEL_ADVANCED,
                       help='By default, every 5th frame is used to compute '
-                           'the movie gain. If you set this parameter to '
+                           'the movie poisson count. If you set this parameter to '
                            '2, 3, ..., then only every 2nd, 3rd, ... '
                            'frame will be used.')
         form.addParam('movieStep', IntParam, default=5,
                       label="Movie step", expertLevel=LEVEL_ADVANCED,
                       help='By default, every movie (movieStep=1) is used to '
-                           'compute the movie gain. If you set '
+                           'compute the movie poisson count. If you set '
                            'this parameter to 2, 3, ..., then only every 2nd, '
                            '3rd, ... movie will be used.')
 
@@ -120,10 +129,13 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
         if not self.doPoissonCountProcess(movieId):
             return
 
-        if movieId not in self.estimatedIds:
-            self.estimatedIds.append(movieId)
-            stats = self.estimatePoissonCount(movie)
-            self.stats[movieId] = stats
+        print('entro aqui siendo la movie a procesar:')
+        print(movieId)
+       # if movieId not in self.estimatedIds:
+        self.estimatedIds.append(movieId)
+        stats = self.estimatePoissonCount(movie)
+        self.stats[movieId] = stats
+        self.estimatedIds2.append(movieId)
 
         fnSummary = self._getPath("summary.txt")
         fnMonitorSummary = self._getPath("summaryForMonitor.txt")
@@ -134,12 +146,10 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
             fhSummary = open(fnSummary, "a")
             fnMonitorSummary = open(fnMonitorSummary, "a")
 
-
         fhSummary.write("movie_%06d_poisson_count: mean=%f std=%f [min=%f,max=%f]\n" %
                         (movieId, stats['mean'], stats['std'], stats['min'], stats['max']))
 
         fhSummary.close()
-
         fnMonitorSummary.close()
 
     def estimatePoissonCount(self, movie):
@@ -152,13 +162,12 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
 
         for frame in range(n):
             if (frame % steps) == 0:
-                mean = np.mean(movieFrames[frame, 0, :, :])
+                mean = np.mean(movieFrames[frame, 0, :, :]) #np.mean(coger el slicing del frame)
                 mean_frames.append(mean)
                 print(frame)
                 print(mean)
 
         stats = computeStats(np.asarray(mean_frames))
-
 
         return stats
 
@@ -186,9 +195,11 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
 
         return outputSet
 
+
     def _checkNewInput(self):
         if isinstance(self.inputMovies.get(), SetOfMovies):
             ProtProcessMovies._checkNewInput(self)
+
 
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
@@ -199,12 +210,8 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
             streamMode = Set.STREAM_CLOSED
             saveMovie = self.getAttributeValue('doSaveMovie', False)
             moviesSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite')
-
-            # Here we need to pass the statistical study of the mean per frame of each movie, std, max, min
-            # movie.....
             moviesSet.append(movie)
 
-            #
             self._updateOutputSet('outputMovies', moviesSet, streamMode)
             outputStep = self._getFirstJoinStep()
             outputStep.setStatus(cons.STATUS_NEW)
@@ -235,8 +242,25 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
                 return
 
             moviesSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite')
+
             for movie in newDone:
-                moviesSet.append(movie)
+                movieId = movie.getObjId()
+                newMovie = movie.clone()
+                # Echar un ojo a esta lista
+                if movieId in self.estimatedIds2:
+                    stats = self.stats[movieId]
+                    mean = stats['mean']
+                    std = stats['std']
+                    min = stats['min']
+                    max = stats['max']
+
+                    setAttribute(newMovie, '_MEAN_DOSE_PER_FRAME', mean)
+                    setAttribute(newMovie, '_STD_DOSE_PER_FRAME', std)
+                    setAttribute(newMovie, '_MIN_DOSE_PER_FRAME', min)
+                    setAttribute(newMovie, '_MAX_DOSE_PER_FRAME', max)
+
+                moviesSet.append(newMovie)
+
             self._updateOutputSet('outputMovies', moviesSet, streamMode)
 
             if self.finished:  # Unlock createOutputStep if finished all jobs
@@ -293,17 +317,10 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
 
 
 # --------------------- WORKERS --------------------------------------
-def arrays_correlation_FT(ar1, ar2_ft_conj, normalize=True):
-    '''Return the correlation matrix of an array and the FT_conjugate of a second array using the fourier transform
-    '''
-    if normalize:
-        ar1 = xmutils.normalize_array(ar1)
-
-    ar1_FT = np.fft.fft2(ar1)
-    corr2FT = np.multiply(ar1_FT, ar2_ft_conj)
-    correlationFunction = np.real(np.fft.ifft2(corr2FT)) / ar1_FT.size
-
-    return correlationFunction
+def setAttribute(obj, label, value):
+    if value is None:
+        return
+    setattr(obj, label, getScipionObj(value))
 
 
 def computeStats(mean_frames):
