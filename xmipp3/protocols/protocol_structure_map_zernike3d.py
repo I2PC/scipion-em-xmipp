@@ -40,7 +40,7 @@ import pyworkflow.protocol.params as params
 from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfVolumes, Volume
 from pyworkflow import VERSION_2_0
-from pyworkflow.utils import cleanPath
+from pyworkflow.utils import cleanPath, copyFile
 
 
 def mds(d, dimensions=2):
@@ -146,35 +146,51 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
         if self.twoSets.get():
             volList, dimList, srList, _ = self._iterInputVolumes(self.secondSet, volList, dimList, srList, [])
 
+        # Resize volumes according to new sampling rate
         nVoli = 1
         depsConvert = []
-        for voli in volList:
+        for _ in volList:
             convert = self._insertFunctionStep('convertStep', volList[nVoli - 1],
                                      dimList[nVoli - 1], srList[nVoli - 1],
                                      min(dimList), max(srList), nVoli, prerequisites=[])
             depsConvert.append(convert)
             nVoli += 1
 
+        # Align all volumes to the first one (reference)
         nVoli = 1
-        deps = []
-        for voli in volList:
+        nVolj = 2
+        depsAlign = []
+        for _ in volList[1:]:
+            if nVolj != nVoli:
+                stepID = self._insertFunctionStep('alignStep', volList[nVolj - 1],
+                                        volList[nVoli - 1], nVoli - 1,
+                                        nVolj - 1, prerequisites=depsConvert)
+                depsAlign.append(stepID)
+            nVolj += 1
+
+        # Zernikes3D
+        nVoli = 1
+        depsZernike = []
+        count = 1
+        for _ in volList:
             nVolj = 1
-            for volj in volList:
+            for _ in volList:
                 if nVolj != nVoli:
                     stepID = self._insertFunctionStep('deformStep', volList[nVoli - 1],
                                             volList[nVolj - 1], nVoli - 1,
-                                            nVolj - 1, prerequisites=depsConvert)
-                    deps.append(stepID)
+                                            nVolj - 1, count, prerequisites=depsAlign)
+                    depsZernike.append(stepID)
                 nVolj += 1
+                count += 1
             nVoli += 1
 
         # if self.computeDef.get():
-        self._insertFunctionStep('deformationMatrix', volList, prerequisites=deps)
+        self._insertFunctionStep('deformationMatrix', volList, prerequisites=depsZernike)
         self._insertFunctionStep('gatherResultsStepDef')
 
         # self._insertFunctionStep('computeCorr', volList)
 
-        self._insertFunctionStep('correlationMatrix', volList, prerequisites=deps)
+        self._insertFunctionStep('correlationMatrix', volList, prerequisites=depsZernike)
         self._insertFunctionStep('gatherResultsStepCorr')
 
         # if self.computeDef.get():
@@ -204,16 +220,29 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
             self.runJob("xmipp_transform_window", " -i %s -o %s --crop %d" %
                         (fnOut, fnOut, (newXdim - minDim)))
 
-    def deformStep(self, inputVolFn, refVolFn, i, j):
-        inputVolFn = self._getExtraPath(os.path.basename(os.path.splitext(inputVolFn)[0] + '_%d_crop.vol' % (i+1)))
-        refVolFn = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0] + '_%d_crop.vol' % (j+1)))
-        fnOut = self._getTmpPath('vol%dAlignedTo%d.vol' % (i, j))
-        fnOut2 = self._getTmpPath('vol%dDeformedTo%d.vol' % (i, j))
-
+    def alignStep(self, inputVolFn, refVolFn, i, j):
+        inputVolFn = self._getExtraPath(os.path.basename(os.path.splitext(inputVolFn)[0] + '_%d_crop.vol' % (j+1)))
+        refVolFn = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0] + '_%d_crop.vol' % (i+1)))
+        fnOut = self._getTmpPath('vol%dAligned.vol' % (j + 1))
         params = ' --i1 %s --i2 %s --apply %s --local --dontScale' % \
                  (refVolFn, inputVolFn, fnOut)
 
         self.runJob("xmipp_volume_align", params)
+
+    def deformStep(self, inputVolFn, refVolFn, i, j, step_id):
+        if j == 0:
+            refVolFn_aux = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0] + '_%d_crop.vol' % (j + 1)))
+        else:
+            refVolFn_aux = self._getTmpPath('vol%dAligned.vol' % (j + 1))
+        if i == 0:
+            fnOut_aux = self._getExtraPath(os.path.basename(os.path.splitext(inputVolFn)[0] + '_%d_crop.vol' % (i + 1)))
+        else:
+            fnOut_aux = self._getTmpPath('vol%dAligned.vol' % (i + 1))
+        refVolFn = self._getTmpPath("reference_%d.vol" % step_id)
+        fnOut = self._getTmpPath("input_%d.vol" % step_id)
+        copyFile(refVolFn_aux, refVolFn)
+        copyFile(fnOut_aux, fnOut)
+        fnOut2 = self._getTmpPath('vol%dDeformedTo%d.vol' % (i + 1, j + 1))
 
         # if self.computeDef.get():
         params = ' -i %s -r %s -o %s --l1 %d --l2 %d --sigma "%s" --oroot %s --regularization %f' %\
@@ -231,16 +260,18 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
         self.computeCorr(fnOut2, refVolFn, i, j)
 
         cleanPath(fnOut)
+        cleanPath(refVolFn)
         cleanPath(fnOut2)
 
     def deformationMatrix(self, volList):
+        cleanPath(self._getTmpPath("*.vol"))
         numVol = len(volList)
         self.distanceMatrix = np.zeros((numVol, numVol))
         for i in range(numVol):
             for j in range(numVol):
                 if i != j:
-                    path = self._getExtraPath('Pair_%d_%d_deformation.txt' % (i,j))
-                    self.distanceMatrix[i,j] = np.loadtxt(path)
+                    path = self._getExtraPath('Pair_%d_%d_deformation.txt' % (i, j))
+                    self.distanceMatrix[i, j] = np.loadtxt(path)
 
     def correlationMatrix(self, volList):
         numVol = len(volList)
@@ -249,7 +280,7 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
             for j in range(numVol):
                 if i != j:
                     path = self._getExtraPath('Pair_%d_%d_correlation.txt' % (i,j))
-                    self.corrMatrix[i,j] = np.loadtxt(path)
+                    self.corrMatrix[i, j] = np.loadtxt(path)
 
 
     def gatherResultsStepDef(self):
@@ -448,10 +479,10 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
                 .reshape(-1, nrows, ncols))
 
     def _defineResultsName(self, i, label=''):
-        return self._getExtraPath('Coordinate%sMatrix%d.txt' % (label,i))
+        return self._getExtraPath('Coordinate%sMatrix%d.txt' % (label, i))
 
     def _defineResultsName2(self, i, label=''):
-        return self._getExtraPath('Coordinate%sMatrixCorr%d.txt' % (label,i))
+        return self._getExtraPath('Coordinate%sMatrixCorr%d.txt' % (label, i))
 
     def _defineResultsName3(self, i):
         return self._getExtraPath('ConsensusMatrix%d.txt' % i)
