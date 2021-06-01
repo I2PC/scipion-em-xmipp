@@ -32,7 +32,7 @@ import math
 import matplotlib.pyplot as plt
 from pyworkflow.utils.path import cleanPath
 from pwem.objects import SetOfParticles
-from xmipp3.protocols.protocol_angular_alignment_sph import XmippProtAngularAlignmentSPH
+from xmipp3.protocols.protocol_angular_alignment_zernike3d import XmippProtAngularAlignmentSPH
 
 
 class XmippAngularAlignmentSphViewer(ProtocolViewer):

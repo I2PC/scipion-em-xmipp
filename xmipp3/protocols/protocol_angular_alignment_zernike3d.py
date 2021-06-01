@@ -44,13 +44,21 @@ from pyworkflow import VERSION_2_0
 
 
 class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
-    """ Protocol for flexible angular alignment based on spherical harmonics. """
-    _label = 'sph angular align'
+    """ Protocol for flexible angular alignment based on Zernike3D basis. """
+    _label = 'angular align - zernike3d'
     _lastUpdateVersion = VERSION_2_0
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
+        form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                           Select the one you want to use.")
+        form.addHidden(params.GPU_LIST, params.StringParam, default='0',
+                       expertLevel=params.LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
         form.addParam('inputParticles', params.PointerParam, label="Input particles", pointerClass='SetOfParticles')
         form.addParam('inputVolume', params.PointerParam, label="Input volume", pointerClass='Volume')
         form.addParam('inputVolumeMask', params.PointerParam, label="Input volume mask", pointerClass='VolumeMask',
@@ -160,7 +168,13 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
             params += ' --phaseFlipped'
         if self.inputVolumeMask.get():
             params += ' --mask %s' % fnVolMask
-        self.runJob("xmipp_angular_sph_alignment", params, numberOfMpi=self.numberOfMpi.get())
+
+        if self.useGpu.get():
+            program = 'xmipp_cuda_angular_sph_alignment'
+            self.runJob(program, params)
+        else:
+            program = 'xmipp_angular_sph_alignment'
+            self.runJob(program, params, numberOfMpi=self.numberOfMpi.get())
 
 
     def createOutputStep(self):
