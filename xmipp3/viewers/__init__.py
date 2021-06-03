@@ -59,8 +59,8 @@ from .viewer_volume_consensus import XmippVolumeConsensusViewer
 from .viewer_projmatch import XmippProjMatchViewer
 
 #AJ
-from .viewer_structure_map_sph import XmippProtStructureMapSphViewer
-from .viewer_volume_deform_sph import XmippVolumeDeformSphViewer
+# from .viewer_structure_map_sph import XmippProtStructureMapSphViewer
+# from .viewer_volume_deform_sph import XmippVolumeDeformSphViewer
 from .viewer_metaprotocol_golden_highres import XmippMetaprotocolGoldenHighResViewer
 from .viewer_deep_align import XmippDeepAlignViewer
 
