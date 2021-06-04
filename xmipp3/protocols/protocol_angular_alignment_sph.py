@@ -1,3 +1,11 @@
+########
+
+# This protocol has been removed from Scipion as there is a newer version being developed that
+# will solve some of the problems of this current implementation. The code will be available
+# again in a newer release.
+
+########
+
 
 # **************************************************************************
 # *
