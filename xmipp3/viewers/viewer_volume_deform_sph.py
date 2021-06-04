@@ -1,3 +1,12 @@
+########
+
+# This viewer has been removed as the protocols associated to it are no longer offered in Scipion.
+# This will be solved in a future release.
+
+########
+
+
+
 # **************************************************************************
 # *
 # * Authors:  Amaya Jimenez Moreno (ajimenez@cnb.csic.es)

@@ -1,3 +1,12 @@
+########
+
+# This test has been removed as the protocols associated to it are no longer offered in Scipion.
+# This will be solved in a future release.
+
+########
+
+
+
 # **************************************************************************
 # *
 # * Authors:    Carlos Oscar Sorzano (coss@cnb.csic.es)
