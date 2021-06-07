@@ -31,7 +31,7 @@ from pwem.wizards import *
 from pwem.wizards.wizard import EmWizard
 from pwem.wizards.wizards_3d.mask_volume_wizard import MaskVolumeWizard
 from pyworkflow.wizard import Wizard
-from xmipp3.viewers import XmippMonoResViewer, XmippResDeepResViewer
+from xmipp3.viewers import XmippMonoResViewer, XmippResDeepResViewer, XmippProtFSOViewer
 
 from .protocols.protocol_cl2d import IMAGES_PER_CLASS
 
@@ -501,8 +501,7 @@ class XmippGaussianVolumesWizard(GaussianVolumesWizard):
 
 
 class ColorScaleWizard(ColorScaleWizardBase):
-        _targets = ColorScaleWizardBase.defineTargets(XmippMonoResViewer, XmippResDeepResViewer)
-
+        _targets = ColorScaleWizardBase.defineTargets(XmippMonoResViewer, XmippResDeepResViewer, XmippProtFSOViewer)
 
 class XmippSelectPointinVolWizard(EmWizard):
     _targets = [(XmippProtShiftParticles, ['x', 'y', 'z'])]
@@ -519,3 +518,4 @@ class XmippSelectPointinVolWizard(EmWizard):
         form.setVar('y', int(plt.origin[1]))
         form.setVar('z', int(plt.origin[0]))
         del plt
+
