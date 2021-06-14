@@ -627,8 +627,7 @@ class TestExtractMovieParticles(BaseTest):
                              "Output SetOfMovieParticles were not created.")
 
         size = protExtract.outputParticles.getSize()
-        self.assertEqual(size, 88, 'Number of particles must be 135 and its '
-                                   '%d' % size)
+        self.assertEqual(size, 88, 'Invalid number of particles: %d' % size)
 
 
 class TestMaxShift(BaseTest):
