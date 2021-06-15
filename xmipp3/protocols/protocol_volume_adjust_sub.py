@@ -60,6 +60,11 @@ class XmippProtVolAdjBase(EMProtocol):
                       expertLevel=LEVEL_ADVANCED,
                       help='Relaxation factor for Fourier amplitude projector (POCS), it should be between 0 and 1, '
                            'being 1 no relaxation and 0 no modification of volume 2 amplitudes')
+        form.addParam('radavg', BooleanParam, label="Match the rotationally averaged Fourier amplitudes?",
+                      default=True, expertLevel=LEVEL_ADVANCED,
+                      help='Match the rotationally averaged Fourier amplitudes when adjusting the amplitudes instead of'
+                           ' taking directly them from the reference volume. For subtraction is recommended to set it '
+                           'to True but for sharpening is recommended to set it to False')
         form.addParam('computeE', BooleanParam, label="Compute energy?", default=True, expertLevel=LEVEL_ADVANCED,
                       help='Compute energy difference between the different adjustment steps and iterations to see if '
                            'the method reaches convergence')
@@ -198,6 +203,8 @@ class XmippProtVolSubtraction(XmippProtVolAdjBase):
         if self.saveFiles:
             args += ' --saveV1 %s --saveV2 %s' % (self._getExtraPath('vol1_filtered.mrc'),
                                                   self._getExtraPath('vol2_adjusted.mrc'))
+        if self.radavg:
+            args += ' --radavg'
         if self.computeE:
             args += ' --computeEnergy'
         self.runJob(program, args)
@@ -218,6 +225,8 @@ class XmippProtVolSubtraction(XmippProtVolAdjBase):
             summary.append("Input mask 2: %s" % self.mask2.get().getFileName())
         if self.resol.get() != 0:
             summary.append("Subtraction at resolution %f A" % self.resol.get())
+        if self.radavg.get() is True:
+            summary.append("Matching the rotational averaged Fourier amplitudes")
         return summary
 
     def _methods(self):
@@ -283,6 +292,8 @@ class XmippProtVolAdjust(XmippProtVolAdjBase):
             args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
         if self.masks:
             args += ' --mask1 %s --mask2 %s' % (self.mask1.get().getFileName(), self.mask2.get().getFileName())
+        if self.radavg:
+            args += ' --radavg'
         if self.computeE:
             args += ' --computeEnergy'
         self.runJob(program, args)
@@ -295,6 +306,8 @@ class XmippProtVolAdjust(XmippProtVolAdjBase):
             summary.append("Input mask 2: %s" % self.mask2.get().getFileName())
         if self.resol.get() != 0:
             summary.append("Filter at resolution %f A" % self.resol.get())
+        if self.radavg.get() is True:
+            summary.append("Matching the rotational averaged Fourier amplitudes")
         return summary
 
     def _methods(self):
