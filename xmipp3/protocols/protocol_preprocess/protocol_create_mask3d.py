@@ -189,7 +189,7 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
 
     #--------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
-        self.maskFile = self._getPath('mask.vol')
+        self.maskFile = self._getPath('mask.mrc')
         
         if self.source == SOURCE_VOLUME:
             self._insertFunctionStep('createMaskFromVolumeStep')
