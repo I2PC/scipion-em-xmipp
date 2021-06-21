@@ -60,11 +60,10 @@ class XmippProtVolAdjBase(EMProtocol):
                       expertLevel=LEVEL_ADVANCED,
                       help='Relaxation factor for Fourier amplitude projector (POCS), it should be between 0 and 1, '
                            'being 1 no relaxation and 0 no modification of volume 2 amplitudes')
-        form.addParam('radavg', BooleanParam, label="Match the rotationally averaged Fourier amplitudes?",
-                      default=True, expertLevel=LEVEL_ADVANCED,
+        form.addParam('radavg', BooleanParam, label="Match the rotationally averaged Fourier amplitudes?", default=True,
                       help='Match the rotationally averaged Fourier amplitudes when adjusting the amplitudes instead of'
-                           ' taking directly them from the reference volume. For subtraction is recommended to set it '
-                           'to True but for sharpening is recommended to set it to False')
+                           ' taking directly them from the reference volume. For subtraction and consensus is '
+                           'recommended to set it to True but for sharpening is recommended to set it to False')
         form.addParam('computeE', BooleanParam, label="Compute energy?", default=True, expertLevel=LEVEL_ADVANCED,
                       help='Compute energy difference between the different adjustment steps and iterations to see if '
                            'the method reaches convergence')
