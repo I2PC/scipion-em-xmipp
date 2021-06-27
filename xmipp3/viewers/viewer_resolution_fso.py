@@ -72,8 +72,9 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         form.addParam('doShowOriginalVolumeSlices', LabelParam,
                       label="Original Half Maps slices")
 
-        form.addParam('doShowDirectionalFilter', LabelParam,
-                      label="Directionally filtered map")
+        if self.protocol.estimate3DFSC:
+            form.addParam('doShowDirectionalFilter', LabelParam,
+                          label="Directionally filtered map")
 
         groupDirFSC = form.addGroup('FSO and Resolution Analysis')
 
@@ -82,40 +83,48 @@ class XmippProtFSOViewer(LocalResolutionViewer):
 
         groupDirFSC.addParam('doShowFSC', LabelParam, label="Global FSC")
 
-        groupDirFSC.addParam('doShow3DFSC', LabelParam, label="3DFSC map")
-
-        groupDirFSC.addParam('doShow3DFSCcolorSlices', LabelParam,
-                             label="Show 3DFSC Color slices")
+        if self.protocol.estimate3DFSC:
+            groupDirFSC.addParam('doShow3DFSC', LabelParam, label="3DFSC map")
+            groupDirFSC.addParam('doShow3DFSCcolorSlices', LabelParam,
+                                 label="Show 3DFSC Color slices")
 
         groupDirFSC.addParam('doShowDirectionalResolution', LabelParam,
                              label="Show Directional Resolution on sphere")
 
-        group = form.addGroup('Choose a Color Map')
+        if self.protocol.estimate3DFSC:
+            group = form.addGroup('Choose a Color Map')
 
-        group.addParam('sliceAxis', EnumParam, default=AX_Z,
-                       choices=['x', 'y', 'z'],
-                       display=EnumParam.DISPLAY_HLIST,
-                       label='Slice axis')
-        group.addParam('doShowOneColorslice', LabelParam,
-                       expertLevel=LEVEL_ADVANCED,
-                       label='Show selected slice')
-        group.addParam('sliceNumber', IntParam, default=-1,
-                       expertLevel=LEVEL_ADVANCED,
-                       label='Show slice number')
-        ColorScaleWizardBase.defineColorScaleParams(group, defaultLowest=0.0,
-                                                    defaultHighest=1.0)
+            group.addParam('sliceAxis', EnumParam, default=AX_Z,
+                           choices=['x', 'y', 'z'],
+                           display=EnumParam.DISPLAY_HLIST,
+                           label='Slice axis')
+            group.addParam('doShowOneColorslice', LabelParam,
+                           expertLevel=LEVEL_ADVANCED,
+                           label='Show selected slice')
+            group.addParam('sliceNumber', IntParam, default=-1,
+                           expertLevel=LEVEL_ADVANCED,
+                           label='Show slice number')
+            ColorScaleWizardBase.defineColorScaleParams(group, defaultLowest=0.0,
+                                                        defaultHighest=1.0)
 
     def _getVisualizeDict(self):
         self.protocol._createFilenameTemplates()
-        return {'doShowOriginalVolumeSlices': self._showOriginalVolumeSlices,
-                'doShow3DFSC': self._show3DFSC,
-                'doShowFSC': self._showFSCCurve,
-                'doShow3DFSCcolorSlices': self._show3DFSCcolorSlices,
-                'doShowOneColorslice': self._showOneColorslice,
-                'doShowAnisotropyCurve': self._showAnisotropyCurve,
-                'doShowDirectionalFilter': self._showDirectionalFilter,
-                'doShowDirectionalResolution': self._showDirectionalResolution,
-                }
+        if self.protocol.estimate3DFSC:
+            return {'doShowOriginalVolumeSlices': self._showOriginalVolumeSlices,
+                    'doShow3DFSC': self._show3DFSC,
+                    'doShowFSC': self._showFSCCurve,
+                    'doShow3DFSCcolorSlices': self._show3DFSCcolorSlices,
+                    'doShowOneColorslice': self._showOneColorslice,
+                    'doShowAnisotropyCurve': self._showAnisotropyCurve,
+                    'doShowDirectionalFilter': self._showDirectionalFilter,
+                    'doShowDirectionalResolution': self._showDirectionalResolution,
+                    }
+        else:
+            return {'doShowOriginalVolumeSlices': self._showOriginalVolumeSlices,
+                    'doShowFSC': self._showFSCCurve,
+                    'doShowAnisotropyCurve': self._showAnisotropyCurve,
+                    'doShowDirectionalResolution': self._showDirectionalResolution,
+                    }
 
     def _showOriginalVolumeSlices(self, param=None):
         """
@@ -131,6 +140,8 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         """
         cm = DataView(self.protocol._getExtraPath(OUTPUT_3DFSC))
         return [cm]
+
+
 
     def _showFSCCurve(self, paramName=None):
         """
@@ -150,23 +161,29 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         """
         It opens 4 colores slices of the 3DFSC
         """
-        img = ImageHandler().read(self.protocol._getExtraPath(OUTPUT_3DFSC))
-        imgData = img.getData()
+        errors = []
+        if self.protocol.estimate3DFSC:
+            img = ImageHandler().read(self.protocol._getExtraPath(OUTPUT_3DFSC))
+            imgData = img.getData()
 
-        xplotter = XmippPlotter(x=2, y=2, mainTitle="3DFSC Color Slices"
-                                                    "along %s-axis."
-                                                    % self._getAxis())
-        # The slices to be shown are close to the center. Volume size is divided in
-        # 9 segments, the fouth central ones are selected i.e. 3,4,5,6
-        for i in range(3, 7):
-            sliceNumber = self.getSlice(i, imgData)
-            a = xplotter.createSubPlot("Slice %s" % (sliceNumber + 1), '', '')
-            matrix = self.getSliceImage(imgData, sliceNumber, self._getAxis())
-            plot = xplotter.plotMatrix(a, matrix, 0, 1,
-                                       cmap=self.getColorMap(),
-                                       interpolation="nearest")
-        xplotter.getColorBar(plot)
-        return [xplotter]
+            xplotter = XmippPlotter(x=2, y=2, mainTitle="3DFSC Color Slices"
+                                                        "along %s-axis."
+                                                        % self._getAxis())
+            # The slices to be shown are close to the center. Volume size is divided in
+            # 9 segments, the fouth central ones are selected i.e. 3,4,5,6
+            for i in range(3, 7):
+                sliceNumber = self.getSlice(i, imgData)
+                a = xplotter.createSubPlot("Slice %s" % (sliceNumber + 1), '', '')
+                matrix = self.getSliceImage(imgData, sliceNumber, self._getAxis())
+                plot = xplotter.plotMatrix(a, matrix, 0, 1,
+                                           cmap=self.getColorMap(),
+                                           interpolation="nearest")
+            xplotter.getColorBar(plot)
+            return [xplotter]
+        else:
+            errors.append("The 3dFSC estimation of the 3dFSC was not selected"
+                          "in the protocol form.")
+            return errors
 
     def _showAnisotropyCurve(self, paramName=None):
         """
