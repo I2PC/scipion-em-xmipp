@@ -84,7 +84,7 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
         form.addParam('threshold', FloatParam, default=0.0,
                       condition='volumeOperation==%d and %s'
                       % (OPERATION_THRESHOLD, isVolume),
-                      label='Threshold'
+                      label='Threshold',
                       help="Select the threshold. Gray values lesser than the threshold" \
                            "will be set to zero, otherwise will be one (mask area).")
         isSegmentation = 'volumeOperation==%d and %s' % (OPERATION_SEGMENT, isVolume)
@@ -104,7 +104,7 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
         form.addParam('dalton', FloatParam, 
                       condition='%s and segmentationType==%d'
                       % (isSegmentation, SEGMENTATION_DALTON),
-                      label='Mass (Da)',)
+                      label='Mass (Da)')
         
         # For geometrical sources
         form.addParam('samplingRate', FloatParam, default=1, 
