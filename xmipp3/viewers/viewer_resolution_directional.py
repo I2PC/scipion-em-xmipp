@@ -143,30 +143,12 @@ class XmippMonoDirViewer(ProtocolViewer):
         
         groupRadAzim.addParam('doShowAzimuthalColorSlices', LabelParam,
                label="Show azimuthal resolution colored slices")
-        
-        groupRadAzim.addParam('doShowRadialHistogram', LabelParam,
-               label="Show radial resolution histogram")
-        
-        groupRadAzim.addParam('doShowAzimuthalHistogram', LabelParam,
-               label="Show azimuthal resolution histogram")
-        
-        groupRadAzim.addParam('doShowHighestResolutionMap', LabelParam,
-               label="Show highest Resolution Map")
-        
-        groupRadAzim.addParam('doShowLowestResolutionMap', LabelParam,
-               label="Show lowest Resolution Map")        
-        
-#        groupRadAzim.addParam('doshowAnisotropyResolution', LabelParam,
-#               label="Anisotropy and resolution")  
-        
+
         groupRadAzim.addParam('doShowDirectionsHistogram', LabelParam,
                label="Show directions histogram")
         
         groupRadAzim.addParam('doShowDirectionsSphere', LabelParam,
                label="Show directions sphere")
-        
-#        groupRadAzim.addParam('doshowZscoreMap', LabelParam,
-#               label="Show zscore map")
         
         groupRadAzim.addParam('doShowRadialAverages', LabelParam,
                label="Show radial averages")
@@ -195,16 +177,10 @@ class XmippMonoDirViewer(ProtocolViewer):
                 'doShowDoAColorPol': self._showHalfInterQuartile,
                 'doShowRadialColorSlices': self._showRadialColorSlices,
                 'doShowAzimuthalColorSlices': self._showAzimuthalColorSlices,
-                'doShowHighestResolutionMap': self._showHighestResolutionColorSlices,
-                'doShowLowestResolutionMap': self._showLowestResolutionColorSlices,
-                #'doShowChimera': self._showChimera,
-                #'doShowDoAHistogram': self._plotHistogramDoA,
-                'doShowRadialHistogram': self._plotHistogramRadial,
-                'doShowAzimuthalHistogram': self._plotHistogramAzimuthal,
+                #'doShowRadialHistogram': self._plotHistogramRadial,
+                #'doShowAzimuthalHistogram': self._plotHistogramAzimuthal,
                 'doShowDirectionsHistogram': self._plotHistogramDirections,
                 'doShowDirectionsSphere': self._show2DDistribution,
-                #'doshowAnisotropyResolution': self._showAnisotropyResolution,
-                #'doshowZscoreMap': self._showZscoreMap,
                 'doShowRadialAverages': self._showRadialAverages
      }
 
@@ -220,22 +196,10 @@ class XmippMonoDirViewer(ProtocolViewer):
         
     def _showRadialColorSlices(self, param=None):
         self._showColorSlices(OUTPUT_RADIAL_FILE, False, 'Radial Resolution', -1, -1)
-        
-#    def _showZscoreMap(self, param=None):
-#        self._showColorSlices(OUTPUT_ZSCOREMAP_FILE, True, 'Zscore map', 0, 5)
-        
-    def _showHighestResolutionColorSlices(self, param=None):
-        self._showColorSlices(OUTPUT_RESOLUTION_HIGHEST_FILE, False, 'Highest Resolution', -1, -1)
-        
-    def _showLowestResolutionColorSlices(self, param=None):
-        self._showColorSlices(OUTPUT_RESOLUTION_LOWEST_FILE, False, 'Lowest Resolution', -1, -1)
-        
+
     def _showAzimuthalColorSlices(self, param=None):
         self._showColorSlices(OUTPUT_AZIMUHTAL_FILE, False, 'Tangential Resolution', -1, -1)
-        
-#    def _showAnisotropyResolution(self, param=None):
-#        self.plotAnisotropyResolution(self.protocol._getExtraPath('anires.xmd'))
-        
+
     def _show2DDistribution(self, param=None):
         self._createAngDist2D(self.protocol._getExtraPath('hist_prefdir.xmd'))
         
@@ -323,17 +287,19 @@ class XmippMonoDirViewer(ProtocolViewer):
         cbar = fig.colorbar(im, cax=cax)
         cbar.ax.invert_yaxis()
 
-        return plt.show(fig)
+        return plt.show()
 
     def _plotHistogramDoA(self, param=None):
         self._plotHistogram('hist_DoA.xmd', 'DoA', 'DoA')
-        
+
+    """   
     def _plotHistogramRadial(self, param=None):
         self._plotHistogram('hist_radial.xmd', 'Azimuthal Resolution', 'Resolution')
         
     def _plotHistogramAzimuthal(self, param=None):
         self._plotHistogram('hist_azimuthal.xmd', 'Azimuthal Resolution', 'Resolution')
-        
+    """
+
     def _plotHistogramDirections(self, param=None):
         self._plotHistogram('hist_prefdir.xmd', 'Highest Resolution per Direction', 'Direction')
         
@@ -349,7 +315,7 @@ class XmippMonoDirViewer(ProtocolViewer):
         #    md.setValue(MDL_WEIGHT,w,objId)
         #md.write(path)
         #print(w)
-        view.plotAngularDistributionFromMd(path, 'directional resolution distribution',  min_w=0)
+        view.plotAngularDistributionFromMd(path, 'directional resolution distribution')#,  min_w=0)
         return view.show()
 
     def _plotHistogram(self, fnhist, titlename, xname):

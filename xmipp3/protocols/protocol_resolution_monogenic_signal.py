@@ -61,39 +61,44 @@ class XmippProtMonoRes(ProtAnalysis3D):
         ProtAnalysis3D.__init__(self, **args)
         self.min_res_init = Float() 
         self.max_res_init = Float()
-       
-    
+
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
 
-        form.addParam('halfVolumes', BooleanParam, default=False,
+        form.addParam('usehalfVolumes', BooleanParam, default=False,
                       label="Would you like to use half volumes?",
                       help='The noise estimation for determining the '
                       'local resolution is performed via half volumes.')
 
-        form.addParam('halfVolumesFile', BooleanParam, default=True,
-                      condition='halfVolumes',
+        form.addParam('hashalfVolumesFile', BooleanParam, default=True,
+                      condition='usehalfVolumes', allowsNull=True,
                       label="Are the half volumes stored with the input volume?",
                       help='Usually, the half volumes are stored as properties of '
                       'the input volume. If this is not the case, set this to '
                       'False and specify the two halves you want to use.')
 
-        form.addParam('inputVolumes', PointerParam, pointerClass='Volume',
+        form.addParam('fullMap', PointerParam, pointerClass='Volume',
                       label="Input Volume", important=True,
-                      condition = 'halfVolumesFile',
+                      condition = 'not usehalfVolumes',
                       help='Select a volume for determining its '
                       'local resolution.')
 
-        form.addParam('inputVolume', PointerParam, pointerClass='Volume',
+        form.addParam('associatedHalves', PointerParam, pointerClass='Volume',
+                      label="Input Half Maps", important=True,
+                      condition = 'usehalfVolumes and hashalfVolumesFile',
+                      help='Select a volume for determining its '
+                      'local resolution.')
+
+        form.addParam('halfMap1', PointerParam, pointerClass='Volume',
                       label="Volume Half 1", important=True,
-                      condition = 'not halfVolumesFile', 
+                      condition = 'usehalfVolumes and not hashalfVolumesFile',
                       help='Select the first half of a volume for determining its '
                       'local resolution.')
 
-        form.addParam('inputVolume2', PointerParam, pointerClass='Volume',
+        form.addParam('halfMap2', PointerParam, pointerClass='Volume',
                       label="Volume Half 2", important=True,
-                      condition='not halfVolumesFile',
+                      condition='usehalfVolumes and not hashalfVolumesFile',
                       help='Select the second half of a volume for determining a '
                       'local resolution.')
 
@@ -120,20 +125,20 @@ class XmippProtMonoRes(ProtAnalysis3D):
         group.addParam('significance', FloatParam, default=0.95, 
                        expertLevel=LEVEL_ADVANCED,
                       label="Significance",
-                      help='Relution is computed using hipothesis tests, '
+                      help='Relution is computed using hypothesis tests, '
                       'this value determines the significance of that test')
         
         group.addParam('maskthreshold', FloatParam, default=0.5, 
                        expertLevel=LEVEL_ADVANCED,
                       label="Mask threshold",
                       help='If the provided mask is not binary. Then, MonoRes'
-                      'will try to binarize it. Bmask values below the threshold'
+                      'will try to binarize it. Mask values below the threshold'
                       'will be change to 0 and above the thresthol will be 1')
         
         form.addParam('noiseonlyinhalves', BooleanParam, expertLevel=LEVEL_ADVANCED,
                       default=True,
                       label="Use noise inside protein?", 
-                      condition = 'halfVolumes',
+                      condition = 'usehalfVolumes',
                       help='(Yes recommended) the noise distribution will be estimated'
 		      ' in the protein region (inside the mask) by means of the '
 		      'difference of both half maps.')
@@ -141,7 +146,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
         form.addParam('gaussianNoise', BooleanParam, expertLevel=LEVEL_ADVANCED,
                       default=False,
                       label="Consider noise gaussian?", 
-                      help='It assumens the noise in the map as gaussian. '
+                      help='It assumes the noise in the map as gaussian. '
 			'Note that this assumption might not be true, despite ,it is '
 			' in general.')
         
@@ -167,7 +172,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
     def _insertAllSteps(self):
             # Convert input into xmipp Metadata format
         self._createFilenameTemplates() 
-        self._insertFunctionStep('convertInputStep', )
+        self._insertFunctionStep('convertInputStep')
         self._insertFunctionStep('resolutionMonogenicSignalStep')
         self._insertFunctionStep('createOutputStep')
         self._insertFunctionStep("createHistogram")
@@ -175,16 +180,12 @@ class XmippProtMonoRes(ProtAnalysis3D):
     def convertInputStep(self):
         """ Read the input volume.
         """
-        
-        self.micsFn = self._getPath()
-
-        if self.halfVolumes:
-            if not self.halfVolumesFile:
-                self.vol1Fn = self.inputVolume.get().getFileName()
-                self.vol2Fn = self.inputVolume2.get().getFileName()
-                #self.inputVolumes.set(None)
+        if self.usehalfVolumes:
+            if not self.hashalfVolumesFile:
+                self.vol1Fn = self.halfMap1.get().getFileName()
+                self.vol2Fn = self.halfMap2.get().getFileName()
             else:
-                self.vol1Fn, self.vol2Fn = self.inputVolumes.get().getHalfMaps().split(',')
+                self.vol1Fn, self.vol2Fn = self.associatedHalves.get().getHalfMaps().split(',')
             extVol1 = getExt(self.vol1Fn)
             extVol2 = getExt(self.vol2Fn)
             if (extVol1 == '.mrc') or (extVol1 == '.map'):
@@ -196,9 +197,8 @@ class XmippProtMonoRes(ProtAnalysis3D):
                 self.ifNomask(self.vol1Fn)
             else:
                 self.maskFn = self.Mask.get().getFileName()
-
         else:
-            self.vol0Fn = self.inputVolumes.get().getFileName()
+            self.vol0Fn = self.fullMap.get().getFileName()
             extVol0 = getExt(self.vol0Fn)
             if (extVol0 == '.mrc') or (extVol0 == '.map'):
                 self.vol0Fn = self.vol0Fn + ':mrc'
@@ -207,10 +207,6 @@ class XmippProtMonoRes(ProtAnalysis3D):
                 self.ifNomask(self.vol0Fn)
             else:
                 self.maskFn = self.Mask.get().getFileName()
-            
-            #self.inputVolume.set(None)
-            #self.inputVolume2.set(None)
-
 
         extMask = getExt(self.maskFn)
         if (extMask == '.mrc') or (extMask == '.map'):
@@ -225,15 +221,19 @@ class XmippProtMonoRes(ProtAnalysis3D):
             self.runJob('xmipp_transform_threshold', params)
 
     def ifNomask(self, fnVol):
-        if self.halfVolumes and not self.halfVolumesFile:
-            xdim, _ydim, _zdim = self.inputVolume.get().getDim()
-            params = ' -i %s' % fnVol
+        if self.usehalfVolumes:
+            if not self.hashalfVolumesFile:
+                xdim, _ydim, _zdim = self.halfMap1.get().getDim()
+                params = ' -i %s' % fnVol
+            else:
+                xdim, _ydim, _zdim = self.associatedHalves.get().getDim()
+                params = ' -i %s' % fnVol
         else:
-            xdim, _ydim, _zdim = self.inputVolumes.get().getDim()
+            xdim, _ydim, _zdim = self.fullMap.get().getDim()
             params = ' -i %s' % fnVol
         params += ' -o %s' % self._getFileName(FN_GAUSSIAN_MAP)
         setsize = 0.02*xdim
-        params += ' --fourier real_gaussian %f' % (setsize)
+        params += ' --fourier real_gaussian %f' % setsize
      
         self.runJob('xmipp_transform_filter', params)
         img = ImageHandler().read(self._getFileName(FN_GAUSSIAN_MAP))
@@ -254,20 +254,20 @@ class XmippProtMonoRes(ProtAnalysis3D):
         if self.stepSize.hasValue():
             freq_step = self.stepSize.get()
         else:
-            freq_step = 0.25
+            freq_step = 0.5
 
-        if self.halfVolumes:
+        if self.usehalfVolumes:
             params = ' --vol %s' % self.vol1Fn
             params += ' --vol2 %s' % self.vol2Fn
-            if not self.halfVolumesFile:
-                params += ' --sampling_rate %f' % self.inputVolume.get().getSamplingRate()
+            if not self.hashalfVolumesFile:
+                params += ' --sampling_rate %f' % self.halfMap1.get().getSamplingRate()
             else:
-                params += ' --sampling_rate %f' % self.inputVolumes.get().getSamplingRate()
-            if (self.noiseonlyinhalves.get() is True):
+                params += ' --sampling_rate %f' % self.associatedHalves.get().getSamplingRate()
+            if self.noiseonlyinhalves.get() is True:
                 params += ' --noiseonlyinhalves'
         else:
             params = ' --vol %s' % self.vol0Fn
-            params += ' --sampling_rate %f' % self.inputVolumes.get().getSamplingRate()
+            params += ' --sampling_rate %f' % self.fullMap.get().getSamplingRate()
         
         params += ' --mask %s' % self._getFileName(BINARY_MASK)
         
@@ -320,18 +320,23 @@ class XmippProtMonoRes(ProtAnalysis3D):
     def createOutputStep(self):
         volume=Volume()
         volume.setFileName(self._getExtraPath(OUTPUT_RESOLUTION_FILE))
-        if self.halfVolumes and not self.halfVolumesFile:
-            volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
-            volume.setOrigin(self.inputVolume.get().getOrigin(True))
-            self._defineOutputs(resolution_Volume=volume)
-            self._defineSourceRelation(self.inputVolume, volume)
-            inputVolumeFileName = self.inputVolume.get().getFileName()
+        if self.usehalfVolumes:
+            if not self.hashalfVolumesFile:
+                volume.setSamplingRate(self.halfMap1.get().getSamplingRate())
+                volume.setOrigin(self.halfMap1.get().getOrigin(True))
+                self._defineOutputs(resolution_Volume=volume)
+                self._defineSourceRelation(self.halfMap1, volume)
+            else:
+                volume.setSamplingRate(self.associatedHalves.get().getSamplingRate())
+                volume.setOrigin(self.associatedHalves.get().getOrigin(True))
+                self._defineOutputs(resolution_Volume=volume)
+                self._defineSourceRelation(self.associatedHalves, volume)
         else:
-            volume.setSamplingRate(self.inputVolumes.get().getSamplingRate())
-            volume.setOrigin(self.inputVolumes.get().getOrigin(True))
+            volume.setSamplingRate(self.fullMap.get().getSamplingRate())
+            volume.setOrigin(self.fullMap.get().getOrigin(True))
             self._defineOutputs(resolution_Volume=volume)
-            self._defineSourceRelation(self.inputVolumes, volume)
-            inputVolumeFileName = self.inputVolumes.get().getFileName()
+            self._defineSourceRelation(self.fullMap, volume)
+
 
         #Setting the min max for the summary
         imageFile = self._getExtraPath(OUTPUT_RESOLUTION_FILE_CHIMERA)
@@ -341,25 +346,6 @@ class XmippProtMonoRes(ProtAnalysis3D):
         self._store(self.min_res_init)
         self._store(self.max_res_init)
             
-
-        # fill ccp4 header so we can transfer the origin to the
-        # viewer (otherwise since imageFile is not a Scipion object
-        # no sampling/origin information can be transfered
-
-        #Ccp4Header(imageFile).copyCCP4Header(
-        #    inputVolumeFileName, volume.getShiftsFromOrigin(),
-        #    volume.getSamplingRate(), originField=Ccp4Header.START)
-
-        # also update the output volume header. This is not needed
-        # since sampling and origin is in the database but
-        # it may be usefull if other programs -outside scipion-
-        # require  these data.
-
-        #Ccp4Header(volume.getFileName()).copyCCP4Header(
-        #     inputVolumeFileName, volume.getShiftsFromOrigin(),
-        #     volume.getSamplingRate(), originField=Ccp4Header.START)
-
-
 
     # --------------------------- INFO functions ------------------------------
 
@@ -380,15 +366,19 @@ class XmippProtMonoRes(ProtAnalysis3D):
     def _validate(self):
         errors = []
 
-        if not self.halfVolumes.get():
-            if not self.inputVolumes.get():
-                errors.append("You need to select an input volume")
-        elif self.halfVolumesFile.get():
-            if not self.inputVolumes.get():
-                errors.append("You need to select an input volume")
+        if not self.maxRes.get():
+            errors.append("You must provide a low resolution limit")
+
+        if self.usehalfVolumes.get():
+            if self.hashalfVolumesFile.get():
+                if not self.associatedHalves.get():
+                    errors.append("You need to select the Associated halves")
+            else:
+                if not self.halfMap1.get() or not self.halfMap2.get():
+                    errors.append("You need to select the volumes half")
         else:
-            if not self.inputVolume.get() or not self.inputVolume2.get():
-                errors.append("You need to select the volumes half")
+            if not self.fullMap.get():
+                errors.append("You need to select an input volume")
 
         return errors
 
