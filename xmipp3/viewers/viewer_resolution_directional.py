@@ -292,29 +292,12 @@ class XmippMonoDirViewer(ProtocolViewer):
     def _plotHistogramDoA(self, param=None):
         self._plotHistogram('hist_DoA.xmd', 'DoA', 'DoA')
 
-    """   
-    def _plotHistogramRadial(self, param=None):
-        self._plotHistogram('hist_radial.xmd', 'Azimuthal Resolution', 'Resolution')
-        
-    def _plotHistogramAzimuthal(self, param=None):
-        self._plotHistogram('hist_azimuthal.xmd', 'Azimuthal Resolution', 'Resolution')
-    """
-
     def _plotHistogramDirections(self, param=None):
         self._plotHistogram('hist_prefdir.xmd', 'Highest Resolution per Direction', 'Direction')
         
     def _createAngDist2D(self, path):
         view = XmippPlotter(x=1, y=1, mainTitle="Highest Resolution per Direction", windowTitle="Angular distribution")
         
-        #md = MetaData(path)
-        #wmax=-1
-        #for objId in md:
-        #    w=md.getValue(MDL_WEIGHT,objId)
-        #    w=sqrt(w)
-        #    wmax=max(wmax,w)
-        #    md.setValue(MDL_WEIGHT,w,objId)
-        #md.write(path)
-        #print(w)
         view.plotAngularDistributionFromMd(path, 'directional resolution distribution')#,  min_w=0)
         return view.show()
 
