@@ -224,7 +224,7 @@ class XmippProtVolSubtraction(XmippProtVolAdjBase):
             summary.append("Input mask 2: %s" % self.mask2.get().getFileName())
         if self.resol.get() != 0:
             summary.append("Subtraction at resolution %f A" % self.resol.get())
-        if self.radavg.get() is True:
+        if self.radavg:
             summary.append("Matching the rotational averaged Fourier amplitudes")
         return summary
 
@@ -305,7 +305,7 @@ class XmippProtVolAdjust(XmippProtVolAdjBase):
             summary.append("Input mask 2: %s" % self.mask2.get().getFileName())
         if self.resol.get() != 0:
             summary.append("Filter at resolution %f A" % self.resol.get())
-        if self.radavg.get() is True:
+        if self.radavg:
             summary.append("Matching the rotational averaged Fourier amplitudes")
         return summary
 
