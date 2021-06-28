@@ -581,6 +581,15 @@ ISSN = {2079-9292},
 DOI = {http://doi.org/10.3390/electronics9061040}
 }
 
-
+@Article{Vilas2021,
+AUTHOR = {Vilas, JL and Tagare, HD},
+TITLE = {FlexAlign: An Accurate and Fast Algorithm for Movie Alignment in Cryo-Electron Microscopy},
+JOURNAL = {XXXX},
+VOLUME = {X},
+YEAR = {2021},
+NUMBER = {X},
+ARTICLE-NUMBER = {xxx},
+URL = {https://github.com/I2PC/xmipp/wiki/FSO---Fourier-Shell-Occupancy},
+}
 """
 

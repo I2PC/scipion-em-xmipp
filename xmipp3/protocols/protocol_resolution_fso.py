@@ -41,7 +41,8 @@ OUTPUT_DIRECTIONAL_DISTRIBUTION = 'Resolution_Distribution.xmd'
 
 class XmippProtFSO(ProtAnalysis3D):
     """    
-    Given two half maps the protocol estimates Fourier Shell Occupancy to determine the global anisotropy of the map
+    Given two half maps the protocol estimates Fourier Shell Occupancy to determine the global anisotropy of the map.
+    See more information here: https://github.com/I2PC/xmipp/wiki/FSO---Fourier-Shell-Occupancy
     """
     _label = 'resolution fso'
     _lastUpdateVersion = VERSION_2_0
@@ -53,7 +54,7 @@ class XmippProtFSO(ProtAnalysis3D):
     def _defineParams(self, form):
         form.addSection(label='Input')
 
-        form.addParam('halfVolumesFile', BooleanParam, default=True,
+        form.addParam('halfVolumesFile', BooleanParam, default=False,
                       label="Are the half volumes stored with the input volume?",
                       help='Usually, the half volumes are stored as properties of '
                       'the input volume. If this is not the case, set this to '
