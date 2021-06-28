@@ -259,10 +259,10 @@ class XmippProtMonoRes(ProtAnalysis3D):
         if self.usehalfVolumes:
             params = ' --vol %s' % self.vol1Fn
             params += ' --vol2 %s' % self.vol2Fn
-            if not self.hashalfVolumesFile:
-                params += ' --sampling_rate %f' % self.halfMap1.get().getSamplingRate()
-            else:
+            if self.hashalfVolumesFile:
                 params += ' --sampling_rate %f' % self.associatedHalves.get().getSamplingRate()
+            else:
+                params += ' --sampling_rate %f' % self.halfMap1.get().getSamplingRate()
             if self.noiseonlyinhalves.get() is True:
                 params += ' --noiseonlyinhalves'
         else:
