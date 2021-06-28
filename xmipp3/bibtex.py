@@ -583,7 +583,7 @@ DOI = {http://doi.org/10.3390/electronics9061040}
 
 @Article{Vilas2021,
 AUTHOR = {Vilas, JL and Tagare, HD},
-TITLE = {FlexAlign: An Accurate and Fast Algorithm for Movie Alignment in Cryo-Electron Microscopy},
+TITLE = {A simple and intuitive measurement of directional resolution anisotropy of cryoEM maps},
 JOURNAL = {XXXX},
 VOLUME = {X},
 YEAR = {2021},
