@@ -48,6 +48,16 @@ class TestLocalDeblurBase(BaseTest):
         return cls.protImport
 
     @classmethod
+    def runImportVolumes2(cls, emdbId):
+        """ Run an Import volumes protocol. """
+        cls.protImport = cls.newProtocol(ProtImportVolumes,
+                                         importFrom=ProtImportVolumes.IMPORT_FROM_EMDB,
+                                         emdbId=emdbId
+                                         )
+        cls.launchProtocol(cls.protImport)
+        return cls.protImport
+
+    @classmethod
     def runCreateMask(cls, pattern, thr):
         """ Create a volume mask. """
         cls.msk = cls.newProtocol(XmippProtCreateMask3D,
@@ -66,6 +76,26 @@ class TestLocalDeblurBase(BaseTest):
         cls.launchProtocol(cls.msk)
         return cls.msk
 
+    @classmethod
+    def runCreateMask2(cls, pattern, thr):
+        """ Create a volume mask. """
+        cls.msk = cls.newProtocol(XmippProtCreateMask3D,
+                                  inputVolume=pattern,
+                                  volumeOperation=0,  # OPERATION_THRESHOLD,
+                                  threshold=thr,
+                                  doSmall=False,
+                                  smallSize=False,
+                                  doBig=False,
+                                  doSymmetrize=False,
+                                  doMorphological=True,
+                                  morphologicalOperation=0, # MORPHOLOGY_DILATION
+                                  doInvert=False,
+                                  doSmooth=False,
+                                  sigmaConvolution=2
+                                  )
+        cls.launchProtocol(cls.msk)
+        return cls.msk
+
 
 class TestLocalDeblur(TestLocalDeblurBase):
     @classmethod
@@ -74,12 +104,14 @@ class TestLocalDeblur(TestLocalDeblurBase):
         TestLocalDeblurBase.setData()
         cls.protImportVol = cls.runImportVolumes(cls.map3D, 3.54)
         cls.protCreateMask = cls.runCreateMask(cls.protImportVol.outputVolume, 0.02)
+        cls.protImportVol2 = cls.runImportVolumes2('3488')
+        cls.protCreateMask2 = cls.runCreateMask2(cls.protImportVol2.outputVolume, 0.167)
 
-    def testLocalDeblur(self):
+    def testLocalDeblur1(self):
         MonoRes = self.newProtocol(XmippProtMonoRes,
                                    objLabel='single volume monores',
-                                   halfVolumes=False,
-                                   inputVolumes=self.protImportVol.outputVolume,
+                                   usehalfVolumes=False,
+                                   fullMap=self.protImportVol.outputVolume,
                                    Mask=self.protCreateMask.outputMask,
                                    minRes=1,
                                    maxRes=25
@@ -91,6 +123,29 @@ class TestLocalDeblur(TestLocalDeblurBase):
         LocalDeblur = self.newProtocol(XmippProtLocSharp,
                                    objLabel='sharpening localdeblur',    
                                    inputVolume=self.protImportVol.outputVolume,
+                                   resolutionVolume=MonoRes.resolution_Volume,
+                                   const=1,
+                                   )
+        self.launchProtocol(LocalDeblur)
+        self.assertTrue(exists(LocalDeblur._getExtraPath('sharpenedMap_last.mrc')),
+                        "LocalDeblur  has failed")
+
+    def testLocalDeblur2(self):
+        MonoRes = self.newProtocol(XmippProtMonoRes,
+                                   objLabel='single volume monores',
+                                   usehalfVolumes=False,
+                                   fullMap=self.protImportVol2.outputVolume,
+                                   Mask=self.protCreateMask2.outputMask,
+                                   minRes=1,
+                                   maxRes=6
+                                   )
+        self.launchProtocol(MonoRes)
+        self.assertTrue(exists(MonoRes._getExtraPath('monoresResolutionMap.mrc')),
+                        "MonoRes (no split, no premasked) has failed")
+
+        LocalDeblur = self.newProtocol(XmippProtLocSharp,
+                                   objLabel='sharpening localdeblur',
+                                   inputVolume=self.protImportVol2.outputVolume,
                                    resolutionVolume=MonoRes.resolution_Volume,
                                    const=1,
                                    )

@@ -229,7 +229,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections, XmippProtocol):
         if not self.checkIfInputIsCompareReprojection()  and self.modelTrainPredMode.get()==ITER_TRAIN and self.inputProjections.get() is None:
           errorMsg.append("Error, in training mode, both particles and projections must be provided")
         if self.imageSize.get() is None and self.modelTrainPredMode.get()==ITER_TRAIN:
-          errorMsg.append("Error, in training mode, image size must be provdided")
+          errorMsg.append("Error, in training mode, image size must be provided")      
         return errorMsg
 
     def _getResizedSize(self):
@@ -387,6 +387,14 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections, XmippProtocol):
             cleanPath(self._getExtraPath('resizedProjections.xmd'))
         if os.path.exists(self._getExtraPath('resizedEmptyParts.xmd')):
             cleanPath(self._getExtraPath('resizedEmptyParts.xmd'))
+        # extra cleaning    
+        if os.path.exists(self._getExtraPath('training_conf.json')):
+            cleanPath(self._getExtraPath('training_conf.json'))
+        if os.path.exists(self._getExtraPath('predict_conf.json')):
+            cleanPath(self._getExtraPath('predict_conf.json'))            
+        if os.path.exists(self._getExtraPath('batchImages/')):
+            #cleanPath(self._getExtraPath('batchImages/*.png'))
+            cleanPath(self._getExtraPath('batchImages'))
 
     def _processRow(self, particle, row):
         particle.setLocation(xmippToLocation(row.getValue(emlib.MDL_IMAGE)))

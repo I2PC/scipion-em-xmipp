@@ -444,7 +444,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                     setAttribute(ctf, '_ctf2_defocusAngle_diff',
                                  anglesDifference(ctf.getDefocusAngle(),
                                                   ctf2.getDefocusAngle()))
-                    if ctf.hasPhaseShift() and ctf2.hasPhaseShit():
+                    if ctf.hasPhaseShift() and ctf2.hasPhaseShift():
                         setAttribute(ctf, '_ctf2_phaseShift_diff',
                                      anglesDifference(ctf.getPhaseShift(),
                                                       ctf2.getPhaseShift()))
@@ -464,7 +464,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                                                         ctf2.getDefocusAngle())
                         ctf.setStandardDefocus(newDefocusU, newDefocusV,
                                                newDefocusAngle)
-                        if ctf.hasPhaseShift() and ctf2.hasPhaseShit():
+                        if ctf.hasPhaseShift() and ctf2.hasPhaseShift():
                             newPhaseShift = averageAngles(ctf.getPhaseShift(),
                                                           ctf2.getPhaseShift())
                             ctf.setPhaseShift(newPhaseShift)

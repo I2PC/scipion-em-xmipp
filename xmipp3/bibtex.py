@@ -161,7 +161,7 @@ keywords = "Image processing, Cluster analysis, Neural networks, Self-organizing
 }
 
 @article{PascualMontano2001,
-title = "A Novel Neural Network Technique for Analysis and Classification of \{EM\} Single-Particle Images",
+title = "A Novel Neural Network Technique for Analysis and Classification of \\{EM\\} Single-Particle Images",
 journal = "JSB",
 volume = "133",
 number = "2 - 3",
@@ -318,7 +318,7 @@ author = "Sorzano, C.O.S. and S. Jonic and C. El-Bez and J.M. Carazo and S. De C
 
 @Article{Sorzano2007a,
   Title                    = {Fast, robust and accurate determination of transmission electron microscopy contrast transfer function},
-  Author                   = {Sorzano, C. O. S. and Jonic, S. and N\'u\~nez-Ram\'irez, R. and Boisset, N. and Carazo, J. M.},
+  Author                   = {Sorzano, C. O. S. and Jonic, S. and N\'u\\~nez-Ram\'irez, R. and Boisset, N. and Carazo, J. M.},
   Journal                  = {J. Structural Biology},
   Year                     = {2007},
   Pages                    = {249--262},
@@ -581,6 +581,15 @@ ISSN = {2079-9292},
 DOI = {http://doi.org/10.3390/electronics9061040}
 }
 
-
+@Article{Vilas2021,
+AUTHOR = {Vilas, JL and Tagare, HD},
+TITLE = {A simple and intuitive measurement of directional resolution anisotropy of cryoEM maps},
+JOURNAL = {XXXX},
+VOLUME = {X},
+YEAR = {2021},
+NUMBER = {X},
+ARTICLE-NUMBER = {xxx},
+URL = {https://github.com/I2PC/xmipp/wiki/FSO---Fourier-Shell-Occupancy},
+}
 """
 

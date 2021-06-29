@@ -39,7 +39,7 @@ from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.20.07'
+_currentVersion = '3.21.06.1'
 
 
 class Plugin(pwem.Plugin):
@@ -144,7 +144,7 @@ class Plugin(pwem.Plugin):
 
         ## Linking bindings (removing installationToken)
         bindingsAndLibsCmd = ("find {bindingsSrc} -maxdepth 1 -mindepth 1 "
-                              "! -name __pycache__ -exec ln -srfn {{}} {bindingsDst} \; && "
+                              r"! -name __pycache__ -exec ln -srfn {{}} {bindingsDst} \; && "
                               "ln -srfn {coreLib} {libsDst} && "
                               "touch {bindingsToken} && "
                               "rm {installedToken} 2> /dev/null")
@@ -157,7 +157,7 @@ class Plugin(pwem.Plugin):
         ## Allowing xmippDev if devel mode detected
         # plugin  = scipion-em-xmipp  <--  xmipp3    <--     __init__.py
         pluginDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        # bundle  = xmipp-bundle  <-  src  <-  scipion-em-xmipp
+        # bundle  = xmipp-bundle  <-  src   <-  scipion-em-xmipp
         bundleDir = os.path.dirname(os.path.dirname(pluginDir))
 
         isPypiDev = os.path.isfile(os.path.join(pluginDir, 'setup.py'))
@@ -241,7 +241,7 @@ def installDeepLearningToolkit(plugin, env):
                      'xmippLibToken': 'xmippLibToken',
                      'libXmipp': plugin.getHome('lib/libXmipp.so'),
                      'preMsgsStr': ' ; '.join(preMsgs),
-                     'afterMsgs': "\n > ".join(cudaMsgs)}
+                     'afterMsgs': ", > ".join(cudaMsgs)}
 
     installDLvars.update({'modelsTarget': "%s_%s_%s_%s"
                                           % (installDLvars['modelsPrefix'],

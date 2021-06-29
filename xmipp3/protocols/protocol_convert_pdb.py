@@ -32,8 +32,8 @@ import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as const
 from pyworkflow.utils import replaceBaseExt, removeExt, getExt
 
-from pwem.convert import cifToPdb, downloadPdb
-from pwem.objects import Volume
+from pwem.convert import cifToPdb, downloadPdb, headers
+from pwem.objects import Volume, Transform
 from pwem.protocols import ProtInitialVolume
 
 
@@ -44,7 +44,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
     IMPORT_OBJ = 1
     IMPORT_FROM_FILES = 2 
        
-    #--------------------------- DEFINE param functions --------------------------------------------
+    # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         """ Define the parameters that will be input for the Protocol.
         This definition is also used to generate automatically the GUI.
@@ -66,16 +66,29 @@ class XmippProtConvertPdb(ProtInitialVolume):
         form.addParam('sampling', params.FloatParam, default=1.0, 
                       label="Sampling rate (Å/px)",
                       help='Sampling rate (Angstroms/pixel)')
-        form.addParam('setSize', params.BooleanParam, label='Set final size?', default=False)
-        form.addParam('size', params.IntParam, condition='setSize', allowsNull=True, 
-                      label="Final size (px)",
-                      help='Final size in pixels. If no value is provided, protocol will estimate it.')
+        form.addParam('vol', params.BooleanParam, label='Use a volume as an empty template?', default=False,
+                      help='Use an existing volume to define the size and origin for the output volume. If this option'
+                           'is selected, make sure that "Center PDB" in advanced parameters is set to *No*.')
+        form.addParam('volObj', params.PointerParam, pointerClass='Volume',
+                      label="Input volume ", condition='vol', allowsNull=True,
+                      help='The origin and the final size of the output volume will be taken from this volume.')
+        form.addParam('setSize', params.BooleanParam, label='Set final size?', default=False, condition='vol == False')
+        form.addParam('size_z', params.IntParam, condition='setSize', allowsNull=True,
+                      label="Final size (px) Z",
+                      help='Final size in Z in pixels. If no value is provided, protocol will estimate it.')
+        form.addParam('size_y', params.IntParam, condition='setSize', allowsNull=True,
+                      label="Final size (px) Y",
+                      help='Final size in Y in pixels. If no value is provided, protocol will estimate it.')
+        form.addParam('size_x', params.IntParam, condition='setSize', allowsNull=True,
+                      label="Final size (px) X",
+                      help='Final size in X in pixels. If desired output size is x = y = z you can only fill this '
+                           'field. If no value is provided, protocol will estimate it.')
         form.addParam('centerPdb', params.BooleanParam, default=True, 
                       expertLevel=const.LEVEL_ADVANCED, 
                       label="Center PDB",
                       help='Center PDB with the center of mass')
     
-    #--------------------------- INSERT steps functions --------------------------------------------
+    # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         """ In this function the steps that are going to be executed should
         be defined. Two of the most used functions are: _insertFunctionStep or _insertRunJobStep
@@ -85,7 +98,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
         self._insertFunctionStep('convertPdbStep')
         self._insertFunctionStep('createOutput')
     
-    #--------------------------- STEPS functions --------------------------------------------
+    # --------------------------- STEPS functions --------------------------------------------
     def pdbDownloadStep(self):
         """Download all pdb files in file_list and unzip them."""
         downloadPdb(self.pdbId.get(), self._getPdbFileName(), self._log)
@@ -101,19 +114,34 @@ class XmippProtConvertPdb(ProtInitialVolume):
             cifToPdb(pdbFn, pdbFn2)
             pdbFn = pdbFn2
 
-        args = '-i %s --sampling %f -o %s' % (pdbFn, self.sampling.get(), outFile)
+        samplingR = self.sampling.get()
+
+        args = '-i %s --sampling %f -o %s' % (pdbFn, samplingR, outFile)
         
         if self.centerPdb:
             args += ' --centerPDB'
-        
+
+        if self.vol:
+            vol = self.volObj.get()
+            size = vol.getDim()
+            ccp4header = headers.Ccp4Header(vol.getFileName(), readHeader=True)
+            self.shifts = ccp4header.getOrigin()
+            args += ' --size %d %d %d --orig %d %d %d' % (size[2], size[1], size[0],
+                                                          self.shifts[0]/samplingR,
+                                                          self.shifts[1]/samplingR,
+                                                          self.shifts[2]/samplingR)
+
         if self.setSize:
             args += ' --size'
-            
-        if self.size.hasValue():
-            args += ' %d' % self.size.get()
+
+        if self.size_x.hasValue():
+            args += ' %d' % self.size_x.get()
+
+        if self.size_y.hasValue() and self.size_z.hasValue():
+            args += ' %d %d' % (self.size_y.get(), self.size_z.get())
 
         self.info("Input file: " + pdbFn)
-        self.info("Output file: " +outFile)
+        self.info("Output file: " + outFile)
         
         program = "xmipp_volume_from_pdb"
         self.runJob(program, args)
@@ -122,11 +150,15 @@ class XmippProtConvertPdb(ProtInitialVolume):
         volume = Volume()
         volume.setSamplingRate(self.sampling.get())
         volume.setFileName(self._getVolName())
+        if self.vol:
+            origin = Transform()
+            origin.setShiftsTuple(self.shifts)
+            volume.setOrigin(origin)
         self._defineOutputs(outputVolume=volume)
         if self.inputPdbData == self.IMPORT_OBJ:
             self._defineSourceRelation(self.pdbObj, volume)
     
-    #--------------------------- INFO functions --------------------------------------------
+    # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
         """ Even if the full set of parameters is available, this function provides
         summary information about an specific run.
@@ -157,7 +189,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
         
         return errors
     
-    #--------------------------- UTLIS functions --------------------------------------------
+    # --------------------------- UTLIS functions --------------------------------------------
     def _getPdbFileName(self):
         if self.inputPdbData == self.IMPORT_FROM_ID:
             return self._getExtraPath('%s.cif' % self.pdbId.get())
@@ -168,4 +200,3 @@ class XmippProtConvertPdb(ProtInitialVolume):
     
     def _getVolName(self):
         return self._getExtraPath(replaceBaseExt(self._getPdbFileName(), "vol"))
-    
