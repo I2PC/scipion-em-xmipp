@@ -314,17 +314,25 @@ class PathData(Data):
         del self._points[-1]
 
 
-class DeprecatedParam():
+class DeprecatedParam:
+    """ Deprecated param. To be used when you want to rename an existing param
+    and still be able to recover old param value. It acts like a redirector, passing the
+    value received when its value is set to the new renamed parameter"""
     def __init__(self, newParamName, prot):
-        self._objId = None
+        """        :param newParamName: Name of the new renamed param
+        :param prot: Protocol hosting this and the renamed param        """
         self._newParamName = newParamName
         self.prot = prot
-        self._objDoStore = False
+        # Need to fake being a Object at loading time
+        self._objId = None
         self._objIsPointer = False
 
     def set(self, value):
         if hasattr(self.prot, self._newParamName):
-            self._getNewParam().set(value)
+            newParam = self._getNewParam()
+            newParam.set(value)
+            if newParam.isPointer():
+                self._extended = newParam._extended
 
     def isPointer(self):
         return self._getNewParam().isPointer()
