@@ -133,14 +133,14 @@ class XmippProtMonoRes(ProtAnalysis3D):
                        help='Relution is computed using hypothesis tests, '
                             'this value determines the significance of that test')
 
-        group.addParam('maskthreshold', FloatParam, default=0.5,
+        group.addParam('maskThreshold', FloatParam, default=0.5,
                        expertLevel=LEVEL_ADVANCED,
                        label="Mask threshold",
                        help='If the provided mask is not binary. Then, MonoRes'
                             'will try to binarize it. Mask values below the threshold'
                             'will be change to 0 and above the thresthol will be 1')
 
-        form.addParam('noiseonlyinhalves', BooleanParam, expertLevel=LEVEL_ADVANCED,
+        form.addParam('noiseOnlyInHalves', BooleanParam, expertLevel=LEVEL_ADVANCED,
                       default=True,
                       label="Use noise inside protein?",
                       condition='useHalfVolumes',
@@ -219,7 +219,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
         if self.mask.hasValue():
             params = ' -i %s' % self.maskFn
             params += ' -o %s' % self._getFileName(BINARY_MASK)
-            params += ' --select below %f' % self.maskthreshold.get()
+            params += ' --select below %f' % self.maskThreshold.get()
             params += ' --substitute binarize'
 
             self.runJob('xmipp_transform_threshold', params)
@@ -266,7 +266,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
                 params += ' --sampling_rate %f' % self.associatedHalves.get().getSamplingRate()
             else:
                 params += ' --sampling_rate %f' % self.halfMap1.get().getSamplingRate()
-            if self.noiseonlyinhalves.get() is True:
+            if self.noiseOnlyInHalves.get() is True:
                 params += ' --noiseonlyinhalves'
         else:
             params = ' --vol %s' % self.vol0Fn
