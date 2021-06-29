@@ -81,10 +81,10 @@ class TestMonoRes(TestMonoResBase):
     def testMonoRes1(self):
         MonoRes = self.newProtocol(XmippProtMonoRes,
                                    objLabel='single volume monores',
-                                   usehalfVolumes=False,
-                                   hashalfVolumesFile=False,
+                                   useHalfVolumes=False,
+                                   hasHalfVolumesFile=False,
                                    fullMap=self.protImportVol.outputVolume,
-                                   Mask=self.protCreateMask.outputMask,
+                                   mask=self.protCreateMask.outputMask,
                                    minRes=1,
                                    maxRes=25,
                                    )
@@ -95,12 +95,12 @@ class TestMonoRes(TestMonoResBase):
     def testMonoRes2(self):
         MonoRes = self.newProtocol(XmippProtMonoRes,
                                    objLabel='two halves monores',
-                                   usehalfVolumes=True,
-                                   hashalfVolumesFile=False,
+                                   useHalfVolumes=True,
+                                   hasHalfVolumesFile=False,
                                    halfMap1=self.protImportHalf1.outputVolume,
                                    halfMap2=self.protImportHalf2.outputVolume,
                                    provideMaskInHalves=True,
-                                   Mask=self.protCreateMask.outputMask,
+                                   mask=self.protCreateMask.outputMask,
                                    minRes=1,
                                    maxRes=25,
                                    )
