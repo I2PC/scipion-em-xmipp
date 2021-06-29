@@ -133,6 +133,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
                        help='Relution is computed using hypothesis tests, '
                             'this value determines the significance of that test')
 
+        self.maskthreshold = DeprecatedParam('maskThreshold', self)
         group.addParam('maskThreshold', FloatParam, default=0.5,
                        expertLevel=LEVEL_ADVANCED,
                        label="Mask threshold",
@@ -140,6 +141,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
                             'will try to binarize it. Mask values below the threshold'
                             'will be change to 0 and above the thresthol will be 1')
 
+        self.noiseonlyinhalves = DeprecatedParam('noiseOnlyInHalves', self)
         form.addParam('noiseOnlyInHalves', BooleanParam, expertLevel=LEVEL_ADVANCED,
                       default=True,
                       label="Use noise inside protein?",
