@@ -125,7 +125,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
 
     def _showOriginalVolumeSlices(self, param=None):
         if self.protocol.useHalfVolumes.get():
-            if self.protocol.hashalfVolumesFile.get():
+            if self.protocol.hasHalfVolumesFile.get():
                 fn1, fn2 = self.protocol.associatedHalves.get().getHalfMaps().split(',')
             else:
                 fn1 = self.protocol.halfMap1.get().getFileName()
@@ -224,7 +224,7 @@ class XmippMonoResViewer(LocalResolutionViewer):
             sampRate = self.sharpenedMap.get().getSamplingRate()
         else:
             if self.protocol.useHalfVolumes.get():
-                if self.protocol.hashalfVolumesFile.get():
+                if self.protocol.hasHalfVolumesFile.get():
                     vol = self.protocol.associatedHalves.get().getHalfMaps()
                     fnOrigMap, _unused = vol.split(',')
                     sampRate = self.protocol.associatedHalves.get().getSamplingRate()
