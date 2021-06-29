@@ -72,7 +72,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
                            'local resolution is performed via half volumes.')
 
         self.halfVolumesFile = DeprecatedParam('hashalfVolumesFile', self)
-        form.addParam('hashalfVolumesFile', BooleanParam, default=True,
+        form.addParam('hasHalfVolumesFile', BooleanParam, default=True,
                       condition='useHalfVolumes', allowsNull=True,
                       label="Are the half volumes stored with the input volume?",
                       help='Usually, the half volumes are stored as properties of '
@@ -88,21 +88,21 @@ class XmippProtMonoRes(ProtAnalysis3D):
 
         form.addParam('associatedHalves', PointerParam, pointerClass='Volume',
                       label="Input Half Maps", important=True,
-                      condition='useHalfVolumes and hashalfVolumesFile',
+                      condition='useHalfVolumes and hasHalfVolumesFile',
                       help='Select a volume for determining its '
                            'local resolution.')
 
         # self.inputVolume = DeprecatedParam('halfMap1', self)
         form.addParam('halfMap1', PointerParam, pointerClass='Volume',
                       label="Volume Half 1", important=True,
-                      condition='useHalfVolumes and not hashalfVolumesFile',
+                      condition='useHalfVolumes and not hasHalfVolumesFile',
                       help='Select the first half of a volume for determining its '
                            'local resolution.')
 
         # self.inputVolume2 = DeprecatedParam('halfMap2', self)
         form.addParam('halfMap2', PointerParam, pointerClass='Volume',
                       label="Volume Half 2", important=True,
-                      condition='useHalfVolumes and not hashalfVolumesFile',
+                      condition='useHalfVolumes and not hasHalfVolumesFile',
                       help='Select the second half of a volume for determining a '
                            'local resolution.')
 
@@ -184,7 +184,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
         """ Read the input volume.
         """
         if self.useHalfVolumes:
-            if not self.hashalfVolumesFile:
+            if not self.hasHalfVolumesFile:
                 self.vol1Fn = self.halfMap1.get().getFileName()
                 self.vol2Fn = self.halfMap2.get().getFileName()
             else:
@@ -225,7 +225,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
 
     def ifNomask(self, fnVol):
         if self.useHalfVolumes:
-            if not self.hashalfVolumesFile:
+            if not self.hasHalfVolumesFile:
                 xdim, _ydim, _zdim = self.halfMap1.get().getDim()
                 params = ' -i %s' % fnVol
             else:
@@ -261,7 +261,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
         if self.useHalfVolumes:
             params = ' --vol %s' % self.vol1Fn
             params += ' --vol2 %s' % self.vol2Fn
-            if self.hashalfVolumesFile:
+            if self.hasHalfVolumesFile:
                 params += ' --sampling_rate %f' % self.associatedHalves.get().getSamplingRate()
             else:
                 params += ' --sampling_rate %f' % self.halfMap1.get().getSamplingRate()
@@ -320,7 +320,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
         volume = Volume()
         volume.setFileName(self._getExtraPath(OUTPUT_RESOLUTION_FILE))
         if self.useHalfVolumes:
-            if not self.hashalfVolumesFile:
+            if not self.hasHalfVolumesFile:
                 volume.setSamplingRate(self.halfMap1.get().getSamplingRate())
                 volume.setOrigin(self.halfMap1.get().getOrigin(True))
                 self._defineOutputs(resolution_Volume=volume)
