@@ -41,21 +41,20 @@ OUTPUT_DIRECTIONAL_DISTRIBUTION = 'Resolution_Distribution.xmd'
 
 class XmippProtFSO(ProtAnalysis3D):
     """    
-    Given two half maps the protocol estimates Fourier Shell Occupancy to determine the global anisotropy of the map
+    Given two half maps the protocol estimates Fourier Shell Occupancy to determine the global anisotropy of the map.
+    See more information here: https://github.com/I2PC/xmipp/wiki/FSO---Fourier-Shell-Occupancy
     """
     _label = 'resolution fso'
     _lastUpdateVersion = VERSION_2_0
-    
+
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
-        self.min_res_init = Float()
-        self.max_res_init = Float()
-    
+
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
 
-        form.addParam('halfVolumesFile', BooleanParam, default=True,
+        form.addParam('halfVolumesFile', BooleanParam, default=False,
                       label="Are the half volumes stored with the input volume?",
                       help='Usually, the half volumes are stored as properties of '
                       'the input volume. If this is not the case, set this to '
@@ -71,39 +70,39 @@ class XmippProtFSO(ProtAnalysis3D):
                       condition = "not halfVolumesFile",
                       label="Half Map 1", important=True,
                       help='Select one map for determining the '
-		      'directional FSC resolution.')
+		                    'directional FSC resolution.')
 
         form.addParam('half2', PointerParam, pointerClass='Volume',
                       condition = "not halfVolumesFile",
                       label="Half Map 2", important=True,
                       help='Select the second map for determining the '
                       'directional FSC resolution.')
-        
-        form.addParam('mask', PointerParam, pointerClass='VolumeMask', 
-                      allowsNull=True, 
-                      label="Mask", 
+
+        form.addParam('mask', PointerParam, pointerClass='VolumeMask',
+                      allowsNull=True,
+                      label="Mask",
                       help='The mask determines which points are specimen'
                       ' and which are not')
 
         form.addParam('coneAngle', FloatParam, default=17.0,
-                      expertLevel=LEVEL_ADVANCED, 
+                      expertLevel=LEVEL_ADVANCED,
                       label="Cone Angle",
                       help='Angle between the axis of the cone and the generatrix. '
                            'An angle of 17 degrees is the best angle (see publication'
                            'Vilas 2021) to measuare directional FSCs')
-        
-        form.addParam('estimate3DFSC', BooleanParam, default=True, 
+
+        form.addParam('estimate3DFSC', BooleanParam, default=True,
                       label="Estimate 3DFSC and directional filtered map",
                       help='Set to estimate the 3DFSCD map, and applyting the '
                            ' 3DFSC as anisotropic filter to obtain a directional'
                            'filtered map.')
 
-        form.addParam('threshold', FloatParam, expertLevel=LEVEL_ADVANCED, 
-                      default=0.143, 
+        form.addParam('threshold', FloatParam, expertLevel=LEVEL_ADVANCED,
+                      default=0.143,
                       label="FSC Threshold",
                       help='Threshold for the fsc. By default the standard 0.143. '
                            'Other common thresholds are 0.5 and 0.3.')
-        
+
         form.addParallelSection(threads = 4, mpi = 0)
 
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -117,7 +116,7 @@ class XmippProtFSO(ProtAnalysis3D):
 
 
     def _insertAllSteps(self):
-        self._createFilenameTemplates() 
+        self._createFilenameTemplates()
         # Convert input into xmipp Metadata format
         self._insertFunctionStep('convertInputStep')
         self._insertFunctionStep('FSOestimationStep')
@@ -131,7 +130,7 @@ class XmippProtFSO(ProtAnalysis3D):
             params = ' -i "%s"' % fileName
             params += ' -o "%s"' % outputFileName
             self.runJob('xmipp_image_convert', params)
-            return outputFileName
+            return outputFileName+':mrc'
         else:
             return fileName+':mrc'
 
@@ -142,24 +141,47 @@ class XmippProtFSO(ProtAnalysis3D):
         if self.halfVolumesFile:
             self.vol1Fn, self.vol2Fn = self.inputHalves.get().getHalfMaps().split(',')
         else:
+            self.vol1Fn = self.half1.get().getFileName()
+            self.vol2Fn = self.half2.get().getFileName()
+
+        extVol1 = getExt(self.vol1Fn)
+        extVol2 = getExt(self.vol2Fn)
+
+        if (extVol1 == '.mrc') or (extVol1 == '.map'):
+            self.vol1Fn = self.vol1Fn + ':mrc'
+        if (extVol2 == '.mrc') or (extVol2 == '.map'):
+            self.vol2Fn = self.vol2Fn + ':mrc'
+
+        if self.mask.hasValue():
+            self.maskFn = self.mask.get().getFileName()
+            extMask = getExt(self.maskFn)
+            if (extMask == '.mrc') or (extMask == '.map'):
+                self.maskFn = self.maskFn + ':mrc'
+
+        """
+        if self.halfVolumesFile:
+            self.vol1Fn, self.vol2Fn = self.inputHalves.get().getHalfMaps().split(',')
+        else:
             self.vol1Fn = self.mrc_convert(self.half1.get().getFileName(),
                                   self._getTmpPath('half1.mrc'))
-            self.vol2Fn = self.mrc_convert(self.half2.get().getFileName(), 
+            self.vol2Fn = self.mrc_convert(self.half2.get().getFileName(),
                                   self._getTmpPath('half2.mrc'))
         if (self.mask.hasValue()):
-            self.maskFn = self.mrc_convert(self.mask.get().getFileName(), 
+            self.maskFn = self.mrc_convert(self.mask.get().getFileName(),
                                   self._getExtraPath('mask.mrc'))
+        """
+
 
     def FSOestimationStep(self):
         import os
-        fndir = self._getExtraPath("fsc") 
+        fndir = self._getExtraPath("fsc")
 
-        os.mkdir(fndir) 	
+        os.mkdir(fndir)
 
         params = ' --half1 "%s"' % self.vol1Fn
         params += ' --half2 "%s"' % self.vol2Fn
         params += ' -o %s' % self._getExtraPath()
-        if (self.halfVolumesFile):
+        if self.halfVolumesFile:
             params += ' --sampling %f' % self.inputHalves.get().getSamplingRate()
         else:
             params += ' --sampling %f' % self.half1.get().getSamplingRate()
@@ -171,26 +193,33 @@ class XmippProtFSO(ProtAnalysis3D):
 
         if self.estimate3DFSC.get():
             params += ' --threedfsc_filter'
-        
+
         params += ' --threshold %s' % self.threshold.get()
         params += ' --threads %s' % self.numberOfThreads.get()
-        
+
         self.runJob('xmipp_resolution_fso', params)
-      
-     
+
+
     def createOutputStep(self):
-        volume=Volume()
-        volume.setFileName(self._getExtraPath("3dFSC.mrc"))
 
-        volume.setSamplingRate(self.half1.get().getSamplingRate())
-        self._defineOutputs(fsc3D=volume)
-        self._defineSourceRelation(self.half1, volume)
+        if self.estimate3DFSC:
+            volume = Volume()
+            volume.setFileName(self._getExtraPath("3dFSC.mrc"))
+            volume.setFileName(self._getExtraPath("filteredMap.mrc"))
+            if self.halfVolumesFile:
+                volume.setSamplingRate(self.inputHalves.get().getSamplingRate())
+                self._defineOutputs(fsc3D=volume)
+                self._defineOutputs(directionalFilteredMap=volume)
+                self._defineSourceRelation(self.inputHalves, volume)
+            else:
+                volume.setSamplingRate(self.half1.get().getSamplingRate())
+                self._defineOutputs(fsc3D=volume)
+                self._defineOutputs(directionalFilteredMap=volume)
+                self._defineSourceRelation(self.half1, volume)
 
-        volume.setFileName(self._getExtraPath("filteredMap.mrc"))
 
-        volume.setSamplingRate(self.half1.get().getSamplingRate())
-        self._defineOutputs(directionalFilteredMap=volume)
-        self._defineSourceRelation(self.half1, volume)
+
+
 
 
     # --------------------------- INFO functions ------------------------------
@@ -201,7 +230,21 @@ class XmippProtFSO(ProtAnalysis3D):
             messages.append(
                 'Information about the method/article in ')
         return messages
-    
+
+    def _validate(self):
+        errors = []
+
+        if self.halfVolumesFile.get():
+            if not self.inputHalves.get():
+                errors.append("You need to select the Associated halves")
+        else:
+            if not self.half1.get():
+                errors.append("You need to select the half1")
+            if not self.half2.get():
+                errors.append("You need to select the half2")
+
+        return errors
+
     def _summary(self):
         summary = []
         summary.append(" ")
