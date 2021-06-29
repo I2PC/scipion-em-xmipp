@@ -367,7 +367,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
             errors.append("You must provide a low resolution limit")
 
         if self.useHalfVolumes.get():
-            if self.hashalfVolumesFile.get():
+            if self.hasHalfVolumesFile.get():
                 if not self.associatedHalves.get():
                     errors.append("You need to select the Associated halves")
             else:
