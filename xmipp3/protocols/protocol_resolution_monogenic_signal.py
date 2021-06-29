@@ -71,7 +71,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
                       help='The noise estimation for determining the '
                            'local resolution is performed via half volumes.')
 
-        self.halfVolumesFile = DeprecatedParam('hashalfVolumesFile', self)
+        self.halfVolumesFile = DeprecatedParam('hasHalfVolumesFile', self)
         form.addParam('hasHalfVolumesFile', BooleanParam, default=True,
                       condition='useHalfVolumes', allowsNull=True,
                       label="Are the half volumes stored with the input volume?",
@@ -79,7 +79,7 @@ class XmippProtMonoRes(ProtAnalysis3D):
                            'the input volume. If this is not the case, set this to '
                            'False and specify the two halves you want to use.')
 
-        # self.inputVolumes = DeprecatedParam('fullMap', self)
+        self.inputVolumes = DeprecatedParam('fullMap', self)
         form.addParam('fullMap', PointerParam, pointerClass='Volume',
                       label="Input Volume", important=True,
                       condition='not useHalfVolumes',
@@ -92,20 +92,21 @@ class XmippProtMonoRes(ProtAnalysis3D):
                       help='Select a volume for determining its '
                            'local resolution.')
 
-        # self.inputVolume = DeprecatedParam('halfMap1', self)
+        self.inputVolume = DeprecatedParam('halfMap1', self)
         form.addParam('halfMap1', PointerParam, pointerClass='Volume',
                       label="Volume Half 1", important=True,
                       condition='useHalfVolumes and not hasHalfVolumesFile',
                       help='Select the first half of a volume for determining its '
                            'local resolution.')
 
-        # self.inputVolume2 = DeprecatedParam('halfMap2', self)
+        self.inputVolume2 = DeprecatedParam('halfMap2', self)
         form.addParam('halfMap2', PointerParam, pointerClass='Volume',
                       label="Volume Half 2", important=True,
                       condition='useHalfVolumes and not hasHalfVolumesFile',
                       help='Select the second half of a volume for determining a '
                            'local resolution.')
 
+        self.Mask = DeprecatedParam('mask', self)
         form.addParam('mask', PointerParam, pointerClass='VolumeMask',
                       allowsNull=True,
                       label="Binary Mask",

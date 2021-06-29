@@ -104,9 +104,13 @@ class XmippMonoResViewer(LocalResolutionViewer):
                                                     defaultHighest=self.protocol.max_res_init)
 
         group.addParam('sharpenedMap', PointerParam, pointerClass='Volume',
-                       label="(Optional) Color in ChimeraX a different map by local resolution (for instance a sharpened map)",
+                       label="(Optional) Color a sharpen map by local resolution in ChimeraX",
                        allowsNull=True,
-                       help='a.')
+                       help='Local resolution should be estimated with the raw maps instead'
+                            ' of sharpen maps. Information about this in (Vilas et al '
+                            'Current Opinion in Structural Biology 2021). This entry parameter '
+                            'allows to color the local resolution in'
+                            'a different map')
 
     def _getVisualizeDict(self):
         self.protocol._createFilenameTemplates()
