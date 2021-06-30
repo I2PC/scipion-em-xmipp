@@ -1172,20 +1172,82 @@ class TestXmippVolSubtraction(TestXmippBase):
         self.launchProtocol(protImportVol1)
         self.assertIsNotNone(protImportVol1.getFiles(),
                              "There was a problem with the import 1")
+
         print("Import Volume 2")
         protImportVol2 = self.newProtocol(ProtImportVolumes,
-                                         objLabel='Volume',
-                                         filesPath=self.vol2,
-                                         samplingRate=7.08)
+                                          objLabel='Volume',
+                                          filesPath=self.vol2,
+                                          samplingRate=7.08)
         self.launchProtocol(protImportVol2)
         self.assertIsNotNone(protImportVol2.getFiles(),
                              "There was a problem with the import 2")
+
+        print("Import atomic structure")
+        protImportPdb = self.newProtocol(ProtImportPdb,
+                                          pdbId='6Z9F',
+                                          inputVolume=protImportVol1.outputVolume)
+        self.launchProtocol(protImportPdb)
+        self.assertIsNotNone(protImportPdb.getFiles(),
+                             "There was a problem with the atomic structure")
+
+        print("Create mask")
+        protCreateMask = self.newProtocol(XmippProtCreateMask3D,
+                                          inputVolume=protImportVol1.outputVolume,
+                                          threshold=0.28)
+        self.launchProtocol(protCreateMask)
+        self.assertIsNotNone(protCreateMask.getFiles(),
+                             "There was a problem with the 3D mask")
+
         print("Run volume subtraction")
         protVolSub = self.newProtocol(XmippProtVolSubtraction,
                                       vol1=protImportVol1.outputVolume,
                                       vol2=protImportVol2.outputVolume,
-                                      pdb=False,
-                                      masks=False)
+                                      masks=False,
+                                      radavg=False)
         self.launchProtocol(protVolSub)
         self.assertIsNotNone(protVolSub.outputVolume,
                              "There was a problem with Volumes subtraction")
+
+        protVolSubMask = self.newProtocol(XmippProtVolSubtraction,
+                                      vol1=protImportVol1.outputVolume,
+                                      vol2=protImportVol2.outputVolume,
+                                      radavg=False,
+                                      mask1=protCreateMask.outputMask,
+                                      mask2=protCreateMask.outputMask)
+        self.launchProtocol(protVolSubMask)
+        self.assertIsNotNone(protVolSubMask.outputVolume,
+                             "There was a problem with Volumes subtraction with masks")
+
+        protVolSubRadAvg = self.newProtocol(XmippProtVolSubtraction,
+                                      vol1=protImportVol1.outputVolume,
+                                      vol2=protImportVol2.outputVolume,
+                                      masks=False)
+        self.launchProtocol(protVolSubRadAvg)
+        self.assertIsNotNone(protVolSubRadAvg.outputVolume,
+                             "There was a problem with Volumes subtraction radial average")
+
+        protVolSubPdb = self.newProtocol(XmippProtVolSubtraction,
+                                      vol1=protImportVol1.outputVolume,
+                                      pdb=True,
+                                      pdbObj=protImportPdb.outputPdb,
+                                      masks=False)
+        self.launchProtocol(protVolSubPdb)
+        self.assertIsNotNone(protVolSubPdb.outputVolume,
+                             "There was a problem with Volumes subtraction pdb")
+
+        print("Run volume adjust")
+        protVolAdj = self.newProtocol(XmippProtVolAdjust,
+                                      vol1=protImportVol1.outputVolume,
+                                      vol2=protImportVol2.outputVolume,
+                                      masks=False)
+        self.launchProtocol(protVolAdj)
+        self.assertIsNotNone(protVolAdj.outputVolume,
+                             "There was a problem with Volumes adjust")
+
+        print("Run volume consensus")
+        protVolConsensus = self.newProtocol(XmippProtVolConsensus,
+                                            vols=[protImportVol1.outputVolume, protImportVol2.outputVolume,
+                                                  protVolAdj.outputVolume])
+        self.launchProtocol(protVolConsensus)
+        self.assertIsNotNone(protVolConsensus.outputVolume,
+                             "There was a problem with Volumes consensus")
