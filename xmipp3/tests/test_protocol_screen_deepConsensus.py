@@ -143,7 +143,7 @@ class TestXmippProtScreenDeepConsensus(BaseTest):
       return kwargs
 
 
-    def testImportCoordinates(self):
+    def testDeepConsensus(self):
       nCoordinateSets = 3
       protImpMics = self._runInportMicrographs()
 
