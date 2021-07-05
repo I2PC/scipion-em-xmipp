@@ -134,63 +134,24 @@ class TestXmippProtScreenDeepConsensusBigTest(BaseTest):
     def testDeepConsensusNew2Thread(self):
       nCoordinateSets = 3
       metacase, case = 4, 3
-      protImpMics = self._runInportMicrographs()
-      protImpCoords = self._runImportCoordinates(protImpMics, case)
 
-      protsStreamCoords = []
-      for i in range(nCoordinateSets):
-        protsStreamCoords.append(self._runStreamCoordinates(protImpCoords, i))
-
-      for i in range(nCoordinateSets):
-        self._waitOutput(protsStreamCoords[i], "outputCoordinates")
-
-      inpCoords = []
-      for prot in protsStreamCoords:
-        point = Pointer(prot, extended="outputCoordinates")
-        inpCoords.append(point)
+      inpCoords = self.prepareInput(case, nCoordinateSets)
       kwargs = self.getDeepConsensusKwargs(case, metacase)
-
       self.lastRun = self._runDeepConsensusPicking(inpCoords, kwargs, case)
 
     def testDeepConsensusPretrain2Thread(self):
       nCoordinateSets = 3
       metacase, case = 5, 1
-      protImpMics = self._runInportMicrographs()
-      protImpCoords = self._runImportCoordinates(protImpMics, case)
 
-      protsStreamCoords = []
-      for i in range(nCoordinateSets):
-        protsStreamCoords.append(self._runStreamCoordinates(protImpCoords, i))
-
-      for i in range(nCoordinateSets):
-        self._waitOutput(protsStreamCoords[i], "outputCoordinates")
-
-      inpCoords = []
-      for prot in protsStreamCoords:
-        point = Pointer(prot, extended="outputCoordinates")
-        inpCoords.append(point)
+      inpCoords = self.prepareInput(case, nCoordinateSets)
       kwargs = self.getDeepConsensusKwargs(case, metacase)
-
       self.lastRun = self._runDeepConsensusPicking(inpCoords, kwargs, case)
 
     def testDeepConsensusPrevRun2Thread(self):
       nCoordinateSets = 3
       metacase, case = 6, 4
-      protImpMics = self._runInportMicrographs()
-      protImpCoords = self._runImportCoordinates(protImpMics, case)
 
-      protsStreamCoords = []
-      for i in range(nCoordinateSets):
-        protsStreamCoords.append(self._runStreamCoordinates(protImpCoords, i))
-
-      for i in range(nCoordinateSets):
-        self._waitOutput(protsStreamCoords[i], "outputCoordinates")
-
-      inpCoords = []
-      for prot in protsStreamCoords:
-        point = Pointer(prot, extended="outputCoordinates")
-        inpCoords.append(point)
-
+      inpCoords = self.prepareInput(case, nCoordinateSets)
       prev_kwargs = self.getDeepConsensusKwargs(case=2, metacase=5)
       self.lastRun = self._runDeepConsensusPicking(inpCoords, prev_kwargs, case)
 
@@ -212,5 +173,22 @@ class TestXmippProtScreenDeepConsensusBigTest(BaseTest):
         if not prot.hasAttribute(outputName):
           return False
       return True
+
+    def prepareInput(self, case, nCoordSets=3):
+      protImpMics = self._runInportMicrographs()
+      protImpCoords = self._runImportCoordinates(protImpMics, case)
+
+      protsStreamCoords = []
+      for i in range(nCoordSets):
+        protsStreamCoords.append(self._runStreamCoordinates(protImpCoords, i))
+
+      for i in range(nCoordSets):
+        self._waitOutput(protsStreamCoords[i], "outputCoordinates")
+
+      inpCoords = []
+      for prot in protsStreamCoords:
+        point = Pointer(prot, extended="outputCoordinates")
+        inpCoords.append(point)
+      return inpCoords
 
 
