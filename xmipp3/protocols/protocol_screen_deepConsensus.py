@@ -83,6 +83,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     CONSENSUS_PARTS_PATH_TEMPLATE="consensus_parts_%s"
     PRE_PROC_MICs_PATH="preProcMics"
 
+    PARTICLES_TEMPLATE = "particles{}.xmd"
+    NET_TEMPLATE = "nnetData{}"
+
     ADD_DATA_TRAIN_TYPES = ["None", "Precompiled", "Custom"]
     ADD_DATA_TRAIN_NONE = 0
     ADD_DATA_TRAIN_PRECOMP = 1
@@ -906,7 +909,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         for mode in ['AND', 'NOISE']:
           self.joinSetOfParticlesStep(mode, toTrainMicFns, trPass, clean=True)
         #Creatting the training pass directory
-        netDataPath = self._getExtraPath("nnetData{}".format(trPass))
+        netDataPath = self._getExtraPath(self.NET_TEMPLATE.format(trPass))
         if not os.path.exists(netDataPath):
           makePath(netDataPath)
         nEpochs = self.nEpochs.get()
@@ -993,9 +996,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           self.joinSetOfParticlesStep(mode='OR', micFns=toPredictMicFns, trainingPass=predExten, clean=True)
           mdORPath = self._getExtraPath("particles_OR{}.xmd".format(predExten))
 
-        netDataPath = self._getExtraPath("nnetData{}".format(trPass))
+        netDataPath = self._getExtraPath(self.NET_TEMPLATE.format(trPass))
         if not os.path.isdir(netDataPath) and self._doContinue():
-            prevRunPath = self.continueRun.get()._getExtraPath("nnetData{}".format(trPass))
+            prevRunPath = self.continueRun.get()._getExtraPath(self.NET_TEMPLATE.format(trPass))
             copyTree(prevRunPath, netDataPath)
         elif self.skipTraining.get() and self._usePretrainedModel():
           self.__retrievePreTrainedModel(netDataPath)
@@ -1020,7 +1023,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             posTestDict = None
             negTestDict = None
 
-        outParticlesPath = self._getPath("particles{}.xmd".format(predExten))
+        outParticlesPath = self._getPath(self.PARTICLES_TEMPLATE.format(predExten))
         fnamesPred, weightsPred= self.__dataDict_toStrs(predictDict)
 
         args= " -n %s --mode score -i %s -o %s "%(netDataPath, fnamesPred, outParticlesPath)
@@ -1057,7 +1060,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     def createFinalOutput(self, closeStream=False):
       predExten = '_partial'
       partSet = self._createSetOfParticles("outputParts_tmp{}".format(predExten))
-      readSetOfParticles(self._getPath("particles{}.xmd".format(predExten)), partSet)
+      readSetOfParticles(self._getPath(self.PARTICLES_TEMPLATE.format(predExten)), partSet)
       partSet.setSamplingRate(self._getDownFactor() * self.inpSampligRate)
 
       self.outputParticles, self.outputCoordinates = self.getParticlesOutput(partSet), self.getCoordinatesOutput()
@@ -1076,14 +1079,14 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           self.outputCoordinates.append(coord)
           self.outputParticles.append(newPart)
 
-      cleanPattern(self._getPath("particles{}.xmd".format(predExten)))
+      cleanPattern(self._getPath(self.PARTICLES_TEMPLATE.format(predExten)))
       cleanPattern(self._getPath("*outputParts_tmp{}.sqlite".format(predExten)))
       writeSetOfParticles(self.outputParticles, self._getPath("particles.xmd"))
       self.updateOutput(closeStream)
 
     def createPreliminarOutput(self, trPass):
       partSet = self._createSetOfParticles("outputParts_tmp{}".format(trPass))
-      readSetOfParticles(self._getPath("particles{}.xmd".format(trPass)), partSet)
+      readSetOfParticles(self._getPath(self.PARTICLES_TEMPLATE.format(trPass)), partSet)
       partSet.setSamplingRate(self._getDownFactor() * self.inpSampligRate)
 
       self.preliminarOutputParticles = self.getPreParticlesOutput(partSet)
@@ -1102,9 +1105,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           self.preliminarOutputCoordinates.append(coord)
           self.preliminarOutputParticles.append(part)
 
-      cleanPattern(self._getPath("particles{}.xmd".format(trPass)))
+      cleanPattern(self._getPath(self.PARTICLES_TEMPLATE.format(trPass)))
       cleanPattern(self._getPath("*outputParts_tmp{}.sqlite".format(trPass)))
-      writeSetOfParticles(self.preliminarOutputParticles, self._getPath("particles{}.xmd".format(trPass)))
+      writeSetOfParticles(self.preliminarOutputParticles, self._getPath(self.PARTICLES_TEMPLATE.format(trPass)))
       self.updatePreOutput(closeStream=True)
 
     def getPreCoordinatesOutput(self):
@@ -1238,7 +1241,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         coordsInMic, mic = [], sharedMics[micFn]
         for coordSet in self.inputCoordinates:
           for coord in coordSet.get().iterCoordinates(mic):
-            coordsInMic.append(True)
+            coordsInMic.append(coord)
             break
 
         if len(coordsInMic) == len(self.inputCoordinates):
@@ -1271,11 +1274,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       sharedMicDict = {}
       for micFn in micFns:
         sharedMicDict[micFn] = micDict[micFn]
-
-      #mics = self._createSetOfMicrographs(suffix='_shared'+str(shared))
-      #for micFn in micFns:
-      #  mics.append(micDict[micFn])
-      #mics.copyInfo(self.inputCoordinates[0].get().getMicrographs())
 
       return sharedMicDict
 
@@ -1542,17 +1540,17 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     #CNN models utils
     def retrievePreviousPassModel(self, trPass, lastTrPass=''):
       '''Retrieves a previous CNN model and copies its folders to used the network in a new location'''
-      curNetDataPath = self._getExtraPath("nnetData{}".format(trPass))
+      curNetDataPath = self._getExtraPath(self.NET_TEMPLATE.format(trPass))
       if trPass == '':
-        prevNetDataPath = self._getExtraPath("nnetData{}".format(lastTrPass))
+        prevNetDataPath = self._getExtraPath(self.NET_TEMPLATE.format(lastTrPass))
       else:
-        prevNetDataPath = self._getExtraPath("nnetData{}".format(trPass - 1))
+        prevNetDataPath = self._getExtraPath(self.NET_TEMPLATE.format(trPass - 1))
       if prevNetDataPath != curNetDataPath:
         copyTree(prevNetDataPath, curNetDataPath)
 
     def retrievePreviousRunModel(self, prevProt, trPass=''):
       '''Retrieves a CNN model from other protocol and copies its folders to used the network in a new location'''
-      curNetDataPath = self._getExtraPath("nnetData{}".format(trPass))
+      curNetDataPath = self._getExtraPath(self.NET_TEMPLATE.format(trPass))
       prevNetDataPath = prevProt._getExtraPath("nnetData")
       if prevNetDataPath != curNetDataPath:
         copyTree(prevNetDataPath, curNetDataPath)
