@@ -33,12 +33,14 @@ from pwem.protocols import (ProtImportMicrographs, ProtImportCoordinates,
                             ProtCreateStreamData)
 from pwem.protocols.protocol_create_stream_data import SET_OF_MICROGRAPHS, SET_OF_COORDINATES
 
-
 from pwem import emlib
 from xmipp3.protocols import XmippProtScreenDeepConsensus
 
+ADD_MODEL_TRAIN_NEW = 0
+ADD_MODEL_TRAIN_PRETRAIN = 1
+ADD_MODEL_TRAIN_PREVRUN = 2
 
-class TestXmippProtScreenDeepConsensus(BaseTest):
+class TestXmippProtScreenDeepConsensusBigTest(BaseTest):
     @classmethod
     def setUpClass(cls):
         tests.setupTestProject(cls)
@@ -96,15 +98,7 @@ class TestXmippProtScreenDeepConsensus(BaseTest):
                            "There was a problem with the consensus")
       return prot
 
-    def getDeepConsensusKwargs(self, case=1):
-      ADD_MODEL_TRAIN_PRETRAIN = 1
-      ADD_MODEL_TRAIN_PREVRUN = 2
-
-      ADD_DATA_TRAIN_CUST = 2
-
-      ADD_DATA_TRAIN_CUSTOM_OPT_PARTS = 0
-      ADD_DATA_TRAIN_CUSTOM_OPT_COORS = 1
-
+    def getDeepConsensusKwargs(self, case=1, metacase=1):
       kwargs = {
         'nEpochs' : 1.0,
         'nModels' :2,
@@ -112,58 +106,96 @@ class TestXmippProtScreenDeepConsensus(BaseTest):
         'trainingBatch':3,
         'predictingBatch':3
       }
+      metacaseKwargs = {'numberOfThreads': 1} if metacase<4 else {'numberOfThreads': 4}
+      if metacase in [1, 4]:
+        metacaseKwargs['modelInitialization'] = ADD_MODEL_TRAIN_NEW
+      elif metacase in [2, 5]:
+        metacaseKwargs['modelInitialization'] = ADD_MODEL_TRAIN_PRETRAIN
+      elif metacase in [3, 6]:
+        metacaseKwargs['modelInitialization'] = ADD_MODEL_TRAIN_PREVRUN
+        metacaseKwargs['continueRun'] = self.lastRun
+
       if case == 1:
-        #Simplest case
-        caseKwargs = {}
+        caseKwargs = {'doPreliminarPredictions': False, 'skipTraining': False}
       elif case == 2:
-        #Pretrained model, do testing, additional data particles, do preliminar predictions
-        caseKwargs = {'doPreliminarPredictions': True,
-                      'modelInitialization': ADD_MODEL_TRAIN_PRETRAIN,
-                      'addTrainingData': ADD_DATA_TRAIN_CUST,
-                      'trainingDataType':ADD_DATA_TRAIN_CUSTOM_OPT_PARTS,
-                      'trainTrueSetOfParticles': self.lastRun.outputParticles,
-                      'trainFalseSetOfParticles': self.lastRun.outputParticles
-                      }
+        caseKwargs = {'doPreliminarPredictions': False, 'skipTraining': True}
       elif case == 3:
-        #Previous run model, additional data coords
-        caseKwargs = {'modelInitialization':ADD_MODEL_TRAIN_PREVRUN,
-                      'continueRun':self.lastRun,
-                      'doTesting': True,
-                      'testTrueSetOfParticles': self.lastRun.outputParticles,
-                      'testFalseSetOfParticles': self.lastRun.outputParticles,
-                      'addTrainingData': ADD_DATA_TRAIN_CUST,
-                      'trainingDataType': ADD_DATA_TRAIN_CUSTOM_OPT_COORS,
-                      'trainTrueSetOfCoords': self.lastRun.outputCoordinates,
-                      'trainFalseSetOfCoords': self.lastRun.outputCoordinates
-                      }
+        caseKwargs = {'doPreliminarPredictions': True, 'skipTraining': False}
+      elif case == 4:
+        caseKwargs = {'doPreliminarPredictions': True, 'skipTraining': True}
+
       else:
         caseKwargs={}
 
       kwargs.update(caseKwargs)
+      kwargs.update(metacaseKwargs)
       return kwargs
 
-
-    def testDeepConsensus(self):
+    def testDeepConsensusNew2Thread(self):
       nCoordinateSets = 3
+      metacase, case = 4, 3
       protImpMics = self._runInportMicrographs()
+      protImpCoords = self._runImportCoordinates(protImpMics, case)
 
-      for case in range(1,3):
-        protImpCoords = self._runImportCoordinates(protImpMics, case)
+      protsStreamCoords = []
+      for i in range(nCoordinateSets):
+        protsStreamCoords.append(self._runStreamCoordinates(protImpCoords, i))
 
-        protsStreamCoords = []
-        for i in range(nCoordinateSets):
-          protsStreamCoords.append(self._runStreamCoordinates(protImpCoords, i))
+      for i in range(nCoordinateSets):
+        self._waitOutput(protsStreamCoords[i], "outputCoordinates")
 
-        for i in range(nCoordinateSets):
-          self._waitOutput(protsStreamCoords[i], "outputCoordinates")
+      inpCoords = []
+      for prot in protsStreamCoords:
+        point = Pointer(prot, extended="outputCoordinates")
+        inpCoords.append(point)
+      kwargs = self.getDeepConsensusKwargs(case, metacase)
 
-        inpCoords = []
-        for prot in protsStreamCoords:
-          point = Pointer(prot, extended="outputCoordinates")
-          inpCoords.append(point)
-        kwargs = self.getDeepConsensusKwargs(case)
+      self.lastRun = self._runDeepConsensusPicking(inpCoords, kwargs, case)
 
-        self.lastRun = self._runDeepConsensusPicking(inpCoords, kwargs, case)
+    def testDeepConsensusPretrain2Thread(self):
+      nCoordinateSets = 3
+      metacase, case = 5, 1
+      protImpMics = self._runInportMicrographs()
+      protImpCoords = self._runImportCoordinates(protImpMics, case)
+
+      protsStreamCoords = []
+      for i in range(nCoordinateSets):
+        protsStreamCoords.append(self._runStreamCoordinates(protImpCoords, i))
+
+      for i in range(nCoordinateSets):
+        self._waitOutput(protsStreamCoords[i], "outputCoordinates")
+
+      inpCoords = []
+      for prot in protsStreamCoords:
+        point = Pointer(prot, extended="outputCoordinates")
+        inpCoords.append(point)
+      kwargs = self.getDeepConsensusKwargs(case, metacase)
+
+      self.lastRun = self._runDeepConsensusPicking(inpCoords, kwargs, case)
+
+    def testDeepConsensusPrevRun2Thread(self):
+      nCoordinateSets = 3
+      metacase, case = 6, 4
+      protImpMics = self._runInportMicrographs()
+      protImpCoords = self._runImportCoordinates(protImpMics, case)
+
+      protsStreamCoords = []
+      for i in range(nCoordinateSets):
+        protsStreamCoords.append(self._runStreamCoordinates(protImpCoords, i))
+
+      for i in range(nCoordinateSets):
+        self._waitOutput(protsStreamCoords[i], "outputCoordinates")
+
+      inpCoords = []
+      for prot in protsStreamCoords:
+        point = Pointer(prot, extended="outputCoordinates")
+        inpCoords.append(point)
+
+      prev_kwargs = self.getDeepConsensusKwargs(case=2, metacase=5)
+      self.lastRun = self._runDeepConsensusPicking(inpCoords, prev_kwargs, case)
+
+      kwargs = self.getDeepConsensusKwargs(case, metacase)
+      self._runDeepConsensusPicking(inpCoords, kwargs, case)
 
 
     def _updateProtocol(self, prot):
