@@ -26,9 +26,13 @@
 # *
 # **************************************************************************
 
+
+import numpy as np
+
 import pyworkflow.protocol.params as params
 from pyworkflow.object import Integer
 from pyworkflow.utils.path import moveFile
+from pyworkflow import VERSION_2_0
 
 from pwem.protocols import ProtAnalysis3D
 import pwem.emlib.metadata as md
@@ -38,9 +42,6 @@ from pwem.constants import ALIGN_PROJ
 from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
                             setXmippAttributes)
 from xmipp3.base import writeInfoField, readInfoField
-import numpy as np
-
-from pyworkflow import VERSION_2_0
 
 
 class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
@@ -147,7 +148,6 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
                 self.runJob("xmipp_image_resize",
                             "-i %s --dim %d --interp nearest" % (fnVolMask, self.newXdim), numberOfMpi=1)
 
-
     def alignmentStep(self):
         imgsFn = self._getFileName('imgsFn')
         fnVol = self._getFileName('fnVol')
@@ -170,6 +170,7 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
             params += ' --mask %s' % fnVolMask
 
         if self.useGpu.get():
+            params += ' --device %d' % self.getGpuList()[0]
             program = 'xmipp_cuda_angular_sph_alignment'
             self.runJob(program, params)
         else:
@@ -178,7 +179,7 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
 
 
     def createOutputStep(self):
-        from sklearn.manifold import TSNE
+        # from sklearn.manifold import TSNE
         Xdim = self.inputParticles.get().getXDim()
         self.Ts = self.inputParticles.get().getSamplingRate()
         newTs = self.targetResolution.get() * 1.0 /3.0
@@ -194,15 +195,15 @@ class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
             else:
                 coeffMatrix = np.vstack((coeffMatrix, coeffs))
             i+=1
-        X_tsne_1d = TSNE(n_components=1).fit_transform(coeffMatrix)
-        X_tsne_2d = TSNE(n_components=2).fit_transform(coeffMatrix)
+        # X_tsne_1d = TSNE(n_components=1).fit_transform(coeffMatrix)
+        # X_tsne_2d = TSNE(n_components=2).fit_transform(coeffMatrix)
 
         newMdOut = md.MetaData()
         i=0
         for row in md.iterRows(mdOut):
             newRow = row
-            newRow.setValue(md.MDL_SPH_TSNE_COEFF1D, float(X_tsne_1d[i,0]))
-            newRow.setValue(md.MDL_SPH_TSNE_COEFF2D, [float(X_tsne_2d[i, 0]),  float(X_tsne_2d[i, 1])])
+            # newRow.setValue(md.MDL_SPH_TSNE_COEFF1D, float(X_tsne_1d[i,0]))
+            # newRow.setValue(md.MDL_SPH_TSNE_COEFF2D, [float(X_tsne_2d[i, 0]),  float(X_tsne_2d[i, 1])])
             if self.newTs != self.Ts:
                 coeffs = mdOut.getValue(md.MDL_SPH_COEFFICIENTS, row.getObjId())
                 correctionFactor = self.inputVolume.get().getDim()[0] / self.newXdim
