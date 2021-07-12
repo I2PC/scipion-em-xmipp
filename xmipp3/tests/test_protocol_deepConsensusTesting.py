@@ -98,7 +98,7 @@ class TestXmippProtScreenDeepConsensusBigTest(BaseTest):
                            "There was a problem with the consensus")
       return prot
 
-    def getDeepConsensusKwargs(self, case=1, metacase=1):
+    def getDeepConsensusKwargs(self, case=1, inputCase=1):
       kwargs = {
         'nEpochs' : 1.0,
         'nModels' :2,
@@ -106,15 +106,17 @@ class TestXmippProtScreenDeepConsensusBigTest(BaseTest):
         'trainingBatch':3,
         'predictingBatch':3
       }
-      metacaseKwargs = {'numberOfThreads': 1} if metacase<4 else {'numberOfThreads': 4}
-      if metacase in [1, 4]:
-        metacaseKwargs['modelInitialization'] = ADD_MODEL_TRAIN_NEW
-      elif metacase in [2, 5]:
-        metacaseKwargs['modelInitialization'] = ADD_MODEL_TRAIN_PRETRAIN
-      elif metacase in [3, 6]:
-        metacaseKwargs['modelInitialization'] = ADD_MODEL_TRAIN_PREVRUN
-        metacaseKwargs['continueRun'] = self.lastRun
+      #inputCase controls the input model of the protocol: previous protocol model, new model, pretrained
+      inputCaseKwargs = {'numberOfThreads': 1} if inputCase<4 else {'numberOfThreads': 4}
+      if inputCase in [1, 4]:
+        inputCaseKwargs['modelInitialization'] = ADD_MODEL_TRAIN_NEW
+      elif inputCase in [2, 5]:
+        inputCaseKwargs['modelInitialization'] = ADD_MODEL_TRAIN_PRETRAIN
+      elif inputCase in [3, 6]:
+        inputCaseKwargs['modelInitialization'] = ADD_MODEL_TRAIN_PREVRUN
+        inputCaseKwargs['continueRun'] = self.lastRun
 
+      #case controls the behavior of the protocol. e.g: skip training, do preliminar predictions
       if case == 1:
         caseKwargs = {'doPreliminarPredictions': False, 'skipTraining': False}
       elif case == 2:
@@ -128,34 +130,37 @@ class TestXmippProtScreenDeepConsensusBigTest(BaseTest):
         caseKwargs={}
 
       kwargs.update(caseKwargs)
-      kwargs.update(metacaseKwargs)
+      kwargs.update(inputCaseKwargs)
       return kwargs
 
-    def testDeepConsensusNew2Thread(self):
+    def testDeepConsensusNew(self):
+      #Testing the protocol on new model
       nCoordinateSets = 3
-      metacase, case = 4, 3
+      inputCase, case = 4, 3
 
       inpCoords = self.prepareInput(case, nCoordinateSets)
-      kwargs = self.getDeepConsensusKwargs(case, metacase)
+      kwargs = self.getDeepConsensusKwargs(case, inputCase)
       self.lastRun = self._runDeepConsensusPicking(inpCoords, kwargs, case)
 
-    def testDeepConsensusPretrain2Thread(self):
+    def testDeepConsensusPretrain(self):
+      #Testing the protocol on pretrained model
       nCoordinateSets = 3
-      metacase, case = 5, 1
+      inputCase, case = 5, 1
 
       inpCoords = self.prepareInput(case, nCoordinateSets)
-      kwargs = self.getDeepConsensusKwargs(case, metacase)
+      kwargs = self.getDeepConsensusKwargs(case, inputCase)
       self.lastRun = self._runDeepConsensusPicking(inpCoords, kwargs, case)
 
-    def testDeepConsensusPrevRun2Thread(self):
+    def testDeepConsensusPrevRun(self):
+      #Testing the protocol on a model from a previous run
       nCoordinateSets = 3
-      metacase, case = 6, 4
+      inputCase, case = 6, 4
 
       inpCoords = self.prepareInput(case, nCoordinateSets)
-      prev_kwargs = self.getDeepConsensusKwargs(case=2, metacase=5)
+      prev_kwargs = self.getDeepConsensusKwargs(case=2, inputCase=5)
       self.lastRun = self._runDeepConsensusPicking(inpCoords, prev_kwargs, case)
 
-      kwargs = self.getDeepConsensusKwargs(case, metacase)
+      kwargs = self.getDeepConsensusKwargs(case, inputCase)
       self._runDeepConsensusPicking(inpCoords, kwargs, case)
 
 

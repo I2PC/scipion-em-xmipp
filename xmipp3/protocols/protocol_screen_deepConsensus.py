@@ -483,7 +483,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         #Particle extraction OR (for predictions)
         if len(self.readyToExtractMicFns('OR')) >= self.extractingBatch.get() and not self.EXTRACTING['OR']:
           self.EXTRACTING['OR'] = True
-          self.newSteps += [self.insertCaculateConsensusSteps('OR', prerequisites=self.initDeps)]
+          self.newSteps += self.insertCaculateConsensusSteps('OR', prerequisites=self.initDeps)
           self.newSteps += self.insertExtractPartSteps('OR', prerequisites=self.newSteps)
 
         #Particle extraction for training and training
@@ -654,7 +654,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           makePath(outCoordsDataPath)
         newDep = self._insertFunctionStep('calculateCoorConsensusStep', outCoordsDataPath, mode, prerequisites=prerequisites)
         newDep = self._insertFunctionStep('loadCoords', outCoordsDataPath, mode, prerequisites=[newDep])
-        return newDep
+        return [newDep]
     
     def waitFreeInputCoords(self):
       while self.USING_INPUT_COORDS:
@@ -858,14 +858,12 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       if len(self.readyToExtractMicFns('NOISE')) >= self.extractingBatch.get() and not self.EXTRACTING['NOISE']:
         self.EXTRACTING['NOISE'] = True
         depNoise = self._insertFunctionStep('pickNoise', prerequisites=self.initDeps)
-        depsNoise = self.insertExtractPartSteps('NOISE', prerequisites=[depNoise])
-        self.newSteps += depsNoise
+        self.newSteps += self.insertExtractPartSteps('NOISE', prerequisites=[depNoise])
 
       if len(self.readyToExtractMicFns('AND')) >= self.extractingBatch.get() and not self.EXTRACTING['AND']:
         self.EXTRACTING['AND'] = True
         depsAnd = self.insertCaculateConsensusSteps('AND', prerequisites=self.initDeps)
-        depsAnd = self.insertExtractPartSteps('AND', prerequisites=[depsAnd])
-        self.newSteps += depsAnd
+        self.newSteps += self.insertExtractPartSteps('AND', prerequisites=depsAnd)
 
       trainedParams = self.loadTrainedParams()
       if self.addTrainingData.get() == self.ADD_DATA_TRAIN_CUST and \
@@ -1430,11 +1428,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
     def getInputMicsFns(self, shared):
       '''Returns the input micrographs filenames'''
-      micFnames = []
-      micDic = self.getAllCoordsInputMicrographs(shared)
-      for micFn in micDic:
-        micFnames.append(micFn)
-      return sorted(micFnames)
+      return sorted(self.getAllCoordsInputMicrographs(shared).keys())
 
     def prunePaths(self, paths):
       fns = []
