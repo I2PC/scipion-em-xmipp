@@ -32,6 +32,7 @@ from xmipp3.convert import *
 from xmipp3.protocols import *
 from pwem.protocols import ProtImportMovies, ProtImportCoordinates
 import pyworkflow.utils as pwutils
+from contextlib import redirect_stdout
 
 # Some utility functions to import movies that are used in several tests.
 class TestXmippBase(BaseTest):
@@ -326,6 +327,21 @@ class TestCorrelationAlignment(BaseTest):
         self._checkMicrographs(prot)
         self._checkAlignment(prot.outputMovies[1],
                              (1,7), [0, 0, 0, 0])
+
+    def test_controlPoints(self):
+        prot = self.newProtocol(XmippProtMovieCorr,
+                                doSaveMovie=False,
+                                doPSD=False,
+                                autoControlPoints=False,
+                                skipAutotuning=True,
+                                controlPointY=9,
+                                objLabel="TestControlPoints(ShouldFail)")
+        prot.inputMovies.set(self.protImport2.outputMovies)
+        with self.assertRaises(Exception,
+                               msg=("Protocol should fail because number of control points is higher "
+                                    "than number of patches for local alignment")):
+            with redirect_stdout(None):
+                self.launchProtocol(prot)
 
     def test_qbeta_SkipCrop(self):
         prot = self.newProtocol(XmippProtMovieCorr,
