@@ -48,6 +48,9 @@ from xmipp3.protocols.protocol_align_volume import (ALIGN_ALGORITHM_EXHAUSTIVE,
                                                ALIGN_ALGORITHM_EXHAUSTIVE_LOCAL,
                                                ALIGN_ALGORITHM_LOCAL)
 
+MSG_WRONG_SAMPLING = "wrong sampling rate"
+MSG_WRONG_SIZE = "wrong size"
+
 
 class TestXmippBase(BaseTest):
     """ Some utility functions to import volumes that are used in several tests."""
@@ -1032,6 +1035,7 @@ class TestPdbImport(TestXmippBase):
         self.launchProtocol(protConvert)
         self.assertIsNotNone(protConvert.outputPdb.getFileName(), 
                              "There was a problem with the import")
+
         
 class TestXmippPdbConvert(TestXmippBase):
     
@@ -1048,8 +1052,9 @@ class TestXmippPdbConvert(TestXmippBase):
         self.launchProtocol(protConvert)
         self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
         self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
-                               msg="wrong sampling rate")
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1, msg="wrong size")
+                               msg=MSG_WRONG_SAMPLING)
+        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1,
+                               msg=MSG_WRONG_SIZE)
         
     def testXmippPdbConvertFromObj(self):
         print("Run convert a pdb from import")
@@ -1066,8 +1071,9 @@ class TestXmippPdbConvert(TestXmippBase):
         self.launchProtocol(protConvert)
         self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
         self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
-                               msg="wrong sampling rate")
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1, msg="wrong size")
+                               msg=MSG_WRONG_SAMPLING)
+        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1,
+                               msg=MSG_WRONG_SIZE)
 
     def testXmippPdbConvertFromFn(self):
         print("Run convert a pdb from file")
@@ -1075,8 +1081,8 @@ class TestXmippPdbConvert(TestXmippBase):
         self.launchProtocol(protConvert)
         self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
         self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
-                               msg="wrong sampling rate")
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], 48, places=1, msg="wrong size")
+                               msg=MSG_WRONG_SAMPLING)
+        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], 48, places=1, msg=MSG_WRONG_SIZE)
 
 
 class TestXmippValidateNonTilt(TestXmippBase):
