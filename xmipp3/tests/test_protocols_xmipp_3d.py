@@ -1036,7 +1036,7 @@ class TestPdbImport(TestXmippBase):
         self.assertIsNotNone(protConvert.outputPdb.getFileName(), 
                              "There was a problem with the import")
 
-        
+
 class TestXmippPdbConvert(TestXmippBase):
     
     @classmethod
