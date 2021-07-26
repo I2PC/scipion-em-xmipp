@@ -110,8 +110,8 @@ class TestLocalDeblur(TestLocalDeblurBase):
     def testLocalDeblur1(self):
         MonoRes = self.newProtocol(XmippProtMonoRes,
                                    objLabel='single volume monores',
-                                   halfVolumes=False,
-                                   inputVolumes=self.protImportVol.outputVolume,
+                                   usehalfVolumes=False,
+                                   fullMap=self.protImportVol.outputVolume,
                                    Mask=self.protCreateMask.outputMask,
                                    minRes=1,
                                    maxRes=25
@@ -133,8 +133,8 @@ class TestLocalDeblur(TestLocalDeblurBase):
     def testLocalDeblur2(self):
         MonoRes = self.newProtocol(XmippProtMonoRes,
                                    objLabel='single volume monores',
-                                   halfVolumes=False,
-                                   inputVolumes=self.protImportVol2.outputVolume,
+                                   usehalfVolumes=False,
+                                   fullMap=self.protImportVol2.outputVolume,
                                    Mask=self.protCreateMask2.outputMask,
                                    minRes=1,
                                    maxRes=6
