@@ -375,7 +375,7 @@ class XmippProtValFit(ProtAnalysis3D):
         volume=Volume()
         volume.setFileName(self._getFileName(RESTA_FILE_MRC))
         volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
-        volume.setOrigin(self.inputVolume.get().getOrigin(True))
+        volume.setOrigin(self.inputVolume.get().getOrigin(True).clone())
         self._defineOutputs(fscq_Volume=volume)
         self._defineTransformRelation(self.inputVolume, volume)
         
