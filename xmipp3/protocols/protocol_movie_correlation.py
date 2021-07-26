@@ -27,7 +27,8 @@
 # *
 # **************************************************************************
 
-import os
+import os.path
+import numpy as np
 from math import ceil
 
 import pyworkflow.utils as pwutils
@@ -36,6 +37,7 @@ import pyworkflow.object as pwobj
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as cons
 import pwem.emlib.metadata as md
+from pwem import emlib
 from pwem.objects import Image
 from pwem.protocols.protocol_align_movies import createAlignmentPlot
 from pyworkflow import VERSION_1_1
@@ -43,6 +45,7 @@ from pwem.protocols import ProtAlignMovies
 
 from xmipp3.convert import writeMovieMd
 from xmipp3.base import isXmippCudaPresent
+import xmipp3.utils as xmutils
 
 
 class XmippProtMovieCorr(ProtAlignMovies):
@@ -58,6 +61,9 @@ class XmippProtMovieCorr(ProtAlignMovies):
 
     # Map to xmipp interpolation values in command line
     INTERP_MAP = {INTERP_LINEAR: 1, INTERP_CUBIC: 3}
+
+    NO_ROTATION = 0
+    NO_FLIP = 0
 
     _label = 'FlexAlign'
     _lastUpdateVersion = VERSION_1_1
@@ -157,6 +163,22 @@ class XmippProtMovieCorr(ProtAlignMovies):
                         The alignment is then performed on the summed frames.',
                     condition='doLocalAlignment')
 
+        form.addSection(label="Gain orientation")
+        form.addParam('gainRot', params.EnumParam,
+                      choices=['no rotation', '90 degrees',
+                               '180 degrees', '270 degrees'],
+                      label="Rotate gain reference:",
+                      default=self.NO_ROTATION,
+                      display=params.EnumParam.DISPLAY_COMBO,
+                      help="Rotate gain reference counter-clockwise.")
+
+        form.addParam('gainFlip', params.EnumParam,
+                      choices=['no flip', 'upside down', 'left right'],
+                      label="Flip gain reference:", default=self.NO_FLIP,
+                      display=params.EnumParam.DISPLAY_COMBO,
+                      help="Flip gain reference after rotation. "
+                           "For tiff movies, gain is automatically upside-down flipped")
+
         form.addParallelSection(threads=1, mpi=1)
 
     #--------------------------- STEPS functions -------------------------------
@@ -183,6 +205,9 @@ class XmippProtMovieCorr(ProtAlignMovies):
         cropDimX = self.cropDimX.get()
         cropDimY = self.cropDimY.get()
 
+        if 0 == offsetX and 0 == offsetY and 0 == cropDimX and 0 == cropDimY:
+            return '' # user does not want to crop at all
+
         args = ' --cropULCorner %d %d' % (offsetX, offsetY)
 
         if cropDimX <= 0:
@@ -197,6 +222,16 @@ class XmippProtMovieCorr(ProtAlignMovies):
 
         args += ' --cropDRCorner %d %d' % (dimX, dimY)
         return args
+
+    def getUserAngle(self):
+      anglesDic = {0:0, 1:90, 2:180, 3:270}
+      return anglesDic[self.gainRot.get()]
+
+    def getUserFlip(self, imag_array):
+      flipDic = {0: np.asarray([[1, 0, 0], [0, 1, 0], [0, 0, 1]]),
+                 1: np.asarray([[1, 0, 0], [0, -1, imag_array.shape[0]], [0, 0, 1]]),
+                 2: np.asarray([[-1, 0, imag_array.shape[1]], [0, 1, 0], [0, 0, 1]])}
+      return flipDic[self.gainFlip.get()]
 
     def getGPUArgs(self):
         args = ' --device %(GPU)s'
@@ -249,7 +284,17 @@ class XmippProtMovieCorr(ProtAlignMovies):
             args += ' --dark "%s"' % self.inputMovies.get().getDark()
 
         if self.inputMovies.get().getGain():
-            args += ' --gain "%s"' % self.inputMovies.get().getGain()
+            ext = pwutils.getExt(self.inputMovies.get().getFirstItem().getFileName()).lower()
+            if ext in ['.tif', '.tiff']:
+              self.flipY = True
+              inGainFn = self.inputMovies.get().getGain()
+              gainFn = xmutils.flipYImage(inGainFn, outDir = self._getExtraPath())
+            else:
+              gainFn = self.inputMovies.get().getGain()
+
+            if self.gainRot.get() != 0 or self.gainFlip.get() != 0:
+              gainFn = self.transformGain(gainFn)
+            args += ' --gain "%s"' % gainFn
 
         if self.autoControlPoints.get():
             self._setControlPoints()
@@ -274,6 +319,25 @@ class XmippProtMovieCorr(ProtAlignMovies):
         self._saveAlignmentPlots(movie)
 
     #--------------------------- UTILS functions ------------------------------
+    def transformGain(self, gainFn, outFn=None):
+      '''Transforms the gain image with the user especifications'''
+      if outFn == None:
+        ext = pwutils.getExt(gainFn)
+        baseName = os.path.basename(gainFn).replace(ext, '_transformed' + ext)
+        outFn = os.path.abspath(self._getExtraPath(baseName))
+
+      gainImg = xmutils.readImage(gainFn)
+      imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
+
+      # Building the transformation matrix
+      angle = self.getUserAngle()
+      M = self.getUserFlip(imag_array)
+      print('Transforming gain: {} degrees rotation, {} flip'.
+            format(angle, ['no', 'vertical', 'horizontal'][self.gainFlip.get()]))
+      flipped_array, M = xmutils.rotation(imag_array, angle, imag_array.shape, M)
+      xmutils.writeImageFromArray(flipped_array, outFn)
+      return outFn
+
     def _getShiftsFile(self, movie):
         return self._getExtraPath(self._getMovieRoot(movie) + '_shifts.xmd')
 
@@ -288,8 +352,8 @@ class XmippProtMovieCorr(ProtAlignMovies):
         x, y, frames = self.inputMovies.get().getDim()
         Ts = self.inputMovies.get().getSamplingRate()
         # one control point each 1000 A
-        self.controlPointX.set(max([int(x / Ts) / 1000 + 2, 3]))
-        self.controlPointY.set(max([int(y / Ts) / 1000 + 2, 3]))
+        self.controlPointX.set(max([int(x * Ts) / 1000 + 2, 3]))
+        self.controlPointY.set(max([int(y * Ts) / 1000 + 2, 3]))
         self.controlPointT.set(max([ceil(frames/7.) + 2, 3]))
 
     def _getMovieShifts(self, movie):

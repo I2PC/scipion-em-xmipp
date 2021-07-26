@@ -87,6 +87,7 @@ from .protocol_reconstruct_highres import XmippProtReconstructHighRes
 from .protocol_reconstruct_significant import XmippProtReconstructSignificant
 from .protocol_reconstruct_swarm import XmippProtReconstructSwarm
 from .protocol_resolution3d import XmippProtResolution3D
+from .protocol_resolution_bfactor import XmippProtbfactorResolution
 from .protocol_resolution_directional import XmippProtMonoDir
 from .protocol_resolution_fso import XmippProtFSO
 from .protocol_resolution_monogenic_signal import XmippProtMonoRes
@@ -97,9 +98,11 @@ from .protocol_rotational_symmetry import XmippProtRotationalSymmetry
 from .protocol_screen_particles import XmippProtScreenParticles
 from .protocol_screen_deepConsensus import XmippProtScreenDeepConsensus, XmippProtDeepConsSubSet
 from .protocol_screen_deeplearning import XmippProtScreenDeepLearning
+from .protocol_shift_particles import XmippProtShiftParticles
 from .protocol_simulate_ctf import XmippProtSimulateCTF
 from .protocol_solid_angles import XmippProtSolidAngles
 from .protocol_split_volume import XmippProtSplitvolume
+from .protocol_tilt_analysis import XmippProtTiltAnalysis
 from .protocol_trigger_data import XmippProtTriggerData
 from .protocol_validate_nontilt import XmippProtValidateNonTilt
 from .protocol_validate_overfitting import XmippProtValidateOverfitting
@@ -115,9 +118,9 @@ from .protocol_reconstruct_heterogeneous import XmippProtReconstructHeterogeneou
 from .protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
 from .protocol_metaprotocol_create_output import XmippMetaProtCreateOutput
 from .protocol_metaprotocol_discrete_heterogeneity_scheduler import XmippMetaProtDiscreteHeterogeneityScheduler # keep this after XmippMetaProtCreateSubset and XmippMetaProtCreateOutput
-from .protocol_angular_alignment_sph import XmippProtAngularAlignmentSPH
-from .protocol_volume_deform_sph import XmippProtVolumeDeformSPH
-from .protocol_structure_map_sph import XmippProtStructureMapSPH
+# from .protocol_angular_alignment_sph import XmippProtAngularAlignmentSPH
+# from .protocol_volume_deform_sph import XmippProtVolumeDeformSPH
+# from .protocol_structure_map_sph import XmippProtStructureMapSPH
 from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
 from .protocol_local_ctf import XmippProtLocalCTF
 from .protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
@@ -126,5 +129,3 @@ from .protocol_particle_pick_remove_duplicates import XmippProtPickingRemoveDupl
 from .protocol_metaprotocol_golden_highres import XmippMetaProtGoldenHighRes
 from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtraction
 from .protocol_volume_consensus import XmippProtVolConsensus
-
-from .protocol_tilt_analysis import XmippProtTiltAnalysis #DMT

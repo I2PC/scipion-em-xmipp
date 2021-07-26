@@ -28,17 +28,20 @@
 This module contains utils functions for Xmipp protocols
 """
 
-from os.path import join
+from os.path import join, basename
 import numpy as np
+import math
 from pyworkflow import Config
+import pyworkflow.utils as pwutils
 from pwem import emlib
+from pyworkflow.object import Object
 
 
 def validateXmippGpuBins():
     pass
 
 
-BAD_IMPORT_TENSORFLOW_KERAS_MSG='''
+BAD_IMPORT_TENSORFLOW_KERAS_MSG = '''
 Error, tensorflow/keras is probably not installed. Install it with:\n  ./scipion installb deepLearningToolkit
 If gpu version of tensorflow desired, install cuda 8.0 or cuda 9.0
 We will try to automatically install cudnn, if unsucesfully, install cudnn and add to LD_LIBRARY_PATH
@@ -52,6 +55,63 @@ CUDNN_VERSION = 6 or 7
 '''.format(Config.SCIPION_CONFIG)
 
 
+def writeImageFromArray(array, fn):
+    img = emlib.Image()
+    img.setData(array)
+    img.write(fn)
+
+
+def readImage(fn):
+    img = emlib.Image()
+    img.read(fn)
+    return img
+
+
+def applyTransform(imag_array, M, shape):
+    ''' Apply a transformation(M) to a np array(imag) and return it in a given shape
+  '''
+    imag = emlib.Image()
+    imag.setData(imag_array)
+    imag = imag.applyWarpAffine(list(M.flatten()), shape, True)
+    return imag.getData()
+
+
+def rotation(imag, angle, shape, P):
+    '''Rotate a np.array and return also the transformation matrix
+  #imag: np.array
+  #angle: angle in degrees
+  #shape: output shape
+  #P: transform matrix (further transformation in addition to the rotation)'''
+    (hsrc, wsrc) = imag.shape
+    angle *= math.pi / 180
+    T = np.asarray([[1, 0, -wsrc / 2], [0, 1, -hsrc / 2], [0, 0, 1]])
+    R = np.asarray([[math.cos(angle), math.sin(angle), 0], [-math.sin(angle), math.cos(angle), 0], [0, 0, 1]])
+    M = np.matmul(np.matmul(np.linalg.inv(T), np.matmul(R, T)), P)
+
+    transformed = applyTransform(imag, M, shape)
+    return transformed, M
+
+
+def flipYImage(inFn, outFn=None, outDir=None):
+    '''Flips an image in the Y axis'''
+    if outFn == None:
+        if not '_flipped' in basename(inFn):
+            ext = pwutils.getExt(inFn)
+            outFn = inFn.replace(ext, '_flipped' + ext)
+        else:
+            outFn = inFn.replace('_flipped', '')
+    if outDir != None:
+        outFn = outDir + '/' + basename(outFn)
+    gainImg = readImage(inFn)
+    imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
+
+    # Flipped Y matrix
+    M, angle = np.asarray([[1, 0, 0], [0, -1, imag_array.shape[0]], [0, 0, 1]]), 0
+    flipped_array, M = rotation(imag_array, angle, imag_array.shape, M)
+    writeImageFromArray(flipped_array, outFn)
+    return outFn
+
+
 def copy_image(imag):
     ''' Return a copy of a xmipp_image
     '''
@@ -62,7 +122,7 @@ def copy_image(imag):
 
 def matmul_serie(mat_list, size=4):
     '''Return the matmul of several numpy arrays'''
-    #Return the identity matrix if te list is empty
+    # Return the identity matrix if te list is empty
     if len(mat_list) > 0:
         res = np.identity(len(mat_list[0]))
         for i in range(len(mat_list)):
@@ -80,15 +140,15 @@ def normalize_array(ar):
     return ar
 
 
-def surrounding_values(a,ii,jj,depth=1):
+def surrounding_values(a, ii, jj, depth=1):
     '''Return a list with the surrounding elements, given the indexs of the center, from an 2D numpy array
     '''
-    values=[]
-    for i in range(ii-depth,ii+depth+1):
-        for j in range(jj-depth,jj+depth+1):
-            if i>=0 and j>=0 and i<a.shape[0] and j<a.shape[1]:
-                if i!=ii or j!=jj:
-                    values+=[a[i][j]]
+    values = []
+    for i in range(ii - depth, ii + depth + 1):
+        for j in range(jj - depth, jj + depth + 1):
+            if i >= 0 and j >= 0 and i < a.shape[0] and j < a.shape[1]:
+                if i != ii or j != jj:
+                    values += [a[i][j]]
     return values
 
 
@@ -252,3 +312,33 @@ class PathData(Data):
 
     def removeLastPoint(self):
         del self._points[-1]
+
+
+class DeprecatedParam:
+    """ Deprecated param. To be used when you want to rename an existing param
+    and still be able to recover old param value. It acts like a redirector, passing the
+    value received when its value is set to the new renamed parameter"""
+    def __init__(self, newParamName, prot):
+        """        :param newParamName: Name of the new renamed param
+        :param prot: Protocol hosting this and the renamed param        """
+        self._newParamName = newParamName
+        self.prot = prot
+        # Need to fake being a Object at loading time
+        self._objId = None
+        self._objIsPointer = False
+
+    def set(self, value):
+        if hasattr(self.prot, self._newParamName):
+            newParam = self._getNewParam()
+            newParam.set(value)
+            if newParam.isPointer():
+                self._extended = newParam._extended
+
+    def isPointer(self):
+        return self._getNewParam().isPointer()
+
+    def getObjValue(self):
+        return None
+
+    def _getNewParam(self):
+        return getattr(self.prot, self._newParamName)

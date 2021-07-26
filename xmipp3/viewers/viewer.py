@@ -290,7 +290,7 @@ class XmippViewer(DataViewer):
             if mdFn:
                 micsfn = mdFn.get()
             else:  # happens if protocol is not an xmipp one
-                micsfn = self._getExtraPath(micSet.getName() + '_micrographs.xmd')
+                micsfn = obj._getExtraPath(micSet.getName() + '_micrographs.xmd')
                 writeSetOfMicrographs(micSet, micsfn)
                 inTmpFolder = True
 

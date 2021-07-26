@@ -39,7 +39,7 @@ from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.20.07'
+_currentVersion = '3.21.06.1'
 
 
 class Plugin(pwem.Plugin):
@@ -176,6 +176,7 @@ class Plugin(pwem.Plugin):
                            deps=xmippDeps, default=False)
 
         avoidConfig = os.environ.get('XMIPP_NOCONFIG', 'False') == 'True'
+        alreadyCompiled = os.path.isfile(getXmippPath('v'+_currentVersion))  # compilation token (see the xmipp script)
         configSrc = ('./xmipp check_config' if avoidConfig
                      else './xmipp config noAsk && ./xmipp check_config')
         env.addPackage('xmippSrc', version=_currentVersion,
@@ -187,7 +188,7 @@ class Plugin(pwem.Plugin):
                                   installTgt + sourceTgt),
                                  (bindingsAndLibsCmd.format(**installVars),
                                   bindingsAndLibsTgt)],
-                       deps=xmippDeps, default=not develMode)
+                       deps=xmippDeps, default=not (develMode or alreadyCompiled))
 
         ## EXTRA PACKAGES ##
         installDeepLearningToolkit(cls, env)
