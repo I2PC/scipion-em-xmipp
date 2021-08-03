@@ -139,8 +139,12 @@ class XmippProtCL2DMap(ProtAnalysis2D):
     #--------------------------- INFO functions --------------------------------
     def _summary(self):
         summary = []
-        if self.getOutputsSize() == 1:
-            summary.append("A total of %d classes were selected" % self.selectedClasses2D.getSize())
+        if self.getOutputsSize() >= 1:
+            totalClasses = self.inputClasses.get().getSize()
+            for key, outClasses in self.iterOutputAttributes():
+                summary.append("*Output %s*" % key.split('_')[-1])
+                summary.append("A total of %d classes out of %d were selected"
+                               % (outClasses.getSize(), totalClasses))
         else:
             summary.append("No classes selected yet.")
         return summary
