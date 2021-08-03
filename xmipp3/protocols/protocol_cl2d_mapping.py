@@ -44,7 +44,9 @@ from pwem.objects import SetOfClasses2D
 
 
 class XmippProtCL2DMap(ProtAnalysis2D):
-    """ Create a low dimensional mapping from a SetOfClasses2D with interactive selection of classes """
+    """ Create a low dimensional mapping from a SetOfClasses2D with interactive selection of classes.
+    Use mouse left-click to select/deselect classes individually or mouse right-click to select/deselect
+    several classes."""
     
     _label = '2D classes mapping'
     red_methods = ['PCA', 'LTSA', 'DM', 'LLTSA', 'LPP', 'kPCA', 'pPCA', 'LE', 'HLLE', 'SPE', 'NPE']
