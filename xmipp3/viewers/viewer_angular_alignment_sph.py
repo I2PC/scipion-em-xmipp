@@ -154,7 +154,7 @@ class XmippAngularAlignmentSphViewer(ProtocolViewer):
     #     prot = self.protocol
     #     project = prot.getProject()
     #     inputSet = prot.getInputParticles()
-    #     fnSqlite = prot._getTmpPath('cluster_particles.sqlite')
+    #     fnSqlite = prot._getExtraPath('cluster_particles.sqlite')
     #     cleanPath(fnSqlite)
     #     partSet = SetOfParticles(filename=fnSqlite)
     #     partSet.copyInfo(inputSet)
