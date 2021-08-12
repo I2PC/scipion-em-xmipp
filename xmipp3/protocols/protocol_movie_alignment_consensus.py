@@ -34,7 +34,7 @@ from cmath import rect, phase
 from math import radians, degrees
 
 from pyworkflow import VERSION_2_0
-from pwem.objects import SetOfMovies, SetOfMicrographs
+from pwem.objects import SetOfMovies, SetOfMicrographs, MovieAlignment
 from pyworkflow.object import Set, Integer, Pointer
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
@@ -61,7 +61,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
 
     _label = 'movie alignment consensus'
     outputName = 'consensusAlignments'
-    #FN_PREFIX = 'consensusAlignments_'
 
     def __init__(self, **args):
         ProtAlignMovies.__init__(self, **args)
@@ -75,14 +74,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         form.addParam('inputMovies1', params.PointerParam, pointerClass='SetOfMovies',
                       label="Aligned Movies", important=True,
                       help='Select the aligned movies to evaluate (this first set will give the global shifts)')
-
-        #form.addSection(label='Xmipp criteria')
-        #form.addParam('useCritXmipp', params.BooleanParam, default=False,
-         #             label='Use Xmipp criteria for selection',
-          #            help='Use this button to decide if carrying out the '
-           #                'selection taking into account the Xmipp parameters.\n'
-            #               'Only available when Xmipp Flex Align algorithm was used '
-             #              'for the _Aligned Input Movies_ or for the _Secondary Aligned Movies_.')
 
         form.addSection(label='Consensus')
         form.addParam('calculateConsensus', params.BooleanParam, default=False,
@@ -126,6 +117,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
     def _insertAllSteps(self):
         self.finished = False
         self.insertedDict = {}
+        self.shift_corr = {}
         self.processedDict = []
         self.outputDict = []
         self.allMovies1 = []
@@ -134,18 +126,17 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         self.setSecondaryAttributes()
 
         self.movieFn1 = self.inputMovies1.get().getFileName()
-        self.numberOfFrames1 = self.inputMovies1.get().getFirstItem().getNumberOfFrames()
-        print(self.numberOfFrames1)
-
+        #self.numberOfFrames1 = self.inputMovies1.get().getFirstItem().getNumberOfFrames()
+        #print(self.numberOfFrames1)
 
         if self.calculateConsensus.get():
             self.movieFn2 = self.inputMovies2.get().getFileName()
-            self.numberOfFrames2 = self.inputMovies2.get().getFirstItem().getNumberOfFrames()
-            print(self.numberOfFrames2)
+            #self.numberOfFrames2 = self.inputMovies2.get().getFirstItem().getNumberOfFrames()
+            #print(self.numberOfFrames2)
             movieSteps = self._checkNewInput()
 
-        else:
-            movieSteps = self._insertNewSelectionSteps(self.insertedDict, self.inputMovies1.get())
+        #else:
+            #movieSteps = self._insertNewSelectionSteps(self.insertedDict, self.inputMovies1.get())
 
         self._insertFunctionStep('createOutputStep',
                                  prerequisites=movieSteps, wait=True)
@@ -174,31 +165,35 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
                                              movies1Dict, movies2Dict,
                                              prerequisites=[])
         deps.append(discrepId)
+
         if len(setOfMovies1) > len(setOfMovies2):
             setOfMovies = setOfMovies2
         else:
             setOfMovies = setOfMovies1
+
         for movie in setOfMovies:
             movieId = movie.getObjId()
             if movieId not in insDict:
-                stepId = self._insertFunctionStep('selectMovieStep', movieId,
+                stepId = self._insertFunctionStep('alignmentCorrelationMovieStep', movieId,
                                                   prerequisites=[discrepId])
                 deps.append(stepId)
                 insDict[movieId] = stepId
 
         return deps
 
+#---------------podemos borrar
     def _insertNewSelectionSteps(self, insertedDict, inputMovies):
         deps = []
         # For each ctf insert the step to process it
         for movie in inputMovies:
             movieId = movie.getObjId()
             if movieId not in insertedDict:
-                stepId = self._insertFunctionStep('selectMovieStep', movieId,
+                stepId = self._insertFunctionStep('alignmentCorrelationMovieStep', movieId,
                                                   prerequisites=[])
                 deps.append(stepId)
                 insertedDict[movieId] = stepId
         return deps
+#-----------------------
 
     def _stepsCheck(self):
         self._checkNewInput()
@@ -216,6 +211,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
                 return None
             movieSet1 = self._loadInputMovieSet(self.movieFn1)
             movieSet2 = self._loadInputMovieSet(self.movieFn2)
+
             if len(self.allMovies1) > 0:
                 newMovies1 = [movie.clone() for movie in
                               movieSet1.iterItems(orderBy='creation',
@@ -223,20 +219,25 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
                                                   self.checkMovies1) + '"')]
             else:
                 newMovies1 = [movie.clone() for movie in movieSet1]
+
             self.allMovies1 = self.allMovies1 + newMovies1
+
             if len(newMovies1) > 0:
                 for movie in movieSet1.iterItems(orderBy='creation',
-                                              direction='DESC'):
+                                                 direction='DESC'):
                     self.checkMovies1 = movie.getObjCreation()
                     break
+
             if len(self.allMovies2) > 0:
                 newMovies2 = [movie.clone() for movie in
-                           movieSet2.iterItems(orderBy='creation',
-                                               where='creation>"' + str(
+                              movieSet2.iterItems(orderBy='creation',
+                                                  where='creation>"' + str(
                                                   self.checkMovies2) + '"')]
             else:
                 newMovies2 = [movie.clone() for movie in movieSet2]
+
             self.allMovies2 = self.allMovies2 + newMovies2
+
             if len(newMovies2) > 0:
                 for movie in movieSet2.iterItems(orderBy='creation',
                                                  direction='DESC'):
@@ -255,39 +256,12 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
             if len(set(self.allMovies1)) > len(set(self.processedDict)) and \
                len(set(self.allMovies2)) > len(set(self.processedDict)):
                 fDeps = self._insertNewMovieSteps(movieSet1, movieSet2, self.insertedDict)
+
                 if outputStep is not None:
                     outputStep.addPrerequisites(*fDeps)
+
                 self.updateSteps()
-        else:
-            now = datetime.now()
-            self.lastCheck = getattr(self, 'lastCheck', now)
-            mTime = datetime.fromtimestamp(os.path.getmtime(self.movieFn1))
-            self.debug('Last check: %s, modification: %s'
-                       % (pwutils.prettyTime(self.lastCheck),
-                          pwutils.prettyTime(mTime)))
 
-            # Open input movies.sqlite and close it as soon as possible
-            movieSet = self._loadInputMovieSet(self.movieFn1)
-            self.isStreamClosed = movieSet.isStreamClosed()
-            self.allMovies1 = [m.clone() for m in movieSet]
-            movieSet.close()
-
-            # If the input movies.sqlite have not changed since our last check,
-            # it does not make sense to check for new input data
-            if self.lastCheck > mTime and hasattr(self, 'allMovies1'):
-                return None
-
-            self.lastCheck = now
-            newMovies = any(movie.getObjId() not in
-                         self.insertedDict for movie in self.allMovies1)
-            outputStep = self._getFirstJoinStep()
-
-            if newMovies:
-                fDeps = self._insertNewSelectionSteps(self.insertedDict,
-                                                      self.allMovies1)
-                if outputStep is not None:
-                    outputStep.addPrerequisites(*fDeps)
-                self.updateSteps()
 
 
     def _checkNewOutput(self):
@@ -298,13 +272,14 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         doneListAccepted = self._readCertainDoneList(ACCEPTED)
 
         # Check for newly done items
-        ctfListIdAccepted = self._readtCtfId(True)
-        ctfListIdDiscarded = self._readtCtfId(False)
+        movieListIdAccepted = self._readtMovieId(True)
+        movieListIdDiscarded = self._readtMovieId(False)
 
-        newDoneAccepted = [ctfId for ctfId in ctfListIdAccepted
-                           if ctfId not in doneListAccepted]
-        newDoneDiscarded = [ctfId for ctfId in ctfListIdDiscarded
-                            if ctfId not in doneListDiscarded]
+        newDoneAccepted = [movieId for movieId in movieListIdAccepted
+                           if movieId not in doneListAccepted]
+        newDoneDiscarded = [movieId for movieId in movieListIdDiscarded
+                            if movieId not in doneListDiscarded]
+
         firstTimeAccepted = len(doneListAccepted) == 0
         firstTimeDiscarded = len(doneListDiscarded) == 0
         allDone = len(doneListAccepted) + len(doneListDiscarded) +\
@@ -312,31 +287,37 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
 
         # We have finished when there is not more input ctf (stream closed)
         # and the number of processed ctf is equal to the number of inputs
-        if self.calculateConsensus:
-            maxCtfSize = min(len(self.allCtf1), len(self.allCtf2))
+        if self.calculateConsensus.get():
+            maxMovieSize = min(len(self.allMovies1), len(self.allMovies2))
         else:
-            maxCtfSize = len(self.allCtf1)
+            maxMovieSize = len(self.allMovies1)
 
-        self.finished = (self.isStreamClosed and allDone == maxCtfSize)
+        self.finished = (self.isStreamClosed and allDone == maxMovieSize)
 
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
 
         def readOrCreateOutputs(doneList, newDone, label=''):
             if len(doneList) > 0 or len(newDone) > 0:
-                cSet = self._loadOutputSet(SetOfMovies, 'ctfs'+label+'.sqlite')
-                mSet = self._loadOutputSet(SetOfMicrographs,
-                                             'micrographs'+label+'.sqlite')
+                movSet = self._loadOutputSet(SetOfMovies, 'movies'+label+'.sqlite')
+                #micSet = self._loadOutputSet(SetOfMicrographs, 'micrographs'+label+'.sqlite')
+                micSet = SetOfMicrographs()
                 label = ACCEPTED if label == '' else DISCARDED
-                self.fillOutput(cSet, mSet, newDone, label)
+                self.fillOutput(movSet, micSet, newDone, label)
 
-                return cSet, mSet
-            return None, None
+                #return movSet, micSet
+                return movSet
+            #return None, None
+            return None
 
-        ctfSet, micSet = readOrCreateOutputs(doneListAccepted, newDoneAccepted)
-        ctfSetDiscarded, micSetDiscarded = readOrCreateOutputs(doneListDiscarded,
-                                                               newDoneDiscarded,
-                                                               DISCARDED)
+        #ctfSet, micSet = readOrCreateOutputs(doneListAccepted, newDoneAccepted)
+        #ctfSetDiscarded, micSetDiscarded = readOrCreateOutputs(doneListDiscarded,
+         #                                                      newDoneDiscarded,
+          #                                                     DISCARDED)
+
+        movieSet = readOrCreateOutputs(doneListAccepted, newDoneAccepted)
+        movieSetDiscarded = readOrCreateOutputs(doneListDiscarded,newDoneDiscarded, DISCARDED)
+
 
         if not self.finished and not newDoneDiscarded and not newDoneAccepted:
             # If we are not finished and no new output have been produced
@@ -346,7 +327,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
 
         def updateRelationsAndClose(cSet, mSet, first, label=''):
 
-            if os.path.exists(self._getPath('ctfs'+label+'.sqlite')):
+            if os.path.exists(self._getPath('movies'+label+'.sqlite')):
 
                 micsAttrName = 'outputMicrographs'+label
                 self._updateOutputSet(micsAttrName, mSet, streamMode)
@@ -354,21 +335,21 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
                 # that happens somewhere while scheduling.
                 cSet.setMicrographs(Pointer(self, extended=micsAttrName))
 
-                self._updateOutputSet('outputCTF'+label, cSet, streamMode)
+                self._updateOutputSet('outputMovies'+label, cSet, streamMode)
 
                 if first:
-                    self._defineTransformRelation(self.inputCTF.get().getMicrographs(),
+                    self._defineTransformRelation(self.inputMovies1.get().getMicrographs(),
                                                   mSet)
                     # self._defineTransformRelation(cSet, mSet)
-                    self._defineTransformRelation(self.inputCTF, cSet)
+                    self._defineTransformRelation(self.inputMovies1, cSet)
                     self._defineCtfRelation(mSet, cSet)
 
                 mSet.close()
                 cSet.close()
 
-        updateRelationsAndClose(ctfSet, micSet, firstTimeAccepted)
-        updateRelationsAndClose(ctfSetDiscarded, micSetDiscarded,
-                                firstTimeDiscarded, DISCARDED)
+        updateRelationsAndClose(movieSet, micSet, firstTimeAccepted)
+        updateRelationsAndClose(movieSetDiscarded, micSetDiscarded,
+                               firstTimeDiscarded, DISCARDED)
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
@@ -381,78 +362,58 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
             inputMovieSet = self._loadInputMovieSet(self.movieFn1)
             if self.calculateConsensus.get():
                 inputMovieSet2 = self._loadInputMovieSet(self.movieFn2)
+
             for movieId in newDone:
                 movie = inputMovieSet[movieId].clone()
-                mic = movie.getMicrograph().clone()
+
+                #mic = movie.getMicrograph().clone()
 
                 movie.setEnabled(self._getEnable(movieId))
-                mic.setEnabled(self._getEnable(movieId))
+
+                #mic.setEnabled(self._getEnable(movieId))
 
                 if self.calculateConsensus.get():
                     movie2 = inputMovieSet2[movieId]
-                    setAttribute(movie, '_consensus_resolution',
-                                 self._freqResol[movieId])
-                    setAttribute(movie, '_ctf2_defocus_diff',
-                                 max(abs(movie.getDefocusU()-movie2.getDefocusU()),
-                                     abs(movie.getDefocusV()-movie2.getDefocusV())))
-                    setAttribute(movie, '_ctf2_defocusAngle_diff',
-                                 anglesDifference(movie.getDefocusAngle(),
-                                                  movie2.getDefocusAngle()))
-                    if movie.hasPhaseShift() and movie2.hasPhaseShift():
-                        setAttribute(movie, '_ctf2_phaseShift_diff',
-                                     anglesDifference(movie.getPhaseShift(),
-                                                      movie2.getPhaseShift()))
 
-                    setAttribute(movie, '_ctf2_resolution', movie2.getResolution())
-                    setAttribute(movie, '_ctf2_fitQuality', movie2.getFitQuality())
+                    alignment1 = movie.getAlignment()
+                    alignment2 = movie2.getAlignment()
 
-                    if movie2.hasAttribute('_xmipp_ctfmodel_quadrant'):
-                        # To check CTF in Xmipp _quadrant is the best
-                        copyAttribute(movie2, movie, '_xmipp_ctfmodel_quadrant')
+                    shiftX_1, shiftY_1 = alignment1.getShifts()
+                    shiftX_2, shiftY_2 = alignment2.getShifts()
+                    setAttribute(movie, '_alignment_corr', self.shift_corr[movieId])
+
+                    if self.averageParams:
+                        newShiftX = 0.5*(shiftX_1 + shiftX_2)
+                        newShiftY = 0.5*(shiftY_1 + shiftY_2)
+                        alignment = MovieAlignment(xshifts=newShiftX, yshifts=newShiftY)
+                        movie.setAlignment(alignment)
+
                     else:
-                        setAttribute(movie, '_ctf2_psdFile', movie2.getPsdFile())
+                        alignment = MovieAlignment(xshifts=shiftX_1, yshifts=shiftY_1)
+                        movie.setAlignment(alignment)
 
-                    if self.averageDefocus:
-                        newDefocusU = 0.5*(movie.getDefocusU() + movie2.getDefocusU())
-                        newDefocusV = 0.5*(movie.getDefocusV() + movie2.getDefocusV())
-                        newDefocusAngle = averageAngles(movie.getDefocusAngle(),
-                                                        movie2.getDefocusAngle())
-                        movie.setStandardDefocus(newDefocusU, newDefocusV,
-                                               newDefocusAngle)
-                        if movie.hasPhaseShift() and movie2.hasPhaseShift():
-                            newPhaseShift = averageAngles(movie.getPhaseShift(),
-                                                          movie2.getPhaseShift())
-                            movie.setPhaseShift(newPhaseShift)
-                    else:
-                        setAttribute(movie, '_ctf2_defocusRatio', movie2.getDefocusRatio())
-                        setAttribute(movie, '_ctf2_astigmatism',
-                                     abs(movie2.getDefocusU() - movie2.getDefocusV()))
-
-                    if self.includeSecondary:
+                    if self.includeSecondary.get():
                         for attr in self.secondaryAttributes:
                             copyAttribute(movie2, movie, attr)
 
-                # main _astigmatism always but after consensus if so
-                setAttribute(movie, '_astigmatism',
-                             abs(movie.getDefocusU() - movie.getDefocusV()))
-
                 movieSet.append(movie)
-                micSet.append(mic)
+                #micSet.append(mic)
                 self._writeCertainDoneList(movieId, label)
 
             inputMovieSet.close()
+
             if self.calculateConsensus.get():
                 inputMovieSet2.close()
 
 
     def setSecondaryAttributes(self):
-        if self.calculateConsensus and self.includeSecondary:
-            item = self.inputCTF.get().getFirstItem()
-            ctf1Attr = set(item.getObjDict().keys())
+        if self.calculateConsensus.get() and self.includeSecondary.get():
+            item = self.inputMovies1.get().getFirstItem()
+            movie1Attr = set(item.getObjDict().keys())
 
-            item = self.inputCTF2.get().getFirstItem()
-            ctf2Attr = set(item.getObjDict().keys())
-            self.secondaryAttributes = ctf2Attr - ctf1Attr
+            item = self.inputMovies2.get().getFirstItem()
+            movie2Attr = set(item.getObjDict().keys())
+            self.secondaryAttributes = movie2Attr - movie1Attr
         else:
             self.secondaryAttributes = set()
 
@@ -476,25 +437,26 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
 
-        micSet = self.inputCTF.get().getMicrographs()
+        #micSet = self.inputMovies1.get().getMicrographs()
 
-        if isinstance(outputSet, SetOfMicrographs):
-            outputSet.copyInfo(micSet)
-        elif isinstance(outputSet, SetOfMovies):
-            outputSet.setMicrographs(micSet)
+        #if isinstance(outputSet, SetOfMicrographs):
+         #   outputSet.copyInfo(micSet)
+        #elif isinstance(outputSet, SetOfMovies):
+         #   outputSet.setMicrographs(micSet)
+
         return outputSet
 
 
     def _movieToMd(self, movie, movieMd):
-        """ Write the proper metadata for Xmipp from a given CTF """
+        """ Write the proper metadata for Xmipp from a given Movie """
         movieMd.clear()
         movieRow = Row()
 
         xmipp3.convert.writeMovieMd(movie, movieMd)
         xmipp3.convert.micrographToRow(movie.getMicrograph(), movieRow,
                                        alignType=xmipp3.convert.ALIGN_NONE)
-
         movieRow.addToMd(movieMd)
+
 
     def movieDiscrepancyStep(self, met1Dict, met2Dict):
         # TODO must be same micrographs
@@ -509,7 +471,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         md1 = emlib.MetaData()
         md2 = emlib.MetaData()
 
-        for movie1 in method1:  # reference CTF
+        for movie1 in method1:  # reference Movies
             movieId = movie1.getObjId()
             if movieId in self.processedDict:
                 continue
@@ -518,14 +480,15 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
                 if movieId2 != movieId:
                     continue
                 self.processedDict.append(movieId)
-                try:
-                    self._movieToMd(movie1, md1)
-                    self._movieToMd(movie2, md2)
-                    self._freqResol[movieId] = emlib.errorMaxFreqCTFs2D(md1, md2)
 
-                except TypeError as exc:
-                    print("Error reading movie for id:%s. %s" % (movieId, exc))
-                    self._freqResol[movieId] = 9999
+                #This part is the one that I dont understand
+                #try:
+                 #   self._movieToMd(movie1, md1)
+                  #  self._movieToMd(movie2, md2)
+
+                #except TypeError as exc:
+                 #   print("Error reading movie for id:%s. %s" % (movieId, exc))
+
 
     def initializeRejDict(self):
         self.discDict = {'shiftX': 0,
@@ -537,49 +500,64 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         self._store()
 
 
-    def selectMovieStep(self, movieId):
-        # Depending on the flags selected by the user, we set the values of
-        # the params to compare with
+    def alignmentCorrelationMovieStep(self, movieId):
 
-        def compareValue(movie, label, comp, crit):
-            """ Returns True if the ctf.label NOT complain the crit by comp
-            """
-            if hasattr(movie, label):
-                if comp == 'lt':
-                    discard = getattr(movie, label).get() < crit
-                elif comp == 'bt':
-                    discard = getattr(movie, label).get() > crit
-                else:
-                    raise Exception("'comp' must be either 'lt' or 'bt'.")
-            else:
-                print("%s not found. Skipping evaluation on that." % label)
-                return False
-
-            if discard:
-                self.discDict[label] += 1
-            return discard
-
-        # TODO: Change this way to get the ctf.
-        movie = self.inputMovies1.get()[movieId]
+        # TODO: Change this way to get the MOVIE.
+        movie1 = self.inputMovies1.get()[movieId]
+        movie2 = self.inputMovies2.get()[movieId]
 
         # FIXME: this is a workaround to skip errors, but it should be treat at checkNewInput
-        if movie is None:
+        if movie1 is None:
             return
 
-        alignment = movie.getAlignment()
-        shiftX, shiftY = alignment.getShifts()
-        print('SHIFTTSSSSSSSSS')
-        print(shiftX)
-        print(shiftY)
+        fn1 = movie1.getFileName()
+        fn2 = movie1.getFileName()
 
-        self.discDict['shiftsX'] = shiftX
-        self.discDict['shiftsY'] = shiftY
-        self.discDict['consensusCorrelation'] = self.minConsCorrelation.get()
+        movieID1 = movie1.getObjId()
+        movieID2 = movie2.getObjId()
 
-        """ Write to a text file the items that have been done. """
-        fn = movie.getFileName()
-        with open(fn, 'a') as f:
-            f.write('%d \n' % movie.getObjId())
+        if movieID1 == movieID2:
+            print('SAME ID BUT LETS SEE IF SAME NAME')
+            print(movieID1)
+            print(movieID2)
+            if fn1 == fn2:
+                print('Holaaaa los nombres son los mismos y el ID TAMBIEN')
+                print(fn1)
+                print(fn2)
+            else:
+                print('CHAOOO NO SON LOS MISMOS')
+
+        alignment1 = movie1.getAlignment()
+        alignment2 = movie2.getAlignment()
+
+        shiftX_1, shiftY_1 = alignment1.getShifts()
+        shiftX_2, shiftY_2 = alignment2.getShifts()
+
+        #print('SHIFTTSSSSSSSSS')
+        #print(shiftX_1)
+        #print(shiftY_1)
+        #print(shiftX_2)
+        #print(shiftY_2)
+
+        # Transformation of the shifts to calculate the shifts trajectory correlation
+
+        correlation = 0.9
+
+        #
+        if correlation >= 0.7:
+            print('Alignment correct')
+            fn = self._getMovieSelecFileAccepted()
+            with open(fn, 'a') as f:
+                f.write('%d T\n' % movieID1)
+
+        elif correlation < 0.7:
+            print('Discrepancy in the alignment')
+            print(correlation)
+            fn = self._getMovieSelecFileDiscarded()
+            with open(fn, 'a') as f:
+                f.write('%d F\n' % movieID1)
+
+        self.shift_corr[movieID1] = correlation
 
         self._store()
 
@@ -669,17 +647,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         return errors
 
 
-    # def _readDoneListDiscarded(self):
-    #     """ Read from a text file the id's of the items
-    #     that have been done. """
-    #     DiscardedFile = self._getDiscardedDone()
-    #     DiscardedList = []
-    #     # Check what items have been previously done
-    #     if os.path.exists(DiscardedFile):
-    #         with open(DiscardedFile) as f:
-    #             DiscardedList += [int(line.strip()) for line in f]
-    #     return DiscardedList
-
     def _readCertainDoneList(self, label):
         """ Read from a text file the id's of the items
         that have been done. """
@@ -700,26 +667,26 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
     def _getCertainDone(self, label):
         return self._getExtraPath('DONE_'+label+'.TXT')
 
-    def _getCtfSelecFileAccepted(self):
-        return self._getExtraPath('selection-ctf-accepted.txt')
+    def _getMovieSelecFileAccepted(self):
+        return self._getExtraPath('selection-movie-accepted.txt')
 
-    def _getCtfSelecFileDiscarded(self):
-        return self._getExtraPath('selection-ctf-discarded.txt')
+    def _getMovieSelecFileDiscarded(self):
+        return self._getExtraPath('selection-movie-discarded.txt')
 
-    def _readtCtfId(self, accepted):
+    def _readtMovieId(self, accepted):
         if accepted:
-            fn = self._getCtfSelecFileAccepted()
+            fn = self._getMovieSelecFileAccepted()
         else:
-            fn = self._getCtfSelecFileDiscarded()
-        ctfList = []
+            fn = self._getMovieSelecFileDiscarded()
+        moviesList = []
         # Check what items have been previously done
         if os.path.exists(fn):
             with open(fn) as f:
-                ctfList += [int(line.strip().split()[0]) for line in f]
-        return ctfList
+                moviesList += [int(line.strip().split()[0]) for line in f]
+        return moviesList
 
     def _getEnable(self, ctfId):
-        fn = self._getCtfSelecFileAccepted()
+        fn = self._getMovieSelecFileAccepted()
         # Check what items have been previously done
         if os.path.exists(fn):
             with open(fn) as f:
