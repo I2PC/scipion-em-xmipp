@@ -33,6 +33,7 @@ from datetime import datetime
 from cmath import rect, phase
 from math import radians, degrees
 
+import numpy as np
 from pyworkflow import VERSION_2_0
 from pwem.objects import SetOfMovies, SetOfMicrographs, MovieAlignment
 from pyworkflow.object import Set, Integer, Pointer
@@ -96,20 +97,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
                            "between the two estimations below this correlation, "
                            "it will be discarded.")
 
-        form.addParam('averageParams', params.BooleanParam,
-                      condition="calculateConsensus", default=False,
-                      label='Average equivalent metadata?',
-                      help='If *Yes*, making an average of those metadata present '
-                           'in both alignments (shift_x, shift_y...)\n '
-                           'If *No*, the primary estimation metadata will persist.')
-
-        form.addParam('includeSecondary', params.BooleanParam,
-                      condition="calculateConsensus", default=False,
-                      label='Include all secondary metadata?',
-                      help='If *Yes*, all metadata in the *Secondary Movie ALignment* will '
-                           'be included in the resulting movies.\n '
-                           'If *No*, only the primary metadata (plus consensus '
-                           'scores) will be in the resulting movies.')
 
         form.addParallelSection(threads=0, mpi=0)
 
@@ -122,7 +109,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         self.outputDict = []
         self.allMovies1 = []
         self.allMovies2 = []
-        self.initializeRejDict()
         self.setSecondaryAttributes()
 
         self.movieFn1 = self.inputMovies1.get().getFileName()
@@ -330,22 +316,26 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
             if os.path.exists(self._getPath('movies'+label+'.sqlite')):
 
                 micsAttrName = 'outputMicrographs'+label
-                self._updateOutputSet(micsAttrName, mSet, streamMode)
+                #self._updateOutputSet(micsAttrName, mSet, streamMode)
                 # Set micrograph as pointer to protocol to prevent pointee end up as another attribute (String, Booelan,...)
                 # that happens somewhere while scheduling.
-                cSet.setMicrographs(Pointer(self, extended=micsAttrName))
+                #cSet.setMicrographs(Pointer(self, extended=micsAttrName))
 
                 self._updateOutputSet('outputMovies'+label, cSet, streamMode)
 
                 if first:
-                    self._defineTransformRelation(self.inputMovies1.get().getMicrographs(),
-                                                  mSet)
+                    #self._defineTransformRelation(self.inputMovies1.get().getMicrographs(),
+                    #                              mSet)
                     # self._defineTransformRelation(cSet, mSet)
-                    self._defineTransformRelation(self.inputMovies1, cSet)
-                    self._defineCtfRelation(mSet, cSet)
+                    #self._defineTransformRelation(self.inputMovies1, cSet)
+                    #self._defineCtfRelation(mSet, cSet)
+                    pass
 
                 mSet.close()
                 cSet.close()
+
+        micSet = SetOfMicrographs()#borrar
+        micSetDiscarded = SetOfMicrographs()#borrar
 
         updateRelationsAndClose(movieSet, micSet, firstTimeAccepted)
         updateRelationsAndClose(movieSetDiscarded, micSetDiscarded,
@@ -379,22 +369,9 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
                     alignment2 = movie2.getAlignment()
 
                     shiftX_1, shiftY_1 = alignment1.getShifts()
-                    shiftX_2, shiftY_2 = alignment2.getShifts()
                     setAttribute(movie, '_alignment_corr', self.shift_corr[movieId])
-
-                    if self.averageParams:
-                        newShiftX = 0.5*(shiftX_1 + shiftX_2)
-                        newShiftY = 0.5*(shiftY_1 + shiftY_2)
-                        alignment = MovieAlignment(xshifts=newShiftX, yshifts=newShiftY)
-                        movie.setAlignment(alignment)
-
-                    else:
-                        alignment = MovieAlignment(xshifts=shiftX_1, yshifts=shiftY_1)
-                        movie.setAlignment(alignment)
-
-                    if self.includeSecondary.get():
-                        for attr in self.secondaryAttributes:
-                            copyAttribute(movie2, movie, attr)
+                    alignment = MovieAlignment(xshifts=shiftX_1, yshifts=shiftY_1)
+                    movie.setAlignment(alignment)
 
                 movieSet.append(movie)
                 #micSet.append(mic)
@@ -407,7 +384,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
 
 
     def setSecondaryAttributes(self):
-        if self.calculateConsensus.get() and self.includeSecondary.get():
+        if self.calculateConsensus.get():
             item = self.inputMovies1.get().getFirstItem()
             movie1Attr = set(item.getObjDict().keys())
 
@@ -438,7 +415,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
             outputSet.setStreamState(outputSet.STREAM_OPEN)
 
         #micSet = self.inputMovies1.get().getMicrographs()
-
         #if isinstance(outputSet, SetOfMicrographs):
          #   outputSet.copyInfo(micSet)
         #elif isinstance(outputSet, SetOfMovies):
@@ -490,16 +466,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
                  #   print("Error reading movie for id:%s. %s" % (movieId, exc))
 
 
-    def initializeRejDict(self):
-        self.discDict = {'shiftX': 0,
-                         'shiftY': 0,
-                         'consensusCorrelation': 0
-                         }
-        for k in self.discDict:
-            setattr(self, "rejBy"+k, Set(0))
-        self._store()
-
-
     def alignmentCorrelationMovieStep(self, movieId):
 
         # TODO: Change this way to get the MOVIE.
@@ -517,15 +483,15 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         movieID2 = movie2.getObjId()
 
         if movieID1 == movieID2:
-            print('SAME ID BUT LETS SEE IF SAME NAME')
-            print(movieID1)
-            print(movieID2)
             if fn1 == fn2:
-                print('Holaaaa los nombres son los mismos y el ID TAMBIEN')
+                print('NAME AND ID ARE THE SAME')
                 print(fn1)
                 print(fn2)
+                print(movieID1)
+                print(movieID2)
             else:
-                print('CHAOOO NO SON LOS MISMOS')
+                print('NAME AND ID ARE NOT THE SAME')
+                return
 
         alignment1 = movie1.getAlignment()
         alignment2 = movie2.getAlignment()
@@ -533,16 +499,56 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         shiftX_1, shiftY_1 = alignment1.getShifts()
         shiftX_2, shiftY_2 = alignment2.getShifts()
 
-        #print('SHIFTTSSSSSSSSS')
-        #print(shiftX_1)
-        #print(shiftY_1)
-        #print(shiftX_2)
-        #print(shiftY_2)
-
         # Transformation of the shifts to calculate the shifts trajectory correlation
+        S1 = np.ones([3, len(shiftX_1)])
+        S2 = np.ones([3, len(shiftX_2)])
+
+        S1[0, :] = shiftX_1
+        S1[1, :] = shiftY_1
+
+        S2[0, :] = shiftX_2
+        S2[2, :] = shiftY_2
+
+        A = np.dot(np.dot(S1, S2.T), np.linalg.inv(np.dot(S2, S2.T)))
+        S2_p = np.dot(A, S2)
+        mse = ((S1 - S2_p) ** 2).mean(axis=1)
+        maxe = np.max(S1 - S2_p)
+        error = S1 -S2_p
+
+        print('S2_PRIME')
+        print(S2_p)
+        print('S1')
+        print(S1)
+        print('HOMOGENOUS COORDINATES')
+        print('General error')
+        print(error)
+        print('MSE per dimension')
+        print(mse)
+        print('MAX ERROR')
+        print(maxe)
+
+
+        S1_cart = np.array([S1[0,:]/S1[2,:], S1[1,:]/S1[2,:]])
+        S2_p_cart = np.array([S2_p[0, :] / S2_p[2, :], S2_p[1, :] / S2_p[2, :]])
+        mse_cart = ((S1_cart - S2_p_cart) ** 2).mean(axis=1)
+        maxe_cart = np.max(S1_cart - S2_p_cart)
+        error_cart = S1_cart - S2_p_cart
+
+        print('CARTESIANS COORDINATES')
+        print('General error')
+        print(error_cart)
+        print('MSE per dimension')
+        print(mse_cart)
+        print('MAX ERROR')
+        print(maxe_cart)
+
+        ## COrr
+        print('Correlation x')
+        print(np.corrcoef(S1_cart[0,:], S2_p_cart[0,:]))
+        print('Correlation y')
+        print(np.corrcoef(S1_cart[1,:], S2_p_cart[1,:]))
 
         correlation = 0.9
-
         #
         if correlation >= 0.7:
             print('Alignment correct')
