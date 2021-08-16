@@ -104,25 +104,18 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
     def _insertAllSteps(self):
         self.finished = False
         self.insertedDict = {}
-        self.shift_corr = {}
         self.processedDict = []
         self.outputDict = []
         self.allMovies1 = []
         self.allMovies2 = []
-        self.setSecondaryAttributes()
-
         self.movieFn1 = self.inputMovies1.get().getFileName()
-        #self.numberOfFrames1 = self.inputMovies1.get().getFirstItem().getNumberOfFrames()
-        #print(self.numberOfFrames1)
+        self.samplingRate = self.inputMovies1.get().getFirstItem().getSamplingRate()
+        self.micsFn = '/home/dmarchan/ScipionUserData/projects/MovieAligmentConsensus/Runs/000753_XmippProtMovieCorr/'
+        self.stats = {}
 
         if self.calculateConsensus.get():
             self.movieFn2 = self.inputMovies2.get().getFileName()
-            #self.numberOfFrames2 = self.inputMovies2.get().getFirstItem().getNumberOfFrames()
-            #print(self.numberOfFrames2)
             movieSteps = self._checkNewInput()
-
-        #else:
-            #movieSteps = self._insertNewSelectionSteps(self.insertedDict, self.inputMovies1.get())
 
         self._insertFunctionStep('createOutputStep',
                                  prerequisites=movieSteps, wait=True)
@@ -167,23 +160,10 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
 
         return deps
 
-#---------------podemos borrar
-    def _insertNewSelectionSteps(self, insertedDict, inputMovies):
-        deps = []
-        # For each ctf insert the step to process it
-        for movie in inputMovies:
-            movieId = movie.getObjId()
-            if movieId not in insertedDict:
-                stepId = self._insertFunctionStep('alignmentCorrelationMovieStep', movieId,
-                                                  prerequisites=[])
-                deps.append(stepId)
-                insertedDict[movieId] = stepId
-        return deps
-#-----------------------
 
     def _stepsCheck(self):
         self._checkNewInput()
-        #self._checkNewOutput()
+        self._checkNewOutput()
 
     def _checkNewInput(self):
         if self.calculateConsensus.get():
@@ -286,23 +266,18 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         def readOrCreateOutputs(doneList, newDone, label=''):
             if len(doneList) > 0 or len(newDone) > 0:
                 movSet = self._loadOutputSet(SetOfMovies, 'movies'+label+'.sqlite')
-                #micSet = self._loadOutputSet(SetOfMicrographs, 'micrographs'+label+'.sqlite')
-                micSet = SetOfMicrographs()
+                micSet = self._loadOutputSet(SetOfMicrographs, 'micrographs'+label+'.sqlite')
                 label = ACCEPTED if label == '' else DISCARDED
                 self.fillOutput(movSet, micSet, newDone, label)
+                movSet.setSamplingRate(self.samplingRate)
+                micSet.setSamplingRate(self.samplingRate)
 
-                #return movSet, micSet
-                return movSet
-            #return None, None
-            return None
+                return movSet, micSet
 
-        #ctfSet, micSet = readOrCreateOutputs(doneListAccepted, newDoneAccepted)
-        #ctfSetDiscarded, micSetDiscarded = readOrCreateOutputs(doneListDiscarded,
-         #                                                      newDoneDiscarded,
-          #                                                     DISCARDED)
+            return None, None
 
-        movieSet = readOrCreateOutputs(doneListAccepted, newDoneAccepted)
-        movieSetDiscarded = readOrCreateOutputs(doneListDiscarded,newDoneDiscarded, DISCARDED)
+        movieSet, micSet = readOrCreateOutputs(doneListAccepted, newDoneAccepted)
+        movieSetDiscarded, micSetDiscarded = readOrCreateOutputs(doneListDiscarded, newDoneDiscarded, DISCARDED)
 
 
         if not self.finished and not newDoneDiscarded and not newDoneAccepted:
@@ -311,35 +286,27 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
             # so we exit from the function here
             return
 
-        def updateRelationsAndClose(cSet, mSet, first, label=''):
+        def updateRelationsAndClose(movieSet, micSet, first, label=''):
 
             if os.path.exists(self._getPath('movies'+label+'.sqlite')):
 
                 micsAttrName = 'outputMicrographs'+label
-                #self._updateOutputSet(micsAttrName, mSet, streamMode)
-                # Set micrograph as pointer to protocol to prevent pointee end up as another attribute (String, Booelan,...)
-                # that happens somewhere while scheduling.
-                #cSet.setMicrographs(Pointer(self, extended=micsAttrName))
-
-                self._updateOutputSet('outputMovies'+label, cSet, streamMode)
+                self._updateOutputSet(micsAttrName, micSet, streamMode)
+                self._updateOutputSet('outputMovies'+label, movieSet, streamMode)
 
                 if first:
-                    #self._defineTransformRelation(self.inputMovies1.get().getMicrographs(),
-                    #                              mSet)
-                    # self._defineTransformRelation(cSet, mSet)
+                    #self._defineTransformRelation(self.inputMovies1.get(),
+                    #                             micSet)
                     #self._defineTransformRelation(self.inputMovies1, cSet)
                     #self._defineCtfRelation(mSet, cSet)
                     pass
 
-                mSet.close()
-                cSet.close()
-
-        micSet = SetOfMicrographs()#borrar
-        micSetDiscarded = SetOfMicrographs()#borrar
+                micSet.close()
+                movieSet.close()
 
         updateRelationsAndClose(movieSet, micSet, firstTimeAccepted)
         updateRelationsAndClose(movieSetDiscarded, micSetDiscarded,
-                               firstTimeDiscarded, DISCARDED)
+                                firstTimeDiscarded, DISCARDED)
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
@@ -350,49 +317,41 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
     def fillOutput(self, movieSet, micSet, newDone, label):
         if newDone:
             inputMovieSet = self._loadInputMovieSet(self.movieFn1)
+            inputMicSet = self._loadInputMicrographSet(self.micsFn)
+
             if self.calculateConsensus.get():
                 inputMovieSet2 = self._loadInputMovieSet(self.movieFn2)
 
             for movieId in newDone:
                 movie = inputMovieSet[movieId].clone()
-
-                #mic = movie.getMicrograph().clone()
-
+                movie.setSamplingRate(self.samplingRate) #DMT
+                mic = inputMicSet[movieId].clone()
+                mic.setSamplingRate(self.samplingRate)  # DMT
                 movie.setEnabled(self._getEnable(movieId))
-
-                #mic.setEnabled(self._getEnable(movieId))
+                mic.setEnabled(self._getEnable(movieId))
 
                 if self.calculateConsensus.get():
-                    movie2 = inputMovieSet2[movieId]
-
                     alignment1 = movie.getAlignment()
-                    alignment2 = movie2.getAlignment()
-
                     shiftX_1, shiftY_1 = alignment1.getShifts()
-                    setAttribute(movie, '_alignment_corr', self.shift_corr[movieId])
+
+
+                    setAttribute(mic, '_alignment_corr', self.stats[movieId]['shift_corr'])
+                    setAttribute(mic, '_alignment_mean_error', self.stats[movieId]['max_error'])
+                    setAttribute(mic, '_alignment_max_error', self.stats[movieId]['mean_error'])
+
                     alignment = MovieAlignment(xshifts=shiftX_1, yshifts=shiftY_1)
                     movie.setAlignment(alignment)
 
                 movieSet.append(movie)
-                #micSet.append(mic)
+                micSet.append(mic)
+
                 self._writeCertainDoneList(movieId, label)
 
             inputMovieSet.close()
+            inputMicSet.close()
 
             if self.calculateConsensus.get():
                 inputMovieSet2.close()
-
-
-    def setSecondaryAttributes(self):
-        if self.calculateConsensus.get():
-            item = self.inputMovies1.get().getFirstItem()
-            movie1Attr = set(item.getObjDict().keys())
-
-            item = self.inputMovies2.get().getFirstItem()
-            movie2Attr = set(item.getObjDict().keys())
-            self.secondaryAttributes = movie2Attr - movie1Attr
-        else:
-            self.secondaryAttributes = set()
 
 
     def _loadOutputSet(self, SetClass, baseName):
@@ -414,24 +373,40 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
 
-        #micSet = self.inputMovies1.get().getMicrographs()
-        #if isinstance(outputSet, SetOfMicrographs):
-         #   outputSet.copyInfo(micSet)
-        #elif isinstance(outputSet, SetOfMovies):
-         #   outputSet.setMicrographs(micSet)
-
         return outputSet
 
+    # def _loadOutputSet_previous_protocol(self, SetClass, baseName):
+    #     """
+    #     Load the output set if it exists or create a new one.
+    #     """
+    #
+    #     baseName_prev = 'micrographs.sqlite'
+    #     setFile_previous = self._getPath_previous_protocol(baseName_prev)
+    #     setFile = self._getPath(baseName)
+    #
+    #     if os.path.exists(setFile_previous):
+    #         inputSet = SetClass(filename=setFile_previous)
+    #
+    #         if os.path.exists(setFile):
+    #             outputSet = SetClass(filename=setFile)
+    #             if (outputSet.__len__() == 0):
+    #                 pwutils.path.cleanPath(setFile)
+    #
+    #         if os.path.exists(setFile):
+    #             outputSet = SetClass(filename=setFile)
+    #             outputSet.loadAllProperties()
+    #             outputSet.enableAppend()
+    #         else:
+    #             outputSet = SetClass(filename=setFile)
+    #             outputSet.setStreamState(outputSet.STREAM_OPEN)
+    #
+    #
+    #
+    #     return outputSet
 
-    def _movieToMd(self, movie, movieMd):
-        """ Write the proper metadata for Xmipp from a given Movie """
-        movieMd.clear()
-        movieRow = Row()
-
-        xmipp3.convert.writeMovieMd(movie, movieMd)
-        xmipp3.convert.micrographToRow(movie.getMicrograph(), movieRow,
-                                       alignType=xmipp3.convert.ALIGN_NONE)
-        movieRow.addToMd(movieMd)
+    def _getPath_previous_protocol(self, baseName):
+        """ Return a path inside the workingDir. """
+        return os.path.join(self.micsFn, baseName)
 
 
     def movieDiscrepancyStep(self, met1Dict, met2Dict):
@@ -511,60 +486,62 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
 
         A = np.dot(np.dot(S1, S2.T), np.linalg.inv(np.dot(S2, S2.T)))
         S2_p = np.dot(A, S2)
-        mse = ((S1 - S2_p) ** 2).mean(axis=1)
-        maxe = np.max(S1 - S2_p)
-        error = S1 -S2_p
 
-        print('S2_PRIME')
-        print(S2_p)
-        print('S1')
-        print(S1)
-        print('HOMOGENOUS COORDINATES')
-        print('General error')
-        print(error)
-        print('MSE per dimension')
-        print(mse)
-        print('MAX ERROR')
-        print(maxe)
+        # mse = ((S1 - S2_p) ** 2).mean(axis=1)
+        # maxe = np.max(S1 - S2_p)
+        # error = S1 -S2_p
+        # print('S2_PRIME')
+        # print(S2_p)
+        # print('S1')
+        # print(S1)
+        # print('HOMOGENOUS COORDINATES')
+        # print('General error')
+        # print(error)
+        # print('MSE per dimension')
+        # print(mse)
+        # print('MAX ERROR')
+        # print(maxe)
 
 
-        S1_cart = np.array([S1[0,:]/S1[2,:], S1[1,:]/S1[2,:]])
+        S1_cart = np.array([S1[0, :]/S1[2, :], S1[1, :]/S1[2, :]])
         S2_p_cart = np.array([S2_p[0, :] / S2_p[2, :], S2_p[1, :] / S2_p[2, :]])
-        mse_cart = ((S1_cart - S2_p_cart) ** 2).mean(axis=1)
+        meane_cart = (S1_cart - S2_p_cart).mean()
         maxe_cart = np.max(S1_cart - S2_p_cart)
-        error_cart = S1_cart - S2_p_cart
+        corrX_cart = np.corrcoef(S1_cart[0, :], S2_p_cart[0, :])[0, 1]
+        corrY_cart = np.corrcoef(S1_cart[1, :], S2_p_cart[1, :])[0, 1]
+        corr_cart = np.corrcoef(S1_cart[1, :], S2_p_cart[1, :])[0, 1]
 
-        print('CARTESIANS COORDINATES')
-        print('General error')
-        print(error_cart)
-        print('MSE per dimension')
-        print(mse_cart)
+        # error_cart = S1_cart - S2_p_cart
+        # print('CARTESIANS COORDINATES')
+        print('Mean error')
+        print(meane_cart)
         print('MAX ERROR')
         print(maxe_cart)
-
-        ## COrr
         print('Correlation x')
-        print(np.corrcoef(S1_cart[0,:], S2_p_cart[0,:]))
+        print(corrX_cart)
         print('Correlation y')
-        print(np.corrcoef(S1_cart[1,:], S2_p_cart[1,:]))
+        print(corrY_cart)
+        print('general corr')
+        print(corr_cart)
 
-        correlation = 0.9
-        #
-        if correlation >= 0.7:
+
+        if corr_cart >= self.minConsCorrelation.get():
             print('Alignment correct')
             fn = self._getMovieSelecFileAccepted()
             with open(fn, 'a') as f:
                 f.write('%d T\n' % movieID1)
 
-        elif correlation < 0.7:
+        elif corr_cart < self.minConsCorrelation.get():
             print('Discrepancy in the alignment')
-            print(correlation)
+            print(corr_cart)
             fn = self._getMovieSelecFileDiscarded()
             with open(fn, 'a') as f:
                 f.write('%d F\n' % movieID1)
 
-        self.shift_corr[movieID1] = correlation
+        stats_loc = {'shift_corr': corr_cart, 'shift_corr_X': corrX_cart, 'shift_corr_Y': corrY_cart,
+                     'max_error': maxe_cart, 'mean_error': meane_cart}
 
+        self.stats[movieID1] = stats_loc
         self._store()
 
 
@@ -708,6 +685,14 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         movieSet = SetOfMovies(filename=moviesFn)
         movieSet.loadAllProperties()
         return movieSet
+
+    def _loadInputMicrographSet(self, micsFn):
+        baseName_prev = 'micrographs.sqlite'
+        micsFn_prev = os.path.join(micsFn, baseName_prev)
+        self.debug("Loading input db: %s" % micsFn_prev)
+        micSet = SetOfMicrographs(filename=micsFn_prev)
+        micSet.loadAllProperties()
+        return micSet
 
     def _getMinCorrelation(self):
        return self.minConsCorrelation.get()
