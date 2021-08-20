@@ -88,15 +88,17 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         self.finished = False
         self.insertedDict = {}
         self.processedDict = []
-        self.outputDict = []
-        self.allMovies1 = []
-        self.allMovies2 = []
+        self.newIDs = []
+        self.allMovies1 = {}
+        self.allMovies2 = {}
         self.movieFn1 = self.inputMovies1.get().getFileName()
+        self.movieFn2 = self.inputMovies2.get().getFileName()
         self.samplingRate = self.inputMovies1.get().getFirstItem().getSamplingRate()
         self.micsFn = self._getMicsPath(self.movieFn1)
         self.stats = {}
-        self.movieFn2 = self.inputMovies2.get().getFileName()
+
         movieSteps = self._checkNewInput()
+
         self._insertFunctionStep('createOutputStep',
                                  prerequisites=movieSteps, wait=True)
 
@@ -116,34 +118,10 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
                 return s
         return None
 
-    def _insertNewMovieSteps(self, setOfMovies1, setOfMovies2, insDict):
-        deps = []
-        movies1Dict = setOfMovies1.getObjDict(includeBasic=True)
-        movies2Dict = setOfMovies2.getObjDict(includeBasic=True)
-        discrepId = self._insertFunctionStep("movieDiscrepancyStep",
-                                             movies1Dict, movies2Dict,
-                                             prerequisites=[])
-        deps.append(discrepId)
-
-        if len(setOfMovies1) > len(setOfMovies2):
-            setOfMovies = setOfMovies2
-        else:
-            setOfMovies = setOfMovies1
-
-        for movie in setOfMovies:
-            movieId = movie.getObjId()
-            if movieId not in insDict:
-                stepId = self._insertFunctionStep('alignmentCorrelationMovieStep', movieId,
-                                                  prerequisites=[discrepId])
-                deps.append(stepId)
-                insDict[movieId] = stepId
-
-        return deps
-
-
     def _stepsCheck(self):
         self._checkNewInput()
         self._checkNewOutput()
+
 
     def _checkNewInput(self):
         # Check if there are new movies to process from the input set
@@ -152,43 +130,37 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
                     datetime.fromtimestamp(os.path.getmtime(self.movieFn2)))
         # If the input movies.sqlite have not changed since our last check,
         # it does not make sense to check for new input data
-        if self.lastCheck > mTime and hasattr(self, 'SetOfMovies1'):
+
+        if self.lastCheck < mTime:
             return None
 
         movieSet1 = self._loadInputMovieSet(self.movieFn1)
         movieSet2 = self._loadInputMovieSet(self.movieFn2)
 
+        movieDict1 = {movie.getObjId(): movie.clone() for movie in movieSet1.iterItems()}
+        movieDict2 = {movie.getObjId(): movie.clone() for movie in movieSet2.iterItems()}
+
+
         if len(self.allMovies1) > 0:
-            newMovies1 = [movie.clone() for movie in
-                            movieSet1.iterItems(orderBy='creation',
-                                                where='creation>"' + str(
-                                                self.checkMovies1) + '"')]
+            newIds1 = [idMovie for idMovie in movieDict1.keys() if idMovie not in self.processedDict]
+            #newMoviesDict1 = {idMovie: self.allMovies1.get(idMovie) for idMovie in newIds1} #Comentar esta linea
         else:
-            newMovies1 = [movie.clone() for movie in movieSet1]
+            newIds1 = list(movieDict1.keys())
+            #newMoviesDict1 = movieDict1#Comentar esta linea
 
-        self.allMovies1 = self.allMovies1 + newMovies1
 
-        if len(newMovies1) > 0:
-            for movie in movieSet1.iterItems(orderBy='creation',
-                                             direction='DESC'):
-                self.checkMovies1 = movie.getObjCreation()
-                break
+        #self.allMovies1.update(newMoviesDict1)#Comentar esta linea
+        self.allMovies1.update(movieDict1)
 
         if len(self.allMovies2) > 0:
-            newMovies2 = [movie.clone() for movie in
-                          movieSet2.iterItems(orderBy='creation',
-                                              where='creation>"' + str(
-                                              self.checkMovies2) + '"')]
+            newIds2 = [idMovie for idMovie in movieDict2.keys() if idMovie not in self.processedDict]
+            #newMoviesDict2 = {idMovie: self.allMovies2.get(idMovie) for idMovie in newIds2}#Comentar esta linea
         else:
-            newMovies2 = [movie.clone() for movie in movieSet2]
+            newIds2 = list(movieDict2.keys())
+            #newMoviesDict2 = movieDict2#Comentar esta linea
 
-        self.allMovies2 = self.allMovies2 + newMovies2
-
-        if len(newMovies2) > 0:
-            for movie in movieSet2.iterItems(orderBy='creation',
-                                             direction='DESC'):
-                self.checkMovies2 = movie.getObjCreation()
-                break
+        #self.allMovies2.update(newMoviesDict2)#Comentar esta linea
+        self.allMovies2.update(movieDict2)
 
         self.lastCheck = datetime.now()
         self.isStreamClosed = movieSet1.isStreamClosed() and \
@@ -199,17 +171,118 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
 
         outputStep = self._getFirstJoinStep()
 
+        #Valora poner un OR porque a veces uno no va a ser mas grande porque ya termino
         if len(set(self.allMovies1)) > len(set(self.processedDict)) and \
            len(set(self.allMovies2)) > len(set(self.processedDict)):
 
-            fDeps = self._insertNewMovieSteps(movieSet1, movieSet2, self.insertedDict)
+            #fDeps = self._insertNewMovieSteps(newMoviesDict1, newMoviesDict2, self.insertedDict)
+            fDeps = self._insertNewMovieSteps(newIds1, newIds2, self.insertedDict)
 
             if outputStep is not None:
                 outputStep.addPrerequisites(*fDeps)
-
             self.updateSteps()
 
 
+    def _insertNewMovieSteps(self, movies1Dict, movies2Dict, insDict):
+        deps = []
+        # movies1Dict = setOfMovies1.getObjDict(includeBasic=True)
+        # movies2Dict = setOfMovies2.getObjDict(includeBasic=True)
+        discrepId = self._insertFunctionStep("movieDiscrepancyStep",
+                                             movies1Dict, movies2Dict,
+                                             prerequisites=[])
+        deps.append(discrepId)
+        for movieID in self.newIDs:
+            if movieID not in insDict:
+                stepId = self._insertFunctionStep('alignmentCorrelationMovieStep', movieID,
+                                                  prerequisites=[discrepId])
+                deps.append(stepId)
+                insDict[movieID] = stepId
+                self.processedDict.append(movieID)
+
+        self.newIDs = []
+        return deps
+
+
+    def movieDiscrepancyStep(self, newMoviesDict1, newMoviesDict2):
+        #newIDs = set(newMoviesDict1.keys()).intersection(set(newMoviesDict2.keys()))
+        newIDs = list(set(newMoviesDict1).intersection(set(newMoviesDict2))) #LIsta de cosas
+
+        if len(newIDs) > 0:
+            #self.newIDs = []
+            #self.newIDs = [id for id in newIDs if id not in self.processedDict]
+            self.newIDs.extend(newIDs)
+        #     print('Discrepancy step pass, new IDs to process')
+        # else:
+        #     print('Discrepancy no pass')
+
+
+    def alignmentCorrelationMovieStep(self, movieId):
+        movie1 = self.allMovies1.get(movieId)
+        movie2 = self.allMovies2.get(movieId)
+
+        # # FIXME: this is a workaround to skip errors, but it should be treat at checkNewInput
+        if (movie1 is None) or (movie2 is None):
+            print('Maybe is here AlignmentCorrelationMOvieStep movie1 or movie2 are None')
+            return
+
+        fn1 = movie1.getFileName()
+        fn2 = movie1.getFileName()
+        movieID1 = movie1.getObjId()
+        movieID2 = movie2.getObjId()
+
+        print(fn1)
+        print(fn2)
+        print(movieID1)
+        print(movieID2)
+
+        alignment1 = movie1.getAlignment()
+        alignment2 = movie2.getAlignment()
+        shiftX_1, shiftY_1 = alignment1.getShifts()
+        shiftX_2, shiftY_2 = alignment2.getShifts()
+
+        # Transformation of the shifts to calculate the shifts trajectory correlation
+        S1 = np.ones([3, len(shiftX_1)])
+        S2 = np.ones([3, len(shiftX_2)])
+
+        S1[0, :] = shiftX_1
+        S1[1, :] = shiftY_1
+        S2[0, :] = shiftX_2
+        S2[2, :] = shiftY_2
+
+        A = np.dot(np.dot(S1, S2.T), np.linalg.inv(np.dot(S2, S2.T)))
+        S2_p = np.dot(A, S2)
+
+        S1_cart = np.array([S1[0, :]/S1[2, :], S1[1, :]/S1[2, :]])
+        S2_p_cart = np.array([S2_p[0, :] / S2_p[2, :], S2_p[1, :] / S2_p[2, :]])
+        rmse_cart = np.sqrt((np.square(S1_cart - S2_p_cart)).mean())
+        maxe_cart = np.max(S1_cart - S2_p_cart)
+        corrX_cart = np.corrcoef(S1_cart[0, :], S2_p_cart[0, :])[0, 1]
+        corrY_cart = np.corrcoef(S1_cart[1, :], S2_p_cart[1, :])[0, 1]
+        corr_cart = np.min([corrY_cart, corrX_cart])
+
+        print('Root Mean Squared Error %f' %rmse_cart)
+        print('Max Error %f' %maxe_cart)
+        print('Correlation X %f' %corrX_cart)
+        print('Correlation Y %f' %corrY_cart)
+        print('General Corr (min X&Y) %f' %corr_cart)
+
+        if corr_cart >= self.minConsCorrelation.get():
+            print('Alignment shift trajectory correlated')
+            fn = self._getMovieSelecFileAccepted()
+            with open(fn, 'a') as f:
+                f.write('%d T\n' % movieID1)
+
+        elif corr_cart < self.minConsCorrelation.get():
+            print('Discrepancy in the alignment with correlation %f' %corr_cart)
+            fn = self._getMovieSelecFileDiscarded()
+            with open(fn, 'a') as f:
+                f.write('%d F\n' % movieID1)
+
+        stats_loc = {'shift_corr': corr_cart, 'shift_corr_X': corrX_cart, 'shift_corr_Y': corrY_cart,
+                     'max_error': maxe_cart, 'rmse_error': rmse_cart}
+
+        self.stats[movieID1] = stats_loc
+        self._store()
 
     def _checkNewOutput(self):
         """ Check for already selected movies and update the output set. """
@@ -252,9 +325,9 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         movieSetDiscarded, micSetDiscarded = readOrCreateOutputs(doneListDiscarded, newDoneDiscarded, DISCARDED)
 
         if not self.finished and not newDoneDiscarded and not newDoneAccepted:
-            # If we are not finished and no new output have been produced
-            # it does not make sense to proceed and updated the outputs
-            # so we exit from the function here
+        # If we are not finished and no new output have been produced
+        # it does not make sense to proceed and updated the outputs
+        # so we exit from the function here
             return
 
         def updateRelationsAndClose(movieSet, micSet, first, label=''):
@@ -336,103 +409,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         return outputSet
 
 
-    def movieDiscrepancyStep(self, met1Dict, met2Dict):
-        # TODO must be same micrographs
-        # move to a single step, each step takes 5 sec while the function
-        # takes 0.03 sec
-        # convert to md
-
-        method1 = SetOfMovies()
-        method1.setAttributesFromDict(met1Dict, setBasic=True, ignoreMissing=True)
-        method2 = SetOfMovies()
-        method2.setAttributesFromDict(met2Dict, setBasic=True, ignoreMissing=True)
-
-        for movie1 in method1:  # reference Movies
-            movieId = movie1.getObjId()
-            if movieId in self.processedDict:
-                continue
-            for movie2 in method2:
-                movieId2 = movie2.getObjId()
-                if movieId2 != movieId:
-                    continue
-                self.processedDict.append(movieId)
-
-
-    def alignmentCorrelationMovieStep(self, movieId):
-        # TODO: Change this way to get the MOVIE.
-        movie1 = self.inputMovies1.get()[movieId]
-        movie2 = self.inputMovies2.get()[movieId]
-
-        # FIXME: this is a workaround to skip errors, but it should be treat at checkNewInput
-        if (movie1 is None) or (movie2 is None):
-            return
-
-        fn1 = movie1.getFileName()
-        fn2 = movie1.getFileName()
-        movieID1 = movie1.getObjId()
-        movieID2 = movie2.getObjId()
-
-        if movieID1 == movieID2:
-            if fn1 == fn2:
-                print('Name and ID correspond to the same:')
-                print(fn1)
-                print(fn2)
-                print(movieID1)
-                print(movieID2)
-            else:
-                print('Name and ID do not correspond to the same')
-                return
-
-        alignment1 = movie1.getAlignment()
-        alignment2 = movie2.getAlignment()
-        shiftX_1, shiftY_1 = alignment1.getShifts()
-        shiftX_2, shiftY_2 = alignment2.getShifts()
-
-        # Transformation of the shifts to calculate the shifts trajectory correlation
-        S1 = np.ones([3, len(shiftX_1)])
-        S2 = np.ones([3, len(shiftX_2)])
-
-        S1[0, :] = shiftX_1
-        S1[1, :] = shiftY_1
-        S2[0, :] = shiftX_2
-        S2[2, :] = shiftY_2
-
-        A = np.dot(np.dot(S1, S2.T), np.linalg.inv(np.dot(S2, S2.T)))
-        S2_p = np.dot(A, S2)
-
-        S1_cart = np.array([S1[0, :]/S1[2, :], S1[1, :]/S1[2, :]])
-        S2_p_cart = np.array([S2_p[0, :] / S2_p[2, :], S2_p[1, :] / S2_p[2, :]])
-        rmse_cart = np.sqrt((np.square(S1_cart - S2_p_cart)).mean())
-        maxe_cart = np.max(S1_cart - S2_p_cart)
-        corrX_cart = np.corrcoef(S1_cart[0, :], S2_p_cart[0, :])[0, 1]
-        corrY_cart = np.corrcoef(S1_cart[1, :], S2_p_cart[1, :])[0, 1]
-        corr_cart = np.min([corrY_cart, corrX_cart])
-
-        print('Root Mean Squared Error %f' %rmse_cart)
-        print('Max Error %f' %maxe_cart)
-        print('Correlation X %f' %corrX_cart)
-        print('Correlation Y %f' %corrY_cart)
-        print('General Corr (min X&Y) %f' %corr_cart)
-
-        if corr_cart >= self.minConsCorrelation.get():
-            print('Alignment shift trajectory correlated')
-            fn = self._getMovieSelecFileAccepted()
-            with open(fn, 'a') as f:
-                f.write('%d T\n' % movieID1)
-
-        elif corr_cart < self.minConsCorrelation.get():
-            print('Discrepancy in the alignment with correlation %f' %corr_cart)
-            fn = self._getMovieSelecFileDiscarded()
-            with open(fn, 'a') as f:
-                f.write('%d F\n' % movieID1)
-
-        stats_loc = {'shift_corr': corr_cart, 'shift_corr_X': corrX_cart, 'shift_corr_Y': corrY_cart,
-                     'max_error': maxe_cart, 'rmse_error': rmse_cart}
-
-        self.stats[movieID1] = stats_loc
-        self._store()
-
-
     def _readDoneList(self):
         """ Read from a file the id's of the items that have been done. """
         doneFile = self._getAllDone()
@@ -480,9 +456,9 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         errors. If the list is empty the protocol can be executed.
         """
         errors = []
-        if (self.inputMovies1.get().hasAlignment() == ALIGN_NONE) or \
-                (self.inputMovies2.get().hasAlignment() == ALIGN_NONE):
-            errors.append("The inputs ( _Input Movies 1_ or _Input Movies 2_ must be aligned before")
+        # if (self.inputMovies1.get().hasAlignment() == ALIGN_NONE) or \
+        #         (self.inputMovies2.get().hasAlignment() == ALIGN_NONE):
+        #     errors.append("The inputs ( _Input Movies 1_ or _Input Movies 2_ must be aligned before")
 
         return errors
 
