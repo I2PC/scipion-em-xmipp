@@ -34,6 +34,7 @@ from .viewer_deep_micrograph_cleaner import XmippDeepMicrographViewer
 from .viewer_ml2d import XmippML2DViewer
 from .viewer_mltomo import XmippMLTomoViewer
 from .viewer_movie_alignment import XmippMovieAlignViewer, XmippMovieMaxShiftViewer
+from .viewer_movie_alignment_consensus import XmippMovieAlignmentConsensusViewer
 from .viewer_normalize_strain import XmippNormalizeStrainViewer
 from .viewer_resolution3d import XmippResolution3DViewer
 from .viewer_resolution_bfactor import XmippBfactorResolutionViewer
