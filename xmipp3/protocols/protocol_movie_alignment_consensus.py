@@ -473,9 +473,8 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         shift_Y1 = stats['S1_cart'][1, :]
         shift_X2 = stats['S2_p_cart'][0, :]
         shift_Y2 = stats['S2_p_cart'][1, :]
-
         # ---------------- PLOT -----------------------
-        figureSize = (10, 8)
+        figureSize = (8, 6)
         plotter = Plotter(*figureSize)
         figure = plotter.getFigure()
         ax = figure.add_subplot(111)
@@ -506,18 +505,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         plotter.tightLayout()
         plotter.savefig(fn)
         plotter.close()
-
-
-        # plt.figure()
-        # plt.title('Global Alignment Trajectories')
-        # plt.plot(shift_X1, shift_Y1, 'b', label='reference shifts')
-        # plt.plot(shift_X2, shift_Y2, 'r', label='target shifts')
-        # plt.xlabel('X-axis (CorrX:%f)' %stats['shift_corr_X'])
-        # plt.ylabel('Y-axis (CorrX:%f)' %stats['shift_corr_Y'])
-        # plt.grid()
-        # plt.legend()
-        # #plt.show()
-        # plt.savefig(fn)
 
 
     def _getTrajectoriesPlot(self, movieId):

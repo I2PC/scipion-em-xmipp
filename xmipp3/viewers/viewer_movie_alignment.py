@@ -37,7 +37,7 @@ from xmipp3.protocols.protocol_movie_max_shift import XmippProtMovieMaxShift
 from .viewer_ctf_consensus import getStringIfActive
 
 class XmippMovieAlignViewer(Viewer):
-    _targets = [XmippProtOFAlignment, XmippProtMovieCorr, XmippProtConsensusMovieAlignment]
+    _targets = [XmippProtOFAlignment, XmippProtMovieCorr]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
 
     _label = 'viewer optical/correlation alignment'
@@ -49,6 +49,30 @@ class XmippMovieAlignViewer(Viewer):
             views.append(ObjectView(self._project, obj.strId(),
                                     obj.outputMicrographs.getFileName(),
                                     viewParams=getViewParams()))
+        elif obj.hasAttribute('outputMovies'):
+            views.append(ObjectView(self._project, obj.strId(),
+                                    obj.outputMovies.getFileName(),
+                                    viewParams=getViewParams()))
+        else:
+            views.append(self.infoMessage("Output (micrographs or movies) has "
+                                          "not been produced yet."))
+
+        return views
+
+
+class XmippMovieAlignConsensusViewer(Viewer):
+    _targets = [XmippProtConsensusMovieAlignment]
+    _environments = [DESKTOP_TKINTER, WEB_DJANGO]
+
+    _label = 'viewer Global Alignment Consensus'
+
+    def _visualize(self, obj, **kwargs):
+        views = []
+
+        if obj.hasAttribute('outputMicrographs'):
+            views.append(ObjectView(self._project, obj.strId(),
+                                    obj.outputMicrographs.getFileName(),
+                                    viewParams=getViewParamsConsensus()))
         elif obj.hasAttribute('outputMovies'):
             views.append(ObjectView(self._project, obj.strId(),
                                     obj.outputMovies.getFileName(),
@@ -108,10 +132,25 @@ class XmippMovieMaxShiftViewer(EmProtocolViewer):
     def _visualizeMicsDiscarded(self, e=None):
         return self._visualizeAny(lambda x: x.endswith('Discarded'))
 
+
 def getViewParams():
     plotLabels = ('psdCorr._filename plotPolar._filename '
                   'plotCart._filename plotGlobal._filename')
     labels = plotLabels + ' _filename '
+    viewParams = {showj.MODE: showj.MODE_MD,
+                  showj.ORDER: 'id ' + labels,
+                  showj.VISIBLE: 'id ' + labels,
+                  showj.RENDER: plotLabels,
+                  showj.ZOOM: 20,
+                  showj.OBJCMDS: "'%s'" % OBJCMD_MOVIE_ALIGNCARTESIAN
+                  }
+
+    return viewParams
+
+def getViewParamsConsensus():
+    plotLabels = ('psdCorr._filename plotPolar._filename '
+                  'plotCart._filename plotGlobal._filename')
+    labels = plotLabels + ' _filename ' + '_alignment_corr ' + '_alignment_rmse_error ' + '_alignment_max_error '
     viewParams = {showj.MODE: showj.MODE_MD,
                   showj.ORDER: 'id ' + labels,
                   showj.VISIBLE: 'id ' + labels,
