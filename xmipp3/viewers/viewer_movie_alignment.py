@@ -29,6 +29,7 @@ from pyworkflow.protocol.params import LabelParam
 from pwem.viewers import showj, EmProtocolViewer, ObjectView
 from pwem.objects import SetOfMicrographs, SetOfMovies
 
+from xmipp3.protocols.protocol_movie_alignment_consensus import XmippProtConsensusMovieAlignment
 from xmipp3.protocols.protocol_movie_opticalflow import (XmippProtOFAlignment,
                                                  OBJCMD_MOVIE_ALIGNCARTESIAN)
 from xmipp3.protocols.protocol_movie_correlation import XmippProtMovieCorr
@@ -36,7 +37,7 @@ from xmipp3.protocols.protocol_movie_max_shift import XmippProtMovieMaxShift
 from .viewer_ctf_consensus import getStringIfActive
 
 class XmippMovieAlignViewer(Viewer):
-    _targets = [XmippProtOFAlignment, XmippProtMovieCorr]
+    _targets = [XmippProtOFAlignment, XmippProtMovieCorr, XmippProtConsensusMovieAlignment]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
 
     _label = 'viewer optical/correlation alignment'

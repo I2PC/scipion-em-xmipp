@@ -30,19 +30,22 @@ Consensus alignment protocol
 
 import os
 from datetime import datetime
-
+from pyworkflow.gui.plotter import Plotter
 import numpy as np
+from math import ceil
 import re
-from pwem.objects import SetOfMovies, SetOfMicrographs, MovieAlignment
+try:
+    from itertools import izip
+except ImportError:
+    izip = zip
+from pwem.objects import SetOfMovies, SetOfMicrographs, MovieAlignment, Image
 from pyworkflow.object import Set
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
-
 from pwem.protocols import ProtAlignMovies
 from pyworkflow.protocol.constants import (STATUS_NEW)
 from xmipp3.convert import getScipionObj
 from pwem.constants import ALIGN_NONE
-import matplotlib.pyplot as plt
 
 ACCEPTED = 'Accepted'
 DISCARDED = 'Discarded'
@@ -153,6 +156,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         movieSet1 = self._loadInputMovieSet(self.movieFn1)
         movieSet2 = self._loadInputMovieSet(self.movieFn2)
 
+        # FILTRAR EN LA BASE DE DATOS LOS NEWIDS por timestamp en el loadinputMovieSet
         movieDict1 = {movie.getObjId(): movie.clone() for movie in movieSet1.iterItems()}
         movieDict2 = {movie.getObjId(): movie.clone() for movie in movieSet2.iterItems()}
 
@@ -186,29 +190,14 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
 
         newIDs = list(set(movies1Dict).intersection(set(movies2Dict)))
 
-        #discrepId = self._insertFunctionStep("movieDiscrepancyStep",
-                                          #   movies1Dict, movies2Dict,
-                                           #  prerequisites=[])
-        #deps.append(discrepId)
-
         for movieID in newIDs:
             if movieID not in insDict:
                 stepId = self._insertFunctionStep('alignmentCorrelationMovieStep', movieID, prerequisites=[])
-                                                  #prerequisites=[discrepId])
                 deps.append(stepId)
                 insDict[movieID] = stepId
                 self.processedDict.append(movieID)
 
         return deps
-
-
-    #def movieDiscrepancyStep(self, newMoviesDict1, newMoviesDict2):
-        #newIDs = list(set(newMoviesDict1).intersection(set(newMoviesDict2)))
-     #   if len(self.newIDs) > 0:
-     #       #self.newIDs.extend(newIDs)
-     #       print('Discrepancy step pass, new IDs to process')
-     #   else:
-     #       print('Discrepancy no pass')
 
 
     def alignmentCorrelationMovieStep(self, movieId):
@@ -297,8 +286,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         newDoneDiscarded = [movieId for movieId in movieListIdDiscarded
                             if movieId not in doneListDiscarded]
 
-        firstTimeAccepted = len(doneListAccepted) == 0
-        firstTimeDiscarded = len(doneListDiscarded) == 0
         allDone = len(doneListAccepted) + len(doneListDiscarded) +\
                   len(newDoneAccepted) + len(newDoneDiscarded)
 
@@ -329,23 +316,17 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         # so we exit from the function here
             return
 
-        def updateRelationsAndClose(movieSet, micSet, first, label=''):
+        def updateRelationsAndClose(movieSet, micSet, label=''):
             if os.path.exists(self._getPath('movies'+label+'.sqlite')):
                 micsAttrName = 'outputMicrographs'+label
                 self._updateOutputSet(micsAttrName, micSet, streamMode)
                 self._updateOutputSet('outputMovies'+label, movieSet, streamMode)
 
-                if first:
-                    #self._defineTransformRelation(self.inputMovies1.get(),
-                    #                             micSet)
-                    pass
-
                 micSet.close()
                 movieSet.close()
 
-        updateRelationsAndClose(movieSet, micSet, firstTimeAccepted)
-        updateRelationsAndClose(movieSetDiscarded, micSetDiscarded,
-                                firstTimeDiscarded, DISCARDED)
+        updateRelationsAndClose(movieSet, micSet)
+        updateRelationsAndClose(movieSetDiscarded, micSetDiscarded, DISCARDED)
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
@@ -372,16 +353,18 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
                 setAttribute(mic, '_alignment_corr', self.stats[movieId]['shift_corr'])
                 setAttribute(mic, '_alignment_rmse_error', self.stats[movieId]['rmse_error'])
                 setAttribute(mic, '_alignment_max_error', self.stats[movieId]['max_error'])
-
                 alignment = MovieAlignment(xshifts=shiftX_1, yshifts=shiftY_1)
                 movie.setAlignment(alignment)
 
-                movieSet.append(movie)
-                micSet.append(mic)
-
                 self._writeCertainDoneList(movieId, label)
+
                 if self.trajectoryPlot.get():
                     self._createAndSaveTrajectoriesPlot(movieId)
+                    mic.plotCart = Image()
+                    mic.plotCart.setFileName(self._getTrajectoriesPlot(movieId))
+
+                movieSet.append(movie)
+                micSet.append(mic)
 
             inputMovieSet.close()
             inputMicSet.close()
@@ -485,29 +468,61 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
     def _createAndSaveTrajectoriesPlot(self, movieId):
         """ Write to a text file the items that have been done. """
         stats = self.stats[movieId]
-        fn = self._getExtraPath('trajectories_plot%d' %movieId+'.jpeg')
-        print(fn)
-        shift_X1 = stats['S1_cart'][0,:]
-        shift_Y1 = stats['S1_cart'][1,:]
-        shift_X2 = stats['S2_p_cart'][0,:]
-        shift_Y2 = stats['S2_p_cart'][1,:]
+        fn = self._getExtraPath('global_trajectories_%d' %movieId+'_plot_cart.png')
+        shift_X1 = stats['S1_cart'][0, :]
+        shift_Y1 = stats['S1_cart'][1, :]
+        shift_X2 = stats['S2_p_cart'][0, :]
+        shift_Y2 = stats['S2_p_cart'][1, :]
 
-        #AÑADIR LA CORRELACIÓN GENERAL
-        plt.figure()
-        plt.title('Global Alignment Trajectories')
-        plt.plot(shift_X1, shift_Y1, 'b', label='reference shifts')
-        plt.plot(shift_X2, shift_Y2, 'r', label='target shifts')
-        plt.xlabel('X-axis (CorrX:%f)' %stats['shift_corr_X'])
-        plt.ylabel('Y-axis (CorrX:%f)' %stats['shift_corr_Y'])
-        plt.grid()
-        plt.legend()
-        #plt.show()
-        plt.savefig(fn)
+        # ---------------- PLOT -----------------------
+        figureSize = (10, 8)
+        plotter = Plotter(*figureSize)
+        figure = plotter.getFigure()
+        ax = figure.add_subplot(111)
+        ax.grid()
+        ax.axis('equal')
+        ax.set_title('Global Alignment Trajectories')
+        ax.set_xlabel('X-axis (CorrX:%f)' %stats['shift_corr_X'])
+        ax.set_ylabel('Y-axis (CorrX:%f)' %stats['shift_corr_Y'])
+        # Max range of the plot of the two coordinates
+        plotRange = max(max(shift_X1) - min(shift_X1),
+                        max(shift_Y1) - min(shift_Y1))
+        i = 1
+        skipLabels = ceil(len(shift_X1) / 10.0)
+        for x, y in izip(shift_X1, shift_Y1):
+            if i % skipLabels == 0:
+                ax.text(x - 0.02 * plotRange, y + 0.02 * plotRange, str(i))
+            i += 1
+
+        ax.plot(shift_X1, shift_Y1, color='b', label='reference shifts')
+        ax.plot(shift_X2, shift_Y2, color='r', label='target shifts')
+        ax.plot(shift_X1, shift_Y1, 'yo')
+
+        # setting the plot windows to properly see the data
+        ax.axis([min(shift_X1) - 0.1 * plotRange, max(shift_X1) + 0.1 * plotRange,
+                 min(shift_Y1) - 0.1 * plotRange, max(shift_Y1) + 0.1 * plotRange])
+
+        ax.legend()
+        plotter.tightLayout()
+        plotter.savefig(fn)
+        plotter.close()
+
+
+        # plt.figure()
+        # plt.title('Global Alignment Trajectories')
+        # plt.plot(shift_X1, shift_Y1, 'b', label='reference shifts')
+        # plt.plot(shift_X2, shift_Y2, 'r', label='target shifts')
+        # plt.xlabel('X-axis (CorrX:%f)' %stats['shift_corr_X'])
+        # plt.ylabel('Y-axis (CorrX:%f)' %stats['shift_corr_Y'])
+        # plt.grid()
+        # plt.legend()
+        # #plt.show()
+        # plt.savefig(fn)
 
 
     def _getTrajectoriesPlot(self, movieId):
         """ Write to a text file the items that have been done. """
-        return  self._getExtraPath('trajectories_plot%d' %movieId+'.jpeg')
+        return self._getExtraPath('global_trajectories_%d' %movieId+'_plot_cart.png')
 
     def _getCertainDone(self, label):
         return self._getExtraPath('DONE_'+label+'.TXT')
