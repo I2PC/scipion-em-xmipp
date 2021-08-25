@@ -789,6 +789,56 @@ class TestXmippProtAlignVolume(TestXmippBase):
         protAlign.inputVolumes.append(self.protImport2.outputVolume)
         self.launchProtocol(protAlign)
 
+    def testExhaustiveCircularMask(self):
+        protAlign = self.newProtocol(XmippProtAlignVolume,
+                                     inputReference=self.protImport1.outputVolume,
+                                     alignmentAlgorithm=ALIGN_ALGORITHM_EXHAUSTIVE,
+                                     minRotationalAngle=65,
+                                     maxRotationalAngle=100,
+                                     stepRotationalAngle=10,
+                                     minTiltAngle=65,
+                                     maxTiltAngle=100,
+                                     stepTiltAngle=10,
+                                     minInplaneAngle=0,
+                                     maxInplaneAngle=0,
+                                     stepInplaneAngle=0,
+                                     applyMask=True,
+                                     maskType=0,
+                                     maskRadius=22,
+                                     numberOfMpi=1, numberOfThreads=1
+                                     )
+        protAlign.inputVolumes.append(self.protImport2.outputVolume)
+        self.launchProtocol(protAlign)
+
+    def testExhaustiveBinaryMask(self):
+        protMask = self.newProtocol(XmippProtCreateMask3D,
+                                    source=0,
+                                    volumeOperation=0,
+                                    threshold=0.0)
+        protMask.inputVolume.set(self.protImport1.outputVolume)
+        self.launchProtocol(protMask)
+        self.assertIsNotNone(protMask.outputMask,
+                             "There was a problem with create mask from volume")
+        protAlign = self.newProtocol(XmippProtAlignVolume,
+                                     inputReference=self.protImport1.outputVolume,
+                                     alignmentAlgorithm=ALIGN_ALGORITHM_EXHAUSTIVE,
+                                     minRotationalAngle=65,
+                                     maxRotationalAngle=100,
+                                     stepRotationalAngle=10,
+                                     minTiltAngle=65,
+                                     maxTiltAngle=100,
+                                     stepTiltAngle=10,
+                                     minInplaneAngle=0,
+                                     maxInplaneAngle=0,
+                                     stepInplaneAngle=0,
+                                     applyMask=True,
+                                     maskType=1,
+                                     numberOfMpi=1, numberOfThreads=1
+                                     )
+        protAlign.inputVolumes.append(self.protImport2.outputVolume)
+        protAlign.maskFile.set(protMask.outputMask)
+        self.launchProtocol(protAlign)
+
 
 class TestXmippProtHelicalParameters(TestXmippBase):
     @classmethod
