@@ -32,6 +32,7 @@ from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from matplotlib.widgets import Slider, RectangleSelector, Button
 from matplotlib.cm import get_cmap, ScalarMappable
 
+from pyworkflow.object import Float
 from pyworkflow.utils.properties import Message
 from pyworkflow.gui.dialog import askYesNo
 import pyworkflow.utils as pwutils
@@ -41,7 +42,11 @@ from pwem.emlib.image import ImageHandler
 import pwem.emlib.metadata as md
 from pwem.protocols import ProtAnalysis2D
 from pwem.objects import SetOfClasses2D
+from pwem.constants import ALIGN_2D
 
+from xmipp3.convert import rowToAlignment, xmippToLocation, writeSetOfClasses2D
+
+MDL_DIMRED_COEFFS = 155
 
 class XmippProtCL2DMap(ProtAnalysis2D):
     """ Create a low dimensional mapping from a SetOfClasses2D with interactive selection of classes.
@@ -62,7 +67,9 @@ class XmippProtCL2DMap(ProtAnalysis2D):
                       label="Input 2D classes",
                       important=True, pointerClass='SetOfClasses2D',
                       help='Select the input classes to be mapped.')
-
+        form.addParam('intSel', param.BooleanParam,
+                      default=True,
+                      label="Interactive class selection?")
         form.addSection(label='Mapping')
         form.addParam('method', param.EnumParam,
                       choices=self.red_methods, default=0,
@@ -73,14 +80,20 @@ class XmippProtCL2DMap(ProtAnalysis2D):
 
     #--------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
+        self._insertFunctionStep('convertStep')
         self._insertFunctionStep('computeMappingStep')
         self._insertFunctionStep('interactiveSelStep', interactive=True)
 
     #--------------------------- STEPS functions -------------------------------
-    def computeMappingStep(self):
-        self.classes = self.inputClasses.get()
-        self.metadata = pwutils.replaceExt(self.classes.getFirstItem().getRepresentative().getFileName(), 'xmd')
+    def convertStep(self):
+        metadata = self._getExtraPath('classes.xmd')
+        writeSetOfClasses2D(self.inputClasses.get(),
+                            metadata,
+                            writeParticles=True)
 
+    def computeMappingStep(self):
+        # metadata = self._getExtraPath('classes.xmd')
+        self.metadata = pwutils.replaceExt(self.inputClasses.get().getFirstItem().getRepresentative().getFileName(), 'xmd')
         params = dict(metadata=self.metadata, method=self.red_methods[self.method.get()],
                       metric=self.distances[self.distance.get()])
         args = '-i {metadata} -m {method} --distance {metric}'.format(**params)
@@ -88,53 +101,95 @@ class XmippProtCL2DMap(ProtAnalysis2D):
         self.runJob("xmipp_transform_dimred", args)
 
     def interactiveSelStep(self):
+        # self.metadata = self._getExtraPath('classes.xmd')
+        self.metadata = pwutils.replaceExt(self.inputClasses.get().getFirstItem().getRepresentative().getFileName(),
+                                           'xmd')
         self.classes = self.inputClasses.get()
-        self.metadata = pwutils.replaceExt(self.classes.getFirstItem().getRepresentative().getFileName(), 'xmd')
-        img_paths = np.unique(np.asarray([rep.getFileName() for rep in self.classes.iterRepresentatives()]))
-        img_ids = []
-        occupancy = []
-        pos = []
+        self.mdOut = md.MetaData(self.metadata)
+        if self.intSel.get():
+            img_paths = np.unique(np.asarray([rep.getFileName() for rep in self.classes.iterRepresentatives()]))
+            img_ids = []
+            occupancy = []
+            pos = []
 
-        mdOut = md.MetaData(self.metadata)
-        MDL_DIMRED_COEFFS = 155
-        for row in md.iterRows(mdOut):
-            pos.append(mdOut.getValue(MDL_DIMRED_COEFFS, row.getObjId()))
-            img_ids.append(mdOut.getValue(md.MDL_REF, row.getObjId()))
-            occupancy.append(mdOut.getValue(md.MDL_CLASS_COUNT, row.getObjId()))
-        occupancy = np.asarray(occupancy)
-        pos = np.vstack(pos)
+            for row in md.iterRows(self.mdOut):
+                pos.append(self.mdOut.getValue(MDL_DIMRED_COEFFS, row.getObjId()))
+                img_ids.append(self.mdOut.getValue(md.MDL_REF, row.getObjId()))
+                occupancy.append(self.mdOut.getValue(md.MDL_CLASS_COUNT, row.getObjId()))
+            occupancy = np.asarray(occupancy)
+            pos = np.vstack(pos)
 
-        # Read selected ids from previous runs (if they exist)
-        if os.path.isfile(self._getExtraPath('selected_ids,txt')):
-            self.selection = np.loadtxt(self._getExtraPath('selected_ids,txt'))
-            self.selection = [int(self.selection)] if self.selection.size == 1 else \
-                              self.selection.astype(int).tolist()
+            # Read selected ids from previous runs (if they exist)
+            if os.path.isfile(self._getExtraPath('selected_ids,txt')):
+                self.selection = np.loadtxt(self._getExtraPath('selected_ids,txt'))
+                self.selection = [int(self.selection)] if self.selection.size == 1 else \
+                                  self.selection.astype(int).tolist()
+            else:
+                self.selection = None
+
+            view = ScatterImageMarker(pos=pos, img_paths=img_paths, ids=img_ids, occupancy=occupancy,
+                                      prevsel=self.selection)
+            view.initializePlot()
+
+            self.selection = view.selected_ids
+
+            # Save selected ids for interactive mode
+            np.savetxt(self._getExtraPath('selected_ids,txt'), np.asarray(self.selection))
+
+            if askYesNo(Message.TITLE_SAVE_OUTPUT, Message.LABEL_SAVE_OUTPUT, None):
+                self._createOutputStep()
         else:
-            self.selection = None
-
-        view = ScatterImageMarker(pos=pos, img_paths=img_paths, ids=img_ids, occupancy=occupancy,
-                                  prevsel=self.selection)
-        view.initializePlot()
-
-        self.selection = view.selected_ids
-
-        # Save selected ids for interactive mode
-        np.savetxt(self._getExtraPath('selected_ids,txt'), np.asarray(self.selection))
-
-        if askYesNo(Message.TITLE_SAVE_OUTPUT, Message.LABEL_SAVE_OUTPUT, None):
+            self.selection = [self.mdOut.getValue(md.MDL_REF, row.getObjId())
+                              for row in md.iterRows(self.mdOut)]
             self._createOutputStep()
 
+
     def _createOutputStep(self):
+        self._loadClassesInfo(self.metadata)
         suffix = self.__getOutputSuffix()
         selected_classes = self._createSetOfClasses2D(self.classes.getImages(), suffix=suffix)
 
-        for class_id in self.selection:
-            selected_classes.append(self.classes[class_id].clone())
+        iterator = md.SetMdIterator(self.mdOut, sortByLabel=md.MDL_ITEM_ID,
+                                    updateItemCallback=self._updateParticle,
+                                    keyLabel=md.MDL_REF, skipDisabled=True)
+        selected_classes.classifyItems(updateItemCallback=iterator.updateItem,
+                                       updateClassCallback=self._updateClass)
 
         result = {'selectedClasses2D_' + suffix: selected_classes}
         self._defineOutputs(**result)
         self._defineSourceRelation(self.inputClasses, selected_classes)
 
+    def _updateParticle(self, item, row):
+        item.setClassId(row.getValue(md.MDL_REF))
+        item.setTransform(rowToAlignment(row, ALIGN_2D))
+
+    def _updateClass(self, item):
+        classId = item.getObjId()
+
+        index, fn, _, c = self._classesInfo[classId]
+        item.setAlignment2D()
+        rep = item.getRepresentative()
+        rep.setLocation(index, fn)
+        rep.setSamplingRate(self.inputClasses.get().getSamplingRate())
+        rep._c_x = Float(c[0])
+        rep._c_y = Float(c[1])
+
+        if not classId in self._classesInfo:
+            rep.setEnabled(False)
+
+
+    def _loadClassesInfo(self, filename):
+        """ Read some information about the produced 2D classes
+        from the metadata file.
+        """
+        self._classesInfo = {}  # store classes info, indexed by class id
+
+        for classNumber, row in enumerate(md.iterRows(self.mdOut)):
+            index, fn = xmippToLocation(row.getValue(md.MDL_IMAGE))
+            c = row.getValue(MDL_DIMRED_COEFFS)
+            # Store info indexed by id, we need to store the row.clone() since
+            # the same reference is used for iteration
+            self._classesInfo[classNumber + 1] = (index, fn, row.clone(), c)
 
     #--------------------------- INFO functions --------------------------------
     def _summary(self):
