@@ -53,6 +53,10 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_DLTK_v0.3'
     _ih = ImageHandler()
+    _cond_modelPretrainTrue = 'modelPretrain==True'
+    _cond_modelPretrainFalse = 'modelPretrain==False'
+
+
 
     def __init__(self, **args):
         ProtRefine3D.__init__(self, **args)
@@ -78,7 +82,7 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
                            'If you choose "no" new models will be trained.')
         form.addParam('pretrainedModels', PointerParam,
                       pointerClass=self.getClassName(),
-                      condition='modelPretrain==True',
+                      condition=self._cond_modelPretrainTrue,
                       label='Set pretrained models',
                       help='Choose the protocol where your models were trained. '
                            'Be careful with using proper models for your new prediction.')
@@ -87,7 +91,7 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
                       pointerClass='SetOfParticles',
                       pointerCondition='hasAlignmentProj',
                       help='The set of particles previously aligned to be used as training set',
-                      condition='modelPretrain==False')
+                      condition=self._cond_modelPretrainFalse)
         form.addParam('targetResolution', FloatParam, label="Target resolution",
                       default=3.0,
                       help="In Angstroms, the images and the volume are rescaled so that this resolution is at "
@@ -99,17 +103,17 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
                       label="Number of epochs for training",
                       default=10,
                       help="Number of epochs for training.",
-                      condition='modelPretrain==False')
+                      condition=self._cond_modelPretrainFalse)
         form.addParam('batchSize', IntParam,
                       label="Batch size for training",
                       default=128,
                       help="Batch size for training.",
-                      condition='modelPretrain==False')
+                      condition=self._cond_modelPretrainFalse)
         form.addParam('spanConesTilt', FloatParam,
                       label="Distance between region centers",
                       default=30,
                       help="Distance in degrees between region centers.",
-                      condition='modelPretrain==False')
+                      condition=self._cond_modelPretrainFalse)
         form.addParam('numConesSelected', IntParam,
                       label="Number of selected regions per image",
                       default=2,
