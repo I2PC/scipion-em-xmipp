@@ -203,47 +203,21 @@ class XmippViewer(DataViewer):
                                                            'sortby': 'id'})
 
         elif issubclass(cls, XmippProtTiltAnalysis):
-            micView = MicrographsView(self._project, obj.outputMicrographs)
-            micView.getViewParams()[VISIBLE] = micView.getViewParams()[VISIBLE] + \
-                                               ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename' + \
-                                               ' ' + XmippProtTiltAnalysis.getTiltMeanLabel() + \
-                                               ' ' + XmippProtTiltAnalysis.getTiltSTDLabel() + \
-                                               ' ' + XmippProtTiltAnalysis.getTiltMinLabel() + \
-                                               ' ' + XmippProtTiltAnalysis.getTiltMaxLabel()
+            if obj.hasAttribute('outputMicrographs'):
+                fn = obj.outputMicrographs.getFileName()
+                labels = ('id enabled psdCorr._filename _xmipp_image._filename _tilt_mean_corr _tilt_std_corr '
+                          '_tilt_max_corr _tilt_min_corr _tilt_psds_image._filename ')
+                labelRender = (' psdCorr._filename _tilt_psds_image._filename')
 
-         #   micView.getViewParams()[RENDER] = micView.getViewParams()[RENDER] + \
-         #                                      ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename'
-
-            micView.getViewParams()[ORDER] = micView.getViewParams()[ORDER] + \
-                                               ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename' + \
-                                               ' ' + XmippProtTiltAnalysis.getTiltMeanLabel() + \
-                                               ' ' + XmippProtTiltAnalysis.getTiltSTDLabel() + \
-                                               ' ' + XmippProtTiltAnalysis.getTiltMinLabel() + \
-                                               ' ' + XmippProtTiltAnalysis.getTiltMaxLabel()
-
-            self._views.append(micView)
-
-            if obj.hasAttribute('discardedMicrographs'):
-                micView2 = MicrographsView(self._project, obj.discardedMicrographs)
-                micView2.getViewParams()[VISIBLE] = micView2.getViewParams()[VISIBLE] + \
-                                                   ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename' + \
-                                                   ' ' + XmippProtTiltAnalysis.getTiltMeanLabel() + \
-                                                   ' ' + XmippProtTiltAnalysis.getTiltSTDLabel() + \
-                                                   ' ' + XmippProtTiltAnalysis.getTiltMinLabel() + \
-                                                   ' ' + XmippProtTiltAnalysis.getTiltMaxLabel()
-
-                #micView2.getViewParams()[RENDER] = micView2.getViewParams()[RENDER] + \
-                 #                                 ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename'
-
-                micView2.getViewParams()[ORDER] = micView2.getViewParams()[ORDER] + \
-                                                    ' ' + XmippProtTiltAnalysis.getTiltPSDsLabel() + '._filename' + \
-                                                    ' ' + XmippProtTiltAnalysis.getTiltMeanLabel() + \
-                                                    ' ' + XmippProtTiltAnalysis.getTiltSTDLabel() + \
-                                                    ' ' + XmippProtTiltAnalysis.getTiltMinLabel() + \
-                                                    ' ' + XmippProtTiltAnalysis.getTiltMaxLabel()
-
-                self._views.append(micView2)
-
+                self._views.append(ObjectView(self._project, obj.strId(), fn,
+                                                   viewParams={ORDER: labels,
+                                                   VISIBLE: labels,
+                                                   RENDER: labelRender,
+                                                   ZOOM: 40,
+                                                   MODE: MODE_MD}))
+            else:
+                self._views.append(self.infoMessage("Output micrographs has "
+                                              "not been produced yet."))
 
         elif issubclass(cls, XmippProtCompareReprojections):
                 fn = obj.reprojections.getFileName()

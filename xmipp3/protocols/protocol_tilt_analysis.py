@@ -31,28 +31,20 @@ from os.path import join, basename, exists
 import math
 from datetime import datetime
 from collections import OrderedDict
-
-
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow.protocol.params import (PointerParam, IntParam,
                                         BooleanParam, LEVEL_ADVANCED, FloatParam, GE, GT, Range)
 from pyworkflow import SCIPION_DEBUG_NOCLEAN
-
 import pyworkflow.utils as pwutils
 from pyworkflow.utils.properties import Message
 from pyworkflow.utils.path import moveFile, getFiles
 import pyworkflow.protocol.constants as cons
-
-
 from pwem.objects import SetOfMicrographs, Image, Micrograph, Acquisition, String, Set, Float
 from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtMicrographs
-
 from xmipp3 import emlib
-from xmipp3.convert import setXmippAttribute, getScipionObj, prefixAttribute
-
-# from timeit import default_timer # FOR TIC TOC methods
+from xmipp3.convert import getScipionObj
 
 
 
@@ -90,7 +82,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                             (xdim*(sampling rate/objective resolution))x(ydim*(sampling rate/objective resolution)).''')
 
         form.addParam('meanCorr_threshold', FloatParam, label='Mean correlation threshold',
-                      default=0.6, expertLevel=LEVEL_ADVANCED,validators=[Range(0, 1)],
+                      default=0.6, expertLevel=LEVEL_ADVANCED, validators=[Range(0, 1)],
                       help='''By default, micrographs will be divided into an output set and a discarded set based
                             on the mean and std threshold''')
 
@@ -234,11 +226,11 @@ class XmippProtTiltAnalysis(ProtMicrographs):
             psdImage = Image(location=self.getPSDs(self._getExtraPath(), id))
 
             new_Mic = mic.clone()
-            setattr(new_Mic, self.getTiltMeanLabel(), corr_mean)
-            setattr(new_Mic, self.getTiltSTDLabel(), corr_std)
-            setattr(new_Mic, self.getTiltMinLabel(), corr_min)
-            setattr(new_Mic, self.getTiltMaxLabel(), corr_max)
-            setattr(new_Mic, self.getTiltPSDsLabel(), psdImage)
+            setAttribute(new_Mic, '_tilt_mean_corr', corr_mean)
+            setAttribute(new_Mic, '_tilt_std_corr', corr_std)
+            setAttribute(new_Mic, '_tilt_min_corr', corr_min)
+            setAttribute(new_Mic, '_tilt_max_corr', corr_max)
+            setAttribute(new_Mic, '_tilt_psds_image', psdImage)
             # Double threshold
             if corr_mean > self.meanCorr_threshold.get() and corr_std < self.stdCorr_threshold.get(): #AND or OR
                 micSet.append(new_Mic)
@@ -328,8 +320,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                     moveFile(file, micOutputFn)
             else:
                 moveFile(self.getPSDs(micFolderTmp, micID), self._getExtraPath())
-
-
 
         # Mark this movie as finished
         open(micDoneFn, 'w').close()
@@ -590,26 +580,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         filename = 'psd_outputs' + str(ID) + '.jpeg'
         return os.path.join(micFolder, filename)
 
-    @staticmethod
-    def getTiltMeanLabel():
-        return prefixAttribute(emlib.label2Str(emlib.MDL_TILT_ANALYSIS_MEAN))
-
-    @staticmethod
-    def getTiltSTDLabel():
-        return prefixAttribute(emlib.label2Str(emlib.MDL_TILT_ANALYSIS_STD))
-
-    @staticmethod
-    def getTiltMinLabel():
-        return prefixAttribute(emlib.label2Str(emlib.MDL_TILT_ANALYSIS_MIN))
-
-    @staticmethod
-    def getTiltMaxLabel():
-        return prefixAttribute(emlib.label2Str(emlib.MDL_TILT_ANALYSIS_MAX))
-
-    @staticmethod
-    def getTiltPSDsLabel():
-        return prefixAttribute(emlib.label2Str(emlib.MDL_TILT_ANALYSIS_PSDs))
-
 
     # --------------------------- INFO functions -------------------------------
 
@@ -633,7 +603,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         """
         return True
 
-    # Este método esta raro
     def _doMicFolderCleanUp(self):
         """ This functions allows subclasses to change the default behaviour
         of cleanup the movie folders after the _processMicrograph function.
