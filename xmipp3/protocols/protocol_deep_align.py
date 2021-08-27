@@ -485,7 +485,7 @@ _noiseCoord   '0'
                 if exists(self._getExtraPath(nameExp + "%d.xmd" % (label - n))):
                     labelPrev = label - n
                     break
-            if labelPrev is not -1:
+            if labelPrev != -1:
                 lastFnExp = self._getExtraPath(nameExp + "%d.xmd" % (labelPrev))
                 self.runJob("xmipp_metadata_utilities",
                             " -i %s --set union %s -o %s " %
