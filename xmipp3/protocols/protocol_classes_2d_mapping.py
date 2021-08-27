@@ -162,6 +162,8 @@ class XmippProtCL2DMap(ProtAnalysis2D):
     def _updateParticle(self, item, row):
         item.setClassId(row.getValue(md.MDL_REF))
         item.setTransform(rowToAlignment(row, ALIGN_2D))
+        if not row.getValue(md.MDL_REF) in self.selection:
+            item.setEnabled(False)
 
     def _updateClass(self, item):
         classId = item.getObjId()
@@ -174,8 +176,8 @@ class XmippProtCL2DMap(ProtAnalysis2D):
         rep._c_x = Float(c[0])
         rep._c_y = Float(c[1])
 
-        if not classId in self._classesInfo:
-            rep.setEnabled(False)
+        if not classId in self.selection:
+            item.setEnabled(False)
 
 
     def _loadClassesInfo(self, filename):
