@@ -174,8 +174,35 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
         self._insertFunctionStep("createOutputStep", prerequisites=[stepId])
 
     # --------------------------- STEPS functions ---------------------------------------------------
-    def convertStep(self):
+    
+    def _resize(self, Xdim, fnCorrected, prefix, fnTarget):
+        if self.newXdim != Xdim:
+            self.runJob("xmipp_image_resize",
+                        "-i %s -o %s --save_metadata_stack %s --fourier %d" %
+                        (fnCorrected,
+                            self._getExtraPath(prefix + '.stk'),
+                            self._getExtraPath(prefix + '.xmd'),
+                            self.newXdim), numberOfMpi=self.myMPI.get())
+            moveFile(self._getExtraPath(prefix + '.xmd'), fnTarget)
 
+    def _correctWiener(self, hasCTF, fn, Ts):
+        if hasCTF and self.applyCTF.get():
+            fnCorrectedStk = self._getExtraPath('corrected_particles.stk')
+            fnCorrected = self._getExtraPath('corrected_particles.xmd')
+            args = "-i %s -o %s --save_metadata_stack %s --keep_input_columns" % (
+                fn, fnCorrectedStk, fnCorrected)
+            args += " --sampling_rate %f --correct_envelope" % Ts
+            if self.inputSet.get().isPhaseFlipped():
+                args += " --phase_flipped"
+            self.runJob("xmipp_ctf_correct_wiener2d",
+                        args, numberOfMpi=self.myMPI.get())
+
+    def _removeCorrectedParticles(self):
+        if exists(self._getExtraPath('corrected_particles.stk')):
+            remove(self._getExtraPath('corrected_particles.stk'))
+            remove(self._getExtraPath('corrected_particles.xmd'))
+
+    def convertStep(self):
         if self.modelPretrain.get() is True:
             fnPreProtocol = self.pretrainedModels.get()._getExtraPath()
             preXDim = readInfoField(fnPreProtocol, "size", emlib.MDL_XSIZE)
@@ -188,44 +215,28 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
         Ts = inputParticles.getSamplingRate()
         row = getFirstRow(self.imgsFn)
         hasCTF = row.containsLabel(emlib.MDL_CTF_DEFOCUSU) or emlib.containsLabel(
-                    emlib.MDL_CTF_MODEL)
+            emlib.MDL_CTF_MODEL)
 
         fnCorrected = self.imgsFn
-        
-        if hasCTF and self.applyCTF.get() is True:
-            fnCorrectedStk = self._getExtraPath('corrected_particles.stk')
-            fnCorrected = self._getExtraPath('corrected_particles.xmd')
-            args = "-i %s -o %s --save_metadata_stack %s --keep_input_columns" % (
-                    self.imgsFn, fnCorrectedStk, fnCorrected)
-            args += " --sampling_rate %f --correct_envelope" % Ts
-            if self.inputSet.get().isPhaseFlipped():
-                args += " --phase_flipped"
-            self.runJob("xmipp_ctf_correct_wiener2d", args,numberOfMpi=self.myMPI.get())
+
+        self._correctWiener(hasCTF, self.imgsFn, Ts)
 
         Xdim = inputParticles.getXDim()
         newTs = self.targetResolution.get() * 1.0 / 3.0
         newTs = max(Ts, newTs)
-        if self.modelPretrain.get() is False:
-            self.newXdim = int(float(Xdim * Ts / newTs))
-        else:
-            self.newXdim = int(preXDim)
+
+        self.newXdim = int(preXDim) if self.modelPretrain.get() else int(
+            float(Xdim * Ts / newTs))
+
         self.firstMaxShift = int(round(self.newXdim / 10))
         writeInfoField(self._getExtraPath(), "sampling",
                        emlib.MDL_SAMPLINGRATE, newTs)
         writeInfoField(self._getExtraPath(), "size", emlib.MDL_XSIZE,
                        self.newXdim)
-        if self.newXdim != Xdim:
-            self.runJob("xmipp_image_resize",
-                        "-i %s -o %s --save_metadata_stack %s --fourier %d" %
-                        (fnCorrected,
-                         self._getExtraPath('scaled_particles.stk'),
-                         self._getExtraPath('scaled_particles.xmd'),
-                         self.newXdim), numberOfMpi=self.myMPI.get())
-            moveFile(self._getExtraPath('scaled_particles.xmd'), self.imgsFn)
 
-        if exists(self._getExtraPath('corrected_particles.stk')):
-            remove(self._getExtraPath('corrected_particles.stk'))
-            remove(self._getExtraPath('corrected_particles.xmd'))
+        self._resize(Xdim, fnCorrected, 'scaled_particles', self.imgsFn)
+
+        self._removeCorrectedParticles()
 
         fnVol = self._getTmpPath("volume.vol")
         self._ih.convert(self.inputVolume.get(), fnVol)
@@ -239,34 +250,16 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
         writeSetOfParticles(inputTrain, self.trainImgsFn)
         row = getFirstRow(self.trainImgsFn)
         hasCTF = row.containsLabel(emlib.MDL_CTF_DEFOCUSU) or emlib.containsLabel(
-                    emlib.MDL_CTF_MODEL)
+            emlib.MDL_CTF_MODEL)
 
         fnCorrected = self.trainImgsFn
 
-        if hasCTF and self.applyCTF.get() is True:
-            fnCorrectedStk = self._getExtraPath('corrected_particles.stk')
-            fnCorrected = self._getExtraPath('corrected_particles.xmd')
-            args = "-i %s -o %s --save_metadata_stack %s --keep_input_columns" % (
-                    self.trainImgsFn, fnCorrectedStk, fnCorrected)
-            args += " --sampling_rate %f --correct_envelope" % Ts
-            if self.inputSet.get().isPhaseFlipped():
-                args += " --phase_flipped"
-            self.runJob("xmipp_ctf_correct_wiener2d", args,numberOfMpi=self.myMPI.get())
+        self._correctWiener(hasCTF, self.trainImgsFn, Ts)
 
-        Xdim = inputTrain.getXDim()
-        if self.newXdim != Xdim:
-            self.runJob("xmipp_image_resize",
-                        "-i %s -o %s --save_metadata_stack %s --fourier %d" %
-                        (fnCorrected,
-                         self._getExtraPath('scaled_train_particles.stk'),
-                         self._getExtraPath('scaled_train_particles.xmd'),
-                         self.newXdim), numberOfMpi=self.myMPI.get())
-            moveFile(self._getExtraPath('scaled_train_particles.xmd'),
-                     self.trainImgsFn)
+        self._resize(Xdim, fnCorrected,
+                     'scaled_train_particles', self.trainImgsFn)
 
-        if exists(self._getExtraPath('corrected_particles.stk')):
-            remove(self._getExtraPath('corrected_particles.stk'))
-            remove(self._getExtraPath('corrected_particles.xmd'))
+        self._removeCorrectedParticles()
 
     def generateConeCenters(self, fn):
         fnVol = self._getTmpPath("volume.vol")
