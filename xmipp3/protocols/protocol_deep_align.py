@@ -437,17 +437,11 @@ _noiseCoord   '0'
         cleanPattern(self._getExtraPath('uniformProjections*'))
 
     def generateExpImagesStep(self, Nimgs, nameProj, nameExp, label):
-
-        newXdim = readInfoField(self._getExtraPath(), "size",
-                                emlib.MDL_XSIZE)
         fnProj = self._getExtraPath(nameProj + self._tempNumXmd % label)
         fnExp = self._getExtraPath(nameExp + self._tempNumXmd % label)
         fnLabels = self._getExtraPath('labels.txt')
         mdIn = emlib.MetaData(fnProj)
         mdExp = emlib.MetaData()
-        maxPsi = 180
-        maxShift = round(newXdim / 10)
-        idx = 1
         NimgsMd = mdIn.size()
         Nrepeats = int(Nimgs / NimgsMd)
         # if Nrepeats<10:
@@ -456,6 +450,28 @@ _noiseCoord   '0'
         if (label == 1 and exists(fnLabels)):
             remove(fnLabels)
         fileLabels = open(fnLabels, "a")
+        self._processRows(label, fnExp, mdIn, mdExp, Nrepeats, fileLabels)
+        mdExp.write(fnExp)
+        fileLabels.close()
+        if (label - 1) > 0:
+            labelPrev = -1
+            for n in range(1, label):
+                if exists(self._getExtraPath(nameExp + self._tempNumXmd % (label - n))):
+                    labelPrev = label - n
+                    break
+            if labelPrev != -1:
+                lastFnExp = self._getExtraPath(
+                    nameExp + self._tempNumXmd % (labelPrev))
+                self.runJob("xmipp_metadata_utilities",
+                            " -i %s --set union %s -o %s " %
+                            (lastFnExp, fnExp, fnExp), numberOfMpi=1)
+        remove(fnProj)
+
+    def _processRows(self, label, fnExp, mdIn, mdExp, Nrepeats, fileLabels):
+        newXdim = readInfoField(self._getExtraPath(), "size",
+                                emlib.MDL_XSIZE)
+        maxPsi = 180
+        maxShift = round(newXdim / 10)
         for row in iterRows(mdIn):
             fnImg = row.getValue(emlib.MDL_IMAGE)
             myRow = row
@@ -463,7 +479,7 @@ _noiseCoord   '0'
             Xdim, Ydim, _, _ = I.getDimensions()
             Xdim2 = Xdim / 2
             Ydim2 = Ydim / 2
-            if Nrepeats==0:
+            if Nrepeats == 0:
                 myRow.addToMd(mdExp)
                 idx += 1
                 fileLabels.write(str(label - 1) + '\n')
@@ -478,7 +494,8 @@ _noiseCoord   '0'
                     M = np.float32([[c, s, (1 - c) * Xdim2 - s * Ydim2 + deltaX],
                                     [-s, c, s * Xdim2 + (1 - c) * Ydim2 + deltaY]])
                     newFn = ('%06d@' % idx) + fnExp[:-3] + 'stk'
-                    self._ih.applyTransform(fnImg, newFn, M, (Ydim, Xdim), doWrap=True)
+                    self._ih.applyTransform(
+                        fnImg, newFn, M, (Ydim, Xdim), doWrap=True)
 
                     myRow.setValue(emlib.MDL_IMAGE, newFn)
                     myRow.setValue(emlib.MDL_ANGLE_PSI, psiDeg)
@@ -487,20 +504,6 @@ _noiseCoord   '0'
                     myRow.addToMd(mdExp)
                     idx += 1
                     fileLabels.write(str(label - 1) + '\n')
-        mdExp.write(fnExp)
-        fileLabels.close()
-        if (label - 1) > 0:
-            labelPrev = -1
-            for n in range(1, label):
-                if exists(self._getExtraPath(nameExp + self._tempNumXmd % (label - n))):
-                    labelPrev = label - n
-                    break
-            if labelPrev != -1:
-                lastFnExp = self._getExtraPath(nameExp + self._tempNumXmd % (labelPrev))
-                self.runJob("xmipp_metadata_utilities",
-                            " -i %s --set union %s -o %s " %
-                            (lastFnExp, fnExp, fnExp), numberOfMpi=1)
-        remove(fnProj)
 
     def trainNClassifiers2ClassesStep(self, thIdx, gpuId, totalGpu):
 
