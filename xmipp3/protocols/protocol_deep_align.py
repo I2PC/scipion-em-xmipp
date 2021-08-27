@@ -524,48 +524,50 @@ _noiseCoord   '0'
                          self._getExtraPath(modelFn + '.h5'))
 
             expCheck = self._getProjectionsExp(idx)
-            if exists(expCheck):
-                if not exists(self._getExtraPath(modelFn + '.h5')):
-                    fnLabels = self._getExtraPath('labels.txt')
-                    fileLabels = open(fnLabels, "r")
-                    expSet = self._getProjectionsExp(self.numCones)
-                    if not exists(expSet):
-                        for n in range(1, self.numCones):
-                            if exists(self._getProjectionsExp(self.numCones - n)):
-                                expSet = self._getProjectionsExp(self.numCones - n)
-                                break
-                    newFnLabels = self._getExtraPath('labels%d.txt' % idx)
-                    newFileLabels = open(newFnLabels, "w")
-                    lines = fileLabels.readlines()
-                    for line in lines:
-                        if line == str(idx - 1) + '\n':
-                            newFileLabels.write('1\n')
-                        else:
-                            newFileLabels.write('0\n')
-                    newFileLabels.close()
-                    fileLabels.close()
+            if exists(expCheck) and not exists(self._getExtraPath(modelFn + '.h5')):
+                self._coneStep(gpuId, idx, modelFn)
 
-                    newXdim = readInfoField(self._getExtraPath(), "size",
-                                            emlib.MDL_XSIZE)
-                    fnLabels = self._getExtraPath('labels%d.txt' % idx)
+    def _coneStep(self, gpuId, idx, modelFn):
+        fnLabels = self._getExtraPath('labels.txt')
+        fileLabels = open(fnLabels, "r")
+        expSet = self._getProjectionsExp(self.numCones)
+        if not exists(expSet):
+            for n in range(1, self.numCones):
+                if exists(self._getProjectionsExp(self.numCones - n)):
+                    expSet = self._getProjectionsExp(self.numCones - n)
+                    break
+        newFnLabels = self._getExtraPath('labels%d.txt' % idx)
+        newFileLabels = open(newFnLabels, "w")
+        lines = fileLabels.readlines()
+        for line in lines:
+            if line == str(idx - 1) + '\n':
+                newFileLabels.write('1\n')
+            else:
+                newFileLabels.write('0\n')
+        newFileLabels.close()
+        fileLabels.close()
 
-                    print("Training region ", idx, " in GPU ", gpuId)
-                    sys.stdout.flush()
+        newXdim = readInfoField(self._getExtraPath(), "size",
+                                        emlib.MDL_XSIZE)
+        fnLabels = self._getExtraPath('labels%d.txt' % idx)
 
-                    try:
-                        args = "%s %s %s %s %d %d %d %d " % (
-                        expSet, fnLabels, self._getExtraPath(),
-                        modelFn+'_aux', self.numEpochs, newXdim, 2, self.batchSize.get())
-                        #args += " %(GPU)s"
-                        args += " %s " % (gpuId)
-                        #args += " %s " %(int(idx % totalGpu))
-                        self.runJob("xmipp_cone_deepalign", args, numberOfMpi=1, env=self.getCondaEnv())
-                    except Exception as e:
-                        raise Exception(
-                            "ERROR: Please, if you are suffering memory problems, "
-                            "check the target resolution to work with lower dimensions.")
+        print("Training region ", idx, " in GPU ", gpuId)
+        sys.stdout.flush()
 
-                    moveFile(self._getExtraPath(modelFn + '_aux.h5'), self._getExtraPath(modelFn + '.h5'))
+        try:
+            args = "%s %s %s %s %d %d %d %d " % (
+                    expSet, fnLabels, self._getExtraPath(),
+                    modelFn+'_aux', self.numEpochs, newXdim, 2, self.batchSize.get())
+                    #args += " %(GPU)s"
+            args += " %s " % (gpuId)
+                    #args += " %s " %(int(idx % totalGpu))
+            self.runJob("xmipp_cone_deepalign", args, numberOfMpi=1, env=self.getCondaEnv())
+        except Exception as e:
+            raise Exception(
+                        "ERROR: Please, if you are suffering memory problems, "
+                        "check the target resolution to work with lower dimensions.")
+
+        moveFile(self._getExtraPath(modelFn + '_aux.h5'), self._getExtraPath(modelFn + '.h5'))
 
     def predictStep(self, gpuId):
 
