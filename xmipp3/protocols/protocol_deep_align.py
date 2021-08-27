@@ -721,24 +721,8 @@ _noiseCoord   '0'
             fnOutCone = self._getOutCone(i + 1)
 
             if exists(self._getExtraPath(fnOutCone)):             
-
-                if numMax == 1:
-                    if not exists(fnFinal):
-                        copy(self._getExtraPath(fnOutCone), fnFinal)
-                    else:
-                        params = ' -i %s --set union %s -o %s' % (fnFinal, self._getExtraPath(fnOutCone),
-                                                                  fnFinal)
-                        self.runJob("xmipp_metadata_utilities", params,
-                                    numberOfMpi=1)
-                else:
-                    mdCones.append(emlib.MetaData(self._getExtraPath(fnOutCone)))
-                    coneFns.append(mdCones[i].getColumnValues(emlib.MDL_IMAGE))
-                    shiftX.append(mdCones[i].getColumnValues(emlib.MDL_SHIFT_X))
-                    shiftY.append(mdCones[i].getColumnValues(emlib.MDL_SHIFT_Y))
-                    coneCCs.append(mdCones[i].getColumnValues(emlib.MDL_MAXCC))
-
-            else:
-                if numMax > 1:
+                self._updateCone(numMax, coneFns, coneCCs, mdCones, shiftX, shiftY, fnFinal, i, fnOutCone)
+            elif numMax > 1:
                     mdCones.append(None)
                     coneFns.append([])
                     coneCCs.append([])
@@ -746,29 +730,7 @@ _noiseCoord   '0'
                     shiftY.append([])
 
         if numMax > 1:
-            mdFinal = emlib.MetaData()
-            row = md.Row()
-            for myFn in allInFns:
-                myCCs = []
-                myCones = []
-                myPos = []
-                for n in range(self.numCones):
-                    if myFn in coneFns[n]:
-                        pos = coneFns[n].index(myFn)
-                        myPos.append(pos)
-                        if abs(shiftX[n][pos])<30 and abs(shiftY[n][pos])<30:
-                            myCCs.append(coneCCs[n][pos])
-                        else:
-                            myCCs.append(0)
-                        myCones.append(n + 1)
-                if len(myPos) > 0:
-                    if max(myCCs)==0:
-                        continue
-                    coneMax = myCones[myCCs.index(max(myCCs))]
-                    objId = myPos[myCCs.index(max(myCCs))] + 1
-                    row.readFromMd(mdCones[coneMax - 1], objId)
-                    row.addToMd(mdFinal)
-            mdFinal.write(fnFinal)
+            self._writeMDFinal(allInFns, coneFns, coneCCs, mdCones, shiftX, shiftY, fnFinal)
         else:
             mdCones = emlib.MetaData(fnFinal)
             mdCones.removeObjects(emlib.MDValueGT(emlib.MDL_SHIFT_X, 30.))
@@ -776,6 +738,47 @@ _noiseCoord   '0'
             mdCones.removeObjects(emlib.MDValueLT(emlib.MDL_SHIFT_X, -30.))
             mdCones.removeObjects(emlib.MDValueLT(emlib.MDL_SHIFT_Y, -30.))
             mdCones.write(fnFinal)
+
+    def _updateCone(self, numMax, coneFns, coneCCs, mdCones, shiftX, shiftY, fnFinal, i, fnOutCone):
+        if numMax == 1:
+            if not exists(fnFinal):
+                copy(self._getExtraPath(fnOutCone), fnFinal)
+            else:
+                params = ' -i %s --set union %s -o %s' % (fnFinal, self._getExtraPath(fnOutCone),
+                                                                  fnFinal)
+                self.runJob("xmipp_metadata_utilities", params,
+                                    numberOfMpi=1)
+        else:
+            mdCones.append(emlib.MetaData(self._getExtraPath(fnOutCone)))
+            coneFns.append(mdCones[i].getColumnValues(emlib.MDL_IMAGE))
+            shiftX.append(mdCones[i].getColumnValues(emlib.MDL_SHIFT_X))
+            shiftY.append(mdCones[i].getColumnValues(emlib.MDL_SHIFT_Y))
+            coneCCs.append(mdCones[i].getColumnValues(emlib.MDL_MAXCC))
+
+    def _writeMDFinal(self, allInFns, coneFns, coneCCs, mdCones, shiftX, shiftY, fnFinal):
+        mdFinal = emlib.MetaData()
+        row = md.Row()
+        for myFn in allInFns:
+            myCCs = []
+            myCones = []
+            myPos = []
+            for n in range(self.numCones):
+                if myFn in coneFns[n]:
+                    pos = coneFns[n].index(myFn)
+                    myPos.append(pos)
+                    if abs(shiftX[n][pos])<30 and abs(shiftY[n][pos])<30:
+                        myCCs.append(coneCCs[n][pos])
+                    else:
+                        myCCs.append(0)
+                    myCones.append(n + 1)
+            if len(myPos) > 0:
+                if max(myCCs)==0:
+                    continue
+                coneMax = myCones[myCCs.index(max(myCCs))]
+                objId = myPos[myCCs.index(max(myCCs))] + 1
+                row.readFromMd(mdCones[coneMax - 1], objId)
+                row.addToMd(mdFinal)
+        mdFinal.write(fnFinal)
 
     def createOutputStep(self):
 
