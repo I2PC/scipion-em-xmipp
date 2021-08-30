@@ -50,6 +50,7 @@ from xmipp3.protocols.protocol_align_volume import (ALIGN_ALGORITHM_EXHAUSTIVE,
 
 MSG_WRONG_SAMPLING = "wrong sampling rate"
 MSG_WRONG_SIZE = "wrong size"
+MSG_MASK_ERROR = "There was a problem with create mask from volume"
 
 
 class TestXmippBase(BaseTest):
@@ -123,7 +124,7 @@ class TestXmippCreateMask3D(TestXmippBase):
         protMask1.setObjLabel('threshold mask')
         self.launchProtocol(protMask1)
         self.assertIsNotNone(protMask1.outputMask,
-                             "There was a problem with create mask from volume")
+                             MSG_MASK_ERROR)
 
 
         print("Run create segment mask from volume")
@@ -134,7 +135,7 @@ class TestXmippCreateMask3D(TestXmippBase):
         protMask2.setObjLabel('segmentation automatic')
         self.launchProtocol(protMask2)
         self.assertIsNotNone(protMask2.outputMask,
-                             "There was a problem with create mask from volume")
+                             MSG_MASK_ERROR)
 
     
         print("Run create mask from another mask")
@@ -790,6 +791,56 @@ class TestXmippProtAlignVolume(TestXmippBase):
                                      numberOfMpi=1, numberOfThreads=1                               
                                      )
         protAlign.inputVolumes.append(self.protImport2.outputVolume)
+        self.launchProtocol(protAlign)
+
+    def testExhaustiveCircularMask(self):
+        protAlign = self.newProtocol(XmippProtAlignVolume,
+                                     inputReference=self.protImport1.outputVolume,
+                                     alignmentAlgorithm=ALIGN_ALGORITHM_EXHAUSTIVE,
+                                     minRotationalAngle=65,
+                                     maxRotationalAngle=100,
+                                     stepRotationalAngle=10,
+                                     minTiltAngle=65,
+                                     maxTiltAngle=100,
+                                     stepTiltAngle=10,
+                                     minInplaneAngle=0,
+                                     maxInplaneAngle=0,
+                                     stepInplaneAngle=0,
+                                     applyMask=True,
+                                     maskType=0,
+                                     maskRadius=22,
+                                     numberOfMpi=1, numberOfThreads=1
+                                     )
+        protAlign.inputVolumes.append(self.protImport2.outputVolume)
+        self.launchProtocol(protAlign)
+
+    def testExhaustiveBinaryMask(self):
+        protMask = self.newProtocol(XmippProtCreateMask3D,
+                                    source=0,
+                                    volumeOperation=0,
+                                    threshold=0.0)
+        protMask.inputVolume.set(self.protImport1.outputVolume)
+        self.launchProtocol(protMask)
+        self.assertIsNotNone(protMask.outputMask,
+                             MSG_MASK_ERROR)
+        protAlign = self.newProtocol(XmippProtAlignVolume,
+                                     inputReference=self.protImport1.outputVolume,
+                                     alignmentAlgorithm=ALIGN_ALGORITHM_EXHAUSTIVE,
+                                     minRotationalAngle=65,
+                                     maxRotationalAngle=100,
+                                     stepRotationalAngle=10,
+                                     minTiltAngle=65,
+                                     maxTiltAngle=100,
+                                     stepTiltAngle=10,
+                                     minInplaneAngle=0,
+                                     maxInplaneAngle=0,
+                                     stepInplaneAngle=0,
+                                     applyMask=True,
+                                     maskType=1,
+                                     numberOfMpi=1, numberOfThreads=1
+                                     )
+        protAlign.inputVolumes.append(self.protImport2.outputVolume)
+        protAlign.maskFile.set(protMask.outputMask)
         self.launchProtocol(protAlign)
 
 
