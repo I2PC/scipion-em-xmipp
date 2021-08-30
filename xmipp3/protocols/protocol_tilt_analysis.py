@@ -104,11 +104,14 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         """
         self.insertedDict = OrderedDict()
         self.samplingRate = self.inputMicrographs.get().getSamplingRate()
-        self.listOfMicrographs = []
-        self._loadInputList()
+        self.micsFn = self.inputMicrographs.get().getFileName()
+        self.stats = {}
+        self.streamClosed = self.inputMicrographs.get().isStreamClosed()
+        self.micsDict = {mic.getObjId(): mic.clone() for mic in self._loadInputList(self.micsFn).iterItems()}
         pwutils.makePath(self._getExtraPath('DONE'))
+
         fDeps = self._insertNewMicrographSteps(self.insertedDict,
-                                               self.listOfMicrographs)
+                                               self.micsDict.values())
         # For the streaming mode, the steps function have a 'wait' flag that can be turned on/off. For example, here we insert the
         # createOutputStep but it wait=True, which means that can not be executed until it is set to False
         # (when the input micrographs stream is closed)
@@ -123,22 +126,16 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         pass
 
 
-    def _loadInputList(self):
+    def _loadInputList(self, micsFn):
         """ Load the input set of mics and create a list. """
-        micsFile = self.inputMicrographs.get().getFileName()
-        self.debug("Loading input db: %s" % micsFile)
-
+        self.debug("Loading input db: %s" % micsFn)
         #Here some how we need to filter by timestamp
-
-        micSet = SetOfMicrographs(filename=micsFile)
+        micSet = SetOfMicrographs(filename=micsFn)
         micSet.loadAllProperties()
-        newMics = [m.clone() for m in micSet if m.getObjId() not in self.insertedDict]
-
-
-        self.listOfMicrographs.extend(newMics)
         self.streamClosed = micSet.isStreamClosed()
         micSet.close()
         self.debug("Closed db.")
+        return micSet
 
 
     def _stepsCheck(self):
@@ -165,29 +162,28 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
     def _checkNewInput(self):
         # Check if there are new micrographs to process from the input set
-        localFile = self.inputMicrographs.get().getFileName()
         now = datetime.now()
         self.lastCheck = getattr(self, 'lastCheck', now)
-        mTime = datetime.fromtimestamp(os.path.getmtime(localFile))
+        mTime = datetime.fromtimestamp(os.path.getmtime(self.micsFn))
         self.debug('Last check: %s, modification: %s'
                    % (pwutils.prettyTime(self.lastCheck),
                       pwutils.prettyTime(mTime)))
         # If the input micrographs.sqlite have not changed since our last check,
         # it does not make sense to check for new input data
-        if self.lastCheck > mTime and hasattr(self, 'listOfMicrographs'):
+        if self.lastCheck > mTime and hasattr(self, 'micsDict'):
             return None
 
         self.lastCheck = now
         # Open input micrographs.sqlite and close it as soon as possible
-        self._loadInputList()
+        micSet = self._loadInputList(self.micsFn)
 
-        # newMics = any(m.getObjId() not in self.insertedDict for m in self.listOfMicrographs) # CHANGE
-        newMics = [m for m in self.listOfMicrographs if m.getObjId() not in self.insertedDict] # SOLUTION
-        newMicsBool = [len(newMics) > 0]
+        #EN EL ITERITEMS SE PUEDE PONER UN FILTRO
+        newMicsDict = {mic.getObjId(): mic.clone() for mic in micSet.iterItems(   ) if mic.getObjId() not in self.insertedDict}
+        self.micsDict.update(newMicsDict)
         outputStep = self._getFirstJoinStep()
 
-        if newMicsBool:
-            fDeps = self._insertNewMicrographSteps(self.insertedDict, newMics) # SOLUTION
+        if len(newMicsDict) > 0:
+            fDeps = self._insertNewMicrographSteps(self.insertedDict, newMicsDict.values())
 
             if outputStep is not None:
                 outputStep.addPrerequisites(*fDeps)
@@ -201,12 +197,12 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         # Load previously done items (from text file)
         doneList = self._readDoneList()
         # Check for newly done items
-        newDone = [m.clone() for m in self.listOfMicrographs if int(m.getObjId()) not in doneList and self._isMicDone(m)]
+        newDone = [m.clone() for m in self.micsDict.values() if int(m.getObjId()) not in doneList and self._isMicDone(m)]
         allDone = len(doneList) + len(newDone)
         # We have finished when there is not more input movies
         # (stream closed) and the number of processed movies is
         # equal to the number of inputs
-        self.finished = self.streamClosed and allDone == len(self.listOfMicrographs)
+        self.finished = self.streamClosed and allDone == len(self.micsDict)
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
         if newDone:
@@ -306,7 +302,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         if self._filterMicrograph(micrograph):
             pwutils.makePath(micFolderTmp)
             pwutils.createLink(micFn, join(micFolderTmp, micName))
-
             newMicName = self._correctFormat(micName, micFn, micFolderTmp)
 
             # Just store the original name in case it is needed in _processMovie
@@ -436,13 +431,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                 autocorrelation = subWind_psd_filt.correlation(subRotatedWind_psd_filt)
 
                 # Paint the output array
-                print('x coordinates')
-                print(x0_psd, x0_psd + subWindStep)
-                print('y coordinates')
-                print(y0_psd, y0_psd + subWindStep)
-                print('shape data')
-                print(np.shape(subWind_psd_filt.getData()))
-
                 output_array[y0_psd:y0_psd+subWindStep, x0_psd:x0_psd+subWindStep] = subWind_psd_filt.getData()
                 # Append
                 autocorrelations.append(autocorrelation)
