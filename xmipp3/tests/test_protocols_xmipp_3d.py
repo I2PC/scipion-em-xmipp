@@ -1204,6 +1204,24 @@ class TestXmippVolSubtraction(TestXmippBase):
         self.assertIsNotNone(protCreateMask.getFiles(),
                              "There was a problem with the 3D mask")
 
+        print("Run volume adjust")
+        protVolAdj = self.newProtocol(XmippProtVolAdjust,
+                                      vol1=protImportVol1.outputVolume,
+                                      vol2=protImportVol2.outputVolume,
+                                      masks=False)
+        self.launchProtocol(protVolAdj)
+        self.assertIsNotNone(protVolAdj.outputVolume,
+                             "There was a problem with Volumes adjust")
+
+        protVolAdjNoE = self.newProtocol(XmippProtVolAdjust,
+                                         vol1=protImportVol1.outputVolume,
+                                         vol2=protImportVol2.outputVolume,
+                                         computeE=False,
+                                         masks=False)
+        self.launchProtocol(protVolAdjNoE)
+        self.assertIsNotNone(protVolAdjNoE.outputVolume,
+                             "There was a problem with Volumes adjust without computing energy")
+
         print("Run volume subtraction")
         protVolSub = self.newProtocol(XmippProtVolSubtraction,
                                       vol1=protImportVol1.outputVolume,
@@ -1213,6 +1231,16 @@ class TestXmippVolSubtraction(TestXmippBase):
         self.launchProtocol(protVolSub)
         self.assertIsNotNone(protVolSub.outputVolume,
                              "There was a problem with Volumes subtraction")
+
+        protVolSubNoE = self.newProtocol(XmippProtVolSubtraction,
+                                         vol1=protImportVol1.outputVolume,
+                                         vol2=protImportVol2.outputVolume,
+                                         computeE=False,
+                                         masks=False,
+                                         radavg=False)
+        self.launchProtocol(protVolSubNoE)
+        self.assertIsNotNone(protVolSubNoE.outputVolume,
+                             "There was a problem with Volumes subtraction without computing energy")
 
         protVolSubMask = self.newProtocol(XmippProtVolSubtraction,
                                       vol1=protImportVol1.outputVolume,
@@ -1240,15 +1268,6 @@ class TestXmippVolSubtraction(TestXmippBase):
         self.launchProtocol(protVolSubPdb)
         self.assertIsNotNone(protVolSubPdb.outputVolume,
                              "There was a problem with Volumes subtraction pdb")
-
-        print("Run volume adjust")
-        protVolAdj = self.newProtocol(XmippProtVolAdjust,
-                                      vol1=protImportVol1.outputVolume,
-                                      vol2=protImportVol2.outputVolume,
-                                      masks=False)
-        self.launchProtocol(protVolAdj)
-        self.assertIsNotNone(protVolAdj.outputVolume,
-                             "There was a problem with Volumes adjust")
 
         print("Run volume consensus")
         protVolConsensus = self.newProtocol(XmippProtVolConsensus,
