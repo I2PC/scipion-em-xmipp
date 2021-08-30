@@ -35,6 +35,9 @@ from pwem.objects import Volume, Transform
 from pwem.protocols import EMProtocol
 
 
+CITE = 'Fernandez-Gimenez2021'
+
+
 class XmippProtVolAdjBase(EMProtocol):
     """ Helper class that contains some Protocol utilities methods
     used by both  XmippProtVolSubtraction and XmippProtVolAdjust."""
@@ -246,6 +249,9 @@ class XmippProtVolSubtraction(XmippProtVolAdjBase):
             errors.append('Relaxation factor (lambda) must be between 0 and 1')
         return errors
 
+    def _citations(self):
+        return [CITE]
+
     # --------------------------- UTLIS functions --------------------------------------------
     def _getPdbFileName(self):
         if self.inputPdbData == self.IMPORT_OBJ:
@@ -326,3 +332,6 @@ class XmippProtVolAdjust(XmippProtVolAdjBase):
         if rfactor < 0 or rfactor > 1:
             errors.append('Relaxation factor (lambda) must be between 0 and 1')
         return errors
+
+    def _citations(self):
+        return [CITE]

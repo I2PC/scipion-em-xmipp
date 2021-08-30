@@ -591,5 +591,16 @@ NUMBER = {X},
 ARTICLE-NUMBER = {xxx},
 URL = {https://github.com/I2PC/xmipp/wiki/FSO---Fourier-Shell-Occupancy},
 }
+
+@article{Fernandez-Gimenez2021,
+title = {Cryo-EM density maps adjustment for subtraction, consensus and sharpening},
+journal = {Journal of Structural Biology},
+year = {2021},
+issn = {1047-8477},
+doi = {https://doi.org/10.1016/j.jsb.2021.107780},
+url = {https://www.sciencedirect.com/science/article/pii/S104784772100085X},
+author = {E. Fernández-Giménez and M. Martínez and R. Sánchez-García and R. Marabini and E. Ramírez-Aportela and
+P. Conesa and J.M. Carazo and C.O.S. Sorzano},
+}
 """
 
