@@ -203,6 +203,19 @@ class XmippViewer(DataViewer):
                                                            'sortby': 'id'})
 
         elif issubclass(cls, XmippProtTiltAnalysis):
+            if obj.hasAttribute('discardedMicrographs'):
+                fn = obj.discardedMicrographs.getFileName()
+                labels = ('id enabled psdCorr._filename _filename _tilt_mean_corr _tilt_std_corr '
+                          '_tilt_max_corr _tilt_min_corr _tilt_psds_image._filename ')
+                labelRender = (' psdCorr._filename _tilt_psds_image._filename')
+
+                self._views.append(ObjectView(self._project, obj.strId(), fn,
+                                              viewParams={ORDER: labels,
+                                                          VISIBLE: labels,
+                                                          RENDER: labelRender,
+                                                          ZOOM: 40,
+                                                          MODE: MODE_MD}))
+
             if obj.hasAttribute('outputMicrographs'):
                 fn = obj.outputMicrographs.getFileName()
                 labels = ('id enabled psdCorr._filename _filename _tilt_mean_corr _tilt_std_corr '
@@ -215,9 +228,11 @@ class XmippViewer(DataViewer):
                                                    RENDER: labelRender,
                                                    ZOOM: 40,
                                                    MODE: MODE_MD}))
-            else:
+
+            if not(obj.hasAttribute('discardedMicrographs')) and not(obj.hasAttribute('outputMicrographs')):
                 self._views.append(self.infoMessage("Output micrographs has "
-                                              "not been produced yet."))
+                                                    "not been produced yet."))
+
 
         elif issubclass(cls, XmippProtCompareReprojections):
                 fn = obj.reprojections.getFileName()

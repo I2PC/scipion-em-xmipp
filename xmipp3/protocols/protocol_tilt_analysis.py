@@ -127,9 +127,14 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         """ Load the input set of mics and create a list. """
         micsFile = self.inputMicrographs.get().getFileName()
         self.debug("Loading input db: %s" % micsFile)
+
+        #Here some how we need to filter by timestamp
+
         micSet = SetOfMicrographs(filename=micsFile)
         micSet.loadAllProperties()
         newMics = [m.clone() for m in micSet if m.getObjId() not in self.insertedDict]
+
+
         self.listOfMicrographs.extend(newMics)
         self.streamClosed = micSet.isStreamClosed()
         micSet.close()
@@ -166,7 +171,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         mTime = datetime.fromtimestamp(os.path.getmtime(localFile))
         self.debug('Last check: %s, modification: %s'
                    % (pwutils.prettyTime(self.lastCheck),
-                   pwutils.prettyTime(mTime)))
+                      pwutils.prettyTime(mTime)))
         # If the input micrographs.sqlite have not changed since our last check,
         # it does not make sense to check for new input data
         if self.lastCheck > mTime and hasattr(self, 'listOfMicrographs'):
@@ -182,7 +187,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         outputStep = self._getFirstJoinStep()
 
         if newMicsBool:
-            # fDeps = self._insertNewMicrographSteps(self.insertedDict, self.listOfMicrographs) #CHANGE
             fDeps = self._insertNewMicrographSteps(self.insertedDict, newMics) # SOLUTION
 
             if outputStep is not None:
@@ -214,6 +218,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
             return
 
         micSet = self._loadOutputSet(SetOfMicrographs, 'micrograph.sqlite')
+
         if self.tilt:
             micSet_discarded = self._loadOutputSet(SetOfMicrographs, 'micrograph'+'DISCARDED'+'.sqlite')
 
@@ -350,7 +355,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         fhSummary.close()
 
         fnMonitorSummary.write("micrograph_%06d: mean=%f std=%f [min=%f,max=%f] \n" %
-                        (micrographId, stats['mean'], stats['std'], stats['min'], stats['max']))
+                              (micrographId, stats['mean'], stats['std'], stats['min'], stats['max']))
         fnMonitorSummary.close()
 
 
@@ -368,16 +373,11 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         #
         subWindStep = int(wind_step * (self.samplingRate / self.objective_resolution.get()))
         x_steps_psd, y_steps_psd = window_coordinates2D(subWindStep*len(x_steps), subWindStep*len(y_steps), subWindStep, 0)
-
-        print(x_steps_psd)
-        print(y_steps_psd)
-
         # Extract windows
         window_image = ImageHandler().createImage()
         rotatedWind_psd = ImageHandler().createImage()
         output_image = ImageHandler().createImage()
-        output_array = np.zeros((subWindStep*len(y_steps), subWindStep*len(x_steps))) #THis was the other way around
-        print(np.shape(output_array))
+        output_array = np.zeros((subWindStep*len(y_steps), subWindStep*len(x_steps)))
         ih = ImageHandler()
         for x0, x0_psd in zip(x_steps, x_steps_psd):
             for y0, y0_psd in zip(y_steps, y_steps_psd):
