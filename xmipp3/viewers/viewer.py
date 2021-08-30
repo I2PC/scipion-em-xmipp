@@ -205,7 +205,7 @@ class XmippViewer(DataViewer):
         elif issubclass(cls, XmippProtTiltAnalysis):
             if obj.hasAttribute('outputMicrographs'):
                 fn = obj.outputMicrographs.getFileName()
-                labels = ('id enabled psdCorr._filename _xmipp_image._filename _tilt_mean_corr _tilt_std_corr '
+                labels = ('id enabled psdCorr._filename _filename _tilt_mean_corr _tilt_std_corr '
                           '_tilt_max_corr _tilt_min_corr _tilt_psds_image._filename ')
                 labelRender = (' psdCorr._filename _tilt_psds_image._filename')
 

@@ -369,11 +369,15 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         subWindStep = int(wind_step * (self.samplingRate / self.objective_resolution.get()))
         x_steps_psd, y_steps_psd = window_coordinates2D(subWindStep*len(x_steps), subWindStep*len(y_steps), subWindStep, 0)
 
+        print(x_steps_psd)
+        print(y_steps_psd)
+
         # Extract windows
         window_image = ImageHandler().createImage()
         rotatedWind_psd = ImageHandler().createImage()
         output_image = ImageHandler().createImage()
-        output_array = np.zeros((subWindStep*len(x_steps), subWindStep*len(y_steps)))
+        output_array = np.zeros((subWindStep*len(y_steps), subWindStep*len(x_steps))) #THis was the other way around
+        print(np.shape(output_array))
         ih = ImageHandler()
         for x0, x0_psd in zip(x_steps, x_steps_psd):
             for y0, y0_psd in zip(y_steps, y_steps_psd):
@@ -411,6 +415,7 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                                                    str(y_steps.index(y0)) + '.mrc')
                 subWind_psd.write(filename_subwindPSD)
                 subRotatedWind_psd.write(filename_rotatedPSD)
+
                 # Filter this window using runJob
                 filename_subwindPSD_filt = os.path.join(micFolder,
                                                         "tmp_psd_filtered" + str(x_steps.index(x0)) +
@@ -429,7 +434,15 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                 subWind_psd_filt = ih.read(filename_subwindPSD_filt)
                 subRotatedWind_psd_filt = ih.read(filename_subwindRotatedPSD_filt)
                 autocorrelation = subWind_psd_filt.correlation(subRotatedWind_psd_filt)
+
                 # Paint the output array
+                print('x coordinates')
+                print(x0_psd, x0_psd + subWindStep)
+                print('y coordinates')
+                print(y0_psd, y0_psd + subWindStep)
+                print('shape data')
+                print(np.shape(subWind_psd_filt.getData()))
+
                 output_array[y0_psd:y0_psd+subWindStep, x0_psd:x0_psd+subWindStep] = subWind_psd_filt.getData()
                 # Append
                 autocorrelations.append(autocorrelation)
