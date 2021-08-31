@@ -163,7 +163,7 @@ class XmippProtCL2DMap(ProtAnalysis2D):
         item.setClassId(row.getValue(md.MDL_REF))
         item.setTransform(rowToAlignment(row, ALIGN_2D))
         if not row.getValue(md.MDL_REF) in self.selection:
-            item.setEnabled(False)
+            item._appendItem = False
 
     def _updateClass(self, item):
         classId = item.getObjId()
