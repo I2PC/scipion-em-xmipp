@@ -92,18 +92,18 @@ class XmippProtCL2DMap(ProtAnalysis2D):
                             writeParticles=True)
 
     def computeMappingStep(self):
-        # metadata = self._getExtraPath('classes.xmd')
-        self.metadata = pwutils.replaceExt(self.inputClasses.get().getFirstItem().getRepresentative().getFileName(), 'xmd')
-        params = dict(metadata=self.metadata, method=self.red_methods[self.method.get()],
+        metadata = self._getExtraPath('classes.xmd')
+        # self.metadata = pwutils.replaceExt(self.inputClasses.get().getFirstItem().getRepresentative().getFileName(), 'xmd')
+        params = dict(metadata=metadata, method=self.red_methods[self.method.get()],
                       metric=self.distances[self.distance.get()])
         args = '-i {metadata} -m {method} --distance {metric}'.format(**params)
 
         self.runJob("xmipp_transform_dimred", args)
 
     def interactiveSelStep(self):
-        # self.metadata = self._getExtraPath('classes.xmd')
-        self.metadata = pwutils.replaceExt(self.inputClasses.get().getFirstItem().getRepresentative().getFileName(),
-                                           'xmd')
+        self.metadata = self._getExtraPath('classes.xmd')
+        # self.metadata = pwutils.replaceExt(self.inputClasses.get().getFirstItem().getRepresentative().getFileName(),
+        #                                    'xmd')
         self.classes = self.inputClasses.get()
         self.mdOut = md.MetaData(self.metadata)
         if self.intSel.get():
@@ -120,8 +120,8 @@ class XmippProtCL2DMap(ProtAnalysis2D):
             pos = np.vstack(pos)
 
             # Read selected ids from previous runs (if they exist)
-            if os.path.isfile(self._getExtraPath('selected_ids,txt')):
-                self.selection = np.loadtxt(self._getExtraPath('selected_ids,txt'))
+            if os.path.isfile(self._getExtraPath('selected_ids.txt')):
+                self.selection = np.loadtxt(self._getExtraPath('selected_ids.txt'))
                 self.selection = [int(self.selection)] if self.selection.size == 1 else \
                                   self.selection.astype(int).tolist()
             else:
@@ -134,7 +134,7 @@ class XmippProtCL2DMap(ProtAnalysis2D):
             self.selection = view.selected_ids
 
             # Save selected ids for interactive mode
-            np.savetxt(self._getExtraPath('selected_ids,txt'), np.asarray(self.selection))
+            np.savetxt(self._getExtraPath('selected_ids.txt'), np.asarray(self.selection))
 
             if askYesNo(Message.TITLE_SAVE_OUTPUT, Message.LABEL_SAVE_OUTPUT, None):
                 self._createOutputStep()
@@ -153,7 +153,8 @@ class XmippProtCL2DMap(ProtAnalysis2D):
                                     updateItemCallback=self._updateParticle,
                                     keyLabel=md.MDL_REF, skipDisabled=True)
         selected_classes.classifyItems(updateItemCallback=iterator.updateItem,
-                                       updateClassCallback=self._updateClass)
+                                       updateClassCallback=self._updateClass,
+                                       iterParams={'iterate': False})
 
         result = {'selectedClasses2D_' + suffix: selected_classes}
         self._defineOutputs(**result)
@@ -167,7 +168,6 @@ class XmippProtCL2DMap(ProtAnalysis2D):
 
     def _updateClass(self, item):
         classId = item.getObjId()
-
         index, fn, _, c = self._classesInfo[classId]
         item.setAlignment2D()
         rep = item.getRepresentative()
@@ -175,9 +175,6 @@ class XmippProtCL2DMap(ProtAnalysis2D):
         rep.setSamplingRate(self.inputClasses.get().getSamplingRate())
         rep._c_x = Float(c[0])
         rep._c_y = Float(c[1])
-
-        if not classId in self.selection:
-            item.setEnabled(False)
 
 
     def _loadClassesInfo(self, filename):
