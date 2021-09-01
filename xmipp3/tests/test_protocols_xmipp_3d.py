@@ -1273,6 +1273,15 @@ class TestXmippVolSubtraction(TestXmippBase):
         self.assertIsNotNone(protVolAdjNoE.outputVolume,
                              "There was a problem with Volumes adjust without computing energy")
 
+        protVolAdjNoRadAvg = self.newProtocol(XmippProtVolAdjust,
+                                              vol1=protImportVol1.outputVolume,
+                                              vol2=protImportVol2.outputVolume,
+                                              masks=False,
+                                              radavg=False)
+        self.launchProtocol(protVolAdjNoRadAvg)
+        self.assertIsNotNone(protVolAdjNoRadAvg.outputVolume,
+                             "There was a problem with Volumes adjust without radial average")
+
         print("Run volume subtraction")
         protVolSub = self.newProtocol(XmippProtVolSubtraction,
                                       vol1=protImportVol1.outputVolume,
