@@ -28,7 +28,7 @@
 """
 Deep Consensus picking protocol
 """
-import os, sys
+import os, sys, time
 from glob import glob
 import six
 import json, shutil, pickle
@@ -78,9 +78,13 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     _conda_env = 'xmipp_DLTK_v0.3'
     _stepsCheckSecs = 5              # time in seconds to check the steps
 
+    USING_INPUT_COORDS = False
     CONSENSUS_COOR_PATH_TEMPLATE="consensus_coords_%s"
     CONSENSUS_PARTS_PATH_TEMPLATE="consensus_parts_%s"
     PRE_PROC_MICs_PATH="preProcMics"
+
+    PARTICLES_TEMPLATE = "particles{}.xmd"
+    NET_TEMPLATE = "nnetData{}"
 
     ADD_DATA_TRAIN_TYPES = ["None", "Precompiled", "Custom"]
     ADD_DATA_TRAIN_NONE = 0
@@ -468,80 +472,52 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
     def _stepsCheck(self):
         '''Checks if new steps can be executed'''
-        newSteps = []
-        if not self.ENDED:
-          # Functions streamed. Input is processed as soon as it is generated
-          if len(self.readyToPreprocessMics(shared = False)) > 0 and not self.PREPROCESSING:
-              self.PREPROCESSING = True
-              self.lastDeps = [self._insertFunctionStep("preprocessMicsStep", prerequisites=self.initDeps)]
+        self.newSteps = []
+        if self.ENDED:
+          return
+        # Preprocessing
+        if len(self.readyToPreprocessMics(shared = False)) > 0 and not self.PREPROCESSING:
+            self.PREPROCESSING = True
+            self.lastDeps = [self._insertFunctionStep("preprocessMicsStep", prerequisites=self.initDeps)]
 
-          if len(self.readyToExtractMicFns('OR')) >= self.extractingBatch.get() and not self.EXTRACTING['OR']:
-            self.EXTRACTING['OR'] = True
-            newSteps += [self.insertCaculateConsensusSteps('OR', prerequisites=self.initDeps)]
-            newSteps += self.insertExtractPartSteps('OR', prerequisites=newSteps)
+        #Particle extraction OR (for predictions)
+        if len(self.readyToExtractMicFns('OR')) >= self.extractingBatch.get() and not self.EXTRACTING['OR']:
+          self.EXTRACTING['OR'] = True
+          self.newSteps += self.insertCaculateConsensusSteps('OR', prerequisites=self.initDeps)
+          self.newSteps += self.insertExtractPartSteps('OR', prerequisites=self.newSteps)
 
+        #Particle extraction for training and training
+        trainedParams = self.loadTrainedParams()
+        toTrainSize = self.toTrainDataSize.get() if self.toTrainDataSize.get() != -1 else 1e10
+        if not self.skipTraining.get() and trainedParams['posParticlesTrained'] < toTrainSize:
+          self.doTraining()
 
-          trainedParams = self.loadTrainedParams()
-          toTrainSize = self.toTrainDataSize.get() if self.toTrainDataSize.get() != -1 else 1e10
-          if not self.skipTraining.get() and trainedParams['posParticlesTrained'] < toTrainSize:
-            if len(self.readyToExtractMicFns('NOISE')) >= self.extractingBatch.get() and not self.EXTRACTING['NOISE']:
-              self.EXTRACTING['NOISE'] = True
-              depNoise = self._insertFunctionStep('pickNoise', prerequisites=self.initDeps)
-              depsNoise = self.insertExtractPartSteps('NOISE', prerequisites=[depNoise])
-              newSteps += depsNoise
+        elif trainedParams['posParticlesTrained'] >= toTrainSize and trainedParams['trainingPass'] != '':
+          lastTrainingPass = trainedParams['trainingPass']
+          self.retrievePreviousPassModel('', lastTrainingPass)
+          trainedParams['trainingPass'] = ''
+          self.saveTrainedParams(trainedParams)
 
-            if len(self.readyToExtractMicFns('AND')) >= self.extractingBatch.get() and not self.EXTRACTING['AND']:
-              self.EXTRACTING['AND'] = True
-              depsAnd = self.insertCaculateConsensusSteps('AND', prerequisites=self.initDeps)
-              depsAnd = self.insertExtractPartSteps('AND', prerequisites=[depsAnd])
-              newSteps += depsAnd
+        #Prediction
+        if self.networkReadyToPredict() and self.cnnFree() and self.predictionsOn():
+            self.PREDICTING = True
+            depPredict = self._insertFunctionStep('predictCNN', prerequisites= self.newSteps)
+            self.newSteps += [self._insertFunctionStep('endPredictingStep', prerequisites=[depPredict])]
+            self.newSteps += [self._insertFunctionStep('createOutputStep', prerequisites=[depPredict])]
 
-            trainedParams = self.loadTrainedParams()
-            if self.addTrainingData.get() == self.ADD_DATA_TRAIN_CUST and\
-                    self.trainingDataType == self.ADD_DATA_TRAIN_CUSTOM_OPT_COORS:
-              if self.trainTrueSetOfCoords.get() is not None and \
-                      len(self.readyToExtractMicFns('ADDITIONAL_COORDS_TRUE')) >= self.extractingBatch.get():
-                self.TO_EXTRACT_MICFNS['ADDITIONAL_COORDS_TRUE'] = self.readyToExtractMicFns('ADDITIONAL_COORDS_TRUE')
-                newSteps += self.insertExtractPartSteps('ADDITIONAL_COORDS_TRUE', prerequisites=self.initDeps)
-              if self.trainFalseSetOfCoords.get() is not None and \
-                      len(self.readyToExtractMicFns('ADDITIONAL_COORDS_FALSE')) >= self.extractingBatch.get():
-                self.TO_EXTRACT_MICFNS['ADDITIONAL_COORDS_FALSE'] = self.readyToExtractMicFns('ADDITIONAL_COORDS_FALSE')
-                newSteps += self.insertExtractPartSteps('ADDITIONAL_COORDS_FALSE', prerequisites=self.initDeps)
-
-            if self.cnnFree():
-              self.TO_TRAIN_MICFNS = self.readyToTrainMicFns()
-              if len(self.TO_TRAIN_MICFNS) >= self.trainingBatch.get():
-                self.TRAINING = True
-                self.curTrainedParams = trainedParams
-                self.depsTrain = [self._insertFunctionStep('trainCNN', self.TO_TRAIN_MICFNS, prerequisites=self.initDeps)]
-                self.depsTrain = [self._insertFunctionStep('endTrainingStep', prerequisites=self.depsTrain)]
-                newSteps += self.depsTrain
-
-          elif trainedParams['posParticlesTrained'] >= toTrainSize and trainedParams['trainingPass'] != '':
-            lastTrainingPass = trainedParams['trainingPass']
-            self.retrievePreviousPassModel('', lastTrainingPass)
-            trainedParams['trainingPass'] = ''
-            self.saveTrainedParams(trainedParams)
-
-          if self.networkReadyToPredict() and self.cnnFree() and self.predictionsOn():
-              self.PREDICTING = True
-              depPredict = self._insertFunctionStep('predictCNN', prerequisites= newSteps)
-              newSteps += [self._insertFunctionStep('endPredictingStep', prerequisites=[depPredict])]
-              newSteps += [self._insertFunctionStep('createOutputStep', prerequisites=[depPredict])]
-
-          trainedParams = self.loadTrainedParams()
-          if self.allFree() and not self.LAST_ROUND and self.checkIfParentsFinished():
-            protLast = self._steps[self.lastStep - 1]
-            protLast.addPrerequisites(*newSteps)
-            protLast.setStatus(STATUS_NEW)
-            self.updateSteps()
-
-          protEnd = self._steps[self.endStep-1]
-          protEnd.addPrerequisites(*newSteps)
-          if self.LAST_ROUND and self.allFree():
-            protEnd.setStatus(STATUS_NEW)
+        #Last round with batch size == 1 to include all input
+        if self.allFree() and not self.LAST_ROUND and self.checkIfParentsFinished():
+          protLast = self._steps[self.lastStep - 1]
+          protLast.addPrerequisites(*self.newSteps)
+          protLast.setStatus(STATUS_NEW)
           self.updateSteps()
-          sys.stdout.flush()
+
+        protEnd = self._steps[self.endStep-1]
+        protEnd.addPrerequisites(*self.newSteps)
+        #Ending the protocol when everything is done
+        if self.LAST_ROUND and self.allFree():
+          protEnd.setStatus(STATUS_NEW)
+        self.updateSteps()
 
 
     def endPredictingStep(self):
@@ -622,6 +598,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           json.dump(preprocParams, f)
 
         #Initializing outputs
+        self.inpSampligRate = self._getInputMicrographs().getSamplingRate()
         self.preCorrectedParSet, self.preCoordSet = [], []
 
 
@@ -629,7 +606,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         '''Step which preprocesses the input micrographs'''
         micIds = self.getMicsIds(filterOutNoCoords=False)
         if len(micIds) > 0:
-          samplingRate = self._getInputMicrographs().getSamplingRate()
           mics_ = self._getInputMicrographs()
           micsFnameSet = {mics_[micId].getMicName(): mics_[micId].getFileName() for micId in micIds
                           if mics_[micId] is not None}  # to skip failed mics
@@ -660,7 +636,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           with open(inputsFname, "w") as f:
             f.write(preproMicsContent)
           downFactor = self._getDownFactor()
-          args= "-i %s -s %s -d %s -o %s -t %d"%(inputsFname, samplingRate, downFactor, ouputDir, nThrs)
+          args= "-i %s -s %s -d %s -o %s -t %d"%(inputsFname, self.inpSampligRate, downFactor, ouputDir, nThrs)
           if not self.skipInvert.get():
             args+=" --invert_contrast"
 
@@ -678,7 +654,12 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           makePath(outCoordsDataPath)
         newDep = self._insertFunctionStep('calculateCoorConsensusStep', outCoordsDataPath, mode, prerequisites=prerequisites)
         newDep = self._insertFunctionStep('loadCoords', outCoordsDataPath, mode, prerequisites=[newDep])
-        return newDep
+        return [newDep]
+    
+    def waitFreeInputCoords(self):
+      while self.USING_INPUT_COORDS:
+        time.sleep(1)
+      self.USING_INPUT_COORDS = True
 
     def calculateCoorConsensusStep(self, outCoordsDataPath, mode):
       '''Calculates the consensus coordinates from micrographs whose particles haven't been extracted yet in "mode"'''
@@ -688,24 +669,10 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         for micFn in self.getExtractedMicFns(mode):
           extractedSetOfCoordsFns.append(pwutils.path.replaceBaseExt(micFn,'pos'))
 
-        Tm = []
-        for coordinatesP in self.inputCoordinates:
-          mics = coordinatesP.get().getMicrographs()
-          Tm.append(mics.getSamplingRate())
-        nCoordsSets= len(Tm)
-
-        inputCoordsFnames={}
-        for coord_num, coordinatesP in enumerate(self.inputCoordinates):
-            tmpPosDir= self._getTmpPath("input_coords_%d_%s"%(coord_num, mode))
-            if not os.path.exists(tmpPosDir):
-              makePath(tmpPosDir)
-            writeSetOfCoordinates(tmpPosDir, coordinatesP.get(), scale=float(Tm[coord_num])/float(Tm[0]))
-            for posFname in os.listdir(tmpPosDir):
-                baseName, extension=os.path.splitext(os.path.basename(posFname))
-                if extension==".pos" and not posFname in extractedSetOfCoordsFns:
-                  if baseName not in inputCoordsFnames:
-                      inputCoordsFnames[baseName]=["None"]*nCoordsSets
-                  inputCoordsFnames[baseName][coord_num]= os.path.join(tmpPosDir, posFname)
+        self.waitFreeInputCoords()
+        inputCoordsFnames = self.getInpCoordsFns(mode, extractedSetOfCoordsFns)
+        self.USING_INPUT_COORDS = False
+          
         inputFileHeader="#pos_i\n"
         inputFileStr=inputFileHeader
         for baseName in inputCoordsFnames:
@@ -792,9 +759,12 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           sqliteName = self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE % mode) + ".sqlite"
           if os.path.isfile(self._getExtraPath(sqliteName)):
             cleanPath(self._getExtraPath(sqliteName))
+          
+          self.waitFreeInputCoords()
           totalSetOfCoordinates = readSetOfCoordsFromPosFnames(posCoorsPath,
                                                                setOfInputCoords=self.inputCoordinates[0].get(),
                                                                sqliteOutName=sqliteName, write=True)
+          self.USING_INPUT_COORDS=False
           print("Coordinates %s size: %d" % (mode, totalSetOfCoordinates.getSize()))
           assert totalSetOfCoordinates.getSize() > MIN_NUM_CONSENSUS_COORDS, \
             ("Error, the consensus (%s) of your input coordinates was too small (%s). " +
@@ -805,10 +775,10 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
     def insertExtractPartSteps(self, mode, prerequisites):
         '''Inserts the steps necessary for extracting the particles from the micrographs'''
-        newSteps = []
-        newSteps.append(self._insertFunctionStep("extractParticles", mode, prerequisites= prerequisites))
-        newSteps.append(self._insertFunctionStep("joinSetOfParticlesStep", mode, prerequisites= newSteps))
-        return newSteps
+        self.newSteps = []
+        self.newSteps.append(self._insertFunctionStep("extractParticles", mode, prerequisites= prerequisites))
+        self.newSteps.append(self._insertFunctionStep("joinSetOfParticlesStep", mode, prerequisites= self.newSteps))
+        return self.newSteps
 
     def extractParticles(self, mode):
         '''Extract the particles from a set of micrographs with their corresponding coordinates'''
@@ -817,39 +787,41 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         preprocMicsPath = self._getExtraPath(self.PRE_PROC_MICs_PATH)
         toExtractMicFns = self.TO_EXTRACT_MICFNS[mode]
         print('To extract in mode {}: {}'.format(mode, toExtractMicFns))
-        if len(toExtractMicFns) > 0:
-          for micFname in toExtractMicFns:
-            micFnameBase= pwutils.removeExt(micFname)
-            micFname= os.path.join(preprocMicsPath, micFname)
-            micsFnameSet[micFnameBase]= micFname
-          extractCoordsContent="#mics coords\n"
+        if len(toExtractMicFns) <= 0:
+          return
 
-          if mode.startswith("ADDITIONAL_COORDS"):
-            if not os.path.exists(posDir):
-              os.mkdir(posDir)
-            if mode.endswith("TRUE"):
-              coordSet= self.trainTrueSetOfCoords.get()
-            elif mode.endswith("FALSE"):
-              coordSet= self.trainFalseSetOfCoords.get()
-            writeSetOfCoordinates(posDir, coordSet)
+        for micFname in toExtractMicFns:
+          micFnameBase= pwutils.removeExt(micFname)
+          micFname= os.path.join(preprocMicsPath, micFname)
+          micsFnameSet[micFnameBase]= micFname
+        extractCoordsContent="#mics coords\n"
 
-          for posFname in os.listdir(posDir):
-            posNameBase=  pwutils.removeExt(posFname)
-            posFname= os.path.join(posDir, posFname)
-            if posNameBase in micsFnameSet:
-              extractCoordsContent+= "%s particles@%s\n"%(micsFnameSet[posNameBase], posFname)
+        if mode.startswith("ADDITIONAL_COORDS"):
+          if not os.path.exists(posDir):
+            os.mkdir(posDir)
+          if mode.endswith("TRUE"):
+            coordSet= self.trainTrueSetOfCoords.get()
+          elif mode.endswith("FALSE"):
+            coordSet= self.trainFalseSetOfCoords.get()
+          writeSetOfCoordinates(posDir, coordSet)
 
-          inputsFname= self._getTmpPath("extractParticles_inputs_%s.txt"%mode)
-          outputDir= self._getConsensusParticlesDir(mode)
-          if not os.path.exists(outputDir):
-            makePath(outputDir)
-          nThrs= self.numberOfThreads.get()
-          with open(inputsFname, "w") as f:
-            f.write(extractCoordsContent)
-          downFactor= self._getDownFactor()
-          args= "-i %s -s %s -d %s -o %s -t %d"%(inputsFname, DEEP_PARTICLE_SIZE, downFactor, outputDir, nThrs)
+        for posFname in os.listdir(posDir):
+          posNameBase=  pwutils.removeExt(posFname)
+          posFname= os.path.join(posDir, posFname)
+          if posNameBase in micsFnameSet:
+            extractCoordsContent+= "%s particles@%s\n"%(micsFnameSet[posNameBase], posFname)
 
-          self.runJob('xmipp_extract_particles', args, numberOfMpi=1)
+        inputsFname= self._getTmpPath("extractParticles_inputs_%s.txt"%mode)
+        outputDir= self._getConsensusParticlesDir(mode)
+        if not os.path.exists(outputDir):
+          makePath(outputDir)
+        nThrs= self.numberOfThreads.get()
+        with open(inputsFname, "w") as f:
+          f.write(extractCoordsContent)
+        downFactor= self._getDownFactor()
+        args= "-i %s -s %s -d %s -o %s -t %d"%(inputsFname, DEEP_PARTICLE_SIZE, downFactor, outputDir, nThrs)
+
+        self.runJob('xmipp_extract_particles', args, numberOfMpi=1)
 
     def joinSetOfParticlesStep(self, mode, micFns='', trainingPass='', clean=False):
         '''Stores the particles extracted from a set of micrographs in a images.xmd metadata file'''
@@ -881,6 +853,38 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           imgsXmd.append(fnImages)
         self.EXTRACTING[mode] = False
 
+    def doTraining(self):
+      '''Prepares the positive (AND) and negative (NOISE) coordinates for the training and executes it'''
+      if len(self.readyToExtractMicFns('NOISE')) >= self.extractingBatch.get() and not self.EXTRACTING['NOISE']:
+        self.EXTRACTING['NOISE'] = True
+        depNoise = self._insertFunctionStep('pickNoise', prerequisites=self.initDeps)
+        self.newSteps += self.insertExtractPartSteps('NOISE', prerequisites=[depNoise])
+
+      if len(self.readyToExtractMicFns('AND')) >= self.extractingBatch.get() and not self.EXTRACTING['AND']:
+        self.EXTRACTING['AND'] = True
+        depsAnd = self.insertCaculateConsensusSteps('AND', prerequisites=self.initDeps)
+        self.newSteps += self.insertExtractPartSteps('AND', prerequisites=depsAnd)
+
+      trainedParams = self.loadTrainedParams()
+      if self.addTrainingData.get() == self.ADD_DATA_TRAIN_CUST and \
+              self.trainingDataType == self.ADD_DATA_TRAIN_CUSTOM_OPT_COORS:
+        if self.trainTrueSetOfCoords.get() is not None and \
+                len(self.readyToExtractMicFns('ADDITIONAL_COORDS_TRUE')) >= self.extractingBatch.get():
+          self.TO_EXTRACT_MICFNS['ADDITIONAL_COORDS_TRUE'] = self.readyToExtractMicFns('ADDITIONAL_COORDS_TRUE')
+          self.newSteps += self.insertExtractPartSteps('ADDITIONAL_COORDS_TRUE', prerequisites=self.initDeps)
+        if self.trainFalseSetOfCoords.get() is not None and \
+                len(self.readyToExtractMicFns('ADDITIONAL_COORDS_FALSE')) >= self.extractingBatch.get():
+          self.TO_EXTRACT_MICFNS['ADDITIONAL_COORDS_FALSE'] = self.readyToExtractMicFns('ADDITIONAL_COORDS_FALSE')
+          self.newSteps += self.insertExtractPartSteps('ADDITIONAL_COORDS_FALSE', prerequisites=self.initDeps)
+
+      if self.cnnFree():
+        self.TO_TRAIN_MICFNS = self.readyToTrainMicFns()
+        if len(self.TO_TRAIN_MICFNS) >= self.trainingBatch.get():
+          self.TRAINING = True
+          self.curTrainedParams = trainedParams
+          self.depsTrain = [self._insertFunctionStep('trainCNN', self.TO_TRAIN_MICFNS, prerequisites=self.initDeps)]
+          self.depsTrain = [self._insertFunctionStep('endTrainingStep', prerequisites=self.depsTrain)]
+          self.newSteps += self.depsTrain
 
     def trainCNN(self, toTrainMicFns):
         '''Trains the CNN with the particles from the ready to train micrographs'''
@@ -894,7 +898,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         for mode in ['AND', 'NOISE']:
           self.joinSetOfParticlesStep(mode, toTrainMicFns, trPass, clean=True)
         #Creatting the training pass directory
-        netDataPath = self._getExtraPath("nnetData{}".format(trPass))
+        netDataPath = self._getExtraPath(self.NET_TEMPLATE.format(trPass))
         if not os.path.exists(netDataPath):
           makePath(netDataPath)
         nEpochs = self.nEpochs.get()
@@ -981,9 +985,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           self.joinSetOfParticlesStep(mode='OR', micFns=toPredictMicFns, trainingPass=predExten, clean=True)
           mdORPath = self._getExtraPath("particles_OR{}.xmd".format(predExten))
 
-        netDataPath = self._getExtraPath("nnetData{}".format(trPass))
+        netDataPath = self._getExtraPath(self.NET_TEMPLATE.format(trPass))
         if not os.path.isdir(netDataPath) and self._doContinue():
-            prevRunPath = self.continueRun.get()._getExtraPath("nnetData{}".format(trPass))
+            prevRunPath = self.continueRun.get()._getExtraPath(self.NET_TEMPLATE.format(trPass))
             copyTree(prevRunPath, netDataPath)
         elif self.skipTraining.get() and self._usePretrainedModel():
           self.__retrievePreTrainedModel(netDataPath)
@@ -1008,7 +1012,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             posTestDict = None
             negTestDict = None
 
-        outParticlesPath = self._getPath("particles{}.xmd".format(predExten))
+        outParticlesPath = self._getPath(self.PARTICLES_TEMPLATE.format(predExten))
         fnamesPred, weightsPred= self.__dataDict_toStrs(predictDict)
 
         args= " -n %s --mode score -i %s -o %s "%(netDataPath, fnamesPred, outParticlesPath)
@@ -1045,9 +1049,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     def createFinalOutput(self, closeStream=False):
       predExten = '_partial'
       partSet = self._createSetOfParticles("outputParts_tmp{}".format(predExten))
-      readSetOfParticles(self._getPath("particles{}.xmd".format(predExten)), partSet)
-      inputSampling = self.inputCoordinates[0].get().getMicrographs().getSamplingRate()
-      partSet.setSamplingRate(self._getDownFactor() * inputSampling)
+      readSetOfParticles(self._getPath(self.PARTICLES_TEMPLATE.format(predExten)), partSet)
+      partSet.setSamplingRate(self._getDownFactor() * self.inpSampligRate)
 
       self.outputParticles, self.outputCoordinates = self.getParticlesOutput(partSet), self.getCoordinatesOutput()
 
@@ -1065,17 +1068,15 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           self.outputCoordinates.append(coord)
           self.outputParticles.append(newPart)
 
-      cleanPattern(self._getPath("particles{}.xmd".format(predExten)))
+      cleanPattern(self._getPath(self.PARTICLES_TEMPLATE.format(predExten)))
       cleanPattern(self._getPath("*outputParts_tmp{}.sqlite".format(predExten)))
       writeSetOfParticles(self.outputParticles, self._getPath("particles.xmd"))
       self.updateOutput(closeStream)
 
     def createPreliminarOutput(self, trPass):
       partSet = self._createSetOfParticles("outputParts_tmp{}".format(trPass))
-      readSetOfParticles(self._getPath("particles{}.xmd".format(trPass)), partSet)
-      inputSampling = self.inputCoordinates[0].get().getMicrographs().getSamplingRate()
-      partSet.setSamplingRate(self._getDownFactor() * inputSampling)
-      boxSize = self._getBoxSize()
+      readSetOfParticles(self._getPath(self.PARTICLES_TEMPLATE.format(trPass)), partSet)
+      partSet.setSamplingRate(self._getDownFactor() * self.inpSampligRate)
 
       self.preliminarOutputParticles = self.getPreParticlesOutput(partSet)
       self.preliminarOutputCoordinates = self.getPreCoordinatesOutput()
@@ -1093,9 +1094,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           self.preliminarOutputCoordinates.append(coord)
           self.preliminarOutputParticles.append(part)
 
-      cleanPattern(self._getPath("particles{}.xmd".format(trPass)))
+      cleanPattern(self._getPath(self.PARTICLES_TEMPLATE.format(trPass)))
       cleanPattern(self._getPath("*outputParts_tmp{}.sqlite".format(trPass)))
-      writeSetOfParticles(self.preliminarOutputParticles, self._getPath("particles{}.xmd".format(trPass)))
+      writeSetOfParticles(self.preliminarOutputParticles, self._getPath(self.PARTICLES_TEMPLATE.format(trPass)))
       self.updatePreOutput(closeStream=True)
 
     def getPreCoordinatesOutput(self):
@@ -1105,8 +1106,10 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       self.preliminarOutputCoordinates.setBoxSize(self._getBoxSize())
       self.preliminarOutputCoordinates.setStreamState(SetOfParticles.STREAM_OPEN)
       self._defineOutputs(preliminarOutputCoordinates=self.preliminarOutputCoordinates)
+      self.waitFreeInputCoords()
       for inSetOfCoords in self.inputCoordinates:
         self._defineSourceRelation(inSetOfCoords.get(), self.preliminarOutputCoordinates)
+      self.USING_INPUT_COORDS = False
       return self.preliminarOutputCoordinates
 
     def getCoordinatesOutput(self):
@@ -1117,8 +1120,10 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         self.outputCoordinates.setBoxSize(self._getBoxSize())
         self.outputCoordinates.setStreamState(SetOfParticles.STREAM_OPEN)
         self._defineOutputs(outputCoordinates=self.outputCoordinates)
+        self.waitFreeInputCoords()
         for inSetOfCoords in self.inputCoordinates:
           self._defineSourceRelation(inSetOfCoords.get(), self.outputCoordinates)
+        self.USING_INPUT_COORDS = False
       else:
         # Micrographs of the set removed because there might be new ones in streaming
         self.outputCoordinates.setMicrographs(self.coordinatesDict['OR'].getMicrographs())
@@ -1219,16 +1224,18 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       '''Return a list with the filenames of those microgrpahs which already have coordinates associated in the input
       sets. If shared, it must be in all the sets, if not shared, at least in one'''
       sharedMics = self.getAllCoordsInputMicrographs(shared)
+      self.waitFreeInputCoords()
       micPaths = []
       for micFn in sharedMics:
         coordsInMic, mic = [], sharedMics[micFn]
         for coordSet in self.inputCoordinates:
           for coord in coordSet.get().iterCoordinates(mic):
-            coordsInMic.append(True)
+            coordsInMic.append(coord)
             break
 
         if len(coordsInMic) == len(self.inputCoordinates):
           micPaths.append(mic.getFileName())
+      self.USING_INPUT_COORDS = False
 
       micFns = self.prunePaths(micPaths)
       return micFns
@@ -1238,8 +1245,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       If shared, the list contains only those micrographs present in all input coordinates sets, else the list contains
       all microgrpah present in any set (Intersection vs Union)
       Do not create a set, because of concurrency in the database'''
-      micFns = set([])
-      micDict = {}
+      self.waitFreeInputCoords()
+      micDict, micFns = {}, set([])
+
       for inputCoord in self.inputCoordinates:
         newMics = inputCoord.get().getMicrographs()
         newMicFns = []
@@ -1253,20 +1261,17 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         else:
           micFns = micFns & set(newMicFns)
 
+      self.USING_INPUT_COORDS = False
       sharedMicDict = {}
       for micFn in micFns:
         sharedMicDict[micFn] = micDict[micFn]
-
-      #mics = self._createSetOfMicrographs(suffix='_shared'+str(shared))
-      #for micFn in micFns:
-      #  mics.append(micDict[micFn])
-      #mics.copyInfo(self.inputCoordinates[0].get().getMicrographs())
 
       return sharedMicDict
 
     def _getInputMicrographs(self):
       '''Return a list with the micrographs corresponding the input coordinates'''
       if not hasattr(self, "inputMicrographs") or not self.inputMicrographs:
+        self.waitFreeInputCoords()
         if len(self.inputCoordinates) == 0:
           print("WARNING. PROVIDE MICROGRAPHS FIRST")
         else:
@@ -1274,12 +1279,15 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           if inputMicrographs is None:
             raise ValueError("there are problems with your coordiantes, they do not have associated micrographs ")
           self.inputMicrographs = inputMicrographs
+        self.USING_INPUT_COORDS = False
       return self.inputMicrographs
 
     def _getBoxSize(self):
       '''Returns the box size of the input coordinates'''
       if not hasattr(self, "boxSize") or not self.boxSize:
+        self.waitFreeInputCoords()
         firstCoords = self.inputCoordinates[0].get()
+        self.USING_INPUT_COORDS = False
         self.boxSize = firstCoords.getBoxSize()
         self.downFactor = self.boxSize / float(DEEP_PARTICLE_SIZE)
       return self.boxSize
@@ -1321,9 +1329,11 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                     "mics_skipInvert": self.skipInvert.get(),
                     "mics_pathToMics": pathToMics,
                     "mics_pathToCtfs": pathToCtfs}
+        self.waitFreeInputCoords()
         coordsNames=[]
         for inputCoords in self.inputCoordinates:
           coordsNames.append( inputCoords.get().getFileName() )
+        self.USING_INPUT_COORDS = False
         coordsNames= tuple(sorted(coordsNames))
         paramsInfo["coords_pathCoords"]= coordsNames
 
@@ -1355,7 +1365,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     def readyPreliminarPrediction(self):
       '''Return a boolean for whether to perform a preliminar predition. True if the user set it and the current
       trained network has not been used yet'''
-      if self.networkReadyToPredict:
+      if self.networkReadyToPredict():
         trainedParams = self.loadTrainedParams()
         if not trainedParams['trainingPass'] in trainedParams[
           'predictionPasses'] and self.doPreliminarPredictions.get():
@@ -1382,12 +1392,16 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
     def checkIfParentsFinished(self):
       '''Check the streamState of the coordinates input to check if the parent protocols are finsihed'''
+      self.waitFreeInputCoords()
+      finished=True
       for coords in self.inputCoordinates:
         coords = coords.get()
         coords.loadAllProperties()
         if coords.isStreamOpen():
-          return False
-      return True
+          finished = False
+          break
+      self.USING_INPUT_COORDS = False
+      return finished
 
     def checkIfNewMics(self, mode=''):
       '''Check if the are new micrographs ready for extracting particles'''
@@ -1405,21 +1419,18 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         '''Returns the input micrographs Ids'''
         if not filterOutNoCoords:
           return self._getInputMicrographs().getIdSet()
-        micIds= set([])
-        micFnames= set([])
+        self.waitFreeInputCoords()
+        micFnames, micIds = set([]), set([])
         for coordinatesP in self.inputCoordinates:
             for coord in coordinatesP.get():
               micIds.add( coord.getMicId())
               micFnames.add( coord.getMicName() )
+        self.USING_INPUT_COORDS = False
         return sorted( micIds )
 
     def getInputMicsFns(self, shared):
       '''Returns the input micrographs filenames'''
-      micFnames = []
-      micDic = self.getAllCoordsInputMicrographs(shared)
-      for micFn in micDic:
-        micFnames.append(micFn)
-      return sorted(micFnames)
+      return sorted(self.getAllCoordsInputMicrographs(shared).keys())
 
     def prunePaths(self, paths):
       fns = []
@@ -1482,6 +1493,27 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       readyToPredict = list(extractedMicFns - set(self.getPredictedMicFns()))
       return readyToPredict
 
+    def getInpCoordsFns(self, mode, extractedSetOfCoordsFns):
+      Tm = []
+      for coordinatesP in self.inputCoordinates:
+        mics = coordinatesP.get().getMicrographs()
+        Tm.append(mics.getSamplingRate())
+      nCoordsSets = len(Tm)
+
+      inputCoordsFnames = {}
+      for coord_num, coordinatesP in enumerate(self.inputCoordinates):
+        tmpPosDir = self._getTmpPath("input_coords_%d_%s" % (coord_num, mode))
+        if not os.path.exists(tmpPosDir):
+          makePath(tmpPosDir)
+        writeSetOfCoordinates(tmpPosDir, coordinatesP.get(), scale=float(Tm[coord_num]) / float(Tm[0]))
+        for posFname in os.listdir(tmpPosDir):
+          baseName, extension = os.path.splitext(os.path.basename(posFname))
+          if extension == ".pos" and not posFname in extractedSetOfCoordsFns:
+            if baseName not in inputCoordsFnames:
+              inputCoordsFnames[baseName] = ["None"] * nCoordsSets
+            inputCoordsFnames[baseName][coord_num] = os.path.join(tmpPosDir, posFname)
+      return inputCoordsFnames
+
     #Training params utils
     def loadTrainedParams(self):
       '''Load the dictionary stored in pickle format which stores the trained parameters.
@@ -1516,17 +1548,17 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     #CNN models utils
     def retrievePreviousPassModel(self, trPass, lastTrPass=''):
       '''Retrieves a previous CNN model and copies its folders to used the network in a new location'''
-      curNetDataPath = self._getExtraPath("nnetData{}".format(trPass))
+      curNetDataPath = self._getExtraPath(self.NET_TEMPLATE.format(trPass))
       if trPass == '':
-        prevNetDataPath = self._getExtraPath("nnetData{}".format(lastTrPass))
+        prevNetDataPath = self._getExtraPath(self.NET_TEMPLATE.format(lastTrPass))
       else:
-        prevNetDataPath = self._getExtraPath("nnetData{}".format(trPass - 1))
+        prevNetDataPath = self._getExtraPath(self.NET_TEMPLATE.format(trPass - 1))
       if prevNetDataPath != curNetDataPath:
         copyTree(prevNetDataPath, curNetDataPath)
 
     def retrievePreviousRunModel(self, prevProt, trPass=''):
       '''Retrieves a CNN model from other protocol and copies its folders to used the network in a new location'''
-      curNetDataPath = self._getExtraPath("nnetData{}".format(trPass))
+      curNetDataPath = self._getExtraPath(self.NET_TEMPLATE.format(trPass))
       prevNetDataPath = prevProt._getExtraPath("nnetData")
       if prevNetDataPath != curNetDataPath:
         copyTree(prevNetDataPath, curNetDataPath)
