@@ -93,19 +93,16 @@ class XmippProtCL2DMap(ProtAnalysis2D):
 
     def computeMappingStep(self):
         metadata = self._getExtraPath('classes.xmd')
-        # self.metadata = pwutils.replaceExt(self.inputClasses.get().getFirstItem().getRepresentative().getFileName(), 'xmd')
         params = dict(metadata=metadata, method=self.red_methods[self.method.get()],
                       metric=self.distances[self.distance.get()])
-        args = '-i {metadata} -m {method} --distance {metric}'.format(**params)
+        args = '-i classes@{metadata} -m {method} --distance {metric}'.format(**params)
 
         self.runJob("xmipp_transform_dimred", args)
 
     def interactiveSelStep(self):
-        self.metadata = self._getExtraPath('classes.xmd')
-        # self.metadata = pwutils.replaceExt(self.inputClasses.get().getFirstItem().getRepresentative().getFileName(),
-        #                                    'xmd')
+        metadata = self._getExtraPath('classes.xmd')
         self.classes = self.inputClasses.get()
-        self.mdOut = md.MetaData(self.metadata)
+        self.mdOut = md.MetaData(metadata)
         if self.intSel.get():
             img_paths = np.unique(np.asarray([rep.getFileName() for rep in self.classes.iterRepresentatives()]))
             img_ids = []
@@ -145,26 +142,22 @@ class XmippProtCL2DMap(ProtAnalysis2D):
 
 
     def _createOutputStep(self):
-        self._loadClassesInfo(self.metadata)
+        self._loadClassesInfo()
         suffix = self.__getOutputSuffix()
         selected_classes = self._createSetOfClasses2D(self.classes.getImages(), suffix=suffix)
-
-        iterator = md.SetMdIterator(self.mdOut, sortByLabel=md.MDL_ITEM_ID,
-                                    updateItemCallback=self._updateParticle,
-                                    keyLabel=md.MDL_REF, skipDisabled=True)
-        selected_classes.classifyItems(updateItemCallback=iterator.updateItem,
-                                       updateClassCallback=self._updateClass,
-                                       iterParams={'iterate': False})
+        selected_classes.copyInfo(self.classes)
+        selected_classes.appendFromClasses(self.classes, updateClassCallback=self._updateClass,
+                                           filterClassFunc=self.skipUnselectedClass)
 
         result = {'selectedClasses2D_' + suffix: selected_classes}
         self._defineOutputs(**result)
         self._defineSourceRelation(self.inputClasses, selected_classes)
 
-    def _updateParticle(self, item, row):
-        item.setClassId(row.getValue(md.MDL_REF))
-        item.setTransform(rowToAlignment(row, ALIGN_2D))
-        if not row.getValue(md.MDL_REF) in self.selection:
-            item._appendItem = False
+    def skipUnselectedClass(self, cls):
+        if cls.getObjId() in self.selection:
+            return True
+        else:
+            return False
 
     def _updateClass(self, item):
         classId = item.getObjId()
@@ -176,8 +169,7 @@ class XmippProtCL2DMap(ProtAnalysis2D):
         rep._c_x = Float(c[0])
         rep._c_y = Float(c[1])
 
-
-    def _loadClassesInfo(self, filename):
+    def _loadClassesInfo(self):
         """ Read some information about the produced 2D classes
         from the metadata file.
         """
