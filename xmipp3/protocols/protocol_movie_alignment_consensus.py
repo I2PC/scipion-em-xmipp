@@ -103,6 +103,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         self.isStreamClosed = self.inputMovies1.get().isStreamClosed() and \
                               self.inputMovies2.get().isStreamClosed()
         self.samplingRate = self.inputMovies1.get().getSamplingRate()
+        self.acquisition = self.inputMovies1.get().getAcquisition()
 
         self.allMovies1 = {movie.getObjId(): movie.clone() for movie
                            in self._loadInputMovieSet(self.movieFn1).iterItems()}
@@ -216,7 +217,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         #if self.isContinued() and os.path.exists(movieDoneFn):
         #    self.info("Skipping movie: %s, seems to be done" % fn1)
         #    return
-
         print(fn1)
         print(fn2)
         print(movieID1)
@@ -286,6 +286,9 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         newDoneDiscarded = [movieId for movieId in movieListIdDiscarded
                             if movieId not in doneListDiscarded]
 
+        firstTimeAccepted = len(doneListAccepted) == 0
+        firstTimeDiscarded = len(doneListDiscarded) == 0
+
         allDone = len(doneListAccepted) + len(doneListDiscarded) +\
                   len(newDoneAccepted) + len(newDoneDiscarded)
 
@@ -303,6 +306,10 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
                 self.fillOutput(movSet, micSet, newDone, label)
                 movSet.setSamplingRate(self.samplingRate)
                 micSet.setSamplingRate(self.samplingRate)
+                micSet.setAcquisition(self.acquisition)
+                #print(micSet.hasAcquisition())
+                #print(micSet.getObjDict())
+                #micSet.copyInfo(self.inputMovies1.get())
 
                 return movSet, micSet
             return None, None
@@ -316,17 +323,26 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         # so we exit from the function here
             return
 
-        def updateRelationsAndClose(movieSet, micSet, label=''):
+        def updateRelationsAndClose(movieSet, micSet, first, label=''):
             if os.path.exists(self._getPath('movies'+label+'.sqlite')):
                 micsAttrName = 'outputMicrographs'+label
                 self._updateOutputSet(micsAttrName, micSet, streamMode)
                 self._updateOutputSet('outputMovies'+label, movieSet, streamMode)
 
+                if first:
+                    # We consider that Movies are 'transformed' into the Micrographs
+                    # This will allow to extend the CTF associated to a set of
+                    # micrographs to another set of micrographs generated from a
+                    # different movie alignment
+                    self._defineTransformRelation(self.inputMovies1, micSet)
+
                 micSet.close()
                 movieSet.close()
 
-        updateRelationsAndClose(movieSet, micSet)
-        updateRelationsAndClose(movieSetDiscarded, micSetDiscarded, DISCARDED)
+        print(micSet.getAcquisition())
+        print(micSet.getObjDict())
+        updateRelationsAndClose(movieSet, micSet, firstTimeAccepted)
+        updateRelationsAndClose(movieSetDiscarded, micSetDiscarded, firstTimeDiscarded, DISCARDED)
 
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
@@ -342,9 +358,13 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
 
             for movieId in newDone:
                 movie = inputMovieSet[movieId].clone()
-                movie.setSamplingRate(self.samplingRate)
                 mic = inputMicSet[movieId].clone()
+                #newMovie = self._createOutputMovie(movie)
+
+                movie.setSamplingRate(self.samplingRate)
                 mic.setSamplingRate(self.samplingRate)
+                mic.setAcquisition(self.acquisition)
+
                 movie.setEnabled(self._getEnable(movieId))
                 mic.setEnabled(self._getEnable(movieId))
 
@@ -389,6 +409,9 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         else:
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
+
+            inputMovies = self.inputMovies1.get()
+            outputSet.copyInfo(inputMovies)
 
         return outputSet
 
