@@ -598,7 +598,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           json.dump(preprocParams, f)
 
         #Initializing outputs
-        self.inpSampligRate = self._getInputMicrographs().getSamplingRate()
+        self.inSamplingRate = self._getInputMicrographs().getSamplingRate()
         self.preCorrectedParSet, self.preCoordSet = [], []
 
 
@@ -636,7 +636,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           with open(inputsFname, "w") as f:
             f.write(preproMicsContent)
           downFactor = self._getDownFactor()
-          args= "-i %s -s %s -d %s -o %s -t %d"%(inputsFname, self.inpSampligRate, downFactor, ouputDir, nThrs)
+          args= "-i %s -s %s -d %s -o %s -t %d"%(inputsFname, self.inSamplingRate, downFactor, ouputDir, nThrs)
           if not self.skipInvert.get():
             args+=" --invert_contrast"
 
@@ -1050,7 +1050,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       predExten = '_partial'
       partSet = self._createSetOfParticles("outputParts_tmp{}".format(predExten))
       readSetOfParticles(self._getPath(self.PARTICLES_TEMPLATE.format(predExten)), partSet)
-      partSet.setSamplingRate(self._getDownFactor() * self.inpSampligRate)
+      partSet.setSamplingRate(self._getDownFactor() * self.inSamplingRate)
 
       self.outputParticles, self.outputCoordinates = self.getParticlesOutput(partSet), self.getCoordinatesOutput()
 
@@ -1076,7 +1076,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     def createPreliminarOutput(self, trPass):
       partSet = self._createSetOfParticles("outputParts_tmp{}".format(trPass))
       readSetOfParticles(self._getPath(self.PARTICLES_TEMPLATE.format(trPass)), partSet)
-      partSet.setSamplingRate(self._getDownFactor() * self.inpSampligRate)
+      partSet.setSamplingRate(self._getDownFactor() * self.inSamplingRate)
 
       self.preliminarOutputParticles = self.getPreParticlesOutput(partSet)
       self.preliminarOutputCoordinates = self.getPreCoordinatesOutput()

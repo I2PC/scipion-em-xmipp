@@ -48,6 +48,10 @@ from xmipp3.protocols.protocol_align_volume import (ALIGN_ALGORITHM_EXHAUSTIVE,
                                                ALIGN_ALGORITHM_EXHAUSTIVE_LOCAL,
                                                ALIGN_ALGORITHM_LOCAL)
 
+MSG_WRONG_SAMPLING = "wrong sampling rate"
+MSG_WRONG_SIZE = "wrong size"
+MSG_MASK_ERROR = "There was a problem with create mask from volume"
+
 
 class TestXmippBase(BaseTest):
     """ Some utility functions to import volumes that are used in several tests."""
@@ -120,7 +124,7 @@ class TestXmippCreateMask3D(TestXmippBase):
         protMask1.setObjLabel('threshold mask')
         self.launchProtocol(protMask1)
         self.assertIsNotNone(protMask1.outputMask,
-                             "There was a problem with create mask from volume")
+                             MSG_MASK_ERROR)
 
 
         print("Run create segment mask from volume")
@@ -131,7 +135,7 @@ class TestXmippCreateMask3D(TestXmippBase):
         protMask2.setObjLabel('segmentation automatic')
         self.launchProtocol(protMask2)
         self.assertIsNotNone(protMask2.outputMask,
-                             "There was a problem with create mask from volume")
+                             MSG_MASK_ERROR)
 
     
         print("Run create mask from another mask")
@@ -789,6 +793,56 @@ class TestXmippProtAlignVolume(TestXmippBase):
         protAlign.inputVolumes.append(self.protImport2.outputVolume)
         self.launchProtocol(protAlign)
 
+    def testExhaustiveCircularMask(self):
+        protAlign = self.newProtocol(XmippProtAlignVolume,
+                                     inputReference=self.protImport1.outputVolume,
+                                     alignmentAlgorithm=ALIGN_ALGORITHM_EXHAUSTIVE,
+                                     minRotationalAngle=65,
+                                     maxRotationalAngle=100,
+                                     stepRotationalAngle=10,
+                                     minTiltAngle=65,
+                                     maxTiltAngle=100,
+                                     stepTiltAngle=10,
+                                     minInplaneAngle=0,
+                                     maxInplaneAngle=0,
+                                     stepInplaneAngle=0,
+                                     applyMask=True,
+                                     maskType=0,
+                                     maskRadius=22,
+                                     numberOfMpi=1, numberOfThreads=1
+                                     )
+        protAlign.inputVolumes.append(self.protImport2.outputVolume)
+        self.launchProtocol(protAlign)
+
+    def testExhaustiveBinaryMask(self):
+        protMask = self.newProtocol(XmippProtCreateMask3D,
+                                    source=0,
+                                    volumeOperation=0,
+                                    threshold=0.0)
+        protMask.inputVolume.set(self.protImport1.outputVolume)
+        self.launchProtocol(protMask)
+        self.assertIsNotNone(protMask.outputMask,
+                             MSG_MASK_ERROR)
+        protAlign = self.newProtocol(XmippProtAlignVolume,
+                                     inputReference=self.protImport1.outputVolume,
+                                     alignmentAlgorithm=ALIGN_ALGORITHM_EXHAUSTIVE,
+                                     minRotationalAngle=65,
+                                     maxRotationalAngle=100,
+                                     stepRotationalAngle=10,
+                                     minTiltAngle=65,
+                                     maxTiltAngle=100,
+                                     stepTiltAngle=10,
+                                     minInplaneAngle=0,
+                                     maxInplaneAngle=0,
+                                     stepInplaneAngle=0,
+                                     applyMask=True,
+                                     maskType=1,
+                                     numberOfMpi=1, numberOfThreads=1
+                                     )
+        protAlign.inputVolumes.append(self.protImport2.outputVolume)
+        protAlign.maskFile.set(protMask.outputMask)
+        self.launchProtocol(protAlign)
+
 
 class TestXmippProtHelicalParameters(TestXmippBase):
     @classmethod
@@ -1048,8 +1102,8 @@ class TestXmippPdbConvert(TestXmippBase):
         self.launchProtocol(protConvert)
         self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
         self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
-                               msg="wrong sampling rate")
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1, msg="wrong size")
+                               msg=MSG_WRONG_SAMPLING)
+        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1, msg=MSG_WRONG_SIZE)
         
     def testXmippPdbConvertFromObj(self):
         print("Run convert a pdb from import")
@@ -1066,8 +1120,9 @@ class TestXmippPdbConvert(TestXmippBase):
         self.launchProtocol(protConvert)
         self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
         self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
-                               msg="wrong sampling rate")
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1, msg="wrong size")
+                               msg=MSG_WRONG_SAMPLING)
+        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1,
+                               msg=MSG_WRONG_SIZE)
 
     def testXmippPdbConvertFromFn(self):
         print("Run convert a pdb from file")
@@ -1075,8 +1130,8 @@ class TestXmippPdbConvert(TestXmippBase):
         self.launchProtocol(protConvert)
         self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
         self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
-                               msg="wrong sampling rate")
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], 48, places=1, msg="wrong size")
+                               msg=MSG_WRONG_SAMPLING)
+        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], 48, places=1, msg=MSG_WRONG_SIZE)
 
 
 class TestXmippValidateNonTilt(TestXmippBase):
