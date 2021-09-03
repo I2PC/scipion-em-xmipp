@@ -100,6 +100,7 @@ class XmippProtCL2DMap(ProtAnalysis2D):
         self.runJob("xmipp_transform_dimred", args)
 
     def interactiveSelStep(self):
+        selection_file = self._getExtraPath('selected_ids.txt')
         metadata = self._getExtraPath('classes.xmd')
         self.classes = self.inputClasses.get()
         self.mdOut = md.MetaData(metadata)
@@ -110,15 +111,16 @@ class XmippProtCL2DMap(ProtAnalysis2D):
             pos = []
 
             for row in md.iterRows(self.mdOut):
-                pos.append(self.mdOut.getValue(MDL_DIMRED_COEFFS, row.getObjId()))
-                img_ids.append(self.mdOut.getValue(md.MDL_REF, row.getObjId()))
-                occupancy.append(self.mdOut.getValue(md.MDL_CLASS_COUNT, row.getObjId()))
+                rowId = row.getObjId()
+                pos.append(self.mdOut.getValue(MDL_DIMRED_COEFFS, rowId))
+                img_ids.append(self.mdOut.getValue(md.MDL_REF, rowId))
+                occupancy.append(self.mdOut.getValue(md.MDL_CLASS_COUNT, rowId))
             occupancy = np.asarray(occupancy)
             pos = np.vstack(pos)
 
             # Read selected ids from previous runs (if they exist)
-            if os.path.isfile(self._getExtraPath('selected_ids.txt')):
-                self.selection = np.loadtxt(self._getExtraPath('selected_ids.txt'))
+            if os.path.isfile(selection_file):
+                self.selection = np.loadtxt(selection_file)
                 self.selection = [int(self.selection)] if self.selection.size == 1 else \
                                   self.selection.astype(int).tolist()
             else:
@@ -131,7 +133,7 @@ class XmippProtCL2DMap(ProtAnalysis2D):
             self.selection = view.selected_ids
 
             # Save selected ids for interactive mode
-            np.savetxt(self._getExtraPath('selected_ids.txt'), np.asarray(self.selection))
+            np.savetxt(selection_file, np.asarray(self.selection))
 
             if askYesNo(Message.TITLE_SAVE_OUTPUT, Message.LABEL_SAVE_OUTPUT, None):
                 self._createOutputStep()
@@ -143,7 +145,7 @@ class XmippProtCL2DMap(ProtAnalysis2D):
 
     def _createOutputStep(self):
         self._loadClassesInfo()
-        suffix = self.__getOutputSuffix()
+        suffix = self._getOutputSuffix()
         selected_classes = self._createSetOfClasses2D(self.classes.getImages(), suffix=suffix)
         selected_classes.copyInfo(self.classes)
         selected_classes.appendFromClasses(self.classes, updateClassCallback=self._updateClass,
@@ -202,7 +204,7 @@ class XmippProtCL2DMap(ProtAnalysis2D):
         return methods
     
     #--------------------------- UTILS functions -------------------------------
-    def __getOutputSuffix(self):
+    def _getOutputSuffix(self):
         maxCounter = -1
         for attrName, _ in self.iterOutputAttributes(SetOfClasses2D):
             suffix = attrName.replace('selectedClasses2D_', '')
@@ -234,7 +236,7 @@ class ScatterImageMarker(object):
         lim_y_low, lim_y_high = -1.5 * np.amax(np.abs(self.pos[:, 1])), 1.5 * np.amax(np.abs(self.pos[:, 1]))
         self.ax.set_xlim(lim_x_low, lim_x_high)
         self.ax.set_ylim(lim_y_low, lim_y_high)
-        plt.title('Interactive Class Selector', fontweight="bold", fontsize=15)
+        plt.title('Interactive class selector', fontweight="bold", fontsize=15)
         plt.setp(self.ax.get_yticklabels(), fontweight="bold")
         plt.setp(self.ax.get_xticklabels(), fontweight="bold")
         plt.rcParams["font.weight"] = "bold"
@@ -266,19 +268,7 @@ class ScatterImageMarker(object):
     def is_window_closed(self, event):
         self.running = False
 
-    def initializePlot(self):
-        if self.occupancy is not None:
-            cmap = get_cmap('cool')
-            _ = [self.imScatter(image, x, y, imid, cmap(occupancy))
-                 for x, y, image, occupancy, imid in zip(self.pos[:, 0], self.pos[:, 1],
-                                                         self.images, self.occupancy, self.ids)]
-            cb = self.fig.colorbar(ScalarMappable(cmap=cmap), ax=self.ax, extend='both')
-            cb.set_label("Class Occupancy", fontweight="bold", labelpad=15)
-        else:
-            _ = [self.imScatter(image, x, y, imid)
-                 for x, y, image, imid in zip(self.pos[:, 0], self.pos[:, 1], self.images, self.ids)]
-        self.ax.scatter(self.pos[:, 0], self.pos[:, 1], alpha=0, picker=True)  # Probably set pickradius param?
-
+    def setPickCallback(self):
         # Picking callback
         def onPickImage(event):
             ind = event.ind[0]
@@ -300,17 +290,17 @@ class ScatterImageMarker(object):
 
         self.fig.canvas.mpl_connect('pick_event', onPickImage)
 
+    def setSliderCallback(self):
         # Slider callback
         slider = plt.axes([0.28, 0.01, 0.3, 0.03], facecolor='lavender') if self.occupancy is not None else \
             plt.axes([0.355, 0.01, 0.3, 0.03], facecolor='lavender')
         self.size_slider = Slider(ax=slider,
-                                  label='Image Zoom',
+                                  label='Image zoom',
                                   valstep=0.1,
                                   valmin=0,
                                   valmax=2,
                                   valinit=self.zoom,
                                   color='springgreen')
-
         def updateSize(val):
             self.pad = val * self.pad / self.zoom
             self.zoom = val
@@ -322,18 +312,16 @@ class ScatterImageMarker(object):
 
         self.size_slider.on_changed(updateSize)
 
+    def setRectangleSelector(self):
         # Rectangle Selector
         def images_select(eclick, erelease):
             x1, y1 = eclick.xdata, eclick.ydata
             x2, y2 = erelease.xdata, erelease.ydata
-            if x1 < x2:
-                x_inrange = np.logical_and(self.pos[:, 0] >= x1, self.pos[:, 0] <= x2)
-            else:
-                x_inrange = np.logical_and(self.pos[:, 0] >= x2, self.pos[:, 0] <= x1)
-            if y1 < y2:
-                y_inrange = np.logical_and(self.pos[:, 1] >= y1, self.pos[:, 1] <= y2)
-            else:
-                y_inrange = np.logical_and(self.pos[:, 1] >= y2, self.pos[:, 1] <= y1)
+            x_sorted, y_sorted = [x1, x2], [y1, y2]
+            x_sorted.sort()
+            y_sorted.sort()
+            x_inrange = np.logical_and(self.pos[:, 0] >= x_sorted[0], self.pos[:, 0] <= x_sorted[1])
+            y_inrange = np.logical_and(self.pos[:, 1] >= y_sorted[0], self.pos[:, 1] <= y_sorted[1])
             ids_inrange = np.argwhere(np.logical_and(x_inrange, y_inrange)).flatten()
             for ind in ids_inrange:
                 selected_artist = self.artists[ind]
@@ -366,6 +354,7 @@ class ScatterImageMarker(object):
                                                interactive=False)
         self.fig.canvas.mpl_connect('key_press_event', toggle_selector)
 
+    def setSelectionButtons(self):
         # Selection Buttons
         def selectAll(event):
             self.selected_ids = self.ids.copy()
@@ -387,10 +376,29 @@ class ScatterImageMarker(object):
 
         axprev = plt.axes([0.65, 0.015, 0.15, 0.035], facecolor='lavender')
         axnext = plt.axes([0.81, 0.015, 0.15, 0.035], facecolor='lavender')
-        self.bnall = Button(axnext, 'Select All')
+        self.bnall = Button(axnext, 'Select all')
         self.bnall.on_clicked(selectAll)
-        self.bnone = Button(axprev, 'Select None')
+        self.bnone = Button(axprev, 'Select none')
         self.bnone.on_clicked(selectNone)
+
+    def initializePlot(self):
+        if self.occupancy is not None:
+            cmap = get_cmap('cool')
+            _ = [self.imScatter(image, x, y, imid, cmap(occupancy))
+                 for x, y, image, occupancy, imid in zip(self.pos[:, 0], self.pos[:, 1],
+                                                         self.images, self.occupancy, self.ids)]
+            cb = self.fig.colorbar(ScalarMappable(cmap=cmap), ax=self.ax, extend='both')
+            cb.set_label("Class occupancy", fontweight="bold", labelpad=15)
+        else:
+            _ = [self.imScatter(image, x, y, imid)
+                 for x, y, image, imid in zip(self.pos[:, 0], self.pos[:, 1], self.images, self.ids)]
+        self.ax.scatter(self.pos[:, 0], self.pos[:, 1], alpha=0, picker=True)  # Probably set pickradius param?
+
+        # Callback initialization
+        self.setPickCallback()
+        self.setSliderCallback()
+        self.setRectangleSelector()
+        self.setSelectionButtons()
 
         # Wait until interactive plot is closed
         self.fig.canvas.mpl_connect('close_event', self.is_window_closed)
