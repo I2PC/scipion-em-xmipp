@@ -98,7 +98,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         self.processedDict = []
         self.movieFn1 = self.inputMovies1.get().getFileName()
         self.movieFn2 = self.inputMovies2.get().getFileName()
-        self.micsFn = self._getMicsPath(self.movieFn1)
+        self.micsFn = self._getMicsPath()
         self.stats = {}
         self.isStreamClosed = self.inputMovies1.get().isStreamClosed() and \
                               self.inputMovies2.get().isStreamClosed()
@@ -157,8 +157,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         movieSet1 = self._loadInputMovieSet(self.movieFn1)
         movieSet2 = self._loadInputMovieSet(self.movieFn2)
 
-        # FILTRAR EN LA BASE DE DATOS LOS NEWIDS por timestamp en el loadinputMovieSet
-        movieDict1 = {movie.getObjId(): movie.clone() for movie in movieSet1.iterItems()}
+        movieDict1 = {movie.getObjId(): movie.clone() for movie in movieSet1.iterItems()} # HERE OPTIMZE BY ITER ONLY ON THOSE >= getObjCreation
         movieDict2 = {movie.getObjId(): movie.clone() for movie in movieSet2.iterItems()}
 
         newIds1 = [idMovie for idMovie in movieDict1.keys() if idMovie not in self.processedDict]
@@ -306,10 +305,8 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
                 self.fillOutput(movSet, micSet, newDone, label)
                 movSet.setSamplingRate(self.samplingRate)
                 micSet.setSamplingRate(self.samplingRate)
-                micSet.setAcquisition(self.acquisition)
-                #print(micSet.hasAcquisition())
-                #print(micSet.getObjDict())
-                #micSet.copyInfo(self.inputMovies1.get())
+                micSet.setAcquisition(self.acquisition.clone())
+                movSet.setAcquisition(self.acquisition.clone())
 
                 return movSet, micSet
             return None, None
@@ -331,16 +328,14 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
 
                 if first:
                     # We consider that Movies are 'transformed' into the Micrographs
-                    # This will allow to extend the CTF associated to a set of
-                    # micrographs to another set of micrographs generated from a
+                    # This will allow to extend the micrograph associated to a set of
+                    # movies to another set of micrographs generated from a
                     # different movie alignment
                     self._defineTransformRelation(self.inputMovies1, micSet)
 
                 micSet.close()
                 movieSet.close()
 
-        print(micSet.getAcquisition())
-        print(micSet.getObjDict())
         updateRelationsAndClose(movieSet, micSet, firstTimeAccepted)
         updateRelationsAndClose(movieSetDiscarded, micSetDiscarded, firstTimeDiscarded, DISCARDED)
 
@@ -359,15 +354,9 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
             for movieId in newDone:
                 movie = inputMovieSet[movieId].clone()
                 mic = inputMicSet[movieId].clone()
-                #newMovie = self._createOutputMovie(movie)
-
-                movie.setSamplingRate(self.samplingRate)
-                mic.setSamplingRate(self.samplingRate)
-                mic.setAcquisition(self.acquisition)
 
                 movie.setEnabled(self._getEnable(movieId))
                 mic.setEnabled(self._getEnable(movieId))
-
                 alignment1 = movie.getAlignment()
                 shiftX_1, shiftY_1 = alignment1.getShifts()
                 setAttribute(mic, '_alignment_corr', self.stats[movieId]['shift_corr'])
@@ -410,9 +399,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
 
-            inputMovies = self.inputMovies1.get()
-            outputSet.copyInfo(inputMovies)
-
         return outputSet
 
 
@@ -438,16 +424,19 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
                 f.write('%d\n' % part.getObjId())
 
 
-    def _getMicsPath(self, moviesFn1):
-        pattern = r'movies.sqlite'
-        fnDirBase = re.sub(pattern, "", moviesFn1)
-        path1 = fnDirBase + 'micrographs.sqlite'
-        path2 = fnDirBase + 'micrographs_dose-weighted.sqlite'
+    def _getMicsPath(self):
+        prot1 = self.inputMovies1.getObjValue()  # pointer to previous protocol
 
-        if (os.path.exists(path1)) and (os.path.getsize(path1) > 0):
-            return path1
-        elif os.path.exists(path2) and (os.path.getsize(path2) > 0):
-            return path2
+        if hasattr(prot1, 'outputMicrographs'):
+            path1 = prot1.outputMicrographs.getFileName()
+            if os.path.getsize(path1) > 0:
+                return path1
+
+        elif hasattr(prot1, 'outputMicrographsDoseWeighted'):
+            path2 = prot1.outputMicrographsDoseWeighted.getFileName()
+            if os.path.getsize(path2) > 0:
+                return path2
+
         else:
             return None
 
