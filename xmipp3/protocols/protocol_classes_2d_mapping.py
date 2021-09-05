@@ -46,8 +46,6 @@ from pwem.constants import ALIGN_2D
 
 from xmipp3.convert import rowToAlignment, xmippToLocation, writeSetOfClasses2D
 
-MDL_DIMRED_COEFFS = 155
-
 class XmippProtCL2DMap(ProtAnalysis2D):
     """ Create a low dimensional mapping from a SetOfClasses2D with interactive selection of classes.
     Use mouse left-click to select/deselect classes individually or mouse right-click to select/deselect
@@ -112,7 +110,7 @@ class XmippProtCL2DMap(ProtAnalysis2D):
 
             for row in md.iterRows(self.mdOut):
                 rowId = row.getObjId()
-                pos.append(self.mdOut.getValue(MDL_DIMRED_COEFFS, rowId))
+                pos.append(self.mdOut.getValue(md.MDL_DIMRED, rowId))
                 img_ids.append(self.mdOut.getValue(md.MDL_REF, rowId))
                 occupancy.append(self.mdOut.getValue(md.MDL_CLASS_COUNT, rowId))
             occupancy = np.asarray(occupancy)
@@ -179,7 +177,7 @@ class XmippProtCL2DMap(ProtAnalysis2D):
 
         for classNumber, row in enumerate(md.iterRows(self.mdOut)):
             index, fn = xmippToLocation(row.getValue(md.MDL_IMAGE))
-            c = row.getValue(MDL_DIMRED_COEFFS)
+            c = row.getValue(md.MDL_DIMRED)
             # Store info indexed by id, we need to store the row.clone() since
             # the same reference is used for iteration
             self._classesInfo[classNumber + 1] = (index, fn, row.clone(), c)
@@ -210,7 +208,7 @@ class XmippProtCL2DMap(ProtAnalysis2D):
             suffix = attrName.replace('selectedClasses2D_', '')
             try:
                 counter = int(suffix)
-            except:
+            except ValueError:
                 counter = 1  # when there is not number assume 1
             maxCounter = max(counter, maxCounter)
 
@@ -243,6 +241,9 @@ class ScatterImageMarker(object):
 
     def readImages(self, img_paths):
         if len(img_paths) == 1:
+            # Numpy does not convert a list of size one to an array but to the actual object type of
+            # element inside the list. We need to consider this case as it will raise an error in Python
+            # when iterating over a non-array object type
             self.images = np.squeeze(ImageHandler().read(img_paths[0]).getData())
         else:
             self.images = [np.squeeze(ImageHandler().read(img_path).getData()) for img_path in img_paths]
@@ -268,25 +269,28 @@ class ScatterImageMarker(object):
     def is_window_closed(self, event):
         self.running = False
 
+    def updatePatch(self, ind):
+        selected_artist = self.artists[ind]
+        selected_id = self.ids[ind]
+        patch = selected_artist.patch
+        if selected_id in self.selected_ids:
+            self.selected_ids.remove(selected_id)
+            patch.set_facecolor("lightgray")
+            if self.occupancy is None:
+                patch.set_edgecolor('black')
+        else:
+            self.selected_ids.append(selected_id)
+            patch = self.artists[ind].patch
+            patch.set_facecolor('palegreen')
+            if self.occupancy is None:
+                patch.set_edgecolor('darkgreen')
+        self.fig.canvas.draw_idle()
+
     def setPickCallback(self):
         # Picking callback
         def onPickImage(event):
             ind = event.ind[0]
-            selected_artist = self.artists[ind]
-            selected_id = self.ids[ind]
-            patch = selected_artist.patch
-            if selected_id in self.selected_ids:
-                self.selected_ids.remove(selected_id)
-                patch.set_facecolor("lightgray")
-                if self.occupancy is None:
-                    patch.set_edgecolor('black')
-            else:
-                self.selected_ids.append(selected_id)
-                patch = self.artists[ind].patch
-                patch.set_facecolor('palegreen')
-                if self.occupancy is None:
-                    patch.set_edgecolor('darkgreen')
-            self.fig.canvas.draw_idle()
+            self.updatePatch(ind)
 
         self.fig.canvas.mpl_connect('pick_event', onPickImage)
 
@@ -323,22 +327,7 @@ class ScatterImageMarker(object):
             x_inrange = np.logical_and(self.pos[:, 0] >= x_sorted[0], self.pos[:, 0] <= x_sorted[1])
             y_inrange = np.logical_and(self.pos[:, 1] >= y_sorted[0], self.pos[:, 1] <= y_sorted[1])
             ids_inrange = np.argwhere(np.logical_and(x_inrange, y_inrange)).flatten()
-            for ind in ids_inrange:
-                selected_artist = self.artists[ind]
-                selected_id = self.ids[ind]
-                patch = selected_artist.patch
-                if selected_id in self.selected_ids:
-                    self.selected_ids.remove(selected_id)
-                    patch.set_facecolor("lightgray")
-                    if self.occupancy is None:
-                        patch.set_edgecolor('black')
-                else:
-                    self.selected_ids.append(selected_id)
-                    patch = self.artists[ind].patch
-                    patch.set_facecolor('palegreen')
-                    if self.occupancy is None:
-                        patch.set_edgecolor('darkgreen')
-            self.fig.canvas.draw_idle()
+            _, = [self.updatePatch(ind) for ind in ids_inrange]
 
         def toggle_selector(event):
             pass
@@ -384,12 +373,18 @@ class ScatterImageMarker(object):
     def initializePlot(self):
         if self.occupancy is not None:
             cmap = get_cmap('cool')
+            # Iterate over all class images and create the matplotlib representation that will be used
+            # to render that image in the scatter plot point position (we move the resulting empty list
+            # to a junk variable)
             _ = [self.imScatter(image, x, y, imid, cmap(occupancy))
                  for x, y, image, occupancy, imid in zip(self.pos[:, 0], self.pos[:, 1],
                                                          self.images, self.occupancy, self.ids)]
             cb = self.fig.colorbar(ScalarMappable(cmap=cmap), ax=self.ax, extend='both')
             cb.set_label("Class occupancy", fontweight="bold", labelpad=15)
         else:
+            # Iterate over all class images and create the matplotlib representation that will be used
+            # to render that image in the scatter plot point position (we move the resulting empty list
+            # to a junk variable)
             _ = [self.imScatter(image, x, y, imid)
                  for x, y, image, imid in zip(self.pos[:, 0], self.pos[:, 1], self.images, self.ids)]
         self.ax.scatter(self.pos[:, 0], self.pos[:, 1], alpha=0, picker=True)  # Probably set pickradius param?
