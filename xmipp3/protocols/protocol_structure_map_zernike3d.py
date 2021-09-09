@@ -40,7 +40,7 @@ import pyworkflow.protocol.params as params
 from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfVolumes, Volume
 from pyworkflow import VERSION_2_0
-from pyworkflow.utils import cleanPath, copyFile
+from pyworkflow.utils import cleanPath, copyFile, getExt
 
 
 def mds(d, dimensions=2):
@@ -209,12 +209,13 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
         fnOut = self._getExtraPath(os.path.basename(fnOut + '_%d_crop.vol' % nVoli))
 
         ih = ImageHandler()
+        volFn = volFn if getExt(volFn) == '.vol' else volFn + ':mrc'
         if Xdim != newXdim:
             self.runJob("xmipp_image_resize",
                         "-i %s -o %s --dim %d" % (volFn, fnOut, newXdim))
 
         else:
-            ih.convert(volFn, fnOut)
+            ih.convert(volFn + ':mrc', fnOut)
 
         if newXdim>minDim:
             self.runJob("xmipp_transform_window", " -i %s -o %s --crop %d" %

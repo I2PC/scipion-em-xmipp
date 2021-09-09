@@ -44,7 +44,7 @@ from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
 from xmipp3.base import writeInfoField, readInfoField
 
 
-class XmippProtAngularAlignmentSPH(ProtAnalysis3D):
+class XmippProtAngularAlignmentZernike3D(ProtAnalysis3D):
     """ Protocol for flexible angular alignment based on Zernike3D basis. """
     _label = 'angular align - zernike3d'
     _lastUpdateVersion = VERSION_2_0
