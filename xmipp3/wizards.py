@@ -29,7 +29,6 @@
 from pwem.constants import *
 from pwem.wizards import *
 from pwem.wizards.wizard import EmWizard
-from pwem.wizards.wizards_3d.mask_volume_wizard import MaskVolumeWizard
 from pyworkflow.wizard import Wizard
 from xmipp3.viewers import XmippMonoResViewer, XmippResDeepResViewer, XmippProtFSOViewer
 
