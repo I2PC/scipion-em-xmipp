@@ -215,7 +215,7 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
                         "-i %s -o %s --dim %d" % (volFn, fnOut, newXdim))
 
         else:
-            ih.convert(volFn + ':mrc', fnOut)
+            ih.convert(volFn, fnOut)
 
         if newXdim>minDim:
             self.runJob("xmipp_transform_window", " -i %s -o %s --crop %d" %
