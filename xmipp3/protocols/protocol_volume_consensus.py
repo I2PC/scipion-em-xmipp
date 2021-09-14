@@ -103,3 +103,6 @@ class XmippProtVolConsensus(ProtInitialVolume):
             methods.append("We compute a consensus volume from %d input volumes at %f A/px" %
                            (self.vols.getSize(), self.vols[0].get().getSamplingRate()))
         return methods
+
+    def _citations(self):
+        return ['Fernandez-Gimenez2021']
