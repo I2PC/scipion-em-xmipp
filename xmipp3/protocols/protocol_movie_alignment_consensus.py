@@ -157,7 +157,7 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         movieSet1 = self._loadInputMovieSet(self.movieFn1)
         movieSet2 = self._loadInputMovieSet(self.movieFn2)
 
-        movieDict1 = {movie.getObjId(): movie.clone() for movie in movieSet1.iterItems()} # HERE OPTIMZE BY ITER ONLY ON THOSE >= getObjCreation
+        movieDict1 = {movie.getObjId(): movie.clone() for movie in movieSet1.iterItems()}
         movieDict2 = {movie.getObjId(): movie.clone() for movie in movieSet2.iterItems()}
 
         newIds1 = [idMovie for idMovie in movieDict1.keys() if idMovie not in self.processedDict]
@@ -210,12 +210,13 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
 
         # # FIXME: this is a workaround to skip errors, but it should be treat at checkNewInput
         if (movie1 is None) or (movie2 is None):
-            print('Maybe is here AlignmentCorrelationMovieStep movie1 or movie2 are None')
+            print('AlignmentCorrelationMovieStep movie1 or movie2 are None')
             return
 
         #if self.isContinued() and os.path.exists(movieDoneFn):
         #    self.info("Skipping movie: %s, seems to be done" % fn1)
         #    return
+
         print(fn1)
         print(fn2)
         print(movieID1)
@@ -349,7 +350,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
         if newDone:
             inputMovieSet = self._loadInputMovieSet(self.movieFn1)
             inputMicSet = self._loadInputMicrographSet(self.micsFn)
-            inputMovieSet2 = self._loadInputMovieSet(self.movieFn2)
 
             for movieId in newDone:
                 movie = inputMovieSet[movieId].clone()
@@ -377,7 +377,6 @@ class XmippProtConsensusMovieAlignment(ProtAlignMovies):
 
             inputMovieSet.close()
             inputMicSet.close()
-            inputMovieSet2.close()
 
 
     def _loadOutputSet(self, SetClass, baseName):
