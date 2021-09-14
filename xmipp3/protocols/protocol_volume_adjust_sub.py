@@ -65,8 +65,8 @@ class XmippProtVolAdjBase(EMProtocol):
                            'being 1 no relaxation and 0 no modification of volume 2 amplitudes')
         form.addParam('radavg', BooleanParam, label="Match the rotationally averaged Fourier amplitudes?", default=True,
                       help='Match the rotationally averaged Fourier amplitudes when adjusting the amplitudes instead of'
-                           ' taking directly them from the reference volume. For subtraction and consensus is '
-                           'recommended to set it to True but for sharpening is recommended to set it to False')
+                           ' taking them directly from the reference volume. For subtraction and consensus it is '
+                           'recommended to set it to True but for sharpening it is recommended to set it to False')
         form.addParam('computeE', BooleanParam, label="Compute energy?", default=True, expertLevel=LEVEL_ADVANCED,
                       help='Compute energy difference between the different adjustment steps and iterations to see if '
                            'the method reaches convergence')
