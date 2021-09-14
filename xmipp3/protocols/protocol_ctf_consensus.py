@@ -94,6 +94,17 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                            'Angstroms. If the evaluated CTF has a '
                            'larger Astigmatism, it will be discarded.')
 
+        form.addParam('useAstigmatismPercentage', params.BooleanParam, default=True,
+                      label='Use Astigmatism percentage for selection',
+                      help='Use this button to decide if carry out the '
+                           'selection taking into account or not the '
+                           'astigmatism value.')
+        form.addParam('astigmatismPer', params.FloatParam, default=0.1,
+                      label='Astigmatism percentage', condition="useAstigmatismPercentage",
+                      help='Maximum value allowed for astigmatism in '
+                           'Angstroms. If the evaluated CTF has a '
+                           'larger Astigmatism, it will be discarded.')
+
         form.addParam('useResolution', params.BooleanParam, default=True,
                       label='Use Resolution for selection',
                       help='Use this button to decide if carry out the '
@@ -481,6 +492,11 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                 setAttribute(ctf, '_astigmatism',
                              abs(ctf.getDefocusU() - ctf.getDefocusV()))
 
+                # percentage _astigmatism always but after consensus if so
+                astigmatismPer = abs(ctf.getDefocusU() - ctf.getDefocusV())/(0.5 * (ctf.getDefocusU() + ctf.getDefocusV()))
+                setAttribute(ctf, '_astigmatismPercentage',astigmatismPer)
+
+
                 ctfSet.append(ctf)
                 micSet.append(mic)
                 self._writeCertainDoneList(ctfId, label)
@@ -569,6 +585,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
     def initializeRejDict(self):
         self.discDict = {'defocus': 0,
                          'astigmatism': 0,
+                         'astigmatismPer': 0,
                          'singleResolution': 0,
                          '_xmipp_ctfCritFirstZero': 0,
                          '_xmipp_ctfCritfirstZeroRatio': 0,
@@ -605,6 +622,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
         minDef, maxDef = self._getDefociValues()
         maxAstig = self._getMaxAstisgmatism()
+        maxAstigPer = self._getMaxAstigmatismPer()
         minResol = self._getMinResol()
 
         # TODO: Change this way to get the ctf.
@@ -618,6 +636,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         defocusU = ctf.getDefocusU()
         defocusV = ctf.getDefocusV()
         astigm = abs(defocusU - defocusV)
+        astigmPer = abs(defocusU - defocusV)/((defocusU+defocusV)/2)
         resol = self._getCtfResol(ctf)
 
         defRangeCrit = (defocusU < minDef or defocusU > maxDef or
@@ -629,11 +648,15 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         if astigCrit:
             self.discDict['astigmatism'] += 1
 
+        astigPer = (astigmPer > maxAstigPer)
+        if astigPer:
+            self.discDict['astigmatismPer'] += 1
+
         singleResolCrit = resol > minResol
         if singleResolCrit:
             self.discDict['singleResolution'] += 1
 
-        firstCondition = defRangeCrit or astigCrit or singleResolCrit
+        firstCondition = defRangeCrit or astigCrit or singleResolCrit or astigPer
 
         consResolCrit = False
         if self.calculateConsensus:
@@ -729,7 +752,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             obj = getattr(self, "rejBy%s" % label, Integer(0))
             number = obj.get()
             return "" if number == 0 else "  (%d discarded)" % number
-        if any([self.useDefocus, self.useAstigmatism, self.useResolution]):
+        if any([self.useDefocus, self.useAstigmatism, self.useResolution, self.useAstigmatismPercentage]):
             message.append("*General Criteria*:")
         if self.useDefocus:
             message.append(" - _Defocus_. Range: %.0f - %.0f %s"
@@ -740,6 +763,11 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             message.append(" - _Astigmatism_. Threshold: %.0f %s"
                            % (self.astigmatism,
                               addDiscardedStr('astigmatism')))
+
+        if self.useAstigmatismPercentage:
+            message.append(" - _AstigmatismPer_. Threshold: %.3f %s"
+                           % (self.astigmatismPer,
+                              addDiscardedStr('astigmatismPer')))
 
         if self.useResolution:
             message.append(" - _Resolution_. Threshold: %.0f %s"
@@ -905,6 +933,12 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             return 0, 1000000
         else:
             return self.minDefocus.get(), self.maxDefocus.get()
+
+    def _getMaxAstigmatismPer(self):
+        if not self.useAstigmatismPercentage:
+            return 0.1
+        else:
+            return self.astigmatismPer.get()
 
     def _getMaxAstisgmatism(self):
         if not self.useAstigmatism:
