@@ -1,6 +1,7 @@
 # **************************************************************************
 # *
 # * Authors:    Carlos Oscar Sorzano (coss@cnb.csic.es)
+# *             David Herreros Calero (dherreros@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -24,43 +25,70 @@
 # *
 # **************************************************************************
 
+
+import os
+import numpy as np
+
 from pyworkflow.tests import BaseTest, DataSet, setupTestProject
 
 from pwem.protocols import ProtImportVolumes, ProtImportParticles, ProtSubSet
+import pwem.emlib.metadata as md
 
 from xmipp3.protocols import (XmippProtAngularAlignmentZernike3D,
                               XmippProtVolumeDeformZernike3D,
                               XmippProtStructureMapZernike3D)
 
+
 class TestZernike3DBase(BaseTest):
     @classmethod
     def setData(cls):
-        cls.dataset = DataSet.getDataSet('relion_tutorial')
-        cls.particles = cls.dataset.getFile('import/case2/particles.sqlite')
-        cls.volParticles = cls.dataset.getFile('volume')
-        cls.volInput = cls.dataset.getFile('volumes/reference_rotated.vol')
-        cls.volRef = cls.dataset.getFile('volumes/reference.mrc')
+        cls.dataset = DataSet(name='test_zernike3d',
+                              folder='test_zernike3d',
+                              files={'particles': 'particles/images_1720_norm.xmd',
+                                     'volumes': 'volumes/*.vol',
+                                     '1720': 'volumes/EMD-1720_norm.vol',
+                                     '1723': 'volumes/EMD-1723_norm.vol'})
+        cls.dataset = DataSet.getDataSet('test_zernike3d')
+        cls.particles = cls.dataset.getFile('particles')
+        cls.volumes = cls.dataset.getFile('volumes')
+        cls.volume_1720 = cls.dataset.getFile('1720')
+        cls.volume_1723 = cls.dataset.getFile('1723')
+        cls.clnm_pd_cpu_gold = cls.dataset.getFile('gold_standard_pd/CPU/Volumes_clnm.txt')
+        cls.clnm_pd_gpu_gold = cls.dataset.getFile('gold_standard_pd/GPU/Volumes_clnm.txt')
 
     @classmethod
-    def runImportVolume(cls, pattern, sampling):
-        """ Run an Import volume protocol. """
+    def runImportVolumes(cls, pattern):
+        """ Run an Import volumes protocol. """
         protImport = cls.newProtocol(ProtImportVolumes,
-                                          filesPath=pattern,
-                                          samplingRate=sampling)
+                                     filesPath=pattern,
+                                     samplingRate=1.0,
+                                     objLabel="Maps - Ribosomes 1718-1724")
         cls.launchProtocol(protImport)
-        if protImport.outputVolume is None:
-            raise Exception('Import of volume: %s, failed. outputVolume is None.' % pattern)
+        if protImport.outputVolumes is None:
+            raise Exception('Import of volumes: %s, failed. outputVolumes is None.' % pattern)
         return protImport
 
     @classmethod
-    def runImportParticles(cls, pattern, sampling):
+    def runImportVolume(cls, pattern, label):
+        protImport = cls.newProtocol(ProtImportVolumes,
+                                     filesPath=pattern,
+                                     samplingRate=1.0,
+                                     objLabel="Map - Ribosome %s" % label)
+        cls.launchProtocol(protImport)
+        if protImport.outputVolume is None:
+            raise Exception('Import of volume: %s, failed. outputVolumes is None.' % pattern)
+        return protImport
+
+    @classmethod
+    def runImportParticles(cls, pattern):
         """ Run an Import particles protocol. """
+        print(pattern)
         protImport = cls.newProtocol(ProtImportParticles,
-                                     objLabel='Particles from scipion',
-                                     importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
-                                     sqliteFile=pattern,
+                                     objLabel='Particles - Ribosome 1720',
+                                     importFrom=ProtImportParticles.IMPORT_FROM_XMIPP3,
+                                     mdFile=pattern,
                                      magnification=50000,
-                                     samplingRate=sampling,
+                                     samplingRate=1.0,
                                      haveDataBeenPhaseFlipped=True
                                      )
         cls.launchProtocol(protImport)
@@ -68,122 +96,192 @@ class TestZernike3DBase(BaseTest):
             raise Exception('Import of particles: %s, failed. outputParticles is None.' % pattern)
         return protImport
 
+    @classmethod
+    def readZernikeParams(cls, filename):
+        with open(filename, 'r') as fid:
+            lines = fid.readlines()
+        basis_params = np.fromstring(lines[0].strip('\n'), sep=' ')
+        coeffs = np.fromstring(lines[1].strip('\n'), sep=' ')
+        size = int(coeffs.size / 3)
+        coeffs = np.asarray([coeffs[:size], coeffs[size:2 * size], coeffs[2 * size:]])
+        return [int(basis_params[0]), int(basis_params[1]), basis_params[2], coeffs]
+
+    @classmethod
+    def readMetadata(cls, file):
+        coeffMatrix = []
+        mdOut = md.MetaData(file)
+        for row in md.iterRows(mdOut):
+            coeffs = mdOut.getValue(md.MDL_SPH_COEFFICIENTS, row.getObjId())
+            coeffMatrix.append(coeffs)
+        return np.vstack(coeffMatrix)[:, :-8]
 
 
-class TestAngularAlignmentZernike3D(TestZernike3DBase):
+class TestProtocolsZernike3D(TestZernike3DBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
         TestZernike3DBase.setData()
-        cls.protImportPart = cls.runImportParticles(cls.particles, 7.08)
-        cls.protImportVol = cls.runImportVolume(cls.volParticles, 7.08)
+        cls.protImportPart = cls.runImportParticles(cls.particles)
+        cls.protImportVols = cls.runImportVolumes(cls.volumes)
+        cls.protImportVol_1720 = cls.runImportVolume(cls.volume_1720, '1720')
+        cls.protImportVol_1723 = cls.runImportVolume(cls.volume_1723, '1723')
 
-    def test(self):
-        subset = self.newProtocol(ProtSubSet,
-                                  inputFullSet=self.protImportPart.outputParticles,
-                                  chooseAtRandom=True,
-                                  nElements=10)
-        self.launchProtocol(subset)
+    def testPairAlignmentZernike3DCPU(self):
+        # Test for CPU implementation
+        alignZernike = self.newProtocol(XmippProtVolumeDeformZernike3D,
+                                        inputVolume=self.protImportVol_1720.outputVolume,
+                                        refVolume=self.protImportVol_1723.outputVolume,
+                                        l1=3,
+                                        l2=2,
+                                        targetResolution=6,
+                                        useGpu=False,
+                                        numberOfThreads=4,
+                                        objLabel="Pair Alignment Zernike3D - CPU")
+        self.launchProtocol(alignZernike)
+        self.assertIsNotNone(alignZernike.outputVolume,
+                             "There was a problem with XmippProtVolumeDeformZernike3D - CPU Version")
+        # Check coefficients and parameters are the ones expected
+        clnm_gold = self.readZernikeParams(self.clnm_pd_cpu_gold)
+        clnm_test = self.readZernikeParams(alignZernike._getExtraPath('Volumes_clnm.txt'))
+        self.assertEqual(clnm_gold[0], clnm_test[0], "There is a problem with Zernike degree")
+        self.assertEqual(clnm_gold[1], clnm_test[1], "There is a problem with Spherical Harmonics degree")
+        self.assertEqual(clnm_gold[2], clnm_test[2], "There is a problem with sphere radius")
+        diff_clnm = np.abs(np.sum(clnm_gold[3] - clnm_test[3]))
+        self.assertAlmostEqual(diff_clnm, 0, delta=0.2,
+                               msg="Zernike coefficients do not have the expected value")
 
+    def testPairAlignmentZernike3DGPU(self):
+        # Test for GPU implementation
+        alignZernike = self.newProtocol(XmippProtVolumeDeformZernike3D,
+                                        inputVolume=self.protImportVol_1720.outputVolume,
+                                        refVolume=self.protImportVol_1723.outputVolume,
+                                        l1=3,
+                                        l2=2,
+                                        targetResolution=3,
+                                        useGpu=True,
+                                        numberOfThreads=1,
+                                        objLabel="Pair Alignment Zernike3D - GPU")
+        self.launchProtocol(alignZernike)
+        self.assertIsNotNone(alignZernike.outputVolume,
+                             "There was a problem with XmippProtVolumeDeformZernike3D - GPU Version")
+        # Check coefficients and parameters are the ones expected
+        clnm_gold = self.readZernikeParams(self.clnm_pd_gpu_gold)
+        clnm_test = self.readZernikeParams(alignZernike._getExtraPath('Volumes_clnm.txt'))
+        self.assertEqual(clnm_gold[0], clnm_test[0], "There is a problem with Zernike degree")
+        self.assertEqual(clnm_gold[1], clnm_test[1], "There is a problem with Spherical Harmonics degree")
+        self.assertEqual(clnm_gold[2], clnm_test[2], "There is a problem with sphere radius")
+        diff_clnm = np.abs(np.sum(clnm_gold[3] - clnm_test[3]))
+        self.assertAlmostEqual(diff_clnm, 0, delta=0.2,
+                               msg="Zernike coefficients do not have the expected value")
+
+    def testStructMapZernike3DCPU(self):
+        # Test for CPU implementation
+        structureMap = self.newProtocol(XmippProtStructureMapZernike3D,
+                                        inputVolumes=[self.protImportVols.outputVolumes],
+                                        l1=3,
+                                        l2=2,
+                                        targetResolution=12.0,
+                                        useGpu=False,
+                                        numberOfThreads=4,
+                                        objLabel="StructMap Zernike3D - CPU")
+        self.launchProtocol(structureMap)
+        self.assertTrue(structureMap.isFinished(), "There was a problem with StructureMapZernike3D - CPU Version")
+        # Check if structure mappings (3D) are fine
+        sm_gold_def = np.loadtxt(self.dataset.getFile('gold_standard_sm/CPU/CoordinateMatrix3.txt'),
+                                     delimiter=' ')
+        sm_test_def = np.loadtxt(structureMap._getExtraPath('CoordinateMatrix3.txt'),
+                                     delimiter=' ')
+        diff_sm_def = np.abs(np.sum(sm_gold_def - sm_test_def))
+        self.assertAlmostEqual(diff_sm_def, 0, delta=0.2,
+                               msg="Unexpected deformation structure mapping")
+        sm_cpu_gold_corr = np.loadtxt(self.dataset.getFile('gold_standard_sm/CPU/CoordinateMatrixCorr3.txt'),
+                                     delimiter=' ')
+        sm_cpu_test_corr = np.loadtxt(structureMap._getExtraPath('CoordinateMatrixCorr3.txt'),
+                                     delimiter=' ')
+        diff_sm_corr = np.abs(np.sum(sm_cpu_gold_corr - sm_cpu_test_corr))
+        self.assertAlmostEqual(diff_sm_corr, 0, delta=0.2,
+                               msg="Unexpected correlation structure mapping")
+        sm_cpu_gold_cons = np.loadtxt(self.dataset.getFile('gold_standard_sm/CPU/ConsensusMatrix3.txt'),
+                                     delimiter=' ')
+        sm_cpu_test_cons = np.loadtxt(structureMap._getExtraPath('ConsensusMatrix3.txt'),
+                                     delimiter=' ')
+        diff_sm_cons = np.abs(np.sum(sm_cpu_gold_cons - sm_cpu_test_cons))
+        self.assertAlmostEqual(diff_sm_cons, 0, delta=0.2,
+                               msg="Unexpected consensus structure mapping")
+
+    def testStructMapZernike3DGPU(self):
+        # Test for GPU implementation
+        structureMap = self.newProtocol(XmippProtStructureMapZernike3D,
+                                        inputVolumes=[self.protImportVols.outputVolumes],
+                                        l1=3,
+                                        l2=2,
+                                        targetResolution=3.0,
+                                        useGpu=True,
+                                        numberOfThreads=1,
+                                        objLabel="StructMap Zernike3D - GPU")
+        self.launchProtocol(structureMap)
+        self.assertTrue(structureMap.isFinished(), "There was a problem with StructureMapZernike3D - GPU Version")
+        # Check if structure mappings (3D) are fine
+        sm_gold_def = np.loadtxt(self.dataset.getFile('gold_standard_sm/GPU/CoordinateMatrix3.txt'),
+                                     delimiter=' ')
+        sm_test_def = np.loadtxt(structureMap._getExtraPath('CoordinateMatrix3.txt'),
+                                     delimiter=' ')
+        diff_sm_def = np.abs(np.sum(sm_gold_def - sm_test_def))
+        self.assertAlmostEqual(diff_sm_def, 0, delta=0.2,
+                               msg="Unexpected deformation structure mapping")
+        sm_cpu_gold_corr = np.loadtxt(self.dataset.getFile('gold_standard_sm/GPU/CoordinateMatrixCorr3.txt'),
+                                     delimiter=' ')
+        sm_cpu_test_corr = np.loadtxt(structureMap._getExtraPath('CoordinateMatrixCorr3.txt'),
+                                     delimiter=' ')
+        diff_sm_corr = np.abs(np.sum(sm_cpu_gold_corr - sm_cpu_test_corr))
+        self.assertAlmostEqual(diff_sm_corr, 0, delta=0.2,
+                               msg="Unexpected correlation structure mapping")
+        sm_cpu_gold_cons = np.loadtxt(self.dataset.getFile('gold_standard_sm/GPU/ConsensusMatrix3.txt'),
+                                     delimiter=' ')
+        sm_cpu_test_cons = np.loadtxt(structureMap._getExtraPath('ConsensusMatrix3.txt'),
+                                     delimiter=' ')
+        diff_sm_cons = np.abs(np.sum(sm_cpu_gold_cons - sm_cpu_test_cons))
+        self.assertAlmostEqual(diff_sm_cons, 0, delta=0.2,
+                               msg="Unexpected consensus structure mapping")
+
+    def testAngularAlignZernike3DCPU(self):
         # Test for CPU implementation
         alignZernike = self.newProtocol(XmippProtAngularAlignmentZernike3D,
-                                        inputParticles=subset.outputParticles,
-                                        inputVolume=self.protImportVol.outputVolume,
-                                        l1=1,
-                                        l2=1,
-                                        targetResolution=7.08*4,
+                                        inputParticles=self.protImportPart.outputParticles,
+                                        inputVolume=self.protImportVol_1723.outputVolume,
+                                        l1=3,
+                                        l2=2,
+                                        targetResolution=12,
                                         useGpu=False,
                                         numberOfMpi=4,
                                         objLabel="Angular Align Zernike3D - CPU")
         self.launchProtocol(alignZernike)
         self.assertIsNotNone(alignZernike.outputParticles,
                              "There was a problem with AngularAlignmentZernike3D - CPU Version")
+        # Check if coefficients are fine
+        aa_gold_clnm = self.readMetadata(self.dataset.getFile('gold_standard_aa/CPU/output_particles.xmd'))
+        aa_test_clnm = self.readMetadata(alignZernike._getExtraPath('output_particles.xmd'))
+        diff_clnm = np.abs(np.sum(aa_gold_clnm - aa_test_clnm))
+        self.assertAlmostEqual(diff_clnm, 0, delta=0.2,
+                               msg="Unexpected Zernike coefficients")
 
+    def testAngularAlignZernike3DGPU(self):
         # Test for GPU implementation
         alignZernike = self.newProtocol(XmippProtAngularAlignmentZernike3D,
-                                        inputParticles=subset.outputParticles,
-                                        inputVolume=self.protImportVol.outputVolume,
-                                        l1=1,
-                                        l2=1,
-                                        targetResolution=7.08*4,
+                                        inputParticles=self.protImportPart.outputParticles,
+                                        inputVolume=self.protImportVol_1723.outputVolume,
+                                        l1=3,
+                                        l2=2,
+                                        targetResolution=3,
                                         useGpu=True,
                                         numberOfMpi=1,
                                         objLabel="Angular Align Zernike3D - GPU")
         self.launchProtocol(alignZernike)
         self.assertIsNotNone(alignZernike.outputParticles,
                              "There was a problem with AngularAlignmentZernike3D - GPU Version")
-
-
-class TestVolumeDeformZernike3D(TestZernike3DBase):
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        TestZernike3DBase.setData()
-        cls.protImportVol = cls.runImportVolume(cls.volInput, 1.0)
-        cls.protImportVolRef = cls.runImportVolume(cls.volRef, 1.0)
-
-    def test(self):
-        # Test for CPU implementation
-        volDeformZernike = self.newProtocol(XmippProtVolumeDeformZernike3D,
-                                            inputVolume=self.protImportVol.outputVolume,
-                                            refVolume=self.protImportVolRef.outputVolume,
-                                            l1=2,
-                                            l2=2,
-                                            targetResolution=4.0,
-                                            useGpu=False,
-                                            numberOfThreads=4,
-                                            objLabel="Volume Deform Zernike3D - CPU")
-        self.launchProtocol(volDeformZernike)
-        self.assertIsNotNone(volDeformZernike.outputVolume,
-                             "There was a problem with VolumeDeformZernike3D - CPU Version")
-
-        # Test for GPU implementation
-        volDeformZernike = self.newProtocol(XmippProtVolumeDeformZernike3D,
-                                            inputVolume=self.protImportVol.outputVolume,
-                                            refVolume=self.protImportVolRef.outputVolume,
-                                            l1=2,
-                                            l2=2,
-                                            targetResolution=4.0,
-                                            useGpu=True,
-                                            numberOfThreads=1,
-                                            objLabel="Volume Deform Zernike3D - GPU")
-        self.launchProtocol(volDeformZernike)
-        self.assertIsNotNone(volDeformZernike.outputVolume,
-                             "There was a problem with VolumeDeformZernike3D - GPU Version")
-
-
-
-class TestStructureMapZernike3D(TestZernike3DBase):
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        TestZernike3DBase.setData()
-        cls.protImportVol1 = cls.runImportVolume(cls.volInput, 1.0)
-        cls.protImportVol2 = cls.runImportVolume(cls.volRef, 1.0)
-
-    def test(self):
-        # Test for CPU implementation
-        structureMap = self.newProtocol(XmippProtStructureMapZernike3D,
-                                        l1=2,
-                                        l2=2,
-                                        targetResolution=4.0,
-                                        useGpu=False,
-                                        numberOfThreads=4,
-                                        objLabel="StructMap Zernike3D - CPU")
-        volumeList = [self.protImportVol1.outputVolume, self.protImportVol2.outputVolume]
-        structureMap.inputVolumes.set(volumeList)
-        self.launchProtocol(structureMap)
-        self.assertTrue(structureMap.isFinished(), "There was a problem with StructureMapZernike3D - CPU Version")
-
-        # Test for GPU implementation
-        structureMap = self.newProtocol(XmippProtStructureMapZernike3D,
-                                        l1=2,
-                                        l2=2,
-                                        targetResolution=4.0,
-                                        useGpu=True,
-                                        numberOfThreads=1,
-                                        objLabel="StructMap Zernike3D - GPU")
-        volumeList = [self.protImportVol1.outputVolume, self.protImportVol2.outputVolume]
-        structureMap.inputVolumes.set(volumeList)
-        self.launchProtocol(structureMap)
-        self.assertTrue(structureMap.isFinished(), "There was a problem with StructureMapZernike3D - GPU Version")
+        # Check if coefficients are fine
+        aa_gold_clnm = self.readMetadata(self.dataset.getFile('gold_standard_aa/GPU/output_particles.xmd'))
+        aa_test_clnm = self.readMetadata(alignZernike._getExtraPath('output_particles.xmd'))
+        diff_clnm = np.abs(np.sum(aa_gold_clnm - aa_test_clnm))
+        self.assertAlmostEqual(diff_clnm, 0, delta=3,
+                               msg="Unexpected Zernike coefficients")

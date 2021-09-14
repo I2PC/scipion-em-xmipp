@@ -182,7 +182,7 @@ class XmippProtVolumeDeformZernike3D(ProtAnalysis3D):
         fnOutVol = self._getFileName('fnOutVol')
 
         # Filter the volumes to improve alignment quality
-        params = " -i %s -o %s --fourier real_gaussian 2" %  (fnInputVol, fnInputFilt)
+        params = " -i %s -o %s --fourier real_gaussian 2" % (fnInputVol, fnInputFilt)
         self.runJob("xmipp_transform_filter", params)
         params = " -i %s -o %s --fourier real_gaussian 2" % (fnRefVol, fnRefFilt)
         self.runJob("xmipp_transform_filter", params)
