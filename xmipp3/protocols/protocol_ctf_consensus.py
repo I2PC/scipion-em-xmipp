@@ -447,8 +447,12 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
                 if self.calculateConsensus:
                     ctf2 = inputCtfSet2[ctfId]
-                    setAttribute(ctf, '_consensus_resolution',
-                                 self._freqResol[ctfId])
+                    conRes = self._freqResol[ctfId]
+                    # FIX ME: _consensus_resolution setAttribute is not working
+                    print('consensus resolution')
+                    print(conRes)
+                    setAttribute(ctf, '_consensus_resolution_test', conRes)
+                    # ----------------
                     setAttribute(ctf, '_ctf2_defocus_diff',
                                  max(abs(ctf.getDefocusU()-ctf2.getDefocusU()),
                                      abs(ctf.getDefocusV()-ctf2.getDefocusV())))
@@ -494,7 +498,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
                 # percentage _astigmatism always but after consensus if so
                 astigmatismPer = abs(ctf.getDefocusU() - ctf.getDefocusV())/(0.5 * (ctf.getDefocusU() + ctf.getDefocusV()))
-                setAttribute(ctf, '_astigmatismPercentage',astigmatismPer)
+                setAttribute(ctf, '_astigmatismPercentage', astigmatismPer)
 
 
                 ctfSet.append(ctf)
