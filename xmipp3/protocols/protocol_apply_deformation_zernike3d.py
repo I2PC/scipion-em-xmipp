@@ -34,10 +34,10 @@ import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 
 
-class XmippProtApplySPH(ProtAnalysis3D):
+class XmippProtApplyZernike3D(ProtAnalysis3D):
     """ Protocol to apply the deformation computed through spherical harmonics to
     EM maps. """
-    _label = 'apply deformation sph'
+    _label = 'apply deformation - Zernike3D'
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
