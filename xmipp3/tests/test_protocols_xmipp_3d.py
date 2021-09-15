@@ -1336,3 +1336,57 @@ class TestXmippVolSubtraction(TestXmippBase):
         self.launchProtocol(protVolConsensus)
         self.assertIsNotNone(protVolConsensus.outputVolume,
                              "There was a problem with Volumes consensus")
+
+class TestXmippProjSubtraction(TestXmippBase):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testXmippProjSub(self):
+        protCreatePhantom2items = self.newProtocol(XmippProtPhantom,
+                                               desc='64 64 64 0\nsph + 1 15 15 0 10\nsph + 1 -15 -15 0 10',
+                                               sampling=4.0)
+        self.launchProtocol(protCreatePhantom2items)
+        self.assertIsNotNone(protCreatePhantom2items.getFiles(),
+                             "There was a problem with phantom with 2 items creation")
+
+        protCreateGallery = self.newProtocol(XmippProtCreateGallery,
+                                             inputVolume=protCreatePhantom2items.outputVolume,
+                                             rotStep=15.0,
+                                             tiltStep=90.0)
+        self.launchProtocol(protCreateGallery)
+        self.assertIsNotNone(protCreateGallery.getFiles(),
+                             "There was a problem with create gallery")
+
+        protCreateMask = self.newProtocol(XmippProtCreateMask3D,
+                                          inputVolume=protCreatePhantom2items.outputVolume,
+                                          threshold=0.1)
+        self.launchProtocol(protCreateMask)
+        self.assertIsNotNone(protCreateMask.getFiles(),
+                             "There was a problem with the 3D mask of the 2 items phantom")
+
+        protCreatePhantom1item = self.newProtocol(XmippProtPhantom,
+                                                  desc='64 64 64 0\nsph + 1 -15 -15 0 10',
+                                                  sampling=4.0)
+        self.launchProtocol(protCreatePhantom1item)
+        self.assertIsNotNone(protCreatePhantom1item.getFiles(),
+                             "There was a problem with phantom with 1 item creation")
+
+        protCreateMaskKeep = self.newProtocol(XmippProtCreateMask3D,
+                                              inputVolume=protCreatePhantom1item.outputVolume,
+                                              threshold=0.1)
+        self.launchProtocol(protCreateMaskKeep)
+        self.assertIsNotNone(protCreateMaskKeep.getFiles(),
+                             "There was a problem with the 3D mask of the 1 item phantom")
+
+        print("Run subtract projection")
+        protSubtractProj = self.newProtocol(XmippProtSubtractProjection,
+                                            particles=protCreateGallery.outputReprojections,
+                                            vol=protCreatePhantom2items.outputVolume,
+                                            maskVol=protCreateMask.outputMask,
+                                            mask=protCreateMaskKeep.outputMask,
+                                            saveFiles=True)
+        self.launchProtocol(protSubtractProj)
+        self.assertIsNotNone(protSubtractProj.outputParticles,
+                             "There was a problem with projection subtraction")
