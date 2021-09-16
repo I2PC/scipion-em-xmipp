@@ -29,7 +29,7 @@ import numpy as np
 import os
 import sys
 
-from pyworkflow import VERSION_1_1
+from pyworkflow import VERSION_3_0
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Set, Float
 from pyworkflow.protocol import STEPS_PARALLEL
@@ -42,7 +42,6 @@ import pyworkflow.protocol.constants as cons
 from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfMovies, Movie
 from pwem.protocols import EMProtocol, ProtProcessMovies
-
 from xmipp3.convert import setXmippAttribute, getScipionObj
 
 
@@ -64,7 +63,7 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
     The same criteria is used for assigning the gain to the output movies (external corrected > external > estimated)
     """
     _label = 'movie poisson count'
-    _lastUpdateVersion = VERSION_1_1
+    _lastUpdateVersion = VERSION_3_0
 
     estimatedDatabase = 'estGains.sqlite'
     residualDatabase = 'resGains.sqlite'
@@ -275,7 +274,7 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
         if self.hasAttribute(outputName):
             outputSet.write()  # Write to commit changes
             outputAttr = getattr(self, outputName)
-            # Copy the properties to the object contained in the protcol
+            # Copy the properties to the object contained in the protocol
             outputAttr.copy(outputSet, copyId=False)
             # Persist changes
             self._store(outputAttr)
