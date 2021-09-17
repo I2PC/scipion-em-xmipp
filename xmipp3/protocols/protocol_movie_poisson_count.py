@@ -55,18 +55,10 @@ from xmipp3.convert import setXmippAttribute, getScipionObj
 
 
 class XmippProtMoviePoissonCount(ProtProcessMovies):
-    """ Estimate the gain image of a camera, directly analyzing one of its movies.
-    It can correct the orientation of an external gain image (by comparing it with the estimated).
-    Finally, it estimates the residual gain (the gain of the movie after correcting with a gain).
-    The gain used in the correction will be preferably the external gain, but can also be the estimated
-    gain if the first is not found.
-    The same criteria is used for assigning the gain to the output movies (external corrected > external > estimated)
-    """
+    """ Protocol for the dose analysis """
     _label = 'movie poisson count'
     _lastUpdateVersion = VERSION_3_0
 
-    estimatedDatabase = 'estGains.sqlite'
-    residualDatabase = 'resGains.sqlite'
     stats = {}
     estimatedIds2 = []
 
