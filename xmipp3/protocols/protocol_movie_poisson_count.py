@@ -33,12 +33,13 @@ from pyworkflow import VERSION_3_0
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Set, Float
 from pyworkflow.protocol import STEPS_PARALLEL
+import pyworkflow.protocol.params as params
 from pyworkflow.protocol.params import (PointerParam, IntParam,
                                         BooleanParam, LEVEL_ADVANCED)
 from pyworkflow.utils.properties import Message
 from pyworkflow.utils.path import moveFile
 import pyworkflow.protocol.constants as cons
-
+from datetime import datetime
 from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfMovies, Movie
 from pwem.protocols import EMProtocol, ProtProcessMovies
@@ -48,7 +49,6 @@ from xmipp3.convert import setXmippAttribute, getScipionObj
 ### TO DO
 # - Comparar con el dose per frame de cada movie
 # - Arreglar que los steps de mas de 1 movie no de error
-# - Investigar sobre como hacer clusters distintos segun la distribucion de nuestros datos. UNa gaussiana y en base a ella los valores que se queden fueran se les pone una flag
 # - El monitor va revisar el umbral en ventanas temporales por si coincide que un grupo de movies ha fallado
 # - Optimizar protocolo
 ###
@@ -66,14 +66,14 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
         self.stepsExecutionMode = STEPS_PARALLEL
+        #self.stepsExecutionMode = params.STEPS_SERIAL
         self.estimatedIds = []
 
     # -------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label=Message.LABEL_INPUT)
 
-        form.addParam('inputMovies', PointerParam, pointerClass='SetOfMovies, '
-                                                                'Movie',
+        form.addParam('inputMovies', PointerParam, pointerClass='SetOfMovies',
                       label=Message.LABEL_INPUT_MOVS,
                       help='Select one or several movies. A gain image will '
                            'be calculated for each one of them.')
@@ -98,6 +98,24 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
     def createOutputStep(self):
         pass
 
+    def _insertAllSteps(self):
+        # Build the list of all processMovieStep ids by
+        # inserting each of the steps for each movie
+        self.insertedDict = {}
+        self.samplingRate = self.inputMovies.get().getSamplingRate()
+
+        self.listOfMovies = [movie.clone() for movie in self.inputMovies.get()]
+
+        self.streamClosed = self.inputMovies.get().isStreamClosed()
+        pwutils.makePath(self._getExtraPath('DONE'))
+        # Conversion step is part of processMovieStep because of streaming.
+        movieSteps = self._insertNewMoviesSteps(self.insertedDict,
+                                                self.inputMovies.get())
+
+        finalSteps = self._insertFinalSteps(movieSteps)
+        self._insertFunctionStep('createOutputStep',
+                                 prerequisites=finalSteps, wait=True)
+
 
     def _insertNewMoviesSteps(self, insertedDict, inputMovies):
         """ Insert steps to process new movies (from streaming)
@@ -106,7 +124,7 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
             inputMovies: input movies set to be check
         """
         deps = []
-        for movie in self.inputMovies.get():
+        for movie in inputMovies:
             if movie.getObjId() not in insertedDict:
                 stepId = self._insertMovieStep(movie)
                 deps.append(stepId)
@@ -115,6 +133,21 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
         return deps
 
 
+    def _insertMovieStep(self, movie):
+        """ Insert the processMovieStep for a given movie. """
+        # Note1: At this point is safe to pass the movie, since this
+        # is not executed in parallel, here we get the params
+        # to pass to the actual step that is gone to be executed later on
+        # Note2: We are serializing the Movie as a dict that can be passed
+        # as parameter for a functionStep
+        movieDict = movie.getObjDict(includeBasic=True)
+        movieStepId = self._insertFunctionStep('processMovieStep',
+                                               movieDict,
+                                               movie.hasAlignment(),
+                                               prerequisites=[])
+
+        return movieStepId
+
     def _processMovie(self, movie):
         movieId = movie.getObjId()
         if not self.doPoissonCountProcess(movieId):
@@ -122,11 +155,10 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
 
         print('entro aqui siendo la movie a procesar:')
         print(movieId)
-       # if movieId not in self.estimatedIds:
+
         self.estimatedIds.append(movieId)
         stats = self.estimatePoissonCount(movie)
         self.stats[movieId] = stats
-        self.estimatedIds2.append(movieId)
 
         fnSummary = self._getPath("summary.txt")
         fnMonitorSummary = self._getPath("summaryForMonitor.txt")
@@ -144,7 +176,7 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
         fnMonitorSummary.close()
 
     def estimatePoissonCount(self, movie):
-        movieImages = ImageHandler().read(movie.getLocation())  # This is an Xmipp Image DATA
+        movieImages = ImageHandler().read(movie.getLocation())
         steps = self.frameStep.get()
         mean_frames = []
         movieFrames = movieImages.getData()
@@ -178,86 +210,109 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
         else:
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
-
-            if isinstance(self.inputMovies.get(), SetOfMovies) or isinstance(self.inputMovies.get(), Movie):
-                inputMovies = self.inputMovies.get()
-                outputSet.copyInfo(inputMovies)
-
+            inputMovies = self.inputMovies.get()
+            inputMovies.loadAllProperties()
+            outputSet.copyInfo(inputMovies)
 
         return outputSet
 
 
     def _checkNewInput(self):
-        if isinstance(self.inputMovies.get(), SetOfMovies):
-            ProtProcessMovies._checkNewInput(self)
+        # Check if there are new movies to process from the input set
+        localFile = self.inputMovies.get().getFileName()
+        now = datetime.now()
+        self.lastCheck = getattr(self, 'lastCheck', now)
+        mTime = datetime.fromtimestamp(os.path.getmtime(localFile))
+        self.debug('Last check: %s, modification: %s'
+                   % (pwutils.prettyTime(self.lastCheck),
+                      pwutils.prettyTime(mTime)))
+        # If the input movies.sqlite have not changed since our last check,
+        # it does not make sense to check for new input data
+        if self.lastCheck > mTime and hasattr(self, 'listOfMovies'):
+            return None
 
+        self.lastCheck = now
+        # Open input movies.sqlite and close it as soon as possible
+        newMovies = self._loadInputList()
+
+        self.listOfMovies.extend(newMovies)
+
+        outputStep = self._getFirstJoinStep()
+
+        if newMovies:
+            fDeps = self._insertNewMoviesSteps(self.insertedDict,
+                                               newMovies)
+            if outputStep is not None:
+                outputStep.addPrerequisites(*fDeps)
+
+            self.updateSteps()
+
+    def _loadInputList(self):
+        """ Load the input set of movies and create a list. """
+        moviesFile = self.inputMovies.get().getFileName()
+        self.debug("Loading input db: %s" % moviesFile)
+        movieSet = SetOfMovies(filename=moviesFile)
+        movieSet.loadAllProperties()
+        newMovies = [movie.clone() for movie in movieSet if movie.getObjId() not in self.insertedDict]
+        self.streamClosed = movieSet.isStreamClosed()
+        movieSet.close()
+        self.debug("Closed db.")
+
+        return newMovies
 
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
-        if isinstance(self.inputMovies.get(), Movie):
-            movie = self.inputMovies.get()
+
+        # Load previously done items (from text file)
+        doneList = self._readDoneList()
+        # Check for newly done items
+        newDone = [m.clone() for m in self.listOfMovies
+                   if int(m.getObjId()) not in doneList and
+                   self._isMovieDone(m)]
+
+        allDone = len(doneList) + len(newDone)
+        # We have finished when there is not more input movies
+        # (stream closed) and the number of processed movies is
+        # equal to the number of inputs
+        self.finished = self.streamClosed and \
+                        allDone == len(self.listOfMovies)
+        streamMode = Set.STREAM_CLOSED if self.finished \
+                     else Set.STREAM_OPEN
+
+        if newDone:
+            self._writeDoneList(newDone)
+        elif not self.finished:
+            # If we are not finished and no new output have been produced
+            # it does not make sense to proceed and updated the outputs
+            # so we exit from the function here
+            return
+
+        moviesSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite')
+
+        for movie in newDone:
             movieId = movie.getObjId()
-            streamMode = Set.STREAM_CLOSED
-            saveMovie = self.getAttributeValue('doSaveMovie', False)
-            moviesSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite')
+            #newMovie = movie.clone()
+
+            stats = self.stats[movieId]
+            mean = stats['mean']
+            std = stats['std']
+            min = stats['min']
+            max = stats['max']
+
+            setAttribute(movie, '_MEAN_DOSE_PER_FRAME', mean)
+            setAttribute(movie, '_STD_DOSE_PER_FRAME', std)
+            setAttribute(movie, '_MIN_DOSE_PER_FRAME', min)
+            setAttribute(movie, '_MAX_DOSE_PER_FRAME', max)
+
             moviesSet.append(movie)
 
-            self._updateOutputSet('outputMovies', moviesSet, streamMode)
+        self._updateOutputSet('outputMovies', moviesSet, streamMode)
+
+        if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
-            outputStep.setStatus(cons.STATUS_NEW)
-            self.finished = True
-        else:
-            # Load previously done items (from text file)
-            doneList = self._readDoneList()
-            # Check for newly done items
-            newDone = [m.clone() for m in self.listOfMovies
-                       if int(m.getObjId()) not in doneList and
-                       self._isMovieDone(m)]
-
-            allDone = len(doneList) + len(newDone)
-            # We have finished when there is not more input movies
-            # (stream closed) and the number of processed movies is
-            # equal to the number of inputs
-            self.finished = self.streamClosed and \
-                            allDone == len(self.listOfMovies)
-            streamMode = Set.STREAM_CLOSED if self.finished \
-                else Set.STREAM_OPEN
-
-            if newDone:
-                self._writeDoneList(newDone)
-            elif not self.finished:
-                # If we are not finished and no new output have been produced
-                # it does not make sense to proceed and updated the outputs
-                # so we exit from the function here
-                return
-
-            moviesSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite')
-
-            for movie in newDone:
-                movieId = movie.getObjId()
-                newMovie = movie.clone()
-                # Echar un ojo a esta lista
-                if movieId in self.estimatedIds2:
-                    stats = self.stats[movieId]
-                    mean = stats['mean']
-                    std = stats['std']
-                    min = stats['min']
-                    max = stats['max']
-
-                    setAttribute(newMovie, '_MEAN_DOSE_PER_FRAME', mean)
-                    setAttribute(newMovie, '_STD_DOSE_PER_FRAME', std)
-                    setAttribute(newMovie, '_MIN_DOSE_PER_FRAME', min)
-                    setAttribute(newMovie, '_MAX_DOSE_PER_FRAME', max)
-
-                moviesSet.append(newMovie)
-
-            self._updateOutputSet('outputMovies', moviesSet, streamMode)
-
-            if self.finished:  # Unlock createOutputStep if finished all jobs
-                outputStep = self._getFirstJoinStep()
-                if outputStep and outputStep.isWaiting():
-                    outputStep.setStatus(cons.STATUS_NEW)
+            if outputStep and outputStep.isWaiting():
+                outputStep.setStatus(cons.STATUS_NEW)
 
 
     def _updateOutputSet(self, outputName, outputSet, state=Set.STREAM_OPEN):
