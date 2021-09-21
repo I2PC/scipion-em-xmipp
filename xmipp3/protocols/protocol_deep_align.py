@@ -53,6 +53,14 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_DLTK_v0.3'
     _ih = ImageHandler()
+    _cond_modelPretrainTrue = 'modelPretrain==True'
+    _cond_modelPretrainFalse = 'modelPretrain==False'
+    _fnCorrectedParticlesStk = 'corrected_particles.stk'    
+    _fnCorrectedParticlesXmd = 'corrected_particles.xmd'
+    _fnVolumeVol = 'volume.vol'
+    _fnConeCenterDoc = 'coneCenters.doc'
+    _tempNumXmd = '%d.xmd'
+
 
     def __init__(self, **args):
         ProtRefine3D.__init__(self, **args)
@@ -78,7 +86,7 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
                            'If you choose "no" new models will be trained.')
         form.addParam('pretrainedModels', PointerParam,
                       pointerClass=self.getClassName(),
-                      condition='modelPretrain==True',
+                      condition=self._cond_modelPretrainTrue,
                       label='Set pretrained models',
                       help='Choose the protocol where your models were trained. '
                            'Be careful with using proper models for your new prediction.')
@@ -87,7 +95,7 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
                       pointerClass='SetOfParticles',
                       pointerCondition='hasAlignmentProj',
                       help='The set of particles previously aligned to be used as training set',
-                      condition='modelPretrain==False')
+                      condition=self._cond_modelPretrainFalse)
         form.addParam('targetResolution', FloatParam, label="Target resolution",
                       default=3.0,
                       help="In Angstroms, the images and the volume are rescaled so that this resolution is at "
@@ -99,17 +107,17 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
                       label="Number of epochs for training",
                       default=10,
                       help="Number of epochs for training.",
-                      condition='modelPretrain==False')
+                      condition=self._cond_modelPretrainFalse)
         form.addParam('batchSize', IntParam,
                       label="Batch size for training",
                       default=128,
                       help="Batch size for training.",
-                      condition='modelPretrain==False')
+                      condition=self._cond_modelPretrainFalse)
         form.addParam('spanConesTilt', FloatParam,
                       label="Distance between region centers",
                       default=30,
                       help="Distance in degrees between region centers.",
-                      condition='modelPretrain==False')
+                      condition=self._cond_modelPretrainFalse)
         form.addParam('numConesSelected', IntParam,
                       label="Number of selected regions per image",
                       default=2,
@@ -170,8 +178,44 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
         self._insertFunctionStep("createOutputStep", prerequisites=[stepId])
 
     # --------------------------- STEPS functions ---------------------------------------------------
-    def convertStep(self):
+    
+    def _getProjectionsExp(self, num):
+        return self._getExtraPath('projectionsExp%d.xmd' % num)
 
+    def _getConePrediction(self):
+        return self._getExtraPath('conePrediction.txt')
+
+    def _getOutCone(self, num):
+        return 'outCone%d.xmd' % num
+
+    def _resize(self, Xdim, fnCorrected, prefix, fnTarget):
+        if self.newXdim != Xdim:
+            self.runJob("xmipp_image_resize",
+                        "-i %s -o %s --save_metadata_stack %s --fourier %d" %
+                        (fnCorrected,
+                            self._getExtraPath(prefix + '.stk'),
+                            self._getExtraPath(prefix + '.xmd'),
+                            self.newXdim), numberOfMpi=self.myMPI.get())
+            moveFile(self._getExtraPath(prefix + '.xmd'), fnTarget)
+
+    def _correctWiener(self, hasCTF, fn, Ts):
+        if hasCTF and self.applyCTF.get():
+            fnCorrectedStk = self._getExtraPath(self._fnCorrectedParticlesStk)
+            fnCorrected = self._getExtraPath(self._fnCorrectedParticlesXmd)
+            args = "-i %s -o %s --save_metadata_stack %s --keep_input_columns" % (
+                fn, fnCorrectedStk, fnCorrected)
+            args += " --sampling_rate %f --correct_envelope" % Ts
+            if self.inputSet.get().isPhaseFlipped():
+                args += " --phase_flipped"
+            self.runJob("xmipp_ctf_correct_wiener2d",
+                        args, numberOfMpi=self.myMPI.get())
+
+    def _removeCorrectedParticles(self):
+        if exists(self._getExtraPath(self._fnCorrectedParticlesStk)):
+            remove(self._getExtraPath(self._fnCorrectedParticlesStk))
+            remove(self._getExtraPath(self._fnCorrectedParticlesXmd))
+
+    def convertStep(self):
         if self.modelPretrain.get() is True:
             fnPreProtocol = self.pretrainedModels.get()._getExtraPath()
             preXDim = readInfoField(fnPreProtocol, "size", emlib.MDL_XSIZE)
@@ -184,46 +228,30 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
         Ts = inputParticles.getSamplingRate()
         row = getFirstRow(self.imgsFn)
         hasCTF = row.containsLabel(emlib.MDL_CTF_DEFOCUSU) or emlib.containsLabel(
-                    emlib.MDL_CTF_MODEL)
+            emlib.MDL_CTF_MODEL)
 
         fnCorrected = self.imgsFn
-        
-        if hasCTF and self.applyCTF.get() is True:
-            fnCorrectedStk = self._getExtraPath('corrected_particles.stk')
-            fnCorrected = self._getExtraPath('corrected_particles.xmd')
-            args = "-i %s -o %s --save_metadata_stack %s --keep_input_columns" % (
-                    self.imgsFn, fnCorrectedStk, fnCorrected)
-            args += " --sampling_rate %f --correct_envelope" % Ts
-            if self.inputSet.get().isPhaseFlipped():
-                args += " --phase_flipped"
-            self.runJob("xmipp_ctf_correct_wiener2d", args,numberOfMpi=self.myMPI.get())
+
+        self._correctWiener(hasCTF, self.imgsFn, Ts)
 
         Xdim = inputParticles.getXDim()
         newTs = self.targetResolution.get() * 1.0 / 3.0
         newTs = max(Ts, newTs)
-        if self.modelPretrain.get() is False:
-            self.newXdim = int(float(Xdim * Ts / newTs))
-        else:
-            self.newXdim = int(preXDim)
+
+        self.newXdim = int(preXDim) if self.modelPretrain.get() else int(
+            float(Xdim * Ts / newTs))
+
         self.firstMaxShift = int(round(self.newXdim / 10))
         writeInfoField(self._getExtraPath(), "sampling",
                        emlib.MDL_SAMPLINGRATE, newTs)
         writeInfoField(self._getExtraPath(), "size", emlib.MDL_XSIZE,
                        self.newXdim)
-        if self.newXdim != Xdim:
-            self.runJob("xmipp_image_resize",
-                        "-i %s -o %s --save_metadata_stack %s --fourier %d" %
-                        (fnCorrected,
-                         self._getExtraPath('scaled_particles.stk'),
-                         self._getExtraPath('scaled_particles.xmd'),
-                         self.newXdim), numberOfMpi=self.myMPI.get())
-            moveFile(self._getExtraPath('scaled_particles.xmd'), self.imgsFn)
 
-        if exists(self._getExtraPath('corrected_particles.stk')):
-            remove(self._getExtraPath('corrected_particles.stk'))
-            remove(self._getExtraPath('corrected_particles.xmd'))
+        self._resize(Xdim, fnCorrected, 'scaled_particles', self.imgsFn)
 
-        fnVol = self._getTmpPath("volume.vol")
+        self._removeCorrectedParticles()
+
+        fnVol = self._getTmpPath(self._fnVolumeVol)
         self._ih.convert(self.inputVolume.get(), fnVol)
         Xdim = self.inputVolume.get().getDim()[0]
         if Xdim != self.newXdim:
@@ -235,37 +263,19 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
         writeSetOfParticles(inputTrain, self.trainImgsFn)
         row = getFirstRow(self.trainImgsFn)
         hasCTF = row.containsLabel(emlib.MDL_CTF_DEFOCUSU) or emlib.containsLabel(
-                    emlib.MDL_CTF_MODEL)
+            emlib.MDL_CTF_MODEL)
 
         fnCorrected = self.trainImgsFn
 
-        if hasCTF and self.applyCTF.get() is True:
-            fnCorrectedStk = self._getExtraPath('corrected_particles.stk')
-            fnCorrected = self._getExtraPath('corrected_particles.xmd')
-            args = "-i %s -o %s --save_metadata_stack %s --keep_input_columns" % (
-                    self.trainImgsFn, fnCorrectedStk, fnCorrected)
-            args += " --sampling_rate %f --correct_envelope" % Ts
-            if self.inputSet.get().isPhaseFlipped():
-                args += " --phase_flipped"
-            self.runJob("xmipp_ctf_correct_wiener2d", args,numberOfMpi=self.myMPI.get())
+        self._correctWiener(hasCTF, self.trainImgsFn, Ts)
 
-        Xdim = inputTrain.getXDim()
-        if self.newXdim != Xdim:
-            self.runJob("xmipp_image_resize",
-                        "-i %s -o %s --save_metadata_stack %s --fourier %d" %
-                        (fnCorrected,
-                         self._getExtraPath('scaled_train_particles.stk'),
-                         self._getExtraPath('scaled_train_particles.xmd'),
-                         self.newXdim), numberOfMpi=self.myMPI.get())
-            moveFile(self._getExtraPath('scaled_train_particles.xmd'),
-                     self.trainImgsFn)
+        self._resize(Xdim, fnCorrected,
+                     'scaled_train_particles', self.trainImgsFn)
 
-        if exists(self._getExtraPath('corrected_particles.stk')):
-            remove(self._getExtraPath('corrected_particles.stk'))
-            remove(self._getExtraPath('corrected_particles.xmd'))
+        self._removeCorrectedParticles()
 
     def generateConeCenters(self, fn):
-        fnVol = self._getTmpPath("volume.vol")
+        fnVol = self._getTmpPath(self._fnVolumeVol)
         fnCenters = self._getExtraPath(fn + ".stk")
         fnCentersMd = self._getExtraPath(fn + ".doc")
         # if self.spanConesTilt.get()>30:
@@ -316,7 +326,7 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
 
         totalCones = self.generateConeCenters('coneCenters')
         self.numCones = totalCones
-        fnCentersMd = self._getExtraPath("coneCenters.doc")
+        fnCentersMd = self._getExtraPath(self._fnConeCenterDoc)
         mdCones = emlib.MetaData(fnCentersMd)
 
         auxList = []
@@ -340,13 +350,13 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
             auxList.append(numCone - 1)
             row.addToMd(mdCone)
         for i in range(totalCones):
-            fnTrain = self._getExtraPath(nameTrain + "%d.xmd" % (i + 1))
+            fnTrain = self._getExtraPath(nameTrain + self._tempNumXmd % (i + 1))
             mdList[i].write(fnTrain)
 
 
     def prepareImagesForTraining(self):
 
-        fnCentersMd = self._getExtraPath("coneCenters.doc")
+        fnCentersMd = self._getExtraPath(self._fnConeCenterDoc)
         mdCones = emlib.MetaData(fnCentersMd)
         span = self.spanConesTilt.get()
         counterCones = 0
@@ -384,7 +394,7 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
             counterCones = counterCones + 1
 
         if self.modelPretrain.get() is False:
-            fnToFilter = self._getExtraPath('projectionsExp%d.xmd' % (lastLabel))
+            fnToFilter = self._getProjectionsExp(lastLabel)
             self.runJob("xmipp_transform_filter", " -i %s --fourier low_pass %f" %
                         (fnToFilter, 0.15), numberOfMpi=self.myMPI.get())
 
@@ -392,7 +402,7 @@ class XmippProtDeepAlign(ProtRefine3D, xmipp3.XmippProtocol):
 
         newXdim = readInfoField(self._getExtraPath(), "size",
                                 emlib.MDL_XSIZE)
-        fnVol = self._getTmpPath("volume.vol")
+        fnVol = self._getTmpPath(self._fnVolumeVol)
 
         uniformProjectionsStr = """
 # XMIPP_STAR_1 *
@@ -427,17 +437,11 @@ _noiseCoord   '0'
         cleanPattern(self._getExtraPath('uniformProjections*'))
 
     def generateExpImagesStep(self, Nimgs, nameProj, nameExp, label):
-
-        newXdim = readInfoField(self._getExtraPath(), "size",
-                                emlib.MDL_XSIZE)
-        fnProj = self._getExtraPath(nameProj + "%d.xmd" % label)
-        fnExp = self._getExtraPath(nameExp + "%d.xmd" % label)
+        fnProj = self._getExtraPath(nameProj + self._tempNumXmd % label)
+        fnExp = self._getExtraPath(nameExp + self._tempNumXmd % label)
         fnLabels = self._getExtraPath('labels.txt')
         mdIn = emlib.MetaData(fnProj)
         mdExp = emlib.MetaData()
-        maxPsi = 180
-        maxShift = round(newXdim / 10)
-        idx = 1
         NimgsMd = mdIn.size()
         Nrepeats = int(Nimgs / NimgsMd)
         # if Nrepeats<10:
@@ -446,6 +450,28 @@ _noiseCoord   '0'
         if (label == 1 and exists(fnLabels)):
             remove(fnLabels)
         fileLabels = open(fnLabels, "a")
+        self._processRows(label, fnExp, mdIn, mdExp, Nrepeats, fileLabels)
+        mdExp.write(fnExp)
+        fileLabels.close()
+        if (label - 1) > 0:
+            labelPrev = -1
+            for n in range(1, label):
+                if exists(self._getExtraPath(nameExp + self._tempNumXmd % (label - n))):
+                    labelPrev = label - n
+                    break
+            if labelPrev != -1:
+                lastFnExp = self._getExtraPath(
+                    nameExp + self._tempNumXmd % (labelPrev))
+                self.runJob("xmipp_metadata_utilities",
+                            " -i %s --set union %s -o %s " %
+                            (lastFnExp, fnExp, fnExp), numberOfMpi=1)
+        remove(fnProj)
+
+    def _processRows(self, label, fnExp, mdIn, mdExp, Nrepeats, fileLabels):
+        newXdim = readInfoField(self._getExtraPath(), "size",
+                                emlib.MDL_XSIZE)
+        maxPsi = 180
+        maxShift = round(newXdim / 10)
         for row in iterRows(mdIn):
             fnImg = row.getValue(emlib.MDL_IMAGE)
             myRow = row
@@ -453,7 +479,7 @@ _noiseCoord   '0'
             Xdim, Ydim, _, _ = I.getDimensions()
             Xdim2 = Xdim / 2
             Ydim2 = Ydim / 2
-            if Nrepeats==0:
+            if Nrepeats == 0:
                 myRow.addToMd(mdExp)
                 idx += 1
                 fileLabels.write(str(label - 1) + '\n')
@@ -468,7 +494,8 @@ _noiseCoord   '0'
                     M = np.float32([[c, s, (1 - c) * Xdim2 - s * Ydim2 + deltaX],
                                     [-s, c, s * Xdim2 + (1 - c) * Ydim2 + deltaY]])
                     newFn = ('%06d@' % idx) + fnExp[:-3] + 'stk'
-                    self._ih.applyTransform(fnImg, newFn, M, (Ydim, Xdim), doWrap=True)
+                    self._ih.applyTransform(
+                        fnImg, newFn, M, (Ydim, Xdim), doWrap=True)
 
                     myRow.setValue(emlib.MDL_IMAGE, newFn)
                     myRow.setValue(emlib.MDL_ANGLE_PSI, psiDeg)
@@ -477,24 +504,10 @@ _noiseCoord   '0'
                     myRow.addToMd(mdExp)
                     idx += 1
                     fileLabels.write(str(label - 1) + '\n')
-        mdExp.write(fnExp)
-        fileLabels.close()
-        if (label - 1) > 0:
-            labelPrev = -1
-            for n in range(1, label):
-                if exists(self._getExtraPath(nameExp + "%d.xmd" % (label - n))):
-                    labelPrev = label - n
-                    break
-            if labelPrev is not -1:
-                lastFnExp = self._getExtraPath(nameExp + "%d.xmd" % (labelPrev))
-                self.runJob("xmipp_metadata_utilities",
-                            " -i %s --set union %s -o %s " %
-                            (lastFnExp, fnExp, fnExp), numberOfMpi=1)
-        remove(fnProj)
 
     def trainNClassifiers2ClassesStep(self, thIdx, gpuId, totalGpu):
 
-        mdNumCones = emlib.MetaData(self._getExtraPath("coneCenters.doc"))
+        mdNumCones = emlib.MetaData(self._getExtraPath(self._fnConeCenterDoc))
         self.numCones = mdNumCones.size()
 
         for i in range(self.numCones):
@@ -510,53 +523,55 @@ _noiseCoord   '0'
                     copy(self.pretrainedModels.get()._getExtraPath(modelFn + '.h5'),
                          self._getExtraPath(modelFn + '.h5'))
 
-            expCheck = self._getExtraPath('projectionsExp%d.xmd' % idx)
-            if exists(expCheck):
-                if not exists(self._getExtraPath(modelFn + '.h5')):
-                    fnLabels = self._getExtraPath('labels.txt')
-                    fileLabels = open(fnLabels, "r")
-                    expSet = self._getExtraPath('projectionsExp%d.xmd' % self.numCones)
-                    if not exists(expSet):
-                        for n in range(1, self.numCones):
-                            if exists(self._getExtraPath('projectionsExp%d.xmd' % (self.numCones - n))):
-                                expSet = self._getExtraPath('projectionsExp%d.xmd' % (self.numCones - n))
-                                break
-                    newFnLabels = self._getExtraPath('labels%d.txt' % idx)
-                    newFileLabels = open(newFnLabels, "w")
-                    lines = fileLabels.readlines()
-                    for line in lines:
-                        if line == str(idx - 1) + '\n':
-                            newFileLabels.write('1\n')
-                        else:
-                            newFileLabels.write('0\n')
-                    newFileLabels.close()
-                    fileLabels.close()
+            expCheck = self._getProjectionsExp(idx)
+            if exists(expCheck) and not exists(self._getExtraPath(modelFn + '.h5')):
+                self._coneStep(gpuId, idx, modelFn)
 
-                    newXdim = readInfoField(self._getExtraPath(), "size",
-                                            emlib.MDL_XSIZE)
-                    fnLabels = self._getExtraPath('labels%d.txt' % idx)
+    def _coneStep(self, gpuId, idx, modelFn):
+        fnLabels = self._getExtraPath('labels.txt')
+        fileLabels = open(fnLabels, "r")
+        expSet = self._getProjectionsExp(self.numCones)
+        if not exists(expSet):
+            for n in range(1, self.numCones):
+                if exists(self._getProjectionsExp(self.numCones - n)):
+                    expSet = self._getProjectionsExp(self.numCones - n)
+                    break
+        newFnLabels = self._getExtraPath('labels%d.txt' % idx)
+        newFileLabels = open(newFnLabels, "w")
+        lines = fileLabels.readlines()
+        for line in lines:
+            if line == str(idx - 1) + '\n':
+                newFileLabels.write('1\n')
+            else:
+                newFileLabels.write('0\n')
+        newFileLabels.close()
+        fileLabels.close()
 
-                    print("Training region ", idx, " in GPU ", gpuId)
-                    sys.stdout.flush()
+        newXdim = readInfoField(self._getExtraPath(), "size",
+                                        emlib.MDL_XSIZE)
+        fnLabels = self._getExtraPath('labels%d.txt' % idx)
 
-                    try:
-                        args = "%s %s %s %s %d %d %d %d " % (
-                        expSet, fnLabels, self._getExtraPath(),
-                        modelFn+'_aux', self.numEpochs, newXdim, 2, self.batchSize.get())
-                        #args += " %(GPU)s"
-                        args += " %s " % (gpuId)
-                        #args += " %s " %(int(idx % totalGpu))
-                        self.runJob("xmipp_cone_deepalign", args, numberOfMpi=1, env=self.getCondaEnv())
-                    except Exception as e:
-                        raise Exception(
-                            "ERROR: Please, if you are suffering memory problems, "
-                            "check the target resolution to work with lower dimensions.")
+        print("Training region ", idx, " in GPU ", gpuId)
+        sys.stdout.flush()
 
-                    moveFile(self._getExtraPath(modelFn + '_aux.h5'), self._getExtraPath(modelFn + '.h5'))
+        try:
+            args = "%s %s %s %s %d %d %d %d " % (
+                    expSet, fnLabels, self._getExtraPath(),
+                    modelFn+'_aux', self.numEpochs, newXdim, 2, self.batchSize.get())
+                    #args += " %(GPU)s"
+            args += " %s " % (gpuId)
+                    #args += " %s " %(int(idx % totalGpu))
+            self.runJob("xmipp_cone_deepalign", args, numberOfMpi=1, env=self.getCondaEnv())
+        except Exception as e:
+            raise Exception(
+                        "ERROR: Please, if you are suffering memory problems, "
+                        "check the target resolution to work with lower dimensions.")
+
+        moveFile(self._getExtraPath(modelFn + '_aux.h5'), self._getExtraPath(modelFn + '.h5'))
 
     def predictStep(self, gpuId):
 
-        if not exists(self._getExtraPath('conePrediction.txt')):
+        if not exists(self._getConePrediction()):
             # if self.useQueueForSteps() or self.useQueue():
             #     myStr = os.environ["CUDA_VISIBLE_DEVICES"]
             # else:
@@ -566,7 +581,7 @@ _noiseCoord   '0'
             # print("Predict", myStr, numGPU)
             # sys.stdout.flush()
 
-            mdNumCones = emlib.MetaData(self._getExtraPath("coneCenters.doc"))
+            mdNumCones = emlib.MetaData(self._getExtraPath(self._fnConeCenterDoc))
             self.numCones = mdNumCones.size()
 
             imgsOutStk = self._getExtraPath('images_out_filtered.stk')
@@ -588,11 +603,11 @@ _noiseCoord   '0'
 
     def correlationCudaStep(self, thIdx, gpuId, totalGpu):
 
-        mdNumCones = emlib.MetaData(self._getExtraPath("coneCenters.doc"))
+        mdNumCones = emlib.MetaData(self._getExtraPath(self._fnConeCenterDoc))
         self.numCones = mdNumCones.size()
 
         # Cuda Correlation step - creating the metadata
-        predCones = np.loadtxt(self._getExtraPath('conePrediction.txt'))
+        predCones = np.loadtxt(self._getConePrediction())
         mdConeList = []
         numMax = int(self.numConesSelected)
         for i in range(self.numCones):
@@ -633,7 +648,7 @@ _noiseCoord   '0'
 
                 self.runJob("xmipp_metadata_utilities", "-i %s --fill ref lineal 1 1 " % (fnProjCone), numberOfMpi=1)
 
-                fnOutCone = 'outCone%d.xmd' % (i + 1)
+                fnOutCone = self._getOutCone(i + 1)
 
                 if not exists(self._getExtraPath(fnOutCone)):
                     params = '  -i %s' % fnExpCone
@@ -645,11 +660,11 @@ _noiseCoord   '0'
 
     def correlationSignificantStep(self):
 
-        mdNumCones = emlib.MetaData(self._getExtraPath("coneCenters.doc"))
+        mdNumCones = emlib.MetaData(self._getExtraPath(self._fnConeCenterDoc))
         self.numCones = mdNumCones.size()
 
         # Cuda Correlation step - creating the metadata
-        predCones = np.loadtxt(self._getExtraPath('conePrediction.txt'))
+        predCones = np.loadtxt(self._getConePrediction())
         mdConeList = []
         numMax = int(self.numConesSelected)
         for i in range(self.numCones):
@@ -674,7 +689,7 @@ _noiseCoord   '0'
                 mdConeList[i].write(fnExpCone)
 
                 fnProjCone = self._getExtraPath('projectionsCudaCorr%d.xmd' % (i + 1))
-                fnOutCone = 'outCone%d.xmd' % (i + 1)
+                fnOutCone = self._getOutCone(i + 1)
 
                 if not exists(self._getExtraPath(fnOutCone)):
                     # Correlation step - calling significant program
@@ -689,7 +704,7 @@ _noiseCoord   '0'
 
     def createOutputMetadataStep(self):
 
-        mdNumCones = emlib.MetaData(self._getExtraPath("coneCenters.doc"))
+        mdNumCones = emlib.MetaData(self._getExtraPath(self._fnConeCenterDoc))
         self.numCones = mdNumCones.size()
         numMax = int(self.numConesSelected)
         mdIn = emlib.MetaData(self.imgsFn)
@@ -703,27 +718,11 @@ _noiseCoord   '0'
         fnFinal = self._getExtraPath('outConesParticles.xmd')
         for i in range(self.numCones):
 
-            fnOutCone = 'outCone%d.xmd' % (i + 1)
+            fnOutCone = self._getOutCone(i + 1)
 
             if exists(self._getExtraPath(fnOutCone)):             
-
-                if numMax == 1:
-                    if not exists(fnFinal):
-                        copy(self._getExtraPath(fnOutCone), fnFinal)
-                    else:
-                        params = ' -i %s --set union %s -o %s' % (fnFinal, self._getExtraPath(fnOutCone),
-                                                                  fnFinal)
-                        self.runJob("xmipp_metadata_utilities", params,
-                                    numberOfMpi=1)
-                else:
-                    mdCones.append(emlib.MetaData(self._getExtraPath(fnOutCone)))
-                    coneFns.append(mdCones[i].getColumnValues(emlib.MDL_IMAGE))
-                    shiftX.append(mdCones[i].getColumnValues(emlib.MDL_SHIFT_X))
-                    shiftY.append(mdCones[i].getColumnValues(emlib.MDL_SHIFT_Y))
-                    coneCCs.append(mdCones[i].getColumnValues(emlib.MDL_MAXCC))
-
-            else:
-                if numMax > 1:
+                self._updateCone(numMax, coneFns, coneCCs, mdCones, shiftX, shiftY, fnFinal, i, fnOutCone)
+            elif numMax > 1:
                     mdCones.append(None)
                     coneFns.append([])
                     coneCCs.append([])
@@ -731,29 +730,7 @@ _noiseCoord   '0'
                     shiftY.append([])
 
         if numMax > 1:
-            mdFinal = emlib.MetaData()
-            row = md.Row()
-            for myFn in allInFns:
-                myCCs = []
-                myCones = []
-                myPos = []
-                for n in range(self.numCones):
-                    if myFn in coneFns[n]:
-                        pos = coneFns[n].index(myFn)
-                        myPos.append(pos)
-                        if abs(shiftX[n][pos])<30 and abs(shiftY[n][pos])<30:
-                            myCCs.append(coneCCs[n][pos])
-                        else:
-                            myCCs.append(0)
-                        myCones.append(n + 1)
-                if len(myPos) > 0:
-                    if max(myCCs)==0:
-                        continue
-                    coneMax = myCones[myCCs.index(max(myCCs))]
-                    objId = myPos[myCCs.index(max(myCCs))] + 1
-                    row.readFromMd(mdCones[coneMax - 1], objId)
-                    row.addToMd(mdFinal)
-            mdFinal.write(fnFinal)
+            self._writeMDFinal(allInFns, coneFns, coneCCs, mdCones, shiftX, shiftY, fnFinal)
         else:
             mdCones = emlib.MetaData(fnFinal)
             mdCones.removeObjects(emlib.MDValueGT(emlib.MDL_SHIFT_X, 30.))
@@ -761,6 +738,47 @@ _noiseCoord   '0'
             mdCones.removeObjects(emlib.MDValueLT(emlib.MDL_SHIFT_X, -30.))
             mdCones.removeObjects(emlib.MDValueLT(emlib.MDL_SHIFT_Y, -30.))
             mdCones.write(fnFinal)
+
+    def _updateCone(self, numMax, coneFns, coneCCs, mdCones, shiftX, shiftY, fnFinal, i, fnOutCone):
+        if numMax == 1:
+            if not exists(fnFinal):
+                copy(self._getExtraPath(fnOutCone), fnFinal)
+            else:
+                params = ' -i %s --set union %s -o %s' % (fnFinal, self._getExtraPath(fnOutCone),
+                                                                  fnFinal)
+                self.runJob("xmipp_metadata_utilities", params,
+                                    numberOfMpi=1)
+        else:
+            mdCones.append(emlib.MetaData(self._getExtraPath(fnOutCone)))
+            coneFns.append(mdCones[i].getColumnValues(emlib.MDL_IMAGE))
+            shiftX.append(mdCones[i].getColumnValues(emlib.MDL_SHIFT_X))
+            shiftY.append(mdCones[i].getColumnValues(emlib.MDL_SHIFT_Y))
+            coneCCs.append(mdCones[i].getColumnValues(emlib.MDL_MAXCC))
+
+    def _writeMDFinal(self, allInFns, coneFns, coneCCs, mdCones, shiftX, shiftY, fnFinal):
+        mdFinal = emlib.MetaData()
+        row = md.Row()
+        for myFn in allInFns:
+            myCCs = []
+            myCones = []
+            myPos = []
+            for n in range(self.numCones):
+                if myFn in coneFns[n]:
+                    pos = coneFns[n].index(myFn)
+                    myPos.append(pos)
+                    if abs(shiftX[n][pos])<30 and abs(shiftY[n][pos])<30:
+                        myCCs.append(coneCCs[n][pos])
+                    else:
+                        myCCs.append(0)
+                    myCones.append(n + 1)
+            if len(myPos) > 0:
+                if max(myCCs)==0:
+                    continue
+                coneMax = myCones[myCCs.index(max(myCCs))]
+                objId = myPos[myCCs.index(max(myCCs))] + 1
+                row.readFromMd(mdCones[coneMax - 1], objId)
+                row.addToMd(mdFinal)
+        mdFinal.write(fnFinal)
 
     def createOutputStep(self):
 
