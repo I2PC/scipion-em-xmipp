@@ -29,18 +29,15 @@
 from os.path import basename
 from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pwem import ALIGN_3D
-from pwem.emlib import lib
 import pwem.emlib.metadata as md
 from pwem.protocols import EMProtocol
-
-from xmipp3.convert import alignmentToRow, ctfModelToRow
+from xmipp3.convert import writeSetOfParticles
 
 
 class XmippProtSubtractProjection(EMProtocol):
-    """ This protocol computes the projection subtraction between particles and initial volume. To achive this, it
-    computes projections with the same angles of input particles from an input initial volume and
-    then, each particle is adjusted and subtracted to its correspondent projection. """
+    """ This protocol computes the subtraction between particles and a initial volume, by computing its projections
+    with the same angles that input particles have. Then, each particle and the correspondent projection of the inital
+    volume are numerically adjusted and subtracted using a mask which denotes the region to keep. """
 
     _label = 'subtract projection'
 
@@ -67,9 +64,6 @@ class XmippProtSubtractProjection(EMProtocol):
                       expertLevel=LEVEL_ADVANCED,
                       help='Relaxation factor for Fourier amplitude projector (POCS), it should be between 0 and 1, '
                            'being 1 no relaxation and 0 no modification of volume 2 amplitudes')
-        form.addParam('saveFiles', BooleanParam, label='Save intermediate files?', default=False,
-                      expertLevel=LEVEL_ADVANCED, help='Save input particle filtered and computed projection adjusted, '
-                                                       'which are the volumes that are really subtracted.')
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -80,19 +74,7 @@ class XmippProtSubtractProjection(EMProtocol):
     # --------------------------- STEPS functions --------------------------------------------
     def convertStep(self):
         # convert input particles into .xmd file
-        mdParticles = lib.MetaData()
-        for part in self.particles.get():
-            id = part.getObjId()
-            ix = part.getIndex()
-            fn = "%s@%s" % (ix, part.getFileName())
-            nRow = md.Row()
-            nRow.setValue(lib.MDL_ITEM_ID, int(id))
-            nRow.setValue(lib.MDL_IMAGE, fn)
-            alignmentToRow(part.getTransform(), nRow, ALIGN_3D)
-            if part.hasCTF():
-                ctfModelToRow(part.getCTF(), nRow)
-            nRow.addToMd(mdParticles)
-        mdParticles.write(self._getExtraPath("input_particles.xmd"))
+        writeSetOfParticles(self.particles.get(), self._getExtraPath("input_particles.xmd"))
         
     def subtractionStep(self):
         vol = self.vol.get().clone()
@@ -105,6 +87,7 @@ class XmippProtSubtractProjection(EMProtocol):
         args = '-i %s --ref %s -o %s --iter %s --lambda %s' % (self._getExtraPath("input_particles.xmd"), fnVol,
                                                                self._getExtraPath("output_particles"), iter,
                                                                self.rfactor.get())
+        args += ' --saveProj %s' % self._getExtraPath('')  # REMOVE!!!!!
         if resol:
             fc = vol.getSamplingRate()/resol
             args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
@@ -112,9 +95,6 @@ class XmippProtSubtractProjection(EMProtocol):
             args += ' --maskVol %s' % self.maskVol.get().getFileName()
         if self.mask:
             args += ' --mask %s' % self.mask.get().getFileName()
-        if self.saveFiles:
-            args += ' --savePart %s --saveProj %s' % (self._getExtraPath('particle_volMask.mrc'), self._getExtraPath(''))
-                                                      # self._getExtraPath('projection_adjusted.mrc'))
         self.runJob(program, args)
 
     def createOutputStep(self):
@@ -122,7 +102,6 @@ class XmippProtSubtractProjection(EMProtocol):
         inputSet = self.particles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
-
         outputSet.copyItems(inputSet, updateItemCallback=self._updateItem,
                             itemDataIterator=md.iterRows(self._getExtraPath("input_particles.xmd")))
 
