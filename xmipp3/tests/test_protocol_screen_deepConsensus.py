@@ -40,7 +40,7 @@ ADD_MODEL_TRAIN_NEW = 0
 ADD_MODEL_TRAIN_PRETRAIN = 1
 ADD_MODEL_TRAIN_PREVRUN = 2
 
-class TestXmippProtScreenDeepConsensusBigTest(BaseTest):
+class TestXmippProtScreenDeepConsensus(BaseTest):
     @classmethod
     def setUpClass(cls):
         tests.setupTestProject(cls)
