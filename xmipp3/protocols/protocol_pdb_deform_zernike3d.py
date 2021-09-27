@@ -31,9 +31,9 @@ import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 
 
-class XmippProtDeformPDB(ProtAnalysis3D):
-    """ Protocol for PDB deformation based on spherical harmonics. """
-    _label = 'sph deform pdb'
+class XmippProtDeformPDBZernike3D(ProtAnalysis3D):
+    """ Protocol for PDB deformation based on Zernike3D basis. """
+    _label = 'deform pdb - Zernike3D'
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
