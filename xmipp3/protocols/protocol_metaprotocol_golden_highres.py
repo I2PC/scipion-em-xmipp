@@ -247,7 +247,7 @@ class XmippMetaProtGoldenHighRes(EMProtocol):
             newHighRes.inputVolumes.set(previousProtVol)
             newHighRes.inputVolumes.setExtended(namePreviousVol)
 
-            project.launchProtocol(newHighRes)
+            project.scheduleProtocol(newHighRes)
 
             # Next schedule will be after this one
             self._runPrerequisites.append(newHighRes.getObjId())
