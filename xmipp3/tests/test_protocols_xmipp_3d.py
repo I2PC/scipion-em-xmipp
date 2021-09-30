@@ -1337,6 +1337,7 @@ class TestXmippVolSubtraction(TestXmippBase):
         self.assertIsNotNone(protVolConsensus.outputVolume,
                              "There was a problem with Volumes consensus")
 
+
 class TestXmippProjSubtraction(TestXmippBase):
 
     @classmethod
@@ -1430,3 +1431,16 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.launchProtocol(protSubtractProjNoise)
         self.assertIsNotNone(protSubtractProjNoise.outputParticles,
                              "There was a problem with projection subtraction with noise")
+
+
+class TestXmippVolPhantom(TestXmippBase):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testXmippProjSub(self):
+        protCreatePhantom = self.newProtocol(XmippProtPhantom)
+        self.launchProtocol(protCreatePhantom)
+        self.assertIsNotNone(protCreatePhantom.getFiles(),
+                             "There was a problem with phantom creation")
