@@ -175,7 +175,7 @@ class XmippProtPreprocessParticles(XmippProcessParticles):
         form.addParam('doPhaseFlip', BooleanParam, default=False,
                       label='Phase flip images')
         XmippPreprocessHelper._defineProcessParams(form)
-    
+
     #--------------------------- INSERT steps functions ------------------------
     def _insertProcessStep(self):
         self.isFirstStep = True
