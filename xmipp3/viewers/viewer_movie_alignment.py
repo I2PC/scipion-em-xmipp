@@ -69,15 +69,16 @@ class XmippMovieAlignConsensusViewer(Viewer):
     def _visualize(self, obj, **kwargs):
         views = []
 
+        if obj.hasAttribute('outputMicrographsDiscarded'):
+            views.append(ObjectView(self._project, obj.strId(),
+                                    obj.outputMicrographsDiscarded.getFileName(),
+                                    viewParams=getViewParamsConsensus()))
         if obj.hasAttribute('outputMicrographs'):
             views.append(ObjectView(self._project, obj.strId(),
                                     obj.outputMicrographs.getFileName(),
                                     viewParams=getViewParamsConsensus()))
-        elif obj.hasAttribute('outputMovies'):
-            views.append(ObjectView(self._project, obj.strId(),
-                                    obj.outputMovies.getFileName(),
-                                    viewParams=getViewParams()))
-        else:
+
+        if not(obj.hasAttribute('outputMicrographs')) and not(obj.hasAttribute('outputMicrographsDiscarded')):
             views.append(self.infoMessage("Output (micrographs or movies) has "
                                           "not been produced yet."))
 
