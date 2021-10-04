@@ -367,40 +367,21 @@ class XmippVolumeRadiiProjMWizard(XmippVolumeRadiiWizard):
         protParams['value']= value
         return protParams
 
-class SphMaskWizard(VolumeMaskRadiusWizard):
-    _targets = [(XmippProtVolumeDeformZernike3D, ['Rmax'])]
+class Zernike3DMaskWizard(VolumeMaskRadiusWizard):
+    _targets = [(XmippProtVolumeDeformZernike3D, ['Rmax']),
+                (XmippProtStructureMapZernike3D, ['Rmax'])]
 
     def _getParameters(self, protocol):
 
         label, value = self._getInputProtocol(self._targets, protocol)
 
         protParams = {}
-        protParams['input']= protocol.inputVolume
-        protParams['label']= label
-        protParams['value']= value
-        return protParams
-
-    def _getProvider(self, protocol):
-        _objs = self._getParameters(protocol)['input']
-        return VolumeMaskRadiusWizard._getListProvider(self, _objs)
-
-    def show(self, form):
-        params = self._getParameters(form.protocol)
-        _value = params['value']
-        _label = params['label']
-        VolumeMaskRadiusWizard.show(self, form, _value, _label, UNIT_PIXEL)
-
-class StructMapSphMaskWizard(VolumeMaskRadiusWizard):
-    _targets = [(XmippProtStructureMapZernike3D, ['Rmax'])]
-
-    def _getParameters(self, protocol):
-
-        label, value = self._getInputProtocol(self._targets, protocol)
-
-        protParams = {}
-        protParams['input']= protocol.inputVolumes
-        protParams['label']= label
-        protParams['value']= value
+        if isinstance(protocol, XmippProtVolumeDeformZernike3D):
+            protParams['input'] = protocol.inputVolume
+        else:
+            protParams['input'] = protocol.inputVolumes
+        protParams['label'] = label
+        protParams['value'] = value
         return protParams
 
     def _getProvider(self, protocol):

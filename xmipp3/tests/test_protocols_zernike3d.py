@@ -36,7 +36,8 @@ import pwem.emlib.metadata as md
 
 from xmipp3.protocols import (XmippProtAngularAlignmentZernike3D,
                               XmippProtVolumeDeformZernike3D,
-                              XmippProtStructureMapZernike3D)
+                              XmippProtStructureMapZernike3D,
+                              XmippProtStructureMap)
 
 
 class TestZernike3DBase(BaseTest):
@@ -208,6 +209,25 @@ class TestProtocolsZernike3D(TestZernike3DBase):
         diff_sm_cons = np.abs(np.sum(sm_cpu_gold_cons - sm_cpu_test_cons))
         self.assertAlmostEqual(diff_sm_cons, 0, delta=0.2,
                                msg="Unexpected consensus structure mapping")
+
+    def testStructMapCPU(self):
+        # Test for CPU implementation
+        structureMap = self.newProtocol(XmippProtStructureMap,
+                                        inputVolumes=self.protImportVols.outputVolumes,
+                                        targetResolution=12.0,
+                                        numberOfThreads=4,
+                                        objLabel="StructMap - CPU")
+        self.launchProtocol(structureMap)
+        self.assertTrue(structureMap.isFinished(), "There was a problem with StructureMap - CPU Version")
+        # Check if structure mappings (3D) are fine
+        sm_cpu_gold_corr = np.loadtxt(self.dataset.getFile('gold_standard_sm/No_Zernike/CoordinateMatrixCorr3.txt'),
+                                     delimiter=' ')
+        sm_cpu_test_corr = np.loadtxt(structureMap._getExtraPath('CoordinateMatrixCorr3.txt'),
+                                     delimiter=' ')
+        diff_sm_corr = np.abs(np.sum(sm_cpu_gold_corr - sm_cpu_test_corr))
+        self.assertAlmostEqual(diff_sm_corr, 0, delta=0.2,
+                               msg="Unexpected correlation structure mapping")
+
 
     def testStructMapZernike3DGPU(self):
         # Test for GPU implementation

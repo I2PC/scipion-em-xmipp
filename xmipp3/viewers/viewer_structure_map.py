@@ -92,7 +92,10 @@ class projectionPlot(object):
         self.coords = coords
         self.labels = labels
         self.weights = weights
-        self.minimum_spanning_tree()
+        try:
+            self.minimum_spanning_tree()
+        except:
+            self.T = None
         self.proj_coords = None
         self.radio = None
         self.cb = None
@@ -101,11 +104,11 @@ class projectionPlot(object):
         self.fig = plt.Figure(figsize=(10, 4))
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
         self.ax_3d = self.fig.add_subplot(121, projection="3d")
-        self.ax_3d.set_title("3D Minimum Spanning Tree")
+        self.ax_3d.set_title("3D view")
         self.ax_3d.set_axis_off()
         self.fig.canvas.mpl_connect('button_release_event', self.onRelease)
         self.ax_2d = self.fig.add_subplot(122)
-        self.ax_2d.set_title("Projection Minimum Spanning Tree")
+        self.ax_2d.set_title("Projection from current 3D view")
 
     def minimum_spanning_tree(self):
         N = self.coords.shape[0]
@@ -167,23 +170,26 @@ class projectionPlot(object):
         N = self.coords.shape[0]
         degree = [0] * N
         edges_mst = [0] * (N - 1)
-        for idn in range(N - 1):
-            degree[self.T[idn][0]] += 1
-            degree[self.T[idn][1]] += 1
-            edges_mst[idn] = (self.T[idn][0], self.T[idn][1])
-        edge_max = max(degree)
-        colors = [plt.cm.plasma(val / edge_max) for val in degree]
+        if self.T is not None:
+            for idn in range(N - 1):
+                degree[self.T[idn][0]] += 1
+                degree[self.T[idn][1]] += 1
+                edges_mst[idn] = (self.T[idn][0], self.T[idn][1])
+            edge_max = max(degree)
+            colors = [plt.cm.plasma(val / edge_max) for val in degree]
+            for edge in edges_mst:
+                if edge != 0:
+                    x = np.array((self.coords[edge[0]][0], self.coords[edge[1]][0]))
+                    y = np.array((self.coords[edge[0]][1], self.coords[edge[1]][1]))
+                    z = np.array((self.coords[edge[0]][2], self.coords[edge[1]][2]))
+                    self.ax_3d.plot(x, y, z, c='black', alpha=0.5)
+        else:
+            colors = [plt.cm.plasma(1) for _ in self.coords]
         for idn, row in enumerate(self.coords):
             xi = row[0]
             yi = row[1]
             zi = row[2]
             self.ax_3d.scatter(xi, yi, zi, c=[colors[idn]], s=20 + 20 * degree[idn], edgecolors='k', alpha=0.7)
-        for edge in edges_mst:
-            if edge != 0:
-                x = np.array((self.coords[edge[0]][0], self.coords[edge[1]][0]))
-                y = np.array((self.coords[edge[0]][1], self.coords[edge[1]][1]))
-                z = np.array((self.coords[edge[0]][2], self.coords[edge[1]][2]))
-                self.ax_3d.plot(x, y, z, c='black', alpha=0.5)
         annotate3D(self.ax_3d, s=self.labels, xyz=self.coords, fontsize=10, xytext=(-3, 3),
                    textcoords='offset points', ha='right', va='bottom')
 
@@ -201,6 +207,72 @@ class projectionPlot(object):
             self.proj_coords = self.projectMatrix(M, self.coords)
             self.plotType(self.prevlabel)
 
+    def plotScatter(self, x, y):
+        self.ax_2d.clear()
+        self.ax_2d.scatter(x, y, color="green")
+        self.ax_2d.set_title("Projection Minimum Spanning Tree")
+        self.fig.canvas.draw()
+
+    def plotContour(self, x, y):
+        self.ax_2d.clear()
+        rangeX = np.max(x) - np.min(x)
+        rangeY = np.max(y) - np.min(y)
+        if rangeX > rangeY:
+            sigma = rangeX / 50
+        else:
+            sigma = rangeY / 50
+        xi = np.linspace(min(x) - 0.1, max(x) + 0.1, 100)
+        yi = np.linspace(min(x) - 0.1, max(x) + 0.1, 100)
+        z = np.zeros((100, 100), float)
+        zSize = z.shape
+        N = len(x)
+        for c in range(zSize[1]):
+            for r in range(zSize[0]):
+                for d in range(N):
+                    z[r, c] = z[r, c] + (1.0 / N) * (1.0 / ((2 * math.pi) * sigma ** 2)) * math.exp(
+                        -((xi[c] - x[d]) ** 2 + (yi[r] - y[d]) ** 2) / (2 * sigma ** 2))
+        zMax = np.max(z)
+        z = z / zMax
+        self.ax_2d.contour(xi, yi, z, 15, linewidths=0.5, colors='k')
+        cf = self.ax_2d.contourf(xi, yi, z, 15, cmap=plt.cm.jet)
+        self.ax_2d.set_title("Projection Scatter Plot")
+        cbaxes = self.fig.add_axes([0.92, 0.1, 0.01, 0.8])
+        self.cb = self.fig.colorbar(mappable=cf, cax=cbaxes)
+        self.cb.set_ticks([])
+        self.fig.canvas.draw()
+
+    def plotConvolution(self, x, y):
+        coordinates = np.stack((x, y), axis=1)
+        Xr = np.round(coordinates, decimals=3)
+        size_grid = 2 * np.amax(Xr)
+        grid_coords = np.arange(-size_grid, size_grid, 0.001)
+        R, C = np.meshgrid(grid_coords, grid_coords, indexing='ij')
+        S = np.zeros(R.shape)
+        sigma = R.shape[0] / (200 / 5)
+        lbox = int(6 * sigma)
+        if lbox % 2 == 0:
+            lbox += 1
+        mid = int((lbox - 1) / 2 + 1)
+        kernel = np.zeros((lbox, lbox))
+        kernel[mid, mid] = 1
+        kernel = gaussian_filter(kernel, sigma=sigma)
+        for p in range(Xr.shape[0]):
+            indx = np.argmin(np.abs(R[:, 0] - Xr[p, 0]))
+            indy = np.argmin(np.abs(C[0, :] - Xr[p, 1]))
+            if 'weights' in locals():
+                S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel * self.weights
+            else:
+                S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel
+        S = S[~np.all(S == 0, axis=1)]
+        S = S[:, ~np.all(S == 0, axis=0)]
+        S = ndimage.rotate(S, 90)
+        cf = self.ax_2d.imshow(S)
+        cbaxes = self.fig.add_axes([0.92, 0.1, 0.01, 0.8])
+        self.ax_2d.set_title('Projection Scatter Plot')
+        self.cb = self.fig.colorbar(mappable=cf, cax=cbaxes)
+        self.cb.set_ticks([])
+        self.fig.canvas.draw()
+
     def plotType(self, label):
         self.prevlabel = label
         x = self.proj_coords[:, 0]
@@ -209,68 +281,11 @@ class projectionPlot(object):
             self.cb.remove()
             self.cb = None
         if label == 'Scatter':
-            self.ax_2d.clear()
-            self.ax_2d.scatter(x, y, color="green")
-            self.ax_2d.set_title("Projection Minimum Spanning Tree")
-            self.fig.canvas.draw()
+            self.plotScatter(x, y)
         elif label == 'Contour':
-            self.ax_2d.clear()
-            rangeX = np.max(x) - np.min(x)
-            rangeY = np.max(y) - np.min(y)
-            if rangeX > rangeY:
-                sigma = rangeX / 50
-            else:
-                sigma = rangeY / 50
-            xi = np.linspace(min(x) - 0.1, max(x) + 0.1, 100)
-            yi = np.linspace(min(x) - 0.1, max(x) + 0.1, 100)
-            z = np.zeros((100, 100), float)
-            zSize = z.shape
-            N = len(x)
-            for c in range(zSize[1]):
-                for r in range(zSize[0]):
-                    for d in range(N):
-                        z[r, c] = z[r, c] + (1.0 / N) * (1.0 / ((2 * math.pi) * sigma ** 2)) * math.exp(
-                            -((xi[c] - x[d]) ** 2 + (yi[r] - y[d]) ** 2) / (2 * sigma ** 2))
-            zMax = np.max(z)
-            z = z / zMax
-            self.ax_2d.contour(xi, yi, z, 15, linewidths=0.5, colors='k')
-            cf = self.ax_2d.contourf(xi, yi, z, 15, cmap=plt.cm.jet)
-            self.ax_2d.set_title("Projection Scatter Plot")
-            cbaxes = self.fig.add_axes([0.92, 0.1, 0.01, 0.8])
-            self.cb = self.fig.colorbar(mappable=cf, cax=cbaxes)
-            self.cb.set_ticks([])
-            self.fig.canvas.draw()
+            self.plotContour(x, y)
         elif label == 'Convolution':
-            coordinates = np.stack((x, y), axis=1)
-            Xr = np.round(coordinates, decimals=3)
-            size_grid = 2 * np.amax(Xr)
-            grid_coords = np.arange(-size_grid, size_grid, 0.001)
-            R, C = np.meshgrid(grid_coords, grid_coords, indexing='ij')
-            S = np.zeros(R.shape)
-            sigma = R.shape[0] / (200 / 5)
-            lbox = int(6 * sigma)
-            if lbox % 2 == 0:
-                lbox += 1
-            mid = int((lbox - 1) / 2 + 1)
-            kernel = np.zeros((lbox, lbox))
-            kernel[mid, mid] = 1
-            kernel = gaussian_filter(kernel, sigma=sigma)
-            for p in range(Xr.shape[0]):
-                indx = np.argmin(np.abs(R[:, 0] - Xr[p, 0]))
-                indy = np.argmin(np.abs(C[0, :] - Xr[p, 1]))
-                if 'weights' in locals():
-                    S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel * self.weights
-                else:
-                    S[indx - mid:indx + mid - 1, indy - mid:indy + mid - 1] += kernel
-            S = S[~np.all(S == 0, axis=1)]
-            S = S[:, ~np.all(S == 0, axis=0)]
-            S = ndimage.rotate(S, 90)
-            cf = self.ax_2d.imshow(S)
-            cbaxes = self.fig.add_axes([0.92, 0.1, 0.01, 0.8])
-            self.ax_2d.set_title('Projection Scatter Plot')
-            self.cb = self.fig.colorbar(mappable=cf, cax=cbaxes)
-            self.cb.set_ticks([])
-            self.fig.canvas.draw()
+            self.plotConvolution(x, y)
 
     def initializePlot(self):
         self.mst_3D()

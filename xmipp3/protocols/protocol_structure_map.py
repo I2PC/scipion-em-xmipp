@@ -24,51 +24,28 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+
+
 import numpy as np
-import glob
 import os
-import re
 
 import xmippLib
 
 from pwem.protocols import ProtAnalysis3D
 import pyworkflow.protocol.params as params
 from pwem.emlib.image import ImageHandler
-from pwem.objects import SetOfVolumes, Volume
+from pwem.objects import SetOfVolumes
 from pyworkflow import VERSION_2_0
-from pyworkflow.utils import cleanPattern, cleanPath
+from pyworkflow.utils import cleanPath
 
-
-def mds(d, dimensions=2):
-    """
-    Multidimensional Scaling - Given a matrix of interpoint distances,
-    find a set of low dimensional points that have similar interpoint
-    distances.
-    """
-
-    # Distance matrix size
-    (n, n) = d.shape
-
-    # Centering Matrix
-    J = np.identity(n, float) - (1 / n) * np.ones([n, n], float)
-
-    # Center distance matrix
-    B = -0.5 * J @ d @ J
-
-    # Singular value decomposition
-    [U, S, V] = np.linalg.svd(B)
-    S = np.diag(S)
-
-    # Coordinates matrix from MDS
-    Y = U[:, 0:dimensions] @ np.power(S[0:dimensions, 0:dimensions], 0.5)
-
-    return Y
+from ..protocols.protocol_structure_map_zernike3d import mds
 
 
 class XmippProtStructureMap(ProtAnalysis3D):
     """ Protocol for structure mapping based on correlation distance. """
     _label = 'struct map'
     _lastUpdateVersion = VERSION_2_0
+    OUTPUT_SUFFIX = '_%d_crop.vol'
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
@@ -127,7 +104,7 @@ class XmippProtStructureMap(ProtAnalysis3D):
         newTs = max(maxSr, newTs)
         newXdim = Xdim * Ts / newTs
         fnOut = os.path.splitext(volFn)[0]
-        fnOut = self._getExtraPath(os.path.basename(fnOut + '_%d_crop.vol' % nVoli))
+        fnOut = self._getExtraPath(os.path.basename(fnOut + self.OUTPUT_SUFFIX % nVoli))
 
         ih = ImageHandler()
         if Xdim != newXdim:
@@ -142,8 +119,10 @@ class XmippProtStructureMap(ProtAnalysis3D):
                         (fnOut, fnOut, (newXdim - minDim)))
 
     def alignStep(self, inputVolFn, refVolFn, i, j):
-        inputVolFn = self._getExtraPath(os.path.basename(os.path.splitext(inputVolFn)[0] + '_%d_crop.vol' % (i + 1)))
-        refVolFn = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0] + '_%d_crop.vol' % (j + 1)))
+        inputVolFn = self._getExtraPath(os.path.basename(os.path.splitext(inputVolFn)[0]
+                                                         + self.OUTPUT_SUFFIX % (i + 1)))
+        refVolFn = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0]
+                                                       + self.OUTPUT_SUFFIX % (j + 1)))
         fnOut = self._getTmpPath('vol%dAlignedTo%d.vol' % (i, j))
 
         params = ' --i1 %s --i2 %s --apply %s --local --dontScale' % \
@@ -155,41 +134,14 @@ class XmippProtStructureMap(ProtAnalysis3D):
 
         cleanPath(fnOut)
 
-    # def computeCorr(self, volList):
-    #     ind = 0
-    #     numVol = len(volList)
-    #     self.corrMatrix = np.zeros((numVol, numVol))
-    #     self.corrMatrix[numVol-1][numVol-1] = 0.0
-    #
-    #     for item in volList:
-    #         vol = xmippLib.Image(item)
-    #         self.corrMatrix[ind][ind] = 0.0
-    #         path = self._getExtraPath("*AlignedTo%d.vol" % ind)
-    #         for fileVol in glob.glob(path):
-    #             matches = re.findall("(\d+)", fileVol)
-    #             ind2 = int(matches[1])
-    #             defVol = xmippLib.Image(fileVol)
-    #             corr = vol.correlation(defVol)
-    #             self.corrMatrix[ind2][ind] = 1-corr
-    #         ind += 1
-
     def computeCorr(self, vol1, vol2, i, j):
         vol = xmippLib.Image(vol1)
-        # if self.computeDef.get():
-        # path = self._getExtraPath("*DeformedTo%d.vol" % ind)
-        # else:
-        #     path = self._getExtraPath("*AlignedTo%d.vol" % ind)
-        # for fileVol in glob.glob(path):
-        #     matches = re.findall("(\d+)", fileVol)
-        #     ind2 = int(matches[1])
         defVol = xmippLib.Image(vol2)
         corr = vol.correlation(defVol)
         corr = 1 - corr
         outFile = self._getExtraPath('Pair_%d_%d_correlation.txt' % (i,j))
         with open(outFile, 'w') as f:
             f.write('%f' % corr)
-        # self.corrMatrix[ind2][ind] = 1-corr
-        # ind += 1
 
     def correlationMatrix(self, volList):
         numVol = len(volList)
@@ -203,7 +155,6 @@ class XmippProtStructureMap(ProtAnalysis3D):
     def gatherResultsStepCorr(self):
         fnRoot = self._getExtraPath("CorrMatrix.txt")
         self.saveCorrelation(self.corrMatrix, fnRoot)
-        # cleanPattern(self._getExtraPath('*.vol'))
 
     def saveCorrelation(self, matrix, fnRoot, label=''):
         np.savetxt(fnRoot, matrix, "%f")

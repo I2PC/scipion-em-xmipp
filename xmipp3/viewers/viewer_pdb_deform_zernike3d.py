@@ -38,6 +38,7 @@ class XmippPDBDeformViewer(pwviewer.ProtocolViewer):
     _label = 'viewer pdb deform sph'
     _targets = [XmippProtDeformPDBZernike3D]
     _environments = [pwviewer.DESKTOP_TKINTER, pwviewer.WEB_DJANGO]
+    OPEN_FILE = "open %s\n"
 
     def _defineParams(self, form):
         form.addSection(label='Show deformation')
@@ -56,8 +57,8 @@ class XmippPDBDeformViewer(pwviewer.ProtocolViewer):
         inputFile = os.path.abspath(self.protocol.inputPDB.get().getFileName())
         outputFile = os.path.abspath(self.protocol.outputPDB.getFileName())
 
-        fhCmd.write("open %s\n" % inputFile)
-        fhCmd.write("open %s\n" % outputFile)
+        fhCmd.write(self.OPEN_FILE % inputFile)
+        fhCmd.write(self.OPEN_FILE % outputFile)
         # fhCmd.write("start Model Panel\n")
         fhCmd.write("show cartoons\n")
         fhCmd.write("cartoon style width 1.5 thick 1.5\n")
@@ -74,18 +75,12 @@ class XmippPDBDeformViewer(pwviewer.ProtocolViewer):
         inputFile = os.path.abspath(self.protocol.inputPDB.get().getFileName())
         outputFile = os.path.abspath(self.protocol.outputPDB.getFileName())
 
-        fhCmd.write("open %s\n" % inputFile)
-        fhCmd.write("open %s\n" % outputFile)
+        fhCmd.write(self.OPEN_FILE % inputFile)
+        fhCmd.write(self.OPEN_FILE % outputFile)
         fhCmd.write("hide models\n")
-        # fhCmd.write("morph  start #0 frames 100\n")
-        # fhCmd.write("morph interpolate #1\n")
-        # fhCmd.write("morph movie\n")
         fhCmd.write("morph #1,2 frames 50 play false\n")
-        # fhCmd.write("start Model Panel\n")
-        # fhCmd.write("coordset #2 1,100\n")
         fhCmd.write("coordset #3 1,\n")
         fhCmd.write("wait 50\n")
-        # fhCmd.write("coordset #2 100,1,-1\n")
         fhCmd.write("coordset #3 50,1\n")
         fhCmd.close()
 

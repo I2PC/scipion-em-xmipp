@@ -26,6 +26,7 @@
 # *
 # **************************************************************************
 
+
 import numpy as np
 from scipy.spatial.distance import pdist
 from scipy.signal import find_peaks
@@ -83,6 +84,7 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
     """ Protocol for structure mapping based on Zernike3D. """
     _label = 'struct map - Zernike3D'
     _lastUpdateVersion = VERSION_2_0
+    OUTPUT_SUFFIX = '_%d_crop.vol'
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
@@ -115,15 +117,14 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
                       default=8.0,
                       help="In Angstroms, the images and the volume are rescaled so that this resolution is at "
                            "2/3 of the Fourier spectrum.")
-        # form.addParam('computeDef', params.BooleanParam, label="Compute deformation",
-        #               default=True,
-        #               help="Performed and structure mapping with/without deforming the input volumes")
         form.addParam('sigma', params.NumericListParam, label="Multiresolution", default="1 2",
-                      help="Perform the analysys comparing different filtered versions of the volumes")
+                      help="Perform the analysis comparing different filtered versions of the volumes. The values "
+                           "specified here will determine the cutoff frequency of the filter in normalized units "
+                           "(normalized to 1/2).")
         form.addParam('Rmax', params.IntParam, default=0,
                       label='Sphere radius',
                       experLevel=params.LEVEL_ADVANCED,
-                      help='Radius of the sphere where the spherical harmonics will be computed.')
+                      help='Radius of the sphere where the spherical harmonics will be computed (in voxels).')
         form.addParam('l1', params.IntParam, default=3,
                       label='Zernike Degree',
                       expertLevel=params.LEVEL_ADVANCED,
@@ -184,16 +185,12 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
                 count += 1
             nVoli += 1
 
-        # if self.computeDef.get():
         self._insertFunctionStep('deformationMatrix', volList, prerequisites=depsZernike)
         self._insertFunctionStep('gatherResultsStepDef')
-
-        # self._insertFunctionStep('computeCorr', volList)
 
         self._insertFunctionStep('correlationMatrix', volList, prerequisites=depsZernike)
         self._insertFunctionStep('gatherResultsStepCorr')
 
-        # if self.computeDef.get():
         self._insertFunctionStep('entropyConsensus')
 
     # --------------------------- STEPS functions ---------------------------------------------------
@@ -206,7 +203,7 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
         newRmax = self.Rmax.get() * Ts / newTs
         self.newRmax = min(newRmax, self.Rmax.get())
         fnOut = os.path.splitext(volFn)[0]
-        fnOut = self._getExtraPath(os.path.basename(fnOut + '_%d_crop.vol' % nVoli))
+        fnOut = self._getExtraPath(os.path.basename(fnOut + self.OUTPUT_SUFFIX % nVoli))
 
         ih = ImageHandler()
         volFn = volFn if getExt(volFn) == '.vol' else volFn + ':mrc'
@@ -222,8 +219,10 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
                         (fnOut, fnOut, (newXdim - minDim)))
 
     def alignStep(self, inputVolFn, refVolFn, i, j):
-        inputVolFn = self._getExtraPath(os.path.basename(os.path.splitext(inputVolFn)[0] + '_%d_crop.vol' % (j+1)))
-        refVolFn = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0] + '_%d_crop.vol' % (i+1)))
+        inputVolFn = self._getExtraPath(os.path.basename(os.path.splitext(inputVolFn)[0]
+                                                         + self.OUTPUT_SUFFIX % (j+1)))
+        refVolFn = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0]
+                                                       + self.OUTPUT_SUFFIX % (i+1)))
         fnOut = self._getTmpPath('vol%dAligned.vol' % (j + 1))
         params = ' --i1 %s --i2 %s --apply %s --local --dontScale' % \
                  (refVolFn, inputVolFn, fnOut)
@@ -232,11 +231,13 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
 
     def deformStep(self, inputVolFn, refVolFn, i, j, step_id):
         if j == 0:
-            refVolFn_aux = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0] + '_%d_crop.vol' % (j + 1)))
+            refVolFn_aux = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0]
+                                                               + self.OUTPUT_SUFFIX % (j + 1)))
         else:
             refVolFn_aux = self._getTmpPath('vol%dAligned.vol' % (j + 1))
         if i == 0:
-            fnOut_aux = self._getExtraPath(os.path.basename(os.path.splitext(inputVolFn)[0] + '_%d_crop.vol' % (i + 1)))
+            fnOut_aux = self._getExtraPath(os.path.basename(os.path.splitext(inputVolFn)[0]
+                                                            + self.OUTPUT_SUFFIX % (i + 1)))
         else:
             fnOut_aux = self._getTmpPath('vol%dAligned.vol' % (i + 1))
         refVolFn = self._getTmpPath("reference_%d.vol" % step_id)
@@ -245,7 +246,6 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
         copyFile(fnOut_aux, fnOut)
         fnOut2 = self._getTmpPath('vol%dDeformedTo%d.vol' % (i + 1, j + 1))
 
-        # if self.computeDef.get():
         params = ' -i %s -r %s -o %s --l1 %d --l2 %d --sigma "%s" --oroot %s --regularization %f' %\
                  (fnOut, refVolFn, fnOut2, self.l1.get(), self.l2.get(), self.sigma.get(),
                   self._getExtraPath('Pair_%d_%d' % (i, j)), self.penalization.get())
@@ -456,7 +456,6 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
             item = pointer.get()
             if item is None:
                 break
-            itemId = item.getObjId()
             if isinstance(item, Volume):
                 volList.append(item.getFileName())
                 dimList.append(item.getDim()[0])

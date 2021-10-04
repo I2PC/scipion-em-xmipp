@@ -46,7 +46,7 @@ from xmipp3.base import writeInfoField, readInfoField
 
 class XmippProtAngularAlignmentZernike3D(ProtAnalysis3D):
     """ Protocol for flexible angular alignment based on Zernike3D basis. """
-    _label = 'angular align - zernike3d'
+    _label = 'angular align - Zernike3D'
     _lastUpdateVersion = VERSION_2_0
 
     # --------------------------- DEFINE param functions --------------------------------------------
@@ -84,12 +84,12 @@ class XmippProtAngularAlignmentZernike3D(ProtAnalysis3D):
         form.addParam('maxResolution', params.FloatParam, default=4.0,
                       label='Maximum resolution (A)', expertLevel=params.LEVEL_ADVANCED,
                       help='Maximum resolution (A)')
-        form.addParam('penalization', params.FloatParam, default=0.005, label='Regularization',
+        form.addParam('regularization', params.FloatParam, default=0.005, label='Regularization',
                       expertLevel=params.LEVEL_ADVANCED,
                       help='Penalization to deformations (higher values penalize more the deformation).')
         form.addParam('ignoreCTF', params.BooleanParam, default=False, label='Ignore CTF?',
                       expertLevel=params.LEVEL_ADVANCED,
-                      help="If true, volume projection won't suffer CTF corrections")
+                      help="If true, volume projection won't be subjected to CTF corrections")
         form.addParam('optimizeAlignment', params.BooleanParam, default=True, label='Optimize alignment?',
                      expertLevel=params.LEVEL_ADVANCED)
         form.addParallelSection(threads=1, mpi=8)
@@ -159,7 +159,7 @@ class XmippProtAngularAlignmentZernike3D(ProtAnalysis3D):
                  '--l1 %d --l2 %d --max_shift %f --max_angular_change %f --sampling %f ' \
                  ' --max_resolution %f --odir %s --resume --regularization %f' %\
                  (imgsFn, fnVol, fnOut, self.l1.get(), self.l2.get(), self.maxShift,
-                  self.maxAngular, Ts, self.maxResolution, fnOutDir, self.penalization.get())
+                  self.maxAngular, Ts, self.maxResolution, fnOutDir, self.regularization.get())
         if self.optimizeAlignment.get():
             params += ' --optimizeAlignment'
         if self.ignoreCTF.get():
@@ -187,22 +187,15 @@ class XmippProtAngularAlignmentZernike3D(ProtAnalysis3D):
         self.newXdim = int(Xdim * self.Ts / newTs)
         fnOut = self._getFileName('fnOut')
         mdOut = md.MetaData(fnOut)
-        i = 0
-        for row in md.iterRows(mdOut):
-            coeffs = mdOut.getValue(md.MDL_SPH_COEFFICIENTS, row.getObjId())
-            if i==0:
-                coeffMatrix = coeffs
-            else:
-                coeffMatrix = np.vstack((coeffMatrix, coeffs))
-            i+=1
+        coeffMatrix = np.vstack(mdOut.getColumnValues(md.MDL_SPH_COEFFICIENTS))
         X_tsne_1d = TSNE(n_components=1).fit_transform(coeffMatrix)
         X_tsne_2d = TSNE(n_components=2).fit_transform(coeffMatrix)
 
         newMdOut = md.MetaData()
-        i=0
+        i = 0
         for row in md.iterRows(mdOut):
             newRow = row
-            newRow.setValue(md.MDL_SPH_TSNE_COEFF1D, float(X_tsne_1d[i,0]))
+            newRow.setValue(md.MDL_SPH_TSNE_COEFF1D, float(X_tsne_1d[i, 0]))
             newRow.setValue(md.MDL_SPH_TSNE_COEFF2D, [float(X_tsne_2d[i, 0]),  float(X_tsne_2d[i, 1])])
             if self.newTs != self.Ts:
                 coeffs = mdOut.getValue(md.MDL_SPH_COEFFICIENTS, row.getObjId())
@@ -210,8 +203,8 @@ class XmippProtAngularAlignmentZernike3D(ProtAnalysis3D):
                 coeffs = [correctionFactor*coeff for coeff in coeffs]
                 newRow.setValue(md.MDL_SPH_COEFFICIENTS, coeffs)
             newRow.addToMd(newMdOut)
-            i+=1
-            newMdOut.write(fnOut)
+            i += 1
+        newMdOut.write(fnOut)
 
         inputSet = self.inputParticles.get()
         partSet = self._createSetOfParticles()

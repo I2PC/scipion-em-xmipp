@@ -62,7 +62,7 @@ from .viewer_projmatch import XmippProjMatchViewer
 from .viewer_structure_map_zernike3d import XmippProtStructureMapZernike3DViewer
 from .viewer_volume_deform_zernike3d import XmippVolumeDeformZernike3DViewer
 from .viewer_structure_map import XmippProtStructureMapViewer
-from .viewer_pdb_deform_sph import XmippPDBDeformViewer
+from .viewer_pdb_deform_zernike3d import XmippPDBDeformViewer
 from .viewer_metaprotocol_golden_highres import XmippMetaprotocolGoldenHighResViewer
 from .viewer_deep_align import XmippDeepAlignViewer
 

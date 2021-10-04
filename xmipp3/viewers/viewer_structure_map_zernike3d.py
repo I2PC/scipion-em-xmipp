@@ -60,8 +60,84 @@ class XmippProtStructureMapZernike3DViewer(ProtocolViewer):
     
     def _getVisualizeDict(self):
         return {'doShowPlot': self._visualize}
-    
-        
+
+    def defineLabels(self):
+        labels = []
+        _, _, _, idList = self.protocol._iterInputVolumes(self.protocol.inputVolumes, [], [], [], [])
+        if self.protocol.secondSet:
+            _, _, _, idList = self.protocol._iterInputVolumes(self.protocol.secondSet, [], [], [], idList)
+        for idv in idList:
+            labels.append("vol_%02d" % idv)
+        return labels
+
+    def plotMapping1D(self):
+        AX = plt.subplot(111)
+        plot = plt.plot(self.coordinates, np.zeros_like(self.coordinates), 'o', c='g')
+        plt.xlabel('Dimension 1', fontsize=11)
+        AX.set_yticks([1])
+        plt.title('StructMap')
+
+        for label, x, y in zip(self.labels, self.coordinates, np.zeros_like(self.coordinates)):
+            plt.annotate(label,
+                         xy=(x, y), xytext=(x, y),
+                         textcoords='data', ha='right', va='bottom', fontsize=9,
+                         bbox=dict(boxstyle='round,pad=0.3', fc='yellow', alpha=0.3))
+        plt.grid(True)
+        plt.show()
+        return plot
+
+    def plotMapping2D(self):
+        plot = plt.scatter(self.coordinates[:, 0], self.coordinates[:, 1], marker='o', c='g')
+        plt.xlabel('Dimension 1', fontsize=11)
+        plt.ylabel('Dimension 2', fontsize=11)
+        plt.title('StructMap')
+        for label, x, y in zip(self.labels, self.coordinates[:, 0], self.coordinates[:, 1]):
+            plt.annotate(label,
+                         xy=(x, y), xytext=(x, y),
+                         textcoords='data', ha='right', va='bottom', fontsize=9,
+                         bbox=dict(boxstyle='round,pad=0.3', fc='yellow', alpha=0.3))
+        plt.grid(True)
+        plt.show()
+        return plot
+
+    def plotMapping3D(self):
+        self.fig = plt.figure()
+        self.ax = self.fig.add_subplot(111, projection='3d')
+
+        self.ax.scatter(self.coordinates[:, 0], self.coordinates[:, 1], self.coordinates[:, 2],
+                   marker='o', c='g')
+        self.ax.set_xlabel('Dimension 1', fontsize=11)
+        self.ax.set_ylabel('Dimension 2', fontsize=11)
+        self.ax.set_zlabel('Dimension 3', fontsize=11)
+        self.ax.text2D(0.05, 0.95, "StructMap", transform=self.ax.transAxes)
+
+        x2, y2, _ = proj3d.proj_transform(self.coordinates[:, 0], self.coordinates[:, 1],
+                                          self.coordinates[:, 2], self.ax.get_proj())
+        self.Labels = []
+        for i in range(len(self.coordinates[:, 0])):
+            text = self.labels[i]
+            label = self.ax.annotate(text,
+                                     xycoords='data',
+                                     xy=(x2[i], y2[i]), xytext=(x2[i], y2[i]),
+                                     textcoords='data', ha='right',
+                                     va='bottom', fontsize=9,
+                                     bbox=dict(boxstyle='round,pad=0.3',
+                                               fc='yellow', alpha=0.3))
+
+            self.Labels.append(label)
+        self.fig.canvas.mpl_connect('button_release_event', self.update_position)
+        plt.show()
+        return None
+
+    def update_position(self, e):
+        x2, y2, _ = proj3d.proj_transform(self.coordinates[:, 0], self.coordinates[:, 1], self.coordinates[:, 2],
+                                          self.ax.get_proj())
+        for i in range(len(self.coordinates[:, 0])):
+            label = self.Labels[i]
+            label.xytext = (x2[i], y2[i])
+            label.update_positions(self.fig.canvas.get_renderer())
+        self.fig.canvas.draw()
+
     def _visualize(self, e=None):
         nDim = self.numberOfDimensions.get()
         if self.map.get()==0 and not self.twoSets:
@@ -86,86 +162,18 @@ class XmippProtStructureMapZernike3DViewer(ProtocolViewer):
                                           'Execute again the protocol\n',
                                           title='Missing result file')]
 
-        coordinates = (np.loadtxt(file) for file in fnOutput)
-        coordinates = np.vstack(coordinates)
+        self.coordinates = (np.loadtxt(file) for file in fnOutput)
+        self.coordinates = np.vstack(self.coordinates)
         
         # Create labels
-        count = 0
-        labels = []
-        _, _, _, idList = self.protocol._iterInputVolumes(self.protocol.inputVolumes, [], [], [], [])
-        if self.protocol.secondSet:
-            _, _, _, idList = self.protocol._iterInputVolumes(self.protocol.secondSet, [], [], [], idList)
-        for idv in idList:
-            # base=os.path.basename(voli)
-            # fileName = os.path.splitext(base)[0]
-            # count += 1
-            labels.append("vol_%02d" % idv)
-            #labels.append(fileName)
-         
-        val = 0
+        self.labels = self.defineLabels()
+
         if nDim == 1:
-            AX = plt.subplot(111)
-            plot = plt.plot(coordinates, np.zeros_like(coordinates) + val, 'o', c='g')
-            plt.xlabel('Dimension 1', fontsize=11)
-            AX.set_yticks([1])
-            plt.title('StructMap')
-             
-            for label, x, y in zip(labels, coordinates, np.zeros_like(coordinates)):
-                plt.annotate(label,
-                             xy = (x, y), xytext = (x+val, y+val),
-                             textcoords = 'data', ha = 'right', va = 'bottom',fontsize=9,
-                             bbox = dict(boxstyle = 'round,pad=0.3', fc = 'yellow', alpha = 0.3))
-            plt.grid(True)
-            plt.show()
-                         
+            plot = self.plotMapping1D()
         elif nDim == 2:
-            plot = plt.scatter(coordinates[:, 0], coordinates[:, 1], marker='o', c='g')
-            plt.xlabel('Dimension 1', fontsize=11)
-            plt.ylabel('Dimension 2', fontsize=11)
-            plt.title('StructMap')
-            for label, x, y in zip(labels, coordinates[:, 0], coordinates[:, 1]):
-                plt.annotate(label,
-                             xy = (x, y), xytext = (x+val, y+val),
-                             textcoords = 'data', ha = 'right', va = 'bottom',fontsize=9,
-                             bbox = dict(boxstyle = 'round,pad=0.3', fc = 'yellow', alpha = 0.3))
-            plt.grid(True)
-            plt.show()
-                
+            plot = self.plotMapping2D()
         else: 
-                         
-            fig = plt.figure()
-            ax = fig.add_subplot(111, projection = '3d')
-            
-            ax.scatter(coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], marker = 'o', c='g')
-            ax.set_xlabel('Dimension 1', fontsize=11)
-            ax.set_ylabel('Dimension 2', fontsize=11)
-            ax.set_zlabel('Dimension 3', fontsize=11)
-            ax.text2D(0.05, 0.95, "StructMap", transform=ax.transAxes)
-                         
-            x2, y2, _ = proj3d.proj_transform(coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], ax.get_proj())
-            Labels = []
-            for i in range(len(coordinates[:, 0])):
-                text = labels[i]
-                label = ax.annotate(text,
-                                    xycoords='data',
-                                    xy = (x2[i], y2[i]), xytext = (x2[i]+val, y2[i]+val),
-                                    textcoords = 'data', ha = 'right',
-                                     va = 'bottom', fontsize=9,
-                                    bbox = dict(boxstyle = 'round,pad=0.3',
-                                                 fc = 'yellow', alpha = 0.3))
-                                     
-                Labels.append(label)
-                
-            def update_position(e):
-                x2, y2, _ = proj3d.proj_transform(coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], ax.get_proj())
-                for i in range(len(coordinates[:, 0])):
-                    label = Labels[i]
-                    label.xytext = (x2[i],y2[i])
-                    label.update_positions(fig.canvas.get_renderer())
-                fig.canvas.draw()
-            fig.canvas.mpl_connect('button_release_event', update_position)
-            plt.show()
-        
+            plot = self.plotMapping3D()
         return plot
         
     def _validate(self):
