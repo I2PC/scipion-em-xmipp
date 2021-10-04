@@ -332,48 +332,68 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
                                    "constant", constant_values=0)
             np.savetxt(self._defineResultsName2(i, label), embedExtended)
 
+    def rigidAlignmentMapping(self, i):
+        X1 = np.loadtxt(self._defineResultsName(i))
+        X2 = np.loadtxt(self._defineResultsName2(i))
+
+        # Normalize the matrices
+        [_, S, _] = np.linalg.svd(X1)
+        X1 = X1 / np.amax(np.abs(S))
+        [_, S, _] = np.linalg.svd(X2)
+        X2 = X2 / np.amax(np.abs(S))
+
+        # Register the points (taking mirrors into account)
+        for idf in range(4):
+            if idf == 0:
+                R, t = rigidRegistration(X1, X2)
+                X1 = t + np.transpose(R @ X1.T)
+                cost = np.sum(pdist(X1 - X2))
+            elif idf == 1:
+                X1_attempt = np.fliplr(X1)
+                R, t = rigidRegistration(X1_attempt, X2)
+                X1_attempt = t + np.transpose(R @ X1_attempt.T)
+                cost_attempt = np.sum(pdist(X1_attempt - X2))
+                if cost_attempt < cost:
+                    cost = cost_attempt
+                    X1 = X1_attempt
+            elif idf == 2:
+                X1_attempt = np.flipud(X1)
+                R, t = rigidRegistration(X1_attempt, X2)
+                X1_attempt = t + np.transpose(R @ X1_attempt.T)
+                cost_attempt = np.sum(pdist(X1_attempt - X2))
+                if cost_attempt < cost:
+                    cost = cost_attempt
+                    X1 = X1_attempt
+            elif idf == 3:
+                X1_attempt = np.fliplr(X1)
+                X1_attempt = np.flipud(X1_attempt)
+                R, t = rigidRegistration(X1_attempt, X2)
+                X1_attempt = t + np.transpose(R @ X1_attempt.T)
+                cost_attempt = np.sum(pdist(X1_attempt - X2))
+                if cost_attempt < cost:
+                    cost = cost_attempt
+                    X1 = X1_attempt
+        return X1, X2
+
+    def gaussianKernel(self, sigma, i):
+        lbox = int(6 * sigma)
+        if lbox % 2 == 0:
+            lbox += 1
+        mid = int((lbox - 1) / 2 + 1)
+        if i == 2:
+            kernel = np.zeros((lbox, lbox))
+            kernel[mid, mid] = 1
+            kernel = gaussian_filter(kernel, sigma=sigma)
+        else:
+            kernel = np.zeros((lbox, lbox, lbox))
+            kernel[mid, mid, mid] = 1
+            kernel = gaussian_filter(kernel, sigma=sigma)
+        return kernel, lbox, mid
+
     def entropyConsensus(self):
         for i in range(2, 4):
-            X1 = np.loadtxt(self._defineResultsName(i))
-            X2 = np.loadtxt(self._defineResultsName2(i))
-
-            # Normalize the matrices
-            [_, S, _] = np.linalg.svd(X1)
-            X1 = X1 / np.amax(np.abs(S))
-            [_, S, _] = np.linalg.svd(X2)
-            X2 = X2 / np.amax(np.abs(S))
-
-            # Register the points (taking mirrors into account)
-            for idf in range(4):
-                if idf == 0:
-                    R, t = rigidRegistration(X1, X2)
-                    X1 = t + np.transpose(R @ X1.T)
-                    cost = np.sum(pdist(X1 - X2))
-                elif idf == 1:
-                    X1_attempt = np.fliplr(X1)
-                    R, t = rigidRegistration(X1_attempt, X2)
-                    X1_attempt = t + np.transpose(R @ X1_attempt.T)
-                    cost_attempt = np.sum(pdist(X1_attempt - X2))
-                    if cost_attempt < cost:
-                        cost = cost_attempt
-                        X1 = X1_attempt
-                elif idf == 2:
-                    X1_attempt = np.flipud(X1)
-                    R, t = rigidRegistration(X1_attempt, X2)
-                    X1_attempt = t + np.transpose(R @ X1_attempt.T)
-                    cost_attempt = np.sum(pdist(X1_attempt - X2))
-                    if cost_attempt < cost:
-                        cost = cost_attempt
-                        X1 = X1_attempt
-                elif idf == 3:
-                    X1_attempt = np.fliplr(X1)
-                    X1_attempt = np.flipud(X1_attempt)
-                    R, t = rigidRegistration(X1_attempt, X2)
-                    X1_attempt = t + np.transpose(R @ X1_attempt.T)
-                    cost_attempt = np.sum(pdist(X1_attempt - X2))
-                    if cost_attempt < cost:
-                        cost = cost_attempt
-                        X1 = X1_attempt
+            # Rigid alignment of mappings (considering mirrors as well)
+            X1, X2 = self.rigidAlignmentMapping(i)
 
             # Round point to place them in a grid
             Xr1 = np.round(X1, decimals=3)
@@ -389,18 +409,7 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
             sigma = R.shape[0] / 20
 
             # Create Gaussian Kernel
-            lbox = int(6*sigma)
-            if lbox % 2 == 0:
-                lbox += 1
-            mid = int((lbox - 1) / 2 + 1)
-            if i == 2:
-                kernel = np.zeros((lbox, lbox))
-                kernel[mid, mid] = 1
-                kernel = gaussian_filter(kernel, sigma=sigma)
-            else:
-                kernel = np.zeros((lbox, lbox, lbox))
-                kernel[mid, mid, mid] = 1
-                kernel = gaussian_filter(kernel, sigma=sigma)
+            kernel, lbox, mid = self.gaussianKernel(sigma, i)
 
             # Consensus
             alpha_vect = np.arange(0, 1.01, 0.01)
