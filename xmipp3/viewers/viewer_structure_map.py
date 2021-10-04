@@ -94,7 +94,7 @@ class projectionPlot(object):
         self.weights = weights
         try:
             self.minimum_spanning_tree()
-        except:
+        except IndexError:
             self.T = None
         self.proj_coords = None
         self.radio = None

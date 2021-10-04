@@ -43,6 +43,7 @@ class XmippProtStructureMapZernike3DViewer(ProtocolViewer):
     _label = 'viewer structure map sph'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
     _targets = [XmippProtStructureMapZernike3D]
+    DIM_1 = 'Dimension 1'
 
 
     def _defineParams(self, form):
@@ -73,7 +74,7 @@ class XmippProtStructureMapZernike3DViewer(ProtocolViewer):
     def plotMapping1D(self):
         AX = plt.subplot(111)
         plot = plt.plot(self.coordinates, np.zeros_like(self.coordinates), 'o', c='g')
-        plt.xlabel('Dimension 1', fontsize=11)
+        plt.xlabel(self.DIM_1, fontsize=11)
         AX.set_yticks([1])
         plt.title('StructMap')
 
@@ -88,7 +89,7 @@ class XmippProtStructureMapZernike3DViewer(ProtocolViewer):
 
     def plotMapping2D(self):
         plot = plt.scatter(self.coordinates[:, 0], self.coordinates[:, 1], marker='o', c='g')
-        plt.xlabel('Dimension 1', fontsize=11)
+        plt.xlabel(self.DIM_1, fontsize=11)
         plt.ylabel('Dimension 2', fontsize=11)
         plt.title('StructMap')
         for label, x, y in zip(self.labels, self.coordinates[:, 0], self.coordinates[:, 1]):
@@ -106,14 +107,14 @@ class XmippProtStructureMapZernike3DViewer(ProtocolViewer):
 
         self.ax.scatter(self.coordinates[:, 0], self.coordinates[:, 1], self.coordinates[:, 2],
                    marker='o', c='g')
-        self.ax.set_xlabel('Dimension 1', fontsize=11)
+        self.ax.set_xlabel(self.DIM_1, fontsize=11)
         self.ax.set_ylabel('Dimension 2', fontsize=11)
         self.ax.set_zlabel('Dimension 3', fontsize=11)
         self.ax.text2D(0.05, 0.95, "StructMap", transform=self.ax.transAxes)
 
         x2, y2, _ = proj3d.proj_transform(self.coordinates[:, 0], self.coordinates[:, 1],
                                           self.coordinates[:, 2], self.ax.get_proj())
-        self.Labels = []
+        self.mpl_labels = []
         for i in range(len(self.coordinates[:, 0])):
             text = self.labels[i]
             label = self.ax.annotate(text,
@@ -124,7 +125,7 @@ class XmippProtStructureMapZernike3DViewer(ProtocolViewer):
                                      bbox=dict(boxstyle='round,pad=0.3',
                                                fc='yellow', alpha=0.3))
 
-            self.Labels.append(label)
+            self.mpl_labels.append(label)
         self.fig.canvas.mpl_connect('button_release_event', self.update_position)
         plt.show()
         return None
@@ -133,21 +134,29 @@ class XmippProtStructureMapZernike3DViewer(ProtocolViewer):
         x2, y2, _ = proj3d.proj_transform(self.coordinates[:, 0], self.coordinates[:, 1], self.coordinates[:, 2],
                                           self.ax.get_proj())
         for i in range(len(self.coordinates[:, 0])):
-            label = self.Labels[i]
+            label = self.mpl_labels[i]
             label.xytext = (x2[i], y2[i])
             label.update_positions(self.fig.canvas.get_renderer())
         self.fig.canvas.draw()
 
+    def plotMapping(self, nDim):
+        if nDim == 1:
+            return self.plotMapping1D()
+        elif nDim == 2:
+            return self.plotMapping2D()
+        else:
+            return self.plotMapping3D()
+
     def _visualize(self, e=None):
         nDim = self.numberOfDimensions.get()
-        if self.map.get()==0 and not self.twoSets:
+        if self.map.get() == 0 and not self.twoSets:
             fnOutput = [self.protocol._defineResultsName(nDim)]
         elif self.map.get() == 1 and not self.twoSets:
             fnOutput = [self.protocol._defineResultsName2(nDim)]
-        elif self.map.get()==0 and self.twoSets:
+        elif self.map.get() == 0 and self.twoSets:
             fnOutput = [self.protocol._defineResultsName(nDim, 'Sub_1_'),
                         self.protocol._defineResultsName(nDim, 'Sub_2_')]
-        elif self.map.get()==1 and self.twoSets:
+        elif self.map.get() == 1 and self.twoSets:
             fnOutput = [self.protocol._defineResultsName2(nDim, 'Sub_1_'),
                         self.protocol._defineResultsName2(nDim, 'Sub_2_')]
         elif self.map.get() == 2 and nDim != 1:
@@ -168,12 +177,9 @@ class XmippProtStructureMapZernike3DViewer(ProtocolViewer):
         # Create labels
         self.labels = self.defineLabels()
 
-        if nDim == 1:
-            plot = self.plotMapping1D()
-        elif nDim == 2:
-            plot = self.plotMapping2D()
-        else: 
-            plot = self.plotMapping3D()
+        # Create Plot
+        plot = self.plotMapping(nDim)
+
         return plot
         
     def _validate(self):

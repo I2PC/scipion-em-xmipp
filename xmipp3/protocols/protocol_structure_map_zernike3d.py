@@ -85,6 +85,7 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
     _label = 'struct map - Zernike3D'
     _lastUpdateVersion = VERSION_2_0
     OUTPUT_SUFFIX = '_%d_crop.vol'
+    ALIGNED_VOL = 'vol%dAligned.vol'
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
@@ -223,7 +224,7 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
                                                          + self.OUTPUT_SUFFIX % (j+1)))
         refVolFn = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0]
                                                        + self.OUTPUT_SUFFIX % (i+1)))
-        fnOut = self._getTmpPath('vol%dAligned.vol' % (j + 1))
+        fnOut = self._getTmpPath(self.ALIGNED_VOL % (j + 1))
         params = ' --i1 %s --i2 %s --apply %s --local --dontScale' % \
                  (refVolFn, inputVolFn, fnOut)
 
@@ -234,12 +235,12 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
             refVolFn_aux = self._getExtraPath(os.path.basename(os.path.splitext(refVolFn)[0]
                                                                + self.OUTPUT_SUFFIX % (j + 1)))
         else:
-            refVolFn_aux = self._getTmpPath('vol%dAligned.vol' % (j + 1))
+            refVolFn_aux = self._getTmpPath(self.ALIGNED_VOL % (j + 1))
         if i == 0:
             fnOut_aux = self._getExtraPath(os.path.basename(os.path.splitext(inputVolFn)[0]
                                                             + self.OUTPUT_SUFFIX % (i + 1)))
         else:
-            fnOut_aux = self._getTmpPath('vol%dAligned.vol' % (i + 1))
+            fnOut_aux = self._getTmpPath(self.ALIGNED_VOL % (i + 1))
         refVolFn = self._getTmpPath("reference_%d.vol" % step_id)
         fnOut = self._getTmpPath("input_%d.vol" % step_id)
         copyFile(refVolFn_aux, refVolFn)

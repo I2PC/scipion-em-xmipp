@@ -65,8 +65,8 @@ class TestZernike3DBase(BaseTest):
                                      samplingRate=1.0,
                                      objLabel="Maps - Ribosomes 1718-1724")
         cls.launchProtocol(protImport)
-        if protImport.outputVolumes is None:
-            raise Exception('Import of volumes: %s, failed. outputVolumes is None.' % pattern)
+        cls.assertIsNotNone(protImport.outputVolumes,
+                            'Import of volumes: %s, failed. outputVolumes is None.' % pattern)
         return protImport
 
     @classmethod
@@ -76,8 +76,8 @@ class TestZernike3DBase(BaseTest):
                                      samplingRate=1.0,
                                      objLabel="Map - Ribosome %s" % label)
         cls.launchProtocol(protImport)
-        if protImport.outputVolume is None:
-            raise Exception('Import of volume: %s, failed. outputVolumes is None.' % pattern)
+        cls.assertIsNotNone(protImport.outputVolume,
+                            'Import of volume: %s, failed. outputVolumes is None.' % pattern)
         return protImport
 
     @classmethod
@@ -93,8 +93,8 @@ class TestZernike3DBase(BaseTest):
                                      haveDataBeenPhaseFlipped=True
                                      )
         cls.launchProtocol(protImport)
-        if protImport.outputParticles is None:
-            raise Exception('Import of particles: %s, failed. outputParticles is None.' % pattern)
+        cls.assertIsNotNone(protImport.outputParticles,
+                            'Import of particles: %s, failed. outputParticles is None.' % pattern)
         return protImport
 
     @classmethod
@@ -126,6 +126,8 @@ class TestProtocolsZernike3D(TestZernike3DBase):
         cls.protImportVols = cls.runImportVolumes(cls.volumes)
         cls.protImportVol_1720 = cls.runImportVolume(cls.volume_1720, '1720')
         cls.protImportVol_1723 = cls.runImportVolume(cls.volume_1723, '1723')
+        cls.CORR_FILE = 'CoordinateMatrixCorr3.txt'
+        cls.EXPECTED_CORR_MAP = 'Unexpected correlation structure mapping'
 
     def testPairAlignmentZernike3DCPU(self):
         # Test for CPU implementation
@@ -197,11 +199,11 @@ class TestProtocolsZernike3D(TestZernike3DBase):
                                msg="Unexpected deformation structure mapping")
         sm_cpu_gold_corr = np.loadtxt(self.dataset.getFile('gold_standard_sm/CPU/CoordinateMatrixCorr3.txt'),
                                      delimiter=' ')
-        sm_cpu_test_corr = np.loadtxt(structureMap._getExtraPath('CoordinateMatrixCorr3.txt'),
+        sm_cpu_test_corr = np.loadtxt(structureMap._getExtraPath(self.CORR_FILE),
                                      delimiter=' ')
         diff_sm_corr = np.abs(np.sum(sm_cpu_gold_corr - sm_cpu_test_corr))
         self.assertAlmostEqual(diff_sm_corr, 0, delta=0.2,
-                               msg="Unexpected correlation structure mapping")
+                               msg=self.EXPECTED_CORR_MAP)
         sm_cpu_gold_cons = np.loadtxt(self.dataset.getFile('gold_standard_sm/CPU/ConsensusMatrix3.txt'),
                                      delimiter=' ')
         sm_cpu_test_cons = np.loadtxt(structureMap._getExtraPath('ConsensusMatrix3.txt'),
@@ -222,11 +224,11 @@ class TestProtocolsZernike3D(TestZernike3DBase):
         # Check if structure mappings (3D) are fine
         sm_cpu_gold_corr = np.loadtxt(self.dataset.getFile('gold_standard_sm/No_Zernike/CoordinateMatrixCorr3.txt'),
                                      delimiter=' ')
-        sm_cpu_test_corr = np.loadtxt(structureMap._getExtraPath('CoordinateMatrixCorr3.txt'),
+        sm_cpu_test_corr = np.loadtxt(structureMap._getExtraPath(self.CORR_FILE),
                                      delimiter=' ')
         diff_sm_corr = np.abs(np.sum(sm_cpu_gold_corr - sm_cpu_test_corr))
         self.assertAlmostEqual(diff_sm_corr, 0, delta=0.2,
-                               msg="Unexpected correlation structure mapping")
+                               msg=self.EXPECTED_CORR_MAP)
 
 
     def testStructMapZernike3DGPU(self):
@@ -251,11 +253,11 @@ class TestProtocolsZernike3D(TestZernike3DBase):
                                msg="Unexpected deformation structure mapping")
         sm_cpu_gold_corr = np.loadtxt(self.dataset.getFile('gold_standard_sm/GPU/CoordinateMatrixCorr3.txt'),
                                      delimiter=' ')
-        sm_cpu_test_corr = np.loadtxt(structureMap._getExtraPath('CoordinateMatrixCorr3.txt'),
+        sm_cpu_test_corr = np.loadtxt(structureMap._getExtraPath(self.CORR_FILE),
                                      delimiter=' ')
         diff_sm_corr = np.abs(np.sum(sm_cpu_gold_corr - sm_cpu_test_corr))
         self.assertAlmostEqual(diff_sm_corr, 0, delta=0.2,
-                               msg="Unexpected correlation structure mapping")
+                               msg=self.EXPECTED_CORR_MAP)
         sm_cpu_gold_cons = np.loadtxt(self.dataset.getFile('gold_standard_sm/GPU/ConsensusMatrix3.txt'),
                                      delimiter=' ')
         sm_cpu_test_cons = np.loadtxt(structureMap._getExtraPath('ConsensusMatrix3.txt'),

@@ -73,7 +73,7 @@ class XmippProtStructureMap(ProtAnalysis3D):
         volList, dimList, srList, _ = self._iterInputVolumes(volList, dimList, srList, [])
         nVoli = 1
         depsConvert = []
-        for voli in volList:
+        for _ in volList:
             convert = self._insertFunctionStep('convertStep', volList[nVoli - 1],
                                      dimList[nVoli - 1], srList[nVoli - 1],
                                      min(dimList), max(srList), nVoli, prerequisites=[])
@@ -82,9 +82,9 @@ class XmippProtStructureMap(ProtAnalysis3D):
 
         nVoli = 1
         deps = []
-        for voli in volList:
+        for _ in volList:
             nVolj = 1
-            for volj in volList:
+            for _ in volList:
                 if nVolj != nVoli:
                     stepID = self._insertFunctionStep('alignStep', volList[nVoli - 1],
                                             volList[nVolj - 1], nVoli - 1,
