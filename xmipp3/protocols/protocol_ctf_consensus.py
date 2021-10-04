@@ -99,7 +99,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                       help='Use this button to decide if carry out the '
                            'selection taking into account or not the '
                            'astigmatism value.')
-        form.addParam('astigmatismPer', params.FloatParam, default=0.1,
+        form.addParam('astigmatismPer', params.FloatParam, default=0.12,
                       label='Astigmatism percentage', condition="useAstigmatismPercentage",
                       help='Maximum value allowed for astigmatism in '
                            'Angstroms. If the evaluated CTF has a '
@@ -443,7 +443,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                 if self.calculateConsensus:
                     ctf2 = inputCtfSet2[ctfId]
                     conRes = self._freqResol[ctfId]
-                    setAttribute(ctf, '_consensus_resolution_', conRes)
+                    setAttribute(ctf, '_consensus_resolution', conRes)
                     setAttribute(ctf, '_ctf2_defocus_diff',
                                  max(abs(ctf.getDefocusU()-ctf2.getDefocusU()),
                                      abs(ctf.getDefocusV()-ctf2.getDefocusV())))
