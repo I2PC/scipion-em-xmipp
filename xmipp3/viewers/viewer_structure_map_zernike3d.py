@@ -44,6 +44,7 @@ class XmippProtStructureMapZernike3DViewer(ProtocolViewer):
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
     _targets = [XmippProtStructureMapZernike3D]
     DIM_1 = 'Dimension 1'
+    ROUND_PAD = 'round,pad=0.3'
 
 
     def _defineParams(self, form):
@@ -82,7 +83,7 @@ class XmippProtStructureMapZernike3DViewer(ProtocolViewer):
             plt.annotate(label,
                          xy=(x, y), xytext=(x, y),
                          textcoords='data', ha='right', va='bottom', fontsize=9,
-                         bbox=dict(boxstyle='round,pad=0.3', fc='yellow', alpha=0.3))
+                         bbox=dict(boxstyle=self.ROUND_PAD, fc='yellow', alpha=0.3))
         plt.grid(True)
         plt.show()
         return plot
@@ -96,7 +97,7 @@ class XmippProtStructureMapZernike3DViewer(ProtocolViewer):
             plt.annotate(label,
                          xy=(x, y), xytext=(x, y),
                          textcoords='data', ha='right', va='bottom', fontsize=9,
-                         bbox=dict(boxstyle='round,pad=0.3', fc='yellow', alpha=0.3))
+                         bbox=dict(boxstyle=self.ROUND_PAD, fc='yellow', alpha=0.3))
         plt.grid(True)
         plt.show()
         return plot
@@ -122,7 +123,7 @@ class XmippProtStructureMapZernike3DViewer(ProtocolViewer):
                                      xy=(x2[i], y2[i]), xytext=(x2[i], y2[i]),
                                      textcoords='data', ha='right',
                                      va='bottom', fontsize=9,
-                                     bbox=dict(boxstyle='round,pad=0.3',
+                                     bbox=dict(boxstyle=self.ROUND_PAD,
                                                fc='yellow', alpha=0.3))
 
             self.mpl_labels.append(label)
