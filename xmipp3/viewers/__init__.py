@@ -58,8 +58,6 @@ from .viewer_volume_consensus import XmippVolumeConsensusViewer
 
 from .viewer_projmatch import XmippProjMatchViewer
 
-#AJ
-from .viewer_structure_map_zernike3d import XmippProtStructureMapZernike3DViewer
 from .viewer_volume_deform_zernike3d import XmippVolumeDeformZernike3DViewer
 from .viewer_structure_map import XmippProtStructureMapViewer
 from .viewer_pdb_deform_zernike3d import XmippPDBDeformViewer

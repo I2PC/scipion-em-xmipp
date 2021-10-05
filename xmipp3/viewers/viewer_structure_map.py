@@ -44,6 +44,7 @@ from pyworkflow.gui.plotter import plt
 import pyworkflow.protocol.params as params
 
 from xmipp3.protocols.protocol_structure_map import XmippProtStructureMap
+from xmipp3.protocols.protocol_structure_map_zernike3d import XmippProtStructureMapZernike3D
 
 
 class XmippProtStructureMapViewer(ProtocolViewer):
@@ -53,31 +54,57 @@ class XmippProtStructureMapViewer(ProtocolViewer):
     
     _label = 'viewer structure map'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
-    _targets = [XmippProtStructureMap]
-
+    _targets = [XmippProtStructureMap, XmippProtStructureMapZernike3D]
 
     def _defineParams(self, form):
         form.addSection(label='Show StructMap')
+        if isinstance(self.protocol, XmippProtStructureMapZernike3D):
+            form.addParam('map', params.EnumParam, choices=['Deformation', 'Correlation', 'Consensus'],
+                          default=0, help='Choose the type of metric to display the coordinates.')
+            form.addParam('twoSets', params.BooleanParam, default=False, label='Two set analysis',
+                          help='Activate if the analysis of the deformation included the option of analysing '
+                               'two sets of volumes independently.')
         form.addParam('doShowPlot', params.LabelParam,
                       label="Display the StructMap")
     
     def _getVisualizeDict(self):
         return {'doShowPlot': self._visualize}
-    
-        
+
+    def getOutputFile(self):
+        fnOutput = ['']
+        if isinstance(self.protocol, XmippProtStructureMapZernike3D):
+            if self.map.get() == 0 and not self.twoSets:
+                fnOutput = [self.protocol._defineResultsName(3)]
+            elif self.map.get() == 1 and not self.twoSets:
+                fnOutput = [self.protocol._defineResultsName2(3)]
+            elif self.map.get() == 0 and self.twoSets:
+                fnOutput = [self.protocol._defineResultsName(3, 'Sub_1_'),
+                            self.protocol._defineResultsName(3, 'Sub_2_')]
+            elif self.map.get() == 1 and self.twoSets:
+                fnOutput = [self.protocol._defineResultsName2(3, 'Sub_1_'),
+                            self.protocol._defineResultsName2(3, 'Sub_2_')]
+            elif self.map.get() == 2 and not self.twoSets:
+                fnOutput = [self.protocol._defineResultsName3(3)]
+        else:
+            fnOutput = [self.protocol._defineResultsName(3)]
+        return fnOutput
+
     def _visualize(self, e=None):
-        fnOutput = self.protocol._defineResultsName(3)
-        if not os.path.exists(fnOutput):
-            return [self.errorMessage('The necessary metadata was not produced\n'
-                                      'Execute again the protocol\n',
-                                      title='Missing result file')]
-        coordinates = np.loadtxt(fnOutput)
-        labels = [str(idp) for idp in range(1, coordinates.shape[0] + 1)]
+        fnOutput = self.getOutputFile()
+        for file in fnOutput:
+            if not os.path.exists(file):
+                return [self.errorMessage('The necessary metadata was not produced\n'
+                                          'Execute again the protocol\n',
+                                          title='Missing result file')]
+
+        self.coordinates = (np.loadtxt(file) for file in fnOutput)
+        self.coordinates = np.vstack(self.coordinates)
+        labels = [str(idp) for idp in range(1, self.coordinates.shape[0] + 1)]
         if os.path.isfile(self._getExtraPath('weigths.txt')):
             weights = np.loadtxt(self._getExtraPath('weigths.txt'))
         else:
             weights = None
-        plot = projectionPlot(coordinates, labels, weights)
+        plot = projectionPlot(self.coordinates, labels, weights)
         plot.initializePlot()
         return plot
         

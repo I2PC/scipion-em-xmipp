@@ -390,6 +390,28 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
             kernel = gaussian_filter(kernel, sigma=sigma)
         return kernel, lbox, mid
 
+    def convolution(self, Xr, kernel, sigma, R, C, D):
+        # Create the grid
+        lbox = int(6 * sigma)
+        if lbox % 2 == 0:
+            lbox += 1
+        mid = int((lbox - 1) / 2 + 1)
+        S_shape = [d + lbox for d in R.shape]
+        S = np.zeros(S_shape)
+
+        # Place rounded points on the grid
+        for p in range(Xr.shape[0]):
+            if D is None:
+                indy = np.argmin(np.abs(R[:, 0] - Xr[p, 0]))
+                indx = np.argmin(np.abs(C[0, :] - Xr[p, 1]))
+                S[indx:indx + 2 * mid - 1, indy:indy + 2 * mid - 1] += kernel
+            else:
+                indx = np.argmin(np.abs(R[:, 0, 0] - Xr[p, 0]))
+                indy = np.argmin(np.abs(C[0, :, 0] - Xr[p, 1]))
+                indz = np.argmin(np.abs(D[0, 0, :] - Xr[p, 2]))
+                S[indx:indx + 2 * mid - 1, indy:indy + 2 * mid - 1, indz:indz + 2 * mid - 1] += kernel
+        return S
+
     def entropyConsensus(self):
         for i in range(2, 4):
             # Rigid alignment of mappings (considering mirrors as well)
@@ -404,6 +426,7 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
             grid_coords = np.linspace(-size_grid, size_grid, num=400)
             if i == 2:
                 R, C = np.meshgrid(grid_coords, grid_coords, indexing='ij')
+                D = None
             else:
                 R, C, D = np.meshgrid(grid_coords, grid_coords, grid_coords, indexing='ij')
             sigma = R.shape[0] / 20
@@ -423,21 +446,8 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
                 # Round points to place them in a grid
                 Xr = np.round(X, decimals=3)
 
-                # Create the grid
-                S_shape = [d+lbox for d in R.shape]
-                S = np.zeros(S_shape)
-
-                # Place rounded points on the grid
-                for p in range(Xr1.shape[0]):
-                    if i == 2:
-                        indy = np.argmin(np.abs(R[:, 0] - Xr[p, 0]))
-                        indx = np.argmin(np.abs(C[0, :] - Xr[p, 1]))
-                        S[indx:indx+2*mid-1, indy:indy+2*mid-1] += kernel
-                    else:
-                        indx = np.argmin(np.abs(R[:, 0, 0] - Xr[p, 0]))
-                        indy = np.argmin(np.abs(C[0, :, 0] - Xr[p, 1]))
-                        indz = np.argmin(np.abs(D[0, 0, :] - Xr[p, 2]))
-                        S[indx:indx+2*mid-1, indy:indy+2*mid-1, indz:indz+2*mid-1] += kernel
+                # Convolve grid and kernel
+                S = self.convolution(Xr, kernel, sigma, R, C, D)
 
                 # Compute the Shannon entropy associated to the convolved grid
                 _, counts = np.unique(S, return_counts=True)
