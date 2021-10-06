@@ -109,12 +109,8 @@ class TestZernike3DBase(BaseTest):
 
     @classmethod
     def readMetadata(cls, file):
-        coeffMatrix = []
         mdOut = md.MetaData(file)
-        for row in md.iterRows(mdOut):
-            coeffs = mdOut.getValue(md.MDL_SPH_COEFFICIENTS, row.getObjId())
-            coeffMatrix.append(coeffs)
-        return np.vstack(coeffMatrix)[:, :-8]
+        return np.vstack(mdOut.getColumnValues(md.MDL_SPH_COEFFICIENTS))[:, :-8]
 
 
 class TestProtocolsZernike3D(TestZernike3DBase):
@@ -305,5 +301,5 @@ class TestProtocolsZernike3D(TestZernike3DBase):
         aa_gold_clnm = self.readMetadata(self.dataset.getFile('gold_standard_aa/GPU/output_particles.xmd'))
         aa_test_clnm = self.readMetadata(alignZernike._getExtraPath('output_particles.xmd'))
         diff_clnm = np.abs(np.sum(aa_gold_clnm - aa_test_clnm))
-        self.assertAlmostEqual(diff_clnm, 0, delta=3,
+        self.assertAlmostEqual(diff_clnm, 0, delta=4,
                                msg="Unexpected Zernike coefficients")
