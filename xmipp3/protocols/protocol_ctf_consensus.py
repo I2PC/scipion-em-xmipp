@@ -32,7 +32,7 @@ from datetime import datetime
 from cmath import rect, phase
 from math import radians, degrees
 
-from pyworkflow import VERSION_2_0
+from pyworkflow import VERSION_3_0
 from pwem.objects import SetOfCTF, SetOfMicrographs
 from pyworkflow.object import Set, Integer, Pointer
 import pyworkflow.protocol.params as params
@@ -56,7 +56,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
     the agreement with a secondary CTF for the same set of micrographs.
     """
     _label = 'ctf consensus'
-    #_lastUpdateVersion = VERSION_2_0
+    _lastUpdateVersion = VERSION_3_0
 
     def __init__(self, **args):
         ProtCTFMicrographs.__init__(self, **args)
