@@ -73,7 +73,6 @@ class XmippProtSubtractProjection(EMProtocol):
 
     # --------------------------- STEPS functions --------------------------------------------
     def convertStep(self):
-        # convert input particles into .xmd file
         writeSetOfParticles(self.particles.get(), self._getExtraPath("input_particles.xmd"))
         
     def subtractionStep(self):
@@ -91,9 +90,9 @@ class XmippProtSubtractProjection(EMProtocol):
         if resol:
             fc = vol.getSamplingRate()/resol
             args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
-        if self.maskVol:
+        if self.maskVol.get() is not None:
             args += ' --maskVol %s' % self.maskVol.get().getFileName()
-        if self.mask:
+        if self.mask.get() is not None:
             args += ' --mask %s' % self.mask.get().getFileName()
         self.runJob(program, args)
 
@@ -104,7 +103,6 @@ class XmippProtSubtractProjection(EMProtocol):
         outputSet.copyInfo(inputSet)
         outputSet.copyItems(inputSet, updateItemCallback=self._updateItem,
                             itemDataIterator=md.iterRows(self._getExtraPath("input_particles.xmd")))
-
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(inputSet, outputSet)
 
