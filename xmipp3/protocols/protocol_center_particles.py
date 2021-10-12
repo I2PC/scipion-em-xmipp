@@ -140,7 +140,6 @@ class XmippProtCenterParticles(ProtClassify2D):
                         md.MDL_XCOOR)+int(centerPoint[0]))
                     rowOut.setValue(md.MDL_YCOOR, rowOut.getValue(
                         md.MDL_YCOOR)+int(centerPoint[1]))
-
                     rowOut.addToMd(mdNewClass)
                 mdNewClass.write(block + "@" + self._getExtraPath(
                     'final_classes.xmd'), MD_APPEND)
@@ -229,7 +228,6 @@ class XmippProtCenterParticles(ProtClassify2D):
         for row in md.iterRows(myParticles):
             #To create the new particle
             p = rowToParticle(row)
-            outputParticles.append(p)
 
             #To create the new coordinate
             newCoord = Coordinate()
@@ -249,6 +247,9 @@ class XmippProtCenterParticles(ProtClassify2D):
                 newCoord.setPosition(x * scale, y * scale)
                 newCoord.setMicrograph(mic)
                 outputCoords.append(newCoord)
+                p.setCoordinate(newCoord)
+            #Storing the new particle
+            outputParticles.append(p)
 
         boxSize = inputParticles.getXDim() * scale
         outputCoords.setBoxSize(boxSize)

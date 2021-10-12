@@ -136,7 +136,6 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             shiftArrayY = np.asarray(shiftListY)
 
             evalBoth = self.rejType==self.REJ_AND or self.rejType==self.REJ_OR
-
             if self.rejType == self.REJ_MOVIE or evalBoth:
                 rangeX = np.max(shiftArrayX) - np.min(shiftArrayX)
                 rangeY = np.max(shiftArrayY) - np.min(shiftArrayY)
@@ -292,21 +291,23 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
         pass
 
     #--------------------------- UTILS functions -------------------------------
-    def _loadOutputSet(self, SetClass, baseName, fixSampling=True):
-        """ Load the output set if it exists or create a new one.
-        fixSampling: correct the output sampling rate if binning was used,
-        except for the case when the original movies are kept and shifts
-            refers to that one.
+    def _loadOutputSet(self, SetClass, baseName):
+        """ Load the output set if it exists or create a new one based on the inputs.
         """
         if SetClass == SetOfMicrographs:
             if 'dose-weighted' in baseName:
                 if self.inputDwMics is None:
                     # if no DwMics to do, do nothing and exit
                     return None
+                inputSet = self.inputDwMics
             else:
                 if self.inputMics is None:
                     # if no mics to do, do nothing and exit
                     return None
+                inputSet = self.inputMics
+        else:
+            inputSet = self.inputMovies.get()
+
         setFile = self._getPath(baseName)
 
         if exists(setFile):
@@ -322,12 +323,7 @@ class XmippProtMovieMaxShift(ProtProcessMovies):
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
 
-        inputMovies = self.inputMovies.get()
-        outputSet.copyInfo(inputMovies)
-
-        if fixSampling:
-            newSampling = inputMovies.getSamplingRate()
-            outputSet.setSamplingRate(newSampling)
+        outputSet.copyInfo(inputSet)
 
         return outputSet
 

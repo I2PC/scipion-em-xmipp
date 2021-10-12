@@ -34,7 +34,7 @@ from math import radians, degrees
 
 from pyworkflow import VERSION_2_0
 from pwem.objects import SetOfCTF, SetOfMicrographs
-from pyworkflow.object import Set, Integer
+from pyworkflow.object import Set, Integer, Pointer
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
 
@@ -163,13 +163,13 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                            "between the two estimations below this resolution, "
                            "it will be discarded.")
         form.addParam('averageDefocus', params.BooleanParam,
-                      condition="calculateConsensus", default=True,
+                      condition="calculateConsensus", default=False,
                       label='Average equivalent metadata?',
                       help='If *Yes*, making an average of those metadata present '
                            'in both CTF estimations (defocus, astigmatism angle...)\n '
                            'If *No*, the primary estimation metadata will persist.')
         form.addParam('includeSecondary', params.BooleanParam,
-                      condition="calculateConsensus", default=True,
+                      condition="calculateConsensus", default=False,
                       label='Include all secondary metadata?',
                       help='If *Yes*, all metadata in the *Secondary CTF* will '
                            'be included in the resulting CTF.\n '
@@ -187,10 +187,11 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         self.allCtf1 = []
         self.allCtf2 = []
         self.initializeRejDict()
-        self.ctfFn1 = self.inputCTF.get().getFileName()
-        self.ctfFn2 = self.inputCTF2.get().getFileName()
         self.setSecondaryAttributes()
+
+        self.ctfFn1 = self.inputCTF.get().getFileName()
         if self.calculateConsensus:
+            self.ctfFn2 = self.inputCTF2.get().getFileName()
             ctfSteps = self._checkNewInput()
         else:
             ctfSteps = self._insertNewSelectionSteps(self.insertedDict,
@@ -357,7 +358,12 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
         # We have finished when there is not more input ctf (stream closed)
         # and the number of processed ctf is equal to the number of inputs
-        self.finished = (self.isStreamClosed and allDone == len(self.allCtf1))
+        if self.calculateConsensus:
+            maxCtfSize = min(len(self.allCtf1), len(self.allCtf2))
+        else:
+            maxCtfSize = len(self.allCtf1)
+
+        self.finished = (self.isStreamClosed and allDone == maxCtfSize)
 
         streamMode = Set.STREAM_CLOSED if self.finished else Set.STREAM_OPEN
 
@@ -387,13 +393,19 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         def updateRelationsAndClose(cSet, mSet, first, label=''):
 
             if os.path.exists(self._getPath('ctfs'+label+'.sqlite')):
+
+                micsAttrName = 'outputMicrographs'+label
+                self._updateOutputSet(micsAttrName, mSet, streamMode)
+                # Set micrograph as pointer to protocol to prevent pointee end up as another attribute (String, Booelan,...)
+                # that happens somewhere while scheduling.
+                cSet.setMicrographs(Pointer(self, extended=micsAttrName))
+
                 self._updateOutputSet('outputCTF'+label, cSet, streamMode)
-                self._updateOutputSet('outputMicrographs'+label, mSet, streamMode)
 
                 if first:
                     self._defineTransformRelation(self.inputCTF.get().getMicrographs(),
                                                   mSet)
-                    self._defineTransformRelation(cSet, mSet)
+                    # self._defineTransformRelation(cSet, mSet)
                     self._defineTransformRelation(self.inputCTF, cSet)
                     self._defineCtfRelation(mSet, cSet)
 
@@ -432,7 +444,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                     setAttribute(ctf, '_ctf2_defocusAngle_diff',
                                  anglesDifference(ctf.getDefocusAngle(),
                                                   ctf2.getDefocusAngle()))
-                    if ctf.hasPhaseShift() and ctf2.hasPhaseShit():
+                    if ctf.hasPhaseShift() and ctf2.hasPhaseShift():
                         setAttribute(ctf, '_ctf2_phaseShift_diff',
                                      anglesDifference(ctf.getPhaseShift(),
                                                       ctf2.getPhaseShift()))
@@ -452,7 +464,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                                                         ctf2.getDefocusAngle())
                         ctf.setStandardDefocus(newDefocusU, newDefocusV,
                                                newDefocusAngle)
-                        if ctf.hasPhaseShift() and ctf2.hasPhaseShit():
+                        if ctf.hasPhaseShift() and ctf2.hasPhaseShift():
                             newPhaseShift = averageAngles(ctf.getPhaseShift(),
                                                           ctf2.getPhaseShift())
                             ctf.setPhaseShift(newPhaseShift)
@@ -485,6 +497,8 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             item = self.inputCTF2.get().getFirstItem()
             ctf2Attr = set(item.getObjDict().keys())
             self.secondaryAttributes = ctf2Attr - ctf1Attr
+        else:
+            self.secondaryAttributes = set()
 
 
     def _loadOutputSet(self, SetClass, baseName):

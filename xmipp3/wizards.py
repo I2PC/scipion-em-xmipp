@@ -28,7 +28,10 @@
 
 from pwem.constants import *
 from pwem.wizards import *
+from pwem.wizards.wizard import EmWizard
 from pyworkflow.wizard import Wizard
+from xmipp3.viewers import XmippMonoResViewer, XmippResDeepResViewer, XmippProtFSOViewer
+
 from .protocols.protocol_cl2d import IMAGES_PER_CLASS
 
 from .protocols import (
@@ -39,7 +42,8 @@ from .protocols import (
     XmippProtMaskVolumes, XmippProtAlignVolume, XmippProtCL2D,
     XmippProtHelicalParameters, XmippProtConsensusPicking, XmippProtMonoRes,
     XmippProtRotSpectra, XmippProtReconstructHighRes, XmippProtExtractUnit,
-    XmippProtReconstructHeterogeneous, XmippMetaProtDiscreteHeterogeneityScheduler)
+    XmippProtReconstructHeterogeneous, XmippMetaProtDiscreteHeterogeneityScheduler,
+    XmippProtShiftParticles)
 
 
 #===============================================================================
@@ -144,7 +148,6 @@ class XmippBoxSizeWizard(Wizard):
 
     def show(self, form):
         form.setVar('boxSize', form.protocol.getBoxSize())
-
 
 #===============================================================================
 # CONSENSUS RADIUS
@@ -496,4 +499,22 @@ class XmippGaussianVolumesWizard(GaussianVolumesWizard):
         GaussianVolumesWizard.show(self, form, _value, _label, UNIT_PIXEL_FOURIER)
 
 
+class ColorScaleWizard(ColorScaleWizardBase):
+        _targets = ColorScaleWizardBase.defineTargets(XmippMonoResViewer, XmippResDeepResViewer, XmippProtFSOViewer)
+
+class XmippSelectPointinVolWizard(EmWizard):
+    _targets = [(XmippProtShiftParticles, ['x', 'y', 'z'])]
+
+    def show(self, form):
+        protocol = form.protocol
+        volume = protocol.inputVol.get()
+        if not volume:
+            print('You must specify input volume')
+            return
+        plt = MaskVolumeWizard(volume.getFileName())
+        plt.initializePlot()
+        form.setVar('x', int(plt.origin[2]))
+        form.setVar('y', int(plt.origin[1]))
+        form.setVar('z', int(plt.origin[0]))
+        del plt
 
