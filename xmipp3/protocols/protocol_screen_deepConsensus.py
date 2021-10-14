@@ -490,7 +490,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         #Particle extraction for training and training
         trainedParams = self.loadTrainedParams()
         toTrainSize = self.toTrainDataSize.get() if self.toTrainDataSize.get() != -1 else 1e10
-        if not self.skipTraining.get() and trainedParams['posParticlesTrained'] < toTrainSize:
+        if self.trainingOn() and trainedParams['posParticlesTrained'] < toTrainSize:
           self.doTraining()
 
         elif trainedParams['posParticlesTrained'] >= toTrainSize and trainedParams['trainingPass'] != '':
@@ -527,6 +527,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     def endTrainingStep(self):
       self.saveTrainedParams(self.curTrainedParams)
       self.TRAINING = False
+      #todo: check here the accuracy/error better than threshold and if so do uploadTrainedParams['keepTraining', False]
 
     def lastRoundStep(self):
       '''Starts the last round of training and predictions with the remainign microgrpahs
@@ -1376,6 +1377,12 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         return nParts
 
     #STREAMING and state checks
+    def trainingOn(self):
+      '''Return a boolean for whether to perform training. True if the training must not be skipped and if the finish
+      training criteria has not been reached yet'''
+      trainedParams = self.loadTrainedParams()
+      return not self.skipTraining.get() and trainedParams['keepTraining']
+
     def predictionsOn(self):
       '''Return a boolean for whether to perform a prediction. True if there must be a preliminar prediction or
       if the training process has finished (trainingPass=='') '''
@@ -1551,7 +1558,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                   'trainingPass': 0,
                   'predictionPasses': [],
                   'doneExtraTesting': False,
-                  'firstTraining': True
+                  'firstTraining': True,
+                  'keepTraining': True,
                   }
       return params
 
