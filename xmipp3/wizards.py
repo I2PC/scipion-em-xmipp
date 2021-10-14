@@ -43,7 +43,7 @@ from .protocols import (
     XmippProtHelicalParameters, XmippProtConsensusPicking, XmippProtMonoRes,
     XmippProtRotSpectra, XmippProtReconstructHighRes, XmippProtExtractUnit,
     XmippProtReconstructHeterogeneous, XmippMetaProtDiscreteHeterogeneityScheduler,
-    XmippProtShiftParticles)
+    XmippProtShiftParticles, XmippProtVolumeDeformZernike3D, XmippProtStructureMapZernike3D)
 
 
 #===============================================================================
@@ -330,8 +330,7 @@ class XmippVolumeMaskRadiusProjMWizard(XmippVolumeMaskRadiusWizard):
 
 class XmippVolumeRadiiWizard(VolumeMaskRadiiWizard):
     _targets = [(XmippProtMaskVolumes, ['innerRadius', 'outerRadius']),
-               (XmippProtExtractUnit, ['innerRadius', 'outerRadius'])
-              ]
+               (XmippProtExtractUnit, ['innerRadius', 'outerRadius'])]
 
     def _getParameters(self, protocol):
 
@@ -367,6 +366,33 @@ class XmippVolumeRadiiProjMWizard(XmippVolumeRadiiWizard):
         protParams['label']= label
         protParams['value']= value
         return protParams
+
+class Zernike3DMaskWizard(VolumeMaskRadiusWizard):
+    _targets = [(XmippProtVolumeDeformZernike3D, ['Rmax']),
+                (XmippProtStructureMapZernike3D, ['Rmax'])]
+
+    def _getParameters(self, protocol):
+
+        label, value = self._getInputProtocol(self._targets, protocol)
+
+        protParams = {}
+        if isinstance(protocol, XmippProtVolumeDeformZernike3D):
+            protParams['input'] = protocol.inputVolume
+        else:
+            protParams['input'] = protocol.inputVolumes
+        protParams['label'] = label
+        protParams['value'] = value
+        return protParams
+
+    def _getProvider(self, protocol):
+        _objs = self._getParameters(protocol)['input']
+        return VolumeMaskRadiusWizard._getListProvider(self, _objs)
+
+    def show(self, form):
+        params = self._getParameters(form.protocol)
+        _value = params['value']
+        _label = params['label']
+        VolumeMaskRadiusWizard.show(self, form, _value, _label, UNIT_PIXEL)
 
 
 #===============================================================================
