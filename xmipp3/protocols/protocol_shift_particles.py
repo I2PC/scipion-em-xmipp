@@ -26,7 +26,7 @@
 # *
 # **************************************************************************
 
-from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, EnumParam
+from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, EnumParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 import pyworkflow.object as pwobj
 from pwem import ALIGN_3D, ALIGN_2D
@@ -49,10 +49,10 @@ class XmippProtShiftParticles(EMProtocol):
         form.addParam('inputVol', PointerParam, pointerClass='Volume', label="Volume", allowsNull=True,
                       help='Volume to select the point (by clicking in the wizard for selecting the new center) that '
                            'will be the new center of the particles.')
-        form.addParam('x', IntParam, label="x", help='Use the wizard to select by clicking in the volume the new '
-                                                     'center for the shifted particles')
-        form.addParam('y', IntParam, label="y")
-        form.addParam('z', IntParam, label="z")
+        form.addParam('x', FloatParam, label="x", help='Use the wizard to select by clicking in the volume the new '
+                                                       'center for the shifted particles')
+        form.addParam('y', FloatParam, label="y")
+        form.addParam('z', FloatParam, label="z")
         form.addParam('boxSizeBool', BooleanParam, label='Use original box size for the shifted particles?',
                       default='True', help='Use input particles box size for the shifted particles.')
         form.addParam('boxSize', IntParam, label='Final box size', condition='not boxSizeBool',
