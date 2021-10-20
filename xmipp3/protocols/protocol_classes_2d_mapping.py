@@ -35,16 +35,15 @@ from matplotlib.cm import get_cmap, ScalarMappable
 from pyworkflow.object import Float
 from pyworkflow.utils.properties import Message
 from pyworkflow.gui.dialog import askYesNo
-import pyworkflow.utils as pwutils
 import pyworkflow.protocol.params as param
 
 from pwem.emlib.image import ImageHandler
 import pwem.emlib.metadata as md
 from pwem.protocols import ProtAnalysis2D
 from pwem.objects import SetOfClasses2D
-from pwem.constants import ALIGN_2D
 
-from xmipp3.convert import rowToAlignment, xmippToLocation, writeSetOfClasses2D
+from xmipp3.convert import xmippToLocation, writeSetOfClasses2D
+
 
 class XmippProtCL2DMap(ProtAnalysis2D):
     """ Create a low dimensional mapping from a SetOfClasses2D with interactive selection of classes.
