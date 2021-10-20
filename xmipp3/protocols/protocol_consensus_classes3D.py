@@ -1,8 +1,8 @@
 # **************************************************************************
-# *sudo forticlientsslvpn/64bit/forticlientsslvpn_cli --server https://vpnssl.cnb.csic.es:443 --vpnuser 78954376E --keepalive
 # * Authors:     David Maluenda (dmaluenda@cnb.csic.es)
 # *              Daniel del Hoyo Gomez (daniel.delhoyo.gomez@alumnos.upm.es)
 # *              Jorge Garcia Condado (jgcondado@cnb.csic.es)
+# *              Oier Lauzirika Zarrabeitia (oierlauzi@bizkaia.eu)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -27,7 +27,7 @@
 # **************************************************************************
 
 from pwem.protocols import EMProtocol
-from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam
+from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam, FloatParam
 from pyworkflow.object import List, Integer, String
 from pwem.objects import Class3D
 from scipy.cluster import hierarchy
@@ -36,6 +36,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
+
 
 class XmippProtConsensusClasses3D(EMProtocol):
     """ Compare several SetOfClasses3D.
@@ -58,23 +59,27 @@ class XmippProtConsensusClasses3D(EMProtocol):
         form.addParam('numClust', IntParam, default=-1,
                       label='Set Number of Clusters',
                       help='Set the final number of clusters. If -1, deduced by the shape of the objective function')
-
+        form.addParam('numRand', IntParam, default=0,
+                      label='Number of random classifications',
+                      help='Number of random classifications used for computing the significance of the actual '
+                           'clusters')
+        form.addParam('thresholdPercentile', FloatParam, default=95,
+                      label='Significance percentile',
+                      help='Percentile of the random classification used as a threshold to determine the significance '
+                           'of the actual classification')
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
-        """ Inserting one step for each intersections analisis
-        """
+        """ Inserting one step for each intersections analisis"""
+        self._insertFunctionStep('compareFirstStep')
 
-        self._insertFunctionStep('compareFirstStep',
-                                 self.inputMultiClasses[0].get().getObjId(),
-                                 self.inputMultiClasses[1].get().getObjId())
+        # if len(self.inputMultiClasses) > 2:  #TODO remove as redundant
+        for i in range(2, len(self.inputMultiClasses)):
+            self._insertFunctionStep('compareOthersStep', i)
 
-        if len(self.inputMultiClasses) > 2:
-            for i in range(2, len(self.inputMultiClasses)):
-                self._insertFunctionStep('compareOthersStep', i,
-                                         self.inputMultiClasses[i].get().getObjId())
         if self.doConsensus.get() == 0:
             self._insertFunctionStep('cossEnsembleStep')
+            self._insertFunctionStep('checkSignificanceStep')
 
         self._insertFunctionStep('createOutputStep')
 
@@ -86,7 +91,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         set1 = self.inputMultiClasses[set1Id].get()
         set2 = self.inputMultiClasses[set2Id].get()
 
-        print('Computing intersections between classes form set %s and set %s:'
+        print('Computing intersections between classes from set %s and set %s:'
               % (set1.getNameId(), set2.getNameId()))
 
         newList = []
@@ -107,8 +112,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         self.intersectsList = newList
 
     def compareOthersStep(self, set1Id, objId):
-        """ We found the intersections for the two firsts sets of classes
-        """
+        """ We found the intersections for the two firsts sets of classes"""
         set1 = self.inputMultiClasses[set1Id].get()
 
         print('Computing intersections between classes form set %s and '
@@ -136,8 +140,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         self.intersectsList = newList
 
     def cossEnsembleStep(self):
-        """ Ensemble clusterig with coss method
-        """
+        """ Ensemble clusterig with coss method"""
         cs = self.get_cs(self.inputMultiClasses)
         all_coss_us, ob_values = self.coss_ensemble(cs, min_nclust=1)
 
@@ -185,9 +188,40 @@ class XmippProtConsensusClasses3D(EMProtocol):
         # Save relevant data for analysis
         self.save_outputs()
 
-    def createOutputStep(self):
-        """ Save the output classes """
+    def checkSignificanceStep(self):
+        """ Create random partitions of same size to compare the quality
+         of the classification """
 
+        # Obtain the execution parameters
+        n_exec = self.numRand.get()
+        percentile = self.thresholdPercentile.get()
+
+        # Obtain the group sizes
+        cluster_sizes = []
+        for i in len(self.inputMultiClasses):
+            clusters = self.inputMultiClasses[i].get()
+            sizes = []
+            for cls in clusters:
+                sizes.append(len(cls))
+            cluster_sizes.append(sizes)
+
+        # Repeatedly obtain a consensus of a random classification of same size
+        consensus_sizes = []
+        for i in range(n_exec):
+            # Create random partitions of same size
+            random_classification = coss_random_classification(cluster_sizes, sum(cluster_sizes[0]))
+
+            # Compute the repeated classifications
+            consensus = coss_consensus(random_classification)
+
+            # Store the amount of distinct sets
+            consensus_sizes.append(len(consensus))
+
+        # Obtain the size threshold using the given percentile
+        threshold = np.percentile(consensus_sizes, percentile)
+
+    def createOutputStep(self):
+        """Save the output classes"""
         # Check user selected number of clusters or elbows
         nclust = self.numClust.get()
 
@@ -250,20 +284,20 @@ class XmippProtConsensusClasses3D(EMProtocol):
         self.saveElbowIndex()
 
     def saveClusteringsList(self):
-        '''Saves the list of clusterings with different number of clusters into a pickle file'''
+        """Saves the list of clusterings with different number of clusters into a pickle file"""
         savepath = self._getExtraPath('clusterings.pkl')
         with open(savepath, 'wb') as f:
             pickle.dump(self.all_iLists, f)
 
     def saveObjectiveFData(self):
-        '''Save the data of the objective function'''
+        """Save the data of the objective function"""
         savepath = self._getExtraPath('ObjectiveFData.pkl')
         with open(savepath, 'wb') as f:
             pickle.dump(self._objectiveFData, f)
 
     def saveElbowIndex(self):
-        '''Save the calculated number of clusters where the function has an elbow
-           for each of the different methods.'''
+        """Save the calculated number of clusters where the function has an elbow
+           for each of the different methods."""
         savepath = self._getExtraPath('elbowclusters.pkl')
         with open(savepath, 'wb') as f:
             pickle.dump(self.elbows, f)
@@ -287,7 +321,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         return (len(inter), inter, setId, clsId, clsSize)
 
     def get_cs(self, scipionMultiClasses):
-        '''Returns the list of lists of sets that stores the clusters of each classification'''
+        """Returns the list of lists of sets that stores the clusters of each classification"""
         cs=[]
         for i in range(len(scipionMultiClasses)):
             clasif = scipionMultiClasses[i].get()
@@ -297,15 +331,15 @@ class XmippProtConsensusClasses3D(EMProtocol):
         return cs
 
     def get_us(self, scipionIntersectList):
-        '''Return the list of sets from the scipion list of intersections'''
+        """Return the list of sets from the scipion list of intersections"""
         us=[]
         for cur_tuple in scipionIntersectList:
             us.append(cur_tuple[1])
         return us
 
     def coss_ensemble(self, cs, min_nclust=2):
-        '''Ensemble clustering by COSS that merges interections of clusters based on entropy minimization
-        '''
+        """Ensemble clustering by COSS that merges interections of clusters based on entropy minimization
+        """
         # Creating intersection clusters (us)
         iList = self.intersectsList
         us = self.get_us(iList)
@@ -343,13 +377,14 @@ class XmippProtConsensusClasses3D(EMProtocol):
             us = self.get_us(iList)
             all_us.append(us)
             self.all_iLists.append(iList)
+
         self.all_iLists = list(reversed(self.all_iLists))
         return all_us, ob_values
 
     def plot_dendogram(self, obvalues, outimage):
-        ''' Plot the dendogram from the objective functions of the merge
+        """ Plot the dendogram from the objective functions of the merge
         between the groups of images
-        '''
+        """
         # Initzialize required values
         allilists = self.all_iLists.copy()
         allilists.reverse()
@@ -430,41 +465,49 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         return outputClasses
 
-#################################
-# COSS functions. See notes 8/4/2019
+
+######################################
+# COSS functions. See notes 8/4/2019 #
+######################################
+
+
 def nc_similarity(n, c):
-    '''Return the similarity of intersection subset (n) with class subset (c)
-    '''
+    """Return the similarity of intersection subset (n) with class subset (c)
+    """
     inter = len(n.intersection(c))
     return inter / len(n)
 
+
 def entropy(p):
-    '''Return the entropy of the elements in a vector
-    '''
+    """Return the entropy of the elements in a vector
+    """
     H = 0
     for i in range(len(p)):
         H += p[i] * math.log(p[i], 2)
     return -H
 
+
 def create_nsubset(c1, c2):
-    '''Return the intersection of two sets
-    '''
+    """Return the intersection of two sets
+    """
     c1 = set(c1)
     c2 = set(c2)
     return c1.intersection(c2)
 
+
 def build_simvector(n, cs):
-    '''Build the similarity vector of n subset with each c subset in cs
-    '''
+    """Build the similarity vector of n subset with each c subset in cs
+    """
     v = []
     for c in cs:
         v.append(nc_similarity(n, c))
     return v
 
+
 def calc_distribution(ns, indexs=[]):
-    '''Return the vector of distribution (p) from the n subsets in ns
+    """Return the vector of distribution (p) from the n subsets in ns
     If two indexs are given, these two subsets are merged in the distribution
-    '''
+    """
     p = np.array([])
     if len(indexs) == 2:
         # Merging two subsets
@@ -479,25 +522,27 @@ def calc_distribution(ns, indexs=[]):
             p = np.append(p, len(n))
     return p / N
 
+
 def vectors_similarity(v1, v2):
-    '''Return the cosine similarity of two vectors that is used as similarity
-    '''
+    """Return the cosine similarity of two vectors that is used as similarity
+    """
     return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
 
+
 def merge_subsets(iList, indexs):
-    '''Return a list of subsets where the subsets[index] have been merged
-    '''
+    """Return a list of subsets where the subsets[index] have been merged
+    """
     niList = []
     for i in range(len(iList)):
         if i not in indexs:
             niList.append(iList[i])
 
-    #Clusters with specified index are merged
+    # Clusters with specified index are merged
     cl0 = iList[indexs[0]][1]
     cl1 = iList[indexs[1]][1]
     union = cl0.union(cl1)
 
-    #Representative info is chosen from the previous bigger cluster
+    # Representative info is chosen from the previous bigger cluster
     if len(cl0) > len(cl1):
         rep = 0
     else:
@@ -510,9 +555,10 @@ def merge_subsets(iList, indexs):
 
     return niList
 
+
 def ob_function(ns, indexs, vs, eps=0.01):
-    '''Objective function to minimize based on the entropy and the similarity between the clusters to merge
-    '''
+    """Objective function to minimize based on the entropy and the similarity between the clusters to merge
+    """
     p = calc_distribution(ns)
     pi = calc_distribution(ns, indexs)
     h = entropy(p)
@@ -521,12 +567,13 @@ def ob_function(ns, indexs, vs, eps=0.01):
     sv = vectors_similarity(vs[indexs[0]], vs[indexs[1]])
     return (h - hi) / (sv + eps)
 
+
 def clusterings_as_sets(rs, nclust, Y):
-    '''Creating class clusters: list of lists(clusterings) of sets
+    """Creating class clusters: list of lists(clusterings) of sets
     (each set is a cluster with the names of objects)
     From a list of lists(clusterings) where the position is the object
     and the value the cluster
-    '''
+    """
     cs = []
     for _ in range(len(rs)):
         cs.append([set() for _ in range(nclust)])
@@ -536,9 +583,10 @@ def clusterings_as_sets(rs, nclust, Y):
             cs[j][rs[j][i]].add(i)
     return cs
 
+
 def intersection_clusters(cs):
-    '''Return the intersections between the clusters of different clusterings
-    '''
+    """Return the intersections between the clusters of different clusterings
+    """
     us = []
     for c in cs:
         if len(us) == 0:
@@ -556,8 +604,9 @@ def intersection_clusters(cs):
         us.remove(set())
     return us
 
+
 def us2labels(us, lenX):
-    '''From merged us it returns the labels of the elements'''
+    """From merged us it returns the labels of the elements"""
     # Saving labels
     coss_labels = [-1 for _ in range(lenX)]
     for ic, clus in enumerate(us):
@@ -565,9 +614,10 @@ def us2labels(us, lenX):
             coss_labels[idx] = ic
     return coss_labels
 
+
 def adjust_index(nsol, pair_min):
-    '''Adjust the index given that same cluster count only as 1
-    '''
+    """Adjust the index given that same cluster count only as 1
+    """
     isol = [0]
     for i in range(1, len(nsol)):
         if nsol[i] == nsol[i - 1]:
@@ -577,9 +627,10 @@ def adjust_index(nsol, pair_min):
     npair = [isol.index(pair_min[0]), isol.index(pair_min[1])]
     return npair
 
+
 def get_vs(us, cs):
-    '''Return the vector of similarities between the subgroups (us) and the clusters (cs)
-    '''
+    """Return the vector of similarities between the subgroups (us) and the clusters (cs)
+    """
     list_cs = []
     for c in cs:
         list_cs += c
@@ -587,6 +638,7 @@ def get_vs(us, cs):
     for u in us:
         vs.append(build_simvector(u, list_cs))
     return vs
+
 
 def n_clusters(all_coss_us):
     """Find number of clusters in each set"""
@@ -599,12 +651,14 @@ def n_clusters(all_coss_us):
 
     return nclusters
 
+
 def normalize(x, y):
     """Normalize values to range 0 to 1"""
     normx = (x-np.min(x))/(np.max(x)-np.min(x))
     normy = (y-np.min(y))/(np.max(y)-np.min(y))
 
     return normx, normy
+
 
 def find_closest_point_to_origin(x, y):
     """ Find the point closest to origin from normalied data
@@ -613,6 +667,7 @@ def find_closest_point_to_origin(x, y):
     distances = np.linalg.norm(coors, axis=1)
     elbow_idx = np.argmin(distances)
     return elbow_idx
+
 
 def find_elbow_angle(x, y):
     """Find the angle the slope of the function makes and
@@ -625,6 +680,7 @@ def find_elbow_angle(x, y):
             elbow_idx = i
             break
     return elbow_idx, angles
+
 
 def mle_estimates(d, q):
     """ MLE estimates of guassian distributions
@@ -642,6 +698,7 @@ def mle_estimates(d, q):
     theta2 = [mu2, sigma]
     return theta1, theta2
 
+
 def fg(d, theta):
     """ Gaussian pdf """
     m = theta[0]
@@ -649,12 +706,14 @@ def fg(d, theta):
     gauss = 1/(np.sqrt(2*np.pi*s))*np.exp(-1/(2*s)*(d-m)**2)
     return gauss
 
+
 def profile_log_likelihood(d, q, theta1, theta2):
     """ Profile log likelihood for given parameters """
     log_f_q = np.log(fg(d[:q], theta1))
     log_f_p = np.log(fg(d[q:], theta2))
     l_q = np.sum(log_f_q) + np.sum(log_f_p)
     return l_q
+
 
 def full_profile_log_likelihood(d):
     """ Calculate profile log likelihood for each partition
@@ -665,9 +724,10 @@ def full_profile_log_likelihood(d):
         pll.append(profile_log_likelihood(d, q, theta1, theta2))
     return pll
 
+
 def plot_function_and_elbows(nclusters, ob_values, elbows, outimage):
-    '''Plots the objective function and elbows
-    '''
+    """Plots the objective function and elbows
+    """
 
     plt.figure()
     plt.plot(nclusters, ob_values)
@@ -680,12 +740,62 @@ def plot_function_and_elbows(nclusters, ob_values, elbows, outimage):
     plt.tight_layout()
     plt.savefig(outimage)
 
+
+def coss_random_classification(C, N):
+    """ Randomly classifies N element indices into groups with
+    sizes defined by rows of C """
+    Cp = []
+
+    for Ci in C:
+        assert(sum(Ci) == N)  # The groups should address all the elements TODO: Maybe LEQ?
+        x = np.argsort(np.random.uniform(size=N)).tolist()  # Shuffles a [0, N) iota
+
+        # Select the number random indices requested by each group
+        Cip = []
+        first = 0
+        for s in Ci:
+            Cip.append(x[first:first + s])
+            first += s
+
+        # Add the random classification to the result
+        Cp.append(Cip)
+
+    return Cp
+
+
+def coss_consensus(Cp):
+    """ Computes the groups of elements that are equally
+    classified for all the classifications of Cp """
+
+    assert(len(Cp) > 0)  # There should be at least one classification
+
+    # Initialize a list of sets containing the groups of the first classification
+    S = []
+    for s in Cp[0]:
+        S.append(set(s))
+
+    # For the remaining classifications, compute the elements that repeatedly appear in the same group
+    for i in range(1, len(Cp)):
+        Sp = []
+        for s1 in S:
+            for s2 in Cp[i]:
+                # Obtain only the elements in common for this combination
+                news = s1.intersection(set(s2))
+
+                # A group is only formed if non-empty
+                if len(news) > 0:  # TODO: maybe >1
+                    Sp.append(news)
+        S = Sp
+
+    return S
+
+
 # TODO remove as deprecated
 
 def find_function_elbow(values, xs=None, ploti=False):
-    '''Finds the point where the maximum change in the slope of the function draw from
+    """Finds the point where the maximum change in the slope of the function draw from
     some values. Returns only non-convex elbows.
-    '''
+    """
     if xs == None:
         xs = list(range(len(values)))
 
@@ -706,9 +816,9 @@ def find_function_elbow(values, xs=None, ploti=False):
     return elbow_idx
 
 def plot_all_coss(all_coss_us, ob_values, outimage):
-    '''Plots the objective function (norm-log) and the rand score of all number of clusters
+    """Plots the objective function (norm-log) and the rand score of all number of clusters
     of the coss greedy ensemble clustering
-    '''
+    """
     nclusters = []
     for coss_us in all_coss_us:
         nclusters.append(len(coss_us))
