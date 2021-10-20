@@ -1006,7 +1006,7 @@ class TestXmippDenoiseParticles(TestXmippBase):
         diameterInA = 2 * radiusInPixel * psize
         cls.protRelion2DClass = cls.newProtocol(ProtRelionClassify2D,
                                                 doCTF=False, maskDiameterA=diameterInA,
-                                                numberOfMpi=4, numberOfThreads=1)
+                                                numberOfMpi=1, numberOfThreads=1)
         cls.protRelion2DClass.numberOfClasses.set(4)
         cls.protRelion2DClass.numberOfIterations.set(3)
         cls.protRelion2DClass.inputParticles.set(cls.protNormalize.outputParticles)
