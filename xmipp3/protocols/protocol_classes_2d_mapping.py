@@ -53,6 +53,7 @@ class XmippProtCL2DMap(ProtAnalysis2D):
     _label = '2D classes mapping'
     red_methods = ['PCA', 'LTSA', 'DM', 'LLTSA', 'LPP', 'kPCA', 'pPCA', 'LE', 'HLLE', 'SPE', 'NPE']
     distances = ['Euclidean', 'Correlation']
+    CLASSES_MD = 'classes.xmd'
     
     def __init__(self, **args):
         ProtAnalysis2D.__init__(self, **args)
@@ -83,13 +84,13 @@ class XmippProtCL2DMap(ProtAnalysis2D):
 
     #--------------------------- STEPS functions -------------------------------
     def convertStep(self):
-        metadata = self._getExtraPath('classes.xmd')
+        metadata = self._getExtraPath(self.CLASSES_MD)
         writeSetOfClasses2D(self.inputClasses.get(),
                             metadata,
                             writeParticles=True)
 
     def computeMappingStep(self):
-        metadata = self._getExtraPath('classes.xmd')
+        metadata = self._getExtraPath(self.CLASSES_MD)
         params = dict(metadata=metadata, method=self.red_methods[self.method.get()],
                       metric=self.distances[self.distance.get()])
         args = '-i classes@{metadata} -m {method} --distance {metric}'.format(**params)
@@ -98,7 +99,7 @@ class XmippProtCL2DMap(ProtAnalysis2D):
 
     def interactiveSelStep(self):
         selection_file = self._getExtraPath('selected_ids.txt')
-        metadata = self._getExtraPath('classes.xmd')
+        metadata = self._getExtraPath(self.CLASSES_MD)
         self.classes = self.inputClasses.get()
         self.mdOut = md.MetaData(metadata)
         if self.intSel.get():
@@ -329,6 +330,10 @@ class ScatterImageMarker(object):
             _, = [self.updatePatch(ind) for ind in ids_inrange]
 
         def toggle_selector(event):
+            """
+            This method must be left empty. I will be completed afterwards with the object
+            to be modifed during a callback as required by Matplotlib.
+            """
             pass
 
         rectprops = dict(facecolor='cyan', edgecolor='gray',
