@@ -244,6 +244,10 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                            'Warning: Sometimes convergency seems to be reached, '
                            'but after time, improvement can still happen. '
                            'Not recommended for very small data sets (<100 true particles)')
+        form.addParam('maxValAcc', params.FloatParam,
+                      label="Training mean val_acc threshold", default=0.90,
+                      condition="modelInitialization==%s or not skipTraining" % self.ADD_MODEL_TRAIN_NEW,
+                      help='Stop training if at any training batch the selected threshold is achieved')
         form.addParam('l2RegStrength', params.FloatParam,
                       label="Regularization strength",
                       default=1e-5, expertLevel=params.LEVEL_ADVANCED,
@@ -527,7 +531,12 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
     def endTrainingStep(self):
       self.saveTrainedParams(self.curTrainedParams)
       self.TRAINING = False
-      #todo: check here the accuracy/error better than threshold and if so do uploadTrainedParams['keepTraining', False]
+      mean_acc = self.loadMeanAccuracy()
+      threshold = self.maxValAcc.get()
+      if mean_acc != None and mean_acc > threshold:
+        self.uploadTrainedParam('keepTraining', False)
+        print('Mean accuracy %f surpass training accuracy threshold %f -> end training'
+              %(mean_acc, threshold))
 
     def lastRoundStep(self):
       '''Starts the last round of training and predictions with the remainign microgrpahs
@@ -1375,6 +1384,19 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           mdObject = md.MetaData(mdPath)
           nParts+= mdObject.size()
         return nParts
+
+    def loadMeanAccuracy(self):
+        trainedParams = self.curTrainedParams
+        trPass = trainedParams['trainingPass']
+        netDataPath = self._getExtraPath(self.NET_TEMPLATE.format(trPass))
+        netMeanAccFname = os.path.join(netDataPath, "netsMeanValAcc.txt")
+        if os.path.exists(netDataPath):
+            with open(netMeanAccFname) as f:
+                lines = f.readlines()
+                mean_accuracy = float(lines[0].split()[1])
+            return mean_accuracy
+        else:
+            return None
 
     #STREAMING and state checks
     def trainingOn(self):
