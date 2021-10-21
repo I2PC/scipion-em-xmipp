@@ -70,7 +70,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
-        """ Inserting one step for each intersections analisis"""
+        """ Inserting one step for each intersections analysis """
         self._insertFunctionStep('compareFirstStep')
 
         # if len(self.inputMultiClasses) > 2:  #TODO remove as redundant
@@ -83,74 +83,85 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         self._insertFunctionStep('createOutputStep')
 
-    def compareFirstStep(self, objId1, objId2):
-        """ We found the intersections for the two firsts sets of classes
-        """
-        set1Id = 0
-        set2Id = 1
-        set1 = self.inputMultiClasses[set1Id].get()
-        set2 = self.inputMultiClasses[set2Id].get()
+    def compareFirstStep(self, classification1Idx=0, classification2Idx=1):
+        """ Intersects all combinations of classes contained in the classification sets
+            referenced by set1Id and set2Id """
 
-        print('Computing intersections between classes from set %s and set %s:'
-              % (set1.getNameId(), set2.getNameId()))
+        # Select the first two classifications
+        classification1 = self.inputMultiClasses[classification1Idx].get()
+        classification2 = self.inputMultiClasses[classification2Idx].get()
 
-        newList = []
-        for cls1 in set1:
-            cls1Id = cls1.getObjId()
-            ids1 = cls1.getIdSet()
+        print('Computing intersections between classes from classifications %s and %s:'
+              % (classification1.getNameId(), classification2.getNameId()))
 
-            for cls2 in set2:
-                cls2Id = cls2.getObjId()
-                ids2 = cls2.getIdSet()
+        # Check intersections for all the possible combinations of classes
+        intersections = []
+        for cluster1 in classification1:
+            cluster1Id = cluster1.getObjId()
+            particleIds1 = cluster1.getIdSet()
 
-                interTuple = self.intersectClasses(set1Id, cls1Id, ids1,
-                                                   set2Id, cls2Id, ids2)
-                # Do not append classes that have no elements
-                if interTuple[0] != 0:
-                    newList.append(interTuple)
+            for cluster2 in classification2:
+                cluster2Id = cluster2.getObjId()
+                particleIds2 = cluster2.getIdSet()
 
-        self.intersectsList = newList
-
-    def compareOthersStep(self, set1Id, objId):
-        """ We found the intersections for the two firsts sets of classes"""
-        set1 = self.inputMultiClasses[set1Id].get()
-
-        print('Computing intersections between classes form set %s and '
-              'the previous ones:' % (set1.getNameId()))
-
-        newList = []
-        currDB = self.intersectsList
-        for cls1 in set1:
-            cls1Id = cls1.getObjId()
-            ids1 = cls1.getIdSet()
-
-            for currTuple in currDB:
-                ids2 = currTuple[1]
-                set2Id = currTuple[2]
-                cls2Id = currTuple[3]
-                clSize = currTuple[4]
-
-                interTuple = self.intersectClasses(set1Id, cls1Id, ids1,
-                                                   set2Id, cls2Id, ids2, clSize)
+                # Calculate the intersection between the current two classes
+                intersection = self.intersectClasses(classification1Idx, cluster1Id, particleIds1,
+                                                     classification2Idx, cluster2Id, particleIds2)
 
                 # Do not append classes that have no elements
-                if interTuple[0] != 0:
-                    newList.append(interTuple)
+                if intersection['particleCount'] > 0:
+                    intersections.append(intersection)
 
-        self.intersectsList = newList
+        # Store the results
+        self.intersectionList = intersections
+
+    def compareOthersStep(self, classification1Idx):
+        """ Intersects the given classification with all the previous intersections """
+
+        # Select the given classification
+        classification1 = self.inputMultiClasses[classification1Idx].get()
+
+        print('Computing intersections between classes from classification %s and '
+              'the previous ones:' % (classification1.getNameId()))
+
+        # Intersect all the classes from the given classification with the previous intersection
+        intersections = []
+        for cluster1 in classification1:
+            cluster1Id = cluster1.getObjId()
+            particleIds1 = cluster1.getIdSet()
+
+            for currIntersection in self.intersectionList:
+                # Obtain the information from the dictionary
+                particleIds2 = currIntersection['particleIds']
+                classification2Idx = currIntersection['classificationIndex']
+                cluster2Id = currIntersection['clusterId']
+                cluster2Size = currIntersection['clusterSize']
+
+                # Calculate the intersection between a previous intersection and the current class
+                intersection = self.intersectClasses(classification1Idx, cluster1Id, particleIds1,
+                                                     classification2Idx, cluster2Id, particleIds2, cluster2Size)
+
+                # Do not append classes that have no elements
+                if intersection['particleCount'] > 0:
+                    intersections.append(intersection)
+
+        # Overwrite previous intersections with the new ones
+        self.intersectionList = intersections
 
     def cossEnsembleStep(self):
-        """ Ensemble clusterig with coss method"""
-        cs = self.get_cs(self.inputMultiClasses)
-        all_coss_us, ob_values = self.coss_ensemble(cs, min_nclust=1)
+        """ Ensembles clusters and generates visual data"""
 
-        # Plot dendogram
-        self.plot_dendogram(ob_values, self._getExtraPath())
+        # Ensemble the clusters using COSS method
+        clusters = self.getClusterParticleIds(self.inputMultiClasses)
+        all_coss_us, ob_values = self.cossEnsemble(clusters, numClusters=1)
+
+        # Plot dendrogram
+        self.plot_dendrogram(ob_values, self._getExtraPath())
 
         # Get number of clusters at each step
         nclusters = n_clusters(all_coss_us)
 
-        # Reverse objective calues so they go from largest to smallest
+        # Reverse objective values so they go from largest to smallest
         ob_values = list(reversed(ob_values))
 
         # Get profile log likelihood for log of objective values
@@ -166,9 +177,9 @@ class XmippProtConsensusClasses3D(EMProtocol):
         elbow_idx_pll = np.argmax(pll)
 
         # Save number of classes for summary
-        n1 = len(self.all_iLists[elbow_idx_origin])
-        n2 = len(self.all_iLists[elbow_idx_angle])
-        n3 = len(self.all_iLists[elbow_idx_pll])
+        n1 = len(self.allEnsembleInterations[elbow_idx_origin])
+        n2 = len(self.allEnsembleInterations[elbow_idx_angle])
+        n3 = len(self.allEnsembleInterations[elbow_idx_pll])
         self.n1 = Integer(n1)
         self.n2 = Integer(n2)
         self.n3 = Integer(n3)
@@ -193,32 +204,33 @@ class XmippProtConsensusClasses3D(EMProtocol):
          of the classification """
 
         # Obtain the execution parameters
-        n_exec = self.numRand.get()
+        numExec = self.numRand.get()
         percentile = self.thresholdPercentile.get()
 
         # Obtain the group sizes
-        cluster_sizes = []
-        for i in len(self.inputMultiClasses):
-            clusters = self.inputMultiClasses[i].get()
-            sizes = []
-            for cls in clusters:
-                sizes.append(len(cls))
-            cluster_sizes.append(sizes)
+        clusterLengths = self.getClusterLengths(self.inputMultiClasses)
+
+        # Calculate the total particle count
+        numParticles = sum(clusterLengths[0])
 
         # Repeatedly obtain a consensus of a random classification of same size
-        consensus_sizes = []
-        for i in range(n_exec):
+        # TODO parallelize
+        consensusSizes = []
+        for i in range(numExec):
             # Create random partitions of same size
-            random_classification = coss_random_classification(cluster_sizes, sum(cluster_sizes[0]))
+            randomClassification = coss_random_classification(clusterLengths, numParticles)
 
             # Compute the repeated classifications
-            consensus = coss_consensus(random_classification)
+            consensus = coss_consensus(randomClassification)
 
             # Store the amount of distinct sets
-            consensus_sizes.append(len(consensus))
+            consensusSizes.append(len(consensus))
 
         # Obtain the size threshold using the given percentile
-        threshold = np.percentile(consensus_sizes, percentile)
+        threshold = np.percentile(consensusSizes, percentile)
+
+        # Store the results
+        self.randomThreshold = threshold
 
     def createOutputStep(self):
         """Save the output classes"""
@@ -228,14 +240,14 @@ class XmippProtConsensusClasses3D(EMProtocol):
         # If consensus not done save just merge if not specified number of clusters
         # or elbow determined clusters
         if self.doConsensus.get() != 0:
-            outputClasses = self.createOutput3Dclass(self.intersectsList, 'all')
+            outputClasses = self.createOutput3Dclass(self.intersectionList, 'all')
             self._defineOutputs(outputClasses=outputClasses)
             for item in self.inputMultiClasses:
                 self._defineSourceRelation(item, outputClasses)
         elif  nclust == -1:
-            outputClasses_origin = self.createOutput3Dclass(self.all_iLists[self.elbows[0][0]], self.elbows[0][1])
-            outputClasses_angle = self.createOutput3Dclass(self.all_iLists[self.elbows[1][0]], self.elbows[1][1])
-            outputClasses_pll = self.createOutput3Dclass(self.all_iLists[self.elbows[2][0]], self.elbows[2][1])
+            outputClasses_origin = self.createOutput3Dclass(self.ensembleIntersectionLists[self.elbows[0][0]], self.elbows[0][1])
+            outputClasses_angle = self.createOutput3Dclass(self.ensembleIntersectionLists[self.elbows[1][0]], self.elbows[1][1])
+            outputClasses_pll = self.createOutput3Dclass(self.ensembleIntersectionLists[self.elbows[2][0]], self.elbows[2][1])
             self._defineOutputs(outputClassesOrigin=outputClasses_origin,
                                 outputClassesAngle=outputClasses_angle,
                                 outputClassesPll=outputClasses_pll)
@@ -244,7 +256,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
                 self._defineSourceRelation(item, outputClasses_angle)
                 self._defineSourceRelation(item, outputClasses_pll)
         else:
-            outputClasses = self.createOutput3Dclass(self.all_iLists[self.nclusters.index(nclust)], 'nclust')
+            outputClasses = self.createOutput3Dclass(self.ensembleIntersectionLists[self.nclusters.index(nclust)], 'nclust')
             self._defineOutputs(outputClasses=outputClasses)
             for item in self.inputMultiClasses:
                 self._defineSourceRelation(item, outputClasses)
@@ -278,115 +290,149 @@ class XmippProtConsensusClasses3D(EMProtocol):
         return errors
 
     # --------------------------- UTILS functions ------------------------------
-    def save_outputs(self):
+    def saveOutputs(self):
         self.saveClusteringsList()
         self.saveObjectiveFData()
         self.saveElbowIndex()
 
     def saveClusteringsList(self):
-        """Saves the list of clusterings with different number of clusters into a pickle file"""
+        """ Saves the list of clusterings with different number of clusters into a pickle file """
         savepath = self._getExtraPath('clusterings.pkl')
         with open(savepath, 'wb') as f:
-            pickle.dump(self.all_iLists, f)
+            pickle.dump(self.ensembleIntersectionLists, f)
 
     def saveObjectiveFData(self):
-        """Save the data of the objective function"""
+        """ Save the data of the objective function """
         savepath = self._getExtraPath('ObjectiveFData.pkl')
         with open(savepath, 'wb') as f:
             pickle.dump(self._objectiveFData, f)
 
     def saveElbowIndex(self):
-        """Save the calculated number of clusters where the function has an elbow
-           for each of the different methods."""
+        """ Save the calculated number of clusters where the function has an elbow
+            for each of the different methods. """
         savepath = self._getExtraPath('elbowclusters.pkl')
         with open(savepath, 'wb') as f:
             pickle.dump(self.elbows, f)
 
-    def intersectClasses(self, setId1, clId1, ids1,
-                         setId2, clId2, ids2, clsSize2=None):
-        size1 = len(ids1)
-        size2 = len(ids2) if clsSize2 is None else clsSize2
+    def intersectClasses(self,
+                         classification1Idx, cluster1Id, particleIds1,
+                         classification2Idx, cluster2Id, particleIds2, classSize2=None):
+        """ Computes the intersection between sets ids1 and ids2. Then selects the smallest
+            class and returns its parameters """
 
-        inter = ids1.intersection(ids2)
+        # Compute the intersection of the classes
+        inter = particleIds1.intersection(particleIds2)
 
+        # Selects the smallest class
+        size1 = len(particleIds1)
+        size2 = len(particleIds2) if classSize2 is None else classSize2
         if size1 < size2:
-            setId = setId1
-            clsId = clId1
-            clsSize = size1
+            classificationIdx = classification1Idx
+            clusterId = cluster1Id
+            clusterSize = size1
         else:
-            setId = setId2
-            clsId = clId2
-            clsSize = size2
+            classificationIdx = classification2Idx
+            clusterId = cluster2Id
+            clusterSize = size2
 
-        return (len(inter), inter, setId, clsId, clsSize)
+        # return (len(inter), inter, setId, clsId, clsSize) #TODO remove, better return a dictionary
+        return {
+            'particleCount': len(inter),
+            'particleIds': inter,
+            'classificationIndex': classificationIdx,
+            'clusterId': clusterId,
+            'clusterSize': clusterSize
+        }
 
-    def get_cs(self, scipionMultiClasses):
-        """Returns the list of lists of sets that stores the clusters of each classification"""
-        cs=[]
+
+    def getClusterLengths(self, scipionMultiClasses):
+        """ Returns a list of lists that stores the lengths of each classification """
+        result = []
+
         for i in range(len(scipionMultiClasses)):
-            clasif = scipionMultiClasses[i].get()
-            cs.append([])
-            for cluster in clasif:
-                cs[-1].append(cluster.getIdSet())
-        return cs
+            classification = scipionMultiClasses[i].get()
 
-    def get_us(self, scipionIntersectList):
-        """Return the list of sets from the scipion list of intersections"""
-        us=[]
-        for cur_tuple in scipionIntersectList:
-            us.append(cur_tuple[1])
-        return us
+            result.append([])
+            for cluster in classification:
+                result[-1].append(len(cluster))
 
-    def coss_ensemble(self, cs, min_nclust=2):
-        """Ensemble clustering by COSS that merges interections of clusters based on entropy minimization
-        """
-        # Creating intersection clusters (us)
-        iList = self.intersectsList
-        us = self.get_us(iList)
+        return result
 
+    def getClusterParticleIds(self, scipionMultiClasses):
+        """ Returns the list of lists of sets that stores the clusters of each classification """
+        result = []
+
+        for i in range(len(scipionMultiClasses)):
+            classification = scipionMultiClasses[i].get()
+
+            result.append([])
+            for cluster in classification:
+                result[-1].append(cluster.getIdSet())
+
+        return result
+
+    def getIntersectionParticleIds(self, scipionIntersectList):
+        """ Return the list of sets from the scipion list of intersections """
+        result = []
+
+        for intersection in scipionIntersectList:
+            result.append(intersection['particleIds'])
+
+        return result
+
+    def cossEnsemble(self, classifications, numClusters=2):
+        """ Ensemble clustering by COSS that merges interactions of clusters based
+            on entropy minimization """
         # Initialize with values before merging
-        all_us = [us]
-        self.all_iLists = [iList]
-        ob_values = [0.0]
+        allIntersections = [self.intersectionList]  # Stores the intersections of all iterations
+        allIntersectionParticleIds = [self.getIntersectionParticleIds(self.intersectionList)]
+        costValues = [0.0]
 
         # Iterations of merging clusters
-        while len(us) > min_nclust:
-            # Similarity vectors
-            all_cs = []
-            for c in cs:
-                all_cs += c
-            vs = []
-            for u in us:
-                vs.append(build_simvector(u, all_cs))
+        while len(allIntersections[-1]) > numClusters:
+            # Some shorthands
+            intersectionParticleIds = allIntersectionParticleIds[-1]  # List of sets with the particle ids
 
-            # For each posible pair of us
-            n = len(us)
-            fob = {}
+            # Reshape the cluster matrix (list of sets instead of list of list of sets)
+            allClusters = []
+            for classification in classifications:
+                allClusters += classification
+
+            # Compute the similarity vectors
+            similarityVectors = []
+            for intersection in intersectionParticleIds:
+                similarityVectors.append(build_simvector(intersection, allClusters))
+
+            # For each possible pair of intersections compute the cost of merging them
+            n = len(intersectionParticleIds)
+            allCostsValues = {}
             for i in range(n - 1):
                 for j in range(i + 1, n):
                     # Objective function to minimize for each merged pair
-                    fob[(i, j)] = ob_function(us, [i, j], vs)
+                    allCostsValues[(i, j)] = ob_function(intersectionParticleIds, [i, j], similarityVectors)
 
-            values = list(fob.values())
-            keys = list(fob.keys())
+            values = list(allCostsValues.values())
+            keys = list(allCostsValues.keys())
 
-            # Index of subsets that minimize the objective function by merging
-            ob_values.append(min(values))
-            pair_min = keys[values.index(min(values))]
-            iList = merge_subsets(iList, pair_min)
-            us = self.get_us(iList)
-            all_us.append(us)
-            self.all_iLists.append(iList)
+            # Select the minimum cost pair and merge them
+            minCostValue = min(values)
+            mergePair = keys[values.index(minCostValue)]
+            mergedIntersections = merge_subsets(allIntersections[-1], mergePair)
 
-        self.all_iLists = list(reversed(self.all_iLists))
-        return all_us, ob_values
+            # Save the data for the next iteration
+            allIntersections.append(mergedIntersections)
+            allIntersectionParticleIds.append(self.getIntersectionParticleIds(mergedIntersections))
+            costValues.append(minCostValue)
 
-    def plot_dendogram(self, obvalues, outimage):
-        """ Plot the dendogram from the objective functions of the merge
-        between the groups of images
-        """
-        # Initzialize required values
-        allilists = self.all_iLists.copy()
+        self.ensembleIntersectionLists = list(reversed(allIntersections))
+        return allIntersectionParticleIds, allCostsValues
+
+    def plotDendrogram(self, obvalues, outimage):
+        """ Plot the dendrogram from the objective functions of the merge
+            between the groups of images """
+
+        # Initialize required values
+        allilists = self.ensembleIntersectionLists.copy()
         allilists.reverse()
         linkage_matrix = np.zeros((len(allilists)-1, 4))
         set_ids = np.arange(len(allilists))
@@ -421,19 +467,19 @@ class XmippProtConsensusClasses3D(EMProtocol):
             set_ids = np.delete(set_ids, np.argwhere(set_ids == sets_merged[1]))
             set_ids = np.append(set_ids, len(allilists)+i)
 
-        # Plot resulting dendogram
+        # Plot resulting dendrogram
         plt.figure()
         dn = hierarchy.dendrogram(linkage_matrix)
-        plt.title('Dendogram')
+        plt.title('Dendrogram')
         plt.xlabel('sets ids')
         plt.ylabel('objective function')
         plt.tight_layout()
-        plt.savefig(outimage+'/dendogram.png')
+        plt.savefig(outimage+'/dendrogram.png')
 
-        # Plot resulting dendogram with log scale
+        # Plot resulting dendrogram with log scale
         plt.yscale('log')
         plt.ylim([np.min(linkage_matrix[:, 2]), np.max(linkage_matrix[:,2])])
-        plt.savefig(outimage+'/dendogram_log.png')
+        plt.savefig(outimage+'/dendrogram_log.png')
 
     def createOutput3Dclass(self, clustering, name):
 
