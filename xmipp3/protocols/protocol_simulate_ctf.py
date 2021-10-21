@@ -75,11 +75,11 @@ class XmippProtSimulateCTF(Prot2D):
     def convertInputStep(self):
         x, y, _ = self.inputParticles.get().getDimensions()
         n = self.inputParticles.get().getSize()
-        createEmptyFile(self._getPath("images.stk"), x, y, 1, n)
+        createEmptyFile(self._getPath("images.mrc"), x, y, 1, n)
 
     def simulateStep(self):
         n = 1
-        fnStk = self._getPath("images.stk")
+        fnStk = self._getPath("images.mrc")
         Ts = self.inputParticles.get().getSamplingRate()
 
         imgSetOut = self._createSetOfParticles()
@@ -105,7 +105,7 @@ class XmippProtSimulateCTF(Prot2D):
             newCTF.setDefocusV(defocus)
             newCTF.setDefocusAngle(0.0)
             newParticle = particle.clone()
-            newParticle.setLocation(fnOut)
+            newParticle.setLocation((n, fnStk))
             acquisition = newParticle.getAcquisition()
             acquisition.setVoltage(self.voltage.get())
             acquisition.setAmplitudeContrast(self.Q0.get())
