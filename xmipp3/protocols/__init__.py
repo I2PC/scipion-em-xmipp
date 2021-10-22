@@ -132,3 +132,4 @@ from .protocol_structure_map import XmippProtStructureMap
 from .protocol_pdb_deform_zernike3d import XmippProtDeformPDBZernike3D
 from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtraction
 from .protocol_volume_consensus import XmippProtVolConsensus
+from .protocol_classes_2d_mapping import XmippProtCL2DMap
