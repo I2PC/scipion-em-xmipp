@@ -104,15 +104,9 @@ class XmippProtCL2DMap(ProtAnalysis2D):
         self.mdOut = md.MetaData(metadata)
         if self.intSel.get():
             img_paths = np.unique(np.asarray([rep.getFileName() for rep in self.classes.iterRepresentatives()]))
-            img_ids = []
-            occupancy = []
-            pos = []
-
-            for row in md.iterRows(self.mdOut):
-                rowId = row.getObjId()
-                pos.append(self.mdOut.getValue(md.MDL_DIMRED, rowId))
-                img_ids.append(self.mdOut.getValue(md.MDL_REF, rowId))
-                occupancy.append(self.mdOut.getValue(md.MDL_CLASS_COUNT, rowId))
+            pos = self.mdOut.getColumnValues(md.MDL_DIMRED)
+            img_ids = self.mdOut.getColumnValues(md.MDL_REF)
+            occupancy = self.mdOut.getColumnValues(md.MDL_CLASS_COUNT)
             occupancy = np.asarray(occupancy)
             pos = np.vstack(pos)
 
@@ -147,13 +141,13 @@ class XmippProtCL2DMap(ProtAnalysis2D):
         selected_classes = self._createSetOfClasses2D(self.classes.getImages(), suffix=suffix)
         selected_classes.copyInfo(self.classes)
         selected_classes.appendFromClasses(self.classes, updateClassCallback=self._updateClass,
-                                           filterClassFunc=self.skipUnselectedClass)
+                                           filterClassFunc=self.isSelected)
 
         result = {'selectedClasses2D_' + suffix: selected_classes}
         self._defineOutputs(**result)
         self._defineSourceRelation(self.inputClasses, selected_classes)
 
-    def skipUnselectedClass(self, cls):
+    def isSelected(self, cls):
         if cls.getObjId() in self.selection:
             return True
         else:
