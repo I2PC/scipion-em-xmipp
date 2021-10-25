@@ -101,7 +101,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                            'itself may be affected so that a higher value may '
                            'be preferable.')
 
-        form.addParam('doInvert', params.BooleanParam, default=None,
+        form.addParam('doInvert', params.BooleanParam, default=True,
                       label='Invert contrast', 
                       help='Invert the contrast if your particles are black '
                            'over a white background.  Xmipp, Spider, Relion '
@@ -109,7 +109,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                            'background. Frealign (up to v9.07) requires black '
                            'particles over a white background')
         
-        form.addParam('doFlip', params.BooleanParam, default=None,
+        form.addParam('doFlip', params.BooleanParam, default=False,
                       label='Phase flipping',
                       help='Use the information from the CTF to compensate for '
                            'phase reversals.\n'
