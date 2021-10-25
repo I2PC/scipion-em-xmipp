@@ -233,11 +233,11 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
         
         from pwem.emlib.image import ImageHandler
         img = ImageHandler()
-        img.convert(self.inputVolumes.get(), self._getExtraPath("volume.vol"))
+        img.convert(self.inputVolumes.get(), self._getExtraPath("volume.mrc"))
         Xdim = self.inputVolumes.get().getDim()[0]
         if Xdim != newXdim:
             self.runJob("xmipp_image_resize", "-i %s --dim %d" % \
-                        (self._getExtraPath("volume.vol"),
+                        (self._getExtraPath("volume.mrc"),
                          newXdim), numberOfMpi=1)
 
     def _getCommonParams(self):
@@ -285,7 +285,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
                                self.inputParticles.get().isPhaseFlipped(),
                                self.doWiener.get()))
         f.close()
-        param = ' -i %s' % self._getExtraPath("volume.vol")
+        param = ' -i %s' % self._getExtraPath("volume.mrc")
         param += ' --params %s' % self._getExtraPath('params.txt')
         param += ' -o %s' % self._getPath('reference_particles.xmd')
         param += ' --sampling_rate % 0.3f' % newTs
@@ -307,7 +307,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         # Generate projections from this reconstruction
         nproc = self.numberOfMpi.get()
         nT = self.numberOfThreads.get()
-        volName = self._getExtraPath("volume.vol")
+        volName = self._getExtraPath("volume.mrc")
         makePath(volDir)
         fnGallery = (volDir + '/gallery.stk')
         params = '-i %s -o %s --sampling_rate %f --sym %s --method fourier 1 0.25 bspline --compute_neighbors --angular_distance %f --experimental_images %s --max_tilt_angle %f --min_tilt_angle %f' \
@@ -473,7 +473,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         cleanPattern(self._getExtraPath("scaled_particles.*"))
         cleanPattern(self._getExtraPath("reference_particles.*"))
         cleanPattern(self._getExtraPath("corrected_ctf_particles.*"))
-        cleanPattern(self._getExtraPath("volume.vol"))
+        cleanPattern(self._getExtraPath("volume.mrc"))
         cleanPattern(self._getExtraPath("params.txt"))
 
     # --------------------------- INFO functions --------------------------------------------
