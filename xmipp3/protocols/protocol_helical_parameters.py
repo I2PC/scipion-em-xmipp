@@ -80,7 +80,7 @@ class XmippProtHelicalParameters(ProtPreprocessVolumes, HelicalFinder):
         self._insertFunctionStep('symmetrize')
         self._insertFunctionStep('createOutput')
         self.fnVol = getImageLocation(self.inputVolume.get())
-        self.fnVolSym=self._getPath('volume_symmetrized.vol')
+        self.fnVolSym=self._getPath('volume_symmetrized.mrc')
         [self.height,_,_]=self.inputVolume.get().getDim()
     
     #--------------------------- STEPS functions --------------------------------------------
@@ -128,8 +128,9 @@ class XmippProtHelicalParameters(ProtPreprocessVolumes, HelicalFinder):
 
     def createOutput(self):
         volume = Volume()
-        volume.setFileName(self._getPath('volume_symmetrized.vol'))
-        #volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
+        volume.setFileName(self.fnVolSym)
+        Ts = self.inputVolume.get().getSamplingRate()
+        self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(self.fnVolSym,Ts))
         volume.copyInfo(self.inputVolume.get())
         self._defineOutputs(outputVolume=volume)
         self._defineTransformRelation(self.inputVolume, self.outputVolume)
