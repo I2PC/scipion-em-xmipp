@@ -39,7 +39,7 @@ from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.21.06.1'
+_currentVersion = '3.21.09.0'
 
 
 class Plugin(pwem.Plugin):
