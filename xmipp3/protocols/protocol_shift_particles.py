@@ -46,13 +46,18 @@ class XmippProtShiftParticles(EMProtocol):
         form.addSection(label='Input')
         form.addParam('inputParticles', PointerParam, pointerClass='SetOfParticles', label="Particles",
                       help='Select the SetOfParticles with transformation matrix to be shifted.')
+        form.addParam('option', BooleanParam, label='Select position in volume?', default='True',
+                      help='Select the position where the particles will be shifted in a volume displayed in a wizard.')
         form.addParam('inputVol', PointerParam, pointerClass='Volume', label="Volume", allowsNull=True,
-                      help='Volume to select the point (by clicking in the wizard for selecting the new center) that '
-                           'will be the new center of the particles.')
-        form.addParam('x', FloatParam, label="x", help='Use the wizard to select by clicking in the volume the new '
-                                                       'center for the shifted particles')
-        form.addParam('y', FloatParam, label="y")
-        form.addParam('z', FloatParam, label="z")
+                      conditon='option', help='Volume to select the point (by clicking in the wizard for selecting the '
+                                              'new center) that will be the new center of the particles.')
+        form.addParam('x', FloatParam, label="x", condition='option',
+                      help='Use the wizard to select clicking in the volume the new center for the shifted particles')
+        form.addParam('y', FloatParam, label="y", condition='option')
+        form.addParam('z', FloatParam, label="z", condition='option')
+        form.addParam('inputMask', PointerParam, pointerClass='VolumeMask', label="Mask 3D", allowsNull=True,
+                      condition='not option', help='3D mask to compute the center of mass, the particles will be '
+                                                   'shifted to the computed center of mass')
         form.addParam('boxSizeBool', BooleanParam, label='Use original box size for the shifted particles?',
                       default='True', help='Use input particles box size for the shifted particles.')
         form.addParam('boxSize', IntParam, label='Final box size', condition='not boxSizeBool',
@@ -60,7 +65,7 @@ class XmippProtShiftParticles(EMProtocol):
         form.addParam('inv', BooleanParam, label='Inverse', expertLevel=LEVEL_ADVANCED, default='True',
                       help='Use inverse transformation matrix')
         form.addParam('interp', EnumParam, default=0, choices=['Linear', 'Spline'], expertLevel=LEVEL_ADVANCED,
-                      display=EnumParam.DISPLAY_HLIST , label='Interpolation',
+                      display=EnumParam.DISPLAY_HLIST, label='Interpolation',
                       help='Linear: Use bilinear/trilinear interpolation\nSpline: Use spline interpolation')
 
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -77,6 +82,16 @@ class XmippProtShiftParticles(EMProtocol):
 
     def shiftStep(self):
         """call xmipp program to shift the particles"""
+        if self.option.get():
+            x = self.x.get()
+            y = self.y.get()
+            z = self.z.get()
+        else:
+            fnmask = self.inputMask.get().getFileName()
+            if fnmask.endswith('.mrc'):
+                fnmask += ':mrc'
+            self.runJob('xmipp_center_volume', '-i "%s" -o "%s"' % (fnmask, self._getExtraPath("center_volume.mrc")))
+            # how can I get the origin matrix of this volume???
         program = "xmipp_transform_geometry"
         centermd = self._getExtraPath("center_particles.xmd")
         if not self.interp.get():
@@ -84,7 +99,7 @@ class XmippProtShiftParticles(EMProtocol):
         else:
             interp = 'spline'
         args = '-i "%s" -o "%s" --shift_to %f %f %f --apply_transform --dont_wrap --interp %s' % \
-               (self._getExtraPath("input_particles.xmd"), centermd, self.x.get(), self.y.get(), self.z.get(), interp)
+               (self._getExtraPath("input_particles.xmd"), centermd, x, y, z, interp)
         if self.inv.get():
             args += ' --inverse'
         self.runJob(program, args)
