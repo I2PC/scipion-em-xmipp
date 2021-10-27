@@ -1542,6 +1542,14 @@ class TestXmippShiftParticlesAndVolume(TestXmippBase):
         self.assertIsNotNone(protShiftParticles.getFiles(),
                              "There was a problem with shift particles")
 
+        protShiftParticlesCenterOfMass = self.newProtocol(XmippProtShiftParticles,
+                                                          inputParticles=protCreateGallery.outputReprojections,
+                                                          inputVol=protImportVol.outputVolume,
+                                                          option=False)
+        self.launchProtocol(protShiftParticlesCenterOfMass)
+        self.assertIsNotNone(protShiftParticlesCenterOfMass.getFiles(),
+                             "There was a problem with shift particles to center of mass")
+
         protShiftVolPart = self.newProtocol(XmippProtShiftVolume,
                                             inputVol=protImportVol.outputVolume,
                                             xp=protShiftParticles.shiftX,
@@ -1552,21 +1560,21 @@ class TestXmippShiftParticlesAndVolume(TestXmippBase):
                              "There was a problem with shift volume with particle shifts")
 
         protShiftVolCrop = self.newProtocol(XmippProtShiftVolume,
-                                        inputVol=protImportVol.outputVolume,
-                                        shiftBool=False,
-                                        x=5, y=5, z=5,
-                                        boxSizeBool=False,
-                                        boxSize=32)
+                                            inputVol=protImportVol.outputVolume,
+                                            shiftBool=False,
+                                            x=5, y=5, z=5,
+                                            boxSizeBool=False,
+                                            boxSize=32)
         self.launchProtocol(protShiftVolCrop)
         self.assertIsNotNone(protShiftVolCrop.getFiles(),
                              "There was a problem with shift crop volume")
 
         protShiftVolPad = self.newProtocol(XmippProtShiftVolume,
-                                        inputVol=protImportVol.outputVolume,
-                                        shiftBool=False,
-                                        x=5, y=5, z=5,
-                                        boxSizeBool=False,
-                                        boxSize=80)
+                                           inputVol=protImportVol.outputVolume,
+                                           shiftBool=False,
+                                           x=5, y=5, z=5,
+                                           boxSizeBool=False,
+                                           boxSize=80)
         self.launchProtocol(protShiftVolPad)
         self.assertIsNotNone(protShiftVolPad.getFiles(),
                              "There was a problem with shift pad volume")

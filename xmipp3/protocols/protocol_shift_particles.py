@@ -55,9 +55,9 @@ class XmippProtShiftParticles(EMProtocol):
                       help='Use the wizard to select clicking in the volume the new center for the shifted particles')
         form.addParam('y', FloatParam, label="y", condition='option')
         form.addParam('z', FloatParam, label="z", condition='option')
-        form.addParam('inputMask', PointerParam, pointerClass='VolumeMask', label="Mask 3D", allowsNull=True,
-                      condition='not option', help='3D mask to compute the center of mass, the particles will be '
-                                                   'shifted to the computed center of mass')
+        # form.addParam('inputMask', PointerParam, pointerClass='VolumeMask', label="Mask 3D", allowsNull=True,
+        #               condition='not option', help='3D mask to compute the center of mass, the particles will be '
+        #                                            'shifted to the computed center of mass')
         form.addParam('boxSizeBool', BooleanParam, label='Use original box size for the shifted particles?',
                       default='True', help='Use input particles box size for the shifted particles.')
         form.addParam('boxSize', IntParam, label='Final box size', condition='not boxSizeBool',
@@ -82,24 +82,25 @@ class XmippProtShiftParticles(EMProtocol):
 
     def shiftStep(self):
         """call xmipp program to shift the particles"""
+        centermd = self._getExtraPath("center_particles.xmd")
+        args = '-i "%s" -o "%s" ' % (self._getExtraPath("input_particles.xmd"), centermd)
         if self.option.get():
             x = self.x.get()
             y = self.y.get()
             z = self.z.get()
+            args += '--shift_to %f %f %f ' % (x, y, z)
         else:
-            fnmask = self.inputMask.get().getFileName()
-            if fnmask.endswith('.mrc'):
-                fnmask += ':mrc'
-            self.runJob('xmipp_center_volume', '-i "%s" -o "%s"' % (fnmask, self._getExtraPath("center_volume.mrc")))
-            # how can I get the origin matrix of this volume???
+            fnvol = self.inputVol.get().getFileName()
+            if fnvol.endswith('.mrc'):
+                fnvol += ':mrc'
+            args += '--shift_to --center_of_mass %s' % fnvol
+
         program = "xmipp_transform_geometry"
-        centermd = self._getExtraPath("center_particles.xmd")
         if not self.interp.get():
             interp = 'linear'
         else:
             interp = 'spline'
-        args = '-i "%s" -o "%s" --shift_to %f %f %f --apply_transform --dont_wrap --interp %s' % \
-               (self._getExtraPath("input_particles.xmd"), centermd, x, y, z, interp)
+        args += ' --apply_transform --dont_wrap --interp %s' % interp
         if self.inv.get():
             args += ' --inverse'
         self.runJob(program, args)
