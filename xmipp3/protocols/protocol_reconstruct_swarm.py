@@ -337,7 +337,7 @@ class XmippProtReconstructSwarm(ProtRefine3D):
         fnAvg = self._getExtraPath("volumeAvg.vol")
         fnAvgMrc = self._getExtraPath("volumeAvg.mrc")
         self.runJob("xmipp_image_resize","-i %s --dim %d"%(fnAvg,XdimOrig),numberOfMpi=1)
-        self.runJob("xmipp_image_convert","-i %s -o %s"%(fnAvg,fnAvgMrc),numberOfMpi=1)
+        self.runJob("xmipp_image_convert","-i %s -o %s -t vol"%(fnAvg,fnAvgMrc),numberOfMpi=1)
         cleanPath(fnAvg)
         self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(fnAvgMrc,TsOrig),numberOfMpi=1)
         volume=Volume()
