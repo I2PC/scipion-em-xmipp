@@ -714,12 +714,19 @@ def runFilterVolumeStep(self, iterN, refN, constantToAddToFiltration):
                   }
         self.runJob("xmipp_transform_filter", args % params)
 
+def convertToMrc(self, fnVol, Ts):
+    fnMrc = fnVol.replace(".vol",".mrc")
+    self.runJob("xmipp_image_convert","-i %s -o %s -t vol"%(fnVol, fnMrc), numberOfMpi=1)
+    self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(fnMrc, Ts), numberOfMpi=1)
+    cleanPath(fnVol)
+    return fnMrc
 
 def runCreateOutputStep(self):
     ''' Create standard output results_images, result_classes'''
     #creating results files
     imgSet = self.inputParticles.get()
     lastIter = self.numberOfIterations.get()
+    Ts = imgSet.getSamplingRate()
     if self.numberOfReferences != 1:
         inDocfile = self._getFileName('docfileInputAnglesIters', iter=lastIter)
         ClassFnTemplate = '%(rootDir)s/reconstruction_Ref3D_%(ref)03d.vol'
@@ -738,10 +745,11 @@ def runCreateOutputStep(self):
         classes.appendFromClasses(clsSet)
         
         volumes = self._createSetOfVolumes()
-        volumes.setSamplingRate(imgSet.getSamplingRate())
+        volumes.setSamplingRate(Ts)
         
         for refN in self.allRefs():
             volFn = self._getFileName('reconstructedFileNamesIters', iter=lastIter, ref=refN)
+            volFn = convertToMrc(self, volFn, Ts)
             vol = Volume()
             vol.setFileName(volFn)
             volumes.append(vol)
@@ -760,9 +768,13 @@ def runCreateOutputStep(self):
         halfMap2 = self._getFileName('reconstructedFileNamesItersSplit2',
                                      iter=lastIter, ref=1)
 
+        volFn = convertToMrc(self, volFn, Ts)
+        halfMap1 = convertToMrc(self, halfMap1, Ts)
+        halfMap2 = convertToMrc(self, halfMap2, Ts)
+
         vol = Volume()
         vol.setFileName(volFn)
-        vol.setSamplingRate(imgSet.getSamplingRate())
+        vol.setSamplingRate(Ts)
         vol.setHalfMaps([halfMap1, halfMap2])
         self._defineOutputs(outputVolume=vol)
         self._defineSourceRelation(self.inputParticles, vol)
