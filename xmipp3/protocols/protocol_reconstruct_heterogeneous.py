@@ -996,18 +996,14 @@ class XmippProtReconstructHeterogeneous(ProtClassify3D):
     def _updateClass(self, item):
         classId = item.getObjId()
         item.setAlignmentProj()
-        #item.setSamplingRate(self.Ts)
-        #item.getRepresentative().setFileName(
-        #    join(self.fnLastDir, "volume%02d.mrc" % classId))
+        fnMrc = join(self.fnLastDir, "volume%02d.mrc" % classId)
         if self.scaleFactor!=1.0:
             newXdim=self.inputParticles.get().getDimensions()[0]
-            self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (
-                join(self.fnLastDir, "volume%02d.mrc" % classId),
-                join(self.fnLastDir, "volume%02d.mrc" % classId), newXdim),
-                        numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
-        item.setSamplingRate(self.inputParticles.get().getSamplingRate())
-        item.getRepresentative().setFileName(
-            join(self.fnLastDir, "volume%02d.mrc" % classId))
+            self.runJob("xmipp_image_resize", "-i %s --fourier %d" % (fnMrc, newXdim), numberOfMpi=1)
+        Ts = self.inputParticles.get().getSamplingRate()
+        self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(fnMrc,Ts), numberOfMpi=1)
+        item.setSamplingRate(Ts)
+        item.getRepresentative().setFileName(fnMrc)
 
     def _saveVolumesToProcess(self, volumesToProcess):
         fn = open(self._getExtraPath('volumesToProcess.txt'), 'w')
