@@ -30,6 +30,7 @@ from os.path import exists
 from pyworkflow.object import String
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 import pyworkflow.protocol.params as params
+from pyworkflow.utils.path import cleanPath
 
 from pwem.protocols import ProtInitialVolume
 from pwem.objects import Volume, SetOfParticles
@@ -297,15 +298,25 @@ class XmippProtRCT(ProtInitialVolume):
         self._defineSourceRelation(self.inputParticlesTiltPair, self.volumesSet)
 
     def _appendOutputVolume(self, volumeOut):
+        fnMrc = volumeOut.replace(".vol",".mrc")
+        self.runJob("xmipp_image_convert","-i %s -o %s -t vol"%(volumeOut,fnMrc), numberOfMpi=1)
+        self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(fnMrc, self.sampling), numberOfMpi=1)
+        cleanPath(volumeOut)
+
         vol = Volume()
-        vol.setFileName(volumeOut)
+        vol.setFileName(fnMrc)
         vol.setSamplingRate(self.sampling)
         self.volumesSet.append(vol)
 
         if self.doFilter.get():
             volumeFilterOut = volumeOut.replace('.vol', '_filtered.vol')
+            fnMrc = volumeFilterOut.replace(".vol",".mrc")
+            self.runJob("xmipp_image_convert", "-i %s -o %s -t vol" % (volumeFilterOut, fnMrc), numberOfMpi=1)
+            self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" % (fnMrc, self.sampling), numberOfMpi=1)
+            cleanPath(volumeFilterOut)
+
             volf = Volume()
-            volf.setFileName(volumeFilterOut)
+            volf.setFileName(fnMrc)
             volf.setSamplingRate(self.sampling)
             self.volumesFilterSet.append(volf)
 
