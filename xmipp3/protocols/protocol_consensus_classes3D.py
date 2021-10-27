@@ -31,6 +31,7 @@ from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam, F
 from pyworkflow.object import List, Integer, String
 from pwem.objects import Class3D
 from scipy.cluster import hierarchy
+import multiprocessing as mp
 
 import math
 import numpy as np
@@ -45,6 +46,9 @@ class XmippProtConsensusClasses3D(EMProtocol):
     """
     _label = 'consensus clustering 3D'
 
+    def __init__(self, *args, **kwargs):
+        EMProtocol.__init__(self, *args, **kwargs)
+
     def _defineParams(self, form):
         form.addSection(label='Input')
 
@@ -55,7 +59,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         form.addParam('doConsensus', EnumParam,
                       choices=['Yes', 'No'], default=0,
                       label='Get Consensus Clustering', display=EnumParam.DISPLAY_HLIST,
-                      help='Use coss ensemble method for obtaing a consensus clustering')
+                      help='Use COSS ensemble method for obtaining a consensus clustering')
         form.addParam('numClust', IntParam, default=-1,
                       label='Set Number of Clusters',
                       help='Set the final number of clusters. If -1, deduced by the shape of the objective function')
@@ -65,8 +69,8 @@ class XmippProtConsensusClasses3D(EMProtocol):
                            'clusters. 0 for skipping this step')
         form.addParam('thresholdPercentile', FloatParam, default=95,
                       label='Significance percentile',
-                      help='Percentile of the random classification used as a threshold to determine the significance '
-                           'of the actual classification')
+                      help='Percentile of the random classification cluster size used as a threshold to '
+                           'determine the significance of the actual classification')
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
@@ -82,6 +86,8 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         if self.doConsensus.get() == 0:
             self._insertFunctionStep('cossEnsembleStep')
+            self._insertFunctionStep('findElbowsStep')
+            self._insertFunctionStep('generateVisualizationsStep')
 
         self._insertFunctionStep('createOutputStep')
 
@@ -150,6 +156,92 @@ class XmippProtConsensusClasses3D(EMProtocol):
         # Overwrite previous intersections with the new ones
         self.intersectionList = intersections
 
+    def cossEnsembleStep(self, numClusters=1):
+        """ Ensemble clustering by COSS that merges interactions of clusters based
+                        on entropy minimization """
+        # Obtain the classification as a list of list of sets
+        classifications = self.getClusterParticleIds(self.inputMultiClasses)
+
+        # Initialize with values before merging
+        allIntersections = [self.intersectionList]  # Stores the intersections of all iterations
+        allIntersectionParticleIds = [self.getIntersectionParticleIds(self.intersectionList)]
+        allObValues = [0.0]
+
+        # Iterations of merging clusters
+        while len(allIntersections[-1]) > numClusters:
+            # Some shorthands
+            intersectionParticleIds = allIntersectionParticleIds[-1]  # List of sets with the particle ids
+
+            # Reshape the cluster matrix (list of sets instead of list of list of sets)
+            allClusters = reshape_matrix_to_list(classifications)
+
+            # Compute the similarity vectors
+            similarityVectors = []
+            for intersection in intersectionParticleIds:
+                similarityVectors.append(build_simvector(intersection, allClusters))
+
+            # For each possible pair of intersections compute the cost of merging them
+            n = len(intersectionParticleIds)
+            obValues = {}
+            for i in range(n - 1):
+                for j in range(i + 1, n):
+                    # Objective function to minimize for each merged pair
+                    obValues[(i, j)] = ob_function(intersectionParticleIds, [i, j], similarityVectors)
+
+            values = list(obValues.values())
+            keys = list(obValues.keys())
+
+            # Select the minimum cost pair and merge them
+            minObValue = min(values)
+            mergePair = keys[values.index(minObValue)]
+            mergedIntersections = merge_subsets(allIntersections[-1], mergePair)
+
+            # Save the data for the next iteration
+            allIntersections.append(mergedIntersections)
+            allIntersectionParticleIds.append(self.getIntersectionParticleIds(mergedIntersections))
+            allObValues.append(minObValue)
+
+        # Get number of clusters at each step
+        allNumClusters = n_clusters(allIntersectionParticleIds)
+
+        # Reverse objective values so they go from largest to smallest
+        self.ensembleIntersectionLists = list(reversed(allIntersections))
+        self.ensembleNumClusters = list(reversed(allNumClusters))
+        self.ensembleObValues = list(reversed(allObValues))
+
+    def findElbowsStep(self):
+        """" Finds elbows of the COSS ensemble process """
+        # Shorthands for variables
+        numClusters = self.ensembleNumClusters
+        obValues = self.ensembleObValues
+
+        # Get profile log likelihood for log of objective values
+        # Remove last obValue as it is zero and log(0) is undefined
+        pll = full_profile_log_likelihood(np.log(obValues[:-1]))
+
+        # Normalize clusters and obValues
+        normc, normo = normalize(numClusters, obValues)
+
+        # Find different kinds of elbows
+        elbow_idx_origin = find_closest_point_to_origin(normc, normo)
+        elbow_idx_angle, _ = find_elbow_angle(normc, normo)
+        elbow_idx_pll = np.argmax(pll)
+
+        # Save number of classes for summary
+        n1 = len(self.ensembleIntersectionLists[elbow_idx_origin])
+        n2 = len(self.ensembleIntersectionLists[elbow_idx_angle])
+        n3 = len(self.ensembleIntersectionLists[elbow_idx_pll])
+        self.n1 = Integer(n1)
+        self.n2 = Integer(n2)
+        self.n3 = Integer(n3)
+
+        # Parse all elbow info to pass to other functions
+        self.elbows = [[elbow_idx_origin, 'origin'], [elbow_idx_angle, 'angle'],
+                       [elbow_idx_pll, 'pll']]
+
+        # Save relevant data for analysis
+        self.saveOutputs()
+
     def checkSignificanceStep(self):
         """ Create random partitions of same size to compare the quality
          of the classification """
@@ -165,105 +257,72 @@ class XmippProtConsensusClasses3D(EMProtocol):
         numParticles = sum(clusterLengths[0])
 
         # Repeatedly obtain a consensus of a random classification of same size
-        # TODO parallelize
-        consensusSizes = []
-        for i in range(numExec):
-            # Create random partitions of same size
-            randomClassification = coss_random_classification(clusterLengths, numParticles)
-
-            # Compute the repeated classifications
-            consensus = coss_consensus(randomClassification)
-
-            # Store the amount of distinct sets
-            consensusSizes.append(len(consensus))
+        threadPool = mp.Pool(mp.cpu_count())
+        consensusSizes = threadPool.starmap(
+            random_consensus_sizes,
+            [(clusterLengths,  numParticles) for i in range(numExec)]
+        )
+        threadPool.close()
 
         # Obtain the size threshold using the given percentile
+        consensusSizes = reshape_matrix_to_list(consensusSizes)
         threshold = np.percentile(consensusSizes, percentile)
 
         # Store the results
-        self.randomThreshold = threshold
+        self.randomThreshold = Integer(threshold)
 
-    def cossEnsembleStep(self):
-        """ Ensembles clusters and generates visual data"""
-
-        # Ensemble the clusters using COSS method
-        clusters = self.getClusterParticleIds(self.inputMultiClasses)
-        allIntersectionParticleIds, obValues = self.cossEnsemble(clusters, numClusters=1)
-
+    def generateVisualizationsStep(self):
+        """ Generates visual data related to the ensemble processing"""
         # Plot dendrogram
-        self.plot_dendrogram(obValues, self._getExtraPath())
-
-        # Get number of clusters at each step
-        nClusters = n_clusters(allIntersectionParticleIds)
-
-        # Reverse objective values so they go from largest to smallest
-        obValues = list(reversed(obValues))
-
-        # Get profile log likelihood for log of objective values
-        # Remove last obValue as it is zero and log(0) is undefined
-        pll = full_profile_log_likelihood(np.log(obValues[:-1]))
-
-        # Normalize clusters and obValues
-        normc, normo = normalize(nClusters, obValues)
-
-        # Find different kinds of elbows
-        elbow_idx_origin = find_closest_point_to_origin(normc, normo)
-        elbow_idx_angle, _ = find_elbow_angle(normc, normo)
-        elbow_idx_pll = np.argmax(pll)
-
-        # Save number of classes for summary
-        n1 = len(self.allEnsembleInterations[elbow_idx_origin])
-        n2 = len(self.allEnsembleInterations[elbow_idx_angle])
-        n3 = len(self.allEnsembleInterations[elbow_idx_pll])
-        self.n1 = Integer(n1)
-        self.n2 = Integer(n2)
-        self.n3 = Integer(n3)
-        self._store()
-
-        # Parse all elbow info to pass to other functions
-        self.elbows = [[elbow_idx_origin, 'origin'], [elbow_idx_angle, 'angle'],
-                    [elbow_idx_pll, 'pll']]
+        self.plotDendrogram(self._getExtraPath())
 
         # Plot all indexes on top of objective function
-        plot_function_and_elbows(nClusters, obValues, self.elbows, self._getExtraPath()+'/objective_function_plot.png')
-
-        # Store values of objective function
-        self._objectiveFData = [nClusters, obValues]
-        self.nClusters = nClusters
-
-        # Save relevant data for analysis
-        self.save_outputs()
+        self.plotFunctionAndElbows(self._getExtraPath())
 
     def createOutputStep(self):
         """Save the output classes"""
+
+        # Store the data
+        self._store()
+
         # Check user selected number of clusters or elbows
-        nclust = self.numClust.get()
+        numClusters = self.numClust.get()
 
         # If consensus not done save just merge if not specified number of clusters
         # or elbow determined clusters
         if self.doConsensus.get() != 0:
+            # No consensus, only output intersections
             outputClasses = self.createOutput3Dclass(self.intersectionList, 'all')
             self._defineOutputs(outputClasses=outputClasses)
+
+            # Establish output relations
             for item in self.inputMultiClasses:
                 self._defineSourceRelation(item, outputClasses)
-        elif nclust == -1:
+
+        elif numClusters > 0:
+            # Use manual cluster count
+            i = self.ensembleNumClusters.index(numClusters)
+            outputClasses = self.createOutput3Dclass(self.ensembleIntersectionLists[i], 'numClusters')
+            self._defineOutputs(outputClasses=outputClasses)
+
+            # Establish output relations
+            for item in self.inputMultiClasses:
+                self._defineSourceRelation(item, outputClasses)
+
+        else:
+            # Automatically select cluster count based on elbows
             outputClasses_origin = self.createOutput3Dclass(self.ensembleIntersectionLists[self.elbows[0][0]], self.elbows[0][1])
             outputClasses_angle = self.createOutput3Dclass(self.ensembleIntersectionLists[self.elbows[1][0]], self.elbows[1][1])
             outputClasses_pll = self.createOutput3Dclass(self.ensembleIntersectionLists[self.elbows[2][0]], self.elbows[2][1])
             self._defineOutputs(outputClassesOrigin=outputClasses_origin,
                                 outputClassesAngle=outputClasses_angle,
                                 outputClassesPll=outputClasses_pll)
+
+            # Establish output relations
             for item in self.inputMultiClasses:
                 self._defineSourceRelation(item, outputClasses_origin)
                 self._defineSourceRelation(item, outputClasses_angle)
                 self._defineSourceRelation(item, outputClasses_pll)
-        else:
-            outputClasses = self.createOutput3Dclass(self.ensembleIntersectionLists[self.nClusters.index(nclust)], 'nclust')
-            self._defineOutputs(outputClasses=outputClasses)
-            for item in self.inputMultiClasses:
-                self._defineSourceRelation(item, outputClasses)
-
-
 
     # --------------------------- INFO functions -------------------------------
     def _summary(self):
@@ -300,12 +359,12 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
     # --------------------------- UTILS functions ------------------------------
     def saveOutputs(self):
-        self.saveClusteringsList()
+        self.saveClusteringLists()
         self.saveObjectiveFData()
         self.saveElbowIndex()
 
-    def saveClusteringsList(self):
-        """ Saves the list of clusterings with different number of clusters into a pickle file """
+    def saveClusteringLists(self):
+        """ Saves the lists of clustering with different number of clusters into a pickle file """
         savepath = self._getExtraPath('clusterings.pkl')
         with open(savepath, 'wb') as f:
             pickle.dump(self.ensembleIntersectionLists, f)
@@ -314,7 +373,8 @@ class XmippProtConsensusClasses3D(EMProtocol):
         """ Save the data of the objective function """
         savepath = self._getExtraPath('ObjectiveFData.pkl')
         with open(savepath, 'wb') as f:
-            pickle.dump(self._objectiveFData, f)
+            data = [self.ensembleNumClusters, self.ensembleObValues]
+            pickle.dump(data, f)
 
     def saveElbowIndex(self):
         """ Save the calculated number of clusters where the function has an elbow
@@ -345,14 +405,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
             clusterSize = size2
 
         # return (len(inter), inter, setId, clsId, clsSize) #TODO remove, better return a dictionary
-        return {
-            'particleCount': len(inter),
-            'particleIds': inter,
-            'classificationIndex': classificationIdx,
-            'clusterId': clusterId,
-            'clusterSize': clusterSize
-        }
-
+        return build_intersection_data(inter, classificationIdx, clusterId, clusterSize)
 
     def getClusterLengths(self, scipionMultiClasses):
         """ Returns a list of lists that stores the lengths of each classification """
@@ -389,60 +442,15 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         return result
 
-    def cossEnsemble(self, classifications, numClusters=2):
-        """ Ensemble clustering by COSS that merges interactions of clusters based
-            on entropy minimization """
-        # Initialize with values before merging
-        allIntersections = [self.intersectionList]  # Stores the intersections of all iterations
-        allIntersectionParticleIds = [self.getIntersectionParticleIds(self.intersectionList)]
-        obValues = [0.0]
-
-        # Iterations of merging clusters
-        while len(allIntersections[-1]) > numClusters:
-            # Some shorthands
-            intersectionParticleIds = allIntersectionParticleIds[-1]  # List of sets with the particle ids
-
-            # Reshape the cluster matrix (list of sets instead of list of list of sets)
-            allClusters = []
-            for classification in classifications:
-                allClusters += classification
-
-            # Compute the similarity vectors
-            similarityVectors = []
-            for intersection in intersectionParticleIds:
-                similarityVectors.append(build_simvector(intersection, allClusters))
-
-            # For each possible pair of intersections compute the cost of merging them
-            n = len(intersectionParticleIds)
-            allObValues = {}
-            for i in range(n - 1):
-                for j in range(i + 1, n):
-                    # Objective function to minimize for each merged pair
-                    allObValues[(i, j)] = ob_function(intersectionParticleIds, [i, j], similarityVectors)
-
-            values = list(allObValues.values())
-            keys = list(allObValues.keys())
-
-            # Select the minimum cost pair and merge them
-            minObValue = min(values)
-            mergePair = keys[values.index(minObValue)]
-            mergedIntersections = merge_subsets(allIntersections[-1], mergePair)
-
-            # Save the data for the next iteration
-            allIntersections.append(mergedIntersections)
-            allIntersectionParticleIds.append(self.getIntersectionParticleIds(mergedIntersections))
-            obValues.append(minObValue)
-
-        self.ensembleIntersectionLists = list(reversed(allIntersections))
-        return allIntersectionParticleIds, obValues
-
-    def plotDendrogram(self, obvalues, outimage):
+    def plotDendrogram(self, outimage):
         """ Plot the dendrogram from the objective functions of the merge
             between the groups of images """
 
         # Initialize required values
         allilists = self.ensembleIntersectionLists.copy()
         allilists.reverse()
+        obvalues = self.ensembleObValues.copy()
+        obvalues.reverse()
         linkage_matrix = np.zeros((len(allilists)-1, 4))
         set_ids = np.arange(len(allilists))
         original_num_sets = len(allilists)
@@ -466,10 +474,10 @@ class XmippProtConsensusClasses3D(EMProtocol):
                 n2 = linkage_matrix[sets_merged[1]-original_num_sets, 3]
 
             # Create linkage matrix
-            linkage_matrix[i, 0] = sets_merged[0] # set id of merged set
-            linkage_matrix[i, 1] = sets_merged[1] # set id of merged set
-            linkage_matrix[i, 2] = obvalues[i+1]  # objective function as distance
-            linkage_matrix[i, 3] = n1+n2 # total number of oiginal sets
+            linkage_matrix[i, 0] = sets_merged[0]  # set id of merged set
+            linkage_matrix[i, 1] = sets_merged[1]  # set id of merged set
+            linkage_matrix[i, 2] = obvalues[i+1]   # objective function as distance
+            linkage_matrix[i, 3] = n1+n2  # total number of oiginal sets
 
             # Change set ids to reflect new set of clusters
             set_ids = np.delete(set_ids, np.argwhere(set_ids == sets_merged[0]))
@@ -487,8 +495,37 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         # Plot resulting dendrogram with log scale
         plt.yscale('log')
-        plt.ylim([np.min(linkage_matrix[:, 2]), np.max(linkage_matrix[:,2])])
+        plt.ylim([np.min(linkage_matrix[:, 2]), np.max(linkage_matrix[:, 2])])
         plt.savefig(outimage+'/dendrogram_log.png')
+
+    def plotFunctionAndElbows(self, outimage):
+        """ Plots the objective function and elbows """
+
+        # Shorthands for some variables
+        numClusters = self.ensembleNumClusters
+        obValues = self.ensembleObValues
+        elbows = self.elbows
+
+        # Begin drawing
+        plt.figure()
+
+        # Plot obValues vs numClusters
+        plt.plot(numClusters, obValues)
+
+        # Show elbows as scatter points
+        for elbow_idx, name in elbows:
+            label = name + ': ' + str(numClusters[elbow_idx])
+            plt.scatter([numClusters[elbow_idx]], [obValues[elbow_idx]], label=label)
+
+        # Configure the figure
+        plt.legend()
+        plt.xlabel('Number of clusters')
+        plt.ylabel('Objective values')
+        plt.title('Objective values for each number of clusters')
+        plt.tight_layout()
+
+        # Save
+        plt.savefig(outimage + '/objective_function_plot.png')
 
     def createOutput3Dclass(self, clustering, name):
 
@@ -496,25 +533,25 @@ class XmippProtConsensusClasses3D(EMProtocol):
         outputClasses = self._createSetOfClasses3D(inputParticles, suffix=name)
 
         for classItem in clustering:
-            numOfPart = classItem[0]
-            partIds = classItem[1]
-            setRepId = classItem[2]
-            clsRepId = classItem[3]
+            # Shorthands for dictionary items and member variables
+            particleIds = classItem['particleIds']
+            classificationIdx = classItem['classificationIndex']
+            clusterId = classItem['clusterId']
+            classification = self.inputMultiClasses[classificationIdx].get()
+            cluster = classification[clusterId]
 
-            setRep = self.inputMultiClasses[setRepId].get()
-            clRep = setRep[clsRepId]
-
+            # Create a new cluster for output based on the current one
             newClass = Class3D()
-            # newClass.copyInfo(clRep)
-            newClass.setAcquisition(clRep.getAcquisition())
-            newClass.setRepresentative(clRep.getRepresentative())
-
+            # newClass.copyInfo(cluster)
+            newClass.setAcquisition(cluster.getAcquisition())
+            newClass.setRepresentative(cluster.getRepresentative())
             outputClasses.append(newClass)
 
+            # Add all the particle IDs
             enabledClass = outputClasses[newClass.getObjId()]
             enabledClass.enableAppend()
-            for itemId in partIds:
-                enabledClass.append(inputParticles[itemId])
+            for particleId in particleIds:
+                enabledClass.append(inputParticles[particleId])
 
             outputClasses.update(enabledClass)
 
@@ -549,6 +586,22 @@ def create_nsubset(c1, c2):
     c2 = set(c2)
     return c1.intersection(c2)
 
+def reshape_matrix_to_list(m):
+    """ Given a list of lists, converts it into a list with all its elements """
+    result = []
+    for row in m:
+        result += row
+    return result
+
+
+def build_intersection_data(intersection, classificationIdx, clusterId, clusterSize):
+    return {
+        'particleCount': len(intersection),
+        'particleIds': intersection,
+        'classificationIndex': classificationIdx,
+        'clusterId': clusterId,
+        'clusterSize': clusterSize
+    }
 
 def build_simvector(n, cs):
     """Build the similarity vector of n subset with each c subset in cs
@@ -584,30 +637,28 @@ def vectors_similarity(v1, v2):
     return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
 
 
-def merge_subsets(iList, indexs):
-    """Return a list of subsets where the subsets[index] have been merged
-    """
+def merge_subsets(iList, indices):
+    """ Return a list of subsets where the subsets[index] have been merged """
     niList = []
     for i in range(len(iList)):
-        if i not in indexs:
+        if i not in indices:
             niList.append(iList[i])
 
     # Clusters with specified index are merged
-    cl0 = iList[indexs[0]][1]
-    cl1 = iList[indexs[1]][1]
-    union = cl0.union(cl1)
+    cluster0 = iList[indices[0]]['particleIds']
+    cluster1 = iList[indices[1]]['particleIds']
+    union = cluster0.union(cluster1)
 
     # Representative info is chosen from the previous bigger cluster
-    if len(cl0) > len(cl1):
+    if len(cluster0) > len(cluster1):
         rep = 0
     else:
         rep = 1
-    clasId = iList[indexs[rep]][2]
-    clusId = iList[indexs[rep]][3]
-    prevClusLen = iList[indexs[rep]][4]
+    classificationIdx = iList[indices[rep]]['classificationIndex']
+    clusterId = iList[indices[rep]]['clusterId']
+    prevClusterSize = iList[indices[rep]]['clusterSize']
 
-    niList.append((len(union), union, clasId, clusId, prevClusLen))
-
+    niList.append(build_intersection_data(union, classificationIdx, clusterId, prevClusterSize))
     return niList
 
 
@@ -701,9 +752,6 @@ def n_clusters(all_coss_us):
     for coss_us in all_coss_us:
         nclusters.append(len(coss_us))
 
-    # Reverse to have smallest to biggest
-    nclusters = list(reversed(nclusters))
-
     return nclusters
 
 
@@ -779,23 +827,6 @@ def full_profile_log_likelihood(d):
         pll.append(profile_log_likelihood(d, q, theta1, theta2))
     return pll
 
-
-def plot_function_and_elbows(nclusters, ob_values, elbows, outimage):
-    """Plots the objective function and elbows
-    """
-
-    plt.figure()
-    plt.plot(nclusters, ob_values)
-    for elbow_idx, name in elbows:
-        plt.scatter([nclusters[elbow_idx]], [ob_values[elbow_idx]], label=name + ': '+str(nclusters[elbow_idx]))
-    plt.legend()
-    plt.xlabel('Number of clusters')
-    plt.ylabel('Objective values')
-    plt.title('Objective values for each number of clusters')
-    plt.tight_layout()
-    plt.savefig(outimage)
-
-
 def coss_random_classification(C, N):
     """ Randomly classifies N element indices into groups with
     sizes defined by rows of C """
@@ -843,6 +874,16 @@ def coss_consensus(Cp):
         S = Sp
 
     return S
+
+
+def random_consensus_sizes(C, N):
+    # Create random partitions of same size
+    randomClassification = coss_random_classification(C, N)
+
+    # Compute the repeated classifications
+    consensus = coss_consensus(randomClassification)
+
+    return [len(cluster) for cluster in consensus]
 
 
 # TODO remove as deprecated
