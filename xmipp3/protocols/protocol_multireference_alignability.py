@@ -136,6 +136,12 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
 
         form.addParallelSection(threads=1, mpi=1)
 
+    def _getFileName(self, key, **kwargs):
+        if key=="volume":
+            return self._getExtraPath("volume.mrc")
+        else:
+            return ""
+
     # --------------------------- INSERT steps functions --------------------------------------------
 
     def _insertAllSteps(self):
@@ -233,12 +239,11 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
         
         from pwem.emlib.image import ImageHandler
         img = ImageHandler()
-        img.convert(self.inputVolumes.get(), self._getExtraPath("volume.mrc"))
+        img.convert(self.inputVolumes.get(), self._getFileName("volume"))
         Xdim = self.inputVolumes.get().getDim()[0]
         if Xdim != newXdim:
             self.runJob("xmipp_image_resize", "-i %s --dim %d" % \
-                        (self._getExtraPath("volume.mrc"),
-                         newXdim), numberOfMpi=1)
+                        (self._getFileName("volume"), newXdim), numberOfMpi=1)
 
     def _getCommonParams(self):
         params = '  -i %s' % self._getExtraPath('scaled_particles.xmd')
@@ -285,7 +290,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
                                self.inputParticles.get().isPhaseFlipped(),
                                self.doWiener.get()))
         f.close()
-        param = ' -i %s' % self._getExtraPath("volume.mrc")
+        param = ' -i %s' % self._getFileName("volume")
         param += ' --params %s' % self._getExtraPath('params.txt')
         param += ' -o %s' % self._getPath('reference_particles.xmd')
         param += ' --sampling_rate % 0.3f' % newTs
@@ -307,7 +312,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         # Generate projections from this reconstruction
         nproc = self.numberOfMpi.get()
         nT = self.numberOfThreads.get()
-        volName = self._getExtraPath("volume.mrc")
+        volName = self._getFileName("volume")
         makePath(volDir)
         fnGallery = (volDir + '/gallery.stk')
         params = '-i %s -o %s --sampling_rate %f --sym %s --method fourier 1 0.25 bspline --compute_neighbors --angular_distance %f --experimental_images %s --max_tilt_angle %f --min_tilt_angle %f' \
@@ -473,7 +478,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         cleanPattern(self._getExtraPath("scaled_particles.*"))
         cleanPattern(self._getExtraPath("reference_particles.*"))
         cleanPattern(self._getExtraPath("corrected_ctf_particles.*"))
-        cleanPattern(self._getExtraPath("volume.mrc"))
+        cleanPattern(self._getFileName("volume"))
         cleanPattern(self._getExtraPath("params.txt"))
 
     # --------------------------- INFO functions --------------------------------------------
