@@ -83,27 +83,31 @@ class XmippProtVolumeStrain(ProtAnalysis3D):
         Ts=self.inputVolume0.get().getSamplingRate()
         fnRoot=self._getExtraPath('result')
 
-        def convert(fnRoot, volDim, key, Ts):
+        def symmetrize(key):
+            self.runJob("xmipp_transform_symmetrize", "-i %s --sym %s --dont_wrap" % \
+                        (self._getFileName(fnRoot, key), self.symmetryGroup.get()))
+
+        def changeSamplingRate(key):
+            self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" % (self._getFileName(fnRoot, key), Ts))
+
+        def convert(key):
             self.runJob("xmipp_image_convert", "-i %s_%s.raw#%d,%d,%d,0,float -o %s" %
                         (fnRoot, key, volDim, volDim, volDim, self._getFileName(fnRoot, key)))
             self.runJob("xmipp_transform_mirror", "-i %s --flipX" % self._getFileName(fnRoot, key))
-            self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" % (self._getFileName(fnRoot, key), Ts))
+            changeSamplingRate(key)
 
-        convert(fnRoot, volDim, "initial", Ts)
-        convert(fnRoot, volDim, "final", Ts)
-        convert(fnRoot, volDim, "initialDeformedToFinal", Ts)
-        convert(fnRoot, volDim, "strain", Ts)
-        convert(fnRoot, volDim, "localrot", Ts)
+        convert("initial")
+        convert("final")
+        convert("initialDeformedToFinal")
+        convert("strain")
+        convert("localrot")
 
         self.runJob("rm","-f "+self._getExtraPath('result_*.raw'))
         if self.symmetryGroup!="c1":
-            self.runJob("xmipp_transform_symmetrize","-i %s --sym %s --dont_wrap"%\
-                        (self._getFileName(fnRoot,"strain"),self.symmetryGroup.get()))
-            self.runJob("xmipp_transform_symmetrize","-i %s --sym %s --dont_wrap"%\
-                        (self._getFileName(fnRoot,"localrot"),self.symmetryGroup.get()))
-
-            self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" % (self._getFileName(fnRoot,"strain"), Ts))
-            self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" % (self._getFileName(fnRoot,"localrot"), Ts))
+            symmetrize("strain")
+            symmetrize("localrot")
+            changeSamplingRate("strain")
+            changeSamplingRate("localrot")
 
     def createChimeraScript(self):
         fnRoot = "extra/result"

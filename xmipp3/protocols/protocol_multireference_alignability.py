@@ -141,6 +141,8 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
     def _getFileName(self, key, **kwargs):
         if key=="volume":
             return self._getExtraPath("volume.mrc")
+        elif key=="reference_particles":
+            return self._getPath("reference_particles.xmd")
         else:
             return ""
 
@@ -256,7 +258,7 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
         return params
 
     def _getCommonParamsRef(self):
-        params = self.INPUTARG % self._getPath('reference_particles.xmd')
+        params = self.INPUTARG % self._getFileName("reference_particles")
         params += ' --sym %s' % self.symmetryGroup.get()
         params += ' --dontReconstruct'
         params += ' --useForValidation %0.3f' % (self.numOrientations.get() - 1)
@@ -294,7 +296,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         f.close()
         param = self.INPUTARG % self._getFileName("volume")
         param += ' --params %s' % self._getExtraPath('params.txt')
-        param += ' -o %s' % self._getPath('reference_particles.xmd')
+        param += ' -o %s' % self._getFileName("reference_particles")
         param += ' --sampling_rate % 0.3f' % newTs
         param += ' --method fourier'
                 
@@ -360,7 +362,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
             if anglesPath == 'exp_particles.xmd':
                 params = self.INPUTARG % self._getExtraPath('scaled_particles.xmd')
             elif anglesPath == 'ref_particles.xmd':
-                params = self.INPUTARG % self._getPath('reference_particles.xmd')
+                params = self.INPUTARG % self._getFileName("reference_particles")
             params += ' --keepBestN %f' % (self.numOrientations.get() - 1)
             params += ' -r  %s' % fnGallery
             params += ' -o  %s' % self._getTmpPath(anglesPath)
@@ -374,7 +376,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
 
         makePath(volDir)
         inputFile = self._getPath('input_particles.xmd')
-        inputFileRef = self._getPath('reference_particles.xmd')
+        inputFileRef = self._getFileName("reference_particles")
         aFile = self._getTmpPath('exp_particles.xmd')
         aFileRef = self._getTmpPath('ref_particles.xmd')
         aFileGallery = (volDir + '/gallery.doc')
