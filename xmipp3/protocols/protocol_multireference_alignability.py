@@ -55,6 +55,7 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
     _label = 'multireference alignability'
 
     INPUTARG = "-i %s"
+    OUTPUTARG = " -o %s"
 
     def __init__(self, *args, **kwargs):
         ProtAnalysis3D.__init__(self, *args, **kwargs)
@@ -208,7 +209,7 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
 
         if self.doWiener.get():
             params = self.INPUTARG % self._getPath('input_particles.xmd')
-            params += '  -o %s' % self._getExtraPath(
+            params += self.OUTPUTARG % self._getExtraPath(
                 'corrected_ctf_particles.stk')
             params += '  --save_metadata_stack %s' % self._getExtraPath(
                 'corrected_ctf_particles.xmd')
@@ -235,7 +236,7 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
         else :
             params =  self.INPUTARG % self._getPath('input_particles.xmd')
             
-        params +=  '  -o %s' % self._getExtraPath('scaled_particles.stk')
+        params +=  self.OUTPUTARG % self._getExtraPath('scaled_particles.stk')
         params +=  '  --save_metadata_stack %s' % self._getExtraPath('scaled_particles.xmd')
         params +=  '  --fourier %d' % newXdim
         
@@ -296,7 +297,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         f.close()
         param = self.INPUTARG % self._getFileName("volume")
         param += ' --params %s' % self._getExtraPath('params.txt')
-        param += ' -o %s' % self._getFileName("reference_particles")
+        param += self.OUTPUTARG % self._getFileName("reference_particles")
         param += ' --sampling_rate % 0.3f' % newTs
         param += ' --method fourier'
                 
@@ -404,7 +405,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
 
         params = '  --i1 %s' % self._getPath('input_particles.xmd')
         params += ' --i2 %s' % aFileGallery
-        params += ' -o %s' % neighbours
+        params += self.OUTPUTARG % neighbours
         params += ' --dist %s' % (self.angDist.get() + 1)
         params += ' --sym %s' % sym
 
@@ -420,7 +421,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
 
         params = self.INPUTARG % volName
         params += ' --i2 %s' % neighbours
-        params += ' -o %s' % (
+        params += self.OUTPUTARG % (
                 volDir + '/pruned_particles_alignability_accuracy.xmd')
 
         self.runJob('xmipp_angular_accuracy_pca', params, numberOfMpi=nproc,
