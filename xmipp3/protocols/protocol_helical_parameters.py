@@ -82,6 +82,14 @@ class XmippProtHelicalParameters(ProtPreprocessVolumes, HelicalFinder):
         self.fnVol = getImageLocation(self.inputVolume.get())
         self.fnVolSym=self._getPath('volume_symmetrized.mrc')
         [self.height,_,_]=self.inputVolume.get().getDim()
+
+    def _getFileName(self, key, **kwargs):
+        if key=="fine":
+            return self._getExtraPath('fineParams.xmd')
+        elif key=="coarse":
+            return self._getExtraPath('coarseParams.xmd')
+        else:
+            return ""
     
     #--------------------------- STEPS functions --------------------------------------------
     def copyInput(self):
@@ -102,7 +110,7 @@ class XmippProtHelicalParameters(ProtPreprocessVolumes, HelicalFinder):
         self.runCoarseSearch(self.fnVolSym,self.dihedral.get(),float(self.heightFraction.get()),
                              float(self.z0.get()),float(self.zF.get()),float(self.zStep.get()),
                              float(self.rot0.get()),float(self.rotF.get()),float(self.rotStep.get()),
-                             self.numberOfThreads.get(),self._getExtraPath('coarseParams.xmd'),
+                             self.numberOfThreads.get(),self._getFileName('coarse'),
                              int(self.cylinderInnerRadius.get()),int(self.cylinderOuterRadius.get()),int(self.height),
                              self.inputVolume.get().getSamplingRate(), Cn)
 
@@ -110,8 +118,8 @@ class XmippProtHelicalParameters(ProtPreprocessVolumes, HelicalFinder):
         Cn = "c1"
         if self.additionalCn:
             Cn=self.Cn.get()
-        self.runFineSearch(self.fnVolSym, self.dihedral.get(), self._getExtraPath('coarseParams.xmd'),
-                           self._getExtraPath('fineParams.xmd'),
+        self.runFineSearch(self.fnVolSym, self.dihedral.get(), self._getFileName('coarse'),
+                           self._getFileName('fine'),
                            float(self.heightFraction.get()),float(self.z0.get()),float(self.zF.get()),
                            float(self.rot0.get()),float(self.rotF.get()),
                            int(self.cylinderInnerRadius.get()),int(self.cylinderOuterRadius.get()),int(self.height),
@@ -121,7 +129,7 @@ class XmippProtHelicalParameters(ProtPreprocessVolumes, HelicalFinder):
         Cn = "c1"
         if self.additionalCn:
             Cn=self.Cn.get()
-        self.runSymmetrize(self.fnVolSym, self.dihedral.get(), self._getExtraPath('fineParams.xmd'), self.fnVolSym,
+        self.runSymmetrize(self.fnVolSym, self.dihedral.get(), self._getFileName('fine'), self.fnVolSym,
                            float(self.heightFraction.get()),
                            self.cylinderInnerRadius.get(), self.cylinderOuterRadius.get(), self.height,
                            self.inputVolume.get().getSamplingRate(), Cn)
@@ -135,7 +143,7 @@ class XmippProtHelicalParameters(ProtPreprocessVolumes, HelicalFinder):
         self._defineOutputs(outputVolume=volume)
         self._defineTransformRelation(self.inputVolume, self.outputVolume)
         
-        md = MetaData(self._getExtraPath('fineParams.xmd'))
+        md = MetaData(self._getFileName('fine'))
         objId = md.firstObject()
         self._defineOutputs(deltaRot=pwobj.Float(md.getValue(MDL_ANGLE_ROT, objId)),
                             deltaZ=pwobj.Float(md.getValue(MDL_SHIFT_Z, objId)))
