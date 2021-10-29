@@ -54,6 +54,8 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
     """
     _label = 'multireference alignability'
 
+    INPUTARG = "-i %s"
+
     def __init__(self, *args, **kwargs):
         ProtAnalysis3D.__init__(self, *args, **kwargs)
 
@@ -203,7 +205,7 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
                             self._getPath('input_particles.xmd'))
 
         if self.doWiener.get():
-            params = '  -i %s' % self._getPath('input_particles.xmd')
+            params = self.INPUTARG % self._getPath('input_particles.xmd')
             params += '  -o %s' % self._getExtraPath(
                 'corrected_ctf_particles.stk')
             params += '  --save_metadata_stack %s' % self._getExtraPath(
@@ -227,9 +229,9 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
         newTs, newXdim = self._getModifiedSizeAndSampling()
 
         if self.doWiener.get():
-            params =  '  -i %s' % self._getExtraPath('corrected_ctf_particles.xmd')
+            params =  self.INPUTARG % self._getExtraPath('corrected_ctf_particles.xmd')
         else :
-            params =  '  -i %s' % self._getPath('input_particles.xmd')
+            params =  self.INPUTARG % self._getPath('input_particles.xmd')
             
         params +=  '  -o %s' % self._getExtraPath('scaled_particles.stk')
         params +=  '  --save_metadata_stack %s' % self._getExtraPath('scaled_particles.xmd')
@@ -246,7 +248,7 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
                         (self._getFileName("volume"), newXdim), numberOfMpi=1)
 
     def _getCommonParams(self):
-        params = '  -i %s' % self._getExtraPath('scaled_particles.xmd')
+        params = self.INPUTARG % self._getExtraPath('scaled_particles.xmd')
         params += ' --sym %s' % self.symmetryGroup.get()
         params += ' --dontReconstruct'
         params += ' --useForValidation %0.3f' % (self.numOrientations.get() - 1)
@@ -254,7 +256,7 @@ class XmippProtMultiRefAlignability(ProtAnalysis3D):
         return params
 
     def _getCommonParamsRef(self):
-        params = '  -i %s' % self._getPath('reference_particles.xmd')
+        params = self.INPUTARG % self._getPath('reference_particles.xmd')
         params += ' --sym %s' % self.symmetryGroup.get()
         params += ' --dontReconstruct'
         params += ' --useForValidation %0.3f' % (self.numOrientations.get() - 1)
@@ -290,7 +292,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
                                self.inputParticles.get().isPhaseFlipped(),
                                self.doWiener.get()))
         f.close()
-        param = ' -i %s' % self._getFileName("volume")
+        param = self.INPUTARG % self._getFileName("volume")
         param += ' --params %s' % self._getExtraPath('params.txt')
         param += ' -o %s' % self._getPath('reference_particles.xmd')
         param += ' --sampling_rate % 0.3f' % newTs
@@ -302,7 +304,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         self.runJob('xmipp_phantom_project', 
                     param, numberOfMpi=1,numberOfThreads=1)
 
-        param = ' -i %s' % self._getPath('reference_particles.stk')
+        param = self.INPUTARG % self._getPath('reference_particles.stk')
         param += ' --mask circular %d' % R
         self.runJob('xmipp_transform_mask', param, numberOfMpi=nproc,
                     numberOfThreads=nT)
@@ -356,9 +358,9 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
                 os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
 
             if anglesPath == 'exp_particles.xmd':
-                params = '  -i %s' % self._getExtraPath('scaled_particles.xmd')
+                params = self.INPUTARG % self._getExtraPath('scaled_particles.xmd')
             elif anglesPath == 'ref_particles.xmd':
-                params = '  -i %s' % self._getPath('reference_particles.xmd')
+                params = self.INPUTARG % self._getPath('reference_particles.xmd')
             params += ' --keepBestN %f' % (self.numOrientations.get() - 1)
             params += ' -r  %s' % fnGallery
             params += ' -o  %s' % self._getTmpPath(anglesPath)
@@ -377,7 +379,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
         aFileRef = self._getTmpPath('ref_particles.xmd')
         aFileGallery = (volDir + '/gallery.doc')
 
-        params = '  -i %s' % inputFile
+        params = self.INPUTARG % inputFile
         params += ' -i2 %s' % inputFileRef
         params += '  --volume %s' % volName
         params += '  --angles_file %s' % aFile
@@ -414,7 +416,7 @@ _noisePixelLevel   '0 0'""" % (newXdim, newXdim, pathParticles,
 
         neighbours = (volDir + '/neighbours.xmd')
 
-        params = ' -i %s' % volName
+        params = self.INPUTARG % volName
         params += ' --i2 %s' % neighbours
         params += ' -o %s' % (
                 volDir + '/pruned_particles_alignability_accuracy.xmd')

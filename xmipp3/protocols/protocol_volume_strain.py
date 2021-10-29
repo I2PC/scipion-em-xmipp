@@ -82,31 +82,18 @@ class XmippProtVolumeStrain(ProtAnalysis3D):
         volDim = self.inputVolume0.get().getDim()[0]
         Ts=self.inputVolume0.get().getSamplingRate()
         fnRoot=self._getExtraPath('result')
-        self.runJob("xmipp_image_convert", "-i %s_initial.raw#%d,%d,%d,0,float -o %s"%
-                    (fnRoot,volDim,volDim,volDim,self._getFileName(fnRoot,"initial")))
-        self.runJob("xmipp_transform_mirror","-i %s --flipX"%self._getFileName(fnRoot,"initial"))
-        self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" % (self._getFileName(fnRoot,"initial"), Ts))
 
-        self.runJob("xmipp_image_convert", "-i %s_final.raw#%d,%d,%d,0,float -o %s"%
-                    (fnRoot,volDim,volDim,volDim,self._getFileName(fnRoot,"final")))
-        self.runJob("xmipp_transform_mirror","-i %s --flipX"%self._getFileName(fnRoot,"final"))
-        self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" % (self._getFileName(fnRoot,"final"), Ts))
+        def convert(fnRoot, volDim, key, Ts):
+            self.runJob("xmipp_image_convert", "-i %s_%s.raw#%d,%d,%d,0,float -o %s" %
+                        (fnRoot, key, volDim, volDim, volDim, self._getFileName(fnRoot, key)))
+            self.runJob("xmipp_transform_mirror", "-i %s --flipX" % self._getFileName(fnRoot, key))
+            self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" % (self._getFileName(fnRoot, key), Ts))
 
-        self.runJob("xmipp_image_convert", "-i %s_initialDeformedToFinal.raw#%d,%d,%d,0,float -o %s"%
-                    (fnRoot,volDim,volDim,volDim,self._getFileName(fnRoot,"initialDeformedToFinal")))
-        self.runJob("xmipp_transform_mirror","-i %s --flipX"%self._getFileName(fnRoot,"initialDeformedToFinal"))
-        self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" %\
-                    (self._getFileName(fnRoot,"initialDeformedToFinal"), Ts))
-
-        self.runJob("xmipp_image_convert", "-i %s_strain.raw#%d,%d,%d,0,float -o %s"%
-                    (fnRoot,volDim,volDim,volDim,self._getFileName(fnRoot,"strain")))
-        self.runJob("xmipp_transform_mirror","-i %s --flipX"%self._getFileName(fnRoot,"strain"))
-        self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" % (self._getFileName(fnRoot,"strain"), Ts))
-
-        self.runJob("xmipp_image_convert", "-i %s_localrot.raw#%d,%d,%d,0,float -o %s"%
-                    (fnRoot,volDim,volDim,volDim,self._getFileName(fnRoot,"localrot")))
-        self.runJob("xmipp_transform_mirror","-i %s --flipX"%self._getFileName(fnRoot,"localrot"))
-        self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" % (self._getFileName(fnRoot,"localrot"), Ts))
+        convert(fnRoot, volDim, "initial", Ts)
+        convert(fnRoot, volDim, "final", Ts)
+        convert(fnRoot, volDim, "initialDeformedToFinal", Ts)
+        convert(fnRoot, volDim, "strain", Ts)
+        convert(fnRoot, volDim, "localrot", Ts)
 
         self.runJob("rm","-f "+self._getExtraPath('result_*.raw'))
         if self.symmetryGroup!="c1":
