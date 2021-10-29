@@ -109,7 +109,7 @@ class XmippProtVolumeStrain(ProtAnalysis3D):
             self.runJob("xmipp_transform_symmetrize","-i %s --sym %s --dont_wrap"%(fnRoot+"_strain.mrc",self.symmetryGroup.get()))
             self.runJob("xmipp_transform_symmetrize","-i %s --sym %s --dont_wrap"%(fnRoot+"_localrot.mrc",self.symmetryGroup.get()))
 
-            self.runJob("xmipp_image_header", "-i %_strain.mrc --sampling_rate %f" % (fnRoot, Ts))
+            self.runJob("xmipp_image_header", "-i %s_strain.mrc --sampling_rate %f" % (fnRoot, Ts))
             self.runJob("xmipp_image_header", "-i %s_localrot.mrc --sampling_rate %f" % (fnRoot, Ts))
 
     def createChimeraScript(self):
