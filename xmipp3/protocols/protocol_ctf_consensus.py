@@ -32,7 +32,7 @@ from datetime import datetime
 from cmath import rect, phase
 from math import radians, degrees
 
-from pyworkflow import VERSION_2_0
+from pyworkflow import VERSION_3_0
 from pwem.objects import SetOfCTF, SetOfMicrographs
 from pyworkflow.object import Set, Integer, Pointer
 import pyworkflow.protocol.params as params
@@ -56,12 +56,12 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
     the agreement with a secondary CTF for the same set of micrographs.
     """
     _label = 'ctf consensus'
-    _lastUpdateVersion = VERSION_2_0
+    _lastUpdateVersion = VERSION_3_0
 
     def __init__(self, **args):
         ProtCTFMicrographs.__init__(self, **args)
         self._freqResol = {}
-        self.stepsExecutionMode = params.STEPS_SERIAL
+        self.stepsExecutionMode = params.STEPS_PARALLEL
 
     def _defineParams(self, form):
         form.addSection(label='Input')
@@ -83,7 +83,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         line.addParam('maxDefocus', params.FloatParam,
                       default=40000, label='Max')
 
-        form.addParam('useAstigmatism', params.BooleanParam, default=True,
+        form.addParam('useAstigmatism', params.BooleanParam, default=False,
                       label='Use Astigmatism for selection',
                       help='Use this button to decide if carry out the '
                            'selection taking into account or not the '
@@ -93,6 +93,17 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                       help='Maximum value allowed for astigmatism in '
                            'Angstroms. If the evaluated CTF has a '
                            'larger Astigmatism, it will be discarded.')
+
+        form.addParam('useAstigmatismPercentage', params.BooleanParam, default=True,
+                      label='Use Astigmatism percentage for selection',
+                      help='Use this button to decide if carry out the '
+                           'selection taking into account or not the '
+                           'astigmatism value.')
+        form.addParam('astigmatismPer', params.FloatParam, default=0.10,
+                      label='Astigmatism percentage', condition="useAstigmatismPercentage",
+                      help='Maximum value allowed for astigmatism '
+                           'percentage (|defocus_U-defocus_V|/mean_defocus). If the evaluated CTF has a '
+                           'larger Astigmatism Percentage, it will be discarded.')
 
         form.addParam('useResolution', params.BooleanParam, default=True,
                       label='Use Resolution for selection',
@@ -176,22 +187,14 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                            'If *No*, only the primary metadata (plus consensus '
                            'scores) will be in the resulting CTF.')
 
-        form.addParallelSection(threads=0, mpi=0)
+        form.addParallelSection(threads=4, mpi=1)
 
 # --------------------------- INSERT steps functions -------------------------
     def _insertAllSteps(self):
-        self.finished = False
-        self.insertedDict = {}
-        self.processedDict = []
-        self.outputDict = []
-        self.allCtf1 = []
-        self.allCtf2 = []
-        self.initializeRejDict()
-        self.setSecondaryAttributes()
-
-        self.ctfFn1 = self.inputCTF.get().getFileName()
+        self.initializeParams()
         if self.calculateConsensus:
             self.ctfFn2 = self.inputCTF2.get().getFileName()
+            self.allCtf2 = {}
             ctfSteps = self._checkNewInput()
         else:
             ctfSteps = self._insertNewSelectionSteps(self.insertedDict,
@@ -201,6 +204,16 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
     def createOutputStep(self):
         pass
+
+    def initializeParams(self):
+        self.finished = False
+        self.insertedDict = {}
+        self.processedDict = []
+        self.initializeRejDict()
+        self.setSecondaryAttributes()
+        self.ctfFn1 = self.inputCTF.get().getFileName()
+        self.allCtf1 = {}
+        pwutils.makePath(self._getExtraPath('DONE'))
 
     def _getFirstJoinStepName(self):
         # This function will be used for streaming, to check which is
@@ -215,25 +228,30 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                 return s
         return None
 
-    def _insertNewCtfsSteps(self, setOfCtf1, setOfCtf2, insDict):
+
+    def _insertNewCtfsSteps(self, newIDs1, newIDs2, insertedDict):
         deps = []
-        ctf1Dict = setOfCtf1.getObjDict(includeBasic=True)
-        ctf2Dict = setOfCtf2.getObjDict(includeBasic=True)
-        discrepId = self._insertFunctionStep("ctfDiscrepancyStep",
-                                             ctf1Dict, ctf2Dict,
-                                             prerequisites=[])
-        deps.append(discrepId)
-        if len(setOfCtf1) > len(setOfCtf2):
-            setOfCtf = setOfCtf2
-        else:
-            setOfCtf = setOfCtf1
-        for ctf in setOfCtf:
-            ctfId = ctf.getObjId()
-            if ctfId not in insDict:
-                stepId = self._insertFunctionStep('selectCtfStep', ctfId,
-                                                  prerequisites=[discrepId])
+
+        newIDs = list(set(newIDs1).intersection(set(newIDs2)))
+        md1 = emlib.MetaData()
+        md2 = emlib.MetaData()
+
+        for ctfID in newIDs:
+            if ctfID not in insertedDict:
+                ctf1 = self.allCtf1.get(ctfID)
+                ctf2 = self.allCtf2.get(ctfID)
+                try:
+                    self._ctfToMd(ctf1, md1)
+                    self._ctfToMd(ctf2, md2)
+                    self._freqResol[ctfID] = emlib.errorMaxFreqCTFs2D(md1, md2)
+                except TypeError as exc:
+                    print("Error reading ctf for id:%s. %s" % (ctfID, exc))
+                    self._freqResol[ctfID] = 9999
+
+                stepId = self._insertFunctionStep('selectCtfStep', ctfID,
+                                                  prerequisites=[])
                 deps.append(stepId)
-                insDict[ctfId] = stepId
+                insertedDict[ctfID] = stepId
 
         return deps
 
@@ -241,12 +259,13 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         deps = []
         # For each ctf insert the step to process it
         for ctf in inputCtfs:
-            ctfId = ctf.getObjId()
-            if ctfId not in insertedDict:
-                stepId = self._insertFunctionStep('selectCtfStep', ctfId,
+            ctfID = ctf.getObjId()
+
+            if ctfID not in insertedDict:
+                stepId = self._insertFunctionStep('selectCtfStep', ctfID,
                                                   prerequisites=[])
                 deps.append(stepId)
-                insertedDict[ctfId] = stepId
+                insertedDict[ctfID] = stepId
         return deps
 
     def _stepsCheck(self):
@@ -261,45 +280,34 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                         datetime.fromtimestamp(os.path.getmtime(self.ctfFn2)))
             # If the input movies.sqlite have not changed since our last check,
             # it does not make sense to check for new input data
-            if self.lastCheck > mTime and hasattr(self, 'SetOfCtf1'):
+            if self.lastCheck > mTime and hasattr(self, 'SetCtf1'):
                 return None
+
             ctfsSet1 = self._loadInputCtfSet(self.ctfFn1)
             ctfsSet2 = self._loadInputCtfSet(self.ctfFn2)
-            if len(self.allCtf1) > 0:
-                newCtf1 = [ctf.clone() for ctf in
-                           ctfsSet1.iterItems(orderBy='creation',
-                                              where='creation>"' + str(
-                                                  self.checkCtf1) + '"')]
-            else:
-                newCtf1 = [ctf.clone() for ctf in ctfsSet1]
-            self.allCtf1 = self.allCtf1 + newCtf1
-            if len(newCtf1) > 0:
-                for ctf in ctfsSet1.iterItems(orderBy='creation',
-                                              direction='DESC'):
-                    self.checkCtf1 = ctf.getObjCreation()
-                    break
-            if len(self.allCtf2) > 0:
-                newCtf2 = [ctf.clone() for ctf in
-                           ctfsSet2.iterItems(orderBy='creation',
-                                              where='creation>"' + str(
-                                                  self.checkCtf2) + '"')]
-            else:
-                newCtf2 = [ctf.clone() for ctf in ctfsSet2]
-            self.allCtf2 = self.allCtf2 + newCtf2
-            if len(newCtf2) > 0:
-                for ctf in ctfsSet2.iterItems(orderBy='creation',
-                                              direction='DESC'):
-                    self.checkCtf2 = ctf.getObjCreation()
-                    break
+
+            ctfDict1 = {ctf.getObjId(): ctf.clone() for ctf
+                        in ctfsSet1.iterItems()}
+
+            ctfDict2 = {ctf.getObjId(): ctf.clone() for ctf
+                        in ctfsSet2.iterItems()}
+
+            newIds1 = [idMovie for idMovie in ctfDict1.keys() if idMovie not in self.processedDict]
+            self.allCtf1.update(ctfDict1)
+
+            newIds2 = [idCTF for idCTF in ctfDict2.keys() if idCTF not in self.processedDict]
+            self.allCtf2.update(ctfDict2)
+
             self.lastCheck = datetime.now()
             self.isStreamClosed = ctfsSet1.isStreamClosed() and \
                                   ctfsSet2.isStreamClosed()
             ctfsSet1.close()
             ctfsSet2.close()
+
             outputStep = self._getFirstJoinStep()
             if len(set(self.allCtf1)) > len(set(self.processedDict)) and \
                len(set(self.allCtf2)) > len(set(self.processedDict)):
-                fDeps = self._insertNewCtfsSteps(ctfsSet1, ctfsSet2,
+                fDeps = self._insertNewCtfsSteps(newIds1, newIds2,
                                                  self.insertedDict)
                 if outputStep is not None:
                     outputStep.addPrerequisites(*fDeps)
@@ -351,6 +359,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                            if ctfId not in doneListAccepted]
         newDoneDiscarded = [ctfId for ctfId in ctfListIdDiscarded
                             if ctfId not in doneListDiscarded]
+
         firstTimeAccepted = len(doneListAccepted) == 0
         firstTimeDiscarded = len(doneListDiscarded) == 0
         allDone = len(doneListAccepted) + len(doneListDiscarded) +\
@@ -436,8 +445,8 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
                 if self.calculateConsensus:
                     ctf2 = inputCtfSet2[ctfId]
-                    setAttribute(ctf, '_consensus_resolution',
-                                 self._freqResol[ctfId])
+                    conRes = self._freqResol[ctfId]
+                    setAttribute(ctf, '_consensus_resolution', conRes)
                     setAttribute(ctf, '_ctf2_defocus_diff',
                                  max(abs(ctf.getDefocusU()-ctf2.getDefocusU()),
                                      abs(ctf.getDefocusV()-ctf2.getDefocusV())))
@@ -480,6 +489,10 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                 # main _astigmatism always but after consensus if so
                 setAttribute(ctf, '_astigmatism',
                              abs(ctf.getDefocusU() - ctf.getDefocusV()))
+
+                # percentage _astigmatism always but after consensus if so
+                astigmatismPer = abs(ctf.getDefocusU() - ctf.getDefocusV())/(0.5 * (ctf.getDefocusU() + ctf.getDefocusV()))
+                setAttribute(ctf, '_astigmatismPercentage', astigmatismPer)
 
                 ctfSet.append(ctf)
                 micSet.append(mic)
@@ -534,41 +547,13 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         ctfRow = Row()
         xmipp3.convert.ctfModelToRow(ctf, ctfRow)
         xmipp3.convert.micrographToRow(ctf.getMicrograph(), ctfRow,
-                                alignType=xmipp3.convert.ALIGN_NONE)
+                                       alignType=xmipp3.convert.ALIGN_NONE)
         ctfRow.addToMd(ctfMd)
-
-    def ctfDiscrepancyStep(self, met1Dict, met2Dict):
-        # TODO must be same micrographs
-        # move to a single step, each step takes 5 sec while the function
-        # takes 0.03 sec
-        # convert to md
-        method1 = SetOfCTF()
-        method1.setAttributesFromDict(met1Dict, setBasic=True, ignoreMissing=True)
-        method2 = SetOfCTF()
-        method2.setAttributesFromDict(met2Dict, setBasic=True, ignoreMissing=True)
-        md1 = emlib.MetaData()
-        md2 = emlib.MetaData()
-
-        for ctf1 in method1:  # reference CTF
-            ctfId = ctf1.getObjId()
-            if ctfId in self.processedDict:
-                continue
-            for ctf2 in method2:
-                ctfId2 = ctf2.getObjId()
-                if ctfId2 != ctfId:
-                    continue
-                self.processedDict.append(ctfId)
-                try:
-                    self._ctfToMd(ctf1, md1)
-                    self._ctfToMd(ctf2, md2)
-                    self._freqResol[ctfId] = emlib.errorMaxFreqCTFs2D(md1, md2)
-                except TypeError as exc:
-                    print("Error reading ctf for id:%s. %s" % (ctfId, exc))
-                    self._freqResol[ctfId] = 9999
 
     def initializeRejDict(self):
         self.discDict = {'defocus': 0,
                          'astigmatism': 0,
+                         'astigmatismPer': 0,
                          'singleResolution': 0,
                          '_xmipp_ctfCritFirstZero': 0,
                          '_xmipp_ctfCritfirstZeroRatio': 0,
@@ -585,6 +570,15 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
     def selectCtfStep(self, ctfId):
         # Depending on the flags selected by the user, we set the values of
         # the params to compare with
+
+        doneFn = self._getCTFDone(ctfId)
+
+        if self.isContinued() and self._isCTFDone(ctfId):
+            self.info("Skipping CTF with ID: %s, seems to be done" % ctfId)
+            return
+
+        # Clean old finished files
+        pwutils.cleanPath(doneFn)
 
         def compareValue(ctf, label, comp, crit):
             """ Returns True if the ctf.label NOT complain the crit by comp
@@ -605,19 +599,15 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
         minDef, maxDef = self._getDefociValues()
         maxAstig = self._getMaxAstisgmatism()
+        maxAstigPer = self._getMaxAstigmatismPer()
         minResol = self._getMinResol()
 
-        # TODO: Change this way to get the ctf.
-        ctf = self.inputCTF.get()[ctfId]
-
-        # FIXME: this is a workaround to skip errors, but it should be treat at checkNewInput
-        if ctf is None:
-            return
-
+        ctf = self.allCtf1.get(ctfId)
 
         defocusU = ctf.getDefocusU()
         defocusV = ctf.getDefocusV()
         astigm = abs(defocusU - defocusV)
+        astigmPer = abs(defocusU - defocusV)/((defocusU+defocusV)/2)
         resol = self._getCtfResol(ctf)
 
         defRangeCrit = (defocusU < minDef or defocusU > maxDef or
@@ -629,11 +619,15 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         if astigCrit:
             self.discDict['astigmatism'] += 1
 
+        astigPer = (astigmPer > maxAstigPer)
+        if astigPer:
+            self.discDict['astigmatismPer'] += 1
+
         singleResolCrit = resol > minResol
         if singleResolCrit:
             self.discDict['singleResolution'] += 1
 
-        firstCondition = defRangeCrit or astigCrit or singleResolCrit
+        firstCondition = defRangeCrit or astigCrit or singleResolCrit or astigPer
 
         consResolCrit = False
         if self.calculateConsensus:
@@ -685,7 +679,11 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
         for k, v in self.discDict.items():
             setattr(self, "rejBy"+k, Integer(v))
+
         self._store()
+        # Mark this ctf as finished
+        open(doneFn, 'w').close()
+
 
     def _readDoneList(self):
         """ Read from a file the id's of the items that have been done. """
@@ -700,11 +698,19 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
     def _getAllDone(self):
         return self._getExtraPath('DONE_all.TXT')
 
-    def _writeDoneList(self, partList):
+    def _writeDoneList(self, idList):
         """ Write to a text file the items that have been done. """
         with open(self._getAllDone(), 'a') as f:
-            for part in partList:
-                f.write('%d\n' % part.getObjId())
+            for id in idList:
+                f.write('%d\n' % id)
+
+    def _isCTFDone(self, id):
+        """ A mic is done if the marker file exists. """
+        return os.path.exists(self._getCTFDone(id))
+
+    def _getCTFDone(self, id):
+        """ Return the file that is used as a flag of termination. """
+        return self._getExtraPath('DONE', 'ctf_%06d.TXT' % id)
 
     def _citations(self):
         return ['Marabini2014a']
@@ -729,7 +735,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             obj = getattr(self, "rejBy%s" % label, Integer(0))
             number = obj.get()
             return "" if number == 0 else "  (%d discarded)" % number
-        if any([self.useDefocus, self.useAstigmatism, self.useResolution]):
+        if any([self.useDefocus, self.useAstigmatism, self.useResolution, self.useAstigmatismPercentage]):
             message.append("*General Criteria*:")
         if self.useDefocus:
             message.append(" - _Defocus_. Range: %.0f - %.0f %s"
@@ -740,6 +746,11 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             message.append(" - _Astigmatism_. Threshold: %.0f %s"
                            % (self.astigmatism,
                               addDiscardedStr('astigmatism')))
+
+        if self.useAstigmatismPercentage:
+            message.append(" - _AstigmatismPer_. Threshold: %.3f %s"
+                           % (self.astigmatismPer,
+                              addDiscardedStr('astigmatismPer')))
 
         if self.useResolution:
             message.append(" - _Resolution_. Threshold: %.0f %s"
@@ -827,17 +838,6 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         else:
             return 0
 
-    # def _readDoneListDiscarded(self):
-    #     """ Read from a text file the id's of the items
-    #     that have been done. """
-    #     DiscardedFile = self._getDiscardedDone()
-    #     DiscardedList = []
-    #     # Check what items have been previously done
-    #     if os.path.exists(DiscardedFile):
-    #         with open(DiscardedFile) as f:
-    #             DiscardedList += [int(line.strip()) for line in f]
-    #     return DiscardedList
-
     def _readCertainDoneList(self, label):
         """ Read from a text file the id's of the items
         that have been done. """
@@ -854,12 +854,6 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         doneFile = self._getCertainDone(label)
         with open(doneFile, 'a') as f:
             f.write('%d\n' % ctfId)
-
-    # def _writeDoneListAccepted(self, ctfId):
-    #     """ Write to a text file the items that have been done. """
-    #     AcceptedFile = self._getAcceptedDone()
-    #     with open(AcceptedFile, 'a') as f:
-    #         f.write('%d\n' % ctfId)
 
     def _getCertainDone(self, label):
         return self._getExtraPath('DONE_'+label+'.TXT')
@@ -905,6 +899,12 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             return 0, 1000000
         else:
             return self.minDefocus.get(), self.maxDefocus.get()
+
+    def _getMaxAstigmatismPer(self):
+        if not self.useAstigmatismPercentage:
+            return 0.1
+        else:
+            return self.astigmatismPer.get()
 
     def _getMaxAstisgmatism(self):
         if not self.useAstigmatism:
