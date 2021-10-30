@@ -26,17 +26,21 @@
 # *
 # **************************************************************************
 
+from xmipp3.convert import setXmippAttribute
+
+from pwem import emlib
 from pwem.protocols import EMProtocol
+from pwem.objects import Class3D
+
 from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam, FloatParam
 from pyworkflow.object import List, Integer, String
-from pwem.objects import Class3D
 from scipy.cluster import hierarchy
-import multiprocessing as mp
 
 import math
+import pickle
+import multiprocessing as mp
 import numpy as np
 import matplotlib.pyplot as plt
-import pickle
 
 
 class XmippProtConsensusClasses3D(EMProtocol):
@@ -67,17 +71,13 @@ class XmippProtConsensusClasses3D(EMProtocol):
                       label='Number of random classifications',
                       help='Number of random classifications used for computing the significance of the actual '
                            'clusters. 0 for skipping this step')
-        form.addParam('thresholdPercentile', FloatParam, default=95,
-                      label='Significance percentile',
-                      help='Percentile of the random classification cluster size used as a threshold to '
-                           'determine the significance of the actual classification')
+        form.addParallelSection(threads=mp.cpu_count(), mpi=0)
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
         """ Inserting one step for each intersections analysis """
         self._insertFunctionStep('compareFirstStep')
 
-        # if len(self.inputMultiClasses) > 2:  #TODO remove as redundant
         for i in range(2, len(self.inputMultiClasses)):
             self._insertFunctionStep('compareOthersStep', i)
 
@@ -86,7 +86,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         if self.doConsensus.get() == 0:
             self._insertFunctionStep('cossEnsembleStep')
-            self._insertFunctionStep('findElbowsStep')
+            self._insertFunctionStep('findElbowsStep')  # TODO maybe skip if using manual clustering settings
             self._insertFunctionStep('generateVisualizationsStep')
 
         self._insertFunctionStep('createOutputStep')
@@ -236,8 +236,11 @@ class XmippProtConsensusClasses3D(EMProtocol):
         self.n3 = Integer(n3)
 
         # Parse all elbow info to pass to other functions
-        self.elbows = [[elbow_idx_origin, 'origin'], [elbow_idx_angle, 'angle'],
-                       [elbow_idx_pll, 'pll']]
+        self.elbows = {
+            'origin': elbow_idx_origin,
+            'angle': elbow_idx_angle,
+            'pll': elbow_idx_pll
+        }
 
         # Save relevant data for analysis
         self.saveOutputs()
@@ -248,7 +251,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         # Obtain the execution parameters
         numExec = self.numRand.get()
-        percentile = self.thresholdPercentile.get()
 
         # Obtain the group sizes
         clusterLengths = self.getClusterLengths(self.inputMultiClasses)
@@ -257,19 +259,19 @@ class XmippProtConsensusClasses3D(EMProtocol):
         numParticles = sum(clusterLengths[0])
 
         # Repeatedly obtain a consensus of a random classification of same size
-        threadPool = mp.Pool(mp.cpu_count())
+        threadPool = mp.Pool(int(self.numberOfThreads))
         consensusSizes = threadPool.starmap(
             random_consensus_sizes,
             [(clusterLengths,  numParticles) for i in range(numExec)]
         )
         threadPool.close()
 
-        # Obtain the size threshold using the given percentile
+        # Store as a sorted list
         consensusSizes = reshape_matrix_to_list(consensusSizes)
-        threshold = np.percentile(consensusSizes, percentile)
+        consensusSizes.sort()
 
-        # Store the results
-        self.randomThreshold = Integer(threshold)
+        # Store the result
+        self.randomConsensusSizes = consensusSizes
 
     def generateVisualizationsStep(self):
         """ Generates visual data related to the ensemble processing"""
@@ -285,44 +287,39 @@ class XmippProtConsensusClasses3D(EMProtocol):
         # Store the data
         self._store()
 
-        # Check user selected number of clusters or elbows
+        # Shorthand for user selected number of clusters or elbows
         numClusters = self.numClust.get()
 
-        # If consensus not done save just merge if not specified number of clusters
-        # or elbow determined clusters
-        if self.doConsensus.get() != 0:
-            # No consensus, only output intersections
-            outputClasses = self.createOutput3Dclass(self.intersectionList, 'all')
-            self._defineOutputs(outputClasses=outputClasses)
+        # Always output all the initial intersections
+        outputClassesInitial = self.createOutput3Dclass(self.intersectionList, 'initial')
+        self._defineOutputs(outputClasses_initial=outputClassesInitial)
 
-            # Establish output relations
-            for item in self.inputMultiClasses:
-                self._defineSourceRelation(item, outputClasses)
+        for item in self.inputMultiClasses:
+            self._defineSourceRelation(item, outputClassesInitial)
 
-        elif numClusters > 0:
-            # Use manual cluster count
-            i = self.ensembleNumClusters.index(numClusters)
-            outputClasses = self.createOutput3Dclass(self.ensembleIntersectionLists[i], 'numClusters')
-            self._defineOutputs(outputClasses=outputClasses)
+        # Check if the ensemble step has been performed
+        if hasattr(self, 'ensembleIntersectionLists'):
+            # Depending on the user's selection, select the elbows or a manual selection
+            if numClusters > 0:
+                # Use manual cluster count
+                i = self.ensembleNumClusters.index(numClusters)
+                outputClasses = self.createOutput3Dclass(self.ensembleIntersectionLists[i], 'numClusters')
+                self._defineOutputs(outputClasses=outputClasses)
 
-            # Establish output relations
-            for item in self.inputMultiClasses:
-                self._defineSourceRelation(item, outputClasses)
+                # Establish output relations
+                for item in self.inputMultiClasses:
+                    self._defineSourceRelation(item, outputClasses)
 
-        else:
-            # Automatically select cluster count based on elbows
-            outputClasses_origin = self.createOutput3Dclass(self.ensembleIntersectionLists[self.elbows[0][0]], self.elbows[0][1])
-            outputClasses_angle = self.createOutput3Dclass(self.ensembleIntersectionLists[self.elbows[1][0]], self.elbows[1][1])
-            outputClasses_pll = self.createOutput3Dclass(self.ensembleIntersectionLists[self.elbows[2][0]], self.elbows[2][1])
-            self._defineOutputs(outputClassesOrigin=outputClasses_origin,
-                                outputClassesAngle=outputClasses_angle,
-                                outputClassesPll=outputClasses_pll)
+            else:
+                # Automatically select cluster count based on elbows
+                for key, value in self.elbows.items():
+                    outputClassesName = 'outputClasses_' + key
+                    outputClasses = self.createOutput3Dclass(self.ensembleIntersectionLists[value], key)
+                    self._defineOutputs(**{outputClassesName: outputClasses})
 
-            # Establish output relations
-            for item in self.inputMultiClasses:
-                self._defineSourceRelation(item, outputClasses_origin)
-                self._defineSourceRelation(item, outputClasses_angle)
-                self._defineSourceRelation(item, outputClasses_pll)
+                    # Establish output relations
+                    for item in self.inputMultiClasses:
+                        self._defineSourceRelation(item, outputClasses)
 
     # --------------------------- INFO functions -------------------------------
     def _summary(self):
@@ -333,9 +330,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
             summary.append('origin:  '+str(self.n1))
             summary.append('angle: '+str(self.n2))
             summary.append('pll: '+str(self.n3))
-
-        if hasattr(self, 'randomThreshold'):
-            summary.append('Significant consensus size: ' + str(self.randomThreshold))
 
         return summary
 
@@ -352,8 +346,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
             errors = ["Too many clusters selected for output"]
         elif self.numClust.get() < -1 or self.numClust.get() == 0:
             errors = ["Invalid number of clusters selected"]
-        elif self.numRand.get() < 0:
-            errors = ["Random classification count must be positive"]
 
         return errors
 
@@ -513,9 +505,9 @@ class XmippProtConsensusClasses3D(EMProtocol):
         plt.plot(numClusters, obValues)
 
         # Show elbows as scatter points
-        for elbow_idx, name in elbows:
-            label = name + ': ' + str(numClusters[elbow_idx])
-            plt.scatter([numClusters[elbow_idx]], [obValues[elbow_idx]], label=label)
+        for key, value in elbows.items():
+            label = key + ': ' + str(numClusters[value])
+            plt.scatter([numClusters[value]], [obValues[value]], label=label)
 
         # Configure the figure
         plt.legend()
@@ -534,6 +526,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         for classItem in clustering:
             # Shorthands for dictionary items and member variables
+            particleCount = classItem['particleCount']
             particleIds = classItem['particleIds']
             classificationIdx = classItem['classificationIndex']
             clusterId = classItem['clusterId']
@@ -545,9 +538,17 @@ class XmippProtConsensusClasses3D(EMProtocol):
             # newClass.copyInfo(cluster)
             newClass.setAcquisition(cluster.getAcquisition())
             newClass.setRepresentative(cluster.getRepresentative())
-            outputClasses.append(newClass)
+
+            # Calculate the size percentile for the
+            percentile = math.nan
+            if hasattr(self, 'randomConsensusSizes'):
+                percentile = find_percentile(self.randomConsensusSizes, particleCount)
+
+            print(emlib.label2Str(emlib.MDL_CLASS_COUNT_PERCENTILE))
+            setXmippAttribute(newClass, emlib.MDL_CLASS_COUNT_PERCENTILE, percentile)
 
             # Add all the particle IDs
+            outputClasses.append(newClass)
             enabledClass = outputClasses[newClass.getObjId()]
             enabledClass.enableAppend()
             for particleId in particleIds:
@@ -556,6 +557,45 @@ class XmippProtConsensusClasses3D(EMProtocol):
             outputClasses.update(enabledClass)
 
         return outputClasses
+
+
+######################################
+#        Helper functions            #
+######################################
+
+def reshape_matrix_to_list(m):
+    """ Given a list of lists, converts it into a list with all its elements """
+    result = []
+    for row in m:
+        result += row
+
+    return result
+
+
+def build_intersection_data(intersection, classificationIdx, clusterId, clusterSize):
+    return {
+        'particleCount': len(intersection),
+        'particleIds': intersection,
+        'classificationIndex': classificationIdx,
+        'clusterId': clusterId,
+        'clusterSize': clusterSize
+    }
+
+def is_sorted(values):
+    """ Returns true if a list is sorted or empty """
+    return all(values[i] <= values[i+1] for i in range(len(values)-1))
+
+
+def find_percentile(data, value):
+    assert(is_sorted(data))  # In order to iterate it in ascending order
+
+    # Count the number of elements that are smaller than the given value
+    i = 0
+    while i < len(data) and data[i] < value:
+        i += 1
+
+    # Convert it into a percentage
+    return float(i) / float(len(data))
 
 
 ######################################
@@ -586,22 +626,6 @@ def create_nsubset(c1, c2):
     c2 = set(c2)
     return c1.intersection(c2)
 
-def reshape_matrix_to_list(m):
-    """ Given a list of lists, converts it into a list with all its elements """
-    result = []
-    for row in m:
-        result += row
-    return result
-
-
-def build_intersection_data(intersection, classificationIdx, clusterId, clusterSize):
-    return {
-        'particleCount': len(intersection),
-        'particleIds': intersection,
-        'classificationIndex': classificationIdx,
-        'clusterId': clusterId,
-        'clusterSize': clusterSize
-    }
 
 def build_simvector(n, cs):
     """Build the similarity vector of n subset with each c subset in cs
