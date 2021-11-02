@@ -82,11 +82,11 @@ class XmippProtVolumeDeformZernike3D(ProtAnalysis3D):
     def _createFilenameTemplates(self):
         """ Centralize how files are called """
         myDict = {
-            'fnRefVol': self._getExtraPath('ref_volume.vol'),
-            'fnInputVol': self._getExtraPath('input_volume.vol'),
-            'fnInputFilt': self._getExtraPath('input_volume_filt.vol'),
-            'fnRefFilt': self._getExtraPath('ref_volume_filt.vol'),
-            'fnOutVol': self._getExtraPath('vol1DeformedTo2.vol')
+            'fnRefVol': self._getExtraPath('ref_volume.mrc'),
+            'fnInputVol': self._getExtraPath('input_volume.mrc'),
+            'fnInputFilt': self._getExtraPath('input_volume_filt.mrc'),
+            'fnRefFilt': self._getExtraPath('ref_volume_filt.mrc'),
+            'fnOutVol': self._getExtraPath('vol1DeformedTo2.mrc')
                  }
         self._updateFilenamesDict(myDict)
 
