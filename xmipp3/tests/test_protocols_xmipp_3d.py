@@ -1537,14 +1537,21 @@ class TestXmippShiftParticlesAndVolume(TestXmippBase):
 
         protShiftParticles = self.newProtocol(XmippProtShiftParticles,
                                               inputParticles=protCreateGallery.outputReprojections,
-                                              x=2, y=3, z=4)
+                                              xin=2.0, yin=3.0, zin=4.0)
         self.launchProtocol(protShiftParticles)
         self.assertIsNotNone(protShiftParticles.getFiles(),
                              "There was a problem with shift particles")
 
+        protCreateMask = self.newProtocol(XmippProtCreateMask3D,
+                                          inputVolume=protImportVol.outputVolume,
+                                          threshold=0.1)
+        self.launchProtocol(protCreateMask)
+        self.assertIsNotNone(protCreateMask.getFiles(),
+                             "There was a problem with the 3D mask ")
+
         protShiftParticlesCenterOfMass = self.newProtocol(XmippProtShiftParticles,
                                                           inputParticles=protCreateGallery.outputReprojections,
-                                                          inputVol=protImportVol.outputVolume,
+                                                          inputMask=protCreateMask.outputMask,
                                                           option=False)
         self.launchProtocol(protShiftParticlesCenterOfMass)
         self.assertIsNotNone(protShiftParticlesCenterOfMass.getFiles(),

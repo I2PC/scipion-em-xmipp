@@ -26,6 +26,8 @@
 # *
 # **************************************************************************
 
+from pwem.emlib.image import ImageHandler as ih
+from pwem.objects import Volume
 from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, EnumParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 import pyworkflow.object as pwobj
@@ -49,15 +51,15 @@ class XmippProtShiftParticles(EMProtocol):
         form.addParam('option', BooleanParam, label='Select position in volume?', default='True',
                       help='Select the position where the particles will be shifted in a volume displayed in a wizard.')
         form.addParam('inputVol', PointerParam, pointerClass='Volume', label="Volume", allowsNull=True,
-                      conditon='option', help='Volume to select the point (by clicking in the wizard for selecting the '
-                                              'new center) that will be the new center of the particles.')
-        form.addParam('x', FloatParam, label="x", condition='option',
+                      condition='option', help='Volume to select the point (by clicking in the wizard for selecting the'
+                                               ' new center) that will be the new center of the particles.')
+        form.addParam('xin', FloatParam, label="x", condition='option',
                       help='Use the wizard to select clicking in the volume the new center for the shifted particles')
-        form.addParam('y', FloatParam, label="y", condition='option')
-        form.addParam('z', FloatParam, label="z", condition='option')
-        # form.addParam('inputMask', PointerParam, pointerClass='VolumeMask', label="Mask 3D", allowsNull=True,
-        #               condition='not option', help='3D mask to compute the center of mass, the particles will be '
-        #                                            'shifted to the computed center of mass')
+        form.addParam('yin', FloatParam, label="y", condition='option')
+        form.addParam('zin', FloatParam, label="z", condition='option')
+        form.addParam('inputMask', PointerParam, pointerClass='VolumeMask', label="Volume mask", allowsNull=True,
+                      condition='not option', help='3D mask to compute the center of mass, the particles will be '
+                                                   'shifted to the computed center of mass')
         form.addParam('boxSizeBool', BooleanParam, label='Use original box size for the shifted particles?',
                       default='True', help='Use input particles box size for the shifted particles.')
         form.addParam('boxSize', IntParam, label='Final box size', condition='not boxSizeBool',
@@ -85,16 +87,22 @@ class XmippProtShiftParticles(EMProtocol):
         centermd = self._getExtraPath("center_particles.xmd")
         args = '-i "%s" -o "%s" ' % (self._getExtraPath("input_particles.xmd"), centermd)
         if self.option.get():
-            x = self.x.get()
-            y = self.y.get()
-            z = self.z.get()
-            args += '--shift_to %f %f %f ' % (x, y, z)
+            self.x = self.xin.get()
+            self.y = self.yin.get()
+            self.z = self.zin.get()
         else:
-            fnvol = self.inputVol.get().getFileName()
+            fnvol = self.inputMask.get().getFileName()
             if fnvol.endswith('.mrc'):
                 fnvol += ':mrc'
-            args += '--shift_to --center_of_mass %s' % fnvol
+            vol = Volume()
+            vol.setFileName(fnvol)
+            vol = ih().read(vol.getFileName())
+            masscenter = vol.centerOfMass()
+            self.x = masscenter[0]
+            self.y = masscenter[1]
+            self.z = masscenter[2]
 
+        args += '--shift_to %f %f %f ' % (self.x, self.y, self.z)
         program = "xmipp_transform_geometry"
         if not self.interp.get():
             interp = 'linear'
@@ -123,9 +131,9 @@ class XmippProtShiftParticles(EMProtocol):
         outputSet.copyItems(inputParticles, updateItemCallback=self._updateItem,
                             itemDataIterator=md.iterRows(outputmd))
         self._defineOutputs(outputParticles=outputSet)
-        self._defineOutputs(shiftX=pwobj.Float(self.x.get()),
-                            shiftY=pwobj.Float(self.y.get()),
-                            shiftZ=pwobj.Float(self.z.get()))
+        self._defineOutputs(shiftX=pwobj.Float(self.x),
+                            shiftY=pwobj.Float(self.y),
+                            shiftZ=pwobj.Float(self.z))
         self._defineSourceRelation(inputParticles, outputSet)
 
     # --------------------------- INFO functions --------------------------------------------
@@ -144,8 +152,7 @@ class XmippProtShiftParticles(EMProtocol):
         return summary
 
     def _methods(self):
-        return ["%d particles shifted to x = %d, y = %d, z = %d." % (self.inputParticles.get().getSize(),
-                                                                     self.x.get(), self.y.get(), self.z.get())]
+        return []
 
     def _validate(self):
         for part in self.inputParticles.get().iterItems():
