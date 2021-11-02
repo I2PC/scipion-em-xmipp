@@ -75,9 +75,6 @@ class XmippProtShiftVolume(EMProtocol):
             shiftx = self.x.get()
             shifty = self.y.get()
             shiftz = self.z.get()
-        # program = "xmipp_shift_volume"
-        # args = '-i %s -o %s -x %f -y %f -z %f' % \
-        #        (self.inputVol.get().getFileName(), self._getExtraPath("shift_volume.mrc"), shiftx, shifty, shiftz)
         program = "xmipp_transform_geometry"
         args = '-i %s -o %s --shift %f %f %f --dont_wrap' % \
                (fnVol, self._getExtraPath("shift_volume.mrc"), shiftx, shifty, shiftz)
