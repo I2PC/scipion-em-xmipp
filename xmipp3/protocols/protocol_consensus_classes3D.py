@@ -158,20 +158,17 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
     def cossEnsembleStep(self, numClusters=1):
         """ Ensemble clustering by COSS that merges interactions of clusters based
-                        on entropy minimization """
+            on entropy minimization """
         # Obtain the classification as a list of list of sets
         classifications = self.getClusterParticleIds(self.inputMultiClasses)
 
         # Initialize with values before merging
         allIntersections = [self.intersectionList]  # Stores the intersections of all iterations
-        allIntersectionParticleIds = [self.getIntersectionParticleIds(self.intersectionList)]
         allObValues = [0.0]
+        intersectionParticleIds = self.getIntersectionParticleIds(self.intersectionList)
 
         # Iterations of merging clusters
         while len(allIntersections[-1]) > numClusters:
-            # Some shorthands
-            intersectionParticleIds = allIntersectionParticleIds[-1]  # List of sets with the particle ids
-
             # Reshape the cluster matrix (list of sets instead of list of list of sets)
             allClusters = reshape_matrix_to_list(classifications)
 
@@ -196,23 +193,21 @@ class XmippProtConsensusClasses3D(EMProtocol):
             mergePair = keys[values.index(minObValue)]
             mergedIntersections = merge_subsets(allIntersections[-1], mergePair)
 
+            # Update the particle ids for the next iteration
+            intersectionParticleIds = self.getIntersectionParticleIds(mergedIntersections)
+
             # Save the data for the next iteration
             allIntersections.append(mergedIntersections)
-            allIntersectionParticleIds.append(self.getIntersectionParticleIds(mergedIntersections))
             allObValues.append(minObValue)
-
-        # Get number of clusters at each step
-        allNumClusters = n_clusters(allIntersectionParticleIds)
 
         # Reverse objective values so they go from largest to smallest
         self.ensembleIntersectionLists = list(reversed(allIntersections))
-        self.ensembleNumClusters = list(reversed(allNumClusters))
         self.ensembleObValues = list(reversed(allObValues))
 
     def findElbowsStep(self):
         """" Finds elbows of the COSS ensemble process """
         # Shorthands for variables
-        numClusters = self.ensembleNumClusters
+        numClusters = [i for i in range(1, 1+len(self.ensembleIntersectionLists))]
         obValues = self.ensembleObValues
 
         # Get profile log likelihood for log of objective values
@@ -220,7 +215,8 @@ class XmippProtConsensusClasses3D(EMProtocol):
         pll = full_profile_log_likelihood(np.log(obValues[:-1]))
 
         # Normalize clusters and obValues
-        normc, normo = normalize(numClusters, obValues)
+        normc = normalize(numClusters)
+        normo = normalize(obValues)
 
         # Find different kinds of elbows
         elbow_idx_origin = find_closest_point_to_origin(normc, normo)
@@ -262,7 +258,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         threadPool = mp.Pool(int(self.numberOfThreads))
         consensusSizes = threadPool.starmap(
             random_consensus_sizes,
-            [(clusterLengths,  numParticles) for i in range(numExec)]
+            [(clusterLengths, numParticles) for i in range(numExec)]
         )
         threadPool.close()
 
@@ -302,13 +298,14 @@ class XmippProtConsensusClasses3D(EMProtocol):
             # Depending on the user's selection, select the elbows or a manual selection
             if numClusters > 0:
                 # Use manual cluster count
-                i = self.ensembleNumClusters.index(numClusters)
+                i = min(numClusters, len(self.ensembleIntersectionLists)) - 1
                 outputClasses = self.createOutput3Dclass(self.ensembleIntersectionLists[i], 'numClusters')
                 self._defineOutputs(outputClasses=outputClasses)
 
                 # Establish output relations
                 for item in self.inputMultiClasses:
                     self._defineSourceRelation(item, outputClasses)
+
 
             else:
                 # Automatically select cluster count based on elbows
@@ -365,7 +362,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         """ Save the data of the objective function """
         savepath = self._getExtraPath('ObjectiveFData.pkl')
         with open(savepath, 'wb') as f:
-            data = [self.ensembleNumClusters, self.ensembleObValues]
+            data = [[i for i in range(1, 1+len(self.ensembleObValues))], self.ensembleObValues]
             pickle.dump(data, f)
 
     def saveElbowIndex(self):
@@ -469,7 +466,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
             linkage_matrix[i, 0] = sets_merged[0]  # set id of merged set
             linkage_matrix[i, 1] = sets_merged[1]  # set id of merged set
             linkage_matrix[i, 2] = obvalues[i+1]   # objective function as distance
-            linkage_matrix[i, 3] = n1+n2  # total number of oiginal sets
+            linkage_matrix[i, 3] = n1+n2  # total number of original sets
 
             # Change set ids to reflect new set of clusters
             set_ids = np.delete(set_ids, np.argwhere(set_ids == sets_merged[0]))
@@ -494,7 +491,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         """ Plots the objective function and elbows """
 
         # Shorthands for some variables
-        numClusters = self.ensembleNumClusters
+        numClusters = [i for i in range(1, 1+len(self.ensembleIntersectionLists))]
         obValues = self.ensembleObValues
         elbows = self.elbows
 
@@ -581,6 +578,7 @@ def build_intersection_data(intersection, classificationIdx, clusterId, clusterS
         'clusterSize': clusterSize
     }
 
+
 def is_sorted(values):
     """ Returns true if a list is sorted or empty """
     return all(values[i] <= values[i+1] for i in range(len(values)-1))
@@ -598,21 +596,20 @@ def find_percentile(data, value):
     return float(i) / float(len(data))
 
 
+
 ######################################
 # COSS functions. See notes 8/4/2019 #
 ######################################
 
 
 def nc_similarity(n, c):
-    """Return the similarity of intersection subset (n) with class subset (c)
-    """
+    """ Return the similarity of intersection subset (n) with class subset (c) """
     inter = len(n.intersection(c))
     return inter / len(n)
 
 
 def entropy(p):
-    """Return the entropy of the elements in a vector
-    """
+    """ Return the entropy of the elements in a vector """
     H = 0
     for i in range(len(p)):
         H += p[i] * math.log(p[i], 2)
@@ -620,16 +617,14 @@ def entropy(p):
 
 
 def create_nsubset(c1, c2):
-    """Return the intersection of two sets
-    """
+    """ Return the intersection of two sets """
     c1 = set(c1)
     c2 = set(c2)
     return c1.intersection(c2)
 
 
 def build_simvector(n, cs):
-    """Build the similarity vector of n subset with each c subset in cs
-    """
+    """ Build the similarity vector of n subset with each c subset in cs """
     v = []
     for c in cs:
         v.append(nc_similarity(n, c))
@@ -637,9 +632,8 @@ def build_simvector(n, cs):
 
 
 def calc_distribution(ns, indexs=[]):
-    """Return the vector of distribution (p) from the n subsets in ns
-    If two indexs are given, these two subsets are merged in the distribution
-    """
+    """ Return the vector of distribution (p) from the n subsets in ns
+        If two indexs are given, these two subsets are merged in the distribution """
     p = np.array([])
     if len(indexs) == 2:
         # Merging two subsets
@@ -656,8 +650,7 @@ def calc_distribution(ns, indexs=[]):
 
 
 def vectors_similarity(v1, v2):
-    """Return the cosine similarity of two vectors that is used as similarity
-    """
+    """ Return the cosine similarity of two vectors that is used as similarity """
     return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
 
 
@@ -699,11 +692,10 @@ def ob_function(ns, indexs, vs, eps=0.01):
 
 
 def clusterings_as_sets(rs, nclust, Y):
-    """Creating class clusters: list of lists(clusterings) of sets
-    (each set is a cluster with the names of objects)
-    From a list of lists(clusterings) where the position is the object
-    and the value the cluster
-    """
+    """ Creating class clusters: list of lists(clusterings) of sets
+        (each set is a cluster with the names of objects)
+        From a list of lists(clusterings) where the position is the object
+        and the value the cluster """
     cs = []
     for _ in range(len(rs)):
         cs.append([set() for _ in range(nclust)])
@@ -715,8 +707,8 @@ def clusterings_as_sets(rs, nclust, Y):
 
 
 def intersection_clusters(cs):
-    """Return the intersections between the clusters of different clusterings
-    """
+    """ Return the intersections between the clusters of
+        different clusterings """
     us = []
     for c in cs:
         if len(us) == 0:
@@ -779,12 +771,9 @@ def n_clusters(all_coss_us):
     return nclusters
 
 
-def normalize(x, y):
+def normalize(x):
     """Normalize values to range 0 to 1"""
-    normx = (x-np.min(x))/(np.max(x)-np.min(x))
-    normy = (y-np.min(y))/(np.max(y)-np.min(y))
-
-    return normx, normy
+    return (x-np.min(x))/(np.max(x)-np.min(x))
 
 
 def find_closest_point_to_origin(x, y):
@@ -797,9 +786,9 @@ def find_closest_point_to_origin(x, y):
 
 
 def find_elbow_angle(x, y):
-    """Find the angle the slope of the function makes and
-    return the point at which the slope changes from > 45º
-    to <45º"""
+    """ Find the angle the slope of the function makes and
+        return the point at which the slope changes from > 45º
+        to <45º"""
     slopes = np.diff(y)/np.diff(x)
     angles = np.arctan(-slopes)
     for i in range(len(angles)):
@@ -844,12 +833,13 @@ def profile_log_likelihood(d, q, theta1, theta2):
 
 def full_profile_log_likelihood(d):
     """ Calculate profile log likelihood for each partition
-    of the data """
+        of the data """
     pll = []
     for q in range(1, len(d)):
         theta1, theta2 = mle_estimates(d, q)
         pll.append(profile_log_likelihood(d, q, theta1, theta2))
     return pll
+
 
 def coss_random_classification(C, N):
     """ Randomly classifies N element indices into groups with
@@ -875,7 +865,7 @@ def coss_random_classification(C, N):
 
 def coss_consensus(Cp):
     """ Computes the groups of elements that are equally
-    classified for all the classifications of Cp """
+        classified for all the classifications of Cp """
 
     assert(len(Cp) > 0)  # There should be at least one classification
 
@@ -901,6 +891,11 @@ def coss_consensus(Cp):
 
 
 def random_consensus_sizes(C, N):
+    """ Obtains the lengths of the elements of a consensus
+        of a random classification of sizes defined in C of
+        N elements. C is a list of lists, where de sum of each
+        row must equal N """
+
     # Create random partitions of same size
     randomClassification = coss_random_classification(C, N)
 
