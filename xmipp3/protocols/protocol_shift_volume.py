@@ -43,9 +43,8 @@ class XmippProtShiftVolume(EMProtocol):
         form.addParam('inputVol', PointerParam, pointerClass='Volume', label="Volume", help='Volume to shift')
         form.addParam('shiftBool', BooleanParam, label='Use the same shifts as for the particles?', default='True',
                       help='Use output shifts of protocol "shift particles" which should be executed previously')
-        form.addParam('xp', FloatParam, allowsPointers=True, label="shift x", condition='shiftBool', allowsNull=True)
-        form.addParam('yp', FloatParam, allowsPointers=True, label="shift y", condition='shiftBool', allowsNull=True)
-        form.addParam('zp', FloatParam, allowsPointers=True, label="shift z", condition='shiftBool', allowsNull=True)
+        form.addParam('inputProtocol', PointerParam, pointerClass='XmippProtShiftParticles', allowsNull=True,
+                      label="Shift particles protocol", condition='shiftBool')
         form.addParam('x', FloatParam, label="x", condition='not shiftBool', allowsNull=True)
         form.addParam('y', FloatParam, label="y", condition='not shiftBool', allowsNull=True)
         form.addParam('z', FloatParam, label="z", condition='not shiftBool', allowsNull=True)
@@ -62,22 +61,23 @@ class XmippProtShiftVolume(EMProtocol):
     # --------------------------- STEPS functions --------------------------------------------
     def shiftStep(self):
         fnVol = self.inputVol.get().getFileName()
-        if not self.boxSizeBool.get():
+        if not self.boxSizeBool:
             box = self.boxSize.get()
             self.runJob('xmipp_transform_window', '-i "%s" -o "%s" --size %d %d %d' %
                         (fnVol, self._getExtraPath("resized_volume.mrc"), box, box, box))
             fnVol = self._getExtraPath("resized_volume.mrc")
         if self.shiftBool:
-            shiftx = self.xp.get()
-            shifty = self.yp.get()
-            shiftz = self.zp.get()
+            shiftprot = self.inputProtocol.get()
+            self.shiftx = shiftprot.shiftX.get()
+            self.shifty = shiftprot.shiftY.get()
+            self.shiftz = shiftprot.shiftZ.get()
         else:
-            shiftx = self.x.get()
-            shifty = self.y.get()
-            shiftz = self.z.get()
+            self.shiftx = self.x.get()
+            self.shifty = self.y.get()
+            self.shiftz = self.z.get()
         program = "xmipp_transform_geometry"
         args = '-i %s -o %s --shift %f %f %f --dont_wrap' % \
-               (fnVol, self._getExtraPath("shift_volume.mrc"), shiftx, shifty, shiftz)
+               (fnVol, self._getExtraPath("shift_volume.mrc"), self.shiftx, self.shifty, self.shiftz)
         self.runJob(program, args)
 
     def createOutputStep(self):
@@ -86,9 +86,9 @@ class XmippProtShiftVolume(EMProtocol):
         out_vol.setSamplingRate(in_vol.getSamplingRate())
         out_vol.setFileName(self._getExtraPath("shift_volume.mrc"))
         self._defineOutputs(outputVolume=out_vol)
-        self._defineOutputs(shiftX=pwobj.Float(self.x.get()),
-                            shiftY=pwobj.Float(self.y.get()),
-                            shiftZ=pwobj.Float(self.z.get()))
+        self._defineOutputs(shiftX=pwobj.Float(self.shiftx),
+                            shiftY=pwobj.Float(self.shifty),
+                            shiftZ=pwobj.Float(self.shiftz))
         self._defineSourceRelation(in_vol, out_vol)
 
     # --------------------------- INFO functions --------------------------------------------
@@ -98,26 +98,10 @@ class XmippProtShiftVolume(EMProtocol):
             summary.append("Output volume not ready yet.")
         else:
             if self.shiftBool:
-                shiftx = self.xp.get()
-                shifty = self.yp.get()
-                shiftz = self.zp.get()
+                summary.append("Volume shift as particles in %s" % self.inputProtocol.get())
             else:
-                shiftx = self.x.get()
-                shifty = self.y.get()
-                shiftz = self.z.get()
-            summary.append("Shifts:\nx: %s\ny: %s\nz: %s" % (shiftx, shifty, shiftz))
+                summary.append("User defined shift")
         return summary
 
     def _methods(self):
-        methods = []
-        if self.shiftBool:
-            shiftx = self.xp.get()
-            shifty = self.yp.get()
-            shiftz = self.zp.get()
-        else:
-            shiftx = self.x.get()
-            shifty = self.y.get()
-            shiftz = self.z.get()
-        methods.append("%s volume shifted to x = %d, y = %d, z = %d." % (self.getObjectTag('outputVolume'),
-                                                                         shiftx, shifty, shiftz))
-        return methods
+        return []

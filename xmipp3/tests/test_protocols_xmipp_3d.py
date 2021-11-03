@@ -1559,9 +1559,7 @@ class TestXmippShiftParticlesAndVolume(TestXmippBase):
 
         protShiftVolPart = self.newProtocol(XmippProtShiftVolume,
                                             inputVol=protImportVol.outputVolume,
-                                            xp=protShiftParticles.shiftX,
-                                            yp=protShiftParticles.shiftY,
-                                            zp=protShiftParticles.shiftZ)
+                                            inputProtocol=protShiftParticles)
         self.launchProtocol(protShiftVolPart)
         self.assertIsNotNone(protShiftVolPart.getFiles(),
                              "There was a problem with shift volume with particle shifts")

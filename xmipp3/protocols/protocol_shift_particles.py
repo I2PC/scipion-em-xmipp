@@ -86,7 +86,7 @@ class XmippProtShiftParticles(EMProtocol):
         """call xmipp program to shift the particles"""
         centermd = self._getExtraPath("center_particles.xmd")
         args = '-i "%s" -o "%s" ' % (self._getExtraPath("input_particles.xmd"), centermd)
-        if self.option.get():
+        if self.option:
             self.x = self.xin.get()
             self.y = self.yin.get()
             self.z = self.zin.get()
@@ -142,11 +142,15 @@ class XmippProtShiftParticles(EMProtocol):
         if not hasattr(self, 'outputParticles'):
             summary.append("Output particles not ready yet.")
         else:
+            if self.option:
+                option = "User defined shift"
+            else:
+                option = "Shift to center of mass"
             if not self.interp.get():
                 interp = 'linear'
             else:
                 interp = 'spline'
-            summary.append("%d particles shifted\ninterpolation: %s" % (self.inputParticles.get().getSize(), interp))
+            summary.append("%s\ninterpolation: %s" % (option, interp))
             if self.inv.get():
                 summary.append("inverse matrix applied")
         return summary
