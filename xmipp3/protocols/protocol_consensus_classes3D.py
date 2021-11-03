@@ -33,7 +33,7 @@ from pwem.protocols import EMProtocol
 from pwem.objects import Class3D
 
 from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam, FloatParam
-from pyworkflow.object import List, Integer, String
+from pyworkflow.object import List, Integer, String, Float
 from scipy.cluster import hierarchy
 
 import math
@@ -76,10 +76,10 @@ class XmippProtConsensusClasses3D(EMProtocol):
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
         """ Inserting one step for each intersections analysis """
-        self._insertFunctionStep('compareFirstStep')
+        self._insertFunctionStep('populateStep')
 
-        for i in range(2, len(self.inputMultiClasses)):
-            self._insertFunctionStep('compareOthersStep', i)
+        for i in range(1, len(self.inputMultiClasses)):
+            self._insertFunctionStep('compareStep', i)
 
         if self.numRand.get() > 0:
             self._insertFunctionStep('checkSignificanceStep')
@@ -91,39 +91,30 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         self._insertFunctionStep('createOutputStep')
 
-    def compareFirstStep(self, classification1Idx=0, classification2Idx=1):
-        """ Intersects all combinations of classes contained in the classification sets
-            referenced by set1Id and set2Id """
+    def populateStep(self, classificationIdx=0):
+        """ Initializes attributes to be able to start comparing """
 
-        # Select the first two classifications
-        classification1 = self.inputMultiClasses[classification1Idx].get()
-        classification2 = self.inputMultiClasses[classification2Idx].get()
+        # Select the given classification
+        classification = self.inputMultiClasses[classificationIdx].get()
 
-        print('Computing intersections between classes from classifications %s and %s:'
-              % (classification1.getNameId(), classification2.getNameId()))
-
-        # Check intersections for all the possible combinations of classes
+        # At the beginning, use the given classification as the intersection
+        # (consider it as a intersection with the 'all' set, AKA the identity for this operation)
         intersections = []
-        for cluster1 in classification1:
-            cluster1Id = cluster1.getObjId()
-            particleIds1 = cluster1.getIdSet()
+        for cluster in classification:
+            clusterId = cluster.getObjId()
+            particleIds = cluster.getIdSet()
 
-            for cluster2 in classification2:
-                cluster2Id = cluster2.getObjId()
-                particleIds2 = cluster2.getIdSet()
+            # Build a intersection-like structure to store it on the intersection list
+            intersection = build_intersection_data(particleIds, classificationIdx, clusterId, len(particleIds))
 
-                # Calculate the intersection between the current two classes
-                intersection = self.intersectClasses(classification1Idx, cluster1Id, particleIds1,
-                                                     classification2Idx, cluster2Id, particleIds2)
-
-                # Do not append classes that have no elements
-                if intersection['particleCount'] > 0:
-                    intersections.append(intersection)
+            # Do not append classes that have no elements
+            if intersection['particleCount'] > 0:
+                intersections.append(intersection)
 
         # Store the results
         self.intersectionList = intersections
 
-    def compareOthersStep(self, classification1Idx):
+    def compareStep(self, classification1Idx):
         """ Intersects the given classification with all the previous intersections """
 
         # Select the given classification
@@ -327,6 +318,18 @@ class XmippProtConsensusClasses3D(EMProtocol):
             summary.append('origin:  '+str(self.n1))
             summary.append('angle: '+str(self.n2))
             summary.append('pll: '+str(self.n3))
+
+        # Check if common percentiles are going to be shown
+        if hasattr(self, 'randomConsensusSizes'):
+            summary.append('Common consensus size percentiles')
+
+            # Calculate size values for common percentiles
+            percentiles = [90, 95, 99, 100]  # Common values for percentiles. Add on your own taste. 100 is max element
+            values = np.percentile(self.randomConsensusSizes, percentiles)
+
+            # Add all the values to the summary
+            for i in range(len(percentiles)):
+                summary.append(str(percentiles[i])+'%: '+str(values[i]))
 
         return summary
 
@@ -536,13 +539,10 @@ class XmippProtConsensusClasses3D(EMProtocol):
             newClass.setAcquisition(cluster.getAcquisition())
             newClass.setRepresentative(cluster.getRepresentative())
 
-            # Calculate the size percentile for the
-            percentile = math.nan
+            # Calculate the size percentile for the cluster size
             if hasattr(self, 'randomConsensusSizes'):
                 percentile = find_percentile(self.randomConsensusSizes, particleCount)
-
-            print(emlib.label2Str(emlib.MDL_CLASS_COUNT_PERCENTILE))
-            setXmippAttribute(newClass, emlib.MDL_CLASS_COUNT_PERCENTILE, percentile)
+                setXmippAttribute(newClass, emlib.MDL_CLASS_COUNT_PERCENTILE, Float(percentile))
 
             # Add all the particle IDs
             outputClasses.append(newClass)
