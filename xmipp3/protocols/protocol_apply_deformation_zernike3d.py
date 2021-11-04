@@ -1,5 +1,6 @@
 # # *************************************************
 # # * This protocol will be offered in future releases (more testing is needed)
+# # * TODO: If this protocol is added, check that sampling rate is properly set in header of mrc
 # # *************************************************
 
 # # **************************************************************************
@@ -76,7 +77,7 @@
 #             with open(file, 'w') as fid:
 #                 fid.write(' '.join(map(str, basisParams)) + "\n")
 #                 fid.write(' '.join(map(str, coeffs)) + "\n")
-#             outFile = pwutils.removeBaseExt(self.inputVol.get().getFileName()) + '_%d_deformed.vol' % idx
+#             outFile = pwutils.removeBaseExt(self.inputVol.get().getFileName()) + '_%d_deformed.mrc' % idx
 #             params = ' -i %s --clnm %s -o %s' % \
 #                      (self.inputVol.get().getFileName(), file, self._getExtraPath(outFile))
 #             self.runJob("xmipp_volume_apply_deform_sph", params)
@@ -101,7 +102,7 @@
 #
 #     def _updateClass(self, item):
 #         representative = item.getRepresentative()
-#         volumeFile = pwutils.removeBaseExt(self.inputVol.get().getFileName()) + '_%d_deformed.vol' \
+#         volumeFile = pwutils.removeBaseExt(self.inputVol.get().getFileName()) + '_%d_deformed.mrc' \
 #                      % (item.getObjId() + 1)
 #         volumeFile = self._getExtraPath(volumeFile)
 #         representative.setSamplingRate(self.samplingRate_Volume)
