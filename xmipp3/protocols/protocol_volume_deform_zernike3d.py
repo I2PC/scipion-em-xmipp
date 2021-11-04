@@ -93,12 +93,13 @@ class XmippProtVolumeDeformZernike3D(ProtAnalysis3D):
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
         self._createFilenameTemplates()
-        self._insertFunctionStep("convertStep")
-        self._insertFunctionStep("deformStep")
-        self._insertFunctionStep("createOutputStep")
+        self._insertFunctionStep(self.convertInputStep)
+        self._insertFunctionStep(self.deformStep)
+        self._insertFunctionStep(self.convertOutputStep)
+        self._insertFunctionStep(self.createOutputStep)
 
     # --------------------------- STEPS functions ------------------------------
-    def convertStep(self):
+    def convertInputStep(self):
         fnInputVol = self._getFileName('fnInputVol')
         fnRefVol = self._getFileName('fnRefVol')
 
@@ -153,6 +154,10 @@ class XmippProtVolumeDeformZernike3D(ProtAnalysis3D):
                 params = params + ' --thr %d' % self.numberOfThreads.get()
             self.runJob("xmipp_volume_deform_sph", params)
 
+    def convertOutputStep(self):
+        fnOutVol = self._getFileName('fnOutVol')
+        params = ' -i %s --sampling_rate %.2f' % (fnOutVol, self.newTs)
+        self.runJob("xmipp_image_header", params)
 
     def createOutputStep(self):
         if self.targetResolution.get() != 3.0:
