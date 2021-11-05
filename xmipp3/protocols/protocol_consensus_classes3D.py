@@ -37,6 +37,7 @@ from pyworkflow.object import List, Integer, String, Float
 from scipy.cluster import hierarchy
 
 import math
+import copy
 import pickle
 import multiprocessing as mp
 import numpy as np
@@ -105,10 +106,10 @@ class XmippProtConsensusClasses3D(EMProtocol):
             particleIds = cluster.getIdSet()
 
             # Build a intersection-like structure to store it on the intersection list
-            intersection = build_intersection_data(particleIds, classificationIdx, clusterId, len(particleIds))
+            intersection = ClassIntersection(particleIds, classificationIdx, clusterId)
 
             # Do not append classes that have no elements
-            if intersection['particleCount'] > 0:
+            if intersection:
                 intersections.append(intersection)
 
         # Store the results
@@ -129,19 +130,15 @@ class XmippProtConsensusClasses3D(EMProtocol):
             cluster1Id = cluster1.getObjId()
             particleIds1 = cluster1.getIdSet()
 
-            for currIntersection in self.intersectionList:
-                # Obtain the information from the dictionary
-                particleIds2 = currIntersection['particleIds']
-                classification2Idx = currIntersection['classificationIndex']
-                cluster2Id = currIntersection['clusterId']
-                cluster2Size = currIntersection['clusterSize']
+            # Build a intersection-like structure to intersect it against the other
+            intersector = ClassIntersection(particleIds1, classification1Idx, cluster1Id)
 
-                # Calculate the intersection between a previous intersection and the current class
-                intersection = self.intersectClasses(classification1Idx, cluster1Id, particleIds1,
-                                                     classification2Idx, cluster2Id, particleIds2, cluster2Size)
+            for currIntersection in self.intersectionList:
+                # Intersect the previous intersection with the intersector
+                intersection = currIntersection.intersect(intersector)
 
                 # Do not append classes that have no elements
-                if intersection['particleCount'] > 0:
+                if intersection:
                     intersections.append(intersection)
 
         # Overwrite previous intersections with the new ones
@@ -151,12 +148,12 @@ class XmippProtConsensusClasses3D(EMProtocol):
         """ Ensemble clustering by COSS that merges interactions of clusters based
             on entropy minimization """
         # Obtain the classification as a list of list of sets
-        classifications = self.getClusterParticleIds(self.inputMultiClasses)
+        classifications = get_classification_particle_ids(self.inputMultiClasses)
 
         # Initialize with values before merging
         allIntersections = [self.intersectionList]  # Stores the intersections of all iterations
         allObValues = [0.0]
-        intersectionParticleIds = self.getIntersectionParticleIds(self.intersectionList)
+        intersectionParticleIds = get_intersection_particle_ids(self.intersectionList)
 
         # Iterations of merging clusters
         while len(allIntersections[-1]) > numClusters:
@@ -185,7 +182,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
             mergedIntersections = merge_subsets(allIntersections[-1], mergePair)
 
             # Update the particle ids for the next iteration
-            intersectionParticleIds = self.getIntersectionParticleIds(mergedIntersections)
+            intersectionParticleIds = get_intersection_particle_ids(mergedIntersections)
 
             # Save the data for the next iteration
             allIntersections.append(mergedIntersections)
@@ -198,7 +195,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
     def findElbowsStep(self):
         """" Finds elbows of the COSS ensemble process """
         # Shorthands for variables
-        numClusters = [i for i in range(1, 1+len(self.ensembleIntersectionLists))]
+        numClusters = list(range(1, 1+len(self.ensembleObValues)))
         obValues = self.ensembleObValues
 
         # Get profile log likelihood for log of objective values
@@ -240,7 +237,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         numExec = self.numRand.get()
 
         # Obtain the group sizes
-        clusterLengths = self.getClusterLengths(self.inputMultiClasses)
+        clusterLengths = get_cluster_lengths(self.inputMultiClasses)
 
         # Calculate the total particle count
         numParticles = sum(clusterLengths[0])
@@ -296,7 +293,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
                 # Establish output relations
                 for item in self.inputMultiClasses:
                     self._defineSourceRelation(item, outputClasses)
-
 
             else:
                 # Automatically select cluster count based on elbows
@@ -365,7 +361,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         """ Save the data of the objective function """
         savepath = self._getExtraPath('ObjectiveFData.pkl')
         with open(savepath, 'wb') as f:
-            data = [[i for i in range(1, 1+len(self.ensembleObValues))], self.ensembleObValues]
+            data = [list(range(1, 1+len(self.ensembleObValues))), self.ensembleObValues]
             pickle.dump(data, f)
 
     def saveElbowIndex(self):
@@ -374,65 +370,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
         savepath = self._getExtraPath('elbowclusters.pkl')
         with open(savepath, 'wb') as f:
             pickle.dump(self.elbows, f)
-
-    def intersectClasses(self,
-                         classification1Idx, cluster1Id, particleIds1,
-                         classification2Idx, cluster2Id, particleIds2, classSize2=None):
-        """ Computes the intersection between sets ids1 and ids2. Then selects the smallest
-            class and returns its parameters """
-
-        # Compute the intersection of the classes
-        inter = particleIds1.intersection(particleIds2)
-
-        # Selects the smallest class
-        size1 = len(particleIds1)
-        size2 = len(particleIds2) if classSize2 is None else classSize2
-        if size1 < size2:
-            classificationIdx = classification1Idx
-            clusterId = cluster1Id
-            clusterSize = size1
-        else:
-            classificationIdx = classification2Idx
-            clusterId = cluster2Id
-            clusterSize = size2
-
-        # return (len(inter), inter, setId, clsId, clsSize) #TODO remove, better return a dictionary
-        return build_intersection_data(inter, classificationIdx, clusterId, clusterSize)
-
-    def getClusterLengths(self, scipionMultiClasses):
-        """ Returns a list of lists that stores the lengths of each classification """
-        result = []
-
-        for i in range(len(scipionMultiClasses)):
-            classification = scipionMultiClasses[i].get()
-
-            result.append([])
-            for cluster in classification:
-                result[-1].append(len(cluster))
-
-        return result
-
-    def getClusterParticleIds(self, scipionMultiClasses):
-        """ Returns the list of lists of sets that stores the clusters of each classification """
-        result = []
-
-        for i in range(len(scipionMultiClasses)):
-            classification = scipionMultiClasses[i].get()
-
-            result.append([])
-            for cluster in classification:
-                result[-1].append(cluster.getIdSet())
-
-        return result
-
-    def getIntersectionParticleIds(self, scipionIntersectList):
-        """ Return the list of sets from the scipion list of intersections """
-        result = []
-
-        for intersection in scipionIntersectList:
-            result.append(intersection['particleIds'])
-
-        return result
 
     def plotDendrogram(self, outimage):
         """ Plot the dendrogram from the objective functions of the merge
@@ -494,7 +431,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         """ Plots the objective function and elbows """
 
         # Shorthands for some variables
-        numClusters = [i for i in range(1, 1+len(self.ensembleIntersectionLists))]
+        numClusters = list(range(1, 1+len(self.ensembleIntersectionLists)))
         obValues = self.ensembleObValues
         elbows = self.elbows
 
@@ -526,10 +463,9 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         for classItem in clustering:
             # Shorthands for dictionary items and member variables
-            particleCount = classItem['particleCount']
-            particleIds = classItem['particleIds']
-            classificationIdx = classItem['classificationIndex']
-            clusterId = classItem['clusterId']
+            particleIds = classItem.particleIds
+            classificationIdx = classItem.classificationIndex
+            clusterId = classItem.clusterId
             classification = self.inputMultiClasses[classificationIdx].get()
             cluster = classification[clusterId]
 
@@ -541,7 +477,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
             # Calculate the size percentile for the cluster size
             if hasattr(self, 'randomConsensusSizes'):
-                percentile = find_percentile(self.randomConsensusSizes, particleCount)
+                percentile = find_percentile(self.randomConsensusSizes, len(classItem))
                 setXmippAttribute(newClass, emlib.MDL_CLASS_COUNT_PERCENTILE, Float(percentile))
 
             # Add all the particle IDs
@@ -554,6 +490,47 @@ class XmippProtConsensusClasses3D(EMProtocol):
             outputClasses.update(enabledClass)
 
         return outputClasses
+
+
+class ClassIntersection:
+    """ Keeps track of the information related to successive class intersections.
+        It is instantiated with the """
+    def __init__(self, particleIds, classificationIdx, clusterId):
+        self.particleIds = set(particleIds)
+        self.classificationIndex = classificationIdx
+        self.clusterId = clusterId
+        self.clusterSize = len(self.particleIds)
+
+    def __len__(self):
+        return len(self.particleIds)
+
+    def intersect(self, other):
+        result = copy.copy(self)
+
+        # Intersect both classes
+        result.particleIds = self.particleIds.intersection(other.particleIds)
+
+        # Select the data from the smallest cluster size
+        if other.clusterSize < self.clusterSize:
+            result.classificationIndex = other.classificationIndex
+            result.clusterId = other.clusterId
+            result.clusterSize = other.clusterSize
+
+        return result
+
+    def merge(self, other):
+        result = copy.copy(self)
+
+        # Merge particle ids
+        result.particleIds = self.particleIds.union(other.particleIds)
+
+        # Select the data from the largest intersection
+        if len(other.particleIds) > len(self.particleIds):
+            result.classificationIndex = other.classificationIndex
+            result.clusterId = other.clusterId
+            result.clusterSize = other.clusterSize
+
+        return result
 
 
 ######################################
@@ -569,22 +546,14 @@ def reshape_matrix_to_list(m):
     return result
 
 
-def build_intersection_data(intersection, classificationIdx, clusterId, clusterSize):
-    return {
-        'particleCount': len(intersection),
-        'particleIds': intersection,
-        'classificationIndex': classificationIdx,
-        'clusterId': clusterId,
-        'clusterSize': clusterSize
-    }
-
-
 def is_sorted(values):
     """ Returns true if a list is sorted or empty """
     return all(values[i] <= values[i+1] for i in range(len(values)-1))
 
 
 def find_percentile(data, value):
+    """ Given an array of values (data), finds the corresponding percentile of value.
+        Percentile is returned in range [0, 1] """
     assert(is_sorted(data))  # In order to iterate it in ascending order
 
     # Count the number of elements that are smaller than the given value
@@ -596,11 +565,63 @@ def find_percentile(data, value):
     return float(i) / float(len(data))
 
 
+def get_cluster_lengths(scipionMultiClasses):
+    """ Returns a list of lists that stores the lengths of each classification """
+    result = []
+
+    for i in range(len(scipionMultiClasses)):
+        classification = scipionMultiClasses[i].get()
+
+        result.append([])
+        for cluster in classification:
+            result[-1].append(len(cluster))
+
+    return result
+
+
+def get_intersection_particle_ids(intersections):
+    """ Return the list of sets from a list of intersections """
+    result = []
+
+    for intersection in intersections:
+        result.append(intersection.particleIds)
+
+    return result
+
+
+def get_classification_particle_ids(scipionMultiClasses):
+    """ Returns the list of lists of sets that stores the clusters of each classification """
+    result = []
+
+    for i in range(len(scipionMultiClasses)):
+        classification = scipionMultiClasses[i].get()
+
+        result.append([])
+        for cluster in classification:
+            result[-1].append(cluster.getIdSet())
+
+    return result
+
+
+def merge_subsets(intersections, indices):
+    """ Return a list of subsets where the intersections[indices] have been merged """
+    # Divide the input intersections into the ones referred by indices and not
+    selection = [intersections[i] for i in indices]  # intersection[indices]
+    result = [intersections[i] for i in range(len(intersections)) if i not in indices]  # intersections - selection
+
+    # Merge all the selected clusters into the same one
+    merged = selection[0]
+    for i in range(1, len(selection)):
+        merged = merged.merge(selection[i])
+
+    # Add the merged items to the result
+    result.append(merged)
+    return result
+
 
 ######################################
 # COSS functions. See notes 8/4/2019 #
 ######################################
-
 
 def nc_similarity(n, c):
     """ Return the similarity of intersection subset (n) with class subset (c) """
@@ -614,13 +635,6 @@ def entropy(p):
     for i in range(len(p)):
         H += p[i] * math.log(p[i], 2)
     return -H
-
-
-def create_nsubset(c1, c2):
-    """ Return the intersection of two sets """
-    c1 = set(c1)
-    c2 = set(c2)
-    return c1.intersection(c2)
 
 
 def build_simvector(n, cs):
@@ -654,31 +668,6 @@ def vectors_similarity(v1, v2):
     return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
 
 
-def merge_subsets(iList, indices):
-    """ Return a list of subsets where the subsets[index] have been merged """
-    niList = []
-    for i in range(len(iList)):
-        if i not in indices:
-            niList.append(iList[i])
-
-    # Clusters with specified index are merged
-    cluster0 = iList[indices[0]]['particleIds']
-    cluster1 = iList[indices[1]]['particleIds']
-    union = cluster0.union(cluster1)
-
-    # Representative info is chosen from the previous bigger cluster
-    if len(cluster0) > len(cluster1):
-        rep = 0
-    else:
-        rep = 1
-    classificationIdx = iList[indices[rep]]['classificationIndex']
-    clusterId = iList[indices[rep]]['clusterId']
-    prevClusterSize = iList[indices[rep]]['clusterSize']
-
-    niList.append(build_intersection_data(union, classificationIdx, clusterId, prevClusterSize))
-    return niList
-
-
 def ob_function(ns, indexs, vs, eps=0.01):
     """Objective function to minimize based on the entropy and the similarity between the clusters to merge
     """
@@ -689,86 +678,6 @@ def ob_function(ns, indexs, vs, eps=0.01):
 
     sv = vectors_similarity(vs[indexs[0]], vs[indexs[1]])
     return (h - hi) / (sv + eps)
-
-
-def clusterings_as_sets(rs, nclust, Y):
-    """ Creating class clusters: list of lists(clusterings) of sets
-        (each set is a cluster with the names of objects)
-        From a list of lists(clusterings) where the position is the object
-        and the value the cluster """
-    cs = []
-    for _ in range(len(rs)):
-        cs.append([set() for _ in range(nclust)])
-
-    for i in range(len(Y)):
-        for j in range(len(cs)):
-            cs[j][rs[j][i]].add(i)
-    return cs
-
-
-def intersection_clusters(cs):
-    """ Return the intersections between the clusters of
-        different clusterings """
-    us = []
-    for c in cs:
-        if len(us) == 0:
-            for setc in c:
-                us.append(setc)
-        else:
-            aux = []
-            for setc in c:
-                for setu in us:
-                    aux.append(setu.intersection(setc))
-            us = aux
-
-    # Removing empty sets from us
-    while set() in us:
-        us.remove(set())
-    return us
-
-
-def us2labels(us, lenX):
-    """From merged us it returns the labels of the elements"""
-    # Saving labels
-    coss_labels = [-1 for _ in range(lenX)]
-    for ic, clus in enumerate(us):
-        for idx in clus:
-            coss_labels[idx] = ic
-    return coss_labels
-
-
-def adjust_index(nsol, pair_min):
-    """Adjust the index given that same cluster count only as 1
-    """
-    isol = [0]
-    for i in range(1, len(nsol)):
-        if nsol[i] == nsol[i - 1]:
-            isol.append(isol[-1])
-        else:
-            isol.append(isol[-1] + 1)
-    npair = [isol.index(pair_min[0]), isol.index(pair_min[1])]
-    return npair
-
-
-def get_vs(us, cs):
-    """Return the vector of similarities between the subgroups (us) and the clusters (cs)
-    """
-    list_cs = []
-    for c in cs:
-        list_cs += c
-    vs = []
-    for u in us:
-        vs.append(build_simvector(u, list_cs))
-    return vs
-
-
-def n_clusters(all_coss_us):
-    """Find number of clusters in each set"""
-    nclusters = []
-    for coss_us in all_coss_us:
-        nclusters.append(len(coss_us))
-
-    return nclusters
 
 
 def normalize(x):
@@ -791,6 +700,7 @@ def find_elbow_angle(x, y):
         to <45º"""
     slopes = np.diff(y)/np.diff(x)
     angles = np.arctan(-slopes)
+    elbow_idx = -1
     for i in range(len(angles)):
         if angles[i] < np.pi/4:
             elbow_idx = i
@@ -906,6 +816,93 @@ def random_consensus_sizes(C, N):
 
 
 # TODO remove as deprecated
+
+def create_nsubset(c1, c2):
+    """ Return the intersection of two sets """
+    c1 = set(c1)
+    c2 = set(c2)
+    return c1.intersection(c2)
+
+
+def adjust_index(nsol, pair_min):
+    """Adjust the index given that same cluster count only as 1
+    """
+    isol = [0]
+    for i in range(1, len(nsol)):
+        if nsol[i] == nsol[i - 1]:
+            isol.append(isol[-1])
+        else:
+            isol.append(isol[-1] + 1)
+    npair = [isol.index(pair_min[0]), isol.index(pair_min[1])]
+    return npair
+
+
+def get_vs(us, cs):
+    """Return the vector of similarities between the subgroups (us) and the clusters (cs)
+    """
+    list_cs = []
+    for c in cs:
+        list_cs += c
+    vs = []
+    for u in us:
+        vs.append(build_simvector(u, list_cs))
+    return vs
+
+
+def n_clusters(all_coss_us):
+    """Find number of clusters in each set"""
+    nclusters = []
+    for coss_us in all_coss_us:
+        nclusters.append(len(coss_us))
+
+    return nclusters
+
+
+def clusterings_as_sets(rs, nclust, Y):
+    """ Creating class clusters: list of lists(clusterings) of sets
+        (each set is a cluster with the names of objects)
+        From a list of lists(clusterings) where the position is the object
+        and the value the cluster """
+    cs = []
+    for _ in range(len(rs)):
+        cs.append([set() for _ in range(nclust)])
+
+    for i in range(len(Y)):
+        for j in range(len(cs)):
+            cs[j][rs[j][i]].add(i)
+    return cs
+
+
+def intersection_clusters(cs):
+    """ Return the intersections between the clusters of
+        different clusterings """
+    us = []
+    for c in cs:
+        if len(us) == 0:
+            for setc in c:
+                us.append(setc)
+        else:
+            aux = []
+            for setc in c:
+                for setu in us:
+                    aux.append(setu.intersection(setc))
+            us = aux
+
+    # Removing empty sets from us
+    while set() in us:
+        us.remove(set())
+    return us
+
+
+def us2labels(us, lenX):
+    """From merged us it returns the labels of the elements"""
+    # Saving labels
+    coss_labels = [-1 for _ in range(lenX)]
+    for ic, clus in enumerate(us):
+        for idx in clus:
+            coss_labels[idx] = ic
+    return coss_labels
+
 
 def find_function_elbow(values, xs=None, ploti=False):
     """Finds the point where the maximum change in the slope of the function draw from
