@@ -156,7 +156,7 @@ class XmippProtVolumeDeformZernike3D(ProtAnalysis3D):
 
     def convertOutputStep(self):
         fnOutVol = self._getFileName('fnOutVol')
-        params = ' -i %s --sampling_rate %.2f' % (fnOutVol, self.newTs)
+        params = ' -i %s --sampling_rate %f' % (fnOutVol, self.newTs)
         self.runJob("xmipp_image_header", params)
 
     def createOutputStep(self):
