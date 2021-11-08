@@ -34,6 +34,7 @@ from pwem.objects import Class3D
 
 from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam, FloatParam
 from pyworkflow.object import List, Integer, String, Float
+from pyworkflow.constants import BETA
 from scipy.cluster import hierarchy
 
 import math
@@ -50,6 +51,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         intersections and the entropy of the clustering formed.
     """
     _label = 'consensus clustering 3D'
+    _devStatus = BETA
 
     def __init__(self, *args, **kwargs):
         EMProtocol.__init__(self, *args, **kwargs)
