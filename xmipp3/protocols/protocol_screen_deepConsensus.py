@@ -505,6 +505,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         #Prediction
         if self.networkReadyToPredict() and self.cnnFree() and self.predictionsOn():
+            print('NETWORK READY TO PREDICT')
             self.PREDICTING = True
             depPredict = self._insertFunctionStep('predictCNN', prerequisites= self.newSteps)
             self.newSteps += [self._insertFunctionStep('endPredictingStep', prerequisites=[depPredict])]
@@ -512,6 +513,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         #Last round with batch size == 1 to include all input
         if self.allFree() and not self.LAST_ROUND and self.checkIfParentsFinished():
+          print('NOT LAST ROUND AND ALL FREE')
           protLast = self._steps[self.lastStep - 1]
           protLast.addPrerequisites(*self.newSteps)
           protLast.setStatus(STATUS_NEW)
@@ -521,6 +523,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         protEnd.addPrerequisites(*self.newSteps)
         #Ending the protocol when everything is done
         if self.LAST_ROUND and self.allFree():
+          print('LAST ROUND AND ALL FREE')
           protEnd.setStatus(STATUS_NEW)
         self.updateSteps()
 
