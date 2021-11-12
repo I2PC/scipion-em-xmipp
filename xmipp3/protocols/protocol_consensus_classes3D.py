@@ -57,19 +57,28 @@ class XmippProtConsensusClasses3D(EMProtocol):
         EMProtocol.__init__(self, *args, **kwargs)
 
     def _defineParams(self, form):
+        # Input data
         form.addSection(label='Input')
 
         form.addParam('inputMultiClasses', MultiPointerParam, important=True,
                       label="Input Classes", pointerClass='SetOfClasses3D',
                       help='Select several sets of classes where '
                            'to evaluate the intersections.')
-        form.addParam('doConsensus', EnumParam,
+
+        # Consensus
+        form.addSection(label='Consensus clustering')
+
+        form.addParam('manualClusterCount', IntParam, default=-1,
+                      label='Manual Number of Clusters',
+                      help='Set the final number of clusters. Disabled if <= 0')
+        form.addParam('automaticClusterCount', EnumParam,
                       choices=['Yes', 'No'], default=0,
-                      label='Get Consensus Clustering', display=EnumParam.DISPLAY_HLIST,
-                      help='Use COSS ensemble method for obtaining a consensus clustering')
-        form.addParam('numClust', IntParam, default=-1,
-                      label='Set Number of Clusters',
-                      help='Set the final number of clusters. If -1, deduced by the shape of the objective function')
+                      label='Guess the Number of Clusters', display=EnumParam.DISPLAY_HLIST,
+                      help='Deduce the number of clusters based on the shape of the objective function')
+
+        # Reference random classification
+        form.addSection(label='Reference random classification')
+
         form.addParam('numRand', IntParam, default=0,
                       label='Number of random classifications',
                       help='Number of random classifications used for computing the significance of the actual '
@@ -79,17 +88,23 @@ class XmippProtConsensusClasses3D(EMProtocol):
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
         """ Inserting one step for each intersections analysis """
-        self._insertFunctionStep('populateStep')
 
+        # Intersect all input classes
+        self._insertFunctionStep('populateStep')
         for i in range(1, len(self.inputMultiClasses)):
             self._insertFunctionStep('compareStep', i)
 
+        # Perform a reference random classification if requested
         if self.numRand.get() > 0:
             self._insertFunctionStep('checkSignificanceStep')
 
-        if self.doConsensus.get() == 0:
+        # Determine if ensemble is needed
+        if self.manualClusterCount.get() > 0 or self.automaticClusterCount.get() == 0:
             self._insertFunctionStep('cossEnsembleStep')
-            self._insertFunctionStep('findElbowsStep')  # TODO maybe skip if using manual clustering settings
+
+        # Determine if automatic clustering is enabled
+        if self.automaticClusterCount.get() == 0:
+            self._insertFunctionStep('findElbowsStep')
             self._insertFunctionStep('generateVisualizationsStep')
 
         self._insertFunctionStep('createOutputStep')
@@ -270,12 +285,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
     def createOutputStep(self):
         """Save the output classes"""
 
-        # Store the data
-        self._store()
-
-        # Shorthand for user selected number of clusters or elbows
-        numClusters = self.numClust.get()
-
         # Always output all the initial intersections
         outputClassesInitial = self.createOutput3Dclass(self.intersectionList, 'initial')
         self._defineOutputs(outputClasses_initial=outputClassesInitial)
@@ -285,19 +294,21 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         # Check if the ensemble step has been performed
         if hasattr(self, 'ensembleIntersectionLists'):
-            # Depending on the user's selection, select the elbows or a manual selection
-            if numClusters > 0:
-                # Use manual cluster count
-                i = min(numClusters, len(self.ensembleIntersectionLists)) - 1
-                outputClasses = self.createOutput3Dclass(self.ensembleIntersectionLists[i], 'numClusters')
-                self._defineOutputs(outputClasses=outputClasses)
+            manualClusterCount = self.manualClusterCount.get()
+            automaticClusterCount = self.automaticClusterCount.get()
+
+            # Check if a manual cluster count was given
+            if manualClusterCount > 0:
+                i = min(manualClusterCount, len(self.ensembleIntersectionLists)) - 1  # Most restrictive one
+                outputClassesManual = self.createOutput3Dclass(self.ensembleIntersectionLists[i], 'manual')
+                self._defineOutputs(outputClasses_manual=outputClassesManual)
 
                 # Establish output relations
                 for item in self.inputMultiClasses:
-                    self._defineSourceRelation(item, outputClasses)
+                    self._defineSourceRelation(item, outputClassesManual)
 
-            else:
-                # Automatically select cluster count based on elbows
+            # Check if automatic cluster count is enabled
+            if automaticClusterCount == 0:
                 for key, value in self.elbows.items():
                     outputClassesName = 'outputClasses_' + key
                     outputClasses = self.createOutput3Dclass(self.ensembleIntersectionLists[value], key)
@@ -817,7 +828,9 @@ def random_consensus_sizes(C, N):
     return [len(cluster) for cluster in consensus]
 
 
-# TODO remove as deprecated
+#############################
+# TODO remove as deprecated #
+#############################
 
 def create_nsubset(c1, c2):
     """ Return the intersection of two sets """
