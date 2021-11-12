@@ -37,7 +37,7 @@ from pwem.objects import Volume, SetOfParticles
 from pwem.constants import ALIGN_2D
 from pwem import emlib
 
-from xmipp3.convert import getImageLocation, alignmentToRow
+from xmipp3.convert import getImageLocation, alignmentToRow, convertToMrc
 
 
 class XmippProtRCT(ProtInitialVolume):
@@ -298,11 +298,7 @@ class XmippProtRCT(ProtInitialVolume):
         self._defineSourceRelation(self.inputParticlesTiltPair, self.volumesSet)
 
     def _appendOutputVolume(self, volumeOut):
-        fnMrc = volumeOut.replace(".vol",".mrc")
-        self.runJob("xmipp_image_convert","-i %s -o %s -t vol"%(volumeOut,fnMrc), numberOfMpi=1)
-        self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(fnMrc, self.sampling), numberOfMpi=1)
-        cleanPath(volumeOut)
-
+        fnMrc = convertToMrc(self, volumeOut, self.sampling, True)
         vol = Volume()
         vol.setFileName(fnMrc)
         vol.setSamplingRate(self.sampling)
@@ -310,11 +306,7 @@ class XmippProtRCT(ProtInitialVolume):
 
         if self.doFilter.get():
             volumeFilterOut = volumeOut.replace('.vol', '_filtered.vol')
-            fnMrc = volumeFilterOut.replace(".vol",".mrc")
-            self.runJob("xmipp_image_convert", "-i %s -o %s -t vol" % (volumeFilterOut, fnMrc), numberOfMpi=1)
-            self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" % (fnMrc, self.sampling), numberOfMpi=1)
-            cleanPath(volumeFilterOut)
-
+            fnMrc = convertToMrc(self, volumeFilterOut, self.sampling, True)
             volf = Volume()
             volf.setFileName(fnMrc)
             volf.setSamplingRate(self.sampling)

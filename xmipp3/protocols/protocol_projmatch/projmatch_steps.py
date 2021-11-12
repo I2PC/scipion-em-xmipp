@@ -38,7 +38,7 @@ from pwem.objects import Volume, SetOfClasses3D
 from pyworkflow.utils import getMemoryAvailable, removeExt, cleanPath, makePath, copyFile
 
 from pwem import emlib
-from xmipp3.convert import createClassesFromImages
+from xmipp3.convert import createClassesFromImages, convertToMrc
 from xmipp3.base import isMdEmpty
 
 
@@ -714,13 +714,6 @@ def runFilterVolumeStep(self, iterN, refN, constantToAddToFiltration):
                   }
         self.runJob("xmipp_transform_filter", args % params)
 
-def convertToMrc(self, fnVol, Ts):
-    fnMrc = fnVol.replace(".vol",".mrc")
-    self.runJob("xmipp_image_convert","-i %s -o %s -t vol"%(fnVol, fnMrc), numberOfMpi=1)
-    self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(fnMrc, Ts), numberOfMpi=1)
-    cleanPath(fnVol)
-    return fnMrc
-
 def runCreateOutputStep(self):
     ''' Create standard output results_images, result_classes'''
     #creating results files
@@ -749,7 +742,7 @@ def runCreateOutputStep(self):
         
         for refN in self.allRefs():
             volFn = self._getFileName('reconstructedFileNamesIters', iter=lastIter, ref=refN)
-            volFn = convertToMrc(self, volFn, Ts)
+            volFn = convertToMrc(self, volFn, Ts, True)
             vol = Volume()
             vol.setFileName(volFn)
             volumes.append(vol)
@@ -768,9 +761,9 @@ def runCreateOutputStep(self):
         halfMap2 = self._getFileName('reconstructedFileNamesItersSplit2',
                                      iter=lastIter, ref=1)
 
-        volFn = convertToMrc(self, volFn, Ts)
-        halfMap1 = convertToMrc(self, halfMap1, Ts)
-        halfMap2 = convertToMrc(self, halfMap2, Ts)
+        volFn = convertToMrc(self, volFn, Ts, True)
+        halfMap1 = convertToMrc(self, halfMap1, Ts, True)
+        halfMap2 = convertToMrc(self, halfMap2, Ts, True)
 
         vol = Volume()
         vol.setFileName(volFn)
