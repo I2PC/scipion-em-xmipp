@@ -32,11 +32,12 @@ from os.path import exists
 
 import pwem.emlib.metadata as md
 import pyworkflow.utils as pwutils
+from pyworkflow.object import Integer
 from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
                                            STATUS_FINISHED)
 import pyworkflow.protocol.params as params
 from pwem.protocols import ProtExtractParticles
-from pwem.objects import Particle, Integer
+from pwem.objects import Particle
 
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
