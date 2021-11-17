@@ -477,8 +477,8 @@ class XmippProtConsensusClasses3D(EMProtocol):
         for classItem in clustering:
             # Shorthands for dictionary items and member variables
             particleIds = classItem.particleIds
-            classificationIdx = classItem.classificationIndex
-            clusterId = classItem.clusterId
+            classificationIdx = classItem.representativeClassificationIndex
+            clusterId = classItem.representativeClusterId
             classification = self.inputMultiClasses[classificationIdx].get()
             cluster = classification[clusterId]
 
@@ -508,40 +508,48 @@ class XmippProtConsensusClasses3D(EMProtocol):
 class ClassIntersection:
     """ Keeps track of the information related to successive class intersections.
         It is instantiated with the """
-    def __init__(self, particleIds, classificationIdx, clusterId):
-        self.particleIds = set(particleIds)
-        self.classificationIndex = classificationIdx
-        self.clusterId = clusterId
-        self.clusterSize = len(self.particleIds)
+    def __init__(self, particleIds, classificationIdx=None, clusterId=None):
+        self.particleIds = set(particleIds)  # Particle ids belonging to this intersection
+
+        self.representativeClassificationIndex = classificationIdx  # Classification index of the representative class
+        self.representativeClusterId = clusterId  # The id of the representative class
+        self.representativeClusterSize = len(self.particleIds)  # The size of the representative class
+
+        self.maxClusterSize = self.representativeClusterSize  # Size of the biggest origin class
 
     def __len__(self):
         return len(self.particleIds)
 
     def intersect(self, other):
-        result = copy.copy(self)
-
-        # Intersect both classes
-        result.particleIds = self.particleIds.intersection(other.particleIds)
-
-        # Select the data from the smallest cluster size
-        if other.clusterSize < self.clusterSize:
-            result.classificationIndex = other.classificationIndex
-            result.clusterId = other.clusterId
-            result.clusterSize = other.clusterSize
-
-        return result
+        # Select the data from the smallest representative cluster
+        return self._combine(other, 'intersection', other.representativeClusterSize < self.representativeClusterSize)
 
     def merge(self, other):
+        # Select the data from the largest intersection
+        return self._combine(other, 'union', len(other.particleIds) > len(self.particleIds))
+
+    def getSizeRatio(self):
+        return len(self.particleIds) / self.maxClusterSize
+
+    def _combine(self, other, op, rep):
+        """ Base operations when combining two intersections.
+            op is the member function of set used to combine particle ids
+            rep is true if the representative class belongs to other"""
         result = copy.copy(self)
 
-        # Merge particle ids
-        result.particleIds = self.particleIds.union(other.particleIds)
+        # Combine both sets
+        result.particleIds = getattr(self.particleIds, op)(other.particleIds)
 
-        # Select the data from the largest intersection
-        if len(other.particleIds) > len(self.particleIds):
-            result.classificationIndex = other.classificationIndex
-            result.clusterId = other.clusterId
-            result.clusterSize = other.clusterSize
+        # Select the representative class
+        if rep:
+            result.representativeClassificationIndex = other.representativeClassificationIndex
+            result.representativeClusterId = other.representativeClusterId
+            result.representativeClusterSize = other.representativeClusterSize
+        else:
+            pass  # Already set by copy()
+
+        # Record the size of the biggest origin cluster for further analysis
+        result.maxClusterSize = max(self.maxClusterSize, other.maxClusterSize)
 
         return result
 
@@ -786,16 +794,17 @@ def coss_random_classification(C, N):
     return Cp
 
 
-def coss_consensus(Cp):
+def coss_consensus(C):
     """ Computes the groups of elements that are equally
         classified for all the classifications of Cp """
 
-    assert(len(Cp) > 0)  # There should be at least one classification
+    assert(len(C) > 0)  # There should be at least one classification
+
+    # Convert the classification into a intersection list
+    Cp = [[ClassIntersection(i) for i in c] for c in C]
 
     # Initialize a list of sets containing the groups of the first classification
-    S = []
-    for s in Cp[0]:
-        S.append(set(s))
+    S = Cp[0]
 
     # For the remaining classifications, compute the elements that repeatedly appear in the same group
     for i in range(1, len(Cp)):
@@ -803,10 +812,10 @@ def coss_consensus(Cp):
         for s1 in S:
             for s2 in Cp[i]:
                 # Obtain only the elements in common for this combination
-                news = s1.intersection(set(s2))
+                news = s1.intersect(s2)
 
                 # A group is only formed if non-empty
-                if len(news) > 0:  # TODO: maybe >1
+                if news:
                     Sp.append(news)
         S = Sp
 
