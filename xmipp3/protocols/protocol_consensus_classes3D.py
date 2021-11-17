@@ -32,8 +32,8 @@ from pwem import emlib
 from pwem.protocols import EMProtocol
 from pwem.objects import Class3D
 
-from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam, FloatParam
-from pyworkflow.object import List, Integer, String, Float
+from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam
+from pyworkflow.object import Float, List, Object
 from pyworkflow.constants import BETA
 from scipy.cluster import hierarchy
 
@@ -130,7 +130,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
                 intersections.append(intersection)
 
         # Store the results
-        self.intersectionList = intersections
+        self.intersectionList = List(intersections)
 
     def compareStep(self, classification1Idx):
         """ Intersects the given classification with all the previous intersections """
@@ -159,7 +159,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
                     intersections.append(intersection)
 
         # Overwrite previous intersections with the new ones
-        self.intersectionList = intersections
+        self.intersectionList = List(intersections)
 
     def cossEnsembleStep(self, numClusters=1):
         """ Ensemble clustering by COSS that merges interactions of clusters based
@@ -206,8 +206,12 @@ class XmippProtConsensusClasses3D(EMProtocol):
             allObValues.append(minObValue)
 
         # Reverse objective values so they go from largest to smallest
-        self.ensembleIntersectionLists = list(reversed(allIntersections))
-        self.ensembleObValues = list(reversed(allObValues))
+        allIntersections.reverse()
+        allObValues.reverse()
+
+        # Save the results
+        self.ensembleIntersectionLists = List(allIntersections)
+        self.ensembleObValues = List(allObValues)
 
     def findElbowsStep(self):
         """" Finds elbows of the COSS ensemble process """
@@ -228,27 +232,23 @@ class XmippProtConsensusClasses3D(EMProtocol):
         elbow_idx_angle, _ = find_elbow_angle(normc, normo)
         elbow_idx_pll = np.argmax(pll)
 
-        # Save number of classes for summary
-        n1 = len(self.ensembleIntersectionLists[elbow_idx_origin])
-        n2 = len(self.ensembleIntersectionLists[elbow_idx_angle])
-        n3 = len(self.ensembleIntersectionLists[elbow_idx_pll])
-        self.n1 = Integer(n1)
-        self.n2 = Integer(n2)
-        self.n3 = Integer(n3)
-
         # Parse all elbow info to pass to other functions
-        self.elbows = {
+        elbows = {
             'origin': elbow_idx_origin,
             'angle': elbow_idx_angle,
             'pll': elbow_idx_pll
         }
 
         # Save relevant data for analysis
+        self.elbows = Object(elbows)
         self.saveOutputs()
 
     def checkSignificanceStep(self):
         """ Create random partitions of same size to compare the quality
          of the classification """
+
+        # Set up multi-threading
+        threadPool = mp.Pool(int(self.numberOfThreads))
 
         # Obtain the execution parameters
         numExec = self.numRand.get()
@@ -260,19 +260,29 @@ class XmippProtConsensusClasses3D(EMProtocol):
         numParticles = sum(clusterLengths[0])
 
         # Repeatedly obtain a consensus of a random classification of same size
-        threadPool = mp.Pool(int(self.numberOfThreads))
-        consensusSizes = threadPool.starmap(
-            random_consensus_sizes,
+        consensus = threadPool.starmap(
+            random_consensus,
             [(clusterLengths, numParticles) for i in range(numExec)]
         )
         threadPool.close()
+        consensus = reshape_matrix_to_list(consensus)
 
-        # Store as a sorted list
-        consensusSizes = reshape_matrix_to_list(consensusSizes)
+        # Obtain the size and its ratio
+        consensusSizes = [len(s) for s in consensus]
+        consensusSizeRatios = [s.getSizeRatio() for s in consensus]
         consensusSizes.sort()
+        consensusSizeRatios.sort()
 
-        # Store the result
-        self.randomConsensusSizes = consensusSizes
+        # Calculate common percentiles
+        percentiles = [90, 95, 99, 100]  # Common values for percentiles. Add on your own taste. 100 is the max value
+        sizePercentiles = np.percentile(consensusSizes, percentiles)
+        sizeRatioPercentiles = np.percentile(consensusSizeRatios, percentiles)
+
+        # Store the results
+        self.randomConsensusSizes = List(consensusSizes)
+        self.randomConsensusSizeRatios = List(consensusSizeRatios)
+        self.randomConsensusSizePercentiles = Object({key: value for key, value in zip(percentiles, sizePercentiles)})
+        self.randomConsensusSizeRatioPercentiles = Object({key: value for key, value in zip(percentiles, sizeRatioPercentiles)})
 
     def generateVisualizationsStep(self):
         """ Generates visual data related to the ensemble processing"""
@@ -309,7 +319,8 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
             # Check if automatic cluster count is enabled
             if automaticClusterCount == 0:
-                for key, value in self.elbows.items():
+                elbows = self.elbows.get()
+                for key, value in elbows.items():
                     outputClassesName = 'outputClasses_' + key
                     outputClasses = self.createOutput3Dclass(self.ensembleIntersectionLists[value], key)
                     self._defineOutputs(**{outputClassesName: outputClasses})
@@ -321,24 +332,32 @@ class XmippProtConsensusClasses3D(EMProtocol):
     # --------------------------- INFO functions -------------------------------
     def _summary(self):
         summary = []
-        # If it has n1 should have the rest
-        if hasattr(self, 'n1'):
+
+        # Show automatically obtained elbows
+        if hasattr(self, 'elbows'):
             summary.append('Number of Classes')
-            summary.append('origin:  '+str(self.n1))
-            summary.append('angle: '+str(self.n2))
-            summary.append('pll: '+str(self.n3))
+            elbows = self.elbows.get()
 
-        # Check if common percentiles are going to be shown
-        if hasattr(self, 'randomConsensusSizes'):
+            for key, value in elbows.items():
+                summary.append(f'{key}: {value+1}')
+
+        # Check if common percentiles of sizes are going to be shown
+        if hasattr(self, 'randomConsensusSizePercentiles'):
             summary.append('Common consensus size percentiles')
-
-            # Calculate size values for common percentiles
-            percentiles = [90, 95, 99, 100]  # Common values for percentiles. Add on your own taste. 100 is max element
-            values = np.percentile(self.randomConsensusSizes, percentiles)
+            percentiles = self.randomConsensusSizePercentiles.get()
 
             # Add all the values to the summary
-            for i in range(len(percentiles)):
-                summary.append(str(percentiles[i])+'%: '+str(values[i]))
+            for key, value in percentiles.items():
+                summary.append(f'{key}%: {value}')
+
+        # Check if common percentiles of ratios are going to be shown
+        if hasattr(self, 'randomConsensusSizeRatioPercentiles'):
+            summary.append('Common consensus size ratio percentiles')
+            percentiles = self.randomConsensusSizeRatioPercentiles.get()
+
+            # Add all the values to the summary
+            for key, value in percentiles.items():
+                summary.append(str(key) + '%: ' + str(value))
 
         return summary
 
@@ -382,17 +401,15 @@ class XmippProtConsensusClasses3D(EMProtocol):
             for each of the different methods. """
         savepath = self._getExtraPath('elbowclusters.pkl')
         with open(savepath, 'wb') as f:
-            pickle.dump(self.elbows, f)
+            pickle.dump(self.elbows.get(), f)
 
     def plotDendrogram(self, outimage):
         """ Plot the dendrogram from the objective functions of the merge
             between the groups of images """
 
         # Initialize required values
-        allilists = self.ensembleIntersectionLists.copy()
-        allilists.reverse()
-        obvalues = self.ensembleObValues.copy()
-        obvalues.reverse()
+        allilists = list(reversed(self.ensembleIntersectionLists))
+        obvalues = list(reversed(self.ensembleObValues))
         linkage_matrix = np.zeros((len(allilists)-1, 4))
         set_ids = np.arange(len(allilists))
         original_num_sets = len(allilists)
@@ -446,7 +463,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         # Shorthands for some variables
         numClusters = list(range(1, 1+len(self.ensembleIntersectionLists)))
         obValues = self.ensembleObValues
-        elbows = self.elbows
+        elbows = self.elbows.get()
 
         # Begin drawing
         plt.figure()
@@ -822,8 +839,8 @@ def coss_consensus(C):
     return S
 
 
-def random_consensus_sizes(C, N):
-    """ Obtains the lengths of the elements of a consensus
+def random_consensus(C, N):
+    """ Obtains the intersections of a consensus
         of a random classification of sizes defined in C of
         N elements. C is a list of lists, where de sum of each
         row must equal N """
@@ -832,9 +849,7 @@ def random_consensus_sizes(C, N):
     randomClassification = coss_random_classification(C, N)
 
     # Compute the repeated classifications
-    consensus = coss_consensus(randomClassification)
-
-    return [len(cluster) for cluster in consensus]
+    return coss_consensus(randomClassification)
 
 
 #############################
