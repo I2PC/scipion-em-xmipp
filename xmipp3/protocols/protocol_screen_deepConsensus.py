@@ -419,7 +419,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                       label="Training batch size",
                       help='Size of the training batches (in number of micrographs).'
                            'The CNN needs a minimum number of particles to train for each batch, if there are not'
-                           'enough particles, the batch size must be increased')
+                           ' enough particles, the batch size must be increased')
 
 
     def _validate(self):
@@ -481,7 +481,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         if self.ENDED:
           return
         # Preprocessing
-        if len(self.readyToPreprocessMics(shared = False)) > 0 and not self.PREPROCESSING:
+        if len(self.readyToPreprocessMics(shared=False)) > 0 and not self.PREPROCESSING:
             self.PREPROCESSING = True
             self.lastDeps = [self._insertFunctionStep("preprocessMicsStep", prerequisites=self.initDeps)]
 
@@ -504,8 +504,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           self.saveTrainedParams(trainedParams)
 
         #Prediction
-        if self.networkReadyToPredict() and self.cnnFree() and self.predictionsOn():
-            print('NETWORK READY TO PREDICT')
+        if self.networkReadyToPredict() and self.cnnFree() and self.predictionsOn() and len(self.readyToPredictMicFns()) > 0:
             self.PREDICTING = True
             depPredict = self._insertFunctionStep('predictCNN', prerequisites= self.newSteps)
             self.newSteps += [self._insertFunctionStep('endPredictingStep', prerequisites=[depPredict])]
@@ -513,7 +512,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         #Last round with batch size == 1 to include all input
         if self.allFree() and not self.LAST_ROUND and self.checkIfParentsFinished():
-          print('NOT LAST ROUND AND ALL FREE')
           protLast = self._steps[self.lastStep - 1]
           protLast.addPrerequisites(*self.newSteps)
           protLast.setStatus(STATUS_NEW)
@@ -523,7 +521,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         protEnd.addPrerequisites(*self.newSteps)
         #Ending the protocol when everything is done
         if self.LAST_ROUND and self.allFree():
-          print('LAST ROUND AND ALL FREE')
           protEnd.setStatus(STATUS_NEW)
         self.updateSteps()
 
@@ -625,26 +622,29 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           micsFnameSet = {mics_[micId].getMicName(): mics_[micId].getFileName() for micId in micIds
                           if mics_[micId] is not None}  # to skip failed mics
           self.USING_INPUT_MICS = False
+          dirName = os.path.dirname(list(micsFnameSet.values())[0])
           toPreprocessMicFns = self.readyToPreprocessMics(shared=False)
-          print('New mics being preprocessed: ', toPreprocessMicFns)
+          print('New mics to be preprocessed: %d' % len(toPreprocessMicFns))
+          max = self.TRAIN_BATCH_MAX
+          if len(toPreprocessMicFns) > max:
+              toPreprocessMicFns = toPreprocessMicFns[:max]
+
           if self.ignoreCTF.get():
             preproMicsContent="#mics\n"
-            for micName in micsFnameSet:
-              preproMicsContent+= "%s\n"%(micsFnameSet[micName])
+            for micFileName in toPreprocessMicFns: # CAMBIOS
+              preproMicsContent+= "%s\n"%os.path.join(dirName, micFileName) # CAMBIOS
           else:
             preproMicsContent="#mics ctfs\n"
             setOfMicCtf= self.ctfRelations.get()
             assert setOfMicCtf is not None, "Error, CTFs must be provided to compute phase flip"
             for ctf in setOfMicCtf:
               ctf_mic = ctf.getMicrograph()
-              ctfMicName = ctf_mic.getMicName()
-              if ctfMicName in micsFnameSet:
+              ctfFnName = ctf_mic.getFileName()
+              if os.path.basename(ctfFnName) in toPreprocessMicFns: #CAMBIOS
                 ctf_mic.setCTF(ctf)
-                ctfMicName= micsFnameSet[ctfMicName]
-                fnCTF = self._getTmpPath("%s.ctfParam" % os.path.basename(ctfMicName))
+                fnCTF = self._getTmpPath("%s.ctfParam" % os.path.basename(ctfFnName))
                 micrographToCTFParam(ctf_mic, fnCTF)
-                preproMicsContent+= "%s %s\n"%(ctfMicName, fnCTF)
-
+                preproMicsContent+= "%s %s\n"%(ctfFnName, fnCTF)
 
           inputsFname= self._getTmpPath("preprocMic_inputs.txt")
           ouputDir= self._getExtraPath(self.PRE_PROC_MICs_PATH)
