@@ -81,7 +81,7 @@ class XmippProtMLTomo(ProtClassify3D):
                   'ref': self._getExtraPath('results/mltomo_ref.xmd'),
                   'fsc_it': self.extraIter + '.fsc',
                   #'fsc': self._getExtraPath('results/mltomo.fsc'),
-                  'volume': self.extraIter + '_ref%(ref3d)06d.vol'
+                  'volume': self.extraIter + '_ref%(ref3d)06d.mrc'
                   }
         self._updateFilenamesDict(myDict)
 
@@ -432,7 +432,7 @@ class XmippProtMLTomo(ProtClassify3D):
     def createOutput(self):
         # output files:
         #   mltomo_ref.xmd contains all info for output 3D classes
-        #   mltomo_refXXXXXX.vol output volume - 3D class
+        #   mltomo_refXXXXXX.mrc output volume - 3D class
         #   mltomo_img.xmd contains alignment metadata for all vols
         #   mltomo.fsc
         outputGlobalMdFn = self._getFileName('ref')
