@@ -40,10 +40,10 @@ import pickle
 import matplotlib.pyplot as plt
 
 
-class XmippClasses3DViewer(ProtocolViewer):
+class XmippConsensusClasses3DViewer(ProtocolViewer):
     """ Visualization of results from the consensus classes 3D protocol
     """
-    _label = 'viewer classes 3D'
+    _label = 'viewer consensus classes 3D'
     _targets = [XmippProtConsensusClasses3D]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
 
