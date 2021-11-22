@@ -35,7 +35,6 @@ from pwem.objects import Class3D
 from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam
 from pyworkflow.object import Float, List, Object
 from pyworkflow.constants import BETA
-from scipy.cluster import hierarchy
 
 import math
 import copy
@@ -52,6 +51,12 @@ class XmippProtConsensusClasses3D(EMProtocol):
     """
     _label = 'consensus clustering 3D'
     _devStatus = BETA
+
+    """ Output file names """
+    objective_function_pkl = 'objective_func.pkl'
+    clusterings_pkl = 'clusterings.pkl'
+    elbows_pkl = 'elbows.pkl'
+
 
     def __init__(self, *args, **kwargs):
         EMProtocol.__init__(self, *args, **kwargs)
@@ -105,7 +110,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
         # Determine if automatic clustering is enabled
         if self.automaticClusterCount.get() == 0:
             self._insertFunctionStep('findElbowsStep')
-            self._insertFunctionStep('generateVisualizationsStep')
 
         self._insertFunctionStep('createOutputStep')
 
@@ -241,7 +245,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         # Save relevant data for analysis
         self.elbows = Object(elbows)
-        self.saveOutputs()
 
     def checkSignificanceStep(self):
         """ Create random partitions of same size to compare the quality
@@ -284,19 +287,12 @@ class XmippProtConsensusClasses3D(EMProtocol):
         self.randomConsensusSizePercentiles = Object({key: value for key, value in zip(percentiles, sizePercentiles)})
         self.randomConsensusSizeRatioPercentiles = Object({key: value for key, value in zip(percentiles, sizeRatioPercentiles)})
 
-    def generateVisualizationsStep(self):
-        """ Generates visual data related to the ensemble processing"""
-        # Plot dendrogram
-        self.plotDendrogram(self._getExtraPath())
-
-        # Plot all indexes on top of objective function
-        self.plotFunctionAndElbows(self._getExtraPath())
-
     def createOutputStep(self):
         """Save the output classes"""
+        self._saveOutputs() # Saves data into pkl files for later visualization
 
         # Always output all the initial intersections
-        outputClassesInitial = self.createOutput3Dclass(self.intersectionList, 'initial')
+        outputClassesInitial = self._createOutput3DClass(self.intersectionList, 'initial')
         self._defineOutputs(outputClasses_initial=outputClassesInitial)
 
         for item in self.inputMultiClasses:
@@ -310,7 +306,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
             # Check if a manual cluster count was given
             if manualClusterCount > 0:
                 i = min(manualClusterCount, len(self.ensembleIntersectionLists)) - 1  # Most restrictive one
-                outputClassesManual = self.createOutput3Dclass(self.ensembleIntersectionLists[i], 'manual')
+                outputClassesManual = self._createOutput3DClass(self.ensembleIntersectionLists[i], 'manual')
                 self._defineOutputs(outputClasses_manual=outputClassesManual)
 
                 # Establish output relations
@@ -322,7 +318,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
                 elbows = self.elbows.get()
                 for key, value in elbows.items():
                     outputClassesName = 'outputClasses_' + key
-                    outputClasses = self.createOutput3Dclass(self.ensembleIntersectionLists[value], key)
+                    outputClasses = self._createOutput3DClass(self.ensembleIntersectionLists[value], key)
                     self._defineOutputs(**{outputClassesName: outputClasses})
 
                     # Establish output relations
@@ -378,115 +374,31 @@ class XmippProtConsensusClasses3D(EMProtocol):
         return errors
 
     # --------------------------- UTILS functions ------------------------------
-    def saveOutputs(self):
-        self.saveClusteringLists()
-        self.saveObjectiveFData()
-        self.saveElbowIndex()
+    def _saveOutputs(self):
+        self._saveClusterings()
+        self._saveObjectiveFunctionData()
+        self._saveElbows()
 
-    def saveClusteringLists(self):
+    def _saveClusterings(self):
         """ Saves the lists of clustering with different number of clusters into a pickle file """
-        savepath = self._getExtraPath('clusterings.pkl')
+        savepath = self._getExtraPath(self.clusterings_pkl)
         with open(savepath, 'wb') as f:
             pickle.dump(self.ensembleIntersectionLists, f)
 
-    def saveObjectiveFData(self):
+    def _saveObjectiveFunctionData(self):
         """ Save the data of the objective function """
-        savepath = self._getExtraPath('ObjectiveFData.pkl')
+        savepath = self._getExtraPath(self.objective_function_pkl)
         with open(savepath, 'wb') as f:
-            data = [list(range(1, 1+len(self.ensembleObValues))), self.ensembleObValues]
-            pickle.dump(data, f)
+            pickle.dump(self.ensembleObValues, f)
 
-    def saveElbowIndex(self):
+    def _saveElbows(self):
         """ Save the calculated number of clusters where the function has an elbow
             for each of the different methods. """
-        savepath = self._getExtraPath('elbowclusters.pkl')
+        savepath = self._getExtraPath(self.elbows_pkl)
         with open(savepath, 'wb') as f:
             pickle.dump(self.elbows.get(), f)
 
-    def plotDendrogram(self, outimage):
-        """ Plot the dendrogram from the objective functions of the merge
-            between the groups of images """
-
-        # Initialize required values
-        allilists = list(reversed(self.ensembleIntersectionLists))
-        obvalues = list(reversed(self.ensembleObValues))
-        linkage_matrix = np.zeros((len(allilists)-1, 4))
-        set_ids = np.arange(len(allilists))
-        original_num_sets = len(allilists)
-
-        # Loop over each iteration of clustering
-        for i in range(len(allilists)-1):
-            # Find the two sets that were merged
-            sets_merged = []
-            for set_info, set_id in zip(allilists[i], set_ids):
-                if set_info not in allilists[i+1]:
-                    sets_merged.append(set_id)
-
-            # Find original number of sets within new set
-            if sets_merged[0] - original_num_sets < 0:
-                n1 = 1
-            else:
-                n1 = linkage_matrix[sets_merged[0]-original_num_sets, 3]
-            if sets_merged[1] - original_num_sets < 0:
-                n2 = 1
-            else:
-                n2 = linkage_matrix[sets_merged[1]-original_num_sets, 3]
-
-            # Create linkage matrix
-            linkage_matrix[i, 0] = sets_merged[0]  # set id of merged set
-            linkage_matrix[i, 1] = sets_merged[1]  # set id of merged set
-            linkage_matrix[i, 2] = obvalues[i+1]   # objective function as distance
-            linkage_matrix[i, 3] = n1+n2  # total number of original sets
-
-            # Change set ids to reflect new set of clusters
-            set_ids = np.delete(set_ids, np.argwhere(set_ids == sets_merged[0]))
-            set_ids = np.delete(set_ids, np.argwhere(set_ids == sets_merged[1]))
-            set_ids = np.append(set_ids, len(allilists)+i)
-
-        # Plot resulting dendrogram
-        plt.figure()
-        dn = hierarchy.dendrogram(linkage_matrix)
-        plt.title('Dendrogram')
-        plt.xlabel('sets ids')
-        plt.ylabel('objective function')
-        plt.tight_layout()
-        plt.savefig(outimage+'/dendrogram.png')
-
-        # Plot resulting dendrogram with log scale
-        plt.yscale('log')
-        plt.ylim([np.min(linkage_matrix[:, 2]), np.max(linkage_matrix[:, 2])])
-        plt.savefig(outimage+'/dendrogram_log.png')
-
-    def plotFunctionAndElbows(self, outimage):
-        """ Plots the objective function and elbows """
-
-        # Shorthands for some variables
-        numClusters = list(range(1, 1+len(self.ensembleIntersectionLists)))
-        obValues = self.ensembleObValues
-        elbows = self.elbows.get()
-
-        # Begin drawing
-        plt.figure()
-
-        # Plot obValues vs numClusters
-        plt.plot(numClusters, obValues)
-
-        # Show elbows as scatter points
-        for key, value in elbows.items():
-            label = key + ': ' + str(numClusters[value])
-            plt.scatter([numClusters[value]], [obValues[value]], label=label)
-
-        # Configure the figure
-        plt.legend()
-        plt.xlabel('Number of clusters')
-        plt.ylabel('Objective values')
-        plt.title('Objective values for each number of clusters')
-        plt.tight_layout()
-
-        # Save
-        plt.savefig(outimage + '/objective_function_plot.png')
-
-    def createOutput3Dclass(self, clustering, name):
+    def _createOutput3DClass(self, clustering, name):
 
         inputParticles = self.inputMultiClasses[0].get().getImages()
         outputClasses = self._createSetOfClasses3D(inputParticles, suffix=name)
@@ -508,7 +420,14 @@ class XmippProtConsensusClasses3D(EMProtocol):
             # Calculate the size percentile for the cluster size
             if hasattr(self, 'randomConsensusSizes'):
                 percentile = find_percentile(self.randomConsensusSizes, len(classItem))
-                setXmippAttribute(newClass, emlib.MDL_CLASS_COUNT_PERCENTILE, Float(percentile))
+                pValue = 1 - percentile
+                setXmippAttribute(newClass, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
+
+            # Calculate the relative size percentile for the cluster size
+            if hasattr(self, 'randomConsensusSizeRatios'):
+                percentile = find_percentile(self.randomConsensusSizeRatios, classItem.getSizeRatio())
+                pValue = 1 - percentile
+                setXmippAttribute(newClass, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE, Float(pValue))
 
             # Add all the particle IDs
             outputClasses.append(newClass)
