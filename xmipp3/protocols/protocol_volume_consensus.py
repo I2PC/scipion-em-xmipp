@@ -71,8 +71,7 @@ class XmippProtVolConsensus(ProtInitialVolume):
         outVol.setSamplingRate(self.vols[0].get().getSamplingRate())
         outVol.setFileName(self._getExtraPath("consensus_volume.mrc"))
         if not exists(self._getExtraPath("consensus_volume.mrc")):
-            raise Exception("Consensus volume NOT generated, please check input volumes to ensure they have equal box "
-                            "size, voxel size and origin")
+            raise NoOutputError
         else:
             outVol2 = Volume()
             outVol2.setSamplingRate(self.vols[0].get().getSamplingRate())
@@ -111,3 +110,9 @@ class XmippProtVolConsensus(ProtInitialVolume):
 
     def _citations(self):
         return ['Fernandez-Gimenez2021']
+
+
+class NoOutputError(Exception):
+    """Consensus volume NOT generated, please check input volumes to ensure they have equal box size, voxel size and
+    origin."""
+    pass
