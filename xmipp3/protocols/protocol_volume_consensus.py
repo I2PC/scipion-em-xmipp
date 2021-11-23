@@ -41,7 +41,6 @@ class XmippProtVolConsensus(ProtInitialVolume):
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
-
         form.addSection(label='Input')
         form.addParam('vols', MultiPointerParam, pointerClass='Volume', label="Volumes",
                       help='Select the volumes for the consensus.')
@@ -71,7 +70,7 @@ class XmippProtVolConsensus(ProtInitialVolume):
         outVol.setSamplingRate(self.vols[0].get().getSamplingRate())
         outVol.setFileName(self._getExtraPath("consensus_volume.mrc"))
         if not exists(self._getExtraPath("consensus_volume.mrc")):
-            raise NoOutputError
+            raise NoOutputGenerated
         else:
             outVol2 = Volume()
             outVol2.setSamplingRate(self.vols[0].get().getSamplingRate())
@@ -108,11 +107,19 @@ class XmippProtVolConsensus(ProtInitialVolume):
                            (self.vols.getSize(), self.vols[0].get().getSamplingRate()))
         return methods
 
+    def _validate(self):
+        errors = []
+        voxel_size = []
+        for i, vol in enumerate(self.vols):
+            voxel_size.append(vol.get().getSamplingRate())
+        result = all(element == voxel_size[0] for element in voxel_size)
+        if not result:
+            errors.append('Pixel size should be the same for all input volumes.')
+        return errors
+
     def _citations(self):
         return ['Fernandez-Gimenez2021']
 
 
-class NoOutputError(Exception):
-    """Consensus volume NOT generated, please check input volumes to ensure they have equal box size, voxel size and
-    origin."""
+class NoOutputGenerated(Exception):
     pass
