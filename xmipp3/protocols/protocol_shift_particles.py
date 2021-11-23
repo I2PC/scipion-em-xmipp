@@ -34,7 +34,7 @@ import pyworkflow.object as pwobj
 from pwem import ALIGN_3D, ALIGN_2D
 import pwem.emlib.metadata as md
 from pwem.protocols import EMProtocol
-from xmipp3.convert import xmippToLocation, writeSetOfParticles
+from xmipp3.convert import xmippToLocation, writeSetOfParticles, readSetOfParticles
 
 
 class XmippProtShiftParticles(EMProtocol):
@@ -54,7 +54,8 @@ class XmippProtShiftParticles(EMProtocol):
                       condition='option', help='Volume to select the point (by clicking in the wizard for selecting the'
                                                ' new center) that will be the new center of the particles.')
         form.addParam('xin', FloatParam, label="x", condition='option',
-                      help='Use the wizard to select clicking in the volume the new center for the shifted particles')
+                      help='Use the wizard to select the new center for the shifted particles by shift+click on the '
+                           'blue point a drag it to the desired location while pressing shift.')
         form.addParam('yin', FloatParam, label="y", condition='option')
         form.addParam('zin', FloatParam, label="z", condition='option')
         form.addParam('inputMask', PointerParam, pointerClass='VolumeMask', label="Volume mask", allowsNull=True,
@@ -128,8 +129,9 @@ class XmippProtShiftParticles(EMProtocol):
             outputmd = self._getExtraPath("center_particles.xmd")
         else:
             outputmd = self._getExtraPath("crop_particles.xmd")
-        outputSet.copyItems(inputParticles, updateItemCallback=self._updateItem,
-                            itemDataIterator=md.iterRows(outputmd))
+        # outputSet.copyItems(inputParticles, updateItemCallback=self._updateItem,
+        #                     itemDataIterator=md.iterRows(outputmd))
+        readSetOfParticles(outputmd, outputSet)
         self._defineOutputs(outputParticles=outputSet)
         self._defineOutputs(shiftX=pwobj.Float(self.x),
                             shiftY=pwobj.Float(self.y),
@@ -165,7 +167,7 @@ class XmippProtShiftParticles(EMProtocol):
                 return validatemsg
 
     # --------------------------- UTLIS functions --------------------------------------------
-    def _updateItem(self, item, row):
-        newFn = row.getValue(md.MDL_IMAGE)
-        newLoc = xmippToLocation(newFn)
-        item.setLocation(newLoc)
+    # def _updateItem(self, item, row):
+    #     newFn = row.getValue(md.MDL_IMAGE)
+    #     newLoc = xmippToLocation(newFn)
+    #     item.setLocation(newLoc)
