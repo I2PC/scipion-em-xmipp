@@ -195,10 +195,8 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         if self.calculateConsensus:
             self.ctfFn2 = self.inputCTF2.get().getFileName()
             self.allCtf2 = {}
-            ctfSteps = self._checkNewInput()
-        else:
-            ctfSteps = self._insertNewSelectionSteps(self.insertedDict,
-                                                     self.inputCTF.get())
+
+        ctfSteps = self._checkNewInput()
         self._insertFunctionStep('createOutputStep',
                                  prerequisites=ctfSteps, wait=True)
 
@@ -208,7 +206,6 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
     def initializeParams(self):
         self.finished = False
         self.insertedDict = {}
-        self.processedDict = []
         self.initializeRejDict()
         self.setSecondaryAttributes()
         self.ctfFn1 = self.inputCTF.get().getFileName()
@@ -255,11 +252,10 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
         return deps
 
-    def _insertNewSelectionSteps(self, insertedDict, inputCtfs):
+    def _insertNewSelectionSteps(self, insertedDict, newIDs):
         deps = []
         # For each ctf insert the step to process it
-        for ctf in inputCtfs:
-            ctfID = ctf.getObjId()
+        for ctfID in newIDs:
 
             if ctfID not in insertedDict:
                 stepId = self._insertFunctionStep('selectCtfStep', ctfID,
@@ -278,9 +274,12 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             self.lastCheck = getattr(self, 'lastCheck', datetime.now())
             mTime = max(datetime.fromtimestamp(os.path.getmtime(self.ctfFn1)),
                         datetime.fromtimestamp(os.path.getmtime(self.ctfFn2)))
+            self.debug('Last check: %s, modification: %s'
+                       % (pwutils.prettyTime(self.lastCheck),
+                          pwutils.prettyTime(mTime)))
             # If the input movies.sqlite have not changed since our last check,
             # it does not make sense to check for new input data
-            if self.lastCheck > mTime and hasattr(self, 'SetCtf1'):
+            if self.lastCheck > mTime and (hasattr(self, 'outputCTF') or hasattr(self, "outputCTFDiscarded")):
                 return None
 
             ctfsSet1 = self._loadInputCtfSet(self.ctfFn1)
@@ -292,10 +291,10 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             ctfDict2 = {ctf.getObjId(): ctf.clone() for ctf
                         in ctfsSet2.iterItems()}
 
-            newIds1 = [idMovie for idMovie in ctfDict1.keys() if idMovie not in self.processedDict]
+            newIds1 = [idCTF1 for idCTF1 in ctfDict1.keys() if idCTF1 not in self.insertedDict]
             self.allCtf1.update(ctfDict1)
 
-            newIds2 = [idCTF for idCTF in ctfDict2.keys() if idCTF not in self.processedDict]
+            newIds2 = [idCTF2 for idCTF2 in ctfDict2.keys() if idCTF2 not in self.insertedDict]
             self.allCtf2.update(ctfDict2)
 
             self.lastCheck = datetime.now()
@@ -305,8 +304,8 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             ctfsSet2.close()
 
             outputStep = self._getFirstJoinStep()
-            if len(set(self.allCtf1)) > len(set(self.processedDict)) and \
-               len(set(self.allCtf2)) > len(set(self.processedDict)):
+            if len(set(self.allCtf1)) > len(set(self.insertedDict)) and \
+               len(set(self.allCtf2)) > len(set(self.insertedDict)):
                 fDeps = self._insertNewCtfsSteps(newIds1, newIds2,
                                                  self.insertedDict)
                 if outputStep is not None:
@@ -319,26 +318,30 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             self.debug('Last check: %s, modification: %s'
                        % (pwutils.prettyTime(self.lastCheck),
                           pwutils.prettyTime(mTime)))
+            # If the input ctfs.sqlite have not changed since our last check,
+            # it does not make sense to check for new input data
+            if self.lastCheck > mTime and (hasattr(self, 'outputCTF') or hasattr(self, "outputCTFDiscarded")):
+                return None
 
             # Open input ctfs.sqlite and close it as soon as possible
             ctfSet = self._loadInputCtfSet(self.ctfFn1)
-            self.isStreamClosed = ctfSet.isStreamClosed()
-            self.allCtf1 = [m.clone() for m in ctfSet]
-            ctfSet.close()
+            ctfDict = {ctf.getObjId(): ctf.clone() for ctf
+                        in ctfSet.iterItems()}
 
-            # If the input ctfs.sqlite have not changed since our last check,
-            # it does not make sense to check for new input data
-            if self.lastCheck > mTime and hasattr(self, 'allCtf1'):
-                return None
+            newIds = [idCTF for idCTF in ctfDict.keys() if idCTF not in self.insertedDict]
+            self.allCtf1.update(ctfDict)
+
+            self.isStreamClosed = ctfSet.isStreamClosed()
+            ctfSet.close()
 
             self.lastCheck = now
             newCtf = any(ctf.getObjId() not in
-                         self.insertedDict for ctf in self.allCtf1)
+                         self.insertedDict for ctf in self.allCtf1.values())
             outputStep = self._getFirstJoinStep()
 
             if newCtf:
                 fDeps = self._insertNewSelectionSteps(self.insertedDict,
-                                                      self.allCtf1)
+                                                      newIds)
                 if outputStep is not None:
                     outputStep.addPrerequisites(*fDeps)
                 self.updateSteps()
