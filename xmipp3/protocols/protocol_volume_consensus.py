@@ -25,6 +25,7 @@
 # *
 # **************************************************************************
 
+from os.path import exists
 from pyworkflow.protocol.params import MultiPointerParam
 from pwem.objects import Volume, Transform
 from pwem.protocols import ProtInitialVolume
@@ -69,11 +70,15 @@ class XmippProtVolConsensus(ProtInitialVolume):
         outVol = Volume()
         outVol.setSamplingRate(self.vols[0].get().getSamplingRate())
         outVol.setFileName(self._getExtraPath("consensus_volume.mrc"))
-        outVol2 = Volume()
-        outVol2.setSamplingRate(self.vols[0].get().getSamplingRate())
-        outVol2.setFileName(self._getExtraPath("consensus_volume_diff.mrc"))
-        self._defineOutputs(outputVolume=outVol)
-        self._defineOutputs(outputVolumeDiff=outVol2)
+        if not exists(self._getExtraPath("consensus_volume.mrc")):
+            raise Exception("Consensus volume NOT generated, please check input volumes to ensure they have equal box "
+                            "size, voxel size and origin")
+        else:
+            outVol2 = Volume()
+            outVol2.setSamplingRate(self.vols[0].get().getSamplingRate())
+            outVol2.setFileName(self._getExtraPath("consensus_volume_diff.mrc"))
+            self._defineOutputs(outputVolume=outVol)
+            self._defineOutputs(outputVolumeDiff=outVol2)
 
     def createChimeraScript(self):
         fnRoot = "extra/"
