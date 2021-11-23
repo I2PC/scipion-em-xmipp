@@ -70,7 +70,8 @@ class XmippProtVolConsensus(ProtInitialVolume):
         outVol.setSamplingRate(self.vols[0].get().getSamplingRate())
         outVol.setFileName(self._getExtraPath("consensus_volume.mrc"))
         if not exists(self._getExtraPath("consensus_volume.mrc")):
-            raise NoOutputGenerated
+            raise NoOutputGenerated("Consensus volume NOT generated, please check input volumes to ensure they have "
+                                    "equal box size, voxel size and origin.")
         else:
             outVol2 = Volume()
             outVol2.setSamplingRate(self.vols[0].get().getSamplingRate())
@@ -122,4 +123,5 @@ class XmippProtVolConsensus(ProtInitialVolume):
 
 
 class NoOutputGenerated(Exception):
+    """No output generation error"""
     pass
