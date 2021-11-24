@@ -155,9 +155,6 @@ class XmippProtShiftParticles(EMProtocol):
                 summary.append("inverse matrix applied")
         return summary
 
-    def _methods(self):
-        return []
-
     def _validate(self):
         for part in self.inputParticles.get().iterItems():
             if not part.hasTransform():
