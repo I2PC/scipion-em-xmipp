@@ -33,6 +33,7 @@ from pyworkflow.gui.form import FormWindow
 from pyworkflow.object import Object
 from pyworkflow.viewer import (ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO)
 from pyworkflow.protocol.params import StringParam, LabelParam, IntParam
+from pwem.viewers import TableView
 
 from xmipp3.protocols.protocol_consensus_classes3D import XmippProtConsensusClasses3D, ob_function
 from pwem.objects import Class3D
@@ -61,13 +62,26 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
         self._loadAttributeIfExists(self.protocol.size_ratio_percentiles_pkl, '_sizeRatioPercentiles')
 
     def _defineParams(self, form):
-        form.addSection(label='Visualization')
+        # Graph section
+        form.addSection(label='Graphs')
         form.addParam('displayDendrogram', LabelParam,
                       label='Visualize the dendrogram of the merging process',
-                      help='Open a GUI to visualize the dendogram each number of clusters ')
+                      help='Open a GUI to visualize the dendogram each number of clusters')
         form.addParam('displayObjectiveFunction', LabelParam,
                       label='Visualize Objective Function',
-                      help='Open a GUI to visualize the objective function for each number of clusters ')
+                      help='Open a GUI to visualize the objective function for each number of clusters')
+
+        # Reference classification section
+        form.addSection(label='Reference classification consensus')
+        form.addParam('displayReferenceClassificationSizePercentiles', LabelParam,
+                      label='Reference Classification Size Percentiles',
+                      help='Open a GUI to visualize a table with the most'
+                      ' common percentiles of the sizes of a random classification consensus')
+        form.addParam('displayReferenceClassificationSizeRatioPercentiles', LabelParam,
+                      label='Reference Classification Size Ratio Percentiles',
+                      help='Open a GUI to visualize a table with the most common percentiles'
+                      ' sizes of a random classification consensus'
+                      ' compared to the original cluster size')
 
         #form.addParam('chooseNumberOfClusters', IntParam, default=-1,
         #              label='Number of Clusters',
@@ -84,7 +98,9 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
     def _getVisualizeDict(self):
         return {
             'displayDendrogram': self._visualizeDendrogram,
-            'displayObjectiveFunction': self._visualizeObjectiveFunction
+            'displayObjectiveFunction': self._visualizeObjectiveFunction,
+            'displayReferenceClassificationSizePercentiles': self._visualizeReferenceClassificationSizes,
+            'displayReferenceClassificationSizeRatioPercentiles': self._visualizeReferenceClassificationSizeRatios,
         }
 
         # TODO: remove when done
@@ -99,6 +115,14 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
     def _visualizeObjectiveFunction(self, e):
         if hasattr(self, '_objectiveFunctionValues') and hasattr(self, '_elbows'):
             plot_function_and_elbows(self._objectiveFunctionValues, self._elbows)
+
+    def _visualizeReferenceClassificationSizes(self, e):
+        if hasattr(self, '_sizePercentiles'):
+            show_percentile_table(self._sizePercentiles, 'Size percentiles')
+
+    def _visualizeReferenceClassificationSizeRatios(self, e):
+        if hasattr(self, '_sizeRatioPercentiles'):
+            show_percentile_table(self._sizeRatioPercentiles, 'Size ratio percentiles')
 
     def _loadAttributeIfExists(self, filename, attribute):
         self._loadAttribute(filename, attribute) # TODO: add exception handling for when the file does not exist
@@ -241,3 +265,8 @@ def plot_function_and_elbows(obValues, elbows):
     plt.title('Objective values for each number of clusters')
     plt.tight_layout()
     plt.show()
+
+def show_percentile_table(data, title=None):
+    header = ('Percentile', 'Value')
+    data = list(data.items())
+    return TableView(header, data, None, title)
