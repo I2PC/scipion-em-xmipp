@@ -37,7 +37,6 @@ from pyworkflow.object import Float, List, Object
 from pyworkflow.constants import BETA
 
 import math
-import copy
 import pickle
 import multiprocessing as mp
 import numpy as np
@@ -56,6 +55,8 @@ class XmippProtConsensusClasses3D(EMProtocol):
     objective_function_pkl = 'objective_func.pkl'
     clusterings_pkl = 'clusterings.pkl'
     elbows_pkl = 'elbows.pkl'
+    size_percentiles_pkl = 'size_percentiles.pkl'
+    size_ratio_percentiles_pkl = 'relative_size_percentiles.pkl'
 
 
     def __init__(self, *args, **kwargs):
@@ -375,28 +376,38 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
     # --------------------------- UTILS functions ------------------------------
     def _saveOutputs(self):
-        self._saveClusterings()
-        self._saveObjectiveFunctionData()
-        self._saveElbows()
+        rmScipionListWrapperwrapper = lambda x: list(x)
+        rmScipionObjWrapperwrapper = lambda x: x.get()
+        self._storeAttributeIfExists(self.clusterings_pkl, 'ensembleIntersectionLists', rmScipionListWrapperwrapper)
+        self._storeAttributeIfExists(self.objective_function_pkl, 'ensembleObValues', rmScipionListWrapperwrapper)
+        self._storeAttributeIfExists(self.elbows_pkl, 'elbows', rmScipionObjWrapperwrapper)
+        self._storeAttributeIfExists(self.size_percentiles_pkl, 'randomConsensusSizePercentiles', rmScipionObjWrapperwrapper)
+        self._storeAttributeIfExists(self.size_ratio_percentiles_pkl, 'randomConsensusSizeRatioPercentiles', rmScipionObjWrapperwrapper)
 
-    def _saveClusterings(self):
-        """ Saves the lists of clustering with different number of clusters into a pickle file """
-        savepath = self._getExtraPath(self.clusterings_pkl)
-        with open(savepath, 'wb') as f:
-            pickle.dump(self.ensembleIntersectionLists, f)
+    def _storeAttributeIfExists(self, filename, attribute, func=None):
+        """ Saves an attribute identified by its name, 
+            only if it exists. Returns true if successful """
+        result = hasattr(self, attribute)
 
-    def _saveObjectiveFunctionData(self):
-        """ Save the data of the objective function """
-        savepath = self._getExtraPath(self.objective_function_pkl)
-        with open(savepath, 'wb') as f:
-            pickle.dump(self.ensembleObValues, f)
+        if result:
+            self._storeAttribute(filename, attribute, func)
 
-    def _saveElbows(self):
-        """ Save the calculated number of clusters where the function has an elbow
-            for each of the different methods. """
-        savepath = self._getExtraPath(self.elbows_pkl)
-        with open(savepath, 'wb') as f:
-            pickle.dump(self.elbows.get(), f)
+        return result
+
+    def _storeAttribute(self, filename, attribute, func=None):
+        """ Saves an attribute identified by its name"""
+        self._storeObject(filename, getattr(self, attribute), func)
+
+    def _storeObject(self, filename, obj, func=None):
+        """ Saves an object """
+        path = self._getExtraPath(filename)
+
+        # Apply a transformation if necessary
+        if func is not None:
+            obj = func(obj)
+
+        with open(path, 'wb') as f:
+            pickle.dump(obj, f)
 
     def _createOutput3DClass(self, clustering, name):
 
@@ -444,14 +455,14 @@ class XmippProtConsensusClasses3D(EMProtocol):
 class ClassIntersection:
     """ Keeps track of the information related to successive class intersections.
         It is instantiated with the """
-    def __init__(self, particleIds, classificationIdx=None, clusterId=None):
+    def __init__(self, particleIds, classificationIdx=None, clusterId=None, clusterSize=None, maxClusterSize=None):
         self.particleIds = set(particleIds)  # Particle ids belonging to this intersection
 
         self.representativeClassificationIndex = classificationIdx  # Classification index of the representative class
         self.representativeClusterId = clusterId  # The id of the representative class
-        self.representativeClusterSize = len(self.particleIds)  # The size of the representative class
+        self.representativeClusterSize = clusterSize if clusterSize is not None else len(self.particleIds)  # The size of the representative class
 
-        self.maxClusterSize = self.representativeClusterSize  # Size of the biggest origin class
+        self.maxClusterSize = maxClusterSize if maxClusterSize is not None else self.representativeClusterSize  # Size of the biggest origin class
 
     def __len__(self):
         return len(self.particleIds)
@@ -471,23 +482,23 @@ class ClassIntersection:
         """ Base operations when combining two intersections.
             op is the member function of set used to combine particle ids
             rep is true if the representative class belongs to other"""
-        result = copy.copy(self)
 
-        # Combine both sets
-        result.particleIds = getattr(self.particleIds, op)(other.particleIds)
+        # Determine the representative class
+        selection = other if rep is True else self
 
-        # Select the representative class
-        if rep:
-            result.representativeClassificationIndex = other.representativeClassificationIndex
-            result.representativeClusterId = other.representativeClusterId
-            result.representativeClusterSize = other.representativeClusterSize
-        else:
-            pass  # Already set by copy()
+        # Combine particle sets in the defined manner by op
+        particleIds = getattr(self.particleIds, op)(other.particleIds)
+
+        # Select the data from the representative class
+        classificationIdx = selection.representativeClassificationIndex
+        clusterId = selection.representativeClusterId
+        clusterSize = selection.representativeClusterSize
 
         # Record the size of the biggest origin cluster for further analysis
-        result.maxClusterSize = max(self.maxClusterSize, other.maxClusterSize)
+        maxClusterSize = max(self.maxClusterSize, other.maxClusterSize)
 
-        return result
+        # Construct the new class
+        return ClassIntersection(particleIds, classificationIdx, clusterId, clusterSize, maxClusterSize)
 
 
 ######################################
