@@ -129,8 +129,6 @@ class XmippProtShiftParticles(EMProtocol):
             outputmd = self._getExtraPath("center_particles.xmd")
         else:
             outputmd = self._getExtraPath("crop_particles.xmd")
-        # outputSet.copyItems(inputParticles, updateItemCallback=self._updateItem,
-        #                     itemDataIterator=md.iterRows(outputmd))
         readSetOfParticles(outputmd, outputSet)
         self._defineOutputs(outputParticles=outputSet)
         self._defineOutputs(shiftX=pwobj.Float(self.x),
@@ -157,17 +155,8 @@ class XmippProtShiftParticles(EMProtocol):
                 summary.append("inverse matrix applied")
         return summary
 
-    def _methods(self):
-        return []
-
     def _validate(self):
         for part in self.inputParticles.get().iterItems():
             if not part.hasTransform():
                 validatemsg = ['Please provide particles which have transformation matrix.']
                 return validatemsg
-
-    # --------------------------- UTLIS functions --------------------------------------------
-    # def _updateItem(self, item, row):
-    #     newFn = row.getValue(md.MDL_IMAGE)
-    #     newLoc = xmippToLocation(newFn)
-    #     item.setLocation(newLoc)
