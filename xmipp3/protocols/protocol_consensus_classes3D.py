@@ -51,16 +51,19 @@ class XmippProtConsensusClasses3D(EMProtocol):
     _label = 'consensus clustering 3D'
     _devStatus = BETA
 
-    """ Output file names """
-    objective_function_pkl = 'objective_func.pkl'
-    clusterings_pkl = 'clusterings.pkl'
-    elbows_pkl = 'elbows.pkl'
-    size_percentiles_pkl = 'size_percentiles.pkl'
-    size_ratio_percentiles_pkl = 'relative_size_percentiles.pkl'
-
-
     def __init__(self, *args, **kwargs):
         EMProtocol.__init__(self, *args, **kwargs)
+        self._createFileNames()
+        
+    def _createFileNames(self):
+        myDict = {
+            'objective_function': 'objective_func.pkl',
+            'clusterings': 'clusterings.pkl',
+            'elbows': 'elbows.pkl',
+            'size_percentiles': 'size_percentiles.pkl',
+            'size_ratio_percentiles': 'relative_size_percentiles.pkl',
+        }
+        self._updateFilenamesDict(myDict)
 
     def _defineParams(self, form):
         # Input data
@@ -291,6 +294,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
     def createOutputStep(self):
         """Save the output classes"""
         self._saveOutputs() # Saves data into pkl files for later visualization
+        # self._store()
 
         # Always output all the initial intersections
         outputClassesInitial = self._createOutput3DClass(self.intersectionList, 'initial')
@@ -378,11 +382,11 @@ class XmippProtConsensusClasses3D(EMProtocol):
     def _saveOutputs(self):
         rmScipionListWrapperwrapper = lambda x: list(x)
         rmScipionObjWrapperwrapper = lambda x: x.get()
-        self._storeAttributeIfExists(self.clusterings_pkl, 'ensembleIntersectionLists', rmScipionListWrapperwrapper)
-        self._storeAttributeIfExists(self.objective_function_pkl, 'ensembleObValues', rmScipionListWrapperwrapper)
-        self._storeAttributeIfExists(self.elbows_pkl, 'elbows', rmScipionObjWrapperwrapper)
-        self._storeAttributeIfExists(self.size_percentiles_pkl, 'randomConsensusSizePercentiles', rmScipionObjWrapperwrapper)
-        self._storeAttributeIfExists(self.size_ratio_percentiles_pkl, 'randomConsensusSizeRatioPercentiles', rmScipionObjWrapperwrapper)
+        self._storeAttributeIfExists(self._getFileName('clusterings'), 'ensembleIntersectionLists', rmScipionListWrapperwrapper)
+        self._storeAttributeIfExists(self._getFileName('objective_function'), 'ensembleObValues', rmScipionListWrapperwrapper)
+        self._storeAttributeIfExists(self._getFileName('elbows'), 'elbows', rmScipionObjWrapperwrapper)
+        self._storeAttributeIfExists(self._getFileName('size_percentiles'), 'randomConsensusSizePercentiles', rmScipionObjWrapperwrapper)
+        self._storeAttributeIfExists(self._getFileName('size_ratio_percentiles'), 'randomConsensusSizeRatioPercentiles', rmScipionObjWrapperwrapper)
 
     def _storeAttributeIfExists(self, filename, attribute, func=None):
         """ Saves an attribute identified by its name, 

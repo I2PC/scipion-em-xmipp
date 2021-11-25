@@ -55,33 +55,47 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
         ProtocolViewer.__init__(self, **kwargs)
 
         # Load attributes if possible
-        self._loadAttributeIfExists(self.protocol.clusterings_pkl, '_clusterings')
-        self._loadAttributeIfExists(self.protocol.objective_function_pkl, '_objectiveFunctionValues')
-        self._loadAttributeIfExists(self.protocol.elbows_pkl, '_elbows')
-        self._loadAttributeIfExists(self.protocol.size_percentiles_pkl, '_sizePercentiles')
-        self._loadAttributeIfExists(self.protocol.size_ratio_percentiles_pkl, '_sizeRatioPercentiles')
+        self._loadAttributeIfExists(self.protocol._getFileName('clusterings'), '_clusterings')
+        self._loadAttributeIfExists(self.protocol._getFileName('objective_function'), '_objectiveFunctionValues')
+        self._loadAttributeIfExists(self.protocol._getFileName('elbows'), '_elbows')
+        self._loadAttributeIfExists(self.protocol._getFileName('size_percentiles'), '_sizePercentiles')
+        self._loadAttributeIfExists(self.protocol._getFileName('size_ratio_percentiles'), '_sizeRatioPercentiles')
 
     def _defineParams(self, form):
         # Graph section
         form.addSection(label='Graphs')
-        form.addParam('displayDendrogram', LabelParam,
-                      label='Visualize the dendrogram of the merging process',
-                      help='Open a GUI to visualize the dendogram each number of clusters')
-        form.addParam('displayObjectiveFunction', LabelParam,
-                      label='Visualize Objective Function',
-                      help='Open a GUI to visualize the objective function for each number of clusters')
+        if hasattr(self, '_clusterings') and hasattr(self, '_objectiveFunctionValues'):
+            form.addParam('displayDendrogram', LabelParam,
+                          label='Visualize the dendrogram of the merging process',
+                          help='Open a GUI to visualize the dendogram each number of clusters')
+            form.addParam('displayDendrogramLog', LabelParam,
+                          label='Visualize the dendrogram of the merging process (log)',
+                          help='Open a GUI to visualize the dendogram each number'
+                          ' of clusters with a logarithmic "y" axis')
+
+        if hasattr(self, '_objectiveFunctionValues') and hasattr(self, '_elbows'):
+            form.addParam('displayObjectiveFunction', LabelParam,
+                          label='Visualize Objective Function',
+                          help='Open a GUI to visualize the objective function for each number of clusters')
+            form.addParam('displayObjectiveFunctionLog', LabelParam,
+                          label='Visualize Objective Function (log)',
+                          help='Open a GUI to visualize the objective function'
+                          ' for each number of clusters with a logarithmic "y" axis')
 
         # Reference classification section
         form.addSection(label='Reference classification consensus')
-        form.addParam('displayReferenceClassificationSizePercentiles', LabelParam,
-                      label='Reference Classification Size Percentiles',
-                      help='Open a GUI to visualize a table with the most'
-                      ' common percentiles of the sizes of a random classification consensus')
-        form.addParam('displayReferenceClassificationSizeRatioPercentiles', LabelParam,
-                      label='Reference Classification Size Ratio Percentiles',
-                      help='Open a GUI to visualize a table with the most common percentiles'
-                      ' sizes of a random classification consensus'
-                      ' compared to the original cluster size')
+        if hasattr(self, '_sizeRatioPercentiles'):
+            form.addParam('displayReferenceClassificationSizePercentiles', LabelParam,
+                          label='Reference Classification Size Percentiles',
+                          help='Open a GUI to visualize a table with the most'
+                          ' common percentiles of the sizes of a random classification consensus')
+
+        if hasattr(self, '_sizeRatioPercentiles'):
+            form.addParam('displayReferenceClassificationSizeRatioPercentiles', LabelParam,
+                          label='Reference Classification Size Ratio Percentiles',
+                          help='Open a GUI to visualize a table with the most common percentiles'
+                          ' sizes of a random classification consensus'
+                          ' compared to the original cluster size')
 
         #form.addParam('chooseNumberOfClusters', IntParam, default=-1,
         #              label='Number of Clusters',
@@ -98,7 +112,9 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
     def _getVisualizeDict(self):
         return {
             'displayDendrogram': self._visualizeDendrogram,
+            'displayDendrogramLog': self._visualizeDendrogramLog,
             'displayObjectiveFunction': self._visualizeObjectiveFunction,
+            'displayObjectiveFunctionLog': self._visualizeObjectiveFunctionLog,
             'displayReferenceClassificationSizePercentiles': self._visualizeReferenceClassificationSizes,
             'displayReferenceClassificationSizeRatioPercentiles': self._visualizeReferenceClassificationSizeRatios,
         }
@@ -109,20 +125,22 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
 
     # --------------------------- UTILS functions ------------------------------
     def _visualizeDendrogram(self, e):
-        if hasattr(self, '_clusterings') and hasattr(self, '_objectiveFunctionValues'):
-            plot_dendrogram(list(reversed(self._clusterings)), list(reversed(self._objectiveFunctionValues)))
+        plot_dendrogram(list(reversed(self._clusterings)), list(reversed(self._objectiveFunctionValues)), False)
+        
+    def _visualizeDendrogramLog(self, e):
+        plot_dendrogram(list(reversed(self._clusterings)), list(reversed(self._objectiveFunctionValues)), True)
         
     def _visualizeObjectiveFunction(self, e):
-        if hasattr(self, '_objectiveFunctionValues') and hasattr(self, '_elbows'):
-            plot_function_and_elbows(self._objectiveFunctionValues, self._elbows)
+        plot_function_and_elbows(self._objectiveFunctionValues, self._elbows, False)
+    
+    def _visualizeObjectiveFunctionLog(self, e):
+        plot_function_and_elbows(self._objectiveFunctionValues, self._elbows, True)
 
     def _visualizeReferenceClassificationSizes(self, e):
-        if hasattr(self, '_sizePercentiles'):
-            show_percentile_table(self._sizePercentiles, 'Size percentiles')
+        show_percentile_table(self._sizePercentiles, 'Size percentiles')
 
     def _visualizeReferenceClassificationSizeRatios(self, e):
-        if hasattr(self, '_sizeRatioPercentiles'):
-            show_percentile_table(self._sizeRatioPercentiles, 'Size ratio percentiles')
+        show_percentile_table(self._sizeRatioPercentiles, 'Size ratio percentiles')
 
     def _loadAttributeIfExists(self, filename, attribute):
         self._loadAttribute(filename, attribute) # TODO: add exception handling for when the file does not exist
@@ -192,7 +210,7 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
 
 # Plotting functions
 
-def plot_dendrogram(clusterings, obValues):
+def plot_dendrogram(clusterings, obValues, logarithmic=False):
     """ Plot the dendrogram from the objective functions of the merge
         between the groups of images """
 
@@ -237,11 +255,14 @@ def plot_dendrogram(clusterings, obValues):
     plt.xlabel('sets ids')
     plt.ylabel('objective function')
     plt.tight_layout()
-    plt.yscale('log')
-    plt.ylim([np.min(linkage_matrix[:, 2]), np.max(linkage_matrix[:, 2])])
+
+    if logarithmic is True:
+        plt.yscale('log')
+        plt.ylim([np.min(linkage_matrix[:, 2]), np.max(linkage_matrix[:, 2])])
+
     plt.show()
 
-def plot_function_and_elbows(obValues, elbows):
+def plot_function_and_elbows(obValues, elbows, logarithmic=False):
     """ Plots the objective function and elbows """
 
     # Shorthands for some variables
@@ -264,6 +285,11 @@ def plot_function_and_elbows(obValues, elbows):
     plt.ylabel('Objective values')
     plt.title('Objective values for each number of clusters')
     plt.tight_layout()
+
+    if logarithmic is True:
+        plt.yscale('log')
+        plt.ylim([np.min(obValues), np.max(obValues)])
+    
     plt.show()
 
 def show_percentile_table(data, title=None):
