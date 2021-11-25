@@ -1343,7 +1343,7 @@ class TestXmippVolSubtraction(TestXmippBase):
         def setUpClass(cls):
             setupTestProject(cls)
 
-        def testXmippProjSub(self):
+        def testXmippPhantomVol(self):
             protCreatePhantom = self.newProtocol(XmippProtPhantom)
             self.launchProtocol(protCreatePhantom)
             self.assertIsNotNone(protCreatePhantom.getFiles(),
