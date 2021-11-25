@@ -42,7 +42,8 @@ class XmippProtPhantom(EMProtocol):
                       default='40 40 40 0\ncyl + 1 0 0 0 15 15 2 0 0 0\nsph + 1 0 0 5 2\ncyl + 1 0 0 -5 2 2 10 0 90 0\n'
                               'sph + 1 0 -5 5 2',
                       help="create a phantom description: x y z backgroundValue geometry(cyl, sph...) +(superimpose) "
-                           "desnsityValue origin radius height rot tilt psi")
+                           "desnsityValue origin radius height rot tilt psi. See more information in "
+                           "https://web.archive.org/web/20180813105422/http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/FileFormats#Phantom_metadata_file")
         form.addParam('sampling', FloatParam, label='Sampling rate', default=4)
 
     # --------------------------- INSERT steps functions --------------------------------------------
