@@ -1198,19 +1198,6 @@ class TestXmippValidateNonTilt(TestXmippBase):
         self.assertIsNotNone(protValidate.outputVolumes, "There was a problem with Validate Non-Tilt")
 
 
-if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        className = sys.argv[1]
-        cls = globals().get(className, None)
-        if cls:
-            suite = unittest.TestLoader().loadTestsFromTestCase(cls)
-            unittest.TextTestRunner(verbosity=2).run(suite)
-        else:
-            print("Test: '%s' not found." % className)
-    else:
-        unittest.main()
-
-
 class TestXmippVolSubtraction(TestXmippBase):
 
     @classmethod
@@ -1337,14 +1324,31 @@ class TestXmippVolSubtraction(TestXmippBase):
         self.assertIsNotNone(protVolConsensus.outputVolume,
                              "There was a problem with Volumes consensus")
 
-    class TestXmippVolPhantom(TestXmippBase):
 
-        @classmethod
-        def setUpClass(cls):
-            setupTestProject(cls)
+class TestXmippVolPhantom(TestXmippBase):
 
-        def testXmippPhantomVol(self):
-            protCreatePhantom = self.newProtocol(XmippProtPhantom)
-            self.launchProtocol(protCreatePhantom)
-            self.assertIsNotNone(protCreatePhantom.getFiles(),
-                                 "There was a problem with phantom creation")
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testXmippPhantomVol(self):
+        protCreatePhantom = self.newProtocol(XmippProtPhantom)
+        self.launchProtocol(protCreatePhantom)
+        self.assertIsNotNone(protCreatePhantom.getFiles(),  "There was a problem with phantom creation")
+        self.assertEqual(protCreatePhantom.outputVolume.getSamplingRate(), 4,
+                         "There was a problem with the sampling rate value of output phantom")
+        self.assertEqual(protCreatePhantom.outputVolume.getDim(), (40, 40, 40),
+                         "There was a problem with the dimensions of output phantom")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        className = sys.argv[1]
+        cls = globals().get(className, None)
+        if cls:
+            suite = unittest.TestLoader().loadTestsFromTestCase(cls)
+            unittest.TextTestRunner(verbosity=2).run(suite)
+        else:
+            print("Test: '%s' not found." % className)
+    else:
+        unittest.main()
