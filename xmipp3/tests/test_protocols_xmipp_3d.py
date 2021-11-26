@@ -1341,6 +1341,81 @@ class TestXmippVolPhantom(TestXmippBase):
                          "There was a problem with the dimensions of output phantom")
 
 
+class TestXmippShiftParticlesAndVolume(TestXmippBase):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
+        cls.vol1 = cls.dataset.getFile('volumes/volume_1_iter_002.mrc')
+
+    def testXmippShiftParticlesAndVolume(self):
+        protImportVol = self.newProtocol(ProtImportVolumes,
+                                          objLabel='Volume',
+                                          filesPath=self.vol1,
+                                          samplingRate=7.08)
+        self.launchProtocol(protImportVol)
+        self.assertIsNotNone(protImportVol.getFiles(),
+                             "There was a problem with the volume import")
+
+        protCreateGallery = self.newProtocol(XmippProtCreateGallery,
+                                             inputVolume=protImportVol.outputVolume,
+                                             rotStep=15.0,
+                                             tiltStep=90.0)
+        self.launchProtocol(protCreateGallery)
+        self.assertIsNotNone(protCreateGallery.getFiles(),
+                             "There was a problem with create gallery")
+
+        protShiftParticles = self.newProtocol(XmippProtShiftParticles,
+                                              inputParticles=protCreateGallery.outputReprojections,
+                                              xin=2.0, yin=3.0, zin=4.0)
+        self.launchProtocol(protShiftParticles)
+        self.assertIsNotNone(protShiftParticles.getFiles(),
+                             "There was a problem with shift particles")
+
+        protCreateMask = self.newProtocol(XmippProtCreateMask3D,
+                                          inputVolume=protImportVol.outputVolume,
+                                          threshold=0.1)
+        self.launchProtocol(protCreateMask)
+        self.assertIsNotNone(protCreateMask.getFiles(),
+                             "There was a problem with the 3D mask ")
+
+        protShiftParticlesCenterOfMass = self.newProtocol(XmippProtShiftParticles,
+                                                          inputParticles=protCreateGallery.outputReprojections,
+                                                          inputMask=protCreateMask.outputMask,
+                                                          option=False)
+        self.launchProtocol(protShiftParticlesCenterOfMass)
+        self.assertIsNotNone(protShiftParticlesCenterOfMass.getFiles(),
+                             "There was a problem with shift particles to center of mass")
+
+        protShiftVolPart = self.newProtocol(XmippProtShiftVolume,
+                                            inputVol=protImportVol.outputVolume,
+                                            inputProtocol=protShiftParticles)
+        self.launchProtocol(protShiftVolPart)
+        self.assertIsNotNone(protShiftVolPart.getFiles(),
+                             "There was a problem with shift volume with particle shifts")
+
+        protShiftVolCrop = self.newProtocol(XmippProtShiftVolume,
+                                            inputVol=protImportVol.outputVolume,
+                                            shiftBool=False,
+                                            x=5, y=5, z=5,
+                                            boxSizeBool=False,
+                                            boxSize=32)
+        self.launchProtocol(protShiftVolCrop)
+        self.assertIsNotNone(protShiftVolCrop.getFiles(),
+                             "There was a problem with shift crop volume")
+
+        protShiftVolPad = self.newProtocol(XmippProtShiftVolume,
+                                           inputVol=protImportVol.outputVolume,
+                                           shiftBool=False,
+                                           x=5, y=5, z=5,
+                                           boxSizeBool=False,
+                                           boxSize=80)
+        self.launchProtocol(protShiftVolPad)
+        self.assertIsNotNone(protShiftVolPad.getFiles(),
+                             "There was a problem with shift pad volume")
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         className = sys.argv[1]
