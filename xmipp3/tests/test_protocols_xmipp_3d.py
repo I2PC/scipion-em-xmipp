@@ -1372,6 +1372,15 @@ class TestXmippShiftParticlesAndVolume(TestXmippBase):
         self.launchProtocol(protShiftParticles)
         self.assertIsNotNone(protShiftParticles.getFiles(),
                              "There was a problem with shift particles")
+        self.assertEqual(protShiftParticles.outputParticles.getSamplingRate(), 7.08,
+                         "There was a problem with the sampling rate value of output particles")
+        self.assertEqual(protShiftParticles.outputParticles.getFirstItem().getDim(), (64, 64, 1),
+                         "There was a problem with the dimensions of output particles")
+        self.assertEqual(protShiftParticles.outputParticles.getSize(), 181,
+                         "There was a problem with the dimensions of output particles")
+        self.assertEqual(protShiftParticles.shiftX.get(), 2.0, "There was a problem with output shift x")
+        self.assertEqual(protShiftParticles.shiftY.get(), 3.0, "There was a problem with output shift y")
+        self.assertEqual(protShiftParticles.shiftZ.get(), 4.0, "There was a problem with output shift z")
 
         protCreateMask = self.newProtocol(XmippProtCreateMask3D,
                                           inputVolume=protImportVol.outputVolume,
@@ -1387,6 +1396,15 @@ class TestXmippShiftParticlesAndVolume(TestXmippBase):
         self.launchProtocol(protShiftParticlesCenterOfMass)
         self.assertIsNotNone(protShiftParticlesCenterOfMass.getFiles(),
                              "There was a problem with shift particles to center of mass")
+        self.assertEqual(protShiftParticlesCenterOfMass.outputParticles.getSamplingRate(), 7.08,
+                         "There was a problem with the sampling rate value of output particles")
+        self.assertEqual(protShiftParticlesCenterOfMass.outputParticles.getFirstItem().getDim(), (64, 64, 1),
+                         "There was a problem with the dimensions of output particles")
+        self.assertEqual(protShiftParticlesCenterOfMass.outputParticles.getSize(), 181,
+                         "There was a problem with the dimensions of output particles")
+        self.assertEqual(protShiftParticlesCenterOfMass.shiftX.get(), 32.0, "There was a problem with output shift x")
+        self.assertEqual(protShiftParticlesCenterOfMass.shiftY.get(), 32.0, "There was a problem with output shift y")
+        self.assertEqual(protShiftParticlesCenterOfMass.shiftZ.get(), 32.0, "There was a problem with output shift z")
 
         protShiftVolPart = self.newProtocol(XmippProtShiftVolume,
                                             inputVol=protImportVol.outputVolume,
@@ -1394,6 +1412,13 @@ class TestXmippShiftParticlesAndVolume(TestXmippBase):
         self.launchProtocol(protShiftVolPart)
         self.assertIsNotNone(protShiftVolPart.getFiles(),
                              "There was a problem with shift volume with particle shifts")
+        self.assertEqual(protShiftVolPart.outputVolume.getSamplingRate(), 7.08,
+                         "There was a problem with the sampling rate value of output volume")
+        self.assertEqual(protShiftVolPart.outputVolume.getDim(), (64, 64, 64),
+                         "There was a problem with the dimensions of output volume")
+        self.assertEqual(protShiftVolPart.shiftX.get(), 2.0, "There was a problem with output shift x")
+        self.assertEqual(protShiftVolPart.shiftY.get(), 3.0, "There was a problem with output shift y")
+        self.assertEqual(protShiftVolPart.shiftZ.get(), 4.0, "There was a problem with output shift z")
 
         protShiftVolCrop = self.newProtocol(XmippProtShiftVolume,
                                             inputVol=protImportVol.outputVolume,
@@ -1404,6 +1429,13 @@ class TestXmippShiftParticlesAndVolume(TestXmippBase):
         self.launchProtocol(protShiftVolCrop)
         self.assertIsNotNone(protShiftVolCrop.getFiles(),
                              "There was a problem with shift crop volume")
+        self.assertEqual(protShiftVolCrop.outputVolume.getSamplingRate(), 7.08,
+                         "There was a problem with the sampling rate value of output volume")
+        self.assertEqual(protShiftVolCrop.outputVolume.getDim(), (32, 32, 32),
+                         "There was a problem with the dimensions of output volume")
+        self.assertEqual(protShiftVolCrop.shiftX.get(), 5.0, "There was a problem with output shift x")
+        self.assertEqual(protShiftVolCrop.shiftY.get(), 5.0, "There was a problem with output shift y")
+        self.assertEqual(protShiftVolCrop.shiftZ.get(), 5.0, "There was a problem with output shift z")
 
         protShiftVolPad = self.newProtocol(XmippProtShiftVolume,
                                            inputVol=protImportVol.outputVolume,
@@ -1414,6 +1446,13 @@ class TestXmippShiftParticlesAndVolume(TestXmippBase):
         self.launchProtocol(protShiftVolPad)
         self.assertIsNotNone(protShiftVolPad.getFiles(),
                              "There was a problem with shift pad volume")
+        self.assertEqual(protShiftVolPad.outputVolume.getSamplingRate(), 7.08,
+                         "There was a problem with the sampling rate value of output volume")
+        self.assertEqual(protShiftVolPad.outputVolume.getDim(), (80, 80, 80),
+                         "There was a problem with the dimensions of output volume")
+        self.assertEqual(protShiftVolPad.shiftX.get(), 5.0, "There was a problem with output shift x")
+        self.assertEqual(protShiftVolPad.shiftY.get(), 5.0, "There was a problem with output shift y")
+        self.assertEqual(protShiftVolPad.shiftZ.get(), 5.0, "There was a problem with output shift z")
 
 
 if __name__ == "__main__":
