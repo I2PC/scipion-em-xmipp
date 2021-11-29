@@ -1325,7 +1325,6 @@ class TestXmippVolSubtraction(TestXmippBase):
                              "There was a problem with Volumes consensus")
 
 
-<<<<<<< HEAD
 class TestXmippProjSubtraction(TestXmippBase):
 
     @classmethod
