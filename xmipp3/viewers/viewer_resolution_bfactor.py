@@ -105,25 +105,10 @@ class XmippBfactorResolutionViewer(ProtocolViewer):
         bf = np.array(bf)
         r = np.array(r)
 
-        if not self.lowestBF.get():
-            low_bf = bf[0]
-        else:
-            low_bf = self.lowestBF
-
-        if not self.highestBF.get():
-            high_bf = bf[-1]
-        else:
-            high_bf = self.highestBF
-
-        if not self.lowestLR.get():
-            low_lr = lr[0]
-        else:
-            low_lr = self.lowestLR
-
-        if not self.highestLR.get():
-            high_lr = lr[-1]
-        else:
-            high_lr = self.highestLR
+        low_bf = self.lowestBF if self.lowestBF.get() else bf[0]
+        high_bf = self.highestBF if self.highestBF.get() else bf[-1]
+        low_lr = self.lowestLR if self.lowestLR.get() else lr[0]
+        high_lr = self.highestLR if self.highestLR.get() else lr[-1]
 
         plt.subplot(211)
         #The magic numbers of 0 and 40 define the size of the vertical bands, they provide good visualization aspect
