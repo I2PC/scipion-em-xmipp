@@ -105,20 +105,20 @@ class XmippBfactorResolutionViewer(ProtocolViewer):
         bf = np.array(bf)
         r = np.array(r)
 
-        low_bf = self.lowestBF if self.lowestBF.get() else bf[0]
-        high_bf = self.highestBF if self.highestBF.get() else bf[-1]
-        low_lr = self.lowestLR if self.lowestLR.get() else lr[0]
-        high_lr = self.highestLR if self.highestLR.get() else lr[-1]
+        lowBF = self.lowestBF if self.lowestBF.get() else bf[0]
+        highBF = self.highestBF if self.highestBF.get() else bf[-1]
+        lowLR = self.lowestLR if self.lowestLR.get() else lr[0]
+        highLR = self.highestLR if self.highestLR.get() else lr[-1]
 
         plt.subplot(211)
         #The magic numbers of 0 and 40 define the size of the vertical bands, they provide good visualization aspect
-        plt.imshow(lr.reshape(1, len(lr)), vmin=low_lr, vmax=high_lr, cmap=plt.cm.viridis, extent=[r[0], r[-1], 0, 40])
+        plt.imshow(lr.reshape(1, len(lr)), vmin=lowLR, vmax=highLR, cmap=plt.cm.viridis, extent=[r[0], r[-1], 0, 40])
         plt.xlabel('Residue')
         plt.title('Normalized Local Resolution')
         plt.colorbar()
 
         plt.subplot(212)
-        plt.imshow(bf.reshape(1, len(bf)), vmin=low_bf, vmax=high_bf, cmap=plt.cm.viridis, extent=[r[0], r[-1], 0, 40])
+        plt.imshow(bf.reshape(1, len(bf)), vmin=lowBF, vmax=highBF, cmap=plt.cm.viridis, extent=[r[0], r[-1], 0, 40])
         plt.xlabel('Residue')
         plt.title('B-factor')
         plt.colorbar()
