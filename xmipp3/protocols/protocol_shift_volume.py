@@ -45,9 +45,10 @@ class XmippProtShiftVolume(EMProtocol):
                       help='Use output shifts of protocol "shift particles" which should be executed previously')
         form.addParam('inputProtocol', PointerParam, pointerClass='XmippProtShiftParticles', allowsNull=True,
                       label="Shift particles protocol", condition='shiftBool')
-        form.addParam('x', FloatParam, label="x", condition='not shiftBool', allowsNull=True)
-        form.addParam('y', FloatParam, label="y", condition='not shiftBool', allowsNull=True)
-        form.addParam('z', FloatParam, label="z", condition='not shiftBool', allowsNull=True)
+        COND = 'not shiftBool'
+        form.addParam('x', FloatParam, label="x", condition=COND, allowsNull=True)
+        form.addParam('y', FloatParam, label="y", condition=COND, allowsNull=True)
+        form.addParam('z', FloatParam, label="z", condition=COND, allowsNull=True)
         form.addParam('boxSizeBool', BooleanParam, label='Use original box size for the shifted volume?',
                       default='True', help='Use input volume box size for the shifted volume.')
         form.addParam('boxSize', IntParam, label='Final box size', condition='not boxSizeBool',
@@ -102,6 +103,3 @@ class XmippProtShiftVolume(EMProtocol):
             else:
                 summary.append("User defined shift")
         return summary
-
-    def _methods(self):
-        return []
