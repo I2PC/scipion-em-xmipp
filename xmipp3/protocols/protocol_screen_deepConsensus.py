@@ -486,8 +486,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         if self.ENDED:
           return
         # Preprocessing
-        #print(self.counter)
-        #print(self.counter%2 == 0)
         if len(self.readyToPreprocessMics(shared=False)) > 0 and not self.PREPROCESSING and (self.counter%2 == 0):
             print('----------------------------------ENTERING PREPROCESSING STEP-----------------------------')
             self.PREPROCESSING = True
@@ -515,7 +513,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           self.saveTrainedParams(trainedParams)
 
         #Prediction
-        if self.networkReadyToPredict() and self.cnnFree() and self.predictionsOn() and len(self.readyToPredictMicFns()) > 0:
+        if self.networkReadyToPredict() and self.cnnFree() and self.predictionsOn() and len(self.readyToPredictMicFns()) > 0: #If it is bigger than self.predicting_BATCH
             print('---------------------------------------------ENTERING PREDICTION---------------------------------')
             self.PREDICTING = True
             depPredict = self._insertFunctionStep('predictCNN', prerequisites= self.newSteps)
@@ -523,6 +521,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             self.newSteps += [self._insertFunctionStep('createOutputStep', prerequisites=[depPredict])]
 
         #Last round with batch size == 1 to include all input
+        print('CHECK not last_round logic')
         if self.allFree() and not self.LAST_ROUND and self.checkIfParentsFinished():
           print('----------------------------------NOT LAST ROUND BUT ACTIVATES LAST_STEPS---------------------------')
           protLast = self._steps[self.lastStep - 1]
@@ -533,6 +532,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         protEnd = self._steps[self.endStep-1]
         protEnd.addPrerequisites(*self.newSteps)
         #Ending the protocol when everything is done
+        print()
+        print('CHECK last_round logic')
         if self.LAST_ROUND and self.allFree():
           print('----------------------------------LAST ROUND ACTIVATES END_STEP---------------------------')
           protEnd.setStatus(STATUS_NEW)
@@ -551,17 +552,17 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       trainedParams = self.loadTrainedParams()
       toTrainSize = self.toTrainDataSize.get() if self.toTrainDataSize.get() != -1 else 1e10
 
-      if mean_acc != None and mean_acc > threshold:
-        self.uploadTrainedParam('keepTraining', False)
-        print('Mean accuracy %f surpass training accuracy threshold %f -> end training'
-              %(mean_acc, threshold))
+      if (mean_acc != None and mean_acc > threshold) or \
+              (trainedParams['posParticlesTrained'] >= toTrainSize and trainedParams['trainingPass'] != ''):
+        print('-------------------------ENTERING IN THE CHANGING THE TRAININGPASS LOGIC-------------------------')
+        lastTrainingPass = trainedParams['trainingPass']
+        self.retrievePreviousPassModel('', lastTrainingPass)
+        trainedParams['trainingPass'] = ''
+        self.saveTrainedParams(trainedParams)
+        if mean_acc > threshold:
+            print('Mean accuracy %f surpass training accuracy threshold %f -> end training'
+                %(mean_acc, threshold))
 
-      if trainedParams['posParticlesTrained'] >= toTrainSize and trainedParams['trainingPass'] != '':
-          print('-------------------------ENTERING IN THE CHANGING THE TRAININGPASS LOGIC-------------------------')
-          lastTrainingPass = trainedParams['trainingPass']
-          self.retrievePreviousPassModel('', lastTrainingPass)
-          trainedParams['trainingPass'] = ''
-          self.saveTrainedParams(trainedParams)
 
     def lastRoundStep(self):
       '''Starts the last round of training and predictions with the remainign microgrpahs
@@ -818,7 +819,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         else:
             if not micSet == []:
-                  #print("Micset not empty in loadCoords")
                   #Load coordinates from an specific set of mics
                   batchSetOfCoordinates = self._createSetOfCoordinates(micSet)
                   batchSetOfCoordinates.setBoxSize(self._getBoxSize())
@@ -831,7 +831,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                   else:
                        self.coordinatesDict[mode] = batchSetOfCoordinates
             else:
-                  #print("Micset empty in loadCoords")
                   sqliteName = self._getExtraPath(self.CONSENSUS_COOR_PATH_TEMPLATE % mode) + ".sqlite"
                   if os.path.isfile(self._getExtraPath(sqliteName)):
                     cleanPath(self._getExtraPath(sqliteName))
@@ -1068,7 +1067,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         else:
           toPredictMicFns = self.readyToPredictMicFns()
           print("Mics ready to predict {}".format(len(toPredictMicFns)))
-          if len(toPredictMicFns) >= self.PREDICT_BATCH_MAX:
+          if len(toPredictMicFns) > self.PREDICT_BATCH_MAX:
               toPredictMicFns = toPredictMicFns[:self.PREDICT_BATCH_MAX]
 
           predExten = '_partial'
@@ -1079,8 +1078,10 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         if not os.path.isdir(netDataPath) and self._doContinue():
             prevRunPath = self.continueRun.get()._getExtraPath(self.NET_TEMPLATE.format(trPass))
             copyTree(prevRunPath, netDataPath)
+            print('I AM DO CONTINUE')
         elif self.skipTraining.get() and self._usePretrainedModel():
           self.__retrievePreTrainedModel(netDataPath)
+          print('I AM NOT DO CONTINUE')
 
         if self.usesGpu():
             numberOfThreads = None
@@ -1090,7 +1091,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             gpuToUse = None
 
         mdObject = md.MetaData(mdORPath)
-        print('Predicting on {} true particles in {} micrographs'.format(mdObject.size(), len(toPredictMicFns)))
+        print('Predicting on {} true particles'.format(mdObject.size()))
+              #'in {} micrographs'.format(mdObject.size(), len(toPredictMicFns)))
         predictDict = {mdORPath: 1}
 
         if self.doTesting.get() and self.testTrueSetOfParticles.get() and self.testFalseSetOfParticles.get() and not\
@@ -1143,7 +1145,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       partSet.setSamplingRate(self._getDownFactor() * self.inSamplingRate)
 
       self.outputParticles, self.outputCoordinates = self.getParticlesOutput(partSet), self.getCoordinatesOutput()
-
       downFactor = self._getDownFactor()
       for part in partSet:
         coord = part.getCoordinate().clone()
@@ -1154,7 +1155,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         newPart.copy(part, copyId=False)
         newPart.scaleCoordinate(downFactor)
         if (self.threshold.get() < 0 or
-                getattr(newPart, deepZscoreLabel) > self.threshold.get()):
+          getattr(newPart, deepZscoreLabel) > self.threshold.get()):
           self.outputCoordinates.append(coord)
           self.outputParticles.append(newPart)
 
@@ -1497,6 +1498,13 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       for mode in ['OR', 'NOISE', 'AND']:
         if self.EXTRACTING[mode]:
           gExtracting = True
+
+      print('INSIDE ALL FREE method')
+      print('self.PREDICTING'+ str(self.PREDICTING))
+      print('self.TRAINING'+str(self.TRAINING))
+      print('self.gExtracting'+str(gExtracting))
+      print('self.PREPROCESSING'+str(self.PREPROCESSING))
+
       return not self.PREDICTING and not self.TRAINING and not gExtracting and not self.PREPROCESSING
 
     def checkIfParentsFinished(self):
