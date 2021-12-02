@@ -506,14 +506,14 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           self.doTraining()
 
         elif trainedParams['posParticlesTrained'] >= toTrainSize and trainedParams['trainingPass'] != '':
-          print('-------------------------ENTERING IN THE CHANGING THE TRAININGPASS LOGIC-------------------------')
+          print('-------------------------ENTERING IN THE CHANGING THE TRAINING_PASS LOGIC-------------------------')
           lastTrainingPass = trainedParams['trainingPass']
           self.retrievePreviousPassModel('', lastTrainingPass)
           trainedParams['trainingPass'] = ''
           self.saveTrainedParams(trainedParams)
 
         #Prediction
-        if self.networkReadyToPredict() and self.cnnFree() and self.predictionsOn() and len(self.readyToPredictMicFns()) > 0: #If it is bigger than self.predicting_BATCH
+        if self.networkReadyToPredict() and self.cnnFree() and self.predictionsOn() and len(self.readyToPredictMicFns()) > 0:
             print('---------------------------------------------ENTERING PREDICTION---------------------------------')
             self.PREDICTING = True
             depPredict = self._insertFunctionStep('predictCNN', prerequisites= self.newSteps)
@@ -521,7 +521,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             self.newSteps += [self._insertFunctionStep('createOutputStep', prerequisites=[depPredict])]
 
         #Last round with batch size == 1 to include all input
-        print('CHECK not last_round logic')
         if self.allFree() and not self.LAST_ROUND and self.checkIfParentsFinished():
           print('----------------------------------NOT LAST ROUND BUT ACTIVATES LAST_STEPS---------------------------')
           protLast = self._steps[self.lastStep - 1]
@@ -532,8 +531,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         protEnd = self._steps[self.endStep-1]
         protEnd.addPrerequisites(*self.newSteps)
         #Ending the protocol when everything is done
-        print()
-        print('CHECK last_round logic')
         if self.LAST_ROUND and self.allFree():
           print('----------------------------------LAST ROUND ACTIVATES END_STEP---------------------------')
           protEnd.setStatus(STATUS_NEW)
@@ -839,13 +836,14 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                   totalSetOfCoordinates = readSetOfCoordsFromPosFnames(posCoorsPath,
                                                                        setOfInputCoords=self.inputCoordinates[0].get(),
                                                                        sqliteOutName=sqliteName, write=True)
-                  self.USING_INPUT_COORDS=False
                   print("Coordinates %s size: %d" % (mode, totalSetOfCoordinates.getSize()))
                   assert totalSetOfCoordinates.getSize() > MIN_NUM_CONSENSUS_COORDS, \
                     ("Error, the consensus (%s) of your input coordinates was too small (%s). " +
                      "It must be > %s. Try a different input..."
                      ) % (mode, str(totalSetOfCoordinates.getSize()), str(MIN_NUM_CONSENSUS_COORDS))
                   self.coordinatesDict[mode] = totalSetOfCoordinates
+
+            self.USING_INPUT_COORDS = False
 
 
     def insertExtractPartSteps(self, mode, prerequisites):
@@ -936,7 +934,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
               imgsXmd.write(fnImages)
             else:
               imgsXmd.append(fnImages)
-            self.EXTRACTING[mode] = False
+
+        self.EXTRACTING[mode] = False
 
     def doTraining(self): # PUT SOMETHING LIKE IN THE PCIKNOISE BUT MAKE SURE YOU ARE ONLY USING IT FOR AND SETS
       '''Prepares the positive (AND) and negative (NOISE) coordinates for the training and executes it'''
@@ -1078,10 +1077,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         if not os.path.isdir(netDataPath) and self._doContinue():
             prevRunPath = self.continueRun.get()._getExtraPath(self.NET_TEMPLATE.format(trPass))
             copyTree(prevRunPath, netDataPath)
-            print('I AM DO CONTINUE')
         elif self.skipTraining.get() and self._usePretrainedModel():
           self.__retrievePreTrainedModel(netDataPath)
-          print('I AM NOT DO CONTINUE')
 
         if self.usesGpu():
             numberOfThreads = None
@@ -1498,12 +1495,6 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
       for mode in ['OR', 'NOISE', 'AND']:
         if self.EXTRACTING[mode]:
           gExtracting = True
-
-      print('INSIDE ALL FREE method')
-      print('self.PREDICTING'+ str(self.PREDICTING))
-      print('self.TRAINING'+str(self.TRAINING))
-      print('self.gExtracting'+str(gExtracting))
-      print('self.PREPROCESSING'+str(self.PREPROCESSING))
 
       return not self.PREDICTING and not self.TRAINING and not gExtracting and not self.PREPROCESSING
 
