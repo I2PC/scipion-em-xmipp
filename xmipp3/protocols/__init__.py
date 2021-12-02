@@ -77,6 +77,7 @@ from .protocol_pick_noise import XmippProtPickNoise
 from .protocol_particle_boxsize import XmippProtParticleBoxsize
 from .protocol_particle_pick import XmippProtParticlePicking
 from .protocol_particle_pick_pairs import XmippProtParticlePickingPairs
+from .protocol_phantom_create import XmippProtPhantom
 from .protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
 from .protocol_projmatch import XmippProtProjMatch
 from .protocol_random_conical_tilt import XmippProtRCT
@@ -99,6 +100,7 @@ from .protocol_screen_particles import XmippProtScreenParticles
 from .protocol_screen_deepConsensus import XmippProtScreenDeepConsensus, XmippProtDeepConsSubSet
 from .protocol_screen_deeplearning import XmippProtScreenDeepLearning
 from .protocol_shift_particles import XmippProtShiftParticles
+from .protocol_shift_volume import XmippProtShiftVolume
 from .protocol_simulate_ctf import XmippProtSimulateCTF
 from .protocol_solid_angles import XmippProtSolidAngles
 from .protocol_split_volume import XmippProtSplitvolume

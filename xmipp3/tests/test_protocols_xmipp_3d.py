@@ -1198,19 +1198,6 @@ class TestXmippValidateNonTilt(TestXmippBase):
         self.assertIsNotNone(protValidate.outputVolumes, "There was a problem with Validate Non-Tilt")
 
 
-if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        className = sys.argv[1]
-        cls = globals().get(className, None)
-        if cls:
-            suite = unittest.TestLoader().loadTestsFromTestCase(cls)
-            unittest.TextTestRunner(verbosity=2).run(suite)
-        else:
-            print("Test: '%s' not found." % className)
-    else:
-        unittest.main()
-
-
 class TestXmippVolSubtraction(TestXmippBase):
 
     @classmethod
@@ -1336,3 +1323,142 @@ class TestXmippVolSubtraction(TestXmippBase):
         self.launchProtocol(protVolConsensus)
         self.assertIsNotNone(protVolConsensus.outputVolume,
                              "There was a problem with Volumes consensus")
+
+
+class TestXmippVolPhantom(TestXmippBase):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testXmippPhantomVol(self):
+        protCreatePhantom = self.newProtocol(XmippProtPhantom)
+        self.launchProtocol(protCreatePhantom)
+        self.assertIsNotNone(protCreatePhantom.getFiles(),  "There was a problem with phantom creation")
+        self.assertEqual(protCreatePhantom.outputVolume.getSamplingRate(), 4,
+                         "There was a problem with the sampling rate value of output phantom")
+        self.assertEqual(protCreatePhantom.outputVolume.getDim(), (40, 40, 40),
+                         "There was a problem with the dimensions of output phantom")
+
+
+class TestXmippShiftParticlesAndVolume(TestXmippBase):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
+        cls.vol1 = cls.dataset.getFile('volumes/volume_1_iter_002.mrc')
+
+    def testXmippShiftParticlesAndVolume(self):
+
+        ERROR_SIZE_PART = "There was a problem with the size of output set of particles"
+        ERROR_DIM = "There was a problem with the dimensions of output "
+        ERROR_SR = "There was a problem with the sampling rate value of output "
+        ERROR_SHIFT = "There was a problem with output shift "
+
+        protImportVol = self.newProtocol(ProtImportVolumes,
+                                          objLabel='Volume',
+                                          filesPath=self.vol1,
+                                          samplingRate=7.08)
+        self.launchProtocol(protImportVol)
+        self.assertIsNotNone(protImportVol.getFiles(),
+                             "There was a problem with the volume import")
+
+        protCreateGallery = self.newProtocol(XmippProtCreateGallery,
+                                             inputVolume=protImportVol.outputVolume,
+                                             rotStep=15.0,
+                                             tiltStep=90.0)
+        self.launchProtocol(protCreateGallery)
+        self.assertIsNotNone(protCreateGallery.getFiles(),
+                             "There was a problem with create gallery")
+
+        protShiftParticles = self.newProtocol(XmippProtShiftParticles,
+                                              inputParticles=protCreateGallery.outputReprojections,
+                                              xin=2.0, yin=3.0, zin=4.0)
+        self.launchProtocol(protShiftParticles)
+        self.assertIsNotNone(protShiftParticles.getFiles(),
+                             "There was a problem with shift particles")
+        self.assertEqual(protShiftParticles.outputParticles.getSamplingRate(), 7.08, (ERROR_SR, "particles"))
+        self.assertEqual(protShiftParticles.outputParticles.getFirstItem().getDim(), (64, 64, 1),
+                         (ERROR_DIM, "particles"))
+        self.assertEqual(protShiftParticles.outputParticles.getSize(), 181, ERROR_SIZE_PART)
+        self.assertEqual(protShiftParticles.shiftX.get(), 2.0, (ERROR_SHIFT, "x"))
+        self.assertEqual(protShiftParticles.shiftY.get(), 3.0, (ERROR_SHIFT, "y"))
+        self.assertEqual(protShiftParticles.shiftZ.get(), 4.0, (ERROR_SHIFT, "z"))
+
+        protCreateMask = self.newProtocol(XmippProtCreateMask3D,
+                                          inputVolume=protImportVol.outputVolume,
+                                          threshold=0.1)
+        self.launchProtocol(protCreateMask)
+        self.assertIsNotNone(protCreateMask.getFiles(),
+                             "There was a problem with the 3D mask ")
+
+        protShiftParticlesCenterOfMass = self.newProtocol(XmippProtShiftParticles,
+                                                          inputParticles=protCreateGallery.outputReprojections,
+                                                          inputMask=protCreateMask.outputMask,
+                                                          option=False)
+        self.launchProtocol(protShiftParticlesCenterOfMass)
+        self.assertIsNotNone(protShiftParticlesCenterOfMass.getFiles(),
+                             "There was a problem with shift particles to center of mass")
+        self.assertEqual(protShiftParticlesCenterOfMass.outputParticles.getSamplingRate(), 7.08, (ERROR_SR, "particles"))
+        self.assertEqual(protShiftParticlesCenterOfMass.outputParticles.getFirstItem().getDim(), (64, 64, 1),
+                         (ERROR_DIM, "particles"))
+        self.assertEqual(protShiftParticlesCenterOfMass.outputParticles.getSize(), 181, ERROR_SIZE_PART)
+        self.assertEqual(protShiftParticlesCenterOfMass.shiftX.get(), 32.0, (ERROR_SHIFT, "x"))
+        self.assertEqual(protShiftParticlesCenterOfMass.shiftY.get(), 32.0, (ERROR_SHIFT, "y"))
+        self.assertEqual(protShiftParticlesCenterOfMass.shiftZ.get(), 32.0, (ERROR_SHIFT, "z"))
+
+        protShiftVolPart = self.newProtocol(XmippProtShiftVolume,
+                                            inputVol=protImportVol.outputVolume,
+                                            inputProtocol=protShiftParticles)
+        self.launchProtocol(protShiftVolPart)
+        self.assertIsNotNone(protShiftVolPart.getFiles(),
+                             "There was a problem with shift volume with particle shifts")
+        self.assertEqual(protShiftVolPart.outputVolume.getSamplingRate(), 7.08, (ERROR_SR, "volume"))
+        self.assertEqual(protShiftVolPart.outputVolume.getDim(), (64, 64, 64), (ERROR_DIM, "volume"))
+        self.assertEqual(protShiftVolPart.shiftX.get(), 2.0, (ERROR_SHIFT, "x"))
+        self.assertEqual(protShiftVolPart.shiftY.get(), 3.0, (ERROR_SHIFT, "y"))
+        self.assertEqual(protShiftVolPart.shiftZ.get(), 4.0, (ERROR_SHIFT, "z"))
+
+        protShiftVolCrop = self.newProtocol(XmippProtShiftVolume,
+                                            inputVol=protImportVol.outputVolume,
+                                            shiftBool=False,
+                                            x=5, y=5, z=5,
+                                            boxSizeBool=False,
+                                            boxSize=32)
+        self.launchProtocol(protShiftVolCrop)
+        self.assertIsNotNone(protShiftVolCrop.getFiles(),
+                             "There was a problem with shift crop volume")
+        self.assertEqual(protShiftVolCrop.outputVolume.getSamplingRate(), 7.08, (ERROR_SR, "volume"))
+        self.assertEqual(protShiftVolCrop.outputVolume.getDim(), (32, 32, 32), (ERROR_DIM, "volume"))
+        self.assertEqual(protShiftVolCrop.shiftX.get(), 5.0, (ERROR_SHIFT, "x"))
+        self.assertEqual(protShiftVolCrop.shiftY.get(), 5.0, (ERROR_SHIFT, "y"))
+        self.assertEqual(protShiftVolCrop.shiftZ.get(), 5.0, (ERROR_SHIFT, "z"))
+
+        protShiftVolPad = self.newProtocol(XmippProtShiftVolume,
+                                           inputVol=protImportVol.outputVolume,
+                                           shiftBool=False,
+                                           x=5, y=5, z=5,
+                                           boxSizeBool=False,
+                                           boxSize=80)
+        self.launchProtocol(protShiftVolPad)
+        self.assertIsNotNone(protShiftVolPad.getFiles(),
+                             "There was a problem with shift pad volume")
+        self.assertEqual(protShiftVolCrop.outputVolume.getSamplingRate(), 7.08, (ERROR_SR, "volume"))
+        self.assertEqual(protShiftVolPad.outputVolume.getDim(), (80, 80, 80), (ERROR_DIM, "volume"))
+        self.assertEqual(protShiftVolPad.shiftX.get(), 5.0, (ERROR_SHIFT, "x"))
+        self.assertEqual(protShiftVolPad.shiftY.get(), 5.0, (ERROR_SHIFT, "y"))
+        self.assertEqual(protShiftVolPad.shiftZ.get(), 5.0, (ERROR_SHIFT, "z"))
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        className = sys.argv[1]
+        cls = globals().get(className, None)
+        if cls:
+            suite = unittest.TestLoader().loadTestsFromTestCase(cls)
+            unittest.TextTestRunner(verbosity=2).run(suite)
+        else:
+            print("Test: '%s' not found." % className)
+    else:
+        unittest.main()
