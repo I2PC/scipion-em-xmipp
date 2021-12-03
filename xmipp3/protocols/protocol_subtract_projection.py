@@ -36,7 +36,7 @@ from xmipp3.convert import writeSetOfParticles
 
 class XmippProtSubtractProjection(EMProtocol):
     """ This protocol computes the subtraction between particles and a initial volume, by computing its projections
-    with the same angles that input particles have. Then, each particle and the correspondent projection of the inital
+    with the same angles that input particles have. Then, each particle and the correspondent projection of the initial
     volume are numerically adjusted and subtracted using a mask which denotes the region to keep. """
 
     _label = 'subtract projection'
@@ -86,7 +86,7 @@ class XmippProtSubtractProjection(EMProtocol):
         args = '-i %s --ref %s -o %s --iter %s --lambda %s' % (self._getExtraPath("input_particles.xmd"), fnVol,
                                                                self._getExtraPath("output_particles"), iter,
                                                                self.rfactor.get())
-        args += ' --saveProj %s' % self._getExtraPath('')  # REMOVE!!!!!
+        args += ' --saveProj %s' % self._getExtraPath('')
         if resol:
             fc = vol.getSamplingRate()/resol
             args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
