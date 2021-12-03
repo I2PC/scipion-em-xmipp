@@ -1326,7 +1326,7 @@ class TestXmippVolSubtraction(TestXmippBase):
 
 
 class TestXmippVolPhantom(TestXmippBase):
-    
+
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
