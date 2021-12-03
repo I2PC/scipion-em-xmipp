@@ -40,9 +40,9 @@ class XmippProtSubtractProjection(EMProtocol):
     volume are numerically adjusted and subtracted using a mask which denotes the region to keep. """
 
     _label = 'subtract projection'
+    INPUT_PARTICLES = "input_particles.xmd"
 
     # --------------------------- DEFINE param functions --------------------------------------------
-    @classmethod
     def _defineParams(self, form):
         form.addSection(label='Input')
         form.addParam('particles', PointerParam, pointerClass='SetOfParticles', label="Particles: ",
@@ -73,7 +73,7 @@ class XmippProtSubtractProjection(EMProtocol):
 
     # --------------------------- STEPS functions --------------------------------------------
     def convertStep(self):
-        writeSetOfParticles(self.particles.get(), self._getExtraPath("input_particles.xmd"))
+        writeSetOfParticles(self.particles.get(), self._getExtraPath(self.INPUT_PARTICLES))
         
     def subtractionStep(self):
         vol = self.vol.get().clone()
@@ -81,10 +81,10 @@ class XmippProtSubtractProjection(EMProtocol):
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
         resol = self.resol.get()
-        iter = self.iter.get()
+        iters = self.iter.get()
         program = "xmipp_subtract_projection"
-        args = '-i %s --ref %s -o %s --iter %s --lambda %s' % (self._getExtraPath("input_particles.xmd"), fnVol,
-                                                               self._getExtraPath("output_particles"), iter,
+        args = '-i %s --ref %s -o %s --iter %s --lambda %s' % (self._getExtraPath(self.INPUT_PARTICLES), fnVol,
+                                                               self._getExtraPath("output_particles"), iters,
                                                                self.rfactor.get())
         args += ' --saveProj %s' % self._getExtraPath('')
         if resol:
@@ -102,7 +102,7 @@ class XmippProtSubtractProjection(EMProtocol):
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
         outputSet.copyItems(inputSet, updateItemCallback=self._updateItem,
-                            itemDataIterator=md.iterRows(self._getExtraPath("input_particles.xmd")))
+                            itemDataIterator=md.iterRows(self._getExtraPath(self.INPUT_PARTICLES)))
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(inputSet, outputSet)
 
