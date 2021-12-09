@@ -579,6 +579,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         self._insertFunctionStep('createOutputStep', True, prerequisites=[self.depLastPredict])
       else:
         self.updateOutput(closeStream=True)
+        self.ENDED = True  # PROBAR ESTO
 
 
     def initializeStep(self):
