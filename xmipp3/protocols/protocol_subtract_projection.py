@@ -49,7 +49,7 @@ class XmippProtSubtractProjection(EMProtocol):
                       help='Specify a SetOfParticles.')
         form.addParam('vol', PointerParam, pointerClass='Volume', label="Initial volume ", help='Specify a volume.')
         form.addParam('maskVol', PointerParam, pointerClass='VolumeMask', label='Volume mask', allowsNull=True,
-                      help='3D mask for the input volume. This mask is not mandatory but highly recommendable.')
+                      help='3D mask for the input volume. This mask is not mandatory but advisable.')
         form.addParam('mask', PointerParam, pointerClass='VolumeMask', label="Mask for region to keep", allowsNull=True,
                       help='Specify a 3D mask for the region of the input volume that you want to keep.')
         form.addParam('resol', FloatParam, label="Filter at resolution: ", default=3, allowsNull=True,
@@ -59,7 +59,9 @@ class XmippProtSubtractProjection(EMProtocol):
         form.addParam('sigma', FloatParam, label="Decay of the filter (sigma): ", default=3, condition='resol',
                       help='Decay of the filter (sigma parameter) to smooth the mask transition',
                       expertLevel=LEVEL_ADVANCED)
-        form.addParam('iter', IntParam, label="Number of iterations: ", default=5, expertLevel=LEVEL_ADVANCED)
+        form.addParam('iter', IntParam, label="Number of iterations: ", default=5, expertLevel=LEVEL_ADVANCED,
+                      help='Number of iterations for the adjustment process of the images before the subtraction itself'
+                           'several iterations are recommended to improve the adjustment.')
         form.addParam('rfactor', FloatParam, label="Relaxation factor (lambda): ", default=1,
                       expertLevel=LEVEL_ADVANCED,
                       help='Relaxation factor for Fourier amplitude projector (POCS), it should be between 0 and 1, '
@@ -97,7 +99,7 @@ class XmippProtSubtractProjection(EMProtocol):
         self.runJob(program, args)
 
     def createOutputStep(self):
-        self.ix = 0
+        self.ix = 0  # initiate counter for particle file name
         inputSet = self.particles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
