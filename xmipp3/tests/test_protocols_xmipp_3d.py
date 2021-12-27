@@ -1324,6 +1324,7 @@ class TestXmippVolSubtraction(TestXmippBase):
         self.assertIsNotNone(protVolConsensus.outputVolume,
                              "There was a problem with Volumes consensus")
 
+
 class TestXmippVolPhantom(TestXmippBase):
 
     @classmethod
