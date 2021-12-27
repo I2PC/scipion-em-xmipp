@@ -88,6 +88,7 @@ class TestHighres(BaseTest):
                                    inputVolumes=self.protImportVol.outputVolume,
                                    particleRadius=180,
                                    symmetryGroup="i1",
+                                   nextResolutionCriterion=0.143,
                                    alignmentMethod=XmippProtReconstructHighRes.AUTOMATIC_ALIGNMENT,
                                    maximumTargetResolution="15 10 7",
                                    numberOfMpi=8)
