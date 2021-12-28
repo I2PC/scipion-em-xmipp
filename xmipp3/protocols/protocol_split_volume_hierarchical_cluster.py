@@ -31,7 +31,7 @@ from shutil import copy
 
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_2_0
-from pyworkflow.utils.path import makePath, cleanPattern, moveFile
+from pyworkflow.utils.path import makePath, cleanPattern, moveFile, cleanPath
 from pwem.emlib.image import ImageHandler
 from pwem.constants import ALIGN_PROJ
 from pwem.objects import Image, Volume
@@ -766,12 +766,15 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
             volumesSet.setSamplingRate(origTs)
             for i in range(2):
                 vol = Volume()
+                fnVol = self._getExtraPath("split%d.vol" % (i + 1))
                 if origTs != lastTs:
                     newXdim = inputParticles.getXDim()
-                    self.runJob("xmipp_image_resize", "-i %s --dim %d"
-                                % (self._getExtraPath("split%d.vol" % (i + 1)),
-                                   newXdim), numberOfMpi=1)
-                vol.setLocation(1, self._getExtraPath("split%d.vol" % (i + 1)))
+                    self.runJob("xmipp_image_resize", "-i %s --dim %d" % (fnVol, newXdim), numberOfMpi=1)
+                fnMrc = self._getExtraPath("split%d.mrc" % (i + 1))
+                self.runJob("xmipp_image_convert", "-i %s -o %s -t vol" % (fnVol, fnMrc), numberOfMpi=1)
+                self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" % (fnMrc, origTs), numberOfMpi=1)
+                cleanPath(fnVol)
+                vol.setLocation(1, fnMrc)
                 volumesSet.append(vol)
 
             self._defineOutputs(outputVolumes=volumesSet)

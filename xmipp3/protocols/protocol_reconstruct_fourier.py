@@ -102,7 +102,7 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
         """ Centralize how files are called for iterations and references. """
         myDict = {
             'input_xmd': self._getExtraPath('input_particles.xmd'),
-            'output_volume': self._getPath('output_volume.vol')
+            'output_volume': self._getPath('output_volume.mrc')
             }
         self._updateFilenamesDict(myDict)
 
