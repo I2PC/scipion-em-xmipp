@@ -250,7 +250,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                            'but after time, improvement can still happen. '
                            'Not recommended for very small data sets (<100 true particles)')
         form.addParam('maxValAcc', params.FloatParam,
-                      label="Training mean val_acc threshold", default=0.90,
+                      label="Training mean val_acc threshold", default=0.95,
                       condition="modelInitialization==%s or not skipTraining" % self.ADD_MODEL_TRAIN_NEW,
                       help='Stop training if at any training batch the selected threshold is achieved')
         form.addParam('l2RegStrength', params.FloatParam,
@@ -579,7 +579,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         self._insertFunctionStep('createOutputStep', True, prerequisites=[self.depLastPredict])
       else:
         self.updateOutput(closeStream=True)
-        self.ENDED = True  # PROBAR ESTO
+        self.ENDED = True
 
 
     def initializeStep(self):
@@ -742,7 +742,9 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
                 assert len(inputFileStr)>len(inputFileHeader), "Error, no consensus can be computed as there " \
                                                                "are mismatch in coordinate sets filenames"
-                consensus = -1 if mode=="AND" else 1
+                #consensus = -1 if mode=="AND" else 1
+                consensus = 0 if mode=="AND" else 1 # The consensus changed: with 0 it would take the union of the intersections
+                # THE MODE CAN BE A NEW PARAMETER TO BE ASKED TO THE USER
                 configFname= self._getTmpPath("consensus_%s_inputs.txt"%(mode) )
                 with open(configFname, "w") as f:
                     f.write(inputFileStr)
