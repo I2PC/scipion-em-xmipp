@@ -96,6 +96,9 @@ class XmippProtCoreAnalysis(ProtClassify2D):
         self.runJob('xmipp_classify_CL2D_core_analysis', args)
         self.runJob("xmipp_classify_evaluate_classes", "-i %s"%\
                     self._getExtraPath(join("level_00","level_classes_core.xmd")), numberOfMpi=1)
+        self.runJob("xmipp_metadata_utilities", "-i classes@%s --set join classes@%s ref"%\
+                    (self._getExtraPath(join("level_00","level_classes.xmd")),
+                     self._getExtraPath(join("level_00","level_classes_core.xmd"))), numberOfMpi=1)
 
     #--------------------------- STEPS functions -------------------------------
     def _defineFileNames(self):
@@ -122,7 +125,7 @@ class XmippProtCoreAnalysis(ProtClassify2D):
 
         inputParticles = self.inputClasses.get().getImages().get()
         level = 0
-        subset = '_core'
+        subset = ''
 
         subsetFn = self._getFileName("level_classes", level=level, sub=subset)
 
