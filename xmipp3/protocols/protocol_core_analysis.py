@@ -124,8 +124,10 @@ class XmippProtCoreAnalysis(ProtClassify2D):
         resulting from the protocol execution.
         """
 
-        inputParticles = self.inputClasses.get().getImages().get()
-        level = 0
+        #inputParticles = self.inputClasses.get().getImages().get()
+        inputParticles = self.inputClasses.get().getImages()
+        #level = 0
+        level = self._lastLevel()
         subset = '_core'
 
         subsetFn = self._getFileName("level_classes", level=level, sub=subset)
@@ -133,10 +135,10 @@ class XmippProtCoreAnalysis(ProtClassify2D):
         if exists(subsetFn):
             classes2DSet = self._createSetOfClasses2D(inputParticles, subset)
             self._fillClassesFromLevel(classes2DSet, "last", subset)
-
+            print(len(classes2DSet))
             result = {'outputClasses' + subset: classes2DSet}
             self._defineOutputs(**result)
-            self._defineSourceRelation(self.inputParticles, classes2DSet)
+            self._defineSourceRelation(inputParticles, classes2DSet)
 
     #--------------------------- INFO functions --------------------------------
     def _validate(self):
@@ -162,6 +164,7 @@ class XmippProtCoreAnalysis(ProtClassify2D):
         item.setTransform(rowToAlignment(row, ALIGN_2D))
 
     def _updateClass(self, item):
+        print(type(item))
         classId = item.getObjId()
 
         if classId in self._classesInfo:
@@ -169,7 +172,7 @@ class XmippProtCoreAnalysis(ProtClassify2D):
             item.setAlignment2D()
             rep = item.getRepresentative()
             rep.setLocation(index, fn)
-            rep.setSamplingRate(self.inputParticles.get().getSamplingRate())
+            rep.setSamplingRate(self.inputClasses.get().getImages().getSamplingRate())
 
     def _loadClassesInfo(self, filename):
         """ Read some information about the produced 2D classes
@@ -196,6 +199,7 @@ class XmippProtCoreAnalysis(ProtClassify2D):
         else:
             xmpMd = self._getLevelMdImages(level, subset)
 
+        print(xmpMd)
         iterator = md.SetMdIterator(xmpMd, sortByLabel=md.MDL_ITEM_ID,
                                     updateItemCallback=self._updateParticle,
                                     skipDisabled=True)
@@ -223,6 +227,7 @@ class XmippProtCoreAnalysis(ProtClassify2D):
         xmpMd = self._getFileName('level_images', level=level, sub=subset)
         if not exists(xmpMd):
             self._createLevelMdImages(level, subset)
+            print('not exists images')
 
         return xmpMd
 
@@ -252,7 +257,8 @@ class XmippProtCoreAnalysis(ProtClassify2D):
 
         if not exists(dataClasses):
             clsSet = SetOfClasses2D(filename=dataClasses)
-            clsSet.setImages(self.inputParticles.get())
+            #clsSet.setImages(self.inputParticles.get())
+            clsSet.setImages(self.inputClasses.get().getImages())
             self._fillClassesFromLevel(clsSet, level=lev, subset=suffix)
             clsSet.write()
             clsSet.close()
