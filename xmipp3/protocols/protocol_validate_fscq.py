@@ -369,76 +369,69 @@ class XmippProtValFit(ProtAnalysis3D):
         params += ' --radius 0.8' 
         params += ' --md %s' % self._getFileName(MD2_MEANS) 
         self.runJob('xmipp_pdb_label_from_volume', params)    
-        
-    def createOutputStep(self):    
-        
-        volume=Volume()
+
+    def _getMetrics(self):
+        """ Internal method to compute some metrics. """
+        # mean values of FSC-Q
+
+        mtd = md.MetaData()
+        mtd.read(self._getFileName(MD_MEANS))
+
+        mean = mtd.getValue(MDL_VOLUME_SCORE1, 1)
+        meanA = mtd.getValue(MDL_VOLUME_SCORE2, 1)
+
+        # means value for map divided by resolution (FSC-Qr)
+        mtd2 = md.MetaData()
+        mtd2.read(self._getFileName(MD2_MEANS))
+
+        mean2 = mtd2.getValue(MDL_VOLUME_SCORE1, 1)
+        meanA2 = mtd2.getValue(MDL_VOLUME_SCORE2, 1)
+
+        # statistic from fnal pdb with fsc-q
+        # Number of atoms greater or less than 0.5
+        total_atom = 0
+        fscq_greater = 0
+        fscq_less = 0
+        with open(self._getFileName(PDB_VALUE_FILE)) as f:
+            lines_data = f.readlines()
+            for j, lin in enumerate(lines_data):
+
+                if (lin.startswith('ATOM') or lin.startswith('HETATM')):
+
+                    total_atom = total_atom + 1
+                    fscq_atom = float(lin[54:60])
+
+                    if (fscq_atom > 0.5):
+                        fscq_greater = fscq_greater + 1
+
+                    if (fscq_atom < -0.5):
+                        fscq_less = fscq_less + 1
+
+        porc_greater = (fscq_greater * 100) / total_atom
+        porc_less = (fscq_less * 100) / total_atom
+
+        return {
+            'mean': Float(mean),
+            'meanA': Float(meanA),
+            'mean2': Float(mean2),
+            'meanA2': Float(meanA2),
+            'total_atom': Integer(total_atom),
+            'fscq_greater': Integer(fscq_greater),
+            'fscq_less': Integer(fscq_less),
+            'porc_greater': Float(porc_greater),
+            'porc_less': Float(porc_less)
+        }
+
+    def createOutputStep(self):
+        metrics = self._getMetrics()
+        volume = Volume()
         volume.setFileName(self._getFileName(RESTA_FILE_MRC))
         volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
         volume.setOrigin(self.inputVolume.get().getOrigin(True).clone())
-        self._defineOutputs(fscq_Volume=volume)
+
+        self._defineOutputs(fscq_Volume=volume, **metrics)
         self._defineTransformRelation(self.inputVolume, volume)
         
-        #mean values of FSC-Q
-              
-        mtd = md.MetaData()
-        mtd.read(self._getFileName(MD_MEANS))
-            
-        mean = mtd.getValue(MDL_VOLUME_SCORE1,1)
-        meanA = mtd.getValue(MDL_VOLUME_SCORE2,1)  
-        
-        #means value for map divided by resolution (FSC-Qr)
-        mtd2 = md.MetaData()
-        mtd2.read(self._getFileName(MD2_MEANS))
-            
-        mean2 = mtd2.getValue(MDL_VOLUME_SCORE1,1)
-        meanA2 = mtd2.getValue(MDL_VOLUME_SCORE2,1)
-              
-        #Setting the mean fsc-q for the summary
-        self.mean = Float(mean)
-        self._store(self) 
-        self.meanA = Float(meanA)
-        self._store(self) 
-        
-        self.mean2 = Float(mean2)
-        self._store(self) 
-        self.meanA2 = Float(meanA2)
-        self._store(self)
-
-        
-        #statistic from fnal pdb with fsc-q
-        #Number of atoms greater or less than 0.5
-        total_atom=0
-        fscq_greater=0
-        fscq_less=0
-        with open(self._getFileName(PDB_VALUE_FILE)) as f:
-            lines_data = f.readlines()
-            for j,lin in enumerate(lines_data):
-                
-                if ( lin.startswith('ATOM') or lin.startswith('HETATM') ):
-                    
-                    total_atom=total_atom+1
-                    fscq_atom = float(lin[54:60])
-                    
-                    if (fscq_atom>0.5):
-                        fscq_greater=fscq_greater+1
-                        
-                    if (fscq_atom<-0.5):
-                        fscq_less=fscq_less+1
-                        
-        porc_greater=(fscq_greater*100)/total_atom
-        porc_less=(fscq_less*100)/total_atom
- 
-        self.total_atom = Integer(total_atom)
-        self._store(self)
-        self.fscq_greater=Integer(fscq_greater)
-        self._store(self)
-        self.fscq_less=Integer(fscq_less)
-        self._store(self)        
-        self.porc_greater=Float(porc_greater)
-        self._store(self)
-        self.porc_less=Float(porc_less)
-        self._store(self)           
 
     # --------------------------- INFO functions ------------------------------
 

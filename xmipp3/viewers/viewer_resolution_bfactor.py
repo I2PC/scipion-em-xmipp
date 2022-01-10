@@ -114,11 +114,13 @@ class XmippBfactorResolutionViewer(ProtocolViewer):
         plt.subplot(211)
         #The magic numbers of 0 and 40 define the size of the vertical bands, they provide good visualization aspect
         plt.imshow(lr.reshape(1, len(lr)), vmin=lowLR, vmax=highLR, cmap=plt.cm.viridis, extent=[np.amin(r), np.amax(r), 0, 80])
+
         plt.xlabel('Residue')
         plt.title('Normalized Local Resolution')
         plt.colorbar()
 
         plt.subplot(212)
+
         plt.imshow(bf.reshape(1, len(bf)), vmin=lowBF, vmax=highBF, cmap=plt.cm.viridis, extent=[np.amin(r), np.amax(r), 0, 80])
         plt.xlabel('Residue')
         plt.title('B-factor')
