@@ -274,7 +274,7 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                     os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                 if self.numberOfMpi.get()==1:
                     params += " --device %s" %(GpuListCuda)
-                params += ' --thr %d' % self.numberOfThreads.get()
+                # params += ' --thr %d' % self.numberOfThreads.get()
                 if self.numberOfMpi.get()>1:
                     self.runJob('xmipp_cuda_reconstruct_fourier', params, numberOfMpi=len((self.gpuList.get()).split(','))+1)
                 else:
@@ -326,7 +326,7 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                 params += ' --sym %s' % self.symmetryGroup.get()
                 params += ' --max_resolution %0.3f' % self.maxRes
                 params += ' --padding 2'
-                params += ' --thr 1'
+                # params += ' --thr 1'
                 # params += ' --thr %d' % self.numberOfThreads.get()
                 params += ' --sampling %f' % Ts
 
@@ -353,7 +353,7 @@ class XmippProtValidateOverfitting(ProtReconstruct3D):
                         os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
                     if self.numberOfMpi.get()==1:
                         params += " --device %s" %(GpuListCuda)
-                    params += ' --thr %d' % self.numberOfThreads.get()
+                    # params += ' --thr %d' % self.numberOfThreads.get()
                     if self.numberOfMpi.get()>1:
                         self.runJob('xmipp_cuda_reconstruct_fourier', params, numberOfMpi=len((self.gpuList.get()).split(','))+1)
                     else:
