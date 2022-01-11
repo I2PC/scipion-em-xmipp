@@ -152,7 +152,7 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             volClass = volInput.getClass()
             vol = volClass() # Create an instance with the same class of input 
             vol.copyInfo(volInput)
-            vol.setLocation(self.outputStk)
+            vol.setLocation(1, self.outputStk)
             if self.outputStk.endswith(".mrc"):
                 self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(self.outputStk,volInput.getSamplingRate()))
             if volInput.hasOrigin():
