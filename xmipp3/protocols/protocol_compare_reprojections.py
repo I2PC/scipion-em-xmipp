@@ -103,7 +103,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         form.addParam('rfactor', FloatParam, label="Relaxation factor (lambda): ", default=1, expertLevel=LEVEL_ADVANCED,
                       help='Relaxation factor for Fourier amplitude projector (POCS), it should be between 0 and 1, '
                            'being 1 no relaxation and 0 no modification of volume 2 amplitudes')
-        form.addParallelSection(threads=0, mpi=1)
+        form.addParallelSection(threads=0, mpi=8)
     
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -122,8 +122,10 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             anglesFn = self.imgsFn
 
         self._insertFunctionStep("produceResiduals", vol.getFileName(), anglesFn, vol.getSamplingRate())
+
         if self.doEvaluateResiduals.get():
             self._insertFunctionStep("evaluateResiduals")
+
         self._insertFunctionStep("createOutputStep")
 
     # --------------------------- STEPS functions ---------------------------------------------------
@@ -171,7 +173,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                 args += ' --maskVol %s' % self.maskVol.get().getFileName()
             if self.mask.get() is not None:
                 args += ' --mask %s' % self.mask.get().getFileName()
-            self.runJob(program, args)
+            self.runJob(program, args, numberOfMpi=1)
 
             fnNewParticles = self._getExtraPath("images.stk")
             if os.path.exists(fnNewParticles):
@@ -219,10 +221,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                     outputSet.setAlignmentProj()
             self.iterMd = md.iterRows(imgFn, md.MDL_ITEM_ID)
             self.lastRow = next(self.iterMd)
-            self.count = 0
-            outputSet.copyItems(imgSet,
-                                updateItemCallback=self._processRow,
-                                itemDataIterator=md.iterRows(self.imgsFn))
+            outputSet.copyItems(imgSet, updateItemCallback=self._processRow)
 
         self._defineOutputs(reprojections=outputSet)
         self._defineSourceRelation(self.inputSet, outputSet)
@@ -247,17 +246,16 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         raise Exception("Missing row %s at %s" % (id, mdFile))
 
     def _processRow(self, particle, row):
-        newFn = row.getValue(md.MDL_IMAGE)
-        # while particle.getObjId() == self.lastRow.getValue(md.MDL_ITEM_ID):
-        self.count += 1
-        particle.setLocation(particle.getObjId(), newFn)
-            #     self._createItemMatrix(particle, self.lastRow)
-            # try:
-            #     self.lastRow = next(self.iterMd)
-            # except StopIteration
-            #     self.lastRow = None
-            #
-        particle._appendItem = self.count > 0
+        count = 0
+        while self.lastRow and particle.getObjId() == self.lastRow.getValue(md.MDL_ITEM_ID):
+            count += 1
+            if count:
+                self._createItemMatrix(particle, self.lastRow)
+            try:
+                self.lastRow = next(self.iterMd)
+            except StopIteration:
+                self.lastRow = None
+        particle._appendItem = count > 0
 
     def _createItemMatrix(self, particle, row):
         setXmippAttributes(particle, row,
