@@ -76,7 +76,7 @@ class XmippProtSubtractProjection(EMProtocol):
     # --------------------------- STEPS functions --------------------------------------------
     def convertStep(self):
         writeSetOfParticles(self.particles.get(), self._getExtraPath(self.INPUT_PARTICLES))
-        
+
     def subtractionStep(self):
         vol = self.vol.get().clone()
         fnVol = vol.getFileName()
