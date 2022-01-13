@@ -62,7 +62,7 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
     confronting them using Graph filtered correlations representation. This
     protocol produces an histogram with two groups of particles.
     """
-    _label = 'angular graph consistence'
+    _label = 'angular graph consistency'
     
     def __init__(self, *args, **kwargs):
         ProtAnalysis3D.__init__(self, *args, **kwargs)
