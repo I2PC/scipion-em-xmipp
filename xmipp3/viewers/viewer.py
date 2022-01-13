@@ -326,15 +326,6 @@ class XmippViewer(DataViewer):
                                emlib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY,
                                marker='.', markersize=.55, color='red', linestyle='')
             self._views.append(plotter)
-
-        elif issubclass(cls, XmippProtExtractParticlesPairs):
-            self._visualize(obj.outputParticlesTiltPair)
-
-        else:
-            # Use default visualization defined in base class
-            DataViewer._visualize(self, obj, **kwargs)
-
-        return self._views
     
         elif issubclass(cls, XmippProtAngularGraphConsistency):
             fn = obj.outputParticles.getFileName()
@@ -348,6 +339,15 @@ class XmippViewer(DataViewer):
                                                       SORT_BY: '_xmipp_assignedDirRefCC desc',
                                                       RENDER: labelRender,
                                                       MODE: MODE_MD}))
+
+        elif issubclass(cls, XmippProtExtractParticlesPairs):
+            self._visualize(obj.outputParticlesTiltPair)
+
+        else:
+            # Use default visualization defined in base class
+            DataViewer._visualize(self, obj, **kwargs)
+
+        return self._views
             
 
     def getCTFViews(self, ctfSet):
