@@ -46,6 +46,7 @@ from xmipp3.protocols import XmippProtScreenParticles
 from xmipp3.protocols import XmippProtCTFMicrographs
 from xmipp3.protocols import XmippProtValidateNonTilt
 from xmipp3.protocols import XmippProtMultiRefAlignability
+from xmipp3.protocols import XmippProtAngularGraphConsistency
 from xmipp3.protocols import XmippProtAssignmentTiltPair
 from xmipp3.protocols import XmippProtMovieGain
 from xmipp3.protocols import XmippProtDeepDenoising
@@ -73,6 +74,7 @@ class XmippViewer(DataViewer):
                 XmippProtValidateNonTilt,
                 XmippProtAssignmentTiltPair,
                 XmippProtMultiRefAlignability,
+                XmippProtAngularGraphConsistency,
                 XmippProtMovieGain,
                 XmippProtDeepDenoising,
                 XmippProtParticleBoxsize
@@ -333,6 +335,20 @@ class XmippViewer(DataViewer):
             DataViewer._visualize(self, obj, **kwargs)
 
         return self._views
+    
+        elif issubclass(cls, XmippProtAngularGraphConsistency):
+            fn = obj.outputParticles.getFileName()
+            labels = ('id enabled _index _filename _xmipp_assignedDirRefCC '
+                      '_xmipp_maxCCprevious _xmipp_graphCCPrevious _xmipp_distance2MaxGraphPrevious '
+                      '_xmipp_maxCC _xmipp_graphCC _xmipp_distance2MaxGraph')
+            labelRender = "_filename"
+            self._views.append(ObjectView(self._project, obj.outputParticles.strId(), fn,
+                                          viewParams={ORDER: labels,
+                                                      VISIBLE: labels,
+                                                      SORT_BY: '_xmipp_assignedDirRefCC desc',
+                                                      RENDER: labelRender,
+                                                      MODE: MODE_MD}))
+            
 
     def getCTFViews(self, ctfSet):
         # This could be used by any CTF viewer to show CTF plus, phaseShift plot
