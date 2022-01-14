@@ -66,10 +66,6 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         form.addParam('inputVolume', PointerParam, label="Volume to compare images to", important=True,
                       pointerClass='Volume',
                       help='Volume to be used for class comparison')
-        form.addParam('maskVol', PointerParam, pointerClass='VolumeMask', label='Volume mask', allowsNull=True,
-                      help='3D mask for the input volume. This mask is not mandatory but advisable.')
-        form.addParam('mask', PointerParam, pointerClass='VolumeMask', label="Mask for region to keep", allowsNull=True,
-                      help='Specify a 3D mask for the region of the input volume that you want to keep.')
         form.addParam('useAssignment', BooleanParam, default=True,
                       label='Use input angular assignment (if available)')
         form.addParam('optimizeGray', BooleanParam, default=False,
@@ -82,6 +78,12 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                       label='Evaluate residuals',
                       help='If this option is chosen, then the residual covariance matrix is calculated and '
                            'characterized. But this option takes time and disk space')
+        form.addParam('maskVol', PointerParam, pointerClass='VolumeMask', label='Volume mask', allowsNull=True,
+                      condition='doEvaluateResiduals', expertLevel=LEVEL_ADVANCED,
+                      help='3D mask for the input volume. This mask is not mandatory but advisable.')
+        form.addParam('mask', PointerParam, pointerClass='VolumeMask', label="Mask for region to keep", allowsNull=True,
+                      condition='doEvaluateResiduals', expertLevel=LEVEL_ADVANCED,
+                      help='Specify a 3D mask for the region of the input volume that you want to keep.')
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group', 
                       help='See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry'
@@ -157,7 +159,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             args += "--optimizeGray --max_gray_scale 0.95 "
         self.runJob("xmipp_angular_continuous_assign2", args)
 
-        if self.evaluateResiduals:
+        if self.doEvaluateResiduals:
             vol = self.inputVolume.get().clone()
             if fnVol.endswith('.mrc'):
                 fnVol += ':mrc'
@@ -174,16 +176,20 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             if self.mask.get() is not None:
                 args += ' --mask %s' % self.mask.get().getFileName()
             self.runJob(program, args, numberOfMpi=1)
-
+            mrcsresiduals = self._getExtraPath("residuals.mrcs")
+            args2 = " -i %s -o %s" % (mrcsresiduals,  self._getExtraPath("residuals.stk"))
+            self.runJob("xmipp_image_convert", args2, numberOfMpi=1)
             fnNewParticles = self._getExtraPath("images.stk")
             if os.path.exists(fnNewParticles):
                 cleanPath(fnNewParticles)
+            if os.path.exists(mrcsresiduals):
+                cleanPath(mrcsresiduals)
 
     def evaluateResiduals(self):
         # Evaluate each image
         fnAutoCorrelations = self._getExtraPath("autocorrelations.xmd")
         stkAutoCorrelations = self._getExtraPath("autocorrelations.stk")
-        stkResiduals = self._getExtraPath("residuals.mrcs")
+        stkResiduals = self._getExtraPath("residuals.stk")
         anglesOutFn = self._getExtraPath("anglesCont.xmd")
         self.runJob("xmipp_image_residuals", " -i %s -o %s --save_metadata_stack %s"
                     % (stkResiduals, stkAutoCorrelations, fnAutoCorrelations), numberOfMpi=1)
