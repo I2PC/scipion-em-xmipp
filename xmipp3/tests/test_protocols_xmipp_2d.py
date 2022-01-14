@@ -1165,6 +1165,10 @@ class TestXmippCompareReprojections(TestXmippBase):
         cls.protImportPart = cls.runImportParticles(cls.particlesFn, 3.5)
         cls.protImportAvgs = cls.runImportAverages(cls.particlesFn, 3.5)
         cls.protImportVol = cls.runImportVolume(cls.volumesFn, 3.5)
+        cls.protCreateMask = cls.newProtocol(XmippProtCreateMask3D, threshold=0.01)
+        cls.protCreateMask.inputVolume.set(cls.protImportVol.outputVolume)
+        cls.launchProtocol(cls.protCreateMask)
+        cls.assertIsNotNone(cls.protCreateMask.getFiles(), "There was a problem with the 3D mask")
         cls.protClassify = cls.runClassify(cls.protImportPart.outputParticles)
         cls.protProjMatch = cls.newProtocol(XmippProtProjMatch,
                                             doCTFCorrection=False,
@@ -1203,7 +1207,44 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet.set(self.protProjMatch.outputParticles)
         prot.inputVolume.set(self.protImportVol.outputVolume)
         self.launchProtocol(prot)
-        self.assertIsNotNone(prot.reprojections, "There was a problem with Compare Reprojections from projections with angles")
+        self.assertIsNotNone(prot.reprojections,
+                             "There was a problem with Compare Reprojections from projections with angles")
+
+    def test_particles4(self):
+        print("Run Compare Reprojections from classes evaluating residuals")
+        prot = self.newProtocol(XmippProtCompareReprojections,
+                                symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True)
+        prot.inputSet.set(self.protClassify.outputClasses)
+        prot.inputVolume.set(self.protImportVol.outputVolume)
+        prot.maskVol.set(self.protCreateMask.outputMask)
+        prot.mask.set(self.protCreateMask.outputMask)
+        self.launchProtocol(prot)
+        self.assertIsNotNone(prot.reprojections,
+                             "There was a problem with Compare Reprojections from classes evaluating residuals")
+
+    def test_particles5(self):
+        print("Run Compare Reprojections from averages evaluating residuals")
+        prot = self.newProtocol(XmippProtCompareReprojections,
+                                symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True)
+        prot.inputSet.set(self.protImportAvgs.outputAverages)
+        prot.inputVolume.set(self.protImportVol.outputVolume)
+        prot.maskVol.set(self.protCreateMask.outputMask)
+        prot.mask.set(self.protCreateMask.outputMask)
+        self.launchProtocol(prot)
+        self.assertIsNotNone(prot.reprojections,
+                             "There was a problem with Compare Reprojections from averages evaluating residuals")
+
+    def test_particles6(self):
+        print("Run Compare Reprojections from projections with angles evaluating residuals")
+        prot = self.newProtocol(XmippProtCompareReprojections,
+                                symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True)
+        prot.inputSet.set(self.protProjMatch.outputParticles)
+        prot.inputVolume.set(self.protImportVol.outputVolume)
+        prot.maskVol.set(self.protCreateMask.outputMask)
+        prot.mask.set(self.protCreateMask.outputMask)
+        self.launchProtocol(prot)
+        self.assertIsNotNone(prot.reprojections, "There was a problem with Compare Reprojections from projections"
+                                                 " with angles evaluating residuals")
 
 
 class TestXmippCreateGallery(TestXmippBase):
