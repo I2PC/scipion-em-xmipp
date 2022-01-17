@@ -139,7 +139,6 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
         """
         self.vol = self.mrc_convert(self.localResolutionMap.get().getFileName(),
                                     self._getTmpPath('localResolutionMap.mrc'))
-        print(self.vol)
 
     def matchingBfactorLocalResolution(self):
         """ The local resolution map and the pdb are taken and analyzed to match the
