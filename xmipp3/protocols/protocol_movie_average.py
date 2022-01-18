@@ -152,7 +152,7 @@ class XmippProtMovieAverage(ProtAlignMovies):
         self.averageMovie(movie, inputMd, outputMicFn, self.binFactor.get(),
                           roi, self.inputMovies.get().getDark(), gainFn,
                           splineOrder=self.INTERP_MAP[self.splineOrder.get()], 
-                          outxmd="\"\"")
+                          outxmd="\"\"") # we're not interested in the metadata
 
         self._storeSummary(movie)
     
