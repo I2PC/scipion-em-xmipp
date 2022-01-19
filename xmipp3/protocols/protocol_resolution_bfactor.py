@@ -55,6 +55,7 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
     _lastUpdateVersion = VERSION_2_0
 
     def __init__(self, **args):
+        self.vol = ''
         ProtAnalysis3D.__init__(self, **args)
 
     # --------------------------- DEFINE param functions ----------------------
@@ -104,6 +105,11 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
                       help='The local resolution per residue can be estimated using'
                            'the mean (by default - No) or the median (yes)')
 
+        form.addParam('centered', BooleanParam, default=True,
+                      label="is the atomic centered",
+                      help='True if the atomic model centered in midle of'
+                           ' the local resolution map')
+
         form.addParallelSection(threads=4, mpi=0)
 
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -148,6 +154,8 @@ class XmippProtbfactorResolution(ProtAnalysis3D):
         params += ' --sampling %f' % self.localResolutionMap.get().getSamplingRate()
         if self.medianEstimation.get():
             params += ' --useMedian '
+        if self.centered.get():
+            params += ' --centered '
         params += ' -o %s' % self._getExtraPath()
 
         self.runJob('xmipp_resolution_pdb_bfactor', params)
