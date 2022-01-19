@@ -110,7 +110,7 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
             mdBlock = emlib.MetaData()
             for xi, yi, deltafi, parti in zip(xbyId,ybyId,meanDefocusbyId,particleIdsbyMicId):
                 objId = mdBlock.addObject()
-                mdBlock.setValue(emlib.MDL_ITEM_ID,long(parti),objId)
+                mdBlock.setValue(emlib.MDL_ITEM_ID,parti,objId)
                 mdBlock.setValue(emlib.MDL_XCOOR,xi,objId)
                 mdBlock.setValue(emlib.MDL_YCOOR,yi,objId)
                 mdBlock.setValue(emlib.MDL_CTF_DEFOCUSA,deltafi,objId)
