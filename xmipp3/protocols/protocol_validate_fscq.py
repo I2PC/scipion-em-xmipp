@@ -34,8 +34,9 @@ from pwem.emlib.metadata import (MDL_VOLUME_SCORE1, MDL_VOLUME_SCORE2)
 from pwem.protocols import ProtAnalysis3D
 from pyworkflow.utils import getExt
 from pyworkflow.object import (Float, Integer)
-from pwem.objects import Volume
+from pwem.objects import AtomStruct
 from pwem.convert import Ccp4Header
+from pwem.convert.atom_struct import toPdb, toCIF, AtomicStructHandler, addScipionAttribute
 import xmipp3
 
 
@@ -56,6 +57,7 @@ MD_MEANS = 'params.xmd'
 MD2_MEANS = 'params2.xmd'
 RESTA_FILE_NORM = 'diferencia_norm.map'
 PDB_NORM_FILE = 'pdb_fsc-q_norm.pdb'
+OUTPUT_CIF = 'fscq_struct.cif'
 
 
 class XmippProtValFit(ProtAnalysis3D):
@@ -64,6 +66,9 @@ class XmippProtValFit(ProtAnalysis3D):
     """
     _label = 'validate fsc-q'
     _lastUpdateVersion = VERSION_3_0
+    _ATTRNAME = 'fscq_score'
+    _OUTNAME = 'outputAtomStruct'
+    _possibleOutputs = {_OUTNAME: AtomStruct}
     
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
@@ -72,47 +77,51 @@ class XmippProtValFit(ProtAnalysis3D):
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-
-        form.addParam('inputVolume', PointerParam, pointerClass='Volume',
+        group = form.addGroup('Input')
+        group.addParam('inputVolume', PointerParam, pointerClass='Volume',
                       label="Input Volume", important=True,
                       help='Select a volume.')
-        
-#         form.addParam('inputPDB', PointerParam, pointerClass='PdbFile',
-#                       label="Refined PDB", important=True, )
-        form.addParam('inputPDB', FileParam,
-                      label="PDB File path", important=True,
+
+        group.addParam('fromFile', BooleanParam, default=False,
+                      label='Input PDB from file: ')
+        group.addParam('inputPDBObj', PointerParam, pointerClass='PdbFile', allowsNull=True,
+                      label="Refined PDB: ", important=True, condition='not fromFile',
+                      help='Specify the desired input structure.')
+        group.addParam('inputPDB', FileParam,  condition='fromFile',
+                      label="PDB File path: ", important=True,
                       help='Specify a path to desired PDB structure.')
         
-        form.addParam('pdbMap', PointerParam, pointerClass='Volume',
-                      label="Volume from PDB", allowsNull=True,
+        group.addParam('pdbMap', PointerParam, pointerClass='Volume',
+                      label="Volume from PDB: ", allowsNull=True,
                       help='Volume created from the PDB.'
                            ' The volume should be aligned with the reconstruction map.'
                            ' If the volume is not entered,' 
                            ' it is automatically created from the PDB.')        
 
-        form.addParam('inputMask', PointerParam, pointerClass='VolumeMask', 
+        group.addParam('inputMask', PointerParam, pointerClass='VolumeMask',
                       allowsNull=True,
                       label="Soft Mask", 
                       help='The mask determines which points are specimen'
                       ' and which are not. If the mask is not passed,' 
                       ' the method creates an automatic mask from the PDB.')
-        
-        form.addParam('box', IntParam, default=20,
+
+        group = form.addGroup('Parameters')
+        group.addParam('box', IntParam, default=20,
                       label="window size",
                       help='Kernel size (slidding window) for determining'
                       ' local resolution (pixels/voxels).')
         
-        form.addParam('setOrigCoord', BooleanParam,
+        group.addParam('setOrigCoord', BooleanParam,
                       label="Set origin of coordinates",
                       help="Option YES:\nA new volume will be created with "
                            "the given ORIGIN of coordinates. ",
                       default=False)       
         
-        form.addParam('xcoor', FloatParam, default=0, condition='setOrigCoord',
+        group.addParam('xcoor', FloatParam, default=0, condition='setOrigCoord',
                       label="x", help="offset along x axis")
-        form.addParam('ycoor', FloatParam, default=0, condition='setOrigCoord',
+        group.addParam('ycoor', FloatParam, default=0, condition='setOrigCoord',
                       label="y", help="offset along y axis")
-        form.addParam('zcoor', FloatParam, default=0, condition='setOrigCoord',
+        group.addParam('zcoor', FloatParam, default=0, condition='setOrigCoord',
                       label="z", help="offset along z axis")
         
         form.addParallelSection(threads=8, mpi=1)
@@ -205,7 +214,7 @@ class XmippProtValFit(ProtAnalysis3D):
             params += ' -v 0 '    
             params += ' --sampling %f' % self.inputVolume.get().getSamplingRate()        
             params += ' --size %d' % self.inputVolume.get().getXDim()
-            params += ' -i %s' % self.inputPDB.get()        
+            params += ' -i %s' % self.getPDBFile()
             params += ' -o %s' % self._getFileName(OUTPUT_PDBVOL_FILE)
             self.runJob('xmipp_volume_from_pdb', params)            
     
@@ -349,7 +358,7 @@ class XmippProtValFit(ProtAnalysis3D):
         
     def assignPdbStep(self):
                  
-        params = ' --pdb %s ' % self.inputPDB.get()  
+        params = ' --pdb %s ' % self.getPDBFile()
         params += ' --vol %s ' % self._getFileName(RESTA_FILE_MRC) 
         params += ' --mask %s ' % self.mask_xmipp         
         params += ' -o %s ' % self._getFileName(PDB_VALUE_FILE)    
@@ -360,7 +369,7 @@ class XmippProtValFit(ProtAnalysis3D):
         self.runJob('xmipp_pdb_label_from_volume', params)   
         
         """Diveded by resolution"""
-        params = ' --pdb %s ' % self.inputPDB.get()  
+        params = ' --pdb %s ' % self.getPDBFile()
         params += ' --vol %s ' % self._getFileName(RESTA_FILE_NORM) 
         params += ' --mask %s ' % self.mask_xmipp         
         params += ' -o %s ' % self._getFileName(PDB_NORM_FILE)    
@@ -422,15 +431,35 @@ class XmippProtValFit(ProtAnalysis3D):
             'porc_less': Float(porc_less)
         }
 
+    def getFscqAttrDic(self):
+        fscqDic = {}
+        with open(self._getFileName(PDB_VALUE_FILE)) as f:
+            lines_data = f.readlines()
+            for j, lin in enumerate(lines_data):
+                if (lin.startswith('ATOM') or lin.startswith('HETATM')):
+                    resNumber, resChain, atomName = lin[22:26].strip(), lin[21].strip(), lin[12:16].strip()
+                    resId = '{}:{}@{}'.format(resChain, resNumber, atomName)
+                    fscq_atom = lin[54:60].strip()
+                    fscqDic[resId] = fscq_atom
+        return fscqDic
+
     def createOutputStep(self):
         metrics = self._getMetrics()
-        volume = Volume()
-        volume.setFileName(self._getFileName(RESTA_FILE_MRC))
-        volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
-        volume.setOrigin(self.inputVolume.get().getOrigin(True).clone())
+        fscqDic = self.getFscqAttrDic()
 
-        self._defineOutputs(fscq_Volume=volume, **metrics)
-        self._defineTransformRelation(self.inputVolume, volume)
+        AS = self.getInputStruct()
+        ASH = AtomicStructHandler()
+        inpAS = toCIF(AS.getFileName(), self._getTmpPath('inputStruct.cif'))
+        cifDic = ASH.readLowLevel(inpAS)
+        cifDic = addScipionAttribute(cifDic, fscqDic, self._ATTRNAME, recipient='atoms')
+        ASH._writeLowLevel(self._getPath(OUTPUT_CIF), cifDic)
+
+        outAS = AS.clone()
+        outAS.setFileName(self._getPath(OUTPUT_CIF))
+
+        self._defineOutputs(outputAtomStruct=outAS)
+        if not self.fromFile:
+            self._defineTransformRelation(self.inputPDBObj, outAS)
         
 
     # --------------------------- INFO functions ------------------------------
@@ -481,6 +510,11 @@ class XmippProtValFit(ProtAnalysis3D):
                 errors.append("Input Volume needs to have half maps. "
                 "If you have imported the volume, be sure to import the half maps.")
 
+        if self.fromFile and not self.inputPDB.get():
+            errors.append('You have to provide a PDB file as input')
+        elif not self.fromFile and not self.inputPDBObj.get():
+            errors.append('You have to provide a PDB object as input')
+
         try:
             import bsoft
             if bsoft.__version__ in ["3.0.0", "3.0.1", "3.0.4"]:
@@ -493,4 +527,16 @@ class XmippProtValFit(ProtAnalysis3D):
 
     def _citations(self):
         return ['Ramirez-Aportela 2020']
+
+    def getPDBFile(self):
+        if self.fromFile:
+            return self.inputPDB.get()
+        else:
+            return self.inputPDBObj.get().getFileName()
+
+    def getInputStruct(self):
+        if self.fromFile:
+            return AtomStruct(filename=self.inputPDB.get())
+        else:
+            return self.inputPDBObj.get()
 
