@@ -68,7 +68,7 @@ class TestAngularGraphConsistency(BaseTest):
         self.checkOutput(prot, 'outputParticles',
                          ['outputParticles.hasAlignmentProj()',
                           'outputParticles.isPhaseFlipped()'])
-        # We are going to make a subset to speed-up following processes
+        # subset to speed-up following processes
         protSubset = self.newProtocol(ProtSubSet,
                                       objLabel='subset of particles',
                                       chooseAtRandom=True,
