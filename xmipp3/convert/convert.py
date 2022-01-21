@@ -312,8 +312,8 @@ def setXmippAttributes(obj, objRow, *labels, **kwargs):
     defaults = kwargs.get('default', None)
 
     for idx, label in enumerate(labels):
-        if objRow.containsLabel(label):
-            value = objRow.getValueAsObject(label)
+        if objRow.hasColumn(label):
+            value = ObjectWrap(objRow.get(label))
         else:
             if isinstance(defaults, list):
                 value = defaults[idx]
@@ -337,9 +337,13 @@ def getScipionObj(value):
     else:
         return None
 
+
 def setXmippAttribute(obj, label, value):
     """ Sets an attribute of an object prefixing it with xmipp"""
-    setattr(obj, prefixAttribute(emlib.label2Str(label)), value)
+    if isinstance(label, str):
+        setattr(obj, prefixAttribute(label), value)
+    else:
+        setattr(obj, prefixAttribute(emlib.label2Str(label)), value)
 
 def getXmippAttribute(obj, label, default=None):
     """ Sets an attribute of an object prefixing it with xmipp"""

@@ -30,6 +30,8 @@
 
 from os.path import exists
 
+import emtable
+
 import pwem.emlib.metadata as md
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Integer
@@ -42,7 +44,7 @@ from pwem.objects import Particle
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
                             xmippToLocation, setXmippAttributes)
-from xmipp3.constants import OTHER
+from xmipp3.constants import OTHER, XMIPPCOLUMNS
 
 
 class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
@@ -491,27 +493,28 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
 
             added = set() # Keep track of added coords to avoid duplicates
             fnMicXmd = self._getMicXmd(mic)
+
             if exists(fnMicXmd):
-                for row in md.iterRows(fnMicXmd):
-                    pos = (row.getValue(md.MDL_XCOOR), row.getValue(md.MDL_YCOOR))
+                for row in emtable.Table.iterRows(fnMicXmd):
+                    pos = (row.get(XMIPPCOLUMNS.xcoor.value), row.get(XMIPPCOLUMNS.ycoor.value))
                     coord = coordDict.get(pos, None)
                     if coord is not None and coord.getObjId() not in added:
                         # scale the coordinates according to particles dimension.
                         coord.scale(self.getBoxScale())
                         p.copyObjId(coord)
-                        p.setLocation(xmippToLocation(row.getValue(md.MDL_IMAGE)))
+                        p.setLocation(xmippToLocation(row.get(XMIPPCOLUMNS.image.value)))
                         p.setCoordinate(coord)
                         p.setMicId(mic.getObjId())
                         p.setCTF(mic.getCTF())
                         # adding the variance and Gini coeff. value of the mic zone
-                        setXmippAttributes(p, row, md.MDL_SCORE_BY_VAR)
-                        setXmippAttributes(p, row, md.MDL_SCORE_BY_GINI)
-                        if row.containsLabel(md.MDL_ZSCORE_DEEPLEARNING1):
-                            setXmippAttributes(p, row, md.MDL_ZSCORE_DEEPLEARNING1)
+                        setXmippAttributes(p, row, XMIPPCOLUMNS.scoreByVariance.value)
+                        setXmippAttributes(p, row, XMIPPCOLUMNS.scoreByGiniCoeff.value)
+                        if row.hasColumn(XMIPPCOLUMNS.zScoreDeepLearning1.value):
+                            setXmippAttributes(p, row, XMIPPCOLUMNS.zScoreDeepLearning1.value)
 
                         # disabled particles (in metadata) should not add to the
                         # final set
-                        if row.getValue(md.MDL_ENABLED) > 0:
+                        if row.get(XMIPPCOLUMNS.enabled.value) > 0:
                             outputParts.append(p)
                             added.add(coord.getObjId())
 
