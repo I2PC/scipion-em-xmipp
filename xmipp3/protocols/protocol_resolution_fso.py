@@ -203,18 +203,18 @@ class XmippProtFSO(ProtAnalysis3D):
             volume = Volume()
             volume.setFileName(self._getExtraPath("filteredMap.mrc"))
 
-            if self.filterHalfMaps:
-                half1filt = Volume()
-                half2filt = Volume()
-                fnhalfMap1 = self._getExtraPath("dirfiltered_half1.mrc")
-                fnhalfMap2 = self._getExtraPath("dirfiltered_half2.mrc")
-                half1filt.setFileName(fnhalfMap1)
-                half2filt.setFileName(fnhalfMap2)
+            #if self.filterHalfMaps:
+            #    half1filt = Volume()
+            #    half2filt = Volume()
+            #    fnhalfMap1 = self._getExtraPath("dirfiltered_half1.mrc")
+            #    fnhalfMap2 = self._getExtraPath("dirfiltered_half2.mrc")
+            #    half1filt.setFileName(fnhalfMap1)
+            #    half2filt.setFileName(fnhalfMap2)
 
             if self.halfVolumesFile:
                 volume.setSamplingRate(self.inputHalves.get().getSamplingRate())
-                if self.filterHalfMaps:
-                    volume.setHalfMaps([fnhalfMap1, fnhalfMap2])
+                #if self.filterHalfMaps:
+                #    volume.setHalfMaps([fnhalfMap1, fnhalfMap2])
                 self._defineOutputs(directionalFilteredMap=volume)
                 self._defineSourceRelation(self.inputHalves, volume)
             else:
