@@ -219,8 +219,8 @@ class XmippProtFSO(ProtAnalysis3D):
                 self._defineSourceRelation(self.inputHalves, volume)
             else:
                 volume.setSamplingRate(self.half1.get().getSamplingRate())
-                if self.filterHalfMaps:
-                    volume.setHalfMaps([fnhalfMap1, fnhalfMap2])
+                #if self.filterHalfMaps:
+                #    volume.setHalfMaps([fnhalfMap1, fnhalfMap2])
                 self._defineOutputs(directionalFilteredMap=volume)
                 self._defineSourceRelation(self.half1, volume)
 
