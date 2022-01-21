@@ -97,11 +97,11 @@ class XmippProtFSO(ProtAnalysis3D):
                            ' 3DFSC as anisotropic filter to obtain a directional'
                            'filtered map.')
 
-        form.addParam('filterHalfMaps', BooleanParam, default=True,
-                      condition="estimate3DFSC",
-                      label="Anisotropic filtering of Half Maps",
-                      help='Use the 3DFSCD map as anisotropic filter to directionally'
-                           'filter the half maps')
+#        form.addParam('filterHalfMaps', BooleanParam, default=True,
+#                      condition="estimate3DFSC",
+#                      label="Anisotropic filtering of Half Maps",
+#                      help='Use the 3DFSCD map as anisotropic filter to directionally'
+#                           'filter the half maps')
 
         form.addParam('threshold', FloatParam, expertLevel=LEVEL_ADVANCED,
                       default=0.143,
@@ -164,19 +164,6 @@ class XmippProtFSO(ProtAnalysis3D):
             if (extMask == '.mrc') or (extMask == '.map'):
                 self.maskFn = self.maskFn + ':mrc'
 
-        """
-        if self.halfVolumesFile:
-            self.vol1Fn, self.vol2Fn = self.inputHalves.get().getHalfMaps().split(',')
-        else:
-            self.vol1Fn = self.mrc_convert(self.half1.get().getFileName(),
-                                  self._getTmpPath('half1.mrc'))
-            self.vol2Fn = self.mrc_convert(self.half2.get().getFileName(),
-                                  self._getTmpPath('half2.mrc'))
-        if (self.mask.hasValue()):
-            self.maskFn = self.mrc_convert(self.mask.get().getFileName(),
-                                  self._getExtraPath('mask.mrc'))
-        """
-
 
     def FSOestimationStep(self):
         import os
@@ -199,8 +186,8 @@ class XmippProtFSO(ProtAnalysis3D):
 
         if self.estimate3DFSC.get():
             params += ' --threedfsc_filter'
-            if self.filterHalfMaps.get():
-                params += ' --threedfsc_filter_halves'
+            #if self.filterHalfMaps.get():
+            #    params += ' --threedfsc_filter_halves'
 
 
 
@@ -216,24 +203,24 @@ class XmippProtFSO(ProtAnalysis3D):
             volume = Volume()
             volume.setFileName(self._getExtraPath("filteredMap.mrc"))
 
-            if self.filterHalfMaps:
-                half1filt = Volume()
-                half2filt = Volume()
-                fnhalfMap1 = self._getExtraPath("dirfiltered_half1.mrc")
-                fnhalfMap2 = self._getExtraPath("dirfiltered_half2.mrc")
-                half1filt.setFileName(fnhalfMap1)
-                half2filt.setFileName(fnhalfMap2)
+            #if self.filterHalfMaps:
+            #    half1filt = Volume()
+            #    half2filt = Volume()
+            #    fnhalfMap1 = self._getExtraPath("dirfiltered_half1.mrc")
+            #    fnhalfMap2 = self._getExtraPath("dirfiltered_half2.mrc")
+            #    half1filt.setFileName(fnhalfMap1)
+            #    half2filt.setFileName(fnhalfMap2)
 
             if self.halfVolumesFile:
                 volume.setSamplingRate(self.inputHalves.get().getSamplingRate())
-                if self.filterHalfMaps:
-                    volume.setHalfMaps([fnhalfMap1, fnhalfMap2])
+                #if self.filterHalfMaps:
+                #    volume.setHalfMaps([fnhalfMap1, fnhalfMap2])
                 self._defineOutputs(directionalFilteredMap=volume)
                 self._defineSourceRelation(self.inputHalves, volume)
             else:
                 volume.setSamplingRate(self.half1.get().getSamplingRate())
-                if self.filterHalfMaps:
-                    volume.setHalfMaps([fnhalfMap1, fnhalfMap2])
+                #if self.filterHalfMaps:
+                #    volume.setHalfMaps([fnhalfMap1, fnhalfMap2])
                 self._defineOutputs(directionalFilteredMap=volume)
                 self._defineSourceRelation(self.half1, volume)
 
