@@ -1217,7 +1217,6 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet.set(self.protClassify.outputClasses)
         prot.inputVolume.set(self.protImportVol.outputVolume)
         prot.maskVol.set(self.protCreateMask.outputMask)
-        prot.mask.set(self.protCreateMask.outputMask)
         self.launchProtocol(prot)
         self.assertIsNotNone(prot.reprojections,
                              "There was a problem with Compare Reprojections from classes evaluating residuals")
@@ -1229,7 +1228,6 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet.set(self.protImportAvgs.outputAverages)
         prot.inputVolume.set(self.protImportVol.outputVolume)
         prot.maskVol.set(self.protCreateMask.outputMask)
-        prot.mask.set(self.protCreateMask.outputMask)
         self.launchProtocol(prot)
         self.assertIsNotNone(prot.reprojections,
                              "There was a problem with Compare Reprojections from averages evaluating residuals")
@@ -1241,11 +1239,19 @@ class TestXmippCompareReprojections(TestXmippBase):
         prot.inputSet.set(self.protProjMatch.outputParticles)
         prot.inputVolume.set(self.protImportVol.outputVolume)
         prot.maskVol.set(self.protCreateMask.outputMask)
-        prot.mask.set(self.protCreateMask.outputMask)
         self.launchProtocol(prot)
         self.assertIsNotNone(prot.reprojections, "There was a problem with Compare Reprojections from projections"
                                                  " with angles evaluating residuals")
 
+    def test_particles7(self):
+        print("Run Compare Reprojections from projections with angles evaluating residuals without user mask")
+        prot = self.newProtocol(XmippProtCompareReprojections,
+                                symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True)
+        prot.inputSet.set(self.protProjMatch.outputParticles)
+        prot.inputVolume.set(self.protImportVol.outputVolume)
+        self.launchProtocol(prot)
+        self.assertIsNotNone(prot.reprojections, "There was a problem with Compare Reprojections from projections"
+                                                 " with angles evaluating residuals without user mask")
 
 class TestXmippCreateGallery(TestXmippBase):
     """This class check if the protocol create gallery in Xmipp works properly."""
