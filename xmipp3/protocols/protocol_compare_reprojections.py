@@ -107,7 +107,8 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         self._insertFunctionStep("convertStep", self.imgsFn)
 
         imgSet = self.inputSet.get()
-        if not self.useAssignment or isinstance(imgSet, SetOfClasses2D) or isinstance(imgSet, SetOfAverages) or \
+        if not self.useAssignment or isinstance(imgSet, SetOfClasses2D) \
+                or (isinstance(imgSet, SetOfAverages) and not imgSet.hasAlignmentProj()) or \
                 (isinstance(imgSet, SetOfParticles) and not imgSet.hasAlignmentProj()):
             anglesFn = self._getExtraPath('angles.xmd')
             self._insertFunctionStep("projMatchStep", self.inputVolume.get().getFileName(), self.angularSampling.get(),
@@ -160,7 +161,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             if fnVol.endswith('.mrc'):
                 fnVol += ':mrc'
             program = "xmipp_subtract_projection"
-            args = '-i %s --ref %s -o %s --iter %s --lambda %s' % \
+            args = '-i %s --ref %s -o %s --iter %s --lambda %s --suball' % \
                    (self.imgsFn, fnVol, self._getExtraPath("residuals"), self.iter.get(), self.rfactor.get())
             args += ' --saveProj %s' % self._getExtraPath('')
 
@@ -187,8 +188,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             self.runJob("xmipp_phantom_create", args_mask_keep, numberOfMpi=1)
             args_imageheader2 = "-i %s --sampling_rate %f" % (mskKeep, vol.getSamplingRate())
             self.runJob("xmipp_image_header", args_imageheader2, numberOfMpi=1)
-            # args += ' --mask %s' % mskKeep
-            args += ' --mask %s' % mskVol
+            args += ' --mask %s' % mskKeep
 
             resol = self.resol.get()
             if resol:
