@@ -72,7 +72,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                       label='Ignore CTF',
                       help='By ignoring the CTF you will create projections more similar to what a person expects, '
                            'while by using the CTF you will create projections more similar to what the microscope sees')
-        form.addParam('evaluateResiduals', BooleanParam, default=False, expertLevel=LEVEL_ADVANCED,
+        form.addParam('doEvaluateResiduals', BooleanParam, default=False, expertLevel=LEVEL_ADVANCED,
                       label='Evaluate residuals',
                       help='If this option is chosen, then the residual covariance matrix is calculated and characterized. '
                            'But this option takes time and disk space')
@@ -102,7 +102,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             anglesFn=self.imgsFn
 
         self._insertFunctionStep("produceResiduals", vol.getFileName(), anglesFn, vol.getSamplingRate())
-        if self.evaluateResiduals.get():
+        if self.doEvaluateResiduals.get():
             self._insertFunctionStep("evaluateResiduals")
         self._insertFunctionStep("createOutputStep")
 
@@ -130,12 +130,12 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         xdim=self._getDimensions()
         args="-i %s -o %s --ref %s --optimizeAngles --optimizeShift --max_shift %d --oprojections %s --sampling %f"%\
                     (fnAngles,anglesOutFn,fnVol,floor(xdim*0.05),projectionsOutFn,Ts)
-        if self.evaluateResiduals:
+        if self.doEvaluateResiduals:
             args+=" --oresiduals %s"%self._getExtraPath("residuals.stk")
         if self.ignoreCTF:
             args+=" --ignoreCTF"
         if self.optimizeGray:
-            args+="--optimizeGray --max_gray_scale 0.95 "
+            args+=" --optimizeGray --max_gray_scale 0.95 "
         self.runJob("xmipp_angular_continuous_assign2", args)
         fnNewParticles=self._getExtraPath("images.stk")
         if os.path.exists(fnNewParticles):
@@ -225,7 +225,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                            emlib.MDL_CONTINUOUS_Y,
                            emlib.MDL_CORRELATION_IDX, emlib.MDL_CORRELATION_MASK,
                            emlib.MDL_CORRELATION_WEIGHT, emlib.MDL_IMED)
-        if self.evaluateResiduals:
+        if self.doEvaluateResiduals:
             setXmippAttributes(particle, row,
                                emlib.MDL_ZSCORE_RESVAR, emlib.MDL_ZSCORE_RESMEAN,
                                emlib.MDL_ZSCORE_RESCOV)
@@ -241,7 +241,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         
         __setXmippImage(emlib.MDL_IMAGE)
         __setXmippImage(emlib.MDL_IMAGE_REF)
-        if self.evaluateResiduals:
+        if self.doEvaluateResiduals:
             __setXmippImage(emlib.MDL_IMAGE_RESIDUAL)
             __setXmippImage(emlib.MDL_IMAGE_COVARIANCE)
 

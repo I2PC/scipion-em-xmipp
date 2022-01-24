@@ -145,8 +145,8 @@ class TestProtocolsZernike3D(TestZernike3DBase):
         self.assertEqual(clnm_gold[0], clnm_test[0], "There is a problem with Zernike degree")
         self.assertEqual(clnm_gold[1], clnm_test[1], "There is a problem with Spherical Harmonics degree")
         self.assertEqual(clnm_gold[2], clnm_test[2], "There is a problem with sphere radius")
-        diff_clnm = np.abs(np.sum(clnm_gold[3] - clnm_test[3]))
-        self.assertAlmostEqual(diff_clnm, 0, delta=0.2,
+        diff_clnm = np.sqrt(np.sum((clnm_gold[3] - clnm_test[3]) ** 2) / clnm_gold[3].size)
+        self.assertAlmostEqual(diff_clnm, 0, delta=0.5,
                                msg="Zernike coefficients do not have the expected value")
 
     def testPairAlignmentZernike3DGPU(self):
@@ -169,8 +169,8 @@ class TestProtocolsZernike3D(TestZernike3DBase):
         self.assertEqual(clnm_gold[0], clnm_test[0], "There is a problem with Zernike degree")
         self.assertEqual(clnm_gold[1], clnm_test[1], "There is a problem with Spherical Harmonics degree")
         self.assertEqual(clnm_gold[2], clnm_test[2], "There is a problem with sphere radius")
-        diff_clnm = np.abs(np.sum(clnm_gold[3] - clnm_test[3]))
-        self.assertAlmostEqual(diff_clnm, 0, delta=0.2,
+        diff_clnm = np.sqrt(np.sum((clnm_gold[3] - clnm_test[3]) ** 2) / clnm_gold[3].size)
+        self.assertAlmostEqual(diff_clnm, 0, delta=0.5,
                                msg="Zernike coefficients do not have the expected value")
 
     def testStructMapZernike3DCPU(self):
@@ -190,22 +190,22 @@ class TestProtocolsZernike3D(TestZernike3DBase):
                                      delimiter=' ')
         sm_test_def = np.loadtxt(structureMap._getExtraPath('CoordinateMatrix3.txt'),
                                      delimiter=' ')
-        diff_sm_def = np.abs(np.sum(sm_gold_def - sm_test_def))
-        self.assertAlmostEqual(diff_sm_def, 0, delta=0.2,
+        diff_sm_def = np.sqrt(np.sum((sm_gold_def - sm_test_def) ** 2) / sm_gold_def.size)
+        self.assertAlmostEqual(diff_sm_def, 0, delta=0.5,
                                msg="Unexpected deformation structure mapping")
         sm_cpu_gold_corr = np.loadtxt(self.dataset.getFile('gold_standard_sm/CPU/CoordinateMatrixCorr3.txt'),
                                      delimiter=' ')
         sm_cpu_test_corr = np.loadtxt(structureMap._getExtraPath(self.CORR_FILE),
                                      delimiter=' ')
-        diff_sm_corr = np.abs(np.sum(sm_cpu_gold_corr - sm_cpu_test_corr))
-        self.assertAlmostEqual(diff_sm_corr, 0, delta=0.2,
+        diff_sm_corr = np.sqrt(np.sum((sm_cpu_gold_corr - sm_cpu_test_corr) ** 2) / sm_cpu_gold_corr.size)
+        self.assertAlmostEqual(diff_sm_corr, 0, delta=0.5,
                                msg=self.EXPECTED_CORR_MAP)
         sm_cpu_gold_cons = np.loadtxt(self.dataset.getFile('gold_standard_sm/CPU/ConsensusMatrix3.txt'),
                                      delimiter=' ')
         sm_cpu_test_cons = np.loadtxt(structureMap._getExtraPath('ConsensusMatrix3.txt'),
                                      delimiter=' ')
-        diff_sm_cons = np.abs(np.sum(sm_cpu_gold_cons - sm_cpu_test_cons))
-        self.assertAlmostEqual(diff_sm_cons, 0, delta=0.2,
+        diff_sm_cons = np.sqrt(np.sum((sm_cpu_gold_cons - sm_cpu_test_cons) ** 2) / sm_cpu_gold_cons.size)
+        self.assertAlmostEqual(diff_sm_cons, 0, delta=0.5,
                                msg="Unexpected consensus structure mapping")
 
     def testStructMapCPU(self):
@@ -222,8 +222,8 @@ class TestProtocolsZernike3D(TestZernike3DBase):
                                      delimiter=' ')
         sm_cpu_test_corr = np.loadtxt(structureMap._getExtraPath(self.CORR_FILE),
                                      delimiter=' ')
-        diff_sm_corr = np.abs(np.sum(sm_cpu_gold_corr - sm_cpu_test_corr))
-        self.assertAlmostEqual(diff_sm_corr, 0, delta=0.2,
+        diff_sm_corr = np.sqrt(np.sum((sm_cpu_gold_corr - sm_cpu_test_corr) ** 2) / sm_cpu_gold_corr.size)
+        self.assertAlmostEqual(diff_sm_corr, 0, delta=0.5,
                                msg=self.EXPECTED_CORR_MAP)
 
 
@@ -244,22 +244,22 @@ class TestProtocolsZernike3D(TestZernike3DBase):
                                      delimiter=' ')
         sm_test_def = np.loadtxt(structureMap._getExtraPath('CoordinateMatrix3.txt'),
                                      delimiter=' ')
-        diff_sm_def = np.abs(np.sum(sm_gold_def - sm_test_def))
-        self.assertAlmostEqual(diff_sm_def, 0, delta=0.2,
+        diff_sm_def = np.sqrt(np.sum((sm_gold_def - sm_test_def) ** 2) / sm_gold_def.size)
+        self.assertAlmostEqual(diff_sm_def, 0, delta=0.5,
                                msg="Unexpected deformation structure mapping")
         sm_cpu_gold_corr = np.loadtxt(self.dataset.getFile('gold_standard_sm/GPU/CoordinateMatrixCorr3.txt'),
                                      delimiter=' ')
         sm_cpu_test_corr = np.loadtxt(structureMap._getExtraPath(self.CORR_FILE),
                                      delimiter=' ')
-        diff_sm_corr = np.abs(np.sum(sm_cpu_gold_corr - sm_cpu_test_corr))
-        self.assertAlmostEqual(diff_sm_corr, 0, delta=0.2,
+        diff_sm_corr = np.sqrt(np.sum((sm_cpu_gold_corr - sm_cpu_test_corr) ** 2) / sm_cpu_gold_corr.size)
+        self.assertAlmostEqual(diff_sm_corr, 0, delta=0.5,
                                msg=self.EXPECTED_CORR_MAP)
         sm_cpu_gold_cons = np.loadtxt(self.dataset.getFile('gold_standard_sm/GPU/ConsensusMatrix3.txt'),
                                      delimiter=' ')
         sm_cpu_test_cons = np.loadtxt(structureMap._getExtraPath('ConsensusMatrix3.txt'),
                                      delimiter=' ')
-        diff_sm_cons = np.abs(np.sum(sm_cpu_gold_cons - sm_cpu_test_cons))
-        self.assertAlmostEqual(diff_sm_cons, 0, delta=0.2,
+        diff_sm_cons = np.sqrt(np.sum((sm_cpu_gold_cons - sm_cpu_test_cons) ** 2) / sm_cpu_gold_cons.size)
+        self.assertAlmostEqual(diff_sm_cons, 0, delta=0.5,
                                msg="Unexpected consensus structure mapping")
 
     def testAngularAlignZernike3DCPU(self):
@@ -279,8 +279,8 @@ class TestProtocolsZernike3D(TestZernike3DBase):
         # Check if coefficients are fine
         aa_gold_clnm = self.readMetadata(self.dataset.getFile('gold_standard_aa/CPU/output_particles.xmd'))
         aa_test_clnm = self.readMetadata(alignZernike._getExtraPath('output_particles.xmd'))
-        diff_clnm = np.abs(np.sum(aa_gold_clnm - aa_test_clnm))
-        self.assertAlmostEqual(diff_clnm, 0, delta=0.2,
+        diff_clnm = np.sqrt(np.sum((aa_gold_clnm - aa_test_clnm) ** 2) / aa_gold_clnm.size)
+        self.assertAlmostEqual(diff_clnm, 0, delta=0.5,
                                msg="Unexpected Zernike coefficients")
 
     def testAngularAlignZernike3DGPU(self):
@@ -300,6 +300,6 @@ class TestProtocolsZernike3D(TestZernike3DBase):
         # Check if coefficients are fine
         aa_gold_clnm = self.readMetadata(self.dataset.getFile('gold_standard_aa/GPU/output_particles.xmd'))
         aa_test_clnm = self.readMetadata(alignZernike._getExtraPath('output_particles.xmd'))
-        diff_clnm = np.abs(np.sum(aa_gold_clnm - aa_test_clnm))
-        self.assertAlmostEqual(diff_clnm, 0, delta=4,
+        diff_clnm = np.sqrt(np.sum((aa_gold_clnm - aa_test_clnm) ** 2) / aa_gold_clnm.size)
+        self.assertAlmostEqual(diff_clnm, 0, delta=0.5,
                                msg="Unexpected Zernike coefficients")
