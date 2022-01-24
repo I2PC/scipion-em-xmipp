@@ -294,7 +294,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
     def createOutputStep(self):
         """Save the output classes"""
         self._saveOutputs() # Saves data into pkl files for later visualization
-        # self._store()
 
         # Always output all the initial intersections
         outputClassesInitial = self._createOutput3DClass(self.intersectionList, 'initial')

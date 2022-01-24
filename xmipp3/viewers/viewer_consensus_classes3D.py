@@ -33,10 +33,14 @@ from pyworkflow.gui.form import FormWindow
 from pyworkflow.object import Object
 from pyworkflow.viewer import (ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO)
 from pyworkflow.protocol.params import StringParam, LabelParam, IntParam
-from pwem.viewers import TableView
+from pyworkflow.protocol.params import GE, GT, LE, LT
+
+from pwem.viewers import TableView, ObjectView
+from pwem.objects import Class3D
+from pwem.viewers.showj import *
 
 from xmipp3.protocols.protocol_consensus_classes3D import XmippProtConsensusClasses3D, ob_function
-from pwem.objects import Class3D
+
 from scipy.cluster import hierarchy
 
 import pickle
@@ -62,37 +66,53 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
         self._loadAttributeIfExists(self.protocol._getFileName('size_ratio_percentiles'), '_sizeRatioPercentiles')
 
     def _defineParams(self, form):
+        # Particles section
+        form.addSection(label='Classes')
+        if hasattr(self, '_clusterings'):
+            form.addParam('displayClasses', IntParam, label='Custom number of classes',
+                            validators=[GT(0), LE(len(self._clusterings))], default=len(self._clusterings),
+                            help='Open a GUI to visualize the class of the given iteration. Warning: It takes time to open')
+
+        if hasattr(self.protocol, 'outputClasses_initial'):
+            form.addParam('displayInitialClasses', LabelParam, label='Initial classes')
+        
+        if hasattr(self.protocol, 'outputClasses_manual'):
+            form.addParam('displayManualClasses', LabelParam, label='Manual number of classes')
+        
+        if hasattr(self.protocol, 'outputClasses_origin'):
+            form.addParam('displayOriginClasses', LabelParam, label='Number of classes by proximity to origin')
+
+        if hasattr(self.protocol, 'outputClasses_angle'):
+            form.addParam('displayAngleClasses', LabelParam, label='Number of classes by angle')
+
+        if hasattr(self.protocol, 'outputClasses_pll'):
+            form.addParam('displayPllClasses', LabelParam, label='Number of classes by profile likelihood')
+
         # Graph section
         form.addSection(label='Graphs')
         if hasattr(self, '_clusterings') and hasattr(self, '_objectiveFunctionValues'):
-            form.addParam('displayDendrogram', LabelParam,
-                          label='Visualize the dendrogram of the merging process',
+            form.addParam('displayDendrogram', LabelParam, label='Dendrogram',
                           help='Open a GUI to visualize the dendogram each number of clusters')
-            form.addParam('displayDendrogramLog', LabelParam,
-                          label='Visualize the dendrogram of the merging process (log)',
+            form.addParam('displayDendrogramLog', LabelParam, label='Dendrogram (log)',
                           help='Open a GUI to visualize the dendogram each number'
                           ' of clusters with a logarithmic "y" axis')
 
         if hasattr(self, '_objectiveFunctionValues') and hasattr(self, '_elbows'):
-            form.addParam('displayObjectiveFunction', LabelParam,
-                          label='Visualize Objective Function',
+            form.addParam('displayObjectiveFunction', LabelParam, label='Objective Function',
                           help='Open a GUI to visualize the objective function for each number of clusters')
-            form.addParam('displayObjectiveFunctionLog', LabelParam,
-                          label='Visualize Objective Function (log)',
+            form.addParam('displayObjectiveFunctionLog', LabelParam, label='Objective Function (log)',
                           help='Open a GUI to visualize the objective function'
                           ' for each number of clusters with a logarithmic "y" axis')
 
         # Reference classification section
         form.addSection(label='Reference classification consensus')
         if hasattr(self, '_sizeRatioPercentiles'):
-            form.addParam('displayReferenceClassificationSizePercentiles', LabelParam,
-                          label='Reference Classification Size Percentiles',
+            form.addParam('displayReferenceClassificationSizePercentiles', LabelParam, label='Reference Classification Size Percentiles',
                           help='Open a GUI to visualize a table with the most'
                           ' common percentiles of the sizes of a random classification consensus')
 
         if hasattr(self, '_sizeRatioPercentiles'):
-            form.addParam('displayReferenceClassificationSizeRatioPercentiles', LabelParam,
-                          label='Reference Classification Size Ratio Percentiles',
+            form.addParam('displayReferenceClassificationSizeRatioPercentiles', LabelParam, label='Reference Classification Size Ratio Percentiles',
                           help='Open a GUI to visualize a table with the most common percentiles'
                           ' sizes of a random classification consensus'
                           ' compared to the original cluster size')
@@ -111,6 +131,12 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
 
     def _getVisualizeDict(self):
         return {
+            'displayClasses': self._visualizeClasses,
+            'displayInitialClasses': self._visualizeInitialClasses,
+            'displayManualClasses': self._visualizeManualClasses,
+            'displayOriginClasses': self._visualizeOriginClasses,
+            'displayAngleClasses': self._visualizeAngleClasses,
+            'displayPllClasses': self._visualizePllClasses,
             'displayDendrogram': self._visualizeDendrogram,
             'displayDendrogramLog': self._visualizeDendrogramLog,
             'displayObjectiveFunction': self._visualizeObjectiveFunction,
@@ -124,6 +150,31 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
         #        'displayObjectiveFunction': self._visualizeObjectiveFunction}
 
     # --------------------------- UTILS functions ------------------------------
+    
+    def _visualizeClasses(self, e):
+        # Shorthands:
+        ite = self.displayClasses.get() - 1
+        clustering = self._clusterings[ite]
+
+        # Create the output classes and show them
+        outputClasses = self.protocol._createOutput3DClass(clustering, 'viewer_'+str(ite))
+        return self._showSetOfClasses3D(outputClasses) # TODO does not work properly. Last class of size 0 and missing xmipp metadata
+    
+    def _visualizeInitialClasses(self, e):
+        return self._showSetOfClasses3D(self.protocol.outputClasses_initial)
+
+    def _visualizeManualClasses(self, e):
+        return self._showSetOfClasses3D(self.protocol.outputClasses_manual)
+
+    def _visualizeOriginClasses(self, e):
+        return self._showSetOfClasses3D(self.protocol.outputClasses_origin)
+
+    def _visualizeAngleClasses(self, e):
+        return self._showSetOfClasses3D(self.protocol.outputClasses_angle)
+
+    def _visualizePllClasses(self, e):
+        return self._showSetOfClasses3D(self.protocol.outputClasses_pll)
+
     def _visualizeDendrogram(self, e):
         plot_dendrogram(list(reversed(self._clusterings)), list(reversed(self._objectiveFunctionValues)), False)
         
@@ -153,6 +204,16 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
         with open(path, 'rb') as f:
             result = pickle.load(f)
         return result
+
+    def _showSetOfClasses3D(self, classes):
+        labels = 'enabled id _size _representative._filename _xmipp_classIntersectionSizePValue _xmipp_classIntersectionRelativeSizePValue'
+        labelRender = '_representative._filename'
+        return [ObjectView( self._project, classes.strId(), classes.getFileName(),
+                            viewParams={ORDER: labels,
+                                        VISIBLE: labels,
+                                        RENDER: labelRender,
+                                        SORT_BY: '_size desc',
+                                        MODE: MODE_MD})]
 
     def _chooseNumberOfClusters(self, e=None):
         views=[]
