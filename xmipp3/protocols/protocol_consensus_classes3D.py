@@ -380,13 +380,13 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
     # --------------------------- UTILS functions ------------------------------
     def _saveOutputs(self):
-        rmScipionListWrapperwrapper = lambda x: list(x)
-        rmScipionObjWrapperwrapper = lambda x: x.get()
-        self._storeAttributeIfExists(self._getFileName('clusterings'), 'ensembleIntersectionLists', rmScipionListWrapperwrapper)
-        self._storeAttributeIfExists(self._getFileName('objective_function'), 'ensembleObValues', rmScipionListWrapperwrapper)
-        self._storeAttributeIfExists(self._getFileName('elbows'), 'elbows', rmScipionObjWrapperwrapper)
-        self._storeAttributeIfExists(self._getFileName('size_percentiles'), 'randomConsensusSizePercentiles', rmScipionObjWrapperwrapper)
-        self._storeAttributeIfExists(self._getFileName('size_ratio_percentiles'), 'randomConsensusSizeRatioPercentiles', rmScipionObjWrapperwrapper)
+        rmScipionListWrapper = lambda x: list(x)
+        rmScipionObjWrapper = lambda x: x.get()
+        self._storeAttributeIfExists(self._getFileName('clusterings'), 'ensembleIntersectionLists', rmScipionListWrapper)
+        self._storeAttributeIfExists(self._getFileName('objective_function'), 'ensembleObValues', rmScipionListWrapper)
+        self._storeAttributeIfExists(self._getFileName('elbows'), 'elbows', rmScipionObjWrapper)
+        self._storeAttributeIfExists(self._getFileName('size_percentiles'), 'randomConsensusSizePercentiles', rmScipionObjWrapper)
+        self._storeAttributeIfExists(self._getFileName('size_ratio_percentiles'), 'randomConsensusSizeRatioPercentiles', rmScipionObjWrapper)
 
     def _storeAttributeIfExists(self, filename, attribute, func=None):
         """ Saves an attribute identified by its name, 
