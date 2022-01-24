@@ -30,7 +30,7 @@ import os
 
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_1
-from pyworkflow.utils import makePath, cleanPattern, moveFile
+from pyworkflow.utils import makePath, cleanPattern, moveFile, cleanPath
 from pwem.emlib.image import ImageHandler
 from pwem.constants import ALIGN_PROJ
 from pwem.objects import Image, Volume
@@ -540,9 +540,14 @@ class XmippProtSolidAngles(ProtAnalysis3D):
             volumesSet = self._createSetOfVolumes()
             volumesSet.setSamplingRate(newTs)
             for i in range(2):
+                fnVol = self._getExtraPath("split_v%d.vol" % (i + 1))
+                fnMrc = self._getExtraPath("split_v%d.mrc" % (i + 1))
+                self.runJob("xmipp_image_convert", "-i %s -o %s -t vol" % (fnVol, fnMrc), numberOfMpi=1)
+                self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" % (fnMrc, newTs), numberOfMpi=1)
+                cleanPath(fnVol)
+
                 vol = Volume()
-                vol.setLocation(1,
-                                self._getExtraPath("split_v%d.vol" % (i + 1)))
+                vol.setLocation(1,fnMrc)
                 volumesSet.append(vol)
 
             self._defineOutputs(outputVolumes=volumesSet)
