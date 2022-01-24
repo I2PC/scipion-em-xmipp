@@ -487,13 +487,13 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
           return
         # Preprocessing
         if len(self.readyToPreprocessMics(shared=False)) > 0 and not self.PREPROCESSING and (self.counter%2 == 0):
-            print('----------------------------------ENTERING PREPROCESSING STEP-----------------------------')
+            #print('----------------------------------ENTERING PREPROCESSING STEP-----------------------------')
             self.PREPROCESSING = True
             self.lastDeps = [self._insertFunctionStep("preprocessMicsStep", prerequisites=self.initDeps)]
 
         #Particle extraction OR (for predictions)
         if len(self.readyToExtractMicFns('OR')) >= self.extractingBatch.get() and not self.EXTRACTING['OR']:
-          print('----------------------------ENTERING OR EXTRACTION FOR PREDICTION-----------------------------')
+          #print('----------------------------ENTERING OR EXTRACTION FOR PREDICTION-----------------------------')
           self.EXTRACTING['OR'] = True
           self.newSteps += self.insertCaculateConsensusSteps('OR', prerequisites=self.initDeps)
           self.newSteps += self.insertExtractPartSteps('OR', prerequisites=self.newSteps)
@@ -502,11 +502,11 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         trainedParams = self.loadTrainedParams()
         toTrainSize = self.toTrainDataSize.get() if self.toTrainDataSize.get() != -1 else 1e10
         if self.trainingOn() and trainedParams['posParticlesTrained'] < toTrainSize and trainedParams['trainingPass'] != '':
-          print('----------------------------------ENTERING AND EXTRACTION AND/OR TRAINING--------------------')
+          #print('----------------------------------ENTERING AND EXTRACTION AND/OR TRAINING--------------------')
           self.doTraining()
 
         elif trainedParams['posParticlesTrained'] >= toTrainSize and trainedParams['trainingPass'] != '':
-          print('-------------------------ENTERING IN THE CHANGING THE TRAINING_PASS LOGIC-------------------------')
+          #print('-------------------------ENTERING IN THE CHANGING THE TRAINING_PASS LOGIC-------------------------')
           lastTrainingPass = trainedParams['trainingPass']
           self.retrievePreviousPassModel('', lastTrainingPass)
           trainedParams['trainingPass'] = ''
@@ -514,7 +514,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         #Prediction
         if self.networkReadyToPredict() and self.cnnFree() and self.predictionsOn() and len(self.readyToPredictMicFns()) > 0:
-            print('---------------------------------------------ENTERING PREDICTION---------------------------------')
+            #print('---------------------------------------------ENTERING PREDICTION---------------------------------')
             self.PREDICTING = True
             depPredict = self._insertFunctionStep('predictCNN', prerequisites= self.newSteps)
             self.newSteps += [self._insertFunctionStep('endPredictingStep', prerequisites=[depPredict])]
@@ -522,7 +522,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
         #Last round with batch size == 1 to include all input
         if self.allFree() and not self.LAST_ROUND and self.checkIfParentsFinished():
-          print('----------------------------------NOT LAST ROUND BUT ACTIVATES LAST_STEPS---------------------------')
+          #print('----------------------------------NOT LAST ROUND BUT ACTIVATES LAST_STEPS---------------------------')
           protLast = self._steps[self.lastStep - 1]
           protLast.addPrerequisites(*self.newSteps)
           protLast.setStatus(STATUS_NEW)
@@ -532,7 +532,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         protEnd.addPrerequisites(*self.newSteps)
         #Ending the protocol when everything is done
         if self.LAST_ROUND and self.allFree():
-          print('----------------------------------LAST ROUND ACTIVATES END_STEP---------------------------')
+          #print('----------------------------------LAST ROUND ACTIVATES END_STEP---------------------------')
           protEnd.setStatus(STATUS_NEW)
 
         self.updateSteps()
@@ -551,7 +551,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
       if (mean_acc != None and mean_acc > threshold) or \
               (trainedParams['posParticlesTrained'] >= toTrainSize and trainedParams['trainingPass'] != ''):
-        print('-------------------------ENTERING IN THE CHANGING THE TRAININGPASS LOGIC-------------------------')
+        #print('-------------------------ENTERING IN THE CHANGING THE TRAININGPASS LOGIC-------------------------')
         lastTrainingPass = trainedParams['trainingPass']
         self.retrievePreviousPassModel('', lastTrainingPass)
         trainedParams['trainingPass'] = ''
