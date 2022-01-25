@@ -145,9 +145,9 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         xdim = self._getDimensions()
         args = "-i %s -o %s --ref %s --optimizeAngles --optimizeShift --max_shift %d --oprojections %s --sampling %f" \
                % (fnAngles, anglesOutFn, fnVol, floor(xdim*0.05), projectionsOutFn, Ts)
-
+        self.fnResiduals = self._getExtraPath("residuals.stk")
         if self.doEvaluateResiduals:
-            args += " --oresiduals %s" % self._getExtraPath("residuals.stk")
+            args += " --oresiduals %s" % self.fnResiduals
 
         if self.ignoreCTF:
             args += " --ignoreCTF"
@@ -196,7 +196,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                 args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
             self.runJob(program, args, numberOfMpi=1)
             mrcsresiduals = self._getExtraPath("residuals.mrcs")
-            args2 = " -i %s -o %s" % (mrcsresiduals,  self._getExtraPath("residuals.stk"))
+            args2 = " -i %s -o %s" % (mrcsresiduals,  self.fnResiduals)
             self.runJob("xmipp_image_convert", args2, numberOfMpi=1)
             fnNewParticles = self._getExtraPath("images.stk")
             if os.path.exists(fnNewParticles):
@@ -208,7 +208,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         # Evaluate each image
         fnAutoCorrelations = self._getExtraPath("autocorrelations.xmd")
         stkAutoCorrelations = self._getExtraPath("autocorrelations.stk")
-        stkResiduals = self._getExtraPath("residuals.stk")
+        stkResiduals = self.fnResiduals
         anglesOutFn = self._getExtraPath("anglesCont.xmd")
         self.runJob("xmipp_image_residuals", " -i %s -o %s --save_metadata_stack %s"
                     % (stkResiduals, stkAutoCorrelations, fnAutoCorrelations), numberOfMpi=1)
