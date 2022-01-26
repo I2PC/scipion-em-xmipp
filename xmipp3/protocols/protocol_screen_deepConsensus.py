@@ -45,7 +45,6 @@ from pwem.protocols import ProtParticlePicking, ProtUserSubSet
 import pyworkflow.utils as pwutils
 from pyworkflow.protocol import params, STATUS_NEW
 import pwem.emlib.metadata as md
-
 from pwem import emlib
 import xmipp3
 from xmipp3 import XmippProtocol
@@ -55,6 +54,9 @@ from xmipp3.convert import (readSetOfParticles, setXmippAttributes,
                             writeSetOfCoordinates, readSetOfCoordsFromPosFnames, readSetOfCoordinates)
 
 MIN_NUM_CONSENSUS_COORDS = 256
+AND = 'by_all'
+OR = 'by_at_least_one'
+UNION_INTERSECTIONS = 'by_at_least_two'
 
 try:
   from xmippPyModules.deepConsensusWorkers.deepConsensus_networkDef import DEEP_PARTICLE_SIZE
@@ -654,8 +656,8 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
 
           if self.ignoreCTF.get():
             preproMicsContent="#mics\n"
-            for micFileName in toPreprocessMicFns: # CAMBIOS
-              preproMicsContent+= "%s\n"%os.path.join(dirName, micFileName) # CAMBIOS
+            for micFileName in toPreprocessMicFns:
+              preproMicsContent+= "%s\n"%os.path.join(dirName, micFileName)
           else:
             preproMicsContent="#mics ctfs\n"
             setOfMicCtf= self.ctfRelations.get()
@@ -663,7 +665,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
             for ctf in setOfMicCtf:
               ctf_mic = ctf.getMicrograph()
               ctfFnName = ctf_mic.getFileName()
-              if os.path.basename(ctfFnName) in toPreprocessMicFns: #CAMBIOS
+              if os.path.basename(ctfFnName) in toPreprocessMicFns:
                 ctf_mic.setCTF(ctf)
                 fnCTF = self._getTmpPath("%s.ctfParam" % os.path.basename(ctfFnName))
                 micrographToCTFParam(ctf_mic, fnCTF)
@@ -702,7 +704,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         sl+=1
         print('Waiting mics: ', sl)
         if sl > 60:
-            print('WARNING: a thread has been waiting for more than a minute to acess the input coordinates')
+            print('WARNING: a thread has been waiting for more than a minute to access the input micrographs')
 
       self.USING_INPUT_MICS = True
 
@@ -713,7 +715,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         sl += 1
         print('Waiting coords: ', sl)
         if sl > 60:
-          print('WARNING: a thread has been waiting for more than a minute to acess the input micrographs')
+          print('WARNING: a thread has been waiting for more than a minute to access the input coordinates')
 
       self.USING_INPUT_COORDS = True
 
@@ -721,10 +723,7 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
         '''Calculates the consensus coordinates from micrographs whose particles haven't been extracted yet in "mode"'''
         #Only calculate consensus for coordinates that has not been extracted yet
         trainedParams = self.loadTrainedParams()
-        if trainedParams['trainingPass'] == '' and mode == 'AND':
-            print('Training already finished')
-
-        else:
+        if trainedParams['trainingPass'] != '' or mode != 'AND':
             if self.checkIfNewMics(mode):
                 extractedSetOfCoordsFns = []
                 for micFn in self.getExtractedMicFns(mode):
@@ -741,18 +740,20 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
                     inputFileStr+=" ".join(fnames)+"\n"
 
                 assert len(inputFileStr)>len(inputFileHeader), "Error, no consensus can be computed as there " \
-                                                               "are mismatch in coordinate sets filenames"
-                #consensus = -1 if mode=="AND" else 1
-                consensus = 0 if mode=="AND" else 1 # The consensus changed: with 0 it would take the union of the intersections
+                                                               "is a mismatch in coordinate sets filenames"
+                #Concensus decision
+                consensus = UNION_INTERSECTIONS if mode=="AND" else OR
                 # THE MODE CAN BE A NEW PARAMETER TO BE ASKED TO THE USER
                 configFname= self._getTmpPath("consensus_%s_inputs.txt"%(mode) )
                 with open(configFname, "w") as f:
                     f.write(inputFileStr)
 
-                args="-i %s -s %d -c %d -d %f -o %s -t %d"%(configFname, self._getBoxSize(), consensus, self.consensusRadius.get(),
-                                                           outCoordsDataPath, self.numberOfThreads.get())
+                args = "-i %s -s %d -c %s -d %f -o %s -t %d" % (configFname, self._getBoxSize(), consensus, self.consensusRadius.get(),
+                                                                outCoordsDataPath, self.numberOfThreads.get())
                 self.runJob('xmipp_coordinates_consensus', args, numberOfMpi=1)
                 self.TO_EXTRACT_MICFNS[mode] = self.readyToExtractMicFns(mode)
+
+                return
 
 
 
@@ -808,17 +809,13 @@ class XmippProtScreenDeepConsensus(ProtParticlePicking, XmippProtocol):
               self.TO_EXTRACT_MICFNS['NOISE'] = toPickNoiseFns
               print('Adding to extract {} {} micrographs'.format(len(toPickNoiseFns), 'NOISE'))
 
-        else:
-            print('Training already finished')
+              return
 
     def loadCoords(self, posCoorsPath, mode, micSet=[]):
         #Upload coords sqlite
         trainedParams = self.loadTrainedParams()
-        if trainedParams['trainingPass'] == '' and mode == 'AND':
-            print('Training already finished')
-
-        else:
-            if not micSet == []:
+        if trainedParams['trainingPass'] != '' or mode != 'AND':
+            if len(micSet):
                   #Load coordinates from an specific set of mics
                   batchSetOfCoordinates = self._createSetOfCoordinates(micSet)
                   batchSetOfCoordinates.setBoxSize(self._getBoxSize())
