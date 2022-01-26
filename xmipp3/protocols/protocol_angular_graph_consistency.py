@@ -244,9 +244,9 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
         self.writeInfoField(fnDirCurrent, "sampling", emlib.MDL_SAMPLINGRATE, TsCurrent)
 
         # Copy reference volume and window if necessary
-        Xdim = self.inputParticles.get().getDimensions()[0]
-        newXdim = int(round(Xdim * self.TsOrig / TsCurrent))
-        self.writeInfoField(fnDirCurrent, "size", emlib.MDL_XSIZE, newXdim)
+        XDim = self.inputParticles.get().getDimensions()[0]
+        newXDim = int(round(XDim * self.TsOrig / TsCurrent))
+        self.writeInfoField(fnDirCurrent, "size", emlib.MDL_XSIZE, newXDim)
         
         img = ImageHandler()
 
@@ -255,8 +255,8 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
         vol = self.inputVolume.get()
         img.convert(vol, fnVol1)
         volXdim = vol.getDim()[0]
-        if newXdim != volXdim:
-            self.runJob('xmipp_transform_window', "-i %s --size %d" % (fnVol1, newXdim), numberOfMpi=1)
+        if newXDim != volXdim:
+            self.runJob('xmipp_transform_window', "-i %s --size %d" % (fnVol1, newXDim), numberOfMpi=1)
 
     def globalAssignment(self):  
         fnDirIter0 = self._getExtraPath("Iter0") 
@@ -276,8 +276,8 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
         self.nextResolutionOffset = 2
         if self.nextLowPass:
             ResolutionAlignment += self.nextResolutionOffset
-        newXdim = self.readInfoField(fnGlobal, "size", emlib.MDL_XSIZE)
-        angleStep = self.calculateAngStep(newXdim, TsCurrent, ResolutionAlignment)
+        newXDim = self.readInfoField(fnGlobal, "size", emlib.MDL_XSIZE)
+        angleStep = self.calculateAngStep(newXDim, TsCurrent, ResolutionAlignment)
         angleStep = max(angleStep, self.angularSampling.get())
         self.writeInfoField(fnGlobal, "angleStep", emlib.MDL_ANGLE_DIFF, float(angleStep))
 
@@ -332,7 +332,7 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
                     if getSize(fnGroup) == 0:  # If the group is empty
                         continue
                     self.angularMaxShift = 10
-                    maxShift = round(self.angularMaxShift * newXdim / 100)
+                    maxShift = round(self.angularMaxShift * newXDim / 100)
                     R = self.inputParticles.get().getDimensions()[0] / 2
                     R = R * self.TsOrig / TsCurrent    
                     args = '-i %s -o %s -ref %s -sampling %f -odir %s --Nsimultaneous %d -angleStep %f --maxShift %f --sym %s --useForValidation --refVol %s' % \
@@ -402,8 +402,8 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
                     self.runJob("xmipp_metadata_utilities", '-i %s --set union_all %s' % (fnOut + ".xmd", fnAngles1), numberOfMpi=1)
         cleanPath(join(fnGlobal, "anglesDisc*_weights.xmd"))    
 
-    def calculateAngStep(self, newXdim, TsCurrent, ResolutionAlignment):
-        k = newXdim * TsCurrent / ResolutionAlignment  # Freq. index
+    def calculateAngStep(self, newXDim, TsCurrent, ResolutionAlignment):
+        k = newXDim * TsCurrent / ResolutionAlignment  # Freq. index
         return math.atan2(1, k) * 180.0 / math.pi  # Corresponding angular step
 
     def checkInfoField(self, fnDir, block):
@@ -427,30 +427,29 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
         if self.checkInfoField(fnDir, "count"):
             state = self.readInfoField(fnDir, "count", emlib.MDL_COUNT)
             if state >= 1:
-                return
-        
+                return        
         print("Preparing images to sampling rate=", TsCurrent)
-        Xdim = self.inputParticles.get().getDimensions()[0]
-        newXdim = int(round(Xdim * self.TsOrig / TsCurrent))
-        if newXdim < 40:
-            newXdim = int(40)
-            TsCurrent = Xdim * (self.TsOrig / newXdim)
-        elif newXdim % 2 == 1:
-            newXdim += 1
-            TsCurrent = Xdim * (self.TsOrig / newXdim)
+        XDim = self.inputParticles.get().getDimensions()[0]
+        newXDim = int(round(XDim * self.TsOrig / TsCurrent))
+        if newXDim < 40:
+            newXDim = int(40)
+            TsCurrent = XDim * (self.TsOrig / newXDim)
+        elif newXDim % 2 == 1:
+            newXDim += 1
+            TsCurrent = XDim * (self.TsOrig / newXDim)
         self.writeInfoField(fnDir, "sampling", emlib.MDL_SAMPLINGRATE, TsCurrent)
-        self.writeInfoField(fnDir, "size", emlib.MDL_XSIZE, newXdim)
+        self.writeInfoField(fnDir, "size", emlib.MDL_XSIZE, newXDim)
         
         # Prepare particles
         fnNewParticles = join(fnDir, "images.stk")
-        if newXdim != Xdim:
-            self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (self.imgsFn, fnNewParticles, newXdim), numberOfMpi=min(self.numberOfMpi.get(), 24))
+        if newXDim != XDim:
+            self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (self.imgsFn, fnNewParticles, newXDim), numberOfMpi=min(self.numberOfMpi.get(), 24))
         else:
             self.runJob("xmipp_image_convert", "-i %s -o %s --save_metadata_stack %s" % (self.imgsFn, fnNewParticles, join(fnDir, "images.xmd")),
                         numberOfMpi=1)
         R = self.inputParticles.get().getDimensions()[0] / 2
         self.angularMaxShift = 10
-        R = min(round(R * self.TsOrig / TsCurrent * (1 + self.angularMaxShift * 0.01)), newXdim / 2)
+        R = min(round(R * self.TsOrig / TsCurrent * (1 + self.angularMaxShift * 0.01)), newXDim / 2)
         self.runJob("xmipp_transform_mask", "-i %s --mask circular -%d" % (fnNewParticles, R), numberOfMpi=min(self.numberOfMpi.get(), 24))
         fnSource = join(fnDir, "images.xmd")
 
@@ -468,12 +467,12 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
 
         print("Preparing references to sampling rate=", TsCurrent)
         fnMask = ''
-        newXdim = self.readInfoField(fnDir, "size", emlib.MDL_XSIZE)
+        newXDim = self.readInfoField(fnDir, "size", emlib.MDL_XSIZE)
         oldXdim = self.readInfoField(fnDirPrevious, "size", emlib.MDL_XSIZE)
         fnPreviousVol = join(fnDirPrevious, "volume.vol") 
         fnReferenceVol = join(fnDir, "volumeRef.vol") 
-        if oldXdim != newXdim:
-            self.runJob("xmipp_image_resize", "-i %s -o %s --dim %d" % (fnPreviousVol, fnReferenceVol, newXdim), numberOfMpi=1)
+        if oldXdim != newXDim:
+            self.runJob("xmipp_image_resize", "-i %s -o %s --dim %d" % (fnPreviousVol, fnReferenceVol, newXDim), numberOfMpi=1)
         else:
             copyFile(fnPreviousVol, fnReferenceVol)
         self.nextLowPass = True
