@@ -1,3 +1,5 @@
+[![Build](https://github.com/I2PC/scipion-em-xmipp/actions/workflows/build.yml/badge.svg)](https://github.com/I2PC/scipion-em-xmipp/actions/workflows/build.yml)
+
 # scipion-em-xmipp
 
 Plugin to use Xmipp programs within the Scipion framework.
