@@ -92,24 +92,21 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                       help='Decay of the filter (sigma parameter) to smooth the mask transition',
                       expertLevel=LEVEL_ADVANCED)
         form.addParam('iter', IntParam, label="Number of iterations: ", default=5, expertLevel=LEVEL_ADVANCED,
-                      help='Number of iterations for the adjustment process of the images before the subtraction itself'
-                           'several iterations are recommended to improve the adjustment.')
+                      help='Number of iterations for the adjustment process of the images before the subtraction '
+                           'itself. Several iterations are recommended to improve the adjustment.')
         form.addParam('rfactor', FloatParam, label="Relaxation factor (lambda): ",  expertLevel=LEVEL_ADVANCED,
-                      default=1, help='Relaxation factor for Fourier amplitude projector (POCS), it should be between 0'
-                                      ' and 1, being 1 no relaxation and 0 no modification of volume 2 amplitudes')
+                      default=1, help='Relaxation factor for Fourier amplitude projector (POCS), it should be between '
+                                      '0 (no modification of the amplitudes of the volume 2) and 1 (no relaxation).')
         form.addParallelSection(threads=0, mpi=8)
     
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        # Convert input images if necessary
+        """ Convert input images if necessary """
         self.imgsFn = self._getExtraPath('residuals.xmd')
         vol = self.inputVolume.get()
         self._insertFunctionStep("convertStep", self.imgsFn)
 
-        imgSet = self.inputSet.get()
-        if not self.useAssignment or isinstance(imgSet, SetOfClasses2D) \
-                or (isinstance(imgSet, SetOfAverages) and not imgSet.hasAlignmentProj()) or \
-                (isinstance(imgSet, SetOfParticles) and not imgSet.hasAlignmentProj()):
+        if self._useProjMatching():
             anglesFn = self._getExtraPath('angles.xmd')
             self._insertFunctionStep("projMatchStep", self.inputVolume.get().getFileName(), self.angularSampling.get(),
                                      self.symmetryGroup.get(), self.imgsFn, anglesFn, self.inputVolume.get().getDim()[0])
@@ -156,53 +153,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         self.runJob("xmipp_angular_continuous_assign2", args)
 
         if self.doEvaluateResiduals:
-            vol = self.inputVolume.get().clone()
-            involdim = vol.getDim()
-            if fnVol.endswith('.mrc'):
-                fnVol += ':mrc'
-            program = "xmipp_subtract_projection"
-            args = '-i %s --ref %s -o %s --iter %s --lambda %s --suball' % \
-                   (self.imgsFn, fnVol, self._getExtraPath("residuals"), self.iter.get(), self.rfactor.get())
-            args += ' --saveProj %s' % self._getExtraPath('')
-
-            if self.maskVol.get() is not None:
-                mskVol = self.maskVol.get().getFileName()
-            else:
-                fnDescr = self._getExtraPath("mask.descr")
-                fhDescr = open(fnDescr, 'w')
-                fhDescr.write("%d %d %d 0 \n sph + 1 0 0 0 %d" % (involdim[0], involdim[1], involdim[2], involdim[0]/2))
-                fhDescr.close()
-                mskVol = self._getExtraPath("mask.mrc")
-                args_mask = "-i %s -o %s" % (fnDescr, mskVol)
-                self.runJob("xmipp_phantom_create", args_mask, numberOfMpi=1)
-                args_imageheader = "-i %s --sampling_rate %f" % (mskVol, vol.getSamplingRate())
-                self.runJob("xmipp_image_header", args_imageheader, numberOfMpi=1)
-            args += ' --maskVol %s' % mskVol
-
-            fnDescr2 = self._getExtraPath("mask.descr2")
-            fhDescr2 = open(fnDescr2, 'w')
-            fhDescr2.write("%d %d %d 0" % (involdim[0], involdim[1], involdim[2]))
-            fhDescr2.close()
-            mskKeep = self._getExtraPath("mask_keep.mrc")
-            args_mask_keep = "-i %s -o %s" % (fnDescr2, mskKeep)
-            self.runJob("xmipp_phantom_create", args_mask_keep, numberOfMpi=1)
-            args_imageheader2 = "-i %s --sampling_rate %f" % (mskKeep, vol.getSamplingRate())
-            self.runJob("xmipp_image_header", args_imageheader2, numberOfMpi=1)
-            args += ' --mask %s' % mskKeep
-
-            resol = self.resol.get()
-            if resol:
-                fc = vol.getSamplingRate()/resol
-                args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
-            self.runJob(program, args, numberOfMpi=1)
-            mrcsresiduals = self._getExtraPath("residuals.mrcs")
-            args2 = " -i %s -o %s" % (mrcsresiduals,  self.fnResiduals)
-            self.runJob("xmipp_image_convert", args2, numberOfMpi=1)
-            fnNewParticles = self._getExtraPath("images.stk")
-            if os.path.exists(fnNewParticles):
-                cleanPath(fnNewParticles)
-            if os.path.exists(mrcsresiduals):
-                cleanPath(mrcsresiduals)
+            self._computeResiduals(fnVol)
 
     def evaluateResiduals(self):
         # Evaluate each image
@@ -308,6 +259,65 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         if self.doEvaluateResiduals:
             __setXmippImage(emlib.MDL_IMAGE_RESIDUAL)
             __setXmippImage(emlib.MDL_IMAGE_COVARIANCE)
+
+    def _useProjMatching(self):
+        """ Determine if it is necessary to perform projection matching step (because there is not input alignment)"""
+        imgSet = self.inputSet.get()
+        if not self.useAssignment or isinstance(imgSet, SetOfClasses2D) \
+                or (isinstance(imgSet, SetOfAverages) and not imgSet.hasAlignmentProj()) or \
+                (isinstance(imgSet, SetOfParticles) and not imgSet.hasAlignmentProj()):
+            return True
+        else:
+            return False
+
+    def _computeResiduals(self, fnVol):
+        vol = self.inputVolume.get().clone()
+        involdim = vol.getDim()
+        if fnVol.endswith('.mrc'):
+            fnVol += ':mrc'
+        program = "xmipp_subtract_projection"
+        args = '-i %s --ref %s -o %s --iter %s --lambda %s --suball' % \
+               (self.imgsFn, fnVol, self._getExtraPath("residuals"), self.iter.get(), self.rfactor.get())
+        args += ' --saveProj %s' % self._getExtraPath('')
+
+        if self.maskVol.get() is not None:
+            mskVol = self.maskVol.get().getFileName()
+        else:
+            fnDescr = self._getExtraPath("mask.descr")
+            fhDescr = open(fnDescr, 'w')
+            fhDescr.write("%d %d %d 0 \n sph + 1 0 0 0 %d" % (involdim[0], involdim[1], involdim[2], involdim[0] / 2))
+            fhDescr.close()
+            mskVol = self._getExtraPath("mask.mrc")
+            args_mask = "-i %s -o %s" % (fnDescr, mskVol)
+            self.runJob("xmipp_phantom_create", args_mask, numberOfMpi=1)
+            args_imageheader = "-i %s --sampling_rate %f" % (mskVol, vol.getSamplingRate())
+            self.runJob("xmipp_image_header", args_imageheader, numberOfMpi=1)
+        args += ' --maskVol %s' % mskVol
+
+        fnDescr2 = self._getExtraPath("mask.descr2")
+        fhDescr2 = open(fnDescr2, 'w')
+        fhDescr2.write("%d %d %d 0" % (involdim[0], involdim[1], involdim[2]))
+        fhDescr2.close()
+        mskKeep = self._getExtraPath("mask_keep.mrc")
+        args_mask_keep = "-i %s -o %s" % (fnDescr2, mskKeep)
+        self.runJob("xmipp_phantom_create", args_mask_keep, numberOfMpi=1)
+        args_imageheader2 = "-i %s --sampling_rate %f" % (mskKeep, vol.getSamplingRate())
+        self.runJob("xmipp_image_header", args_imageheader2, numberOfMpi=1)
+        args += ' --mask %s' % mskKeep
+
+        resol = self.resol.get()
+        if resol:
+            fc = vol.getSamplingRate() / resol
+            args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
+        self.runJob(program, args, numberOfMpi=1)
+        mrcsresiduals = self._getExtraPath("residuals.mrcs")
+        args2 = " -i %s -o %s" % (mrcsresiduals, self.fnResiduals)
+        self.runJob("xmipp_image_convert", args2, numberOfMpi=1)
+        fnNewParticles = self._getExtraPath("images.stk")
+        if os.path.exists(fnNewParticles):
+            cleanPath(fnNewParticles)
+        if os.path.exists(mrcsresiduals):
+            cleanPath(mrcsresiduals)
 
     # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
