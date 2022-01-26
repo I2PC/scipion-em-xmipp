@@ -128,8 +128,8 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
         self.runJob('xmipp_metadata_utilities', '-i %s --operate keep_column particleId -o %s' % (self.imgsFn, imgsFnId), numberOfMpi=1)
 
     def createOutput(self):
-        fnLastDir = self._getExtraPath("Iter001") 
-        fnDirGlobal = join(fnLastDir, "globalAssignment")
+        fnLastDir = self._getExtraPath("Iter1") 
+        fnDirGlobal = fnLastDir
         Ts = self.readInfoField(fnDirGlobal, "sampling", emlib.MDL_SAMPLINGRATE)
 
         fnAnglesDisc=join(fnDirGlobal,"anglesDisc.xmd")
@@ -233,7 +233,7 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
         createItemMatrix(particle, row, align=ALIGN_PROJ)
 
     def doIteration000(self):
-        fnDirCurrent = self._getExtraPath('Iter000')
+        fnDirCurrent = self._getExtraPath('Iter0')
         makePath(fnDirCurrent)
 
         # Get volume sampling rate
@@ -259,18 +259,16 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
             self.runJob('xmipp_transform_window', "-i %s --size %d" % (fnVol1, newXdim), numberOfMpi=1)
 
     def globalAssignment(self):  
-        fnDirPrevious = self._getExtraPath("Iter000") 
-        fnDirCurrent = self._getExtraPath("Iter001")
-        makePath(fnDirCurrent)
-        fnGlobal = join(fnDirCurrent, "globalAssignment")
+        fnDirIter0 = self._getExtraPath("Iter0") 
+        fnGlobal = self._getExtraPath("Iter1")
         makePath(fnGlobal)
         previousResolution = self._maximumTargetResolution
         targetResolution = self._maximumTargetResolution
         TsCurrent = max(self.TsOrig,targetResolution/3)
         getShiftsFrom = ''
-        self.prepareImages(fnDirPrevious, fnGlobal, TsCurrent, getShiftsFrom)
+        self.prepareImages(fnDirIter0, fnGlobal, TsCurrent, getShiftsFrom)
         TsCurrent = self.readInfoField(fnGlobal, "sampling", emlib.MDL_SAMPLINGRATE)  # Prepare images may have changed it
-        self.prepareReferences(fnDirPrevious, fnGlobal, TsCurrent, targetResolution)
+        self.prepareReferences(fnDirIter0, fnGlobal, TsCurrent, targetResolution)
         
         # Calculate angular step at this resolution
         ResolutionAlignment = previousResolution
@@ -497,9 +495,9 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
         self.writeInfoField(fnDir, "count", emlib.MDL_COUNT, int(2)) 
 
     def cleanDirectory(self):
-        fnDirCurrent = self._getExtraPath("Iter001") 
+        fnDirCurrent = self._getExtraPath("Iter1") 
         if self.saveSpace:
-            fnGlobal = join(fnDirCurrent, "globalAssignment")
+            fnGlobal = fnDirCurrent
             if exists(fnGlobal):
                 cleanPath(join(fnGlobal, "images.stk"))
             if exists(fnGlobal):
