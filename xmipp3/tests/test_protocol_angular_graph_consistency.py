@@ -34,29 +34,29 @@ class TestAngularGraphConsistency(BaseTest):
         setupTestProject(cls)
         cls.dsRelion = DataSet.getDataSet('relion_tutorial')
 
-    def checkOutput(self, prot, outputName, conditions=[]):
+    def checkOutput(self, prot, outName, conditions=[]):
         """ Check that an ouput was generated and
         the condition is valid.
         """
-        o = getattr(prot, outputName, None)
-        locals()[outputName] = o
-        self.assertIsNotNone(o, "Output: %s is None" % outputName)
-        for cond in conditions:
-            self.assertTrue(eval(cond), 'Condition failed: ' + cond)
+        o = getattr(prot, outName, None)
+        locals()[outName] = o
+        self.assertIsNotNone(o, "Output: %s is None" % outName)
+        for c in conditions:
+            self.assertTrue(eval(c), 'Condition failed: ' + c)
 
     def importVolumes(self):
-        prot = self.newProtocol(ProtImportVolumes,
+        importProt = self.newProtocol(ProtImportVolumes,
                                 objLabel='import volume',
                                 filesPath=self.dsRelion.getFile('volumes/reference.mrc'),
                                 samplingRate=7.08)
-        self.launchProtocol(prot)
+        self.launchProtocol(importProt)
 
-        return prot
+        return importProt
 
     def importParticles(self, numberOfParticles, path):
         """ Import an EMX file with Particles and defocus
         """
-        prot = self.newProtocol(ProtImportParticles,
+        importProt = self.newProtocol(ProtImportParticles,
                                  objLabel='from relion (auto-refine 3d)',
                                  importFrom=ProtImportParticles.IMPORT_FROM_RELION,
                                  starFile=self.dsRelion.getFile(path),
@@ -64,36 +64,36 @@ class TestAngularGraphConsistency(BaseTest):
                                  samplingRate=7.08,
                                  haveDataBeenPhaseFlipped=True
                                  )
-        self.launchProtocol(prot)
-        self.checkOutput(prot, 'outputParticles',
+        self.launchProtocol(importProt)
+        self.checkOutput(importProt, 'outputParticles',
                          ['outputParticles.hasAlignmentProj()',
                           'outputParticles.isPhaseFlipped()'])
         # subset to speed-up following processes
-        protSubset = self.newProtocol(ProtSubSet,
+        subsetProt = self.newProtocol(ProtSubSet,
                                       objLabel='subset of particles',
                                       chooseAtRandom=True,
                                       nElements=numberOfParticles)
-        protSubset.inputFullSet.set(prot.outputParticles)
+        subsetProt.inputFullSet.set(importProt.outputParticles)
 
-        self.launchProtocol(protSubset)
-        self.checkOutput(protSubset, 'outputParticles',
+        self.launchProtocol(subsetProt)
+        self.checkOutput(subsetProt, 'outputParticles',
                          ['outputParticles.getSize() == %d'
                           % numberOfParticles])
 
-        return protSubset
+        return subsetProt
 
     def test_validate(self):
         protImportVols = self.importVolumes()
         pathToFile = 'import/case2/relion_it015_data.star'
-        protImportParts = self.importParticles(200,pathToFile)
+        importParticlesProt = self.importParticles(2000,pathToFile)
 
-        protValidate = self.newProtocol(XmippProtAngularGraphConsistency,
+        validateProt = self.newProtocol(XmippProtAngularGraphConsistency,
                                 objLabel='angular graph consistency',
                                 angularSampling=3,
                                 maximumTargetResolution=10,
                                 numberOfMpi=4, numberOfThreads=1)
-        protValidate.inputParticles.set(protImportParts.outputParticles)
-        protValidate.inputVolume.set(protImportVols.outputVolume)
+        validateProt.inputParticles.set(importParticlesProt.outputParticles)
+        validateProt.inputVolume.set(protImportVols.outputVolume)
 
-        self.launchProtocol(protValidate)
-        self.checkOutput(protValidate, 'outputParticles')       
+        self.launchProtocol(validateProt)
+        self.checkOutput(validateProt, 'outputParticles')       
