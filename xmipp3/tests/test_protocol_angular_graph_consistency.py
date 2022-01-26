@@ -85,7 +85,7 @@ class TestAngularGraphConsistency(BaseTest):
     def test_validate(self):
         protImportVols = self.importVolumes()
         pathToFile = 'import/case2/relion_it015_data.star'
-        protImportParts = self.importParticles(2000,pathToFile)
+        protImportParts = self.importParticles(200,pathToFile)
 
         protValidate = self.newProtocol(XmippProtAngularGraphConsistency,
                                 objLabel='angular graph consistency',
@@ -93,7 +93,7 @@ class TestAngularGraphConsistency(BaseTest):
                                 maximumTargetResolution=10,
                                 numberOfMpi=4, numberOfThreads=1)
         protValidate.inputParticles.set(protImportParts.outputParticles)
-        protValidate.inputVolumes.set(protImportVols.outputVolume)
+        protValidate.inputVolume.set(protImportVols.outputVolume)
 
         self.launchProtocol(protValidate)
         self.checkOutput(protValidate, 'outputParticles')       

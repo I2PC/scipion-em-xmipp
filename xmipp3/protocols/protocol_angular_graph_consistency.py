@@ -30,7 +30,6 @@ from os.path import join, isfile, exists
 from shutil import copyfile, copy
 import os
 
-#from pyworkflow.object import Float, String
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
                                         STEPS_PARALLEL,
                                         StringParam, BooleanParam, IntParam,
@@ -71,7 +70,7 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
     def _defineParams(self, form):
 
         form.addSection(label='Input')
-        form.addParam('inputVolumes', PointerParam, pointerClass='Volume, SetOfVolumes',
+        form.addParam('inputVolume', PointerParam, pointerClass='Volume',
                       label="Input volume", important=True,
                       help='Select the input volume(s).')
         form.addParam('inputParticles', PointerParam,
@@ -110,10 +109,9 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
 
     def _insertAllSteps(self):
         self.imgsFn = self._getExtraPath('images.xmd')
-        convertId = self._insertFunctionStep('convertInputStep',
+        self._insertFunctionStep('convertInputStep',
                                              self.inputParticles.get().getObjId())
         self.TsOrig = self.inputParticles.get().getSamplingRate()
-        sym = self.symmetryGroup.get()
         self._insertFunctionStep('doIteration000')
         self._maximumTargetResolution = self.maximumTargetResolution.get()
         self._insertFunctionStep('globalAssignment')  
@@ -239,34 +237,26 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
         makePath(fnDirCurrent)
 
         # Get volume sampling rate
-        if self.inputVolumes.get() is None:
+        if self.inputVolume.get() is None:
             TsCurrent = self.inputParticles.get().getSamplingRate()
         else:
-            TsCurrent = self.inputVolumes.get().getSamplingRate()
+            TsCurrent = self.inputVolume.get().getSamplingRate()
         self.writeInfoField(fnDirCurrent, "sampling", emlib.MDL_SAMPLINGRATE, TsCurrent)
 
-        # Copy reference volumes and window if necessary
+        # Copy reference volume and window if necessary
         Xdim = self.inputParticles.get().getDimensions()[0]
         newXdim = int(round(Xdim * self.TsOrig / TsCurrent))
         self.writeInfoField(fnDirCurrent, "size", emlib.MDL_XSIZE, newXdim)
         
         img = ImageHandler()
-        if isinstance(self.inputVolumes.get(), SetOfVolumes):
-            i = 1
-            for vol in self.inputVolumes.get():
-                fnVol = join(fnDirCurrent, "volume.vol") 
-                img.convert(vol, fnVol)
-                if newXdim != vol.getDim()[0]:
-                    self.runJob('xmipp_transform_window', "-i %s --size %d" % (fnVol, newXdim), numberOfMpi=1)
-                i += 1
-        else:
-            fnVol1 = join(fnDirCurrent, "volume.vol")  
 
-            vol = self.inputVolumes.get()
-            img.convert(vol, fnVol1)
-            volXdim = vol.getDim()[0]
-            if newXdim != volXdim:
-                self.runJob('xmipp_transform_window', "-i %s --size %d" % (fnVol1, newXdim), numberOfMpi=1)
+        fnVol1 = join(fnDirCurrent, "volume.vol")  
+
+        vol = self.inputVolume.get()
+        img.convert(vol, fnVol1)
+        volXdim = vol.getDim()[0]
+        if newXdim != volXdim:
+            self.runJob('xmipp_transform_window', "-i %s --size %d" % (fnVol1, newXdim), numberOfMpi=1)
 
     def globalAssignment(self):  
         fnDirPrevious = self._getExtraPath("Iter000") 
@@ -309,13 +299,11 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
             moveFile("%s/ctf_images.sel" % fnDirAssignment, "%s/ctf_groups.xmd" % fnDirAssignment)
             cleanPath("%s/ctf_split.doc" % fnDirAssignment)
             mdInfo = emlib.MetaData("numberGroups@%s" % join(fnDirAssignment, "ctfInfo.xmd"))
-            fnCTFs = "%s/ctf_ctf.stk" % fnDirAssignment
             numberGroups = mdInfo.getValue(emlib.MDL_COUNT, mdInfo.firstObject())
             ctfPresent = True
         else:
             numberGroups = 1
             ctfPresent = False
-            fnCTFs = ""
             
         # Generate projections
         fnReferenceVol = join(fnGlobal, "volumeRef.vol") 
@@ -335,14 +323,13 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
                     if ctfPresent:
                         fnGroup = "ctfGroup%06d@%s/ctf_groups.xmd" % (j, fnDirAssignment)
                         fnCTF = "%d@%s/ctf_ctf.stk" % (j, fnDirAssignment)
-                        fnGalleryGroup = fnGallery = join(fnDirAssignment, "gallery%s_%06d.stk" % (subset, j))
-                        fnGalleryGroupMd = fnGallery = join(fnDirAssignment, "gallery%s_%06d.xmd" % (subset, j))
+                        fnGalleryGroup = join(fnDirAssignment, "gallery%s_%06d.stk" % (subset, j))
+                        fnGalleryGroupMd = join(fnDirAssignment, "gallery%s_%06d.xmd" % (subset, j))
                         self.runJob("xmipp_transform_filter", "-i %s -o %s --fourier binary_file %s --save_metadata_stack %s --keep_input_columns" % \
                                     (fnGalleryMd, fnGalleryGroup, fnCTF, fnGalleryGroupMd),
                                     numberOfMpi=min(self.numberOfMpi.get(), 24))
                     else:
                         fnGroup = fnImgs
-                        fnGalleryGroup = fnGallery
                         fnGalleryGroupMd = fnGalleryMd
                     if getSize(fnGroup) == 0:  # If the group is empty
                         continue
@@ -457,7 +444,6 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
         self.writeInfoField(fnDir, "size", emlib.MDL_XSIZE, newXdim)
         
         # Prepare particles
-        fnDir0 = self._getExtraPath("Iter000")
         fnNewParticles = join(fnDir, "images.stk")
         if newXdim != Xdim:
             self.runJob("xmipp_image_resize", "-i %s -o %s --fourier %d" % (self.imgsFn, fnNewParticles, newXdim), numberOfMpi=min(self.numberOfMpi.get(), 24))
@@ -474,8 +460,6 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
             self.runJob("xmipp_ctf_correct_phase", "-i %s --sampling_rate %f" % (fnSource, TsCurrent),
                         numberOfMpi=min(self.numberOfMpi.get(), 24))
 
-        # cleanPath(fnSource)
-
         self.writeInfoField(fnDir, "count", emlib.MDL_COUNT, int(1))   
         
     def prepareReferences(self, fnDirPrevious, fnDir, TsCurrent, targetResolution):
@@ -488,7 +472,6 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
         fnMask = ''
         newXdim = self.readInfoField(fnDir, "size", emlib.MDL_XSIZE)
         oldXdim = self.readInfoField(fnDirPrevious, "size", emlib.MDL_XSIZE)
-        i=1
         fnPreviousVol = join(fnDirPrevious, "volume.vol") 
         fnReferenceVol = join(fnDir, "volumeRef.vol") 
         if oldXdim != newXdim:
@@ -527,7 +510,7 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
     def _validate(self):
         validateMsgs = []
         # if there are Volume references, it cannot be empty.
-        if self.inputVolumes.get() and not self.inputVolumes.hasValue():
+        if self.inputVolume.get() and not self.inputVolume.hasValue():
             validateMsgs.append('Please provide an input reference volume.')
         if self.inputParticles.get() and not self.inputParticles.hasValue():
             validateMsgs.append('Please provide input particles.')
