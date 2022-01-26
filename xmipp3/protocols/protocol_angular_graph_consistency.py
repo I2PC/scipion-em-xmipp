@@ -352,54 +352,54 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
                 
         # Evaluate the stability of the alignment
         fnOut = join(fnGlobal, "anglesDisc")
-        for subset1 in perturbationList:
-            fnOut1 = join(fnGlobal, "anglesDisc%s" % subset1)
+        for set1 in perturbationList:
+            fnOut1 = join(fnGlobal, "anglesDisc%s" % set1)
             fnAngles1 = fnOut1 + ".xmd"
             counter2 = 0
-            for subset2 in perturbationList:
-                if subset1 == subset2:
+            for set2 in perturbationList:
+                if set1 == set2:
                     continue
-                fnAngles2 = join(fnGlobal, "anglesDisc%s.xmd" % subset2)
-                fnOut12 = join(fnGlobal, "anglesDisc%s%s" % (subset1, subset2))
-                self.runJob("xmipp_angular_distance","--ang1 %s --ang2 %s --oroot %s --sym %s --compute_weights 1 particleId 0.5 --check_mirrors --set 0"%(fnAngles2,fnAngles1,fnOut12,self.symmetryGroup),numberOfMpi=1)
-                self.runJob("xmipp_metadata_utilities",'-i %s --operate keep_column "angleDiff0 shiftDiff0 weightJumper0"'%(fnOut12+"_weights.xmd"),numberOfMpi=1)
+                fnAngles2 = join(fnGlobal, "anglesDisc%s.xmd" % set2)
+                fnOut12 = join(fnGlobal, "anglesDisc%s%s" % (set1, set2))
+                self.runJob("xmipp_angular_distance", "--ang1 %s --ang2 %s --oroot %s --sym %s --compute_weights 1 particleId 0.5 --check_mirrors --set 0" % (fnAngles2, fnAngles1, fnOut12, self.symmetryGroup), numberOfMpi=1)
+                self.runJob("xmipp_metadata_utilities", '-i %s --operate keep_column "angleDiff0 shiftDiff0 weightJumper0"' % (fnOut12 + "_weights.xmd"), numberOfMpi=1)
                 if counter2 == 0:
-                    mdWeightsAll = emlib.MetaData(fnOut12+"_weights.xmd")
+                    mdAllWeights = emlib.MetaData(fnOut12 + "_weights.xmd")
                     counter2 = 1
                 else:
-                    mdWeights = emlib.MetaData(fnOut12+"_weights.xmd")
-                    if mdWeights.size() == mdWeightsAll.size():
+                    mdWeight = emlib.MetaData(fnOut12 + "_weights.xmd")
+                    if mdWeight.size() == mdAllWeights.size():
                         counter2 += 1
-                        for id1, id2 in izip(mdWeights,mdWeightsAll):
-                            angleDiff0 = mdWeights.getValue(emlib.MDL_ANGLE_DIFF0,id1)
-                            shiftDiff0 = mdWeights.getValue(emlib.MDL_SHIFT_DIFF0,id1)
-                            weightJumper0 = mdWeights.getValue(emlib.MDL_WEIGHT_JUMPER0,id1)
+                        for id1, id2 in izip(mdWeight, mdAllWeights):
+                            angleDiff0 = mdWeight.getValue(emlib.MDL_ANGLE_DIFF0, id1)
+                            shiftDiff0 = mdWeight.getValue(emlib.MDL_SHIFT_DIFF0, id1)
+                            weightJumper0 = mdWeight.getValue(emlib.MDL_WEIGHT_JUMPER0, id1)
 
-                            angleDiff0All = mdWeightsAll.getValue(emlib.MDL_ANGLE_DIFF0,id2)
-                            shiftDiff0All = mdWeightsAll.getValue(emlib.MDL_SHIFT_DIFF0,id2)
-                            weightJumper0All = mdWeightsAll.getValue(emlib.MDL_WEIGHT_JUMPER0,id2)
+                            angleDiff0All = mdAllWeights.getValue(emlib.MDL_ANGLE_DIFF0, id2)
+                            shiftDiff0All = mdAllWeights.getValue(emlib.MDL_SHIFT_DIFF0, id2)
+                            weightJumper0All = mdAllWeights.getValue(emlib.MDL_WEIGHT_JUMPER0, id2)
 
-                            mdWeightsAll.setValue(emlib.MDL_ANGLE_DIFF0, angleDiff0 + angleDiff0All,id2)
-                            mdWeightsAll.setValue(emlib.MDL_SHIFT_DIFF0, shiftDiff0 + shiftDiff0All,id2)
-                            mdWeightsAll.setValue(emlib.MDL_WEIGHT_JUMPER0, weightJumper0 + weightJumper0All,id2)
+                            mdAllWeights.setValue(emlib.MDL_ANGLE_DIFF0, angleDiff0 + angleDiff0All, id2)
+                            mdAllWeights.setValue(emlib.MDL_SHIFT_DIFF0, shiftDiff0 + shiftDiff0All, id2)
+                            mdAllWeights.setValue(emlib.MDL_WEIGHT_JUMPER0, weightJumper0 + weightJumper0All, id2)
             if counter2 > 1:
-                iCounter2 = 1.0/counter2
-                for id in mdWeightsAll:
-                    angleDiff0All = mdWeightsAll.getValue(emlib.MDL_ANGLE_DIFF0,id)
-                    shiftDiff0All = mdWeightsAll.getValue(emlib.MDL_SHIFT_DIFF0,id)
-                    weightJumper0All = mdWeightsAll.getValue(emlib.MDL_WEIGHT_JUMPER0,id)
+                iCounter2 = 1.0 / counter2
+                for id in mdAllWeights:
+                    angleDiff0All = mdAllWeights.getValue(emlib.MDL_ANGLE_DIFF0, id)
+                    shiftDiff0All = mdAllWeights.getValue(emlib.MDL_SHIFT_DIFF0, id)
+                    weightJumper0All = mdAllWeights.getValue(emlib.MDL_WEIGHT_JUMPER0, id)
 
-                    mdWeightsAll.setValue(emlib.MDL_ANGLE_DIFF0, angleDiff0All * iCounter2,id)
-                    mdWeightsAll.setValue(emlib.MDL_SHIFT_DIFF0, shiftDiff0All * iCounter2,id)
-                    mdWeightsAll.setValue(emlib.MDL_WEIGHT_JUMPER0, weightJumper0All * iCounter2,id)
+                    mdAllWeights.setValue(emlib.MDL_ANGLE_DIFF0, angleDiff0All * iCounter2, id)
+                    mdAllWeights.setValue(emlib.MDL_SHIFT_DIFF0, shiftDiff0All * iCounter2, id)
+                    mdAllWeights.setValue(emlib.MDL_WEIGHT_JUMPER0, weightJumper0All * iCounter2, id)
             if counter2 > 0:
-                mdWeightsAll.write(fnOut1 +"_weights.xmd")
+                mdAllWeights.write(fnOut1 + "_weights.xmd")
                 self.runJob("xmipp_metadata_utilities", '-i %s --set merge %s' % (fnAngles1, fnOut1 + "_weights.xmd"), numberOfMpi=1)
-            if not exists(fnOut+".xmd") and exists(fnAngles1):
-                copyFile(fnAngles1,fnOut+".xmd")
+            if not exists(fnOut + ".xmd") and exists(fnAngles1):
+                copyFile(fnAngles1, fnOut + ".xmd")
             else:
-                if exists(fnAngles1) and exists(fnOut+".xmd"):
-                    self.runJob("xmipp_metadata_utilities", '-i %s --set union_all %s'%(fnOut+".xmd",fnAngles1),numberOfMpi=1)
+                if exists(fnAngles1) and exists(fnOut + ".xmd"):
+                    self.runJob("xmipp_metadata_utilities", '-i %s --set union_all %s' % (fnOut + ".xmd", fnAngles1), numberOfMpi=1)
         cleanPath(join(fnGlobal, "anglesDisc*_weights.xmd"))    
 
     def calculateAngStep(self, newXDim, TsCurrent, ResolutionAlignment):
@@ -542,27 +542,27 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
         # from golden-highres
         import numpy as np
 
-        cc_number = len(ccList)
-        mean_weigth = 1.0/cc_number
-        his, bins = np.histogram(ccList,int((max(ccList)-min(ccList))/0.01))
-        final_thresh = -1
-        final_value = -1
-        cc_arr = np.arange(min(ccList), max(ccList),0.01)
-        if len(cc_arr) == (len(his)+1):
-            cc_arr = cc_arr[:-1]
-        for t, j in enumerate( bins[1:-1] ):
+        ccNumber = len(ccList)
+        meanWeight = 1.0 / ccNumber
+        his, bins = np.histogram(ccList, int((max(ccList)-min(ccList))/0.01))
+        finalThres = -1
+        finalVal = -1
+        ccArange = np.arange(min(ccList),max(ccList),0.01)
+        if len(ccArange)==(len(his)+1):
+            ccArange=ccArange[:-1]
+        for t in enumerate(bins[1:-1]):
             idx = t+1
             pcb = np.sum(his[:idx])
             pcf = np.sum(his[idx:])
-            Wb = pcb * mean_weigth
-            Wf = pcf * mean_weigth
+            Wb = pcb * meanWeight
+            Wf = pcf * meanWeight
 
-            mub = np.sum(cc_arr[:idx] * his[:idx])/float(pcb)
-            muf = np.sum(cc_arr[idx:] * his[idx:])/float(pcf)
+            mub = np.sum(ccArange[:idx] * his[:idx]) / float(pcb)
+            muf = np.sum(ccArange[idx:] * his[idx:]) / float(pcf)
             value = Wb * Wf * (mub - muf) ** 2
 
-            if value > final_value:
-                final_thresh = bins[idx]
-                final_value = value
+            if value > finalVal:
+                finalThres = bins[idx]
+                finalVal = value
 
-        return final_thresh
+        return finalThres
