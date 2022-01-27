@@ -96,6 +96,18 @@ class XmippProtSubtractProjection(EMProtocol):
             args += ' --maskVol %s' % self.maskVol.get().getFileName()
         if self.mask.get() is not None:
             args += ' --mask %s' % self.mask.get().getFileName()
+        else:
+            involdim = vol.getDim()
+            fnDescr = self._getExtraPath("mask.descr")
+            fhDescr = open(fnDescr, 'w')
+            fhDescr.write("%d %d %d 0" % (involdim[0], involdim[1], involdim[2]))
+            fhDescr.close()
+            mskKeep = self._getExtraPath("mask_keep.mrc")
+            args_mask_keep = "-i %s -o %s" % (fnDescr, mskKeep)
+            self.runJob("xmipp_phantom_create", args_mask_keep, numberOfMpi=1)
+            args_imageheader2 = "-i %s --sampling_rate %f" % (mskKeep, vol.getSamplingRate())
+            self.runJob("xmipp_image_header", args_imageheader2, numberOfMpi=1)
+            args += ' --mask %s --suball' % mskKeep
         self.runJob(program, args)
 
     def createOutputStep(self):
