@@ -51,7 +51,8 @@ class XmippProtSubtractProjection(EMProtocol):
         form.addParam('maskVol', PointerParam, pointerClass='VolumeMask', label='Volume mask', allowsNull=True,
                       help='3D mask for the input volume. This mask is not mandatory but advisable.')
         form.addParam('mask', PointerParam, pointerClass='VolumeMask', label="Mask for region to keep", allowsNull=True,
-                      help='Specify a 3D mask for the region of the input volume that you want to keep.')
+                      help='Specify a 3D mask for the region of the input volume that you want to keep. If no mask is '
+                           'selected, the whole image will be subtracted')
         form.addParam('resol', FloatParam, label="Filter at resolution: ", default=3, allowsNull=True,
                       expertLevel=LEVEL_ADVANCED,
                       help='Resolution (A) at which subtraction will be performed, filtering the volume projections.'
@@ -107,7 +108,7 @@ class XmippProtSubtractProjection(EMProtocol):
             self.runJob("xmipp_phantom_create", args_mask_keep, numberOfMpi=1)
             args_imageheader2 = "-i %s --sampling_rate %f" % (mskKeep, vol.getSamplingRate())
             self.runJob("xmipp_image_header", args_imageheader2, numberOfMpi=1)
-            args += ' --mask %s --suball' % mskKeep
+            args += ' --mask %s --subAll' % mskKeep
         self.runJob(program, args)
 
     def createOutputStep(self):
