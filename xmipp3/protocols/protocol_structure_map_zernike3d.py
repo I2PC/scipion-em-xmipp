@@ -84,8 +84,8 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
     """ Protocol for structure mapping based on Zernike3D. """
     _label = 'struct map - Zernike3D'
     _lastUpdateVersion = VERSION_2_0
-    OUTPUT_SUFFIX = '_%d_crop.vol'
-    ALIGNED_VOL = 'vol%dAligned.vol'
+    OUTPUT_SUFFIX = '_%d_crop.mrc'
+    ALIGNED_VOL = 'vol%dAligned.mrc'
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
@@ -241,11 +241,11 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
                                                             + self.OUTPUT_SUFFIX % (i + 1)))
         else:
             fnOut_aux = self._getTmpPath(self.ALIGNED_VOL % (i + 1))
-        refVolFn = self._getTmpPath("reference_%d.vol" % step_id)
-        fnOut = self._getTmpPath("input_%d.vol" % step_id)
+        refVolFn = self._getTmpPath("reference_%d.mrc" % step_id)
+        fnOut = self._getTmpPath("input_%d.mrc" % step_id)
         copyFile(refVolFn_aux, refVolFn)
         copyFile(fnOut_aux, fnOut)
-        fnOut2 = self._getTmpPath('vol%dDeformedTo%d.vol' % (i + 1, j + 1))
+        fnOut2 = self._getTmpPath('vol%dDeformedTo%d.mrc' % (i + 1, j + 1))
 
         params = ' -i %s -r %s -o %s --l1 %d --l2 %d --sigma "%s" --oroot %s --regularization %f' %\
                  (fnOut, refVolFn, fnOut2, self.l1.get(), self.l2.get(), self.sigma.get(),
@@ -266,7 +266,7 @@ class XmippProtStructureMapZernike3D(ProtAnalysis3D):
         cleanPath(fnOut2)
 
     def deformationMatrix(self, volList):
-        cleanPath(self._getTmpPath("*.vol"))
+        cleanPath(self._getTmpPath("*.mrc"))
         numVol = len(volList)
         self.distanceMatrix = np.zeros((numVol, numVol))
         for i in range(numVol):
