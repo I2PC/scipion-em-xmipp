@@ -60,8 +60,11 @@ class XmippProtConsensusClasses3D(EMProtocol):
             'objective_function': 'objective_func.pkl',
             'clusterings': 'clusterings.pkl',
             'elbows': 'elbows.pkl',
+            'random_consensus_sizes': 'random_consensus_sizes.pkl',
+            'random_consensus_size_ratios': 'random_consensus_size_ratios.pkl',
             'size_percentiles': 'size_percentiles.pkl',
             'size_ratio_percentiles': 'relative_size_percentiles.pkl',
+            'summary': 'summary.txt',
         }
         self._updateFilenamesDict(myDict)
 
@@ -296,7 +299,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         self._saveOutputs() # Saves data into pkl files for later visualization
 
         # Always output all the initial intersections
-        outputClassesInitial = self._createOutput3DClass(self.intersectionList, 'initial')
+        outputClassesInitial = self._createOutput3DClassWithAttributes(self.intersectionList, 'initial')
         self._defineOutputs(outputClasses_initial=outputClassesInitial)
 
         for item in self.inputMultiClasses:
@@ -310,7 +313,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
             # Check if a manual cluster count was given
             if manualClusterCount > 0:
                 i = min(manualClusterCount, len(self.ensembleIntersectionLists)) - 1  # Most restrictive one
-                outputClassesManual = self._createOutput3DClass(self.ensembleIntersectionLists[i], 'manual')
+                outputClassesManual = self._createOutput3DClassWithAttributes(self.ensembleIntersectionLists[i], 'manual')
                 self._defineOutputs(outputClasses_manual=outputClassesManual)
 
                 # Establish output relations
@@ -322,7 +325,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
                 elbows = self.elbows.get()
                 for key, value in elbows.items():
                     outputClassesName = 'outputClasses_' + key
-                    outputClasses = self._createOutput3DClass(self.ensembleIntersectionLists[value], key)
+                    outputClasses = self._createOutput3DClassWithAttributes(self.ensembleIntersectionLists[value], key)
                     self._defineOutputs(**{outputClassesName: outputClasses})
 
                     # Establish output relations
@@ -384,6 +387,8 @@ class XmippProtConsensusClasses3D(EMProtocol):
         self._storeAttributeIfExists(self._getFileName('clusterings'), 'ensembleIntersectionLists', rmScipionListWrapper)
         self._storeAttributeIfExists(self._getFileName('objective_function'), 'ensembleObValues', rmScipionListWrapper)
         self._storeAttributeIfExists(self._getFileName('elbows'), 'elbows', rmScipionObjWrapper)
+        self._storeAttributeIfExists(self._getFileName('random_consensus_sizes'), 'randomConsensusSizes', rmScipionListWrapper)
+        self._storeAttributeIfExists(self._getFileName('random_consensus_size_ratios'), 'randomConsensusSizeRatios', rmScipionListWrapper)
         self._storeAttributeIfExists(self._getFileName('size_percentiles'), 'randomConsensusSizePercentiles', rmScipionObjWrapper)
         self._storeAttributeIfExists(self._getFileName('size_ratio_percentiles'), 'randomConsensusSizeRatioPercentiles', rmScipionObjWrapper)
 
@@ -412,8 +417,12 @@ class XmippProtConsensusClasses3D(EMProtocol):
         with open(path, 'wb') as f:
             pickle.dump(obj, f)
 
-    def _createOutput3DClass(self, clustering, name):
+    def _createOutput3DClassWithAttributes(self, clustering, name):
+        randomConsensusSizes = getattr(self, 'randomConsensusSizes', None)
+        randomConsensusRelativeSizes = getattr(self, 'randomConsensusSizeRatios', None)
+        return self._createOutput3DClass(clustering, name, randomConsensusSizes, randomConsensusRelativeSizes)
 
+    def _createOutput3DClass(self, clustering, name, randomConsensusSizes=None, randomConsensusRelativeSizes=None):
         inputParticles = self.inputMultiClasses[0].get().getImages()
         outputClasses = self._createSetOfClasses3D(inputParticles, suffix=name)
 
@@ -432,14 +441,14 @@ class XmippProtConsensusClasses3D(EMProtocol):
             newClass.setRepresentative(cluster.getRepresentative())
 
             # Calculate the size percentile for the cluster size
-            if hasattr(self, 'randomConsensusSizes'):
-                percentile = find_percentile(self.randomConsensusSizes, len(classItem))
+            if randomConsensusSizes is not None:
+                percentile = find_percentile(randomConsensusSizes, len(classItem))
                 pValue = 1 - percentile
                 setXmippAttribute(newClass, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
 
             # Calculate the relative size percentile for the cluster size
-            if hasattr(self, 'randomConsensusSizeRatios'):
-                percentile = find_percentile(self.randomConsensusSizeRatios, classItem.getSizeRatio())
+            if randomConsensusRelativeSizes is not None:
+                percentile = find_percentile(randomConsensusRelativeSizes, classItem.getSizeRatio())
                 pValue = 1 - percentile
                 setXmippAttribute(newClass, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE, Float(pValue))
 

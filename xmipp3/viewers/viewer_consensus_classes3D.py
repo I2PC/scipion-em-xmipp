@@ -57,13 +57,7 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
 
     def __init__(self, **kwargs):
         ProtocolViewer.__init__(self, **kwargs)
-
-        # Load attributes if possible
-        self._loadAttributeIfExists(self.protocol._getFileName('clusterings'), '_clusterings')
-        self._loadAttributeIfExists(self.protocol._getFileName('objective_function'), '_objectiveFunctionValues')
-        self._loadAttributeIfExists(self.protocol._getFileName('elbows'), '_elbows')
-        self._loadAttributeIfExists(self.protocol._getFileName('size_percentiles'), '_sizePercentiles')
-        self._loadAttributeIfExists(self.protocol._getFileName('size_ratio_percentiles'), '_sizeRatioPercentiles')
+        self._loadAttributes()
 
     def _defineParams(self, form):
         # Particles section
@@ -150,15 +144,23 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
         #        'displayObjectiveFunction': self._visualizeObjectiveFunction}
 
     # --------------------------- UTILS functions ------------------------------
-    
+    def _loadAttributes(self):
+        self._loadAttributeIfExists(self.protocol._getFileName('clusterings'), '_clusterings')
+        self._loadAttributeIfExists(self.protocol._getFileName('objective_function'), '_objectiveFunctionValues')
+        self._loadAttributeIfExists(self.protocol._getFileName('elbows'), '_elbows')
+        self._loadAttributeIfExists(self.protocol._getFileName('random_consensus_sizes'), '_randomConsensusSizes')
+        self._loadAttributeIfExists(self.protocol._getFileName('random_consensus_size_ratios'), '_randomConsensusSizeRatios')
+        self._loadAttributeIfExists(self.protocol._getFileName('size_percentiles'), '_sizePercentiles')
+        self._loadAttributeIfExists(self.protocol._getFileName('size_ratio_percentiles'), '_sizeRatioPercentiles')
+
     def _visualizeClasses(self, e):
         # Shorthands:
         ite = self.displayClasses.get() - 1
         clustering = self._clusterings[ite]
 
         # Create the output classes and show them
-        outputClasses = self.protocol._createOutput3DClass(clustering, 'viewer_'+str(ite))
-        return self._showSetOfClasses3D(outputClasses) # TODO does not work properly. Last class of size 0 and missing xmipp metadata
+        outputClasses = self.protocol._createOutput3DClass(clustering, 'viewer_'+str(ite), self._randomConsensusSizes, self._randomConsensusSizeRatios)
+        return self._showSetOfClasses3D(outputClasses)
     
     def _visualizeInitialClasses(self, e):
         return self._showSetOfClasses3D(self.protocol.outputClasses_initial)
