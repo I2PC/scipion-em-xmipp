@@ -230,6 +230,7 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
         params += ' -s  %f' % self.inputVolume.get().getSamplingRate()            
         params += ' -o  %s' % self._getFileName(OUTPUT_RESOLUTION_FILE)
 
+        os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
         self.runJob("xmipp_deepRes_resolution", params, numberOfMpi=1,
                     env=self.getCondaEnv())
         
