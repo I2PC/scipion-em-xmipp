@@ -66,6 +66,7 @@ class XmippProtSubtractProjection(EMProtocol):
                       expertLevel=LEVEL_ADVANCED,
                       help='Relaxation factor for Fourier amplitude projector (POCS), it should be between 0 and 1, '
                            'being 1 no relaxation and 0 no modification of volume 2 amplitudes')
+        form.addParallelSection(threads=0, mpi=8)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
