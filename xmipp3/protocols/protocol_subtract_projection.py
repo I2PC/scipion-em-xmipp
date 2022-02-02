@@ -126,7 +126,7 @@ class XmippProtSubtractProjection(EMProtocol):
     def _summary(self):
         summary = ["Volume: %s" % self.vol.get().getFileName()]
         summary.append("Set of particles: %s" % self.particles.get())
-        if self.mask:
+        if self.mask.get() is not None:
             summary.append("Mask: %s" % self.mask.get().getFileName())
         if self.resol.get() != 0:
             summary.append("Subtraction at resolution %f A" % self.resol.get())
@@ -139,7 +139,7 @@ class XmippProtSubtractProjection(EMProtocol):
         else:
             methods.append("Volume projections from %s subtracted from particles" %
                            basename(self.vol.get().getFileName()))
-            if self.mask:
+            if self.mask.get() is not None:
                 methods.append("with mask %s" % basename(self.mask.get().getFileName()))
             if self.resol.get() != 0:
                 methods.append(" at resolution %f A" % self.resol.get())
