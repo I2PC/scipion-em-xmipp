@@ -25,7 +25,7 @@
 # *
 # **************************************************************************
 
-
+import shutil
 from pyworkflow import VERSION_3_0
 from pyworkflow.protocol.params import (PointerParam, BooleanParam,
                                         IntParam, FileParam, FloatParam)
@@ -84,7 +84,7 @@ class XmippProtValFit(ProtAnalysis3D):
 
         group.addParam('fromFile', BooleanParam, default=False,
                       label='Input PDB from file: ')
-        group.addParam('inputPDBObj', PointerParam, pointerClass='PdbFile', allowsNull=True,
+        group.addParam('inputPDBObj', PointerParam, pointerClass='AtomStruct', allowsNull=True,
                       label="Refined PDB: ", important=True, condition='not fromFile',
                       help='Specify the desired input structure.')
         group.addParam('inputPDB', FileParam,  condition='fromFile',
@@ -163,6 +163,13 @@ class XmippProtValFit(ProtAnalysis3D):
 
 
     def convertInputStep(self):
+        """ Convert inputs to desired format."""
+        #Convert Input to pdb
+        if self.getInputStructFile().endswith('.pdb'):
+            shutil.copyfile(self.getInputStructFile(), self.getPDBFile())
+        else:
+            toPdb(self.getInputStructFile(), self.getPDBFile())
+
         """ Read the input volume."""
         self.volume = self.inputVolume.get()
 
@@ -528,11 +535,14 @@ class XmippProtValFit(ProtAnalysis3D):
     def _citations(self):
         return ['Ramirez-Aportela 2020']
 
-    def getPDBFile(self):
+    def getInputStructFile(self):
         if self.fromFile:
             return self.inputPDB.get()
         else:
             return self.inputPDBObj.get().getFileName()
+
+    def getPDBFile(self):
+        return self._getExtraPath('inputPDB.pdb')
 
     def getInputStruct(self):
         if self.fromFile:
