@@ -157,16 +157,16 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
             ccAsigDirRefList = mdParticles.getColumnValues(emlib.MDL_ASSIGNED_DIR_REF_CC)
             angDistPrevList = mdParticles.getColumnValues(emlib.MDL_GRAPH_DISTANCE2MAX_PREVIOUS)
             
-            # threshold
-            try:
-                th_ccGraph = self.otsu(ccGraphPrevList)
-                th_ccAsigDir = self.otsu(ccAsigDirRefList)
-                th_angDist = self.otsu(angDistPrevList)
-            except:
+            # threshold            
+            th_ccGraph = self.otsu(ccGraphPrevList)
+            th_ccAsigDir = self.otsu(ccAsigDirRefList)
+            th_angDist = self.otsu(angDistPrevList)
+            if (th_ccGraph < 0.50) and (th_ccAsigDir < 0.50):
                 print("applying default thresholds")
                 th_ccGraph = 0.95
                 th_ccAsigDir = 0.95
-                th_angDist = 3 * self.angularSampling.get() 
+                th_angDist = 3.0 * self.angularSampling.get() 
+                print(th_ccGraph, th_ccAsigDir, th_angDist)
             
             print("\033[1;33Thresholds:\033[0;33 \n")
             print('correlation with projection in Graph max direction:',th_ccGraph,
@@ -550,7 +550,7 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
         ccArange = np.arange(min(ccList),max(ccList),0.01)
         if len(ccArange)==(len(his)+1):
             ccArange=ccArange[:-1]
-        for t in enumerate(bins[1:-1]):
+        for t, j in enumerate(bins[1:-1]):
             idx = t+1
             pcb = np.sum(his[:idx])
             pcf = np.sum(his[idx:])
