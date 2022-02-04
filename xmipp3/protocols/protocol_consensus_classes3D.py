@@ -26,11 +26,8 @@
 # *
 # **************************************************************************
 
-from xmipp3.convert import setXmippAttribute
-
 from pwem import emlib
 from pwem.protocols import EMProtocol
-from pwem.objects import Class3D
 
 from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam
 from pyworkflow.object import Float, List, Object
@@ -38,9 +35,12 @@ from pyworkflow.constants import BETA
 
 import math
 import pickle
+import collections
 import multiprocessing as mp
 import numpy as np
 import matplotlib.pyplot as plt
+
+from xmipp3.convert.convert import setXmippAttribute
 
 
 class XmippProtConsensusClasses3D(EMProtocol):
@@ -112,7 +112,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         # Determine if ensemble is needed
         if self.manualClusterCount.get() > 0 or self.automaticClusterCount.get() == 0:
-            self._insertFunctionStep('cossEnsembleStep')
+            self._insertFunctionStep('ensembleStep')
 
         # Determine if automatic clustering is enabled
         if self.automaticClusterCount.get() == 0:
@@ -134,7 +134,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
             particleIds = cluster.getIdSet()
 
             # Build a intersection-like structure to store it on the intersection list
-            intersection = ClassIntersection(particleIds, classificationIdx, clusterId)
+            intersection = XmippProtConsensusClasses3D.ClassIntersection(particleIds, classificationIdx, clusterId)
 
             # Do not append classes that have no elements
             if intersection:
@@ -159,7 +159,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
             particleIds1 = cluster1.getIdSet()
 
             # Build a intersection-like structure to intersect it against the other
-            intersector = ClassIntersection(particleIds1, classification1Idx, cluster1Id)
+            intersector = XmippProtConsensusClasses3D.ClassIntersection(particleIds1, classification1Idx, cluster1Id)
 
             for currIntersection in self.intersectionList:
                 # Intersect the previous intersection with the intersector
@@ -172,7 +172,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         # Overwrite previous intersections with the new ones
         self.intersectionList = List(intersections)
 
-    def cossEnsembleStep(self, numClusters=1):
+    def ensembleStep(self, numClusters=1):
         """ Ensemble clustering by COSS that merges interactions of clusters based
             on entropy minimization """
         # Obtain the classification as a list of list of sets
@@ -373,10 +373,10 @@ class XmippProtConsensusClasses3D(EMProtocol):
         errors = []
         if len(self.inputMultiClasses) <= 1:
             errors = ["More than one Input Classes is needed to compute the consensus."]
-        elif self.numClust.get() > max_nClusters:
+        elif self.manualClusterCount.get() > max_nClusters:
             errors = ["Too many clusters selected for output"]
-        elif self.numClust.get() < -1 or self.numClust.get() == 0:
-            errors = ["Invalid number of clusters selected"]
+
+        # TODO check that all classifications come from the same particles
 
         return errors
 
@@ -426,91 +426,135 @@ class XmippProtConsensusClasses3D(EMProtocol):
         inputParticles = self.inputMultiClasses[0].get().getImages()
         outputClasses = self._createSetOfClasses3D(inputParticles, suffix=name)
 
-        for classItem in clustering:
-            # Shorthands for dictionary items and member variables
-            particleIds = classItem.particleIds
-            classificationIdx = classItem.representativeClassificationIndex
-            clusterId = classItem.representativeClusterId
-            classification = self.inputMultiClasses[classificationIdx].get()
-            cluster = classification[clusterId]
-
-            # Create a new cluster for output based on the current one
-            newClass = Class3D()
-            # newClass.copyInfo(cluster)
-            newClass.setAcquisition(cluster.getAcquisition())
-            newClass.setRepresentative(cluster.getRepresentative())
-
-            # Calculate the size percentile for the cluster size
-            if randomConsensusSizes is not None:
-                percentile = find_percentile(randomConsensusSizes, len(classItem))
-                pValue = 1 - percentile
-                setXmippAttribute(newClass, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
-
-            # Calculate the relative size percentile for the cluster size
-            if randomConsensusRelativeSizes is not None:
-                percentile = find_percentile(randomConsensusRelativeSizes, classItem.getSizeRatio())
-                pValue = 1 - percentile
-                setXmippAttribute(newClass, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE, Float(pValue))
-
-            # Add all the particle IDs
-            outputClasses.append(newClass)
-            enabledClass = outputClasses[newClass.getObjId()]
-            enabledClass.enableAppend()
-            for particleId in particleIds:
-                enabledClass.append(inputParticles[particleId])
-
-            outputClasses.update(enabledClass)
+        # Fill the output
+        loader = XmippProtConsensusClasses3D.ClassesLoader(
+            clustering, 
+            self.inputMultiClasses,
+            randomConsensusSizes,
+            randomConsensusRelativeSizes
+        )
+        loader.fillClasses(outputClasses)
 
         return outputClasses
 
 
-class ClassIntersection:
-    """ Keeps track of the information related to successive class intersections.
-        It is instantiated with the """
-    def __init__(self, particleIds, classificationIdx=None, clusterId=None, clusterSize=None, maxClusterSize=None):
-        self.particleIds = set(particleIds)  # Particle ids belonging to this intersection
+    class ClassIntersection:
+        """ Keeps track of the information related to successive class intersections.
+            It is instantiated with a single class and allows to perform intersections
+            and unions with it"""
+        def __init__(self, particleIds, classificationIdx=None, clusterId=None, clusterSize=None, maxClusterSize=None):
+            self.particleIds = set(particleIds)  # Particle ids belonging to this intersection
 
-        self.representativeClassificationIndex = classificationIdx  # Classification index of the representative class
-        self.representativeClusterId = clusterId  # The id of the representative class
-        self.representativeClusterSize = clusterSize if clusterSize is not None else len(self.particleIds)  # The size of the representative class
+            self.representativeClassificationIndex = classificationIdx  # Classification index of the representative class
+            self.representativeClusterId = clusterId  # The id of the representative class
+            self.representativeClusterSize = clusterSize if clusterSize is not None else len(self.particleIds)  # The size of the representative class
 
-        self.maxClusterSize = maxClusterSize if maxClusterSize is not None else self.representativeClusterSize  # Size of the biggest origin class
+            self.maxClusterSize = maxClusterSize if maxClusterSize is not None else self.representativeClusterSize  # Size of the biggest origin class
 
-    def __len__(self):
-        return len(self.particleIds)
+        def __len__(self):
+            return len(self.particleIds)
 
-    def intersect(self, other):
-        # Select the data from the smallest representative cluster
-        return self._combine(other, 'intersection', other.representativeClusterSize < self.representativeClusterSize)
+        def intersect(self, other):
+            # Select the data from the smallest representative cluster
+            return self._combine(other, 'intersection', other.representativeClusterSize < self.representativeClusterSize)
 
-    def merge(self, other):
-        # Select the data from the largest intersection
-        return self._combine(other, 'union', len(other.particleIds) > len(self.particleIds))
+        def merge(self, other):
+            # Select the data from the largest intersection
+            return self._combine(other, 'union', len(other.particleIds) > len(self.particleIds))
 
-    def getSizeRatio(self):
-        return len(self.particleIds) / self.maxClusterSize
+        def getSizeRatio(self):
+            return len(self.particleIds) / self.maxClusterSize
 
-    def _combine(self, other, op, rep):
-        """ Base operations when combining two intersections.
-            op is the member function of set used to combine particle ids
-            rep is true if the representative class belongs to other"""
+        def _combine(self, other, op, rep):
+            """ Base operations when combining two intersections.
+                op is the member function of set used to combine particle ids
+                rep is true if the representative class belongs to other"""
 
-        # Determine the representative class
-        selection = other if rep is True else self
+            # Ensure that the type is correct           
+            if not isinstance(other, XmippProtConsensusClasses3D.ClassIntersection):
+                raise TypeError('other must be of type ClassIntersection')
 
-        # Combine particle sets in the defined manner by op
-        particleIds = getattr(self.particleIds, op)(other.particleIds)
+            # Determine the representative class
+            selection = other if rep is True else self
 
-        # Select the data from the representative class
-        classificationIdx = selection.representativeClassificationIndex
-        clusterId = selection.representativeClusterId
-        clusterSize = selection.representativeClusterSize
+            # Combine particle sets in the defined manner by op
+            particleIds = getattr(self.particleIds, op)(other.particleIds)
 
-        # Record the size of the biggest origin cluster for further analysis
-        maxClusterSize = max(self.maxClusterSize, other.maxClusterSize)
+            # Select the data from the representative class
+            classificationIdx = selection.representativeClassificationIndex
+            clusterId = selection.representativeClusterId
+            clusterSize = selection.representativeClusterSize
 
-        # Construct the new class
-        return ClassIntersection(particleIds, classificationIdx, clusterId, clusterSize, maxClusterSize)
+            # Record the size of the biggest origin cluster for further analysis
+            maxClusterSize = max(self.maxClusterSize, other.maxClusterSize)
+
+            # Construct the new class
+            return XmippProtConsensusClasses3D.ClassIntersection(particleIds, classificationIdx, clusterId, clusterSize, maxClusterSize)
+
+    class ClassesLoader:
+        """ Helper class to produce classes
+        """
+        def __init__(self, classes, inputClasses, randomConsensusSizes=None, randomConsensusRelativeSizes=None):
+            self.classification = self._createClassification(classes)
+            self.representatives = self._createRepresentatives(classes, inputClasses)
+            self.classSizes = self._createClassSizes(classes)
+            self.randomConsensusSizes = randomConsensusSizes
+            self.randomConsensusRelativeSizes = randomConsensusRelativeSizes
+
+        def fillClasses(self, clsSet):
+            clsSet.classifyItems(updateItemCallback=self._updateParticle,
+                                updateClassCallback=self._updateClass,
+                                itemDataIterator=iter(self.classification.items()),
+                                doClone=False)
+
+        def _updateParticle(self, item, row):
+            particleId, classId = row
+            assert(item.getObjId() == particleId)
+            item.setClassId(classId)
+
+        def _updateClass(self, item):
+            self._defineRepresentative(item)
+
+            self._definePercentile(item, self.randomConsensusSizes, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE)
+            self._definePercentile(item, self.randomConsensusRelativeSizes, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE)
+
+        def _createClassification(self, classes):
+            # Fill the classification data (particle-class mapping)
+            result = {}
+            for cls, data in enumerate(classes):
+                for particleId in data.particleIds:
+                    result[particleId] = cls + 1 
+
+            return collections.OrderedDict(sorted(result.items())) 
+
+        def  _createRepresentatives(self, classes, inputClasses):
+            result = [None]*len(classes)
+
+            for cls, data in enumerate(classes):
+                classificationIdx = data.representativeClassificationIndex
+                clusterId = data.representativeClusterId
+                classification = inputClasses[classificationIdx].get()
+                cluster = classification[clusterId]
+                result[cls] = cluster.getRepresentative()
+
+            return result
+        
+        def _createClassSizes(self, classes):
+            return [len(cls) for cls in classes]
+
+        def _defineRepresentative(self, item):
+            classId = item.getObjId()
+            item.setRepresentative(self.representatives[classId-1])
+
+        def _definePercentile(self, item, sizes, md):
+            if sizes is not None:
+                classId = item.getObjId()
+
+                # Calculate the percentile
+                size = self.classSizes[classId-1]
+                percentile = find_percentile(sizes, size)
+                pValue = 1 - percentile
+                setXmippAttribute(item, md, Float(pValue))
 
 
 ######################################
@@ -760,7 +804,7 @@ def coss_consensus(C):
     assert(len(C) > 0)  # There should be at least one classification
 
     # Convert the classification into a intersection list
-    Cp = [[ClassIntersection(i) for i in c] for c in C]
+    Cp = [[XmippProtConsensusClasses3D.ClassIntersection(i) for i in c] for c in C]
 
     # Initialize a list of sets containing the groups of the first classification
     S = Cp[0]
