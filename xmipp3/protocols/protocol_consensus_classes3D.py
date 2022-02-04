@@ -495,9 +495,9 @@ class XmippProtConsensusClasses3D(EMProtocol):
         """ Helper class to produce classes
         """
         def __init__(self, classes, inputClasses, randomConsensusSizes=None, randomConsensusRelativeSizes=None):
+            self.classes = classes
             self.classification = self._createClassification(classes)
             self.representatives = self._createRepresentatives(classes, inputClasses)
-            self.classSizes = self._createClassSizes(classes)
             self.randomConsensusSizes = randomConsensusSizes
             self.randomConsensusRelativeSizes = randomConsensusRelativeSizes
 
@@ -513,10 +513,26 @@ class XmippProtConsensusClasses3D(EMProtocol):
             item.setClassId(classId)
 
         def _updateClass(self, item):
-            self._defineRepresentative(item)
+            classId = item.getObjId()
+            classIdx = classId-1
 
-            self._definePercentile(item, self.randomConsensusSizes, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE)
-            self._definePercentile(item, self.randomConsensusRelativeSizes, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE)
+            # Set the representative
+            item.setRepresentative(self.representatives[classIdx])
+
+            # Set the size p-value
+            if self.randomConsensusSizes is not None:
+                size = len(self.classes[classIdx])
+                percentile = find_percentile(self.randomConsensusSizes, size)
+                pValue = 1 - percentile
+                setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
+
+
+            # Set the relative size p-value
+            if self.randomConsensusRelativeSizes is not None:
+                size = self.classes[classIdx].getSizeRatio()
+                percentile = find_percentile(self.randomConsensusRelativeSizes, size)
+                pValue = 1 - percentile
+                setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE, Float(pValue))
 
         def _createClassification(self, classes):
             # Fill the classification data (particle-class mapping)
@@ -539,23 +555,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
             return result
         
-        def _createClassSizes(self, classes):
-            return [len(cls) for cls in classes]
-
-        def _defineRepresentative(self, item):
-            classId = item.getObjId()
-            item.setRepresentative(self.representatives[classId-1])
-
-        def _definePercentile(self, item, sizes, md):
-            if sizes is not None:
-                classId = item.getObjId()
-
-                # Calculate the percentile
-                size = self.classSizes[classId-1]
-                percentile = find_percentile(sizes, size)
-                pValue = 1 - percentile
-                setXmippAttribute(item, md, Float(pValue))
-
 
 ######################################
 #        Helper functions            #
