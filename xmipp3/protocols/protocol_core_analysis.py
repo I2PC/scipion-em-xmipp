@@ -34,12 +34,12 @@ from pyworkflow.utils.path import cleanPath, makePath
 
 import pwem.emlib.metadata as md
 from pwem.protocols import ProtClassify2D
-from pwem.objects import SetOfClasses2D
+from pwem.objects import SetOfClasses2D, SetOfImages, Class2D
 from pwem.constants import ALIGN_NONE, ALIGN_2D
 
 from xmipp3.convert import (writeSetOfParticles, createItemMatrix,
                             writeSetOfClasses2D, xmippToLocation,
-                            rowToAlignment)
+                            rowToAlignment,  readSetOfClasses2D, readSetOfImages, readSetOfParticles)
 
 
 CLASSES_CORE = '_core'
@@ -63,6 +63,12 @@ class XmippProtCoreAnalysis(ProtClassify2D):
                       label="Input classes",
                       important=True, pointerClass='SetOfClasses2D',
                       help='Select the input classes to be classified.')
+        # DAN
+        form.addParam('inputParticles', param.PointerParam,
+                      label="Input images",
+                      important=True, pointerClass='SetOfParticles',
+                      help='Select the input images to be classified.')
+        #
         form.addParam('thZscore', param.FloatParam, default=3,
                       label='Junk Zscore',
                       help='Which is the average Z-score to be considered as '
@@ -83,23 +89,37 @@ class XmippProtCoreAnalysis(ProtClassify2D):
     def _insertAllSteps(self):
         self._defineFileNames()
         self._insertFunctionStep('analyzeCore')
-        self._insertFunctionStep('createOutputStep')
+        self._insertFunctionStep('createOutputStepNew')
 
     def analyzeCore(self):
+        # Put in a function convertInputStep
         fnLevel = self._getExtraPath('level_00')
         makePath(fnLevel)
         inputMdName = join(fnLevel, 'level_classes.xmd')
         writeSetOfClasses2D(self.inputClasses.get(), inputMdName)
+
+        inputMdNameParticles = join(fnLevel, 'level_classes_particles.xmd')
+        writeSetOfParticles(self.inputParticles.get(),inputMdNameParticles,
+                            alignType=ALIGN_NONE)
+        # function
 
         args = " --dir %s --root level --computeCore %f %f"%(self._getExtraPath(),
                                                             self.thZscore, self.thPCAZscore)
         self.runJob('xmipp_classify_CL2D_core_analysis', args)
         self.runJob("xmipp_classify_evaluate_classes", "-i %s"%\
                     self._getExtraPath(join("level_00","level_classes_core.xmd")), numberOfMpi=1)
+
+        fnMd = self._getExtraPath(join("level_00", "level_classes_core.xmd"))
+        mdOut = md.MetaData(fnMd)
+        for objId in mdOut:
+            mdOut.setValue(md.MDL_ITEM_ID,
+                           int(mdOut.getValue(md.MDL_REF, objId)), objId)
+
+        #An alternative to this cause this is the one that overwrites everything
         self.runJob("xmipp_metadata_utilities", "-i classes@%s --set join classes@%s ref -o classes@%s"%\
                     (self._getExtraPath(join("level_00","level_classes.xmd")),
                      self._getExtraPath(join("level_00","level_classes_core.xmd")),
-                     self._getExtraPath(join("level_00","level_classes_core.xmd"))), numberOfMpi=1)
+                     self._getExtraPath(join("level_00","level_classes_coreImages.xmd"))), numberOfMpi=1)
 
     #--------------------------- STEPS functions -------------------------------
     def _defineFileNames(self):
@@ -123,10 +143,7 @@ class XmippProtCoreAnalysis(ProtClassify2D):
         """ Store the SetOfClasses2D object
         resulting from the protocol execution.
         """
-
-        #inputParticles = self.inputClasses.get().getImages().get()
-        inputParticles = self.inputClasses.get().getImages()
-        #level = 0
+        inputParticles = self.inputParticles.get()
         level = self._lastLevel()
         subset = '_core'
 
@@ -134,11 +151,61 @@ class XmippProtCoreAnalysis(ProtClassify2D):
 
         if exists(subsetFn):
             classes2DSet = self._createSetOfClasses2D(inputParticles, subset)
-            self._fillClassesFromLevel(classes2DSet, "last", subset)
-            print(len(classes2DSet))
+            readSetOfClasses2D(classes2DSet, subsetFn)
+            #print(len(classes2DSet))
+            #print(len(inputParticles))
+            self._fillClassesFromLevel(classes2DSet, 'last', subset) # change here the level
             result = {'outputClasses' + subset: classes2DSet}
             self._defineOutputs(**result)
             self._defineSourceRelation(inputParticles, classes2DSet)
+
+    def createOutputStep2(self):
+        """ Store the SetOfClasses2D object
+        resulting from the protocol execution.
+        """
+        #inputParticles = self.inputClasses.get().getImages().get()
+        inputParticles = self.inputClasses.get().getImages()
+        level = self._lastLevel()
+
+        subset = '_core'
+        subsetFn = self._getFileName("level_classes", level=level, sub=subset)
+
+        if exists(subsetFn):
+            classes2DSetCore = self._createSetOfClasses2D(inputParticles, subset)
+            readSetOfClasses2D(classes2DSetCore, subsetFn)
+            #self._fillClassesFromLevel(classes2DSetCore, "last", subset)
+
+            subset2 = '_coreImages'
+            subsetFn2 = self._getFileName("level_classes", level=level, sub=subset2)
+            classes2DSet = self._createSetOfClasses2D(inputParticles, subset2)
+            #readSetOfClasses2D(classes2DSet, subsetFn2)
+            self._fillClassesFromLevel(classes2DSet, "last", subset)
+            classes2DSet.setImages(classes2DSetCore.getImages())
+
+            result = {'outputClasses' + subset: classes2DSetCore, 'outputClasses' + subset2: classes2DSet}
+            self._defineOutputs(**result)
+            self._defineSourceRelation(inputParticles, classes2DSet)
+
+    def createOutputStepNew(self):
+        """ Store the SetOfClasses2D object
+        resulting from the protocol execution.
+        """
+        inputParticles = self.inputParticles.get()
+        level = self._lastLevel()
+        subset = '_core'
+        subsetFn = self._getFileName("level_classes", level=level, sub=subset)
+
+        inputMdName = join(self._getExtraPath('level_00'), 'level_classes2.xmd')
+        writeSetOfClasses2D(self.inputClasses.get(), inputMdName, writeParticles=False)
+
+        if exists(subsetFn):
+            classes2DSetCore = self._createSetOfClasses2D(inputParticles, subset)
+            #readSetOfClasses2D(classes2DSetCore, subsetFn)
+            self._fillClassesFromLevel(classes2DSetCore, level, subset)
+
+            result = {'outputClasses': classes2DSetCore}
+            self._defineOutputs(**result)
+            self._defineSourceRelation(inputParticles, classes2DSetCore)
 
     #--------------------------- INFO functions --------------------------------
     def _validate(self):
@@ -164,7 +231,6 @@ class XmippProtCoreAnalysis(ProtClassify2D):
         item.setTransform(rowToAlignment(row, ALIGN_2D))
 
     def _updateClass(self, item):
-        print(type(item))
         classId = item.getObjId()
 
         if classId in self._classesInfo:
@@ -188,7 +254,7 @@ class XmippProtCoreAnalysis(ProtClassify2D):
             # the same reference is used for iteration
             self._classesInfo[classNumber + 1] = (index, fn, row.clone())
 
-    def _fillClassesFromLevel(self, clsSet, level, subset):
+    def _fillClassesFromLevel2(self, clsSet, level, subset):
         """ Create the SetOfClasses2D from a given iteration. """
         self._loadClassesInfo(self._getLevelMdClasses(lev=level, subset=subset))
 
@@ -198,14 +264,31 @@ class XmippProtCoreAnalysis(ProtClassify2D):
                 xmpMd = self._getLevelMdImages(level, subset)
         else:
             xmpMd = self._getLevelMdImages(level, subset)
-
         print(xmpMd)
         iterator = md.SetMdIterator(xmpMd, sortByLabel=md.MDL_ITEM_ID,
                                     updateItemCallback=self._updateParticle,
                                     skipDisabled=True)
-
         # itemDataIterator is not neccesary because, the class SetMdIterator
         # contain all the information about the metadata
+        clsSet.classifyItems(updateItemCallback=iterator.updateItem,
+                             updateClassCallback=self._updateClass)
+
+
+    def _fillClassesFromLevel(self, clsSet, level, subset):
+        """ Create the SetOfClasses2D from a given iteration. """
+        #myFileClasses = self._getExtraPath('last_classes.xmd')
+        myFileClasses = self._getFileName("level_classes", level=level, sub='2')
+        print(myFileClasses)
+        #myFileImages = self._getExtraPath('last_images.xmd')
+        #myFileImages = self._getLevelMdImages(level, subset)
+        myFileImages = self._getFileName("level_classes", level=level, sub='_particles')
+        print(myFileImages)
+        self._loadClassesInfo(myFileClasses)
+        xmpMd = myFileImages
+
+        iterator = md.SetMdIterator(xmpMd, sortByLabel=md.MDL_ITEM_ID,
+                                    updateItemCallback=self._updateParticle,
+                                    skipDisabled=True)
         clsSet.classifyItems(updateItemCallback=iterator.updateItem,
                              updateClassCallback=self._updateClass)
 
@@ -227,7 +310,6 @@ class XmippProtCoreAnalysis(ProtClassify2D):
         xmpMd = self._getFileName('level_images', level=level, sub=subset)
         if not exists(xmpMd):
             self._createLevelMdImages(level, subset)
-            print('not exists images')
 
         return xmpMd
 
