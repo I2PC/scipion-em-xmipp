@@ -25,6 +25,7 @@
 # **************************************************************************
 
 from pwem.protocols import EMProtocol
+from pyworkflow.protocol.params import PointerParam, FloatParam
 
 class XmippProtDeepHand(EMProtocol):
 
@@ -36,6 +37,14 @@ class XmippProtDeepHand(EMProtocol):
     def _defineParams(self, form):
 
         form.addSection('Input')
+        form.addParam('inputVolume', PointerParam, pointerClass="Volume",
+                      label='Input Volume', allowsNull=False,
+                      important=True, help="Volume to process")
+        form.addParam('inputMask', PointerParam, pointerClass="Volume",
+                      label='Input Mask', allowsNull=False,
+                      important=True, help="Non background voxel mask")
+        form.addParam('thresholdAlpha', FloatParam, label='Alpha Threshold',
+                      default=0.7, help="Threshold for alpha helix determination")
 
 # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
