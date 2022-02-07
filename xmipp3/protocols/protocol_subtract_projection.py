@@ -88,7 +88,7 @@ class XmippProtSubtractProjection(EMProtocol):
         iters = self.iter.get()
         program = "xmipp_subtract_projection"
         args = '-i %s --ref %s -o %s --iter %s --lambda %s' % (self._getExtraPath(self.INPUT_PARTICLES), fnVol,
-                                                               self._getExtraPath("output_particles"), iters,
+                                                               self._getExtraPath("output_particles.xmd"), iters,
                                                                self.rfactor.get())
         args += ' --saveProj %s' % self._getExtraPath('')
         if resol:
