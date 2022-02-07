@@ -25,7 +25,7 @@
 # *
 # **************************************************************************
 
-import shutil
+import os
 from pyworkflow import VERSION_3_0
 from pyworkflow.protocol.params import (PointerParam, BooleanParam,
                                         IntParam, FileParam, FloatParam)
@@ -166,7 +166,7 @@ class XmippProtValFit(ProtAnalysis3D):
         """ Convert inputs to desired format."""
         #Convert Input to pdb
         if self.getInputStructFile().endswith('.pdb'):
-            shutil.copyfile(self.getInputStructFile(), self.getPDBFile())
+            os.symlink(os.path.abspath(self.getInputStructFile()), self.getPDBFile())
         else:
             toPdb(self.getInputStructFile(), self.getPDBFile())
 
