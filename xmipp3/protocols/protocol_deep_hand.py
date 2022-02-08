@@ -24,14 +24,16 @@
 # *
 # **************************************************************************
 
+from xmipp3.base import XmippProtocol
 from pwem.protocols import EMProtocol
 from pyworkflow.protocol.params import PointerParam, FloatParam
 
-class XmippProtDeepHand(EMProtocol):
+class XmippProtDeepHand(XmippProtocol, EMProtocol):
 
     _label ="deep hand"
 
     def __init__(self, *args, **kwargs):
+        XmippProtocol.__init__(self, *args, **kwargs)
         EMProtocol.__init__(self, *args, **kwargs)
 
     def _defineParams(self, form):
@@ -48,7 +50,6 @@ class XmippProtDeepHand(EMProtocol):
 
 # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        print('Hey')
         pass
 
     def _validate(self):
@@ -64,4 +65,4 @@ class XmippProtDeepHand(EMProtocol):
 
     def _validate(self):
         errors = []
-        return error
+        return errors
