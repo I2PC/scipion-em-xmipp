@@ -39,7 +39,7 @@ from pwem.viewers import TableView, ObjectView
 from pwem.objects import Class3D
 from pwem.viewers.showj import *
 
-from xmipp3.protocols.protocol_consensus_classes3D import XmippProtConsensusClasses3D, ob_function
+from xmipp3.protocols.protocol_consensus_classes3D import XmippProtConsensusClasses3D
 
 from scipy.cluster import hierarchy
 
