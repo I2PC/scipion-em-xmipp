@@ -28,6 +28,7 @@ from pwem.protocols import EMProtocol
 from pwem.emlib.image import ImageHandler
 
 from pyworkflow.protocol.params import PointerParam, FloatParam
+from pyworkflow.object import Float
 
 import torch
 import time
@@ -62,9 +63,10 @@ class XmippProtDeepHand(XmippProtocol, EMProtocol):
 
 # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        self._insertFunctionStep('predict')
+        self._insertFunctionStep('predictStep')
+        self._insertFunctionStep('createOutputStep')
 
-    def predict(self):
+    def predictStep(self):
 
         # Create pipeline object from saved models DTlK
         alpha_model= self.getModel('deepHand', '5A_SSE_experimental.pth')
@@ -77,8 +79,11 @@ class XmippProtDeepHand(XmippProtocol, EMProtocol):
         Vmask = ih.read(self.inputMask.get()).getData()
 
         # Predict hand
-        handness = pipeline.predict(Vf, Vmask, self.thresholdAlpha.get(), 2048)
-        print(handness)
+        hand = pipeline.predict(Vf, Vmask, self.thresholdAlpha.get(), 2048)
+        self.hand = Float(hand)
+
+    def createOutputStep(self):
+        self._defineOutputs(outputHand=self.hand)
 
 # --------------------------- INFO functions -------------------------------
     def _summary(self):
