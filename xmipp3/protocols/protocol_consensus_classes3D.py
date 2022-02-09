@@ -370,14 +370,17 @@ class XmippProtConsensusClasses3D(EMProtocol):
         return methods
 
     def _validate(self):
-        max_nClusters = np.prod([len(self.inputMultiClasses[i].get()) for i in range(len(self.inputMultiClasses))])
         errors = []
-        if len(self.inputMultiClasses) <= 1:
-            errors = ["More than one Input Classes is needed to compute the consensus."]
-        elif self.manualClusterCount.get() > max_nClusters:
-            errors = ["Too many clusters selected for output"]
+        
+        max_nClusters = np.prod([len(self.inputMultiClasses[i].get()) for i in range(len(self.inputMultiClasses))])
+        if self.manualClusterCount.get() > max_nClusters:
+            errors.append("Too many clusters selected for output")
 
-        # TODO check that all classifications come from the same particles
+        particles0 = self.inputMultiClasses[0].get().getImages()
+        for i in range(1, len(self.inputMultiClasses)):
+            particles1 = self.inputMultiClasses[1].get().getImages()
+            if particles0 != particles1:
+                errors.append(f"SetOfClasses #{i} was made with different particles")
 
         return errors
 
@@ -604,7 +607,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
         loader.fillClasses(outputClasses)
 
         return outputClasses
-
 
     class ClassIntersection:
         """ Keeps track of the information related to successive class intersections.
