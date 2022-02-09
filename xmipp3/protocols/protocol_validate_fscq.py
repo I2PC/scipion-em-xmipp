@@ -165,7 +165,7 @@ class XmippProtValFit(ProtAnalysis3D):
     def convertInputStep(self):
         """ Convert inputs to desired format."""
         #Convert Input to pdb
-        if self.getInputStructFile().endswith('.pdb'):
+        if self.getInputStructFile().endswith('.pdb') or self.getInputStructFile().endswith('.ent'):
             os.symlink(os.path.abspath(self.getInputStructFile()), self.getPDBFile())
         else:
             toPdb(self.getInputStructFile(), self.getPDBFile())
