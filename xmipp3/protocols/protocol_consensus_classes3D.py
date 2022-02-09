@@ -32,6 +32,7 @@ from pwem.protocols import EMProtocol
 from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam
 from pyworkflow.object import Float, List, Object
 from pyworkflow.constants import BETA
+from pyworkflow.protocol.constants import STEPS_PARALLEL
 
 import math
 import pickle
@@ -54,6 +55,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
     def __init__(self, *args, **kwargs):
         EMProtocol.__init__(self, *args, **kwargs)
+        #self.stepsExecutionMode = STEPS_PARALLEL # TODO does not work properly if threading
         self._createFileNames()
         
     def _createFileNames(self):
@@ -72,7 +74,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
     def _defineParams(self, form):
         # Input data
         form.addSection(label='Input')
-
         form.addParam('inputMultiClasses', MultiPointerParam, important=True,
                       label="Input Classes", pointerClass='SetOfClasses3D',
                       help='Select several sets of classes where '
@@ -80,7 +81,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         # Consensus
         form.addSection(label='Consensus clustering')
-
         form.addParam('manualClusterCount', IntParam, default=-1,
                       label='Manual Number of Clusters',
                       help='Set the final number of clusters. Disabled if <= 0')
@@ -91,7 +91,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         # Reference random classification
         form.addSection(label='Reference random classification')
-
         form.addParam('numRand', IntParam, default=0,
                       label='Number of random classifications',
                       help='Number of random classifications used for computing the significance of the actual '
@@ -107,10 +106,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
         for i in range(1, len(self.inputMultiClasses)):
             self._insertFunctionStep('compareStep', i)
 
-        # Perform a reference random classification if requested
-        if self.numRand.get() > 0:
-            self._insertFunctionStep('checkSignificanceStep')
-
         # Determine if ensemble is needed
         if self.manualClusterCount.get() > 0 or self.automaticClusterCount.get() == 0:
             self._insertFunctionStep('ensembleStep')
@@ -118,8 +113,16 @@ class XmippProtConsensusClasses3D(EMProtocol):
         # Determine if automatic clustering is enabled
         if self.automaticClusterCount.get() == 0:
             self._insertFunctionStep('findElbowsStep')
+        
+        # All prior steps are executed sequentially. Depend on the last one
+        outputPrerequisites = [len(self._steps)]
 
-        self._insertFunctionStep('createOutputStep')
+        # Perform a reference random classification if requested. It can be executed in parallel to the previous steps
+        if self.numRand.get() > 0:
+            self._insertFunctionStep('checkSignificanceStep', prerequisites=[])
+            outputPrerequisites.append(len(self._steps))
+
+        self._insertFunctionStep('createOutputStep', prerequisites=outputPrerequisites)
 
     def populateStep(self, classificationIdx=0):
         """ Initializes attributes to be able to start comparing """
@@ -550,7 +553,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
             theta1, theta2 = self._calculateGaussianMleEstimates(d, q)
             pll.append(self._calculateProfileLogLikelihood(d, q, theta1, theta2))
         return pll
-
 
     def _saveOutputs(self):
         rmScipionListWrapper = lambda x: list(x)
