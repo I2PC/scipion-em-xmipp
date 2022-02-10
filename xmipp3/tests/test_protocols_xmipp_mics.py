@@ -990,7 +990,7 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
         self.launchProtocol(protCons1)
 
         self.assertTrue(protCons1.isFinished(), "Consensus failed")
-        self.assertSetSize(protCons1.consensusCoordinates,383,
+        self.assertSetSize(protCons1.consensusCoordinates,382,
                         "Output coordinates size for AND consensus is wrong.")
 
         protConsOr = self.newProtocol(XmippProtConsensusPicking,
@@ -1039,7 +1039,7 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
 
         time.sleep(3)  # protDupl2 should be as long as protCons2, but just in case
         protCons2 = self._updateProtocol(protCons2)
-        self.assertSetSize(protCons2.consensusCoordinates, 383,
+        self.assertSetSize(protCons2.consensusCoordinates, 382,
                         "Output coordinates size does not is wrong.")
         protDupl2 = self._updateProtocol(protDupl2)
         self.assertSetSize(protDupl2.outputCoordinates, 245,
