@@ -299,7 +299,7 @@ class XmippProtValFit(ProtAnalysis3D):
 
             """ Calculate FSC map-PDB """
 
-            params = ' -criterio FSC -nofill -smooth -pad 1 '
+            params = '  -nofill -smooth -pad 1 '
             params += ' -cutoff 0.67'
             params += ' -maxresolution 0.5 '
             params += ' -step 1 '
@@ -312,13 +312,12 @@ class XmippProtValFit(ProtAnalysis3D):
             params += ' %s  %s' % (self.fnvol, self._getFileName(OUTPUT_PDBMRC_FILE))
             params += ' %s' % self._getFileName(BLOCRES_AVG_FILE)
 
-            self.runJob(bsoft.Plugin.getProgram('blocres', bsoftVersion=bsoft.V1_9_0), params,
-                        env=bsoft.Plugin.getEnviron(bsoftVersion=bsoft.V1_9_0))
+            self.runJob(bsoft.Plugin.getProgram('blocres'), params)
         else:
 
             """ Calculate FSC half1-half2 """
 
-            params = ' -criterio FSC -nofill -smooth -pad 1 '
+            params = '  -nofill -smooth -pad 1 '
             params += ' -cutoff 0.5'
             params += ' -maxresolution 0.5 '
             params += ' -step 1 '
@@ -331,8 +330,7 @@ class XmippProtValFit(ProtAnalysis3D):
             params += ' %s  %s' % (self.fnvol1, self.fnvol2)
             params += ' %s' % self._getFileName(BLOCRES_HALF_FILE)
 
-            self.runJob(bsoft.Plugin.getProgram('blocres', bsoftVersion=bsoft.V1_9_0), params,
-                        env=bsoft.Plugin.getEnviron(bsoftVersion=bsoft.V1_9_0))
+            self.runJob(bsoft.Plugin.getProgram('blocres'), params)
 
     def substractBlocresStep(self):
 
