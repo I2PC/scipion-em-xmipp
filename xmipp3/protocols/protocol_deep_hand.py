@@ -31,23 +31,22 @@ from pyworkflow.protocol.params import PointerParam, FloatParam
 from pyworkflow.object import Float
 
 import torch
-import time
 import numpy as np
-import os
 
 from torch import nn
 from torch import optim
 
 from xmipp3.base import XmippProtocol
+from xmipp3.convert import getImageLocation
 
 
-class XmippProtDeepHand(XmippProtocol, EMProtocol):
+class XmippProtDeepHand(EMProtocol, XmippProtocol):
 
     _label ="deep hand"
 
     def __init__(self, *args, **kwargs):
-        XmippProtocol.__init__(self, *args, **kwargs)
         EMProtocol.__init__(self, *args, **kwargs)
+        XmippProtocol.__init__(self, *args, **kwargs)
 
     def _defineParams(self, form):
 
@@ -55,16 +54,43 @@ class XmippProtDeepHand(XmippProtocol, EMProtocol):
         form.addParam('inputVolume', PointerParam, pointerClass="Volume",
                       label='Input Volume', allowsNull=False,
                       important=True, help="Volume to process")
-        form.addParam('inputMask', PointerParam, pointerClass="Volume",
-                      label='Input Mask', allowsNull=False,
-                      important=True, help="Non background voxel mask")
+#        form.addParam('threshold', FloatParam, label='Threshold Mask', default=0.03,
+#                      allowsNull=False, important=True,  help="Threshold for mask creation")
         form.addParam('thresholdAlpha', FloatParam, label='Alpha Threshold',
                       default=0.7, help="Threshold for alpha helix determination")
 
 # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
+        self._insertFunctionStep('preprocessStep')
         self._insertFunctionStep('predictStep')
         self._insertFunctionStep('createOutputStep')
+
+    def preprocessStep(self):
+
+        # Get volume information
+        volume = self.inputVolume.get()
+        fnVol = getImageLocation(volume)
+        Ts = volume.getSamplingRate()
+
+        # Paths to new files created
+        self.resizedVolFile = self._getPath('resizedVol.mrc')
+        self.maskFile = self._getPath('mask.mrc')
+        self.filteredVolFile = self._getPath('filteredVol.mrc')
+
+        # Resize to 1A/px
+        self.runJob("xmipp_image_resize", "-i %s -o %s --factor %f" %
+                    (fnVol, self.resizedVolFile, Ts))
+
+        # Threshold to obtain mask
+        self.runJob("xmipp_transform_threshold",
+                    "-i %s -o %s --select below %f --substitute binarize"
+                    % (self.resizedVolFile, self.maskFile, 0.03))
+#                    % (self.resizedVolFile, self.maskFile, self.threshold.get()))
+
+        # Filter to 5A
+        self.runJob("xmipp_transform_filter", "-i %s -o %s "\
+                    "--fourier low_pass %f --sampling 1"
+                    % (self.resizedVolFile, self.filteredVolFile, 5.0))
 
     def predictStep(self):
 
@@ -75,8 +101,8 @@ class XmippProtDeepHand(XmippProtocol, EMProtocol):
 
         # Obtain Volume and Mask
         ih = ImageHandler()
-        Vf = ih.read(self.inputVolume.get()).getData()
-        Vmask = ih.read(self.inputMask.get()).getData()
+        Vf = ih.read(self.filteredVolFile).getData()
+        Vmask = ih.read(self.maskFile).getData()
 
         # Predict hand
         hand = pipeline.predict(Vf, Vmask, self.thresholdAlpha.get(), 2048)
