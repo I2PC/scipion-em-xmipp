@@ -95,7 +95,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
                       label='Number of random classifications',
                       help='Number of random classifications used for computing the significance of the actual '
                            'clusters. 0 for skipping this step')
-        form.addParallelSection(threads=mp.cpu_count(), mpi=0)
+        form.addParallelSection()
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
@@ -119,8 +119,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         # Perform a reference random classification if requested. It can be executed in parallel to the previous steps
         if self.numRand.get() > 0:
-            self._insertFunctionStep('checkSignificanceStep', prerequisites=[])
-            outputPrerequisites.append(len(self._steps))
+            outputPrerequisites.append(self._insertFunctionStep('checkSignificanceStep', prerequisites=[]))
 
         self._insertFunctionStep('createOutputStep', prerequisites=outputPrerequisites)
 
@@ -180,7 +179,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         """ Ensemble clustering by COSS that merges interactions of clusters based
             on entropy minimization """
         # Obtain the classification as a list of list of sets
-        classifications = self._getClassificationParticleIds(self.inputMultiClasses)
+        classifications = self._getClassificationParticleIds()
 
         # Initialize with values before merging
         allIntersections = [self.intersectionList]  # Stores the intersections of all iterations
@@ -268,7 +267,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         numExec = self.numRand.get()
 
         # Obtain the group sizes
-        clusterLengths = self._getClusterLengths(self.inputMultiClasses)
+        clusterLengths = self._getClusterLengths()
 
         # Calculate the total particle count
         numParticles = sum(clusterLengths[0])
@@ -381,23 +380,24 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         particles0 = self.inputMultiClasses[0].get().getImages()
         for i in range(1, len(self.inputMultiClasses)):
-            particles1 = self.inputMultiClasses[1].get().getImages()
+            particles1 = self.inputMultiClasses[i].get().getImages()
             if particles0 != particles1:
                 errors.append(f"SetOfClasses #{i} was made with different particles")
 
         return errors
 
     # --------------------------- UTILS functions ------------------------------
-    def _getClusterLengths(self, scipionMultiClasses):
+    def _getClusterLengths(self):
         """ Returns a list of lists that stores the lengths of each classification """
         result = []
 
-        for i in range(len(scipionMultiClasses)):
-            classification = scipionMultiClasses[i].get()
+        for classification in self.inputMultiClasses:
+            classification = classification.get()
 
-            result.append([])
+            lengths = []
             for cluster in classification:
-                result[-1].append(len(cluster))
+                lengths.append(len(cluster))
+            result.append(lengths)
 
         return result
 
@@ -410,16 +410,17 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         return result
 
-    def _getClassificationParticleIds(self, scipionMultiClasses):
+    def _getClassificationParticleIds(self):
         """ Returns the list of lists of sets that stores the clusters of each classification """
         result = []
 
-        for i in range(len(scipionMultiClasses)):
-            classification = scipionMultiClasses[i].get()
+        for classification in self.inputMultiClasses:
+            classification = classification.get()
 
-            result.append([])
+            particleIds = []
             for cluster in classification:
-                result[-1].append(cluster.getIdSet())
+                particleIds.append(cluster.getIdSet())
+            result.append(particleIds)
 
         return result
 
