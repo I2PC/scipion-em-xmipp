@@ -92,7 +92,8 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
         hand_model = self.getModel('deepHand', '5A_TL_hand_alpha.pth')
 
         # Predict hand
-        args = "%s %s %s %f %s %s" % (
+        args = "--alphaModel %s --handModel %s -o %s " \
+               "--alphaThr %f --pathVf %s --pathVmask %s" % (
                 alpha_model, hand_model, self._getExtraPath(),
                 self.thresholdAlpha.get(), self._getPath('filteredVol.mrc'),
                 self._getPath('mask.mrc'))
