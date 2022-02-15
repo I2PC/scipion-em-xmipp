@@ -40,7 +40,7 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
 
     def __init__(self, *args, **kwargs):
         EMProtocol.__init__(self, *args, **kwargs)
-        XmippProtocol.__init__(self, *args, **kwargs)
+        XmippProtocol.__init__(self)
 
     def _defineParams(self, form):
 
@@ -63,8 +63,8 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
 
         # Get volume information
         volume = self.inputVolume.get()
-        fnVol = getImageLocation(volume)
-        Ts = volume.getSamplingRate()
+        fn_vol = getImageLocation(volume)
+        T_s = volume.getSamplingRate()
 
         # Paths to new files created
         self.resizedVolFile = self._getPath('resizedVol.mrc')
@@ -73,7 +73,7 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
 
         # Resize to 1A/px
         self.runJob("xmipp_image_resize", "-i %s -o %s --factor %f" %
-                    (fnVol, self.resizedVolFile, Ts))
+                    (fn_vol, self.resizedVolFile, T_s))
 
         # Threshold to obtain mask
         self.runJob("xmipp_transform_threshold",
@@ -98,8 +98,8 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
         self.runJob("xmipp_deep_hand", args, env=self.getCondaEnv())
 
     def createOutputStep(self):
-        handFile = self._getExtraPath('hand.txt')
-        f = open(handFile)
+        hand_file = self._getExtraPath('hand.txt')
+        f = open(hand_file)
         self.hand = Float(float(f.read()))
         f.close()
         self._defineOutputs(outputHand=self.hand)
