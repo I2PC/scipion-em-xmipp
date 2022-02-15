@@ -94,7 +94,8 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
         # Predict hand
         args = "%s %s %s %f %s %s" % (
                 alpha_model, hand_model, self._getExtraPath(),
-                self.thresholdAlpha.get(), self.filteredVolFile, self.maskFile)
+                self.thresholdAlpha.get(), self._getPath('filteredVol.mrc'),
+                self._getPath('mask.mrc'))
         self.runJob("xmipp_deep_hand", args, env=self.getCondaEnv())
 
     def createOutputStep(self):
