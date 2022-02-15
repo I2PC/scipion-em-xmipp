@@ -36,7 +36,7 @@ from xmipp3.convert import getImageLocation
 class XmippProtDeepHand(EMProtocol, XmippProtocol):
 
     _label ="deep hand"
-    _cond_env = "xmipp_deepHand"
+    _conda_env = "xmipp_deepHand"
 
     def __init__(self, *args, **kwargs):
         EMProtocol.__init__(self, *args, **kwargs)
