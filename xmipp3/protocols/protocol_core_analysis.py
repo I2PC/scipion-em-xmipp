@@ -35,7 +35,6 @@ from pyworkflow.utils.path import cleanPath, makePath
 
 import pwem.emlib.metadata as md
 from pwem.protocols import ProtClassify2D
-from pwem.objects import SetOfClasses2D
 from pwem.constants import ALIGN_2D
 
 from xmipp3.convert import (writeSetOfClasses2D, xmippToLocation,
@@ -62,7 +61,7 @@ class XmippProtCoreAnalysis(ProtClassify2D):
         form.addParam('inputClasses', param.PointerParam,
                       label="Input classes",
                       pointerClass='SetOfClasses2D',
-                      help='Set of input classes to be classified')
+                      help='Set of input classes to be analyzed')
         form.addParam('thZscore', param.FloatParam, default=3,
                       label='Junk Zscore',
                       help='Which is the average Z-score to be considered as '
