@@ -191,11 +191,14 @@ class XmippProtAlignVolume(ProtAlignVolume):
             self.runJob("xmipp_volume_align", args)
     
     def createOutputStep(self):        
+        Ts = self.inputReference.get().getSamplingRate()
+
         vols = []
         idx=1
         for vol in self._iterInputVolumes():
             outVol = Volume()
-            outVol.setLocation(self._getExtraPath("vol%02d.mrc"%idx))
+            fnOutVol = self._getExtraPath("vol%02d.mrc"%idx)
+            outVol.setLocation(fnOutVol)
             outVol.setObjComment(vol.getObjComment())
             #set transformation matrix             
             fhInputTranMat = self._getExtraPath('transformation-matrix_vol%06d.txt'%idx)
@@ -205,23 +208,31 @@ class XmippProtAlignVolume(ProtAlignVolume):
             transform.setMatrix(transformationMat)
             outVol.setTransform(transform)            
             vols.append(outVol)
+
+            # Set the sampling rate in the mrc header
+            self.runJob("xmipp_image_header", "-i %s --sampling_rate %f"%(fnOutVol, Ts))
+
             idx+=1
-                        
+
         if len(vols) > 1:
             volSet = self._createSetOfVolumes()
-            volSet.setSamplingRate(self.inputReference.get().getSamplingRate())
+            volSet.setSamplingRate(Ts)
             for vol in vols:
                 volSet.append(vol)
             outputArgs = {'outputVolumes': volSet}
         else:
-            vols[0].setSamplingRate(self.inputReference.get().getSamplingRate())
+            vols[0].setSamplingRate(Ts)
             outputArgs = {'outputVolume': vols[0]}
             
         self._defineOutputs(**outputArgs)
-        for pointer in self.inputVolumes:
-            self._defineSourceRelation(pointer, outputArgs['outputVolume'])
-    #--------------------------- INFO functions --------------------------------------------
-    
+        if len(vols) > 1:
+            for pointer in self.inputVolumes:
+                self._defineSourceRelation(pointer, outputArgs['outputVolumes'])
+        else:
+            for pointer in self.inputVolumes:
+                self._defineSourceRelation(pointer, outputArgs['outputVolume'])
+
+    #  --------------------------- INFO functions --------------------------------------------
     def _validate(self):
         errors = []
         for pointer in self.inputVolumes:
@@ -279,7 +290,7 @@ class XmippProtAlignVolume(ProtAlignVolume):
                 break
             itemId = item.getObjId()
             if isinstance(item, Volume):
-                item.outputName = self._getExtraPath('output_vol%06d.vol' % itemId)
+                item.outputName = self._getExtraPath('output_vol%06d.mrc' % itemId)
                 # If item is a Volume and label is empty
                 if not item.getObjLabel():
                     # Volume part of a set
@@ -290,7 +301,7 @@ class XmippProtAlignVolume(ProtAlignVolume):
                 yield item
             elif isinstance(item, SetOfVolumes):
                 for vol in item:
-                    vol.outputName = self._getExtraPath('output_vol%06d_%03d.vol' % (itemId, vol.getObjId()))
+                    vol.outputName = self._getExtraPath('output_vol%06d_%03d.mrc' % (itemId, vol.getObjId()))
                     # If set item label is empty
                     if not vol.getObjLabel():
                         # if set label is not empty use it
@@ -314,7 +325,7 @@ class XmippProtAlignVolume(ProtAlignVolume):
             if self.maskType == ALIGN_MASK_CIRCULAR:
                 maskArgs+=" --mask circular -%d" % self.maskRadius
             else:
-                maskArgs+=" --mask binary_file %s" % self.volMask
+                maskArgs+=" --mask binary_file %s" % self.maskFile.get().getFileName()
         return maskArgs
     
     def _getAlignArgs(self):

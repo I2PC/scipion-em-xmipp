@@ -36,6 +36,7 @@ from pyworkflow.utils import getExt
 from pyworkflow.object import (Float, Integer)
 from pwem.objects import Volume
 from pwem.convert import Ccp4Header
+import xmipp3
 
 
 VALIDATE_METHOD_URL = 'http://github.com/I2PC/scipion-em-xmipp/wiki/XmippProtValFit'
@@ -52,7 +53,9 @@ FN_VOL = 'vol.map'
 FN_HALF1 = 'half1.map'
 FN_HALF2 = 'half2.map'
 MD_MEANS = 'params.xmd'
-
+MD2_MEANS = 'params2.xmd'
+RESTA_FILE_NORM = 'diferencia_norm.map'
+PDB_NORM_FILE = 'pdb_fsc-q_norm.pdb'
 
 
 class XmippProtValFit(ProtAnalysis3D):
@@ -96,7 +99,7 @@ class XmippProtValFit(ProtAnalysis3D):
         
         form.addParam('box', IntParam, default=20,
                       label="window size",
-                      help='Kernel size for determining'
+                      help='Kernel size (slidding window) for determining'
                       ' local resolution (pixels/voxels).')
         
         form.addParam('setOrigCoord', BooleanParam,
@@ -125,13 +128,16 @@ class XmippProtValFit(ProtAnalysis3D):
                  BLOCRES_HALF_FILE: self._getTmpPath('blocres_half.map'),
                  RESTA_FILE: self._getTmpPath('diferencia.vol'),
                  RESTA_FILE_MRC: self._getExtraPath('diferencia.map'),
+                 RESTA_FILE_NORM: self._getExtraPath('diferencia_norm.map'),
                  PDB_VALUE_FILE:  self._getExtraPath('pdb_fsc-q.pdb'),
+                 PDB_NORM_FILE: self._getExtraPath('pdb_fsc-q_norm.pdb'), 
                  MASK_FILE_MRC : self._getExtraPath('mask.map'),  
                  MASK_FILE: self._getTmpPath('mask.vol'), 
                  FN_VOL: self._getTmpPath("vol.map"),
                  FN_HALF1: self._getTmpPath("half1.map"),
                  FN_HALF2: self._getTmpPath("half2.map"),  
-                 MD_MEANS: self._getExtraPath('params.xmd')        
+                 MD_MEANS: self._getExtraPath('params.xmd'),  
+                 MD2_MEANS: self._getExtraPath('params2.xmd')      
                  }
         self._updateFilenamesDict(myDict)
 
@@ -196,7 +202,7 @@ class XmippProtValFit(ProtAnalysis3D):
         else:         
             """ Convert PDB to Map """           
             params = ' --centerPDB '
-            params += ' -v 0 '        
+            params += ' -v 0 '    
             params += ' --sampling %f' % self.inputVolume.get().getSamplingRate()        
             params += ' --size %d' % self.inputVolume.get().getXDim()
             params += ' -i %s' % self.inputPDB.get()        
@@ -237,7 +243,7 @@ class XmippProtValFit(ProtAnalysis3D):
                             
                 params = ' -i %s' % self._getFileName(OUTPUT_PDBVOL_FILE)+'.vol'          
                 params += ' -o %s' % self.mask_xmipp
-                params += ' --select below 0.02 --substitute binarize'                    
+                params += ' --select below 0.02 --substitute binarize'                   
                 self.runJob('xmipp_transform_threshold', params) 
                  
                 params = ' -i %s' % self.mask_xmipp        
@@ -279,7 +285,7 @@ class XmippProtValFit(ProtAnalysis3D):
 
             params = ' -criterio FSC -nofill -smooth -pad 1 '
             params += ' -cutoff 0.67'
-            params += ' -maxresolution 2 '
+            params += ' -maxresolution 0.5 '
             params += ' -step 1 '
             params += ' -box %d ' % self.box.get()
             params += ' -sampling %f,%f,%f' % (self.inputVolume.get().getSamplingRate(),
@@ -290,15 +296,15 @@ class XmippProtValFit(ProtAnalysis3D):
             params += ' %s  %s' % (self.fnvol, self._getFileName(OUTPUT_PDBMRC_FILE))
             params += ' %s' % self._getFileName(BLOCRES_AVG_FILE)
 
-            self.runJob(bsoft.Plugin.getProgram('blocres'), params,
-                        env=bsoft.Plugin.getEnviron())
+            self.runJob(bsoft.Plugin.getProgram('blocres', bsoftVersion=bsoft.V1_9_0), params,
+                        env=bsoft.Plugin.getEnviron(bsoftVersion=bsoft.V1_9_0))
         else:
 
             """ Calculate FSC half1-half2 """
 
             params = ' -criterio FSC -nofill -smooth -pad 1 '
             params += ' -cutoff 0.5'
-            params += ' -maxresolution 2 '
+            params += ' -maxresolution 0.5 '
             params += ' -step 1 '
             params += ' -box %d ' % self.box.get()
             params += ' -sampling %f,%f,%f' % (self.inputVolume.get().getSamplingRate(),
@@ -309,8 +315,8 @@ class XmippProtValFit(ProtAnalysis3D):
             params += ' %s  %s' % (self.fnvol1, self.fnvol2)
             params += ' %s' % self._getFileName(BLOCRES_HALF_FILE)
 
-            self.runJob(bsoft.Plugin.getProgram('blocres'), params,
-                        env=bsoft.Plugin.getEnviron())
+            self.runJob(bsoft.Plugin.getProgram('blocres', bsoftVersion=bsoft.V1_9_0), params,
+                        env=bsoft.Plugin.getEnviron(bsoftVersion=bsoft.V1_9_0))
 
     def substractBlocresStep(self):
         
@@ -321,6 +327,24 @@ class XmippProtValFit(ProtAnalysis3D):
         
         Ccp4Header.fixFile(self._getFileName(RESTA_FILE), self._getFileName(RESTA_FILE_MRC), 
                            self.origin, self.sampling, Ccp4Header.START)
+        
+        """Diveded by resolution"""       
+        Vx = xmipp3.Image(self._getFileName(RESTA_FILE))
+        V=Vx.getData()
+        Vmask = xmipp3.Image(self._getFileName(MASK_FILE_MRC)+':mrc').getData()
+        Vres = xmipp3.Image(self._getFileName(BLOCRES_HALF_FILE)+':mrc').getData()
+        Vt = V
+        Zdim, Ydim, Xdim = V.shape
+              
+        for z in range(0,Zdim):
+            for y in range(0,Ydim):
+                for x in range(0,Xdim):
+                    if (Vmask[z,y,x] > 0.001 and Vres[z,y,x]>0.001): 
+                        Vt[z,y,x] = (V[z,y,x]/Vres[z,y,x])
+        Vx.setData(Vt) 
+        Vx.write(self._getFileName(RESTA_FILE_NORM))
+        Ccp4Header.fixFile(self._getFileName(RESTA_FILE_NORM), self._getFileName(RESTA_FILE_NORM), 
+                           self.origin, self.sampling, Ccp4Header.START) 
                     
         
     def assignPdbStep(self):
@@ -333,65 +357,81 @@ class XmippProtValFit(ProtAnalysis3D):
         params += ' --origin %f %f %f' %(self.x, self.y, self.z)
         params += ' --radius 0.8'  
         params += ' --md %s' % self._getFileName(MD_MEANS)     
-        self.runJob('xmipp_pdb_label_from_volume', params)      
+        self.runJob('xmipp_pdb_label_from_volume', params)   
         
-    def createOutputStep(self):    
-        
-        volume=Volume()
-        volume.setFileName(self._getFileName(RESTA_FILE_MRC))
-        volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
-        volume.setOrigin(self.inputVolume.get().getOrigin(True))
-        self._defineOutputs(fscq_Volume=volume)
-        self._defineTransformRelation(self.inputVolume, volume)
-        
-        #mean values of FSC-Q
-              
+        """Diveded by resolution"""
+        params = ' --pdb %s ' % self.inputPDB.get()  
+        params += ' --vol %s ' % self._getFileName(RESTA_FILE_NORM) 
+        params += ' --mask %s ' % self.mask_xmipp         
+        params += ' -o %s ' % self._getFileName(PDB_NORM_FILE)    
+        params += ' --sampling %f' % self.inputVolume.get().getSamplingRate()
+        params += ' --origin %f %f %f' %(self.x, self.y, self.z)
+        params += ' --radius 0.8' 
+        params += ' --md %s' % self._getFileName(MD2_MEANS) 
+        self.runJob('xmipp_pdb_label_from_volume', params)    
+
+    def _getMetrics(self):
+        """ Internal method to compute some metrics. """
+        # mean values of FSC-Q
+
         mtd = md.MetaData()
         mtd.read(self._getFileName(MD_MEANS))
-            
-        mean = mtd.getValue(MDL_VOLUME_SCORE1,1)
-        meanA = mtd.getValue(MDL_VOLUME_SCORE2,1)  
-              
-        #Setting the mean fsc-q for the summary
-        self.mean = Float(mean)
-        self._store(self) 
-        self.meanA = Float(meanA)
-        self._store(self) 
 
-        
-        #statistic from fnal pdb with fsc-q
-        #Number of atoms greater or less than 0.5
-        total_atom=0
-        fscq_greater=0
-        fscq_less=0
+        mean = mtd.getValue(MDL_VOLUME_SCORE1, 1)
+        meanA = mtd.getValue(MDL_VOLUME_SCORE2, 1)
+
+        # means value for map divided by resolution (FSC-Qr)
+        mtd2 = md.MetaData()
+        mtd2.read(self._getFileName(MD2_MEANS))
+
+        mean2 = mtd2.getValue(MDL_VOLUME_SCORE1, 1)
+        meanA2 = mtd2.getValue(MDL_VOLUME_SCORE2, 1)
+
+        # statistic from fnal pdb with fsc-q
+        # Number of atoms greater or less than 0.5
+        total_atom = 0
+        fscq_greater = 0
+        fscq_less = 0
         with open(self._getFileName(PDB_VALUE_FILE)) as f:
             lines_data = f.readlines()
-            for j,lin in enumerate(lines_data):
-                
-                if ( lin.startswith('ATOM') or lin.startswith('HETATM') ):
-                    
-                    total_atom=total_atom+1
+            for j, lin in enumerate(lines_data):
+
+                if (lin.startswith('ATOM') or lin.startswith('HETATM')):
+
+                    total_atom = total_atom + 1
                     fscq_atom = float(lin[54:60])
-                    
-                    if (fscq_atom>0.5):
-                        fscq_greater=fscq_greater+1
-                        
-                    if (fscq_atom<-0.5):
-                        fscq_less=fscq_less+1
-                        
-        porc_greater=(fscq_greater*100)/total_atom
-        porc_less=(fscq_less*100)/total_atom
- 
-        self.total_atom = Integer(total_atom)
-        self._store(self)
-        self.fscq_greater=Integer(fscq_greater)
-        self._store(self)
-        self.fscq_less=Integer(fscq_less)
-        self._store(self)        
-        self.porc_greater=Float(porc_greater)
-        self._store(self)
-        self.porc_less=Float(porc_less)
-        self._store(self)           
+
+                    if (fscq_atom > 0.5):
+                        fscq_greater = fscq_greater + 1
+
+                    if (fscq_atom < -0.5):
+                        fscq_less = fscq_less + 1
+
+        porc_greater = (fscq_greater * 100) / total_atom
+        porc_less = (fscq_less * 100) / total_atom
+
+        return {
+            'mean': Float(mean),
+            'meanA': Float(meanA),
+            'mean2': Float(mean2),
+            'meanA2': Float(meanA2),
+            'total_atom': Integer(total_atom),
+            'fscq_greater': Integer(fscq_greater),
+            'fscq_less': Integer(fscq_less),
+            'porc_greater': Float(porc_greater),
+            'porc_less': Float(porc_less)
+        }
+
+    def createOutputStep(self):
+        metrics = self._getMetrics()
+        volume = Volume()
+        volume.setFileName(self._getFileName(RESTA_FILE_MRC))
+        volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
+        volume.setOrigin(self.inputVolume.get().getOrigin(True).clone())
+
+        self._defineOutputs(fscq_Volume=volume, **metrics)
+        self._defineTransformRelation(self.inputVolume, volume)
+        
 
     # --------------------------- INFO functions ------------------------------
 
@@ -408,7 +448,14 @@ class XmippProtValFit(ProtAnalysis3D):
         if self.hasAttribute('mean'):
             summary.append("Mean FSC-Q: %.2f" % (self.mean.get()))
         if self.hasAttribute('meanA'):    
-            summary.append("Absotute Mean FSC-Q: %.2f" % (self.meanA.get()))  
+            summary.append("Absotute Mean FSC-Q: %.2f" % (self.meanA.get()))
+             
+        summary.append(" ")            
+        summary.append("Deviation from the signal of the Half Maps divided by local resolution")
+        if self.hasAttribute('mean2'):
+            summary.append("Mean FSC-Qr: %.2f" % (self.mean2.get()))
+        if self.hasAttribute('meanA2'):    
+            summary.append("Absotute Mean FSC-Qr: %.2f" % (self.meanA2.get()))      
              
         summary.append("------------------------------------------")   
         if self.hasAttribute('total_atom'):                    
@@ -436,8 +483,11 @@ class XmippProtValFit(ProtAnalysis3D):
 
         try:
             import bsoft
-        except ImportError as e:
-            errors.append("This protocol requires bsoft plugin to run.")
+            if bsoft.__version__ in ["3.0.0", "3.0.1", "3.0.4"]:
+                errors.append("This protocol requires bsoft plugin 3.0.5 or above to run."
+                              " You have %s. Update it using the plugin manager or command line" % bsoft.__version__)
+        except Exception as e:
+            errors.append("This protocol requires bsoft plugin 3.0.5 or above to run. Update it using the plugin manager or command line")
             
         return errors    
 

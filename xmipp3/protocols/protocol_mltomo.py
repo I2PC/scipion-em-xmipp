@@ -81,7 +81,7 @@ class XmippProtMLTomo(ProtClassify3D):
                   'ref': self._getExtraPath('results/mltomo_ref.xmd'),
                   'fsc_it': self.extraIter + '.fsc',
                   #'fsc': self._getExtraPath('results/mltomo.fsc'),
-                  'volume': self.extraIter + '_ref%(ref3d)06d.vol'
+                  'volume': self.extraIter + '_ref%(ref3d)06d.mrc'
                   }
         self._updateFilenamesDict(myDict)
 
@@ -90,7 +90,7 @@ class XmippProtMLTomo(ProtClassify3D):
         self._iterTemplate = self._getFileName('ref_it', iter=0).replace('000000', '??????')
         # Iterations will be identify by _itXXXXXX_ where XXXXXX is the
         # iteration number and is restricted to only 6 digits.
-        self._iterRegex = re.compile('_it(\d{6,6})_')
+        self._iterRegex = re.compile(r'_it(\d{6,6})_')
 
     #--------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
@@ -432,7 +432,7 @@ class XmippProtMLTomo(ProtClassify3D):
     def createOutput(self):
         # output files:
         #   mltomo_ref.xmd contains all info for output 3D classes
-        #   mltomo_refXXXXXX.vol output volume - 3D class
+        #   mltomo_refXXXXXX.mrc output volume - 3D class
         #   mltomo_img.xmd contains alignment metadata for all vols
         #   mltomo.fsc
         outputGlobalMdFn = self._getFileName('ref')

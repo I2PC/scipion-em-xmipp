@@ -1,6 +1,7 @@
 # ***************************************************************************
 # *
 # * Authors:     Amaya Jimenez (ajimenez@cnb.csic.es)
+# *              David Strelak (dstrelak@cnb.csic.es)
 # *
 # * This program is free software; you can redistribute it and/or modify
 # * it under the terms of the GNU General Public License as published by
@@ -35,16 +36,15 @@ from xmipp3.protocols.protocol_classification_gpuCorr_full import *
 
 ProtCTFFind = Domain.importFromPlugin('cistem.protocols', 'CistemProtCTFFind',
                                       doRaise=True)
-
-SparxGaussianProtPicking = Domain.importFromPlugin('eman2.protocols',
-                                                   'SparxGaussianProtPicking',
+EmanProtAutopick = Domain.importFromPlugin('eman2.protocols',
+                                                   'EmanProtAutopick',
                                                    doRaise=True)
 
 
 # Number of mics to be processed
 NUM_MICS = 5
 
-class TestGpuCorrFullStreaming(BaseTest):
+class GpuCorrCommon(BaseTest):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
@@ -65,7 +65,7 @@ class TestGpuCorrFullStreaming(BaseTest):
     def importMicrographsStr(self, fnMics):
         kwargs = {'inputMics': fnMics,
                   'nDim': NUM_MICS,
-                  'creationInterval': 30,
+                  'creationInterval': 15,
                   'delay': 10,
                   'setof': SET_OF_MICROGRAPHS  # SetOfMics
                   }
@@ -95,35 +95,28 @@ class TestGpuCorrFullStreaming(BaseTest):
 
     def runPicking(self, inputMicrographs):
         """ Run a particle picking. """
-        protPicking = SparxGaussianProtPicking(boxSize=64, lowerThreshold=0.01)
+        protPicking = EmanProtAutopick(boxSize=64, boxerMode=3, gaussLow=0.01)
         protPicking.inputMicrographs.set(inputMicrographs)
         self.proj.launchProtocol(protPicking, wait=False)
 
         return protPicking
 
     def runExtractParticles(self, inputCoord, setCtfs):
-        protExtract = self.newProtocol(XmippProtExtractParticles,
+        self.protExtract = self.newProtocol(XmippProtExtractParticles,
                                        boxSize=64,
                                        doInvert = False,
                                        doFlip = False)
 
-        protExtract.inputCoordinates.set(inputCoord)
-        protExtract.ctfRelations.set(setCtfs)
+        self.protExtract.inputCoordinates.set(inputCoord)
+        self.protExtract.ctfRelations.set(setCtfs)
 
-        self.proj.launchProtocol(protExtract, wait=False)
+        self.proj.launchProtocol(self.protExtract, wait=False)
 
-        return protExtract
+        return self.protExtract
 
     def runClassify(self, inputParts):
-        protClassify = self.newProtocol(XmippProtStrGpuCrrCL2D)
-
-        protClassify.inputParticles.set(inputParts)
-        self.proj.launchProtocol(protClassify, wait=False)
-
-        return protClassify
-
-    def runClassify2(self, inputParts):
-        protClassify = self.newProtocol(XmippProtStrGpuCrrCL2D, useCL2D=False)
+        protClassify = self.newProtocol(XmippProtStrGpuCrrCL2D,
+                                        numberOfMpi=4)
 
         protClassify.inputParticles.set(inputParts)
         self.proj.launchProtocol(protClassify, wait=False)
@@ -141,106 +134,39 @@ class TestGpuCorrFullStreaming(BaseTest):
             return prot2
 
 
-
-    def test_pattern(self):
-
+    def run_common_workflow(self):
         protImportMics = self.importMicrographs()
         self.assertFalse(protImportMics.isFailed(), 'ImportMics has failed.')
 
-        protImportMicsStr = self.importMicrographsStr\
-            (protImportMics.outputMicrographs)
-        counter = 1
-        while not protImportMicsStr.hasAttribute('outputMicrographs'):
-            time.sleep(2)
-            protImportMicsStr = self._updateProtocol(protImportMicsStr)
-            if counter > 100:
-                break
-            counter += 1
-        self.assertFalse(protImportMicsStr.isFailed(), 'Create stream data has failed.')
-        self.assertTrue(protImportMicsStr.hasAttribute('outputMicrographs'),
-                        'Create stream data has no outputMicrographs in more than 3min.')
+        protImportMicsStr = self.importMicrographsStr(protImportMics.outputMicrographs)
+        self._waitOutput(protImportMicsStr,'outputMicrographs')
 
         protInvContr = self.invertContrast(protImportMicsStr.outputMicrographs)
-        counter = 1
-        while not protInvContr.hasAttribute('outputMicrographs'):
-            time.sleep(2)
-            protInvContr = self._updateProtocol(protInvContr)
-            if counter > 100:
-                break
-            counter += 1
-        self.assertFalse(protInvContr.isFailed(), 'protInvContr has failed.')
-        self.assertTrue(protInvContr.hasAttribute('outputMicrographs'),
-                        'protInvContr has no outputMicrographs in more than 3min.')
+        self._waitOutput(protInvContr,'outputMicrographs')
 
         protCtf = self.calculateCtf(protInvContr.outputMicrographs)
-        counter = 1
-        while not protCtf.hasAttribute('outputCTF'):
-            time.sleep(2)
-            protCtf = self._updateProtocol(protCtf)
-            if counter > 100:
-                break
-            counter += 1
-        self.assertFalse(protCtf.isFailed(), 'CTFfind4 has failed.')
-        self.assertTrue(protCtf.hasAttribute('outputCTF'),
-                        'CTFfind4 has no outputCTF in more than 3min.')
+        self._waitOutput(protCtf,'outputCTF')
 
         protPicking = self.runPicking(protInvContr.outputMicrographs)
-        counter = 1
-        while not protPicking.hasAttribute('outputCoordinates'):
-            time.sleep(2)
-            protPicking = self._updateProtocol(protPicking)
-            if counter > 100:
-                break
-            counter += 1
-        self.assertFalse(protPicking.isFailed(), 'Eman Sparx has failed.')
-        self.assertTrue(protPicking.hasAttribute('outputCoordinates'),
-                        'Eman Sparx has no outputCoordinates in more than 3min.')
+        self._waitOutput(protPicking,'outputCoordinates')
 
-        protExtract = self.runExtractParticles(protPicking.outputCoordinates,
+        self.runExtractParticles(protPicking.outputCoordinates,
                                                protCtf.outputCTF)
-        counter = 1
-        while not protExtract.hasAttribute('outputParticles'):
-            time.sleep(2)
-            protExtract = self._updateProtocol(protExtract)
-            if counter > 100:
-                break
-            counter += 1
-        self.assertFalse(protExtract.isFailed(), 'Extract particles has failed.')
-        self.assertTrue(protExtract.hasAttribute('outputParticles'),
-                        'Extract particles has no outputParticles in more than 3min.')
+        self._waitOutput(self.protExtract,'outputParticles')
 
-        protClassify = self.runClassify(protExtract.outputParticles)
-        counter = 1
-        while protClassify.getStatus() != STATUS_FINISHED:
-            time.sleep(2)
-            protClassify = self._updateProtocol(protClassify)
-            self.assertFalse(protClassify.isFailed(), 'GL2D-streaming has failed.')
+        self.verify_classification()
 
-            if counter > 100:
-                self.assertTrue(protClassify.hasAttribute('outputAverages'),
-                                'GL2D-streaming has no outputAverages in more than 3min.')
-            counter += 1
+
+class TestGpuCorrFullStreaming(GpuCorrCommon):
+    def test_full_streaming(self):
+        self.run_common_workflow()
+
+    def verify_classification(self):
+        protClassify = self.runClassify(self.protExtract.outputParticles)
+
+        self._waitOutput(protClassify, "outputClasses", timeOut=180)
 
         self.assertTrue(protClassify.hasAttribute('outputAverages'),
                         'GL2D-streaming has no outputAverages at the end.')
         self.assertTrue(protClassify.hasAttribute('outputClasses'),
                         'GL2D-streaming has no outputClasses at the end.')
-
-        protClassify2 = self.runClassify2(protExtract.outputParticles)
-        counter = 1
-        while protClassify2.getStatus() != STATUS_FINISHED:
-            time.sleep(2)
-            protClassify2 = self._updateProtocol(protClassify2)
-            self.assertFalse(protClassify2.isFailed(), 'GL2D-streaming has failed.')
-
-            if counter > 100:
-                self.assertTrue(protClassify2.hasAttribute('outputAverages'),
-                                'GL2D-streaming has no outputAverages in more than 3min.')
-            counter += 1
-
-        self.assertFalse(protClassify2.isFailed(), 'GL2D-streaming has failed.')
-        self.assertTrue(protClassify2.hasAttribute('outputAverages'),
-                        'GL2D-streaming has no outputAverages at the end.')
-        self.assertTrue(protClassify2.hasAttribute('outputClasses'),
-                        'GL2D-streaming has no outputClasses at the end.')
-

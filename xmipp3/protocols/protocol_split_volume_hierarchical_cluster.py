@@ -31,7 +31,7 @@ from shutil import copy
 
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_2_0
-from pyworkflow.utils.path import makePath, cleanPattern, moveFile
+from pyworkflow.utils.path import makePath, cleanPattern, moveFile, cleanPath
 from pwem.emlib.image import ImageHandler
 from pwem.constants import ALIGN_PROJ
 from pwem.objects import Image, Volume
@@ -42,8 +42,8 @@ from xmipp3.convert import (createItemMatrix, writeSetOfParticles,
                             rowToAlignment, setXmippAttributes, xmippToLocation)
 
 from pwem import emlib
-from xmipp3.base import findRow, writeInfoField, readInfoField
-from xmipp3.constants import SYM_URL
+from xmipp3.base import findRow, writeInfoField, readInfoField, isXmippCudaPresent
+from xmipp3.constants import SYM_URL, CUDA_ALIGN_SIGNIFICANT
 import numpy as np
 
 
@@ -320,7 +320,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
                 args = '-i %s -r %s -o images.xmd --odir %s' \
                        ' --keepBestN 1 --oUpdatedRefs %s ' % (fnToUse, mdRefName, join(fnDir,"level_%02d"%i), 'class_classes')
                 args += ' --dev %s ' %GpuListCuda
-                self.runJob("xmipp_cuda_align_significant", args, numberOfMpi=1)
+                self.runJob(CUDA_ALIGN_SIGNIFICANT, args, numberOfMpi=1)
             copy(join(fnDir,"level_%02d"%(self.class2dIterations.get()-1), "images.xmd"), join(fnDir,"images.xmd"))
 
             # After classification the stk and xmd files should be produced
@@ -513,7 +513,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
                 os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
 
             args = '-i %s -r %s -o %s --dev %s ' % (fnDirectional, fnGalleryMd, fnAngles, GpuListCuda)
-            self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+            self.runJob(CUDA_ALIGN_SIGNIFICANT, args, numberOfMpi=1)
 
         self.runJob("xmipp_metadata_utilities",
                     "-i %s --operate drop_column ref" % fnAngles, numberOfMpi=1)
@@ -523,9 +523,9 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
 
         # Local angular assignment
         fnAnglesLocalStk = self._getPath("directional_local_classes.stk")
-        args = "-i %s -o %s --sampling %f --Rmax %d --padding %d --ref %s --max_resolution %f --applyTo image1 --Nsimultaneous %d" % \
+        args = "-i %s -o %s --sampling %f --Rmax %d --padding %d --ref %s --max_resolution %f --applyTo image1 " % \
                (fnAngles, fnAnglesLocalStk, newTs, newXdim / 2, 2, fnVol,
-                self.targetResolution, 8)
+                self.targetResolution)
         args += " --optimizeShift --max_shift %f" % maxShift
         args += " --optimizeAngles --max_angular_change %f" % self.angularDistance
         self.runJob("xmipp_angular_continuous_assign2", args,
@@ -563,7 +563,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
                 os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
             if self.numberOfMpi.get()==1:
                 args += ' --device %s' % GpuListCuda
-                args += ' --thr %d' % self.fr_gpu_threads.get()
+            args += ' --thr %d' % self.fr_gpu_threads.get()
             if self.numberOfMpi.get()>1:
                 self.runJob('xmipp_cuda_reconstruct_fourier', args, numberOfMpi=len((self.gpuList.get()).split(','))+1)
             else:
@@ -766,12 +766,15 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
             volumesSet.setSamplingRate(origTs)
             for i in range(2):
                 vol = Volume()
+                fnVol = self._getExtraPath("split%d.vol" % (i + 1))
                 if origTs != lastTs:
                     newXdim = inputParticles.getXDim()
-                    self.runJob("xmipp_image_resize", "-i %s --dim %d"
-                                % (self._getExtraPath("split%d.vol" % (i + 1)),
-                                   newXdim), numberOfMpi=1)
-                vol.setLocation(1, self._getExtraPath("split%d.vol" % (i + 1)))
+                    self.runJob("xmipp_image_resize", "-i %s --dim %d" % (fnVol, newXdim), numberOfMpi=1)
+                fnMrc = self._getExtraPath("split%d.mrc" % (i + 1))
+                self.runJob("xmipp_image_convert", "-i %s -o %s -t vol" % (fnVol, fnMrc), numberOfMpi=1)
+                self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" % (fnMrc, origTs), numberOfMpi=1)
+                cleanPath(fnVol)
+                vol.setLocation(1, fnMrc)
                 volumesSet.append(vol)
 
             self._defineOutputs(outputVolumes=volumesSet)
@@ -827,6 +830,8 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
             validateMsgs.append('Please provide input particles.')
         if self.angularSampling.get()>40:
             validateMsgs.append("The angular sampling must be <= 40")
+        if self.useGpu and not isXmippCudaPresent():
+            validateMsgs.append("You have asked to use GPU, but I cannot find the Xmipp GPU programs")
         return validateMsgs
 
     def _summary(self):

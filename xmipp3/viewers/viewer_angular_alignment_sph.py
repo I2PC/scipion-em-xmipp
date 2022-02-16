@@ -32,13 +32,13 @@ import math
 import matplotlib.pyplot as plt
 from pyworkflow.utils.path import cleanPath
 from pwem.objects import SetOfParticles
-from xmipp3.protocols.protocol_angular_alignment_sph import XmippProtAngularAlignmentSPH
+from xmipp3.protocols.protocol_angular_alignment_zernike3d import XmippProtAngularAlignmentZernike3D
 
 
 class XmippAngularAlignmentSphViewer(ProtocolViewer):
     """ Visualize the output of protocol volume strain """
     _label = 'viewer angular align sph'
-    _targets = [XmippProtAngularAlignmentSPH]
+    _targets = [XmippProtAngularAlignmentZernike3D]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
 
     def __init__(self, **kwargs):
@@ -154,7 +154,7 @@ class XmippAngularAlignmentSphViewer(ProtocolViewer):
     #     prot = self.protocol
     #     project = prot.getProject()
     #     inputSet = prot.getInputParticles()
-    #     fnSqlite = prot._getTmpPath('cluster_particles.sqlite')
+    #     fnSqlite = prot._getExtraPath('cluster_particles.sqlite')
     #     cleanPath(fnSqlite)
     #     partSet = SetOfParticles(filename=fnSqlite)
     #     partSet.copyInfo(inputSet)

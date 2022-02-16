@@ -28,6 +28,7 @@ import numpy as np
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol import STEPS_PARALLEL
+from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
 from pwem.protocols import ProtAlignVolume
 from pwem.emlib.image import ImageHandler
@@ -35,12 +36,17 @@ import pwem.emlib.metadata as md
 from pwem.objects import Transform, Volume
 from pwem.constants import ALIGN_PROJ
 
+from pyworkflow.utils.path import cleanPath
+
 from xmipp3.convert import (rowToAlignment, alignmentToRow, writeSetOfParticles,
                             readSetOfParticles)
 from xmipp3.constants import SYM_URL
 
 ALIGN_MASK_CIRCULAR = 0
 ALIGN_MASK_BINARY_FILE = 1
+
+ALIGN_GLOBAL = 0
+ALIGN_LOCAL = 1
 
 
 class XmippProtAlignVolumeParticles(ProtAlignVolume):
@@ -72,10 +78,15 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
                       help='Select one set of particles to be aligned against '
                            'the reference set of particles using the transformation '
                            'calculated with the reference and input volumes.')
+        form.addParam('alignmentMode', params.EnumParam, default=ALIGN_GLOBAL, choices=["Global","Local"],
+                      label="Alignment mode")
         form.addParam('symmetryGroup', params.StringParam, default='c1',
                       label="Symmetry group",
                       help='See %s page for a description of the symmetries '
                            'accepted by Xmipp' % SYM_URL)
+        form.addParam('wrap', params.BooleanParam, default=False,
+                      label='Wrap', expertLevel=LEVEL_ADVANCED,
+                      help='Wrap the input volume when aligning to the reference')
         
         group1 = form.addGroup('Mask')
         group1.addParam('applyMask', params.BooleanParam, default=False, 
@@ -143,15 +154,21 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
     def alignVolumeStep(self, maskArgs):
 
         fhInputTranMat = self._getExtraPath('transformation-matrix.txt')
-        outVolFn = self._getExtraPath("inputVolumeAligned.vol")
+        outVolFn = self._getExtraPath("inputVolumeAligned.mrc")
       
         args = "--i1 %s --i2 %s --apply %s" % \
                (self.fnRefVol, self.fnInputVol, outVolFn)
         args += maskArgs
-        args += " --frm "
-        args += " --copyGeo %s" % fhInputTranMat        
+        if self.alignmentMode.get()==ALIGN_GLOBAL:
+            args += " --frm"
+        else:
+            args += " --local"
+        args += " --copyGeo %s" % fhInputTranMat
+        if not self.wrap:
+            args += ' --dontWrap'
         self.runJob("xmipp_volume_align", args)
-
+        cleanPath(self.fnRefVol)
+        cleanPath(self.fnInputVol)
 
     def alignParticlesStep(self):
 
@@ -176,11 +193,14 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
             alignmentToRow(resultMat, rowOut, ALIGN_PROJ)
             rowOut.addToMd(outputParts)
         outputParts.write(outParticlesFn)
+        cleanPath(self.imgsInputFn)
 
 
     def createOutputStep(self):   
 
-        outVolFn = self._getExtraPath("inputVolumeAligned.vol")
+        outVolFn = self._getExtraPath("inputVolumeAligned.mrc")
+        Ts = self.inputVolume.get().getSamplingRate()
+        self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(outVolFn,Ts))
         outVol = Volume()
         outVol.setLocation(outVolFn)
         #set transformation matrix             
@@ -190,7 +210,7 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
         transform = Transform()
         transform.setMatrix(transformationMat)
         outVol.setTransform(transform)
-        outVol.setSamplingRate(self.inputVolume.get().getSamplingRate())
+        outVol.setSamplingRate(Ts)
 
         outputArgs = {'outputVolume': outVol}
         self._defineOutputs(**outputArgs)

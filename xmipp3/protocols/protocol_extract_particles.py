@@ -32,11 +32,12 @@ from os.path import exists
 
 import pwem.emlib.metadata as md
 import pyworkflow.utils as pwutils
+from pyworkflow.object import Integer
 from pyworkflow.protocol.constants import (STEPS_PARALLEL, LEVEL_ADVANCED,
                                            STATUS_FINISHED)
 import pyworkflow.protocol.params as params
 from pwem.protocols import ProtExtractParticles
-from pwem.objects import Particle, Integer
+from pwem.objects import Particle
 
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import (micrographToCTFParam, writeMicCoordinates,
@@ -101,7 +102,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                            'itself may be affected so that a higher value may '
                            'be preferable.')
 
-        form.addParam('doInvert', params.BooleanParam, default=None,
+        form.addParam('doInvert', params.BooleanParam, default=True,
                       label='Invert contrast', 
                       help='Invert the contrast if your particles are black '
                            'over a white background.  Xmipp, Spider, Relion '
@@ -109,7 +110,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                            'background. Frealign (up to v9.07) requires black '
                            'particles over a white background')
         
-        form.addParam('doFlip', params.BooleanParam, default=None,
+        form.addParam('doFlip', params.BooleanParam, default=False,
                       label='Phase flipping',
                       help='Use the information from the CTF to compensate for '
                            'phase reversals.\n'
@@ -230,7 +231,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
                 fnCTF = None
 
             args = " -i %s --pos %s" % (fnLast, particlesMd)
-            args += " -o %s.mrc --Xdim %d" % (outputRoot, boxSize)
+            args += " -o %s.mrcs --Xdim %d" % (outputRoot, boxSize)
 
             if doInvert:
                 args += " --invert"
@@ -246,7 +247,7 @@ class XmippProtExtractParticles(ProtExtractParticles, XmippProtocol):
             # Normalize
             if normalizeArgs:
                 self.runJob('xmipp_transform_normalize',
-                            '-i %s.mrc %s' % (outputRoot, normalizeArgs))
+                            '-i %s.mrcs %s' % (outputRoot, normalizeArgs))
         else:
             self.warning("The micrograph %s hasn't coordinate file! "
                          % baseMicName)

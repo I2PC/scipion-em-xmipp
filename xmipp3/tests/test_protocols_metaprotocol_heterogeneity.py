@@ -68,7 +68,7 @@ class TestMetaprotHeterogeneity(BaseTest):
         protHeterogeneity = self.newProtocol(XmippMetaProtDiscreteHeterogeneityScheduler,
                                            inputVolume=protImportVol.outputVolume,
                                            inputParticles=protImportParts.outputParticles,
-                                           maxNumClasses=3,
+                                           maxNumClasses=2,
                                            symmetryGroup='d2',
                                            numberOfMpi=8)
         self.launchProtocol(protHeterogeneity)

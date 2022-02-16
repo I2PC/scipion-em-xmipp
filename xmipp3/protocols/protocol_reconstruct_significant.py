@@ -40,7 +40,9 @@ from pwem.constants import ALIGN_NONE
 from pwem.objects import SetOfClasses2D, Volume
 from pwem import emlib
 
+from xmipp3.constants import CUDA_ALIGN_SIGNIFICANT
 from xmipp3.convert import writeSetOfClasses2D, writeSetOfParticles, volumeToRow
+from xmipp3.base import isXmippCudaPresent
 
 
 class XmippProtReconstructSignificant(ProtInitialVolume):
@@ -72,7 +74,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
                       help='Select the input classes2D from the project.\n'
                            'It should be a SetOfClasses2D class with  class '
                            'representative')
-        form.addParam('symmetryGroup', TextParam, default='c1',
+        form.addParam('symmetryGroup', StringParam, default='c1',
                       label="Symmetry group",
                       help='See [[http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry][Symmetry]]'
                            'for a description of the symmetry groups format.'
@@ -280,7 +282,7 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
 
             args = '-i %s -r %s.doc -o %s --keepBestN %f --dev %s ' % \
                    (self.imgsFn, fnGalleryRoot, anglesFn, N, GpuListCuda)
-            self.runJob("xmipp_cuda_align_significant", args, numberOfMpi=1)
+            self.runJob(CUDA_ALIGN_SIGNIFICANT, args, numberOfMpi=1)
 
             cleanPattern(fnGalleryRoot + "*")
         else:
@@ -331,7 +333,6 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
                     GpuListAux = GpuListAux+str(elem)+','
                     count+=1
                 os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
-
             cudaReconsArgs += ' --thr %s' %  self.numberOfThreads.get()
             if self.numberOfMpi.get()==1:
                 cudaReconsArgs += ' --device %s' %(GpuListCuda)
@@ -373,6 +374,9 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
         if not self.keepIntermediate:
             cleanPath(prevVolFn, iterDir)
 
+        if self.thereisRefVolume:
+            cleanPath(self._getExtraPath('filteredVolume.vol'))
+
     def convertInputStep(self, classesFn):
         inputSet = self.inputSet.get()
 
@@ -412,7 +416,8 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
         # previously
         if self.thereisRefVolume:
             fnFilVol = self._getExtraPath('filteredVolume.vol')
-            copy(self.refVolume.get().getFileName(), fnFilVol)
+            self.runJob("xmipp_image_convert", "-i %s -o %s -t vol" % (self.refVolume.get().getFileName(), fnFilVol),
+                        numberOfMpi=1)
             # TsVol = self.refVolume.get().getSamplingRate()
             if self.useMaxRes:
                 if self.newXdim != Xdim:
@@ -439,18 +444,23 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
 
     def createOutputStep(self):
         lastIter = self.getLastIteration(1)
+        Ts = self.inputSet.get().getSamplingRate()
 
         # To recover the original size of the volume if it was changed
-        volFn = self.getIterVolume(lastIter)
+        fnVol = self.getIterVolume(lastIter)
         Xdim = self.inputSet.get().getDimensions()[0]
         if self.useMaxRes and self.newXdim != Xdim:
             self.runJob('xmipp_image_resize', "-i %s --fourier %d" %
-                        (volFn, Xdim), numberOfMpi=1)
+                        (fnVol, Xdim), numberOfMpi=1)
+        fnMrc = fnVol.replace(".vol",".mrc")
+        self.runJob("xmipp_image_convert","-i %s -o %s -t vol"%(fnVol,fnMrc),numberOfMpi=1)
+        cleanPath(fnVol)
+        self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(fnMrc,Ts),numberOfMpi=1)
 
         vol = Volume()
         vol.setObjComment('significant volume 1')
-        vol.setLocation(volFn)
-        vol.setSamplingRate(self.inputSet.get().getSamplingRate())
+        vol.setLocation(fnMrc)
+        vol.setSamplingRate(Ts)
         self._defineOutputs(outputVolume=vol)
         self._defineSourceRelation(self.inputSet, vol)
 
@@ -473,6 +483,9 @@ class XmippProtReconstructSignificant(ProtInitialVolume):
         if (100 - self.alpha0.get()) / 100.0 * (SL.getTrueSymsNo() + 1) > 1:
             errors.append("Increase the initial significance it is too low "
                           "for this symmetry")
+
+        if self.useGpu and not isXmippCudaPresent():
+            errors.append("You have asked to use GPU, but I cannot find Xmipp GPU programs in the path")
         return errors
 
     def _summary(self):

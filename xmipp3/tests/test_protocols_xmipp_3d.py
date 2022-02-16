@@ -48,6 +48,10 @@ from xmipp3.protocols.protocol_align_volume import (ALIGN_ALGORITHM_EXHAUSTIVE,
                                                ALIGN_ALGORITHM_EXHAUSTIVE_LOCAL,
                                                ALIGN_ALGORITHM_LOCAL)
 
+MSG_WRONG_SAMPLING = "wrong sampling rate"
+MSG_WRONG_SIZE = "wrong size"
+MSG_MASK_ERROR = "There was a problem with create mask from volume"
+
 
 class TestXmippBase(BaseTest):
     """ Some utility functions to import volumes that are used in several tests."""
@@ -120,7 +124,7 @@ class TestXmippCreateMask3D(TestXmippBase):
         protMask1.setObjLabel('threshold mask')
         self.launchProtocol(protMask1)
         self.assertIsNotNone(protMask1.outputMask,
-                             "There was a problem with create mask from volume")
+                             MSG_MASK_ERROR)
 
 
         print("Run create segment mask from volume")
@@ -131,7 +135,7 @@ class TestXmippCreateMask3D(TestXmippBase):
         protMask2.setObjLabel('segmentation automatic')
         self.launchProtocol(protMask2)
         self.assertIsNotNone(protMask2.outputMask,
-                             "There was a problem with create mask from volume")
+                             MSG_MASK_ERROR)
 
     
         print("Run create mask from another mask")
@@ -788,21 +792,56 @@ class TestXmippProtAlignVolume(TestXmippBase):
                                      )
         protAlign.inputVolumes.append(self.protImport2.outputVolume)
         self.launchProtocol(protAlign)
-        
 
-class TestXmippConvertToPseudoatoms(TestXmippBase):
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        TestXmippBase.setData()
-        cls.protImport = cls.runImportVolumes(cls.vol1, 9.896)
+    def testExhaustiveCircularMask(self):
+        protAlign = self.newProtocol(XmippProtAlignVolume,
+                                     inputReference=self.protImport1.outputVolume,
+                                     alignmentAlgorithm=ALIGN_ALGORITHM_EXHAUSTIVE,
+                                     minRotationalAngle=65,
+                                     maxRotationalAngle=100,
+                                     stepRotationalAngle=10,
+                                     minTiltAngle=65,
+                                     maxTiltAngle=100,
+                                     stepTiltAngle=10,
+                                     minInplaneAngle=0,
+                                     maxInplaneAngle=0,
+                                     stepInplaneAngle=0,
+                                     applyMask=True,
+                                     maskType=0,
+                                     maskRadius=22,
+                                     numberOfMpi=1, numberOfThreads=1
+                                     )
+        protAlign.inputVolumes.append(self.protImport2.outputVolume)
+        self.launchProtocol(protAlign)
 
-    def testConvertToPseudoatoms(self):
-        print("Run convert to pseudoatoms")
-        prot = XmippProtConvertToPseudoAtoms(pseudoAtomTarget=15)
-        prot.inputStructure.set(self.protImport.outputVolume)
-        self.proj.launchProtocol(prot, wait=True)
-        self.assertIsNotNone(prot.outputPdb, "There was a problem with Convert to pseudoatoms output Pdb")
+    def testExhaustiveBinaryMask(self):
+        protMask = self.newProtocol(XmippProtCreateMask3D,
+                                    source=0,
+                                    volumeOperation=0,
+                                    threshold=0.0)
+        protMask.inputVolume.set(self.protImport1.outputVolume)
+        self.launchProtocol(protMask)
+        self.assertIsNotNone(protMask.outputMask,
+                             MSG_MASK_ERROR)
+        protAlign = self.newProtocol(XmippProtAlignVolume,
+                                     inputReference=self.protImport1.outputVolume,
+                                     alignmentAlgorithm=ALIGN_ALGORITHM_EXHAUSTIVE,
+                                     minRotationalAngle=65,
+                                     maxRotationalAngle=100,
+                                     stepRotationalAngle=10,
+                                     minTiltAngle=65,
+                                     maxTiltAngle=100,
+                                     stepTiltAngle=10,
+                                     minInplaneAngle=0,
+                                     maxInplaneAngle=0,
+                                     stepInplaneAngle=0,
+                                     applyMask=True,
+                                     maskType=1,
+                                     numberOfMpi=1, numberOfThreads=1
+                                     )
+        protAlign.inputVolumes.append(self.protImport2.outputVolume)
+        protAlign.maskFile.set(protMask.outputMask)
+        self.launchProtocol(protAlign)
 
 
 class TestXmippProtHelicalParameters(TestXmippBase):
@@ -1047,7 +1086,8 @@ class TestPdbImport(TestXmippBase):
         self.launchProtocol(protConvert)
         self.assertIsNotNone(protConvert.outputPdb.getFileName(), 
                              "There was a problem with the import")
-        
+
+
 class TestXmippPdbConvert(TestXmippBase):
     
     @classmethod
@@ -1058,11 +1098,14 @@ class TestXmippPdbConvert(TestXmippBase):
     
     def testXmippPdbConvertFromDb(self):
         print("Run convert a pdb from database")
-        protConvert = self.newProtocol(XmippProtConvertPdb, pdbId="3j3i", sampling=4, setSize=True, size=100)
+        protConvert = self.newProtocol(XmippProtConvertPdb, pdbId="3j3i", sampling=4, setSize=True,
+                                       size_z=100, size_y=100, size_x=100)
         self.launchProtocol(protConvert)
         self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
-        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1, msg="wrong sampling rate")
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size.get(), places=1, msg="wrong size")
+        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
+                               msg=MSG_WRONG_SAMPLING)
+        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1,
+                               msg=MSG_WRONG_SIZE)
         
     def testXmippPdbConvertFromObj(self):
         print("Run convert a pdb from import")
@@ -1074,20 +1117,23 @@ class TestXmippPdbConvert(TestXmippBase):
         
         protConvert = self.newProtocol(XmippProtConvertPdb, 
                                        inputPdbData=XmippProtConvertPdb.IMPORT_OBJ, 
-                                       sampling=3, setSize=True, size=20)
+                                       sampling=3, setSize=True, size_z=20, size_y=20, size_x=20)
         protConvert.pdbObj.set(protImport.outputPdb)
         self.launchProtocol(protConvert)
         self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
-        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1, msg="wrong sampling rate")
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size.get(), places=1, msg="wrong size")
+        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
+                               msg=MSG_WRONG_SAMPLING)
+        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1,
+                               msg=MSG_WRONG_SIZE)
 
     def testXmippPdbConvertFromFn(self):
         print("Run convert a pdb from file")
-        protConvert = self.newProtocol(XmippProtConvertPdb,inputPdbData=2, pdbFile=self.pdb, sampling=2, setSize=True)
+        protConvert = self.newProtocol(XmippProtConvertPdb,inputPdbData=2, pdbFile=self.pdb, sampling=2, setSize=False)
         self.launchProtocol(protConvert)
         self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
-        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1, msg="wrong sampling rate")
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], 48, places=1, msg="wrong size")
+        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
+                               msg=MSG_WRONG_SAMPLING)
+        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], 48, places=1, msg=MSG_WRONG_SIZE)
 
 
 class TestXmippValidateNonTilt(TestXmippBase):
@@ -1150,6 +1196,466 @@ class TestXmippValidateNonTilt(TestXmippBase):
         protValidate.setObjLabel('Validate Non-Tilt projection matching')
         self.launchProtocol(protValidate)
         self.assertIsNotNone(protValidate.outputVolumes, "There was a problem with Validate Non-Tilt")
+
+
+class TestXmippVolSubtraction(TestXmippBase):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
+        cls.vol1 = cls.dataset.getFile('volumes/volume_1_iter_002.mrc')
+        cls.vol2 = cls.dataset.getFile('volumes/volume_2_iter_002.mrc')
+
+    def testXmippVolSub(self):
+        print("Import Volume 1")
+        protImportVol1 = self.newProtocol(ProtImportVolumes,
+                                         objLabel='Volume',
+                                         filesPath=self.vol1,
+                                         samplingRate=7.08)
+        self.launchProtocol(protImportVol1)
+        self.assertIsNotNone(protImportVol1.getFiles(),
+                             "There was a problem with the import 1")
+
+        print("Import Volume 2")
+        protImportVol2 = self.newProtocol(ProtImportVolumes,
+                                          objLabel='Volume',
+                                          filesPath=self.vol2,
+                                          samplingRate=7.08)
+        self.launchProtocol(protImportVol2)
+        self.assertIsNotNone(protImportVol2.getFiles(),
+                             "There was a problem with the import 2")
+
+        print("Import atomic structure")
+        protImportPdb = self.newProtocol(ProtImportPdb,
+                                          pdbId='6Z9F',
+                                          inputVolume=protImportVol1.outputVolume)
+        self.launchProtocol(protImportPdb)
+        self.assertIsNotNone(protImportPdb.getFiles(),
+                             "There was a problem with the atomic structure")
+
+        print("Create mask")
+        protCreateMask = self.newProtocol(XmippProtCreateMask3D,
+                                          inputVolume=protImportVol1.outputVolume,
+                                          threshold=0.28)
+        self.launchProtocol(protCreateMask)
+        self.assertIsNotNone(protCreateMask.getFiles(),
+                             "There was a problem with the 3D mask")
+
+        print("Run volume adjust")
+        protVolAdj = self.newProtocol(XmippProtVolAdjust,
+                                      vol1=protImportVol1.outputVolume,
+                                      vol2=protImportVol2.outputVolume,
+                                      masks=False)
+        self.launchProtocol(protVolAdj)
+        self.assertIsNotNone(protVolAdj.outputVolume,
+                             "There was a problem with Volumes adjust")
+
+        protVolAdjNoE = self.newProtocol(XmippProtVolAdjust,
+                                         vol1=protImportVol1.outputVolume,
+                                         vol2=protImportVol2.outputVolume,
+                                         computeE=False,
+                                         masks=False)
+        self.launchProtocol(protVolAdjNoE)
+        self.assertIsNotNone(protVolAdjNoE.outputVolume,
+                             "There was a problem with Volumes adjust without computing energy")
+
+        protVolAdjNoRadAvg = self.newProtocol(XmippProtVolAdjust,
+                                              vol1=protImportVol1.outputVolume,
+                                              vol2=protImportVol2.outputVolume,
+                                              masks=False,
+                                              radavg=False)
+        self.launchProtocol(protVolAdjNoRadAvg)
+        self.assertIsNotNone(protVolAdjNoRadAvg.outputVolume,
+                             "There was a problem with Volumes adjust without radial average")
+
+        print("Run volume subtraction")
+        protVolSub = self.newProtocol(XmippProtVolSubtraction,
+                                      vol1=protImportVol1.outputVolume,
+                                      vol2=protImportVol2.outputVolume,
+                                      masks=False,
+                                      radavg=False)
+        self.launchProtocol(protVolSub)
+        self.assertIsNotNone(protVolSub.outputVolume,
+                             "There was a problem with Volumes subtraction")
+
+        protVolSubNoE = self.newProtocol(XmippProtVolSubtraction,
+                                         vol1=protImportVol1.outputVolume,
+                                         vol2=protImportVol2.outputVolume,
+                                         computeE=False,
+                                         masks=False,
+                                         radavg=False)
+        self.launchProtocol(protVolSubNoE)
+        self.assertIsNotNone(protVolSubNoE.outputVolume,
+                             "There was a problem with Volumes subtraction without computing energy")
+
+        protVolSubMask = self.newProtocol(XmippProtVolSubtraction,
+                                      vol1=protImportVol1.outputVolume,
+                                      vol2=protImportVol2.outputVolume,
+                                      radavg=False,
+                                      mask1=protCreateMask.outputMask,
+                                      mask2=protCreateMask.outputMask)
+        self.launchProtocol(protVolSubMask)
+        self.assertIsNotNone(protVolSubMask.outputVolume,
+                             "There was a problem with Volumes subtraction with masks")
+
+        protVolSubRadAvg = self.newProtocol(XmippProtVolSubtraction,
+                                      vol1=protImportVol1.outputVolume,
+                                      vol2=protImportVol2.outputVolume,
+                                      masks=False)
+        self.launchProtocol(protVolSubRadAvg)
+        self.assertIsNotNone(protVolSubRadAvg.outputVolume,
+                             "There was a problem with Volumes subtraction radial average")
+
+        protVolSubPdb = self.newProtocol(XmippProtVolSubtraction,
+                                      vol1=protImportVol1.outputVolume,
+                                      pdb=True,
+                                      pdbObj=protImportPdb.outputPdb,
+                                      masks=False)
+        self.launchProtocol(protVolSubPdb)
+        self.assertIsNotNone(protVolSubPdb.outputVolume,
+                             "There was a problem with Volumes subtraction pdb")
+
+        print("Run volume consensus")
+        protVolConsensus = self.newProtocol(XmippProtVolConsensus,
+                                            vols=[protImportVol1.outputVolume, protImportVol2.outputVolume,
+                                                  protVolAdj.outputVolume])
+        self.launchProtocol(protVolConsensus)
+        self.assertIsNotNone(protVolConsensus.outputVolume,
+                             "There was a problem with Volumes consensus")
+
+
+class TestXmippVolPhantom(TestXmippBase):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testXmippPhantomVol(self):
+        protCreatePhantom = self.newProtocol(XmippProtPhantom)
+        self.launchProtocol(protCreatePhantom)
+        self.assertIsNotNone(protCreatePhantom.getFiles(),  "There was a problem with phantom creation")
+        self.assertEqual(protCreatePhantom.outputVolume.getSamplingRate(), 4,
+                         "There was a problem with the sampling rate value of output phantom")
+        self.assertEqual(protCreatePhantom.outputVolume.getDim(), (40, 40, 40),
+                         "There was a problem with the dimensions of output phantom")
+
+
+class TestXmippShiftParticlesAndVolume(TestXmippBase):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
+        cls.vol1 = cls.dataset.getFile('volumes/volume_1_iter_002.mrc')
+
+    def testXmippShiftParticlesAndVolume(self):
+
+        ERROR_SIZE_PART = "There was a problem with the size of output set of particles"
+        ERROR_DIM = "There was a problem with the dimensions of output "
+        ERROR_SR = "There was a problem with the sampling rate value of output "
+        ERROR_SHIFT = "There was a problem with output shift "
+
+        protImportVol = self.newProtocol(ProtImportVolumes,
+                                          objLabel='Volume',
+                                          filesPath=self.vol1,
+                                          samplingRate=7.08)
+        self.launchProtocol(protImportVol)
+        self.assertIsNotNone(protImportVol.getFiles(),
+                             "There was a problem with the volume import")
+
+        protCreateGallery = self.newProtocol(XmippProtCreateGallery,
+                                             inputVolume=protImportVol.outputVolume,
+                                             rotStep=15.0,
+                                             tiltStep=90.0)
+        self.launchProtocol(protCreateGallery)
+        self.assertIsNotNone(protCreateGallery.getFiles(),
+                             "There was a problem with create gallery")
+
+        protShiftParticles = self.newProtocol(XmippProtShiftParticles,
+                                              inputParticles=protCreateGallery.outputReprojections,
+                                              xin=2.0, yin=3.0, zin=4.0)
+        self.launchProtocol(protShiftParticles)
+        self.assertIsNotNone(protShiftParticles.getFiles(),
+                             "There was a problem with shift particles")
+        self.assertEqual(protShiftParticles.outputParticles.getSamplingRate(), 7.08, (ERROR_SR, "particles"))
+        self.assertEqual(protShiftParticles.outputParticles.getFirstItem().getDim(), (64, 64, 1),
+                         (ERROR_DIM, "particles"))
+        self.assertEqual(protShiftParticles.outputParticles.getSize(), 181, ERROR_SIZE_PART)
+        self.assertEqual(protShiftParticles.shiftX.get(), 2.0, (ERROR_SHIFT, "x"))
+        self.assertEqual(protShiftParticles.shiftY.get(), 3.0, (ERROR_SHIFT, "y"))
+        self.assertEqual(protShiftParticles.shiftZ.get(), 4.0, (ERROR_SHIFT, "z"))
+
+        protCreateMask = self.newProtocol(XmippProtCreateMask3D,
+                                          inputVolume=protImportVol.outputVolume,
+                                          threshold=0.1)
+        self.launchProtocol(protCreateMask)
+        self.assertIsNotNone(protCreateMask.getFiles(),
+                             "There was a problem with the 3D mask ")
+
+        protShiftParticlesCenterOfMass = self.newProtocol(XmippProtShiftParticles,
+                                                          inputParticles=protCreateGallery.outputReprojections,
+                                                          inputMask=protCreateMask.outputMask,
+                                                          option=False)
+        self.launchProtocol(protShiftParticlesCenterOfMass)
+        self.assertIsNotNone(protShiftParticlesCenterOfMass.getFiles(),
+                             "There was a problem with shift particles to center of mass")
+        self.assertEqual(protShiftParticlesCenterOfMass.outputParticles.getSamplingRate(), 7.08, (ERROR_SR, "particles"))
+        self.assertEqual(protShiftParticlesCenterOfMass.outputParticles.getFirstItem().getDim(), (64, 64, 1),
+                         (ERROR_DIM, "particles"))
+        self.assertEqual(protShiftParticlesCenterOfMass.outputParticles.getSize(), 181, ERROR_SIZE_PART)
+        self.assertEqual(protShiftParticlesCenterOfMass.shiftX.get(), 32.0, (ERROR_SHIFT, "x"))
+        self.assertEqual(protShiftParticlesCenterOfMass.shiftY.get(), 32.0, (ERROR_SHIFT, "y"))
+        self.assertEqual(protShiftParticlesCenterOfMass.shiftZ.get(), 32.0, (ERROR_SHIFT, "z"))
+
+        protShiftVolPart = self.newProtocol(XmippProtShiftVolume,
+                                            inputVol=protImportVol.outputVolume,
+                                            inputProtocol=protShiftParticles)
+        self.launchProtocol(protShiftVolPart)
+        self.assertIsNotNone(protShiftVolPart.getFiles(),
+                             "There was a problem with shift volume with particle shifts")
+        self.assertEqual(protShiftVolPart.outputVolume.getSamplingRate(), 7.08, (ERROR_SR, "volume"))
+        self.assertEqual(protShiftVolPart.outputVolume.getDim(), (64, 64, 64), (ERROR_DIM, "volume"))
+        self.assertEqual(protShiftVolPart.shiftX.get(), 2.0, (ERROR_SHIFT, "x"))
+        self.assertEqual(protShiftVolPart.shiftY.get(), 3.0, (ERROR_SHIFT, "y"))
+        self.assertEqual(protShiftVolPart.shiftZ.get(), 4.0, (ERROR_SHIFT, "z"))
+
+        protShiftVolCrop = self.newProtocol(XmippProtShiftVolume,
+                                            inputVol=protImportVol.outputVolume,
+                                            shiftBool=False,
+                                            x=5, y=5, z=5,
+                                            boxSizeBool=False,
+                                            boxSize=32)
+        self.launchProtocol(protShiftVolCrop)
+        self.assertIsNotNone(protShiftVolCrop.getFiles(),
+                             "There was a problem with shift crop volume")
+        self.assertEqual(protShiftVolCrop.outputVolume.getSamplingRate(), 7.08, (ERROR_SR, "volume"))
+        self.assertEqual(protShiftVolCrop.outputVolume.getDim(), (32, 32, 32), (ERROR_DIM, "volume"))
+        self.assertEqual(protShiftVolCrop.shiftX.get(), 5.0, (ERROR_SHIFT, "x"))
+        self.assertEqual(protShiftVolCrop.shiftY.get(), 5.0, (ERROR_SHIFT, "y"))
+        self.assertEqual(protShiftVolCrop.shiftZ.get(), 5.0, (ERROR_SHIFT, "z"))
+
+        protShiftVolPad = self.newProtocol(XmippProtShiftVolume,
+                                           inputVol=protImportVol.outputVolume,
+                                           shiftBool=False,
+                                           x=5, y=5, z=5,
+                                           boxSizeBool=False,
+                                           boxSize=80)
+        self.launchProtocol(protShiftVolPad)
+        self.assertIsNotNone(protShiftVolPad.getFiles(),
+                             "There was a problem with shift pad volume")
+        self.assertEqual(protShiftVolCrop.outputVolume.getSamplingRate(), 7.08, (ERROR_SR, "volume"))
+        self.assertEqual(protShiftVolPad.outputVolume.getDim(), (80, 80, 80), (ERROR_DIM, "volume"))
+        self.assertEqual(protShiftVolPad.shiftX.get(), 5.0, (ERROR_SHIFT, "x"))
+        self.assertEqual(protShiftVolPad.shiftY.get(), 5.0, (ERROR_SHIFT, "y"))
+        self.assertEqual(protShiftVolPad.shiftZ.get(), 5.0, (ERROR_SHIFT, "z"))
+
+
+class TestXmippProjSubtraction(TestXmippBase):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testXmippProjSub(self):
+
+        ERROR_SIZE_PART = "There was a problem with the size of output set of particles"
+        ERROR_DIM = "There was a problem with the dimensions of output "
+        ERROR_SR = "There was a problem with the sampling rate value of output "
+
+        protCreatePhantom2items = self.newProtocol(XmippProtPhantom,
+                                               desc='80 80 80 0\nsph + 1 15 15 0 10\nsph + 5 -15 -15 0 10',
+                                               sampling=1.0)
+        self.launchProtocol(protCreatePhantom2items)
+        self.assertIsNotNone(protCreatePhantom2items.getFiles(),
+                             "There was a problem with phantom with 2 items creation")
+        protCreateGallery = self.newProtocol(XmippProtCreateGallery,
+                                             inputVolume=protCreatePhantom2items.outputVolume,
+                                             rotStep=15.0,
+                                             tiltStep=90.0)
+        self.launchProtocol(protCreateGallery)
+        self.assertIsNotNone(protCreateGallery.getFiles(),
+                             "There was a problem with create gallery")
+        protCreateMask = self.newProtocol(XmippProtCreateMask3D,
+                                          inputVolume=protCreatePhantom2items.outputVolume,
+                                          threshold=0.1)
+        self.launchProtocol(protCreateMask)
+        self.assertIsNotNone(protCreateMask.getFiles(),
+                             "There was a problem with the 3D mask of the 2 items phantom")
+        protCreatePhantom1item = self.newProtocol(XmippProtPhantom,
+                                                  desc='80 80 80 0\nsph + 1 -15 -15 0 10',
+                                                  sampling=1.0)
+        self.launchProtocol(protCreatePhantom1item)
+        self.assertIsNotNone(protCreatePhantom1item.getFiles(),
+                             "There was a problem with phantom with 1 item creation")
+        protCreateMaskKeep = self.newProtocol(XmippProtCreateMask3D,
+                                              inputVolume=protCreatePhantom1item.outputVolume,
+                                              threshold=0.1)
+        self.launchProtocol(protCreateMaskKeep)
+        self.assertIsNotNone(protCreateMaskKeep.getFiles(),
+                             "There was a problem with the 3D mask of the 1 item phantom")
+        protSubtractProj = self.newProtocol(XmippProtSubtractProjection,
+                                            particles=protCreateGallery.outputReprojections,
+                                            vol=protCreatePhantom2items.outputVolume,
+                                            maskVol=protCreateMask.outputMask,
+                                            mask=protCreateMaskKeep.outputMask,
+                                            saveFiles=True)
+        self.launchProtocol(protSubtractProj)
+        self.assertIsNotNone(protSubtractProj.outputParticles,
+                             "There was a problem with projection subtraction")
+        self.assertEqual(protSubtractProj.outputParticles.getSamplingRate(), 1.0, (ERROR_SR, "particles"))
+        self.assertEqual(protSubtractProj.outputParticles.getFirstItem().getDim(), (80, 80, 1),
+                         (ERROR_DIM, "particles"))
+        self.assertEqual(protSubtractProj.outputParticles.getSize(), 181, ERROR_SIZE_PART)
+
+        protCreateGalleryShift = self.newProtocol(XmippProtCreateGallery,
+                                                  inputVolume=protCreatePhantom2items.outputVolume,
+                                                  rotStep=15.0,
+                                                  tiltStep=90.0,
+                                                  shiftSigma=10)
+        self.launchProtocol(protCreateGalleryShift)
+        self.assertIsNotNone(protCreateGalleryShift.getFiles(),
+                             "There was a problem with create gallery shifted")
+        protSubtractProjShift = self.newProtocol(XmippProtSubtractProjection,
+                                                 particles=protCreateGalleryShift.outputReprojections,
+                                                 vol=protCreatePhantom2items.outputVolume,
+                                                 maskVol=protCreateMask.outputMask,
+                                                 mask=protCreateMaskKeep.outputMask,
+                                                 saveFiles=True)
+        self.launchProtocol(protSubtractProjShift)
+        self.assertIsNotNone(protSubtractProjShift.outputParticles,
+                             "There was a problem with projection subtraction shifted")
+        self.assertEqual(protSubtractProjShift.outputParticles.getSamplingRate(), 1.0, (ERROR_SR, "particles"))
+        self.assertEqual(protSubtractProjShift.outputParticles.getFirstItem().getDim(), (80, 80, 1),
+                         (ERROR_DIM, "particles"))
+        self.assertEqual(protSubtractProjShift.outputParticles.getSize(), 181, ERROR_SIZE_PART)
+
+        protSimulateCTF = self.newProtocol(XmippProtSimulateCTF,
+                                           inputParticles=protCreateGallery.outputReprojections)
+        self.launchProtocol(protSimulateCTF)
+        self.assertIsNotNone(protSimulateCTF.outputParticles,
+                             "There was a problem with CTF simulation")
+        protSubtractProjCTF = self.newProtocol(XmippProtSubtractProjection,
+                                               particles=protSimulateCTF.outputParticles,
+                                               vol=protCreatePhantom2items.outputVolume,
+                                               maskVol=protCreateMask.outputMask,
+                                               mask=protCreateMaskKeep.outputMask,
+                                               saveFiles=True)
+        self.launchProtocol(protSubtractProjCTF)
+        self.assertIsNotNone(protSubtractProjCTF.outputParticles,
+                             "There was a problem with projection subtraction CTF")
+        self.assertEqual(protSubtractProjCTF.outputParticles.getSamplingRate(), 1.0, (ERROR_SR, "particles"))
+        self.assertEqual(protSubtractProjCTF.outputParticles.getFirstItem().getDim(), (80, 80, 1),
+                         (ERROR_DIM, "particles"))
+        self.assertEqual(protSubtractProjCTF.outputParticles.getSize(), 181, ERROR_SIZE_PART)
+
+        protAddNoise = self.newProtocol(XmippProtAddNoiseParticles,
+                                        input=protCreateGallery.outputReprojections,
+                                        gaussianStd=50.0)
+        self.launchProtocol(protAddNoise)
+        self.assertIsNotNone(protAddNoise.outputParticles,
+                             "There was a problem with add noise protocol")
+        protSubtractProjNoise = self.newProtocol(XmippProtSubtractProjection,
+                                                 particles=protAddNoise.outputParticles,
+                                                 vol=protCreatePhantom2items.outputVolume,
+                                                 maskVol=protCreateMask.outputMask,
+                                                 mask=protCreateMaskKeep.outputMask,
+                                                 saveFiles=True)
+        self.launchProtocol(protSubtractProjNoise)
+        self.assertIsNotNone(protSubtractProjNoise.outputParticles,
+                             "There was a problem with projection subtraction with noise")
+        self.assertEqual(protSubtractProjNoise.outputParticles.getSamplingRate(), 1.0, (ERROR_SR, "particles"))
+        self.assertEqual(protSubtractProjNoise.outputParticles.getFirstItem().getDim(), (80, 80, 1),
+                         (ERROR_DIM, "particles"))
+        self.assertEqual(protSubtractProjNoise.outputParticles.getSize(), 181, ERROR_SIZE_PART)
+        protAddNoiseCTF = self.newProtocol(XmippProtAddNoiseParticles,
+                                           input=protSimulateCTF.outputParticles,
+                                           gaussianStd=50.0)
+        self.launchProtocol(protAddNoiseCTF)
+        self.assertIsNotNone(protAddNoiseCTF.outputParticles,
+                             "There was a problem with add noise to ctf particles protocol")
+        protSubtractProjNoiseCTF = self.newProtocol(XmippProtSubtractProjection,
+                                                    particles=protAddNoiseCTF.outputParticles,
+                                                    vol=protCreatePhantom2items.outputVolume,
+                                                    maskVol=protCreateMask.outputMask,
+                                                    mask=protCreateMaskKeep.outputMask,
+                                                    saveFiles=True)
+        self.launchProtocol(protSubtractProjNoiseCTF)
+        self.assertIsNotNone(protSubtractProjNoiseCTF.outputParticles,
+                             "There was a problem with projection subtraction with noise and CTF")
+        self.assertEqual(protSubtractProjNoiseCTF.outputParticles.getSamplingRate(), 1.0, (ERROR_SR, "particles"))
+        self.assertEqual(protSubtractProjNoiseCTF.outputParticles.getFirstItem().getDim(), (80, 80, 1),
+                         (ERROR_DIM, "particles"))
+        self.assertEqual(protSubtractProjNoiseCTF.outputParticles.getSize(), 181, ERROR_SIZE_PART)
+        protCreatePhantom2Over = self.newProtocol(XmippProtPhantom,
+                                                  desc='80 80 80 0\nsph + 1 5 5 0 10\nsph + 5 -5 -5 0 10',
+                                                  sampling=1.0)
+        self.launchProtocol(protCreatePhantom2Over)
+        self.assertIsNotNone(protCreatePhantom2Over.getFiles(),
+                             "There was a problem with phantom with 2 items overlap creation")
+        protCreateGalleryOver = self.newProtocol(XmippProtCreateGallery,
+                                                 inputVolume=protCreatePhantom2Over.outputVolume,
+                                                 rotStep=15.0,
+                                                 tiltStep=90.0,
+                                                 shiftSigma=10)
+        self.launchProtocol(protCreateGalleryOver)
+        self.assertIsNotNone(protCreateGalleryOver.getFiles(),
+                             "There was a problem with create gallery overlap")
+        protCreateMaskOver = self.newProtocol(XmippProtCreateMask3D,
+                                              inputVolume=protCreatePhantom2Over.outputVolume,
+                                              threshold=0.1)
+        self.launchProtocol(protCreateMaskOver)
+        self.assertIsNotNone(protCreateMaskOver.getFiles(),
+                             "There was a problem with the 3D mask of the 2 items overlap phantom")
+        protCreatePhantom1Over = self.newProtocol(XmippProtPhantom,
+                                                  desc='80 80 80 0\nsph + 1 -5 -5 0 10',
+                                                  sampling=1.0)
+        self.launchProtocol(protCreatePhantom1Over)
+        self.assertIsNotNone(protCreatePhantom1Over.getFiles(),
+                             "There was a problem with phantom with 1 item overlap creation")
+        protCreateMaskKeepOver = self.newProtocol(XmippProtCreateMask3D,
+                                                  inputVolume=protCreatePhantom1Over.outputVolume,
+                                                  threshold=0.1)
+        self.launchProtocol(protCreateMaskKeepOver)
+        self.assertIsNotNone(protCreateMaskKeepOver.getFiles(),
+                             "There was a problem with the 3D mask of the 1 item overlap phantom")
+        protSubtractProjOver = self.newProtocol(XmippProtSubtractProjection,
+                                                particles=protCreateGalleryOver.outputReprojections,
+                                                vol=protCreatePhantom2Over.outputVolume,
+                                                maskVol=protCreateMaskOver.outputMask,
+                                                mask=protCreateMaskKeepOver.outputMask,
+                                                saveFiles=True)
+        self.launchProtocol(protSubtractProjOver)
+        self.assertIsNotNone(protSubtractProjOver.outputParticles,
+                             "There was a problem with projection subtraction with overlap")
+        self.assertEqual(protSubtractProjOver.outputParticles.getSamplingRate(), 1.0, (ERROR_SR, "particles"))
+        self.assertEqual(protSubtractProjOver.outputParticles.getFirstItem().getDim(), (80, 80, 1),
+                         (ERROR_DIM, "particles"))
+        self.assertEqual(protSubtractProjOver.outputParticles.getSize(), 181, ERROR_SIZE_PART)
+        protSimulateCTFOver = self.newProtocol(XmippProtSimulateCTF,
+                                               inputParticles=protCreateGalleryOver.outputReprojections)
+        self.launchProtocol(protSimulateCTFOver)
+        self.assertIsNotNone(protSimulateCTFOver.outputParticles,
+                             "There was a problem with overlap CTF simulation")
+        protAddNoiseCTFOver = self.newProtocol(XmippProtAddNoiseParticles,
+                                               input=protSimulateCTFOver.outputParticles,
+                                               gaussianStd=50.0)
+        self.launchProtocol(protAddNoiseCTFOver)
+        self.assertIsNotNone(protAddNoiseCTFOver.outputParticles,
+                             "There was a problem with add noise to ctf overlap particles protocol")
+        protSubtractProjNoiseCTFOver = self.newProtocol(XmippProtSubtractProjection,
+                                                        particles=protAddNoiseCTFOver.outputParticles,
+                                                        vol=protCreatePhantom2Over.outputVolume,
+                                                        maskVol=protCreateMaskOver.outputMask,
+                                                        mask=protCreateMaskKeepOver.outputMask,
+                                                        saveFiles=True)
+        self.launchProtocol(protSubtractProjNoiseCTFOver)
+        self.assertIsNotNone(protSubtractProjNoiseCTFOver.outputParticles,
+                             "There was a problem with projection subtraction with noise and CTF overlap")
+        self.assertEqual(protSubtractProjNoiseCTFOver.outputParticles.getSamplingRate(), 1.0, (ERROR_SR, "particles"))
+        self.assertEqual(protSubtractProjNoiseCTFOver.outputParticles.getFirstItem().getDim(), (80, 80, 1),
+                         (ERROR_DIM, "particles"))
+        self.assertEqual(protSubtractProjNoiseCTFOver.outputParticles.getSize(), 181, ERROR_SIZE_PART)
 
 
 if __name__ == "__main__":

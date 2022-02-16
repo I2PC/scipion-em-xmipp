@@ -30,7 +30,7 @@ import os
 
 import pyworkflow.protocol.params as params
 from pyworkflow import VERSION_1_1
-from pyworkflow.utils import makePath, cleanPattern, moveFile
+from pyworkflow.utils import makePath, cleanPattern, moveFile, cleanPath
 from pwem.emlib.image import ImageHandler
 from pwem.constants import ALIGN_PROJ
 from pwem.objects import Image, Volume
@@ -38,10 +38,10 @@ from pwem.protocols import ProtAnalysis3D
 import pwem.emlib.metadata as md
 
 from pwem import emlib
-from xmipp3.base import findRow, readInfoField, writeInfoField
+from xmipp3.base import findRow, readInfoField, writeInfoField, isXmippCudaPresent
 from xmipp3.convert import (rowToAlignment, setXmippAttributes, xmippToLocation,
                             createItemMatrix, writeSetOfParticles)
-from xmipp3.constants import SYM_URL
+from xmipp3.constants import SYM_URL, CUDA_ALIGN_SIGNIFICANT
 
 
 class XmippProtSolidAngles(ProtAnalysis3D):
@@ -447,7 +447,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
                 os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
 
             args = '-i %s -r %s -o %s --dev %s ' % (fnDirectional, fnGalleryMd, fnAngles, GpuListCuda)
-            self.runJob('xmipp_cuda_align_significant', args, numberOfMpi=1)
+            self.runJob(CUDA_ALIGN_SIGNIFICANT, args, numberOfMpi=1)
 
         self.runJob("xmipp_metadata_utilities",
                     "-i %s --operate drop_column ref" % fnAngles, numberOfMpi=1)
@@ -457,9 +457,9 @@ class XmippProtSolidAngles(ProtAnalysis3D):
 
         # Local angular assignment
         fnAnglesLocalStk = self._getPath("directional_local_classes.stk")
-        args = "-i %s -o %s --sampling %f --Rmax %d --padding %d --ref %s --max_resolution %f --applyTo image1 --Nsimultaneous %d" % \
+        args = "-i %s -o %s --sampling %f --Rmax %d --padding %d --ref %s --max_resolution %f --applyTo image1 " % \
                (fnAngles, fnAnglesLocalStk, newTs, newXdim / 2, 2, fnVol,
-                self.targetResolution, 8)
+                self.targetResolution)
         args += " --optimizeShift --max_shift %f" % maxShift
         args += " --optimizeAngles --max_angular_change %f" % self.angularDistance
         self.runJob("xmipp_angular_continuous_assign2", args,
@@ -540,9 +540,14 @@ class XmippProtSolidAngles(ProtAnalysis3D):
             volumesSet = self._createSetOfVolumes()
             volumesSet.setSamplingRate(newTs)
             for i in range(2):
+                fnVol = self._getExtraPath("split_v%d.vol" % (i + 1))
+                fnMrc = self._getExtraPath("split_v%d.mrc" % (i + 1))
+                self.runJob("xmipp_image_convert", "-i %s -o %s -t vol" % (fnVol, fnMrc), numberOfMpi=1)
+                self.runJob("xmipp_image_header", "-i %s --sampling_rate %f" % (fnMrc, newTs), numberOfMpi=1)
+                cleanPath(fnVol)
+
                 vol = Volume()
-                vol.setLocation(1,
-                                self._getExtraPath("split_v%d.vol" % (i + 1)))
+                vol.setLocation(1,fnMrc)
                 volumesSet.append(vol)
 
             self._defineOutputs(outputVolumes=volumesSet)
@@ -593,6 +598,8 @@ class XmippProtSolidAngles(ProtAnalysis3D):
             validateMsgs.append('Please provide an input reference volume.')
         if self.inputParticles.get() and not self.inputParticles.hasValue():
             validateMsgs.append('Please provide input particles.')
+        if self.useGpu and not isXmippCudaPresent():
+            validateMsgs.append("You have asked to use GPU, but I cannot find the Xmipp GPU programs")
         return validateMsgs
 
     def _summary(self):

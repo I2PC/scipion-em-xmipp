@@ -34,17 +34,20 @@ from matplotlib import cm
 import matplotlib.colors as mcolors
 from pyworkflow.utils import getExt, removeExt
 from os.path import abspath
-from pwem.viewers.viewer_chimera import (Chimera)
+from pwem.viewers import (LocalResolutionViewer, EmPlotter, ChimeraView,
+                          DataView)
 from pyworkflow.gui import *
 from pyworkflow.protocol.params import (LabelParam, EnumParam)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 from xmipp3.protocols.protocol_validate_fscq import (XmippProtValFit, 
                                                      RESTA_FILE_MRC, 
                                                      OUTPUT_PDBMRC_FILE, 
-                                                     PDB_VALUE_FILE)
+                                                     PDB_VALUE_FILE,
+                                                     RESTA_FILE_NORM,
+                                                     PDB_NORM_FILE)
 
 
-class XmippProtValFitViewer(ProtocolViewer):
+class XmippProtValFitViewer(LocalResolutionViewer):
     """
     Visualization tools for validation fsc-q.
     
@@ -68,14 +71,26 @@ class XmippProtValFitViewer(ProtocolViewer):
         
         group.addParam('displayVolume', LabelParam,
                       important=True,
-                      label='Display Volume Output')
+                      label='Display FSC-Q Volume Output')
+        
+        group.addParam('displayNormVolume', LabelParam,
+               important=True,
+               label='Display FSC-Qr Volume Output')
 
 
         group.addParam('displayPDB', EnumParam,
                       choices=['by residue', 'by atom'],
                       default=0, important=True,
                       display=EnumParam.DISPLAY_COMBO,
-                      label='Display PDB Output')  
+                      label='Display FSC-Q on PDB Output',
+                      help='FSC-Q projected on the atomic model')  
+        
+        group.addParam('displayNormPDB', EnumParam,
+              choices=['by residue', 'by atom'],
+              default=0, important=True,
+              display=EnumParam.DISPLAY_COMBO,
+              label='Display FSC-Qr on PDB Output',
+              help='FSC-Qr projected on the atomic model') 
         
         group = form.addGroup('Statistics')
         
@@ -96,61 +111,148 @@ class XmippProtValFitViewer(ProtocolViewer):
     def _getVisualizeDict(self):
         self.protocol._createFilenameTemplates()
         visualizeDict = {'displayVolume': self._visualize_vol,
+                         'displayNormVolume': self._visualize_norm_vol,
                          'displayPDB': self._visualize_pdb,
+                         'displayNormPDB': self._visualize_norm_pdb,
                          'calculateFscqNeg': self._statistics,
                          'calculateFscqPos': self._statistics}
-        return visualizeDict    
-
-    def _visualize_vol(self, obj, **args):
+        return visualizeDict     
+    
+    def _create_legend(self, scale):
          
-
-        fnRoot = os.path.abspath(self.protocol._getExtraPath())
-        
-        _inputVol = self.protocol.inputVolume.get()
-        fnCmd = self.protocol._getTmpPath("chimera_VOLoutput.cxc")
+        fnCmd = self.protocol._getExtraPath("chimera_output.py")
         
         f = open(fnCmd, 'w')
+        f.write("from chimerax.core.commands import run\n")
+        f.write("from chimerax.graphics.windowsize import window_size\n")
+        f.write("from PyQt5.QtGui import QFontMetrics\n")
+        f.write("from PyQt5.QtGui import QFont\n")
+        f.write("run(session, 'set bgColor white')\n")
+                
+        # get window size so we can place labels properly
+        f.write("v = session.main_view\n")
+        f.write("vx,vy=v.window_size\n")
+        # Calculate heights and Y positions: font, scale height and firstY
+        f.write('font = QFont("Arial", 12)\n')
+        f.write('f = QFontMetrics(font)\n')
+        f.write('_height =  1 * f.height()/vy\n') # Font height
+        f.write('_half_scale_height = _height * 3.5\n') # Full height of the scale
+        f.write("_firstY= 0.5 + _half_scale_height\n")  # Y location for first label
+        
+        val = scale
+        f.write('scale = %f \n' % val)
+        
+        f.write("run(session, '2dlabel text -%.2f bgColor red xpos 0.01 ypos %f size 12' % (scale, _firstY)) \n")
+        f.write("run(session, '2dlabel text -%.2f bgColor orange xpos 0.01 ypos %f size 12' % (scale/1.5, _firstY-_height)) \n")
+        f.write("run(session, '2dlabel text -%.2f bgColor gold xpos 0.01 ypos %f size 12' % (scale/3, _firstY-2*_height)) \n")
+        f.write("run(session, '2dlabel text %05.2f bgColor yellow xpos 0.01 ypos %f size 12' % (00.00, _firstY-3*_height)) \n")            
+        f.write("run(session, '2dlabel text %05.2f bgColor lime xpos 0.01 ypos %f size 12' % (scale/3, _firstY-4*_height)) \n")
+        f.write("run(session, '2dlabel text %05.2f bgColor cyan xpos 0.01 ypos %f size 12' % (scale/1.5, _firstY-5*_height)) \n")
+        f.write("run(session, '2dlabel text %05.2f bgColor dodger blue xpos 0.01 ypos %f size 12' % (scale, _firstY-6*_height)) \n") 
+        
 
-        f.write("open %s\n" % (fnRoot+'/'+OUTPUT_PDBMRC_FILE))
-        f.write("open %s\n" % (fnRoot+'/'+RESTA_FILE_MRC))           
-        f.write("volume #0 voxelSize %f step 1\n" % (_inputVol.getSamplingRate()))
-        f.write("volume #1 voxelSize %f\n" % (_inputVol.getSamplingRate()))
-        f.write("vol #1 hide\n")
-        f.write("scolor #0 volume #1 perPixel false cmap -3,#ff0000:"
-                "0,#ffff00:1,#00ff00:2,#00ffff:3,#0000ff\n")
-        f.write("colorkey 0.01,0.05 0.02,0.95 -3 #ff0000 -2 #ff4500 -1 #ff7f00 "
-                 "0 #ffff00 1  #00ff00 2 #00ffff 3 #0000ff\n")        
-
-        f.close()
-
-        # run in the background
-        Chimera.runProgram(Chimera.getProgram(), fnCmd+"&")
-        return []
+    def _visualize_vol(self, obj, **args):
+        
+        self._create_legend(3);
+        
+        fnCmd = self.protocol._getExtraPath("chimera_output.py")
+        f = open(fnCmd, 'a')
+               
+        f.write("run(session, 'open %s')\n" % self.protocol._getFileName(OUTPUT_PDBMRC_FILE))
+        f.write("run(session, 'open %s')\n" % self.protocol._getFileName(RESTA_FILE_MRC))
+        
+        f.write("run(session, 'volume #2 voxelSize %s step 1')\n" % 
+                self.protocol.inputVolume.get().getSamplingRate() )
+        f.write("run(session, 'volume #3 voxelSize %s')\n" % 
+                self.protocol.inputVolume.get().getSamplingRate() )
+        f.write("run(session, 'vol #3 hide')\n")        
+        f.write("run(session, 'color sample #2 map #3 palette"
+                " -3.0,red:-2.0,orange:-1.0,gold:0,yellow:1.0,lime:2.0,cyan:3.0,#1e90ff')\n")
+                               
+        f.close()     
+        view = ChimeraView(fnCmd)
+        return [view]
+       
+    
+    def _visualize_norm_vol(self, obj, **args):
+        
+        self._create_legend(1.5);
+        
+        fnCmd = self.protocol._getExtraPath("chimera_output.py")
+        f = open(fnCmd, 'a')
+               
+        f.write("run(session, 'open %s')\n" % self.protocol._getFileName(OUTPUT_PDBMRC_FILE))
+        f.write("run(session, 'open %s')\n" % self.protocol._getFileName(RESTA_FILE_NORM))
+        
+        f.write("run(session, 'volume #2 voxelSize %s step 1')\n" % 
+                self.protocol.inputVolume.get().getSamplingRate() )
+        f.write("run(session, 'volume #3 voxelSize %s')\n" % 
+                self.protocol.inputVolume.get().getSamplingRate() )
+        f.write("run(session, 'vol #3 hide')\n")       
+        f.write("run(session, 'color sample #2 map #3 palette"
+                " -1.5,red:-1.0,orange:-0.5,gold:0,yellow:0.5,lime:1.0,cyan:1.5,#1e90ff')\n")
+                               
+        f.close()     
+        view = ChimeraView(fnCmd)
+        return [view]        
     
     
     def _visualize_pdb(self, obj, **args):
         
-        # show coordinate axis
-        fnRoot = os.path.abspath(self.protocol._getExtraPath())
-        fnCmd = self.protocol._getTmpPath("chimera_PDBoutput.cmd")
-        f = open(fnCmd, 'w')
-        #open PDB
-
+        self._create_legend(3);
+        
+        fnCmd = self.protocol._getExtraPath("chimera_output.py")
+        f = open(fnCmd, 'a')
+               
+        f.write("run(session, 'open %s')\n" % self.protocol._getFileName(PDB_VALUE_FILE))
+         
         if self.displayPDB == self.RESIDUE:
-            f.write("open %s\n" % (fnRoot+'/'+PDB_VALUE_FILE))
-            f.write("rangecol occupancy,r -3 red 0 white 1 green 2 cyan 3 blue\n")
+            f.write("run(session, 'cartoon')\n")
+            f.write("run(session, 'hide target ab')\n")
+            f.write("run(session, 'color byattribute occupancy palette" 
+                         " -3.0,red:-2.0,orange:-1.0,gold:0,yellow:1.0,lime:2.0,cyan:3.0,#1e90ff" 
+                         " ave residue')\n")
+                                      
         else:
-            f.write("open %s\n" % (fnRoot+'/'+PDB_VALUE_FILE))
-            f.write("display\n")
-            f.write("~ribbon\n")
-            f.write("rangecol occupancy,a -3 red 0 white 1 green 2 cyan 3 blue\n")  
-        f.write("colorkey 0.01,0.05 0.02,0.95 -3 #ff0000 -2 #ff4500 -1 #ff7f00 "  
-                "0 white 1  #00ff00 2 #00ffff 3 #0000ff\n")    
-        f.close()  
-                     
-        Chimera.runProgram(Chimera.getProgram(), fnCmd+"&")
-        return []
-
+            f.write("run(session, 'cartoon hide')\n")
+            f.write("run(session, 'show target ab')\n")
+            f.write("run(session, 'style stick')\n")
+            f.write("run(session, 'color byattribute occupancy palette" 
+                         " -3.0,red:-2.0,orange:-1.0,gold:0,yellow:1.0,lime:2.0,cyan:3.0,#1e90ff')\n")
+                               
+        f.close()     
+        view = ChimeraView(fnCmd)
+        return [view]
+    
+    
+    def _visualize_norm_pdb(self, obj, **args):
+        
+        self._create_legend(1.5);
+        
+        fnCmd = self.protocol._getExtraPath("chimera_output.py")
+        f = open(fnCmd, 'a')
+               
+        f.write("run(session, 'open %s')\n" % self.protocol._getFileName(PDB_NORM_FILE))
+         
+        if self.displayNormPDB == self.RESIDUE:
+            f.write("run(session, 'cartoon')\n")
+            f.write("run(session, 'hide target ab')\n")
+            f.write("run(session, 'color byattribute occupancy palette" 
+                         " -1.5,red:-1.0,orange:-0.5,gold:0,yellow:0.5,lime:1.0,cyan:1.5,#1e90ff" 
+                         " ave residue')\n")
+                                      
+        else:
+            f.write("run(session, 'cartoon hide')\n")
+            f.write("run(session, 'show target ab')\n")
+            f.write("run(session, 'style stick')\n")
+            f.write("run(session, 'color byattribute occupancy palette" 
+                         " -1.5,red:-1.0,orange:-0.5,gold:0,yellow:0.5,lime:1.0,cyan:1.5,#1e90ff')\n")
+                               
+        f.close()     
+        view = ChimeraView(fnCmd)
+        return [view]        
+         
+ 
     def _calculate_fscq(self, obj, **args):
 
         fnRoot = os.path.abspath(self.protocol._getExtraPath())

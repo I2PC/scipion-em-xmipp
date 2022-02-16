@@ -84,7 +84,9 @@ class XmippProtCreateMask3D(ProtCreateMask3D, XmippGeometricalMask3D):
         form.addParam('threshold', FloatParam, default=0.0,
                       condition='volumeOperation==%d and %s'
                       % (OPERATION_THRESHOLD, isVolume),
-                      label='Threshold')
+                      label='Threshold',
+                      help="Select the threshold. Gray values lesser than the threshold" \
+                           "will be set to zero, otherwise will be one (mask area).")
         isSegmentation = 'volumeOperation==%d and %s' % (OPERATION_SEGMENT, isVolume)
         form.addParam('segmentationType', EnumParam, default=SEGMENTATION_DALTON, 
                       condition=isSegmentation,
@@ -150,19 +152,20 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
         form.addSection(label='Postprocessing')
         form.addParam('doSmall', BooleanParam, default=False,
                       label='Remove small objects',
-                      help="The input mask has to be binary")
+                      help="To remove small clusters of points. "
+                           "The input mask has to be binary.")
         form.addParam('smallSize', IntParam, default=50,
                       label='Minimum size',condition="doSmall",
                       help='Connected components whose size is smaller than '
                            'this number in voxels will be removed')
         form.addParam('doBig', BooleanParam, default=False,
                       label='Keep largest component',
-                      help="The input mask has to be binary")
+                      help="To keep cluster greater than a given size. The input mask has to be binary")
         form.addParam('doSymmetrize', BooleanParam, default=False,
                       label='Symmetrize mask')
         form.addParam('symmetry', StringParam, default='c1',
                       label='Symmetry group',condition="doSymmetrize",
-                      help="See http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry \n"
+                      help="To obtain a symmetric mask. See http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry \n"
                            "for a description of the symmetry groups format. \n"
                            "If no symmetry is present, give c1")
         form.addParam('doMorphological', BooleanParam, default=False,
@@ -189,7 +192,7 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
 
     #--------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
-        self.maskFile = self._getPath('mask.vol')
+        self.maskFile = self._getPath('mask.mrc')
         
         if self.source == SOURCE_VOLUME:
             self._insertFunctionStep('createMaskFromVolumeStep')
@@ -284,10 +287,12 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
         volMask.setFileName(self.maskFile)
         
         if self.source==SOURCE_VOLUME:
-            volMask.setSamplingRate(self.inputVolume.get().getSamplingRate())
+            Ts = self.inputVolume.get().getSamplingRate()
         else:
-            volMask.setSamplingRate(self.samplingRate.get())
-        
+            Ts = self.samplingRate.get()
+        volMask.setSamplingRate(Ts)
+        self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(self.maskFile,Ts))
+
         self._defineOutputs(outputMask=volMask)
         
         if self.source==SOURCE_VOLUME:

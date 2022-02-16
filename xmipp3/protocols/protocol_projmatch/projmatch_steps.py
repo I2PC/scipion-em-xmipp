@@ -38,7 +38,7 @@ from pwem.objects import Volume, SetOfClasses3D
 from pyworkflow.utils import getMemoryAvailable, removeExt, cleanPath, makePath, copyFile
 
 from pwem import emlib
-from xmipp3.convert import createClassesFromImages
+from xmipp3.convert import createClassesFromImages, convertToMrc
 from xmipp3.base import isMdEmpty
 
 
@@ -201,7 +201,9 @@ def insertAngularProjectLibraryStep(self, iterN, refN, **kwargs):
         maxChangeInAngles = int(tokens[-1])
     else:
         maxChangeInAngles = int(tokens[iterN-1])
+
     if maxChangeInAngles < 181:
+        params['maxChangeInAngles'] = maxChangeInAngles
         args += ' --near_exp_data --angular_distance %(maxChangeInAngles)s'
     else:
         args += ' --angular_distance -1'
@@ -457,7 +459,7 @@ def insertAngularClassAverageStep(self, iterN, refN, **kwargs):
               'outClasses' : outClasses
               }
     
-    args = ' -i ctfGroup[0-9][0-9][0-9][0-9][0-9][0-9]\$@'
+    args = r' -i ctfGroup[0-9][0-9][0-9][0-9][0-9][0-9]\$@'
     args += '%(docFileInputAngles)s --lib %(projLibraryDoc)s -o %(outClasses)s'
     
     # FIXME: This option no exist in the form
@@ -527,7 +529,7 @@ def insertReconstructionStep(self, iterN, refN, suffix='', **kwargs):
         program =  'xmipp_reconstruct_fourier_accel'
         if self.useGpu.get():
             program = 'xmipp_cuda_reconstruct_fourier'
-            args += " --thr %d" % self.numberOfThreads.get()
+            #args += " --thr %d" % self.numberOfThreads.get()
         args += ' --weight --padding %(pad)s %(pad)s'
         params['pad'] = self.paddingFactor.get()
 
@@ -566,7 +568,7 @@ def runReconstructionStep(self, iterN, refN, program, method, args, suffix, **kw
     mdFn = self._getFileName(reconsXmd, iter=iterN, ref=refN)
     volFn = self._getFileName(reconsVol, iter=iterN, ref=refN)
     maskFn = self._getFileName('maskedFileNamesIters', iter=iterN, ref=refN)
-    if method=="art" or method == 'fourier':
+    if method=="art": #or method == 'fourier':
         mpi = 1
         threads = 1
     else:
@@ -574,7 +576,8 @@ def runReconstructionStep(self, iterN, refN, program, method, args, suffix, **kw
         if self.useGpu.get() and self.numberOfMpi.get()>1:
             mpi = len((self.gpuList.get()).split(','))+1
         threads = self.numberOfThreads.get()
-        args += ' --thr %d' % threads
+        if self.useGpu.get():
+            args += ' --thr %d' % threads
     
     if isMdEmpty(mdFn):
         img = emlib.Image()
@@ -711,12 +714,12 @@ def runFilterVolumeStep(self, iterN, refN, constantToAddToFiltration):
                   }
         self.runJob("xmipp_transform_filter", args % params)
 
-
 def runCreateOutputStep(self):
     ''' Create standard output results_images, result_classes'''
     #creating results files
     imgSet = self.inputParticles.get()
     lastIter = self.numberOfIterations.get()
+    Ts = imgSet.getSamplingRate()
     if self.numberOfReferences != 1:
         inDocfile = self._getFileName('docfileInputAnglesIters', iter=lastIter)
         ClassFnTemplate = '%(rootDir)s/reconstruction_Ref3D_%(ref)03d.vol'
@@ -735,10 +738,11 @@ def runCreateOutputStep(self):
         classes.appendFromClasses(clsSet)
         
         volumes = self._createSetOfVolumes()
-        volumes.setSamplingRate(imgSet.getSamplingRate())
+        volumes.setSamplingRate(Ts)
         
         for refN in self.allRefs():
             volFn = self._getFileName('reconstructedFileNamesIters', iter=lastIter, ref=refN)
+            volFn = convertToMrc(self, volFn, Ts, True)
             vol = Volume()
             vol.setFileName(volFn)
             volumes.append(vol)
@@ -757,9 +761,13 @@ def runCreateOutputStep(self):
         halfMap2 = self._getFileName('reconstructedFileNamesItersSplit2',
                                      iter=lastIter, ref=1)
 
+        volFn = convertToMrc(self, volFn, Ts, True)
+        halfMap1 = convertToMrc(self, halfMap1, Ts, True)
+        halfMap2 = convertToMrc(self, halfMap2, Ts, True)
+
         vol = Volume()
         vol.setFileName(volFn)
-        vol.setSamplingRate(imgSet.getSamplingRate())
+        vol.setSamplingRate(Ts)
         vol.setHalfMaps([halfMap1, halfMap2])
         self._defineOutputs(outputVolume=vol)
         self._defineSourceRelation(self.inputParticles, vol)

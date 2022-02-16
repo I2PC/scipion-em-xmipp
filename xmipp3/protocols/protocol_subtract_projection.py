@@ -1,7 +1,7 @@
+# -*- coding: utf-8 -*-
 # **************************************************************************
 # *
-# * Authors:         Josue Gomez Blanco (josue.gomez-blanco@mcgill.ca)
-# *                  Roberto Marabini   (roberto@cnb.csic.es)
+# * Authors:  Estrella Fernandez Gimenez (me.fernandez@cnb.csic.es)
 # *
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
@@ -26,240 +26,134 @@
 # *
 # **************************************************************************
 
-from pyworkflow import VERSION_1_1
-from pyworkflow.protocol.params import PointerParam, EnumParam, BooleanParam
-from pyworkflow.protocol.constants import STEPS_PARALLEL
-
-from pwem.protocols import ProtOperateParticles
-from pwem.emlib.image import ImageHandler
-from pwem import emlib
-
-from xmipp3.convert import particleToRow, getImageLocation, geometryFromMatrix
+from os.path import basename
+from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, FloatParam
+from pyworkflow.protocol.constants import LEVEL_ADVANCED
+import pwem.emlib.metadata as md
+from pwem.protocols import EMProtocol
+from xmipp3.convert import writeSetOfParticles
 
 
-class XmippProtSubtractProjection(ProtOperateParticles):
-    """
-        Subtract volume projections from the experimental particles.
-        The particles must have projection alignment in order to
-        properly generate volume projections.
+class XmippProtSubtractProjection(EMProtocol):
+    """ This protocol computes the subtraction between particles and a initial volume, by computing its projections
+    with the same angles that input particles have. Then, each particle and the correspondent projection of the initial
+    volume are numerically adjusted and subtracted using a mask which denotes the region to keep. """
 
-        An example of usage is to delete the virus capsid to
-        refine only the genetic material.
-        """
     _label = 'subtract projection'
-    _lastUpdateVersion = VERSION_1_1
+    INPUT_PARTICLES = "input_particles.xmd"
 
-    CORRECT_NONE = 0
-    CORRECT_FULL_CTF = 1
-    CORRECT_PHASE_FLIP = 2
-
-    def __init__(self, *args, **kwargs):
-        ProtOperateParticles.__init__(self, *args, **kwargs)
-        self.stepsExecutionMode = STEPS_PARALLEL
-
-    #--------------------------- DEFINE param functions ------------------------
+    # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('inputParticles', PointerParam,
-                      pointerClass='SetOfParticles',
-                      pointerCondition='hasAlignmentProj',
-                      label="Input particles", important=True,
-                      help='Select the experimental particles.')
-        form.addParam('inputVolume', PointerParam, pointerClass='Volume',
-                      label="Input volume",
-                      help='Select the input volume. Is desirable that the '
-                           'volume was generated with the input particles.')
-        form.addParam('refMask', PointerParam, pointerClass='VolumeMask',
-                      label='Reference mask (optional)', allowsNull=True,
-                      help="The volume will be masked once the volume has been "
-                           "applied the CTF of the particles.")
-        form.addParam('projType', EnumParam, default=self.CORRECT_NONE,
-                      choices=['NO','full CTF','abs(CTF) (phase flip)'],
-                      label='apply CTF?',
-                      help='apply CTF to the reference gallery of projections')
-        form.addParam('normalize', BooleanParam, default=False,
-                   label='normalize', help = "adjust grey scale range so experimental data and synthetic data match")
+        form.addParam('particles', PointerParam, pointerClass='SetOfParticles', label="Particles: ",
+                      help='Specify a SetOfParticles.')
+        form.addParam('vol', PointerParam, pointerClass='Volume', label="Initial volume ", help='Specify a volume.')
+        form.addParam('maskVol', PointerParam, pointerClass='VolumeMask', label='Volume mask', allowsNull=True,
+                      help='3D mask for the input volume. This mask is not mandatory but advisable.')
+        form.addParam('mask', PointerParam, pointerClass='VolumeMask', label="Mask for region to keep", allowsNull=True,
+                      help='Specify a 3D mask for the region of the input volume that you want to keep. If no mask is '
+                           'selected, the whole image will be subtracted')
+        form.addParam('resol', FloatParam, label="Filter at resolution: ", default=3, allowsNull=True,
+                      expertLevel=LEVEL_ADVANCED,
+                      help='Resolution (A) at which subtraction will be performed, filtering the volume projections.'
+                           'Value 0 implies no filtering.')
+        form.addParam('sigma', FloatParam, label="Decay of the filter (sigma): ", default=3, condition='resol',
+                      help='Decay of the filter (sigma parameter) to smooth the mask transition',
+                      expertLevel=LEVEL_ADVANCED)
+        form.addParam('iter', IntParam, label="Number of iterations: ", default=5, expertLevel=LEVEL_ADVANCED,
+                      help='Number of iterations for the adjustment process of the images before the subtraction itself'
+                           'several iterations are recommended to improve the adjustment.')
+        form.addParam('rfactor', FloatParam, label="Relaxation factor (lambda): ", default=1,
+                      expertLevel=LEVEL_ADVANCED,
+                      help='Relaxation factor for Fourier amplitude projector (POCS), it should be between 0 and 1, '
+                           'being 1 no relaxation and 0 no modification of volume 2 amplitudes')
 
-        form.addParallelSection(threads=3, mpi=1)
-
-    #--------------------------- INSERT steps functions ------------------------
+    # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        #divide work in several threads
-        numberOfThreads = self.numberOfThreads.get()-1
-        if numberOfThreads == 0:
-            numberOfThreads = 1
-        partSet = self.inputParticles.get()
-        nPart = len(partSet)
-        numberOfThreads = min(numberOfThreads, nPart)
-        samplingRate = partSet.getSamplingRate()
-        inputVolume = getImageLocation(self.inputVolume.get())
-        mdFn = self._getInputParticlesFn()
-        convertId = self._insertFunctionStep('convertInputStep',
-                                            inputVolume)
+        self._insertFunctionStep('convertStep')
+        self._insertFunctionStep('subtractionStep')
+        self._insertFunctionStep('createOutputStep')
 
-        deps = [convertId]
+    # --------------------------- STEPS functions --------------------------------------------
+    def convertStep(self):
+        writeSetOfParticles(self.particles.get(), self._getExtraPath(self.INPUT_PARTICLES))
 
-        # Create xmipp metadata
-        # partSet
-        #writeSetOfParticles(partSet, mdFn, blockName="images")
-        groupSize = nPart/numberOfThreads
-        groupRemainder = nPart%numberOfThreads
-
-        depsOutPut=[]
-        for thread in range(0, numberOfThreads):
-            start = int(thread * groupSize+1)
-            end = int(thread * groupSize+groupSize)
-            if thread == (numberOfThreads-1):
-                end += groupRemainder
-            idStep = self._insertFunctionStep('projectStep', start, end,
-                                              samplingRate, thread,
-                                              prerequisites=deps)
-            depsOutPut.append(idStep)
-        self._insertFunctionStep('createOutputStep', prerequisites=depsOutPut)
-
-    #--------------------------- STEPS functions -------------------------------
-    def convertInputStep(self, volName):
-        # Read volume and convert to DOUBLE
-        self.vol = emlib.Image(volName)
-        self.vol.convert2DataType(emlib.DT_DOUBLE)
-        # Mask volume if needed
-        if self.refMask.get() is not None:
-            maskName = getImageLocation(self.refMask.get())
-            self.mask = emlib.Image(maskName)
-            self.mask.convert2DataType(emlib.DT_DOUBLE)
-            self.vol.inplaceMultiply(self.mask)
-        padding = 2
-        maxFreq = 0.5
-        splineDegree = 3
-        ###
-        self.fourierProjectVol = emlib.FourierProjector(self.vol, padding, maxFreq, splineDegree)
-        ###
-        partSet = self.inputParticles.get()
-        nPart = len(partSet)
-        numberOfTasks = min(nPart, max(self.numberOfThreads.get()-1, 1))
-        taskSize = nPart / numberOfTasks
-        md = emlib.MetaData()
-
-        # Convert angles and shifts from volume system of coordinates to
-        # projection system of coordinates
-        mdCount = 0
-
-        for index, part in enumerate(partSet):
-            objId = md.addObject()
-            imgRow = emlib.metadata.Row()
-            particleToRow(part, imgRow)
-            shifts, angles = geometryFromMatrix(part.getTransform().getMatrix(), True)
-
-            imgRow.setValue(emlib.MDL_SHIFT_X,-shifts[0])
-            imgRow.setValue(emlib.MDL_SHIFT_Y,-shifts[1])
-            imgRow.setValue(emlib.MDL_SHIFT_Z,0.)
-            imgRow.setValue(emlib.MDL_ANGLE_ROT,angles[0])
-            imgRow.setValue(emlib.MDL_ANGLE_TILT,angles[1])
-            imgRow.setValue(emlib.MDL_ANGLE_PSI,angles[2])
-
-            imgRow.writeToMd(md, objId)
-
-            # Write a new metadata every taskSize number of elements
-            # except in the last chunk where we want to add also the
-            # remainder and the condition is the last element
-            if ((index % taskSize == taskSize-1 and
-                 mdCount < numberOfTasks-1) or index == nPart-1):
-                md.write(self._getInputParticlesSubsetFn(mdCount))
-                md.clear()
-                mdCount += 1
-
-        x, y, _ = partSet.getDim()
-        emlib.createEmptyFile(self._getProjGalleryFn(), x, y, 1, nPart)
-
-    def projectStep(self, start, end, samplingRate, threadNumber):
-        # Project
-        md = emlib.MetaData(self._getInputParticlesSubsetFn(threadNumber))
-        ##
-        projection = emlib.Image()
-        projection.setDataType(emlib.DT_DOUBLE)
-        ##
-        for id in md:
-            rot  = md.getValue(emlib.MDL_ANGLE_ROT,  id)
-            tilt = md.getValue(emlib.MDL_ANGLE_TILT, id)
-            psi  = md.getValue(emlib.MDL_ANGLE_PSI,  id)
-
-            ##projection =self.vol.projectVolumeDouble(rot, tilt, psi)
-            self.fourierProjectVol.projectVolume(projection, rot, tilt, psi)
-            ##
-            # Apply CTF
-            if self.projType == self.CORRECT_NONE:
-                pass
-            elif self.projType == self.CORRECT_FULL_CTF:
-                emlib.applyCTF(projection, md, samplingRate, id, False)
-            elif self.projType == self.CORRECT_PHASE_FLIP:
-                emlib.applyCTF(projection, md, samplingRate, id, True)
-            else:
-                raise Exception("ERROR: Unknown projection mode: %d" % self.projType)
-
-            # Shift image
-            projection.applyGeo(md,id,True,False)#onlyapplyshist, wrap
-            ih = ImageHandler()
-            expProj = ih.read(md.getValue(emlib.MDL_IMAGE, id))
-            expProj.convert2DataType(emlib.DT_DOUBLE)
-            # Subtract from experimental and write result
-            projection.resetOrigin()
-            if self.normalize:
-                expProj = expProj.adjustAndSubtract(projection)
-            else:
-                expProj.inplaceSubtract(projection)
-
-            expProj.write( self._getProjGalleryIndexFn(id+start-1))
+    def subtractionStep(self):
+        vol = self.vol.get().clone()
+        fnVol = vol.getFileName()
+        if fnVol.endswith('.mrc'):
+            fnVol += ':mrc'
+        resol = self.resol.get()
+        iters = self.iter.get()
+        program = "xmipp_subtract_projection"
+        args = '-i %s --ref %s -o %s --iter %s --lambda %s' % (self._getExtraPath(self.INPUT_PARTICLES), fnVol,
+                                                               self._getExtraPath("output_particles"), iters,
+                                                               self.rfactor.get())
+        args += ' --saveProj %s' % self._getExtraPath('')
+        if resol:
+            fc = vol.getSamplingRate()/resol
+            args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
+        if self.maskVol.get() is not None:
+            args += ' --maskVol %s' % self.maskVol.get().getFileName()
+        if self.mask.get() is not None:
+            args += ' --mask %s' % self.mask.get().getFileName()
+        else:
+            involdim = vol.getDim()
+            fnDescr = self._getExtraPath("mask.descr")
+            fhDescr = open(fnDescr, 'w')
+            fhDescr.write("%d %d %d 0" % (involdim[0], involdim[1], involdim[2]))
+            fhDescr.close()
+            mskKeep = self._getExtraPath("mask_keep.mrc")
+            args_mask_keep = "-i %s -o %s" % (fnDescr, mskKeep)
+            self.runJob("xmipp_phantom_create", args_mask_keep, numberOfMpi=1)
+            args_imageheader2 = "-i %s --sampling_rate %f" % (mskKeep, vol.getSamplingRate())
+            self.runJob("xmipp_image_header", args_imageheader2, numberOfMpi=1)
+            args += ' --mask %s --subAll' % mskKeep
+        self.runJob(program, args)
 
     def createOutputStep(self):
-        partSet = self.inputParticles.get()
-        outImgSet = self._createSetOfParticles()
-        outImgSet.copyInfo(partSet)
-        outImgSet.setAlignmentProj()
-        for index, part in enumerate(partSet):
-            part2 = part.clone()
-            part2.setLocation(index+1, self._getProjGalleryFn())
-            outImgSet.append(part2)
+        self.ix = 0  # initiate counter for particle file name
+        inputSet = self.particles.get()
+        outputSet = self._createSetOfParticles()
+        outputSet.copyInfo(inputSet)
+        outputSet.copyItems(inputSet, updateItemCallback=self._updateItem,
+                            itemDataIterator=md.iterRows(self._getExtraPath(self.INPUT_PARTICLES)))
+        self._defineOutputs(outputParticles=outputSet)
+        self._defineSourceRelation(inputSet, outputSet)
 
-        self._defineOutputs(outputParticles=outImgSet)
-        self._defineTransformRelation(self.inputParticles, outImgSet)
-
-    #--------------------------- INFO functions --------------------------------
-    def _validate(self):
-        validateMsgs = []
-        imgSet = self.inputParticles.get()
-        vol = self.inputVolume.get()
-        xImg = imgSet.getXDim()
-        xVol = vol.getXDim()
-        if not imgSet.getSamplingRate() == vol.getSamplingRate():
-            validateMsgs.append("The sampling rate of your SetOfParticles"
-                                " and your volume *MUST be equal* ")
-        if not xImg == xVol:
-            validateMsgs.append(" The dimensions of your particles and "
-                                " your volume *MUST BE EQUAL*")
-        #if imgSet.isPhaseFlipped() and self.projType != self.CORRECT_NONE:
-        #   validateMsgs.append("your images and volume are phase flipped therefore does not make sense to apply abs(CTF)")
-
-        return validateMsgs
-
+    # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
-        summary = ["Input particles:  %s" % self.inputParticles.get().getNameId()]
-        summary.append("-----------------")
+        summary = ["Volume: %s" % self.vol.get().getFileName()]
+        summary.append("Set of particles: %s" % self.particles.get())
+        if self.mask:
+            summary.append("Mask: %s" % self.mask.get().getFileName())
+        if self.resol.get() != 0:
+            summary.append("Subtraction at resolution %f A" % self.resol.get())
         return summary
 
     def _methods(self):
-        messages = []
-        return messages
+        methods = []
+        if not hasattr(self, 'outputParticles'):
+            methods.append("Output particles not ready yet.")
+        else:
+            methods.append("Volume projections from %s subtracted from particles" %
+                           basename(self.vol.get().getFileName()))
+            if self.mask:
+                methods.append("with mask %s" % basename(self.mask.get().getFileName()))
+            if self.resol.get() != 0:
+                methods.append(" at resolution %f A" % self.resol.get())
+        return methods
 
-    #--------------------------- UTILS functions -------------------------------
-    def _getInputParticlesFn(self):
-        return self._getExtraPath('input_particles.xmd')
+    def _validate(self):
+        errors = []
+        rfactor = self.rfactor.get()
+        if rfactor < 0 or rfactor > 1:
+            errors.append('Relaxation factor (lambda) must be between 0 and 1')
+        return errors
 
-    def _getInputParticlesSubsetFn(self, setNumber):
-        return self._getExtraPath('input_particles_thr_%05d.xmd'%setNumber)
-
-    def _getProjGalleryFn(self):
-        return self._getExtraPath('projGallery.stk')
-
-    def _getProjGalleryIndexFn(self,index):
-        return "%d@%s"%(index, self._getProjGalleryFn())
-
+    # --------------------------- UTLIS functions --------------------------------------------
+    def _updateItem(self, item, row):
+        newFn = row.getValue(md.MDL_IMAGE)
+        self.ix = self.ix + 1
+        newFn = newFn.split('@')[1]
+        item.setLocation(self.ix, newFn)

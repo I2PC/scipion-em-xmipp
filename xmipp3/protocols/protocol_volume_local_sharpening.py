@@ -89,9 +89,8 @@ class XmippProtLocSharp(ProtAnalysis3D):
     def _createFilenameTemplates(self):
         """ Centralize how files are called """
         myDict= {           
-                'BINARY_MASK': self._getTmpPath('binaryMask.vol'),
-                'OUTPUT_RESOLUTION_FILE': self._getTmpPath('resolutionMonoRes.vol'),                
-                'OUTPUT_RESOLUTION_FILE_CHIMERA': self._getTmpPath('MonoResChimera.vol'),
+                'BINARY_MASK': self._getTmpPath('binaryMask.mrc'),
+                'OUTPUT_RESOLUTION_FILE': self._getTmpPath('monoresResolutionMap.mrc'),                
                 'METADATA_PARAMS_SHARPENING': self._getTmpPath('params.xmd'),                                                                                 
                 }
         self._updateFilenamesDict(myDict) 
@@ -177,14 +176,8 @@ class XmippProtLocSharp(ProtAnalysis3D):
         params += ' --minRes %f' % (2*sampling)
         params += ' --maxRes %f' % max_res           
         params += ' --step %f' % 0.25
-        params += ' --mask_out %s' % self._getTmpPath('refined_mask.vol')
-        params += ' -o %s' % self._getFileName('OUTPUT_RESOLUTION_FILE')
-        params += ' --volumeRadius %f' % radius
-        params += ' --exact'
-        params += ' --chimera_volume %s' % self._getFileName(
-                                                'OUTPUT_RESOLUTION_FILE_CHIMERA')
+        params += ' -o %s' % self._getTmpPath()
         params += ' --significance %f' % significance
-        params += ' --md_outputdata %s' % self._getTmpPath('mask_data.xmd')
         params += ' --threads %i' % self.numberOfThreads.get()
 
         self.runJob('xmipp_resolution_monogenic_signal', params)
@@ -255,21 +248,17 @@ class XmippProtLocSharp(ProtAnalysis3D):
             imgData = img.getData()
             max_res = np.amax(imgData)
             min_res = 2*self.inputVolume.get().getSamplingRate()
-            
-            # print("minres %s  y maxres  %s"  % (min_res, max_res))
         
             if (max_res-min_res<0.75):
                 nextIter = False
                 break
 
-        # TODO: please copy the file using python not the operating system
-        os.system('cp '  +self._getExtraPath('sharpenedMap_'+str(self.iteration)+'.mrc')+
-                   ' '  +self._getExtraPath('sharpenedMap_last.mrc'))
-
+        os.rename(self._getExtraPath('sharpenedMap_' + str(self.iteration) + '.mrc'),
+                  self._getExtraPath('sharpenedMap_last.mrc'))
         
         resFile = self.resolutionVolume.get().getFileName()        
         pathres=dirname(resFile)
-        if  not exists(os.path.join(pathres,'mask_data.xmd')):     
+        if  not exists(self._getFileName('OUTPUT_RESOLUTION_FILE')):     
 
             print('\n====================\n' 
                   ' WARNING---This is not the ideal case because resolution map has been imported.'
@@ -280,22 +269,21 @@ class XmippProtLocSharp(ProtAnalysis3D):
              
     def createOutputStep(self):
 
-        volume=Volume()
-        volume.setFileName(self._getExtraPath('sharpenedMap_last.mrc'))
-        volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
-        volume.setOrigin(self.inputVolume.get().getOrigin(True))
-
-
         volumesSet = self._createSetOfVolumes()
-        volumesSet.setSamplingRate(self.inputVolume.get().getSamplingRate()) 
+        volumesSet.setSamplingRate(self.inputVolume.get().getSamplingRate())
         for i in range(self.iteration):
-            vol = Volume()       
-            vol.setLocation(i, self._getExtraPath('sharpenedMap_%d.mrc' % (i+1)))
-            vol.setObjComment("Sharpened Map, \n Epoch %d"%(i+1))
-            volumesSet.append(vol)  
-            
+            vol = Volume()
+            vol.setOrigin(self.inputVolume.get().getOrigin(True))
+            if (self.iteration > (i + 1)):
+                vol.setLocation(i, self._getExtraPath('sharpenedMap_%d.mrc' % (i + 1)))
+                vol.setObjComment("Sharpened Map, \n Epoch %d" % (i + 1))
+            else:
+                vol.setLocation(i, self._getExtraPath('sharpenedMap_last.mrc'))
+                vol.setObjComment("Sharpened Map, \n Epoch last")
+            volumesSet.append(vol)
+
         self._defineOutputs(outputVolumes=volumesSet)
-        self._defineSourceRelation(self.inputVolume, volumesSet)            
+        self._defineSourceRelation(self.inputVolume, volumesSet)
                      
     # --------------------------- INFO functions ------------------------------
 
