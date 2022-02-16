@@ -49,7 +49,7 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
         form.addParam('inputVolume', PointerParam, pointerClass="Volume",
                       label='Input Volume', allowsNull=False,
                       important=True, help="Volume to process")
-        form.addParam('threshold', FloatParam, label='Threshold Mask',
+        form.addParam('threshold', FloatParam, label='Mask Threshold',
                       allowsNull=False, important=True,  help="Threshold for mask creation")
         form.addParam('thresholdAlpha', FloatParam, label='Alpha Threshold',
                       default=0.7, help="Threshold for alpha helix determination")
@@ -133,6 +133,15 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
 # --------------------------- INFO functions -------------------------------
     def _summary(self):
         summary = []
+
+        if hasattr(self, 'hand'):
+            summary.append('Hand value is: %f' %self.hand.get())
+            summary.append('Hand values close to 1 mean the structure is predicted to be left handed')
+            summary.append('Hand values close to 0 mean the structure is predicted to be right handed')
+            if self.hand.get() > self.thresholdHand.get():
+                summary.append('Volume was flipped as it was deemed to be left handed')
+
+        return summary
 
     def _methods(self):
         methods = []
