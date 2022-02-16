@@ -26,8 +26,9 @@
 
 from pwem.protocols import EMProtocol
 from pwem.emlib.image import ImageHandler
+from pwem.objects import Volume
 
-from pyworkflow.protocol.params import PointerParam, FloatParam
+from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam
 from pyworkflow.object import Float
 
 from xmipp3.base import XmippProtocol
@@ -52,11 +53,14 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
                       allowsNull=False, important=True,  help="Threshold for mask creation")
         form.addParam('thresholdAlpha', FloatParam, label='Alpha Threshold',
                       default=0.7, help="Threshold for alpha helix determination")
+        form.addParam('thresholdHand', FloatParam, label='Hand Threshold',
+                      default=0.6, help="Hand threshold to flip volume")
 
 # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self._insertFunctionStep('preprocessStep')
         self._insertFunctionStep('predictStep')
+        self._insertFunctionStep('flipStep')
         self._insertFunctionStep('createOutputStep')
 
     def preprocessStep(self):
@@ -99,12 +103,32 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
                 self._getPath('mask.mrc'))
         self.runJob("xmipp_deep_hand", args, env=self.getCondaEnv())
 
-    def createOutputStep(self):
+        # Store hand value
         hand_file = self._getExtraPath('hand.txt')
         f = open(hand_file)
         self.hand = Float(float(f.read()))
         f.close()
+
+    def flipStep(self):
+        if self.hand.get() > self.thresholdHand.get():
+            volume = self.inputVolume.get()
+            fn_vol = getImageLocation(volume)
+            pathFlipVol = self._getPath('flipVol.mrc')
+            self.runJob("xmipp_transform_mirror", "-i %s -o %s --flipX" \
+                            % (fn_vol, pathFlipVol))
+
+    def createOutputStep(self):
         self._defineOutputs(outputHand=self.hand)
+
+        if self.hand.get() > self.thresholdHand.get():
+            vol = Volume()
+            volFile = self._getPath('flipVol.mrc')
+            vol.setFileName(volFile)
+            Ts = self.inputVolume.get().getSamplingRate()
+            vol.setSamplingRate(Ts)
+            self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(volFile,Ts))
+            self._defineOutputs(outputFlipVol=vol)
+            self._defineSourceRelation(self.inputVolume, self.outputFlipVol)
 
 # --------------------------- INFO functions -------------------------------
     def _summary(self):
