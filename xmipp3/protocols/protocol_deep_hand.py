@@ -134,11 +134,11 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
     def _summary(self):
         summary = []
 
-        if hasattr(self, 'hand'):
-            summary.append('Hand value is: %f' %self.hand.get())
+        if hasattr(self, 'outputHand'):
+            summary.append('Hand value is: %f' %self.outputHand.get())
             summary.append('Hand values close to 1 mean the structure is predicted to be left handed')
             summary.append('Hand values close to 0 mean the structure is predicted to be right handed')
-            if self.hand.get() > self.thresholdHand.get():
+            if self.outputHand.get() > self.thresholdHand.get():
                 summary.append('Volume was flipped as it was deemed to be left handed')
 
         return summary
