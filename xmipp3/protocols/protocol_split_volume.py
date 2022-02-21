@@ -1,6 +1,7 @@
 # **************************************************************************
 # *
 # * Authors:     Carlos Oscar Sorzano (coss@cnb.csic.es)
+# *              Oier Lauzirika Zarrabeitia (oierlauzi@bizkaia.eu)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
