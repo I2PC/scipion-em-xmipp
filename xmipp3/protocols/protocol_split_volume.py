@@ -27,84 +27,213 @@
 Protocol to split a volume in two volumes based on a set of images
 """
 
-from pyworkflow.protocol.constants import LEVEL_ADVANCED
-from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, StringParam
-from pyworkflow.utils.path import cleanPath
+from asyncore import write
+from re import sub
+from pyworkflow.constants import BETA
+from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
+from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, StringParam, BooleanParam
+from pyworkflow.protocol.params import LT, LE, GE, GT, Range
+from pyworkflow.utils.path import copyFile, makePath, createLink, cleanPattern, cleanPath, moveFile
+
 from pwem.protocols import ProtClassify3D
 from pwem.objects import Volume
-from pwem.emlib.image import ImageHandler
-from xmipp3.convert import writeSetOfParticles
+from pwem.constants import (ALIGN_NONE, ALIGN_2D, ALIGN_3D, ALIGN_PROJ)
 
+from xmipp3.convert import writeSetOfParticles, writeSetOfVolumes
+
+import random as rand
 
 class XmippProtSplitvolume(ProtClassify3D):
     """Split volume in two"""
     _label = 'split volume'
+    _devStatus = BETA
     
     def __init__(self, **args):
         ProtClassify3D.__init__(self, **args)
+        #self.stepsExecutionMode = STEPS_PARALLEL
+        self._createFilenames()
 
+    def _createFilenames(self):
+        """ Centralize the names of the files. """
+        recFmt='rec%(rec)05d'
+
+        myDict = {
+            'average_root': f'average/',
+            'average_particles': f'average/directional_classes.xmd',
+            'average_volume': f'average/volume.vol',
+            'reconstruction_root': f'{recFmt}/', 
+            'reconstruction_particles': f'{recFmt}/directional_classes.xmd',
+            'reconstruction_volume': f'{recFmt}/volume.vol',
+            'volume_pca_root': f'volume_pca/',
+            'volume_pca_md': f'volume_pca/volumes.xmd',
+            'volume_pca_projections': f'volume_pca/projections.xmd',
+            'volume_pca_percentiles': f'volume_pca/percentiles.vol',
+        }
+        self._updateFilenamesDict(myDict)
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-        
-        form.addParam('directionalClasses', PointerParam, label="Directional classes", important=True, 
+        form.addParam('directionalClasses', PointerParam, label="Directional classes", 
                       pointerClass='SetOfAverages', pointerCondition='hasAlignmentProj',
+                      important=True, 
                       help='Select a set of particles with angles. Preferrably the output of a run of directional classes')
-        form.addParam('symmetryGroup', StringParam, default='c1',
-                      label="Symmetry group", 
+        form.addParam('symmetryGroup', StringParam, label="Symmetry group",
+                      default='c1',
                       help='See [[Xmipp Symmetry][http://www2.mrc-lmb.cam.ac.uk/Xmipp/index.php/Conventions_%26_File_formats#Symmetry]] page '
                            'for a description of the symmetry format accepted by Xmipp') 
         form.addParam('mask', PointerParam, label="Mask", pointerClass='VolumeMask', allowsNull=True,
                       help='The mask values must be binary: 0 (remove these voxels) and 1 (let them pass).')
-        form.addParam('Nrec', IntParam, label="Number of reconstructions", default=5000, expertLevel=LEVEL_ADVANCED, 
-                      help="Number of random reconstructions to perform");
-        form.addParam('Nsamples', IntParam, label="Number of images/reconstruction", default=15, expertLevel=LEVEL_ADVANCED, 
-                      help="Number of images per reconstruction. Consider that reconstructions with symmetry c1 will be perfomed");
-        form.addParam('alpha', FloatParam, label="Confidence level", default=0.05, expertLevel=LEVEL_ADVANCED, 
-                      help="This parameter is alpha. Two volumes, one at alpha/2 and another one at 1-alpha/2, will be generated");
+
+        form.addSection(label='Reconstruction')
+        form.addParam('reconstructionCount', IntParam, label="Number of reconstructions", 
+                      default=5000, validators=[GE(2)], expertLevel=LEVEL_ADVANCED, 
+                      help="Number of random reconstructions to perform")
+        form.addParam('reconstructionSamples', IntParam, label="Number of images per reconstruction", 
+                      default=15, validators=[GT(0)], expertLevel=LEVEL_ADVANCED, 
+                      help="Number of images per reconstruction. Consider that reconstructions with symmetry c1 will be performed")
+        form.addParam('reconstructionMaxResolution', FloatParam, label="Maximum resolution", 
+                      default=0.25, validators=[Range(0, 1)], expertLevel=LEVEL_ADVANCED, 
+                      help="Maximum resolution in terms of the Nyquist frequency")
+
+        form.addSection(label='Volumetric PCA Splitting')
+        form.addParam('volumePca_enable', BooleanParam, label='Enable', default=True)
+        form.addParam('volumePca_alpha', FloatParam, label="Confidence level (%)", 
+                      default=90, validators=[Range(50, 100)], expertLevel=LEVEL_ADVANCED, 
+                      help="This parameter is alpha. Two volumes, one at alpha/2 and another one at 1-alpha/2, will be generated")
+
+        form.addParallelSection()
     
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        self._insertFunctionStep('convertInputStep',self.directionalClasses.getObjId())
-        self._insertFunctionStep('generateSplittedVolumes')
-        self._insertFunctionStep('createOutput')
+        nRec = self.reconstructionCount.get()
+
+        reconstructSteps = []
+
+        # Reconstruct the average volume with all the particles
+        self._insertFunctionStep('generateAverageVolumeStep', prerequisites=[])
+        reconstructSteps.append(len(self._steps))
+
+        # Generate reconstructions in parallel with a random particle subset
+        for i in range(nRec):
+            self._insertFunctionStep('generateVolumeStep', i, prerequisites=[])
+            reconstructSteps.append(len(self._steps))
+
+        # Compare the volumes to select the most different ones
+        if self.volumePca_enable.get():
+            self._insertFunctionStep('volumePcaStep', nRec)
+        
+        self._insertFunctionStep('createOutputStep')
 
     #--------------------------- STEPS functions ---------------------------------------------------
-    def convertInputStep(self, inputParticlesId):
-        writeSetOfParticles(self.directionalClasses.get(),self._getExtraPath("directionalClasses.xmd"))
+    def generateAverageVolumeStep(self):
+        self._createAverageWorkingDir()
+        fnParticles = self._getExtraPath(self._getFileName('average_particles'))
+        fnVolume = self._getExtraPath(self._getFileName('average_volume'))
+        sym = self.symmetryGroup.get()
+        maxRes = self.reconstructionMaxResolution.get()
+        
+        # Write a metadata file with all the particles
+        particles = self.directionalClasses.get()
+        writeSetOfParticles(particles, fnParticles)
 
-    def createOutput(self):
-        inputParticles = self.directionalClasses.get()
-        Ts = inputParticles.getSamplingRate()
-        volumesSet = self._createSetOfVolumes()
-        volumesSet.setSamplingRate(Ts)
+        # Execute the reconstruction job
+        command='xmipp_reconstruct_fourier'
+        args = f'-i {fnParticles} -o {fnVolume} --max_resolution {maxRes} --sym {sym} -v 0'
+        self.runJob(command, args)
+    
+    def generateVolumeStep(self, rec):
+        self._createReconstructionWorkingDir(rec)
+        fnParticles = self._getExtraPath(self._getFileName('reconstruction_particles', rec=rec))
+        fnVolume = self._getExtraPath(self._getFileName('reconstruction_volume', rec=rec))
+        maxRes = self.reconstructionMaxResolution.get()
+        
+        # Write a metadata file with a random subset of particles
+        particles = self.directionalClasses.get()
+        nSamples = self.reconstructionSamples.get()
+        subset = self._createRandomParticleSubset(particles, nSamples)
+        writeSetOfParticles(subset, fnParticles, alignType=particles.getAlignment())
+
+        # Execute the reconstruction job
+        command='xmipp_reconstruct_fourier'
+        args = f'-i {fnParticles} -o {fnVolume} --max_resolution {maxRes} -v 0'
+        self.runJob(command, args)
+
+    def volumePcaStep(self, nRec):
+        self._createVolumePcaWorkingDir()
+        fnAverageVolume = self._getExtraPath(self._getFileName('average_volume'))
+        fnsVolumes = [self._getExtraPath(self._getFileName('reconstruction_volume', rec=rec)) for rec in range(nRec)]
+        fnVolumesMd = self._getExtraPath(self._getFileName('volume_pca_md'))
+        fnProjections = self._getExtraPath(self._getFileName('volume_pca_projections'))
+        fnOutPca = self._getExtraPath(self._getFileName('volume_pca_percentiles'))
+        alpha = self.volumePca_alpha.get()
+
+        # Index all volumes into the metadata file
+        writeSetOfVolumes(
+            [Volume(fn, objId=i) for i, fn in enumerate(fnsVolumes)], 
+            fnVolumesMd, 
+            alignType=ALIGN_NONE
+        )
+
+        # Execute the analysis job
+        command='xmipp_volume_pca'
+        args = f'-i {fnVolumesMd} -o {fnProjections} --generatePCAVolumes {alpha} {1-alpha} --opca {fnOutPca} --avgVolume {fnAverageVolume} -v 0'
+        self.runJob(command, args)
+
+    def createOutputStep(self):
+        outputs = []
+        sources = [self.directionalClasses]
+
+        # Generate requested outputs
+        if self.volumePca_enable.get():
+            outputs.append(self._createVolumePcaOutput())
+
+        # Define source-output relations
+        for output in outputs:
+            for source in sources:
+                self._defineSourceRelation(source, output)
+
+        
+    #--------------------------- UTILS functions ---------------------------------------------------
+    def _createAverageWorkingDir(self):
+        root = self._getExtraPath(self._getFileName('average_root'))
+        makePath(root)
+        return root
+
+    def _createReconstructionWorkingDir(self, rec):
+        root = self._getExtraPath(self._getFileName('reconstruction_root', rec=rec))
+        makePath(root)
+        return root
+    
+    def _createVolumePcaWorkingDir(self):
+        root = self._getExtraPath(self._getFileName('volume_pca_root'))
+        makePath(root)
+        return root
+
+    def _createRandomParticleSubset(self, particles, nSamples):
+        result = []
+
+        # Create a random selection mask (nSample Trues and False for the rest)
+        particleMask = [True]*nSamples + [False]*(len(particles)-nSamples)
+        rand.shuffle(particleMask)
+
+        # Add the selected items to the result
+        assert(len(particles) == len(particleMask))
+        for particle, selected in zip(particles, particleMask):
+            if selected:
+                result.append(particle.clone())
+
+        return result
+
+    def _createVolumePcaOutput(self):
+        assert(self.volumePca_enable.get())
+        volumes = self._createSetOfVolumes('volumePca')
+        volumes.copyInfo(self.directionalClasses.get())
+
         for i in range(2):
-            vol = Volume()
-            fnVol = self._getExtraPath("split_v%d.vol"%(i+1))
-            fnMrc = self._getExtraPath("split_v%d.mrc"%(i+1))
-            self.runJob("xmipp_image_convert","-i %s -o %s -t vol"%(fnVol,fnMrc), numberOfMpi=1)
-            self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(fnMrc, Ts), numberOfMpi=1)
-            cleanPath(fnVol)
-            vol.setLocation(1, fnMrc)
-            volumesSet.append(vol)
-        
-        self._defineOutputs(outputVolumes=volumesSet)
-        self._defineSourceRelation(inputParticles, volumesSet)
-        
-    def generateSplittedVolumes(self):
-        inputParticles = self.directionalClasses.get()
-        Xdim = inputParticles.getDimensions()[0]
-        fnMask = ""
-        if self.mask.hasValue():
-            fnMask = self._getExtraPath("mask.vol")
-            img=ImageHandler()
-            img.convert(self.mask.get(), fnMask)
-            self.runJob('xmipp_image_resize',"-i %s --dim %d"%(fnMask,Xdim),numberOfMpi=1)
-            self.runJob('xmipp_transform_threshold',"-i %s --select below 0.5 --substitute binarize"%fnMask,numberOfMpi=1)
+            path = self._getExtraPath(self._getFileName('volume_pca_percentiles'))
+            loc = (i+1, path)
+            vol = Volume(loc)
+            volumes.append(vol)
 
-        args="-i %s --oroot %s --Nrec %d --Nsamples %d --sym %s --alpha %f"%\
-             (self._getExtraPath("directionalClasses.xmd"),self._getExtraPath("split"),self.Nrec.get(),self.Nsamples.get(),
-              self.symmetryGroup.get(), self.alpha.get())
-        if fnMask!="":
-            args+=" --mask binary_file %s"%fnMask
-        self.runJob("xmipp_classify_first_split",args)
+        self._defineOutputs(outputVolumetricPca=volumes)
+        return volumes
