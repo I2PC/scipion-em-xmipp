@@ -28,8 +28,6 @@
 Protocol to split a volume in two volumes based on a set of images
 """
 
-from asyncore import write
-from re import sub
 from pyworkflow.constants import BETA
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, StringParam, BooleanParam
@@ -181,7 +179,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         self.runJob(command, args)
 
     def createOutputStep(self):
-        outputs = []
+        outputs = [self._createAverageVolumeOutput()]
         sources = [self.directionalClasses]
 
         # Generate requested outputs
@@ -224,6 +222,13 @@ class XmippProtSplitvolume(ProtClassify3D):
                 result.append(particle.clone())
 
         return result
+
+    def _createAverageVolumeOutput(self):
+        path = self._getExtraPath(self._getFileName('average_volume'))
+        volume = Volume(path)
+        volume.copyInfo(self.directionalClasses.get())
+        self._defineOutputs(outputAverageVolume=volume)
+        return volume
 
     def _createVolumePcaOutput(self):
         assert(self.volumePca_enable.get())
