@@ -127,8 +127,10 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
             Ts = self.inputVolume.get().getSamplingRate()
             vol.setSamplingRate(Ts)
             self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(volFile,Ts))
-            self._defineOutputs(outputFlipVol=vol)
-            self._defineSourceRelation(self.inputVolume, self.outputFlipVol)
+            self._defineOutputs(outputVol=vol)
+        else:
+            self._defineOutputs(outputVol=self.inputVolume.get())
+        self._defineSourceRelation(self.inputVolume, self.outputVol)
 
 # --------------------------- INFO functions -------------------------------
     def _summary(self):
@@ -140,6 +142,8 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
             summary.append('Hand values close to 0 mean the structure is predicted to be right handed')
             if self.outputHand.get() > self.thresholdHand.get():
                 summary.append('Volume was flipped as it was deemed to be left handed')
+            else:
+                summary.append('Volume was not flipped as it was deemed to be right handed')
 
         return summary
 
