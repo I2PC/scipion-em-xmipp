@@ -116,7 +116,7 @@ class XmippProtCoreAnalysis(ProtClassify2D):
         resulting from the protocol execution.
         """
         inputParticles = self.inputClasses.get().getImages()
-        level = self._lastLevel()
+        level = self._getLastLevel()
         subset = CLASSES_CORE
 
         subsetFn = self._getFileName("level_classes", level=level, sub=subset)
@@ -194,7 +194,7 @@ class XmippProtCoreAnalysis(ProtClassify2D):
         """ Return the classes metadata for this iteration.
         block parameter can be 'info' or 'classes'."""
         if lev == "last":
-            lev = self._lastLevel()
+            lev = self._getLastLevel()
         mdFile = self._getFileName('level_classes', level=lev, sub=subset)
         if block:
             mdFile = block + '@' + mdFile
@@ -203,7 +203,7 @@ class XmippProtCoreAnalysis(ProtClassify2D):
 
     def _getLevelMdImages(self, level, subset):
         if level == "last":
-            level = self._lastLevel()
+            level = self._getLastLevel()
 
         xmpMd = self._getFileName('level_images', level=level, sub=subset)
         if not exists(xmpMd):
@@ -213,12 +213,12 @@ class XmippProtCoreAnalysis(ProtClassify2D):
 
     def _createLevelMdImages(self, level, sub):
         if level == "last":
-            level = self._lastLevel()
+            level = self._getLastLevel()
         mdClassesFn = self._getLevelMdClasses(lev=level, block="", subset=sub)
         mdImgs = md.joinBlocks(mdClassesFn, "class0")
         mdImgs.write(self._getFileName('level_images', level=level, sub=sub))
 
-    def _lastLevel(self):
+    def _getLastLevel(self):
         """ Find the last Level number """
         clsFn = self._getFileName('level_classes', level=0, sub="")
         levelTemplate = clsFn.replace('level_00', 'level_??')
