@@ -152,7 +152,9 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
             volClass = volInput.getClass()
             vol = volClass() # Create an instance with the same class of input 
             vol.copyInfo(volInput)
-            vol.setLocation(1, self.outputStk)
+            vol.setLocation(self.outputStk)
+            if self.outputStk.endswith(".mrc"):
+                self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(self.outputStk,volInput.getSamplingRate()))
             if volInput.hasOrigin():
                 vol.setOrigin(volInput.getOrigin())
             self._postprocessOutput(vol)
@@ -179,7 +181,7 @@ class XmippProcessVolumes(ProtPreprocessVolumes):
         """ Prepare the files to process """
         if self._isSingleInput():
             self.inputFn = getImageLocation(self.inputVolumes.get())
-            self.outputStk = self._getExtraPath("output_volume.vol")
+            self.outputStk = self._getExtraPath("output_volume.mrc")
         else:
             self.inputFn = self._getTmpPath('input_volumes.xmd')
             self.outputStk = self._getExtraPath("output_volumes.stk")

@@ -45,7 +45,7 @@ class XmippReconstructSwarmViewer(XmippViewer):
 
     def _visualize(self, obj, **args):
         import os
-        fnVolume = self.protocol._getExtraPath("volumeAvg.vol")
+        fnVolume = self.protocol._getExtraPath("volumeAvg.mrc")
         if os.path.exists(fnVolume):
             fnDir = self.protocol._getExtraPath()
             samplingRate=self.protocol.readInfoField(fnDir,"sampling",emlib.MDL_SAMPLINGRATE)

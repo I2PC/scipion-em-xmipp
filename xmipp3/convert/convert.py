@@ -40,6 +40,7 @@ except ImportError:
 import numpy as np
 
 from pyworkflow.utils import replaceBaseExt
+from pyworkflow.utils.path import cleanPath
 from pyworkflow.object import ObjectWrap, String, Float, Integer, Object
 from pwem.constants import (NO_INDEX, ALIGN_NONE, ALIGN_PROJ, ALIGN_2D,
                             ALIGN_3D)
@@ -1710,3 +1711,11 @@ def createParamPhantomFile(filename, dimX, partSetMd, phFlip=False,
     str += "_applyShift 1\n_noisePixelLevel    '0 0'\n"
     f.write(str)
     f.close()
+
+def convertToMrc(self, fnVol, Ts, deleteVol=False):
+    fnMrc = fnVol.replace(".vol",".mrc")
+    self.runJob("xmipp_image_convert","-i %s -o %s -t vol"%(fnVol, fnMrc), numberOfMpi=1)
+    self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(fnMrc, Ts), numberOfMpi=1)
+    if deleteVol:
+        cleanPath(fnVol)
+    return fnMrc
