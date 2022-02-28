@@ -43,7 +43,7 @@ from .protocols import (
     XmippProtHelicalParameters, XmippProtConsensusPicking, XmippProtMonoRes,
     XmippProtRotSpectra, XmippProtReconstructHighRes, XmippProtExtractUnit,
     XmippProtReconstructHeterogeneous, XmippMetaProtDiscreteHeterogeneityScheduler,
-    XmippProtShiftParticles)
+    XmippProtShiftParticles, XmippProtVolumeDeformZernike3D, XmippProtStructureMapZernike3D)
 
 
 #===============================================================================
@@ -330,8 +330,7 @@ class XmippVolumeMaskRadiusProjMWizard(XmippVolumeMaskRadiusWizard):
 
 class XmippVolumeRadiiWizard(VolumeMaskRadiiWizard):
     _targets = [(XmippProtMaskVolumes, ['innerRadius', 'outerRadius']),
-               (XmippProtExtractUnit, ['innerRadius', 'outerRadius'])
-              ]
+               (XmippProtExtractUnit, ['innerRadius', 'outerRadius'])]
 
     def _getParameters(self, protocol):
 
@@ -367,6 +366,33 @@ class XmippVolumeRadiiProjMWizard(XmippVolumeRadiiWizard):
         protParams['label']= label
         protParams['value']= value
         return protParams
+
+class Zernike3DMaskWizard(VolumeMaskRadiusWizard):
+    _targets = [(XmippProtVolumeDeformZernike3D, ['Rmax']),
+                (XmippProtStructureMapZernike3D, ['Rmax'])]
+
+    def _getParameters(self, protocol):
+
+        label, value = self._getInputProtocol(self._targets, protocol)
+
+        protParams = {}
+        if isinstance(protocol, XmippProtVolumeDeformZernike3D):
+            protParams['input'] = protocol.inputVolume
+        else:
+            protParams['input'] = protocol.inputVolumes
+        protParams['label'] = label
+        protParams['value'] = value
+        return protParams
+
+    def _getProvider(self, protocol):
+        _objs = self._getParameters(protocol)['input']
+        return VolumeMaskRadiusWizard._getListProvider(self, _objs)
+
+    def show(self, form):
+        params = self._getParameters(form.protocol)
+        _value = params['value']
+        _label = params['label']
+        VolumeMaskRadiusWizard.show(self, form, _value, _label, UNIT_PIXEL)
 
 
 #===============================================================================
@@ -502,8 +528,9 @@ class XmippGaussianVolumesWizard(GaussianVolumesWizard):
 class ColorScaleWizard(ColorScaleWizardBase):
         _targets = ColorScaleWizardBase.defineTargets(XmippMonoResViewer, XmippResDeepResViewer, XmippProtFSOViewer)
 
+
 class XmippSelectPointinVolWizard(EmWizard):
-    _targets = [(XmippProtShiftParticles, ['x', 'y', 'z'])]
+    _targets = [(XmippProtShiftParticles, ['xin', 'yin', 'zin'])]
 
     def show(self, form):
         protocol = form.protocol
@@ -513,8 +540,7 @@ class XmippSelectPointinVolWizard(EmWizard):
             return
         plt = MaskVolumeWizard(volume.getFileName())
         plt.initializePlot()
-        form.setVar('x', int(plt.origin[2]))
-        form.setVar('y', int(plt.origin[1]))
-        form.setVar('z', int(plt.origin[0]))
+        form.setVar('xin', int(plt.origin[2]))
+        form.setVar('yin', int(plt.origin[1]))
+        form.setVar('zin', int(plt.origin[0]))
         del plt
-

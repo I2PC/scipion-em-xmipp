@@ -111,7 +111,7 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
         myDict = {
                  MASK_DILATE: self._getTmpPath('Mask_dilate.vol'),  
                  OPERATE_VOL: self._getTmpPath('operateVolume.vol'),                             
-                 RESIZE_MASK: self._getExtraPath('binaryMask.vol'),                
+                 RESIZE_MASK: self._getTmpPath('binaryMask.vol'),                
                  RESIZE_VOL: self._getExtraPath('originalVolume.vol'),
                  OUTPUT_RESOLUTION_FILE_CHIMERA: self._getExtraPath('chimera_resolution.vol'),
 #                 OUTPUT_RESOLUTION_FILE_CHIMERA: self._getExtraPath(CHIMERA_RESOLUTION_VOL),                                 
@@ -230,6 +230,7 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
         params += ' -s  %f' % self.inputVolume.get().getSamplingRate()            
         params += ' -o  %s' % self._getFileName(OUTPUT_RESOLUTION_FILE)
 
+        os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
         self.runJob("xmipp_deepRes_resolution", params, numberOfMpi=1,
                     env=self.getCondaEnv())
         

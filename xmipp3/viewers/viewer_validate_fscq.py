@@ -35,7 +35,7 @@ import matplotlib.colors as mcolors
 from pyworkflow.utils import getExt, removeExt
 from os.path import abspath
 from pwem.viewers import (LocalResolutionViewer, EmPlotter, ChimeraView,
-                          DataView)
+                          DataView, ChimeraAttributeViewer)
 from pyworkflow.gui import *
 from pyworkflow.protocol.params import (LabelParam, EnumParam)
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
@@ -47,7 +47,7 @@ from xmipp3.protocols.protocol_validate_fscq import (XmippProtValFit,
                                                      PDB_NORM_FILE)
 
 
-class XmippProtValFitViewer(LocalResolutionViewer):
+class XmippProtValFitViewer(LocalResolutionViewer, ChimeraAttributeViewer):
     """
     Visualization tools for validation fsc-q.
     
@@ -62,12 +62,12 @@ class XmippProtValFitViewer(LocalResolutionViewer):
     
     def __init__(self, *args, **kwargs):
         ProtocolViewer.__init__(self, *args, **kwargs)
-    
+
     def _defineParams(self, form):
         self._env = os.environ.copy()
         form.addSection(label='FSC-Q results')
         
-        group = form.addGroup('Visualization in Chimera')
+        group = form.addGroup('Chimera visualization')
         
         group.addParam('displayVolume', LabelParam,
                       important=True,
@@ -105,9 +105,15 @@ class XmippProtValFitViewer(LocalResolutionViewer):
                       label='Amino acids with low resolvability',   
                       help='Amino acids that have atoms with FSC-Q > 1'
                       ' are determined. It is suggested that these amino acids '
-                      ' be re-checked in order to improve the fit.')       
-            
-        
+                      ' be re-checked in order to improve the fit.')
+
+        super()._defineParams(form)
+        from pwem.wizards.wizard import ColorScaleWizardBase
+        group = form.addGroup('Color settings')
+        ColorScaleWizardBase.defineColorScaleParams(group, defaultLowest=-3, defaultHighest=3, defaultIntervals=21,
+                                                    defaultColorMap='RdBu_r')
+
+
     def _getVisualizeDict(self):
         self.protocol._createFilenameTemplates()
         visualizeDict = {'displayVolume': self._visualize_vol,
@@ -116,6 +122,7 @@ class XmippProtValFitViewer(LocalResolutionViewer):
                          'displayNormPDB': self._visualize_norm_pdb,
                          'calculateFscqNeg': self._statistics,
                          'calculateFscqPos': self._statistics}
+        visualizeDict.update(ChimeraAttributeViewer._getVisualizeDict(self))
         return visualizeDict     
     
     def _create_legend(self, scale):

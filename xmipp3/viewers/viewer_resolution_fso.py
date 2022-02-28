@@ -195,8 +195,9 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         xTitle = 'Resolution (1/A)'
         yTitle = 'Anisotropy (a.u.)'
         mdLabelX = emlib.MDL_RESOLUTION_FREQ
-        mdLabelY = emlib.MDL_RESOLUTION_FSO
-        self._plotCurveAnisotropy(fnmd, title, xTitle, yTitle, mdLabelX, mdLabelY)
+        mdLabelY1 = emlib.MDL_RESOLUTION_FSO
+        mdLabelY2 = emlib.MDL_RESOLUTION_ANISOTROPY
+        self._plotCurveAnisotropy(fnmd, title, xTitle, yTitle, mdLabelX, mdLabelY1, mdLabelY2)
 
     def _showDirectionalFilter(self, param=None):
         """
@@ -292,7 +293,7 @@ class XmippProtFSOViewer(LocalResolutionViewer):
 
         return resInterp, okToPlot
 
-    def _plotCurveAnisotropy(self, fnmd, title, xTitle, yTitle, mdLabelX, mdLabelY):
+    def _plotCurveAnisotropy(self, fnmd, title, xTitle, yTitle, mdLabelX, mdLabelY1, mdLabelY2):
         """
         This function is called by _showAnisotropyCurve
         It shows the FSO curve in terms of the resolution
@@ -303,9 +304,11 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         xplotter.plot_title_fontsize = 11
 
         a = xplotter.createSubPlot(title, xTitle, yTitle, 1, 1)
-        xplotter.plotMdFile(md, mdLabelX, mdLabelY, 'g')
+        xplotter.plotMdFile(md, mdLabelX, mdLabelY1, 'g')
 
-        xx, yy = self._prepareDataForPlot(md, mdLabelX, mdLabelY)
+        xx, yy = self._prepareDataForPlot(md, mdLabelX, mdLabelY1)
+        _, yyBingham = self._prepareDataForPlot(md, mdLabelX, mdLabelY2)
+
         from matplotlib.ticker import FuncFormatter
         a.axes.xaxis.set_major_formatter(FuncFormatter(self._formatFreq))
         a.axes.set_ylim([-0.1, 1.1])
@@ -320,6 +323,8 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         res_01, okToPlot_01 = self.interpolRes(0.1, xx, yy)
         res_05, okToPlot_05 = self.interpolRes(0.5, xx, yy)
         res_09, okToPlot_09 = self.interpolRes(0.9, xx, yy)
+
+        a.axes.plot(xx, yyBingham, 'r--')
 
         if (okToPlot_01 and okToPlot_05 and okToPlot_09):
             textstr = str(0.9) + ' --> ' + str("{:.2f}".format(res_09)) + 'A\n' + str(0.5) + ' --> ' + str(
