@@ -28,6 +28,7 @@
 Protocol to split a volume in two volumes based on a set of images
 """
 
+from numpy import average
 from pyworkflow.constants import BETA
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, StringParam, BooleanParam
@@ -38,7 +39,7 @@ from pwem.protocols import ProtClassify3D
 from pwem.objects import Volume
 from pwem.constants import (ALIGN_NONE, ALIGN_2D, ALIGN_3D, ALIGN_PROJ)
 
-from xmipp3.convert import writeSetOfParticles, writeSetOfVolumes
+from xmipp3.convert import writeSetOfParticles, writeSetOfVolumes, readSetOfVolumes
 
 import random as rand
 
@@ -49,12 +50,12 @@ class XmippProtSplitvolume(ProtClassify3D):
     
     def __init__(self, **args):
         ProtClassify3D.__init__(self, **args)
-        #self.stepsExecutionMode = STEPS_PARALLEL
+        self.stepsExecutionMode = STEPS_PARALLEL
         self._createFilenames()
 
     def _createFilenames(self):
         """ Centralize the names of the files. """
-        recFmt='rec%(rec)05d'
+        recFmt='rec%(rec)06d'
 
         myDict = {
             'average_root': f'average/',
@@ -67,6 +68,8 @@ class XmippProtSplitvolume(ProtClassify3D):
             'volume_pca_md': f'volume_pca/volumes.xmd',
             'volume_pca_projections': f'volume_pca/projections.xmd',
             'volume_pca_percentiles': f'volume_pca/percentiles.vol',
+            'volume_pca_extremes': f'volume_pca/extremes.vol',
+            'volume_pca_basis': f'volume_pca/basis.vol',
         }
         self._updateFilenamesDict(myDict)
     #--------------------------- DEFINE param functions --------------------------------------------
@@ -76,6 +79,9 @@ class XmippProtSplitvolume(ProtClassify3D):
                       pointerClass='SetOfAverages', pointerCondition='hasAlignmentProj',
                       important=True, 
                       help='Select a set of particles with angles. Preferrably the output of a run of directional classes')
+        form.addParam('averageVolume', PointerParam, label="Average volume", 
+                      pointerClass='Volume', important=True, 
+                      help='Volume used as the coordinate origin of the PCA analysis')
         form.addParam('symmetryGroup', StringParam, label="Symmetry group",
                       default='c1',
                       help='See [[Xmipp Symmetry][http://www2.mrc-lmb.cam.ac.uk/Xmipp/index.php/Conventions_%26_File_formats#Symmetry]] page '
@@ -99,6 +105,9 @@ class XmippProtSplitvolume(ProtClassify3D):
         form.addParam('volumePca_alpha', FloatParam, label="Confidence level (%)", 
                       default=90, validators=[Range(50, 100)], expertLevel=LEVEL_ADVANCED, 
                       help="This parameter is alpha. Two volumes, one at alpha/2 and another one at 1-alpha/2, will be generated")
+        form.addParam('volumePca_beta', FloatParam, label="Extreme volume separation", 
+                      default=10, validators=[GE(0.0)], expertLevel=LEVEL_ADVANCED, 
+                      help="This parameter defines how far extreme volumes are generated")
 
         form.addParallelSection()
     
@@ -106,16 +115,13 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _insertAllSteps(self):
         nRec = self.reconstructionCount.get()
 
-        reconstructSteps = []
-
-        # Reconstruct the average volume with all the particles
-        self._insertFunctionStep('generateAverageVolumeStep', prerequisites=[])
-        reconstructSteps.append(len(self._steps))
+        # Start converting the input
+        convertInputIdx = self._insertFunctionStep('convertInputStep')
 
         # Generate reconstructions in parallel with a random particle subset
+        reconstructSteps = []
         for i in range(nRec):
-            self._insertFunctionStep('generateVolumeStep', i, prerequisites=[])
-            reconstructSteps.append(len(self._steps))
+            reconstructSteps.append(self._insertFunctionStep('generateVolumeStep', i, prerequisites=[convertInputIdx]))
 
         # Compare the volumes to select the most different ones
         if self.volumePca_enable.get():
@@ -124,6 +130,9 @@ class XmippProtSplitvolume(ProtClassify3D):
         self._insertFunctionStep('createOutputStep')
 
     #--------------------------- STEPS functions ---------------------------------------------------
+    def convertInputStep(self):
+        self._createParticleList()
+
     def generateAverageVolumeStep(self):
         self._createAverageWorkingDir()
         fnParticles = self._getExtraPath(self._getFileName('average_particles'))
@@ -137,7 +146,11 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         # Execute the reconstruction job
         command='xmipp_reconstruct_fourier'
-        args = f'-i {fnParticles} -o {fnVolume} --max_resolution {maxRes} --sym {sym} -v 0'
+        args  = f'-i {fnParticles} '
+        args += f'-o {fnVolume} '
+        args += f'--max_resolution {maxRes} '
+        args += f'--sym {sym} '
+        args += f'-v 0'
         self.runJob(command, args)
     
     def generateVolumeStep(self, rec):
@@ -149,22 +162,29 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Write a metadata file with a random subset of particles
         particles = self.directionalClasses.get()
         nSamples = self.reconstructionSamples.get()
-        subset = self._createRandomParticleSubset(particles, nSamples)
+        subset = rand.sample(self.particleList, k=nSamples)
         writeSetOfParticles(subset, fnParticles, alignType=particles.getAlignment())
 
         # Execute the reconstruction job
         command='xmipp_reconstruct_fourier'
-        args = f'-i {fnParticles} -o {fnVolume} --max_resolution {maxRes} -v 0'
+        args  = f'-i {fnParticles} '
+        args += f'-o {fnVolume} '
+        args += f'--max_resolution {maxRes} '
+        args += f'-v 0'
         self.runJob(command, args)
 
     def volumePcaStep(self, nRec):
         self._createVolumePcaWorkingDir()
-        fnAverageVolume = self._getExtraPath(self._getFileName('average_volume'))
+        alpha = self.volumePca_alpha.get()
+        beta = self.volumePca_beta.get()
+        fnAverageVolume = self.averageVolume.get().getFileName()
+        fnMask = self.mask.get().getFileName() if self.mask.get() else None
         fnsVolumes = [self._getExtraPath(self._getFileName('reconstruction_volume', rec=rec)) for rec in range(nRec)]
         fnVolumesMd = self._getExtraPath(self._getFileName('volume_pca_md'))
-        fnProjections = self._getExtraPath(self._getFileName('volume_pca_projections'))
+        fnOutProjections = self._getExtraPath(self._getFileName('volume_pca_projections'))
+        fnOutExtremes = self._getExtraPath(self._getFileName('volume_pca_extremes'))
         fnOutPca = self._getExtraPath(self._getFileName('volume_pca_percentiles'))
-        alpha = self.volumePca_alpha.get()
+        fnOutBasis = self._getExtraPath(self._getFileName('volume_pca_basis'))
 
         # Index all volumes into the metadata file
         writeSetOfVolumes(
@@ -175,16 +195,31 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         # Execute the analysis job
         command='xmipp_volume_pca'
-        args = f'-i {fnVolumesMd} -o {fnProjections} --generatePCAVolumes {alpha} {1-alpha} --opca {fnOutPca} --avgVolume {fnAverageVolume} -v 0'
+        args  = f'-i {fnVolumesMd} '
+        args += f'-o {fnOutProjections} '
+        args += f'--avgVolume {fnAverageVolume} '
+        args += f'--saveBasis {fnOutBasis} '
+        args += f'--generatePCAVolumes {alpha} {100-alpha} '
+        args += f'--opca {fnOutPca} '
+        args += f'--generateExtremeVolumes {beta} '
+        args += f'--oext {fnOutExtremes} '
+        if fnMask:
+            args += f'--mask binary_file {fnMask} '
+        args += f'-v 0'
         self.runJob(command, args)
 
     def createOutputStep(self):
-        outputs = [self._createAverageVolumeOutput()]
+        outputs = []
         sources = [self.directionalClasses]
+
+        # Only add the mask if defined
+        if self.mask.get():
+            sources.append(self.mask)
 
         # Generate requested outputs
         if self.volumePca_enable.get():
-            outputs.append(self._createVolumePcaOutput())
+            outputs.append(self._createVolumePcaPercentilesOutput())
+            outputs.append(self._createVolumePcaExtremesOutput())
 
         # Define source-output relations
         for output in outputs:
@@ -193,6 +228,17 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         
     #--------------------------- UTILS functions ---------------------------------------------------
+    def _createParticleList(self):
+        """ Concurrent iteration of SetOfParticles is problematic.
+            Therefore create a list with clones of its elements 
+        """        
+        result = []
+
+        for particle in self.directionalClasses.get():
+            result.append(particle.clone())
+
+        self.particleList = result
+    
     def _createAverageWorkingDir(self):
         root = self._getExtraPath(self._getFileName('average_root'))
         makePath(root)
@@ -208,31 +254,9 @@ class XmippProtSplitvolume(ProtClassify3D):
         makePath(root)
         return root
 
-    def _createRandomParticleSubset(self, particles, nSamples):
-        result = []
-
-        # Create a random selection mask (nSample Trues and False for the rest)
-        particleMask = [True]*nSamples + [False]*(len(particles)-nSamples)
-        rand.shuffle(particleMask)
-
-        # Add the selected items to the result
-        assert(len(particles) == len(particleMask))
-        for particle, selected in zip(particles, particleMask):
-            if selected:
-                result.append(particle.clone())
-
-        return result
-
-    def _createAverageVolumeOutput(self):
-        path = self._getExtraPath(self._getFileName('average_volume'))
-        volume = Volume(path)
-        volume.copyInfo(self.directionalClasses.get())
-        self._defineOutputs(outputAverageVolume=volume)
-        return volume
-
-    def _createVolumePcaOutput(self):
+    def _createVolumePcaPercentilesOutput(self):
         assert(self.volumePca_enable.get())
-        volumes = self._createSetOfVolumes('volumePca')
+        volumes = self._createSetOfVolumes('volumePcaPercentiles')
         volumes.copyInfo(self.directionalClasses.get())
 
         for i in range(2):
@@ -241,5 +265,19 @@ class XmippProtSplitvolume(ProtClassify3D):
             vol = Volume(loc)
             volumes.append(vol)
 
-        self._defineOutputs(outputVolumetricPca=volumes)
+        self._defineOutputs(outputVolumetricPcaPercentiles=volumes)
+        return volumes
+    
+    def _createVolumePcaExtremesOutput(self):
+        assert(self.volumePca_enable.get())
+        volumes = self._createSetOfVolumes('volumePcaExtremes')
+        volumes.copyInfo(self.directionalClasses.get())
+
+        for i in range(2):
+            path = self._getExtraPath(self._getFileName('volume_pca_extremes'))
+            loc = (i+1, path)
+            vol = Volume(loc)
+            volumes.append(vol)
+
+        self._defineOutputs(outputVolumetricPcaExtremes=volumes)
         return volumes
