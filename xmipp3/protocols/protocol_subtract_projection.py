@@ -53,20 +53,19 @@ class XmippProtSubtractProjection(EMProtocol):
         form.addParam('mask', PointerParam, pointerClass='VolumeMask', label="Mask for region to keep", allowsNull=True,
                       help='Specify a 3D mask for the region of the input volume that you want to keep. If no mask is '
                            'selected, the whole image will be subtracted')
-        form.addParam('resol', FloatParam, label="Filter at resolution: ", default=3, allowsNull=True,
-                      expertLevel=LEVEL_ADVANCED,
+        form.addParam('resol', FloatParam, label="Resolution: ", default=3, allowsNull=True, expertLevel=LEVEL_ADVANCED,
                       help='Resolution (A) at which subtraction will be performed, filtering the volume projections.'
                            'Value 0 implies no filtering.')
         form.addParam('sigma', FloatParam, label="Decay of the filter (sigma): ", default=3, condition='resol',
-                      help='Decay of the filter (sigma parameter) to smooth the mask transition',
-                      expertLevel=LEVEL_ADVANCED)
+                      help='Decay of the filter (sigma) to smooth the mask transition', expertLevel=LEVEL_ADVANCED)
         form.addParam('iter', IntParam, label="Number of iterations: ", default=5, expertLevel=LEVEL_ADVANCED,
                       help='Number of iterations for the adjustment process of the images before the subtraction itself'
                            'several iterations are recommended to improve the adjustment.')
-        form.addParam('rfactor', FloatParam, label="Relaxation factor (lambda): ", default=1,
-                      expertLevel=LEVEL_ADVANCED,
-                      help='Relaxation factor for Fourier amplitude projector (POCS), it should be between 0 and 1, '
-                           'being 1 no relaxation and 0 no modification of volume 2 amplitudes')
+        form.addParam('rfactor', FloatParam, label="Relaxation factor: ", default=1, expertLevel=LEVEL_ADVANCED,
+                      help='Relaxation factor (lambda) for Fourier amplitude projector (POCS), it should be between 0 '
+                           'and 1, being 1 no relaxation and 0 no modification of volume 2 amplitudes')
+        form.addParam('pad', IntParam, label="Fourier padding factor: ", default=1, expertLevel=LEVEL_ADVANCED,
+                      help='The volume is zero padded by this factor to produce projections')
         form.addParallelSection(threads=0, mpi=8)
 
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -84,16 +83,14 @@ class XmippProtSubtractProjection(EMProtocol):
         fnVol = vol.getFileName()
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
-        resol = self.resol.get()
-        iters = self.iter.get()
+        ts = vol.getSamplingRate()
         program = "xmipp_subtract_projection"
-        args = '-i %s --ref %s -o %s --iter %s --lambda %s' % (self._getExtraPath(self.INPUT_PARTICLES), fnVol,
-                                                               self._getExtraPath("output_particles.xmd"), iters,
-                                                               self.rfactor.get())
-        args += ' --saveProj %s' % self._getExtraPath('')
+        args = '-i %s --ref %s -o %s --iter %d --lambda %f --sampling %f --padding %f' % \
+               (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles.xmd"),
+                self.iter.get(), self.rfactor.get(), ts, self.pad.get())
+        resol = self.resol.get()
         if resol:
-            fc = vol.getSamplingRate()/resol
-            args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
+            args += ' --max_resolution %f --sigma %d' % (resol, self.sigma.get())
         if self.maskVol.get() is not None:
             args += ' --maskVol %s' % self.maskVol.get().getFileName()
         if self.mask.get() is not None:
@@ -107,7 +104,7 @@ class XmippProtSubtractProjection(EMProtocol):
             mskKeep = self._getExtraPath("mask_keep.mrc")
             args_mask_keep = "-i %s -o %s" % (fnDescr, mskKeep)
             self.runJob("xmipp_phantom_create", args_mask_keep, numberOfMpi=1)
-            args_imageheader2 = "-i %s --sampling_rate %f" % (mskKeep, vol.getSamplingRate())
+            args_imageheader2 = "-i %s --sampling_rate %f" % (mskKeep, ts)
             self.runJob("xmipp_image_header", args_imageheader2, numberOfMpi=1)
             args += ' --mask %s --subAll' % mskKeep
         self.runJob(program, args)
