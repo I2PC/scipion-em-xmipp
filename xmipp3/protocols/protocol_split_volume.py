@@ -28,7 +28,7 @@
 Protocol to split a volume in two volumes based on a set of images
 """
 
-from numpy import average
+from unittest import result
 from pyworkflow.constants import BETA
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, StringParam, BooleanParam
@@ -39,9 +39,13 @@ from pwem.protocols import ProtClassify3D
 from pwem.objects import Volume
 from pwem.constants import (ALIGN_NONE, ALIGN_2D, ALIGN_3D, ALIGN_PROJ)
 
+import xmippLib
 from xmipp3.convert import writeSetOfParticles, writeSetOfVolumes, readSetOfVolumes
 
-import random as rand
+import math
+import itertools
+import numpy as np
+
 
 class XmippProtSplitvolume(ProtClassify3D):
     """Split volume in two"""
@@ -55,21 +59,9 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def _createFilenames(self):
         """ Centralize the names of the files. """
-        recFmt='rec%(rec)06d'
-
         myDict = {
-            'average_root': f'average/',
-            'average_particles': f'average/directional_classes.xmd',
-            'average_volume': f'average/volume.vol',
-            'reconstruction_root': f'{recFmt}/', 
-            'reconstruction_particles': f'{recFmt}/directional_classes.xmd',
-            'reconstruction_volume': f'{recFmt}/volume.vol',
-            'volume_pca_root': f'volume_pca/',
-            'volume_pca_md': f'volume_pca/volumes.xmd',
-            'volume_pca_projections': f'volume_pca/projections.xmd',
-            'volume_pca_percentiles': f'volume_pca/percentiles.vol',
-            'volume_pca_extremes': f'volume_pca/extremes.vol',
-            'volume_pca_basis': f'volume_pca/basis.vol',
+            'distances': 'distances.csv',
+            'correlations': 'correlations.csv',
         }
         self._updateFilenamesDict(myDict)
     #--------------------------- DEFINE param functions --------------------------------------------
@@ -79,205 +71,175 @@ class XmippProtSplitvolume(ProtClassify3D):
                       pointerClass='SetOfAverages', pointerCondition='hasAlignmentProj',
                       important=True, 
                       help='Select a set of particles with angles. Preferrably the output of a run of directional classes')
-        form.addParam('averageVolume', PointerParam, label="Average volume", 
-                      pointerClass='Volume', important=True, 
-                      help='Volume used as the coordinate origin of the PCA analysis')
-        form.addParam('symmetryGroup', StringParam, label="Symmetry group",
-                      default='c1',
-                      help='See [[Xmipp Symmetry][http://www2.mrc-lmb.cam.ac.uk/Xmipp/index.php/Conventions_%26_File_formats#Symmetry]] page '
-                           'for a description of the symmetry format accepted by Xmipp') 
-        form.addParam('mask', PointerParam, label="Mask", pointerClass='VolumeMask', allowsNull=True,
-                      help='The mask values must be binary: 0 (remove these voxels) and 1 (let them pass).')
 
-        form.addSection(label='Reconstruction')
-        form.addParam('reconstructionCount', IntParam, label="Number of reconstructions", 
-                      default=5000, validators=[GE(2)], expertLevel=LEVEL_ADVANCED, 
-                      help="Number of random reconstructions to perform")
-        form.addParam('reconstructionSamples', IntParam, label="Number of images per reconstruction", 
-                      default=15, validators=[GT(0)], expertLevel=LEVEL_ADVANCED, 
-                      help="Number of images per reconstruction. Consider that reconstructions with symmetry c1 will be performed")
-        form.addParam('reconstructionMaxResolution', FloatParam, label="Maximum resolution", 
-                      default=0.25, validators=[Range(0, 1)], expertLevel=LEVEL_ADVANCED, 
-                      help="Maximum resolution in terms of the Nyquist frequency")
-
-        form.addSection(label='Volumetric PCA Splitting')
-        form.addParam('volumePca_enable', BooleanParam, label='Enable', default=True)
-        form.addParam('volumePca_alpha', FloatParam, label="Confidence level (%)", 
-                      default=90, validators=[Range(50, 100)], expertLevel=LEVEL_ADVANCED, 
-                      help="This parameter is alpha. Two volumes, one at alpha/2 and another one at 1-alpha/2, will be generated")
-        form.addParam('volumePca_beta', FloatParam, label="Extreme volume separation", 
-                      default=10, validators=[GE(0.0)], expertLevel=LEVEL_ADVANCED, 
-                      help="This parameter defines how far extreme volumes are generated")
+        form.addSection(label='Graph building')
+        form.addParam('maxAngularDistance', FloatParam, label="Maximum angular distance (deg)", 
+                      validators=[Range(0, 180)], default=15,
+                      help='Maximum angular distance for considering the correlation of two classes. '
+                      'Valid range: 0 to 180 deg')
+        form.addParam('maxComparisonCount', IntParam, label="Maximum number of classes to be compared", 
+                      validators=[GT(0)], default=8,
+                      help='Number of classes among which the aligned correlation is computed.')
 
         form.addParallelSection()
     
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        nRec = self.reconstructionCount.get()
-
         # Start converting the input
-        convertInputIdx = self._insertFunctionStep('convertInputStep')
+        self._insertFunctionStep('convertInputStep')
 
-        # Generate reconstructions in parallel with a random particle subset
-        reconstructSteps = []
-        for i in range(nRec):
-            reconstructSteps.append(self._insertFunctionStep('generateVolumeStep', i, prerequisites=[convertInputIdx]))
+        # Compute the angular distances
+        self._insertFunctionStep('computeAngularDistancesStep')
 
-        # Compare the volumes to select the most different ones
-        if self.volumePca_enable.get():
-            self._insertFunctionStep('volumePcaStep', nRec)
-        
+        # Compute the correlation among the closest averages
+        self._insertFunctionStep('computeCorrelationStep')
+
+        # Create the output
         self._insertFunctionStep('createOutputStep')
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def convertInputStep(self):
-        self._createParticleList()
+        self._particleList = self._getParticleList(self.directionalClasses.get())
 
-    def generateAverageVolumeStep(self):
-        self._createAverageWorkingDir()
-        fnParticles = self._getExtraPath(self._getFileName('average_particles'))
-        fnVolume = self._getExtraPath(self._getFileName('average_volume'))
-        sym = self.symmetryGroup.get()
-        maxRes = self.reconstructionMaxResolution.get()
-        
-        # Write a metadata file with all the particles
-        particles = self.directionalClasses.get()
-        writeSetOfParticles(particles, fnParticles)
+    def computeAngularDistancesStep(self):
+        # Perform the computation
+        distances = self._getAngularDistanceMatrix(self._particleList)
 
-        # Execute the reconstruction job
-        command='xmipp_reconstruct_fourier'
-        args  = f'-i {fnParticles} '
-        args += f'-o {fnVolume} '
-        args += f'--max_resolution {maxRes} '
-        args += f'--sym {sym} '
-        args += f'-v 0'
-        self.runJob(command, args)
-    
-    def generateVolumeStep(self, rec):
-        self._createReconstructionWorkingDir(rec)
-        fnParticles = self._getExtraPath(self._getFileName('reconstruction_particles', rec=rec))
-        fnVolume = self._getExtraPath(self._getFileName('reconstruction_volume', rec=rec))
-        maxRes = self.reconstructionMaxResolution.get()
-        
-        # Write a metadata file with a random subset of particles
-        particles = self.directionalClasses.get()
-        nSamples = self.reconstructionSamples.get()
-        subset = rand.sample(self.particleList, k=nSamples)
-        writeSetOfParticles(subset, fnParticles, alignType=particles.getAlignment())
+        # Save output data
+        self._saveMatrix(self._getExtraPath(self._getFileName('distances')), distances)
 
-        # Execute the reconstruction job
-        command='xmipp_reconstruct_fourier'
-        args  = f'-i {fnParticles} '
-        args += f'-o {fnVolume} '
-        args += f'--max_resolution {maxRes} '
-        args += f'-v 0'
-        self.runJob(command, args)
+    def computeCorrelationStep(self):
+        # Read input data
+        distances = self._loadMatrix(self._getExtraPath(self._getFileName('distances')))
+        maxAngularDistance = np.radians(self.maxAngularDistance.get())
+        particles = self._particleList
 
-    def volumePcaStep(self, nRec):
-        self._createVolumePcaWorkingDir()
-        alpha = self.volumePca_alpha.get()
-        beta = self.volumePca_beta.get()
-        fnAverageVolume = self.averageVolume.get().getFileName()
-        fnMask = self.mask.get().getFileName() if self.mask.get() else None
-        fnsVolumes = [self._getExtraPath(self._getFileName('reconstruction_volume', rec=rec)) for rec in range(nRec)]
-        fnVolumesMd = self._getExtraPath(self._getFileName('volume_pca_md'))
-        fnOutProjections = self._getExtraPath(self._getFileName('volume_pca_projections'))
-        fnOutExtremes = self._getExtraPath(self._getFileName('volume_pca_extremes'))
-        fnOutPca = self._getExtraPath(self._getFileName('volume_pca_percentiles'))
-        fnOutBasis = self._getExtraPath(self._getFileName('volume_pca_basis'))
+        # Compute the class pairs to be considered
+        pairs = self._getPairMatrix(distances, maxAngularDistance)
 
-        # Index all volumes into the metadata file
-        writeSetOfVolumes(
-            [Volume(fn, objId=i) for i, fn in enumerate(fnsVolumes)], 
-            fnVolumesMd, 
-            alignType=ALIGN_NONE
-        )
+        # Compute the correlation
+        correlations = self._getCorrelationMatrix(particles, pairs)
 
-        # Execute the analysis job
-        command='xmipp_volume_pca'
-        args  = f'-i {fnVolumesMd} '
-        args += f'-o {fnOutProjections} '
-        args += f'--avgVolume {fnAverageVolume} '
-        args += f'--saveBasis {fnOutBasis} '
-        args += f'--generatePCAVolumes {alpha} {100-alpha} '
-        args += f'--opca {fnOutPca} '
-        args += f'--generateExtremeVolumes {beta} '
-        args += f'--oext {fnOutExtremes} '
-        if fnMask:
-            args += f'--mask binary_file {fnMask} '
-        args += f'-v 0'
-        self.runJob(command, args)
+        # Save output data
+        self._saveMatrix(self._getExtraPath(self._getFileName('correlations')), correlations)
 
     def createOutputStep(self):
-        outputs = []
-        sources = [self.directionalClasses]
+        pass
 
-        # Only add the mask if defined
-        if self.mask.get():
-            sources.append(self.mask)
-
-        # Generate requested outputs
-        if self.volumePca_enable.get():
-            outputs.append(self._createVolumePcaPercentilesOutput())
-            outputs.append(self._createVolumePcaExtremesOutput())
-
-        # Define source-output relations
-        for output in outputs:
-            for source in sources:
-                self._defineSourceRelation(source, output)
-
-        
-    #--------------------------- UTILS functions ---------------------------------------------------
-    def _createParticleList(self):
-        """ Concurrent iteration of SetOfParticles is problematic.
-            Therefore create a list with clones of its elements 
-        """        
+    #--------------------------- INFO functions ----------------------------------------------------
+    def _validate(self):
         result = []
 
-        for particle in self.directionalClasses.get():
+        if self.maxComparisonCount.get() >= len(self.directionalClasses.get()):
+            result.append('Comparison count should be less than the length of the input directional classes')
+
+        return result
+    
+    def _citations(self):
+        pass
+
+    def _summary(self):
+        pass
+    
+    def _methods(self):
+        pass
+
+    #--------------------------- UTILS functions ---------------------------------------------------
+    def _saveMatrix(self, path, x):
+        np.savetxt(path, x, delimiter=',') # CSV
+
+    def _loadMatrix(self, path, dtype=float):
+        return np.genfromtxt(path, delimiter=',', dtype=dtype) # CSV
+
+    def _calculateInDegreesFromAdjacency(self, adj):
+        return np.sum(adj, axis=0)
+
+    def _calculateOutDegreesFromAdjacency(self, adj):
+        return np.sum(adj, axis=1)
+
+    def _calculateDegreesFromAdjacency(self, adj):
+        return self._calculateInDegreesFromAdjacency(adj) + self._calculateOutDegreesFromAdjacency(adj)
+
+    def _calculateLaplacianFromAdjacency(self, adjacency):
+        result = -adjacency
+        degrees = self._calculateDegreesFromAdjacency(adjacency)
+
+        for i in range(len(degrees)):
+            assert(result[i, i] == 0)
+            result[i, i] = degrees[i]
+
+        return result
+
+    def _getParticleList(self, particles):
+        result = []
+
+        for particle in particles:
             result.append(particle.clone())
 
-        self.particleList = result
+        assert(len(result) == len(particles))
+        return result
     
-    def _createAverageWorkingDir(self):
-        root = self._getExtraPath(self._getFileName('average_root'))
-        makePath(root)
-        return root
+    def _getAngularDistanceMatrix(self, classes):
+        # Shorthands for some variables
+        nClasses = len(classes)
 
-    def _createReconstructionWorkingDir(self, rec):
-        root = self._getExtraPath(self._getFileName('reconstruction_root', rec=rec))
-        makePath(root)
-        return root
-    
-    def _createVolumePcaWorkingDir(self):
-        root = self._getExtraPath(self._getFileName('volume_pca_root'))
-        makePath(root)
-        return root
+        # Compute a symmetric matrix with the angular distances.
+        # Do not compute the diagonal, as the distance with itself is zero.
+        distances = np.zeros(shape=(nClasses, nClasses))
+        for idx0, class0 in enumerate(classes):
+            for idx1, class1 in enumerate(itertools.islice(classes, idx0)):
+                # Obtain the rotation matrices of the directional classes
+                rotMtx0 = class0.getTransform().getRotationMatrix()
+                rotMtx1 = class1.getTransform().getRotationMatrix()
 
-    def _createVolumePcaPercentilesOutput(self):
-        assert(self.volumePca_enable.get())
-        volumes = self._createSetOfVolumes('volumePcaPercentiles')
-        volumes.copyInfo(self.directionalClasses.get())
+                # Compute the angular distance. Based on:
+                # http://www.boris-belousov.net/2016/12/01/quat-dist/
+                # Rotation matrix is supposed to be orthonormal. Therefore, transpose is cheaper than inversion
+                assert(np.allclose(np.linalg.inv(rotMtx1), np.transpose(rotMtx1)))
+                diffMtx = np.matmul(rotMtx0, np.transpose(rotMtx1))
+                distance = math.acos((np.trace(diffMtx) - 1)/2)
 
-        for i in range(2):
-            path = self._getExtraPath(self._getFileName('volume_pca_percentiles'))
-            loc = (i+1, path)
-            vol = Volume(loc)
-            volumes.append(vol)
+                # Write the result on symmetrical positions
+                distances[idx0, idx1] = distance
+                distances[idx1, idx0] = distance
 
-        self._defineOutputs(outputVolumetricPcaPercentiles=volumes)
-        return volumes
-    
-    def _createVolumePcaExtremesOutput(self):
-        assert(self.volumePca_enable.get())
-        volumes = self._createSetOfVolumes('volumePcaExtremes')
-        volumes.copyInfo(self.directionalClasses.get())
+        # Ensure that the result matrix is symmetrical
+        assert(np.array_equal(distances, np.transpose(distances)))
+        return distances
 
-        for i in range(2):
-            path = self._getExtraPath(self._getFileName('volume_pca_extremes'))
-            loc = (i+1, path)
-            vol = Volume(loc)
-            volumes.append(vol)
+    def _getPairMatrix(self, distances, maxDistance):
+        pairs = distances <= maxDistance
+        np.fill_diagonal(pairs, False)
+        return pairs
 
-        self._defineOutputs(outputVolumetricPcaExtremes=volumes)
-        return volumes
+    def _getCorrelation(self, class0, class1):
+        img0 = xmippLib.Image(class0.getLocation())
+        img1 = xmippLib.Image(class1.getLocation())
+        corr = img0.correlation(img1)
+        return max(corr, 0.0)
+
+    def _getCorrelationMatrix(self, classes, pairs):
+        correlations = np.zeros_like(pairs, dtype=float)
+
+        # Ensure that the pairs matrix is symmetrical
+        assert(np.array_equal(pairs, np.transpose(pairs)))
+
+        # Compute the symmetric matrix with the correlations
+        for idx0, idx1 in zip(*np.where(pairs)):
+            if idx0 < idx1:
+                # Calculate the corrrelation
+                class0 = classes[idx0]
+                class1 = classes[idx1]
+
+                # Write it on symmetrical positions
+                correlation = self._getCorrelation(class0, class1)
+                correlations[idx0, idx1] = correlation
+                correlations[idx1, idx0] = correlation
+
+            elif idx0 == idx1:
+                # Correlation on the diagonal is 1
+                correlations[idx0, idx0] = 1.0
+
+        # Ensure that the result matrix is symmetrical
+        assert(np.array_equal(correlations, np.transpose(correlations)))
+        return correlations
