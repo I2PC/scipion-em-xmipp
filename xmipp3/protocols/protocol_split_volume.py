@@ -28,7 +28,6 @@
 Protocol to split a volume in two volumes based on a set of images
 """
 
-from unittest import result
 from pyworkflow.constants import BETA
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, StringParam, BooleanParam
@@ -45,6 +44,9 @@ from xmipp3.convert import writeSetOfParticles, writeSetOfVolumes, readSetOfVolu
 import math
 import itertools
 import numpy as np
+
+from scipy.sparse import csgraph
+from scipy import stats
 
 
 class XmippProtSplitvolume(ProtClassify3D):
@@ -94,6 +96,9 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Compute the correlation among the closest averages
         self._insertFunctionStep('computeCorrelationStep')
 
+        # Identify disctinct sets
+        self._insertFunctionStep('cutGraphStep')
+
         # Create the output
         self._insertFunctionStep('createOutputStep')
 
@@ -123,6 +128,20 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Save output data
         self._saveMatrix(self._getExtraPath(self._getFileName('correlations')), correlations)
 
+    def cutGraphStep(self):
+        # Read input data
+        correlations = self._loadMatrix(self._getExtraPath(self._getFileName('correlations')))
+        graph = csgraph.csgraph_from_dense(correlations)
+
+        # Successively cut the graph until the desired amount of components (2) is obtained
+        desiredComponents = 2
+        nComponents, labels = csgraph.connected_components(graph)
+        while nComponents < desiredComponents:
+            component = stats.mode(labels) # Cut the biggest component
+            graph = self._cutGraph(graph, labels, component)
+            nComponents, labels = csgraph.connected_components(graph)
+        assert(nComponents == desiredComponents)
+
     def createOutputStep(self):
         pass
 
@@ -151,24 +170,6 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _loadMatrix(self, path, dtype=float):
         return np.genfromtxt(path, delimiter=',', dtype=dtype) # CSV
 
-    def _calculateInDegreesFromAdjacency(self, adj):
-        return np.sum(adj, axis=0)
-
-    def _calculateOutDegreesFromAdjacency(self, adj):
-        return np.sum(adj, axis=1)
-
-    def _calculateDegreesFromAdjacency(self, adj):
-        return self._calculateInDegreesFromAdjacency(adj) + self._calculateOutDegreesFromAdjacency(adj)
-
-    def _calculateLaplacianFromAdjacency(self, adjacency):
-        result = -adjacency
-        degrees = self._calculateDegreesFromAdjacency(adjacency)
-
-        for i in range(len(degrees)):
-            assert(result[i, i] == 0)
-            result[i, i] = degrees[i]
-
-        return result
 
     def _getParticleList(self, particles):
         result = []
@@ -215,7 +216,7 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _getCorrelation(self, class0, class1):
         img0 = xmippLib.Image(class0.getLocation())
         img1 = xmippLib.Image(class1.getLocation())
-        corr = img0.correlation(img1)
+        corr = img0.correlationAfterAlignment(img1)
         return max(corr, 0.0)
 
     def _getCorrelationMatrix(self, classes, pairs):
@@ -225,7 +226,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(np.array_equal(pairs, np.transpose(pairs)))
 
         # Compute the symmetric matrix with the correlations
-        for idx0, idx1 in zip(*np.where(pairs)):
+        for idx0, idx1 in zip(*np.nonzero(pairs)):
             if idx0 < idx1:
                 # Calculate the corrrelation
                 class0 = classes[idx0]
@@ -243,3 +244,20 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Ensure that the result matrix is symmetrical
         assert(np.array_equal(correlations, np.transpose(correlations)))
         return correlations
+
+    def _getSourceSinkVertices(self, graph, labels, component):
+        """ Among all the connected vertices, returns the least connected pair """
+        result = None
+
+        for pos in zip(*graph.nonzero()):
+            if (not result or graph[pos] < graph[result]) and labels[pos[0]] == component:
+                assert(labels[pos[1]] == component) # The destination vertex should also be in the same component
+                result = pos
+
+        return result
+
+    def _cutGraph(self, graph, labels, component):
+        source, sink = self._getSourceSinkVertices(graph, labels, component)
+        flow = csgraph.maximum_flow(graph, source, sink)
+        
+        return graph # TODO partition the graph based on the flow
