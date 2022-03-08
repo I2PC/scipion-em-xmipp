@@ -161,6 +161,8 @@ class XmippProtML2D(ProtClassify2D):
     #--------------------------- STEPS functions --------------------------------------------
     def convertInputStep(self, inputId):
         """ Write the input images as a Xmipp metadata file. """
+        import time
+        time.sleep(5)
         writeSetOfParticles(self.inputParticles.get(),
                             self._getFileName('input_particles'))
         # If input references, also convert to xmipp metadata
