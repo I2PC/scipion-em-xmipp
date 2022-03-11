@@ -36,7 +36,6 @@ from pyworkflow.utils.path import copyFile, makePath, createLink, cleanPattern, 
 
 from pwem.protocols import ProtClassify3D
 from pwem.objects import Volume
-from pwem.constants import (ALIGN_NONE, ALIGN_2D, ALIGN_3D, ALIGN_PROJ)
 
 import xmippLib
 from xmipp3.convert import writeSetOfParticles, writeSetOfVolumes, readSetOfVolumes
@@ -292,15 +291,19 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Decompose the laplacian matrix of the graph into its N
         # smallest eigenvectors. Then interpret these vectors as
         # "standing waves" in the graph and use them to partition it
+        # https://es.mathworks.com/help/matlab/math/partition-graph-with-laplacian-matrix.html
+        # https://people.csail.mit.edu/jshun/6886-s18/lectures/lecture13-1.pdf#page=11
         l = csgraph.laplacian(graph)
         values, vectors = linalg.eigsh(l, k=componentCount, which='SM')
         assert(values == sorted(values))
-        return self._classifySpectrum(vectors)
+        labels = self._classifySpectrum(vectors)
+
+        return labels
 
     def _getSourceSinkVertices(self, graph, labels, component):
         result = None
 
-        # Among all the connected vertices, get the least conneted ones
+        # Among all the connected vertices, get the least connected ones
         for pos in zip(*graph.nonzero()):
             if (not result or graph[pos] < graph[result]) and labels[pos[0]] == component:
                 assert(labels[pos[1]] == component) # The destination vertex should also be in the same component
@@ -329,7 +332,10 @@ class XmippProtSplitvolume(ProtClassify3D):
             source, sink = self._getSourceSinkVertices(graph, labels, component)
             flow = csgraph.maximum_flow(graph, source, sink)
 
-            # Update the labels and the graph with the residual graph
+            # Use the residual graph to determine separated components
+            # Then remove the edges connecting different components
+            # http://web.stanford.edu/class/archive/cs/cs161/cs161.1172/CS161Lecture16.pdf
+            # https://www.baeldung.com/cs/minimum-cut-graphs
             nComponents, labels = csgraph.connected_components(flow.residual)
             graph = self._removeEdges(graph, labels)
 
@@ -400,4 +406,3 @@ class XmippProtSplitvolume(ProtClassify3D):
             # Set the representative
             vol = Volume(self.representatives[classIdx])
             item.setRepresentative(vol)
-
