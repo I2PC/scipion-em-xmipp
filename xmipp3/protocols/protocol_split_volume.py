@@ -30,7 +30,7 @@ Protocol to split a volume in two volumes based on a set of images
 
 from pyworkflow.constants import BETA
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
-from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, StringParam, BooleanParam
+from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, StringParam, BooleanParam, EnumParam
 from pyworkflow.protocol.params import LT, LE, GE, GT, Range
 from pyworkflow.utils.path import copyFile, makePath, createLink, cleanPattern, cleanPath, moveFile
 
@@ -45,8 +45,10 @@ import math
 import itertools
 import numpy as np
 
-from scipy.sparse import csgraph
+from scipy import sparse
 from scipy import stats
+from scipy.sparse import csgraph
+from scipy.sparse import linalg
 
 
 class XmippProtSplitvolume(ProtClassify3D):
@@ -61,9 +63,14 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def _createFilenames(self):
         """ Centralize the names of the files. """
+        classFmt='c%(cls)02d'
+        suffixFmt='%(suffix)s'
+
         myDict = {
             'distances': 'distances.csv',
             'correlations': 'correlations.csv',
+            'labels': 'labels.csv',
+            'representative': f'{suffixFmt}_volume_{classFmt}.vol'
         }
         self._updateFilenamesDict(myDict)
     #--------------------------- DEFINE param functions --------------------------------------------
@@ -83,23 +90,21 @@ class XmippProtSplitvolume(ProtClassify3D):
                       validators=[GT(0)], default=8,
                       help='Number of classes among which the aligned correlation is computed.')
 
+        form.addSection(label='Graph partition')
+        form.addParam('graphPartitionMethod', EnumParam, label="Graph partition method", 
+                      choices=['Spectral',  'Minimum cut'], default=0,
+                      help='The method used for partitioning the graph')
+        form.addParam('graphPartitionCount', IntParam, label="Number of components", 
+                      validators=[GE(2)], default=2,
+                      help='Number of graphs to obtain')
         form.addParallelSection()
     
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        # Start converting the input
         self._insertFunctionStep('convertInputStep')
-
-        # Compute the angular distances
         self._insertFunctionStep('computeAngularDistancesStep')
-
-        # Compute the correlation among the closest averages
         self._insertFunctionStep('computeCorrelationStep')
-
-        # Identify disctinct sets
-        self._insertFunctionStep('cutGraphStep')
-
-        # Create the output
+        self._insertFunctionStep('graphPartitionStep')
         self._insertFunctionStep('createOutputStep')
 
     #--------------------------- STEPS functions ---------------------------------------------------
@@ -128,22 +133,42 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Save output data
         self._saveMatrix(self._getExtraPath(self._getFileName('correlations')), correlations)
 
-    def cutGraphStep(self):
+    def graphPartitionStep(self):
         # Read input data
         correlations = self._loadMatrix(self._getExtraPath(self._getFileName('correlations')))
         graph = csgraph.csgraph_from_dense(correlations)
-
-        # Successively cut the graph until the desired amount of components (2) is obtained
-        desiredComponents = 2
-        nComponents, labels = csgraph.connected_components(graph)
-        while nComponents < desiredComponents:
-            component = stats.mode(labels) # Cut the biggest component
-            graph = self._cutGraph(graph, labels, component)
-            nComponents, labels = csgraph.connected_components(graph)
-        assert(nComponents == desiredComponents)
+        
+        # Partition the graph according to the selected method
+        partitionFunctions = {
+            0: self._spectralPartition,
+            1: self._minimumCut
+        }
+        partitionFunction = partitionFunctions[self.graphPartitionMethod.get()]
+        partitionCount = self.graphPartitionCount.get()
+        labels = partitionFunction(graph, partitionCount)
+        
+        # Save the output
+        self._saveMatrix(self._getExtraPath(self._getFileName('labels')), labels)
 
     def createOutputStep(self):
-        pass
+        # Read input data
+        labels = self._loadMatrix(self._getExtraPath(self._getFileName('labels')), dtype=int)
+        particles = self.directionalClasses.get()
+        nClasses = max(labels) + 1
+
+        # Create the output elements
+        classes = self._createOutputClasses(particles, nClasses, labels, 'output')
+        volumes = self._createOutputVolumes(classes, 'output')
+
+        # Define the output
+        self._defineOutputs(outputClasses=classes, outputVolumes=volumes)
+
+        # Establish source-output relations
+        sources = [self.directionalClasses]
+        destinations = [classes, volumes]
+        for src in sources:
+            for dst in destinations:
+                self._defineSourceRelation(src, dst)
 
     #--------------------------- INFO functions ----------------------------------------------------
     def _validate(self):
@@ -165,7 +190,8 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     #--------------------------- UTILS functions ---------------------------------------------------
     def _saveMatrix(self, path, x):
-        np.savetxt(path, x, delimiter=',') # CSV
+        # Determine the format
+        np.savetxt(path, x, delimiter=',', fmt='%s') # CSV
 
     def _loadMatrix(self, path, dtype=float):
         return np.genfromtxt(path, delimiter=',', dtype=dtype) # CSV
@@ -196,9 +222,11 @@ class XmippProtSplitvolume(ProtClassify3D):
                 # Compute the angular distance. Based on:
                 # http://www.boris-belousov.net/2016/12/01/quat-dist/
                 # Rotation matrix is supposed to be orthonormal. Therefore, transpose is cheaper than inversion
+                # Clip is used inside the arccos because floating point errors may lead to values slightly 
+                # outside of its domain
                 assert(np.allclose(np.linalg.inv(rotMtx1), np.transpose(rotMtx1)))
                 diffMtx = np.matmul(rotMtx0, np.transpose(rotMtx1))
-                distance = math.acos((np.trace(diffMtx) - 1)/2)
+                distance = math.acos(np.clip((np.trace(diffMtx) - 1)/2, -1.0, +1.0))
 
                 # Write the result on symmetrical positions
                 distances[idx0, idx1] = distance
@@ -245,10 +273,34 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(np.array_equal(correlations, np.transpose(correlations)))
         return correlations
 
+    def _classifySpectrum(self, eigenVectors):
+        nVertices, nVectors = eigenVectors.shape
+        nVectorsLog2 = math.trunc(math.log2(nVectors))
+        assert(2**nVectorsLog2==nVectors) # TODO generalize for non pow2 classifications
+
+        # Iterate over the pow 2 indices, summing their weights in 
+        # decreasing order (binary counting)
+        labels = np.zeros(nVertices)
+        for i in range(1, nVectorsLog2+1):
+            w = eigenVectors[:, 2**i-1] # Extract the eigenvector
+            r = 2**(nVectorsLog2-i)
+            labels += r*(w>=0)
+
+        return labels
+
+    def _spectralPartition(self, graph, componentCount):
+        # Decompose the laplacian matrix of the graph into its N
+        # smallest eigenvectors. Then interpret these vectors as
+        # "standing waves" in the graph and use them to partition it
+        l = csgraph.laplacian(graph)
+        values, vectors = linalg.eigsh(l, k=componentCount, which='SM')
+        assert(values == sorted(values))
+        return self._classifySpectrum(vectors)
+
     def _getSourceSinkVertices(self, graph, labels, component):
-        """ Among all the connected vertices, returns the least connected pair """
         result = None
 
+        # Among all the connected vertices, get the least conneted ones
         for pos in zip(*graph.nonzero()):
             if (not result or graph[pos] < graph[result]) and labels[pos[0]] == component:
                 assert(labels[pos[1]] == component) # The destination vertex should also be in the same component
@@ -256,8 +308,96 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return result
 
-    def _cutGraph(self, graph, labels, component):
-        source, sink = self._getSourceSinkVertices(graph, labels, component)
-        flow = csgraph.maximum_flow(graph, source, sink)
+    def _removeEdges(self, graph, labels):
+        result = sparse.csr_matrix(graph.shape, dtype=graph.dtype)
+
+        # Copy the edges only if both vertices correspond to the same component
+        for pos in zip(*graph.nonzero()):
+            if labels[pos[0]] == labels[pos[1]]:
+                result[pos] = graph[pos]
         
-        return graph # TODO partition the graph based on the flow
+        return result
+
+    def _minimumCut(self, graph, componentCount):
+        # Obtain the component labels from the graph
+        nComponents, labels = csgraph.connected_components(graph)
+
+        # Repeatedly cut the graph until the desired amount of components is obtained
+        while nComponents < componentCount:
+            # Perform a maximum flow analysis with the biggest component of the graph
+            component = stats.mode(labels)
+            source, sink = self._getSourceSinkVertices(graph, labels, component)
+            flow = csgraph.maximum_flow(graph, source, sink)
+
+            # Update the labels and the graph with the residual graph
+            nComponents, labels = csgraph.connected_components(flow.residual)
+            graph = self._removeEdges(graph, labels)
+
+        return labels
+
+    def _reconstructVolume(self, path, particles, xmdSuffix=''):
+        # Convert the particles to a xmimpp metadata file
+        fnParticles = self._getTmpPath('particles_'+xmdSuffix+'.xmd')
+        writeSetOfParticles(particles, fnParticles)
+
+        # Reconstruct the volume
+        args  = f'-i {fnParticles} '
+        args += f'-o {path} '
+        args += f'--max_resolution 0.25 '
+        args += f'-v 0'
+        self.runJob('xmipp_reconstruct_fourier', args)
+
+        # Clear the metadata file
+        cleanPattern(fnParticles)
+
+    def _createOutputClasses(self, particles, nClasses, classification, suffix=''):
+        result = self._createSetOfClasses3D(particles, suffix)
+
+        # Create a list with all the representative filenames
+        representatives = []
+        for i in range(nClasses):
+            path = self._getExtraPath(self._getFileName('representative', suffix=suffix, cls=i))
+            representatives.append(path)
+
+        # Classify input particles
+        loader = XmippProtSplitvolume.ClassesLoader(classification, representatives)
+        loader.fillClasses(result)
+
+        return result
+
+    def _createOutputVolumes(self, classes, suffix=''):
+        result = self._createSetOfVolumes(suffix)
+        result.setSamplingRate(classes.getImages().getSamplingRate())
+        for i, cls in enumerate(classes):
+            vol = cls.getRepresentative()
+            vol.setObjId(cls.getObjId())
+            self._reconstructVolume(vol.getFileName(), cls, suffix+str(i))
+            result.append(vol)
+        
+        return result
+
+    class ClassesLoader:
+        """ Helper class to produce classes
+        """
+        def __init__(self, classification, representatives):
+            self.classification = classification
+            self.representatives = representatives
+
+        def fillClasses(self, clsSet):
+            clsSet.classifyItems(updateItemCallback=self._updateParticle,
+                                updateClassCallback=self._updateClass,
+                                itemDataIterator=iter(self.classification),
+                                doClone=False)
+
+        def _updateParticle(self, item, cls):
+            classId = cls + 1
+            item.setClassId(classId)
+
+        def _updateClass(self, item):
+            classId = item.getObjId()
+            classIdx = classId-1
+
+            # Set the representative
+            vol = Volume(self.representatives[classIdx])
+            item.setRepresentative(vol)
+
