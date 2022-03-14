@@ -66,6 +66,8 @@ class XmippProtSubtractProjection(EMProtocol):
                            'and 1, being 1 no relaxation and 0 no modification of volume 2 amplitudes')
         form.addParam('pad', IntParam, label="Fourier padding factor: ", default=1, expertLevel=LEVEL_ADVANCED,
                       help='The volume is zero padded by this factor to produce projections')
+        form.addParam('mwidth', FloatParam, label="Extra width for final mask (in A): ", default=40,
+                      expertLevel=LEVEL_ADVANCED, help='length in A to add for each side to the mask for final result')
         form.addParallelSection(threads=0, mpi=8)
 
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -85,9 +87,9 @@ class XmippProtSubtractProjection(EMProtocol):
             fnVol += ':mrc'
         ts = vol.getSamplingRate()
         program = "xmipp_subtract_projection"
-        args = '-i %s --ref %s -o %s --iter %d --lambda %f --sampling %f --padding %f' % \
+        args = '-i %s --ref %s -o %s --iter %d --lambda %f --sampling %f --padding %f --fmaskWidth %f' % \
                (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles.xmd"),
-                self.iter.get(), self.rfactor.get(), ts, self.pad.get())
+                self.iter.get(), self.rfactor.get(), ts, self.pad.get(), self.mwidth.get())
         resol = self.resol.get()
         if resol:
             args += ' --max_resolution %f --sigma %d' % (resol, self.sigma.get())
