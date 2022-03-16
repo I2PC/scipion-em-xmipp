@@ -28,17 +28,16 @@ This module implement the wrappers aroung Xmipp CL2D protocol
 visualization program.
 """
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
-from pyworkflow.utils import exists
-
-from pwem.viewers import DataView
+from pyworkflow.protocol.params import IntParam, LabelParam, BooleanParam
 
 from xmipp3.viewers import XmippViewer
 from xmipp3.protocols.protocol_split_volume import XmippProtSplitvolume
 
+import numpy as np
+import matplotlib.pyplot as plt
 
 class XmippViewerSplitVolume(XmippViewer):
-    """ Wrapper to visualize different type of data objects
-    with the Xmipp program xmipp_showj
+    """ Viewer for Split Volumes protocol
     """
     _label = 'viewer split volume'
     _targets = [XmippProtSplitvolume]
@@ -47,11 +46,85 @@ class XmippViewerSplitVolume(XmippViewer):
     def __init__(self, **args):
         XmippViewer.__init__(self, **args)
 
-    def _visualize(self, obj, **args):
-        if hasattr(obj, 'outputVolumes'):
-            XmippViewer._visualize(self,self.protocol.outputVolumes)
-        fnBasis=self.protocol._getExtraPath('split_pc1.vol')
-        if exists(fnBasis):
-            self._views.append(DataView(fnBasis))
+    # --------------------------- DEFINE param functions ----------------------
+    def _defineParams(self, form):
+        form.addParam('displayDistanceImage', LabelParam, label='Angular distance matrix',
+                        help='Shows an image where each pixel\'s colour corresponds to '
+                        'the angular distance computed for each image pair')
+        form.addParam('displayCorrelationImage', LabelParam, label='Correlation matrix',
+                        help='Shows an image where each pixel\'s colour corresponds to '
+                        'the correlation computed for each image pair')
+        form.addParam('displayAdjacencyImage', LabelParam, label='Adjacency matrix',
+                        help='Shows an image where each pixel\'s colour corresponds to '
+                        'the weight of each graph edge')
+        form.addParam('displayLabelImage', LabelParam, label='Classification',
+                        help='Shows an image where each column\'s colour corresponds to '
+                        'the label assigned to each image')
+        form.addParam('displayLabelHistogram', LabelParam, label='Class sizes',
+                        help='Shows a bar plot with the sizes of each class')
 
-        return self._views
+    def _getVisualizeDict(self):
+        return {
+            'displayDistanceImage': self._displayDistanceImage,
+            'displayCorrelationImage': self._displayCorrelationImage,
+            'displayAdjacencyImage': self._displayAdjacencyImage,
+            'displayLabelImage': self._displayLabelImage,
+            'displayLabelHistogram': self._displayLabelHistogram,
+        }
+    
+    # --------------------------- DEFINE display functions ----------------------
+    def _displayDistanceImage(self, e):
+        distances = self._readAngularDistances()
+        return self._showImagePairImage(distances, 'Angular distances')
+
+    def _displayCorrelationImage(self, e):
+        correlations = self._readCorrelations()
+        return self._showImagePairImage(correlations, 'Correlation')
+    
+    def _displayAdjacencyImage(self, e):
+        correlations = self._readAdjacency()
+        return self._showImagePairImage(correlations, 'Adjacency')
+
+    def _displayLabelImage(self, e):
+        labels = self._readLabels(labels, 'Classification')
+        return self._showStrip(labels)
+
+    def _displayLabelHistogram(self, e):
+        labels = self._readLabels(labels, 'Class sizes')
+        nClasses = max(labels)+1
+
+        fig, ax = plt.subplots()
+        ax.hist(labels, bins=nClasses)
+        ax.set_xlabel('Class number')
+        ax.set_ylabel('Class size')
+        ax.set_title('Class sizes')
+        return [fig]
+
+    # --------------------------- UTILS functions -----------------------------
+    def _readAngularDistances(self):
+        return self.protocol._readAngularDistances()
+
+    def _readCorrelations(self):
+        return self.protocol._readCorrelations()
+
+    def _readAdjacency(self):
+        return self.protocol._readAdjacency()
+
+    def _readLabels(self):
+        return self.protocol._readLabels()
+
+    def _showImagePairImage(self, img, title):
+        fig, ax = plt.subplots()
+        plt.colorbar(ax.imshow(img, origin='lower', aspect='auto', interpolation='none'))
+        ax.set_xlabel('Image number')
+        ax.set_ylabel('Image number')
+        ax.set_title(title)
+        return [fig]
+
+    def _showStrip(self, data, title):
+        fig, ax = plt.subplots()
+        plt.colorbar(ax.imshow(data, origin='lower', aspect='auto', interpolation='none'))
+        ax.set_xlabel('Image number')
+        ax.set_title(title)
+        return [fig]
+

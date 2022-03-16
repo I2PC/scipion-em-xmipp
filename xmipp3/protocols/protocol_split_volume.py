@@ -38,7 +38,7 @@ from pwem.protocols import ProtClassify3D
 from pwem.objects import Volume
 
 import xmippLib
-from xmipp3.convert import writeSetOfParticles, writeSetOfVolumes, readSetOfVolumes
+from xmipp3.convert import writeSetOfParticles
 
 import math
 import itertools
@@ -57,7 +57,7 @@ class XmippProtSplitvolume(ProtClassify3D):
     
     def __init__(self, **args):
         ProtClassify3D.__init__(self, **args)
-        self.stepsExecutionMode = STEPS_PARALLEL
+        # self.stepsExecutionMode = STEPS_PARALLEL
         self._createFilenames()
 
     def _createFilenames(self):
@@ -68,6 +68,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         myDict = {
             'distances': 'distances.csv',
             'correlations': 'correlations.csv',
+            'adjacency': 'adjacency.csv',
             'labels': 'labels.csv',
             'representative': f'{suffixFmt}_volume_{classFmt}.vol'
         }
@@ -103,6 +104,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         self._insertFunctionStep('convertInputStep')
         self._insertFunctionStep('computeAngularDistancesStep')
         self._insertFunctionStep('computeCorrelationStep')
+        self._insertFunctionStep('buildGraphStep')
         self._insertFunctionStep('graphPartitionStep')
         self._insertFunctionStep('createOutputStep')
 
@@ -115,11 +117,11 @@ class XmippProtSplitvolume(ProtClassify3D):
         distances = self._getAngularDistanceMatrix(self._particleList)
 
         # Save output data
-        self._saveMatrix(self._getExtraPath(self._getFileName('distances')), distances)
+        self._writeAngularDistances(distances)
 
     def computeCorrelationStep(self):
         # Read input data
-        distances = self._loadMatrix(self._getExtraPath(self._getFileName('distances')))
+        distances = self._readAngularDistances()
         maxAngularDistance = np.radians(self.maxAngularDistance.get())
         particles = self._particleList
 
@@ -130,12 +132,22 @@ class XmippProtSplitvolume(ProtClassify3D):
         correlations = self._getCorrelationMatrix(particles, pairs)
 
         # Save output data
-        self._saveMatrix(self._getExtraPath(self._getFileName('correlations')), correlations)
+        self._writeCorrelations(correlations)
+
+    def buildGraphStep(self):
+        # Read input data
+        correlations = self._readCorrelations()
+
+        # Compute the adjacencies
+        adjacency = correlations # TODO
+
+        # Save output data
+        self._writeAdjacency(adjacency)
 
     def graphPartitionStep(self):
         # Read input data
-        correlations = self._loadMatrix(self._getExtraPath(self._getFileName('correlations')))
-        graph = csgraph.csgraph_from_dense(correlations)
+        adjacency = self._readAdjacency()
+        graph = sparse.csr_matrix(adjacency)
         
         # Partition the graph according to the selected method
         partitionFunctions = {
@@ -147,11 +159,11 @@ class XmippProtSplitvolume(ProtClassify3D):
         labels = partitionFunction(graph, partitionCount)
         
         # Save the output
-        self._saveMatrix(self._getExtraPath(self._getFileName('labels')), labels)
+        self._writeLabels(labels)
 
     def createOutputStep(self):
         # Read input data
-        labels = self._loadMatrix(self._getExtraPath(self._getFileName('labels')), dtype=int)
+        labels = self._readLabels()
         particles = self.directionalClasses.get()
         nClasses = max(labels) + 1
 
@@ -188,13 +200,40 @@ class XmippProtSplitvolume(ProtClassify3D):
         pass
 
     #--------------------------- UTILS functions ---------------------------------------------------
-    def _saveMatrix(self, path, x):
+    def _writeMatrix(self, path, x, fmt='%s'):
         # Determine the format
-        np.savetxt(path, x, delimiter=',', fmt='%s') # CSV
+        np.savetxt(path, x, delimiter=',', fmt=fmt) # CSV
 
-    def _loadMatrix(self, path, dtype=float):
+    def _readMatrix(self, path, dtype=float):
         return np.genfromtxt(path, delimiter=',', dtype=dtype) # CSV
 
+    def _writeAngularDistances(self, distances):
+        assert(distances.dtype==float)
+        self._writeMatrix(self._getExtraPath(self._getFileName('distances')), distances, fmt='%.8f')
+
+    def _readAngularDistances(self):
+        return self._readMatrix(self._getExtraPath(self._getFileName('distances')), dtype=float)
+
+    def _writeCorrelations(self, correlations):
+        assert(correlations.dtype==float)
+        self._writeMatrix(self._getExtraPath(self._getFileName('correlations')), correlations, fmt='%.8f')
+    
+    def _readCorrelations(self):
+        return self._readMatrix(self._getExtraPath(self._getFileName('correlations')), dtype=float)
+
+    def _writeAdjacency(self, correlations):
+        assert(correlations.dtype==float)
+        self._writeMatrix(self._getExtraPath(self._getFileName('adjacency')), correlations, fmt='%.8f')
+    
+    def _readAdjacency(self):
+        return self._readMatrix(self._getExtraPath(self._getFileName('adjacency')), dtype=float)
+
+    def _writeLabels(self, labels):
+        assert(labels.dtype==int)
+        self._writeMatrix(self._getExtraPath(self._getFileName('labels')), labels, fmt='%i')
+
+    def _readLabels(self):
+        return self._readMatrix(self._getExtraPath(self._getFileName('labels')), dtype=int)
 
     def _getParticleList(self, particles):
         result = []
@@ -223,8 +262,8 @@ class XmippProtSplitvolume(ProtClassify3D):
                 # Rotation matrix is supposed to be orthonormal. Therefore, transpose is cheaper than inversion
                 # Clip is used inside the arccos because floating point errors may lead to values slightly 
                 # outside of its domain
-                assert(np.allclose(np.linalg.inv(rotMtx1), np.transpose(rotMtx1)))
-                diffMtx = np.matmul(rotMtx0, np.transpose(rotMtx1))
+                assert(np.allclose(np.linalg.inv(rotMtx1), rotMtx1.T))
+                diffMtx = np.matmul(rotMtx0, rotMtx1.T)
                 distance = math.acos(np.clip((np.trace(diffMtx) - 1)/2, -1.0, +1.0))
 
                 # Write the result on symmetrical positions
@@ -232,12 +271,12 @@ class XmippProtSplitvolume(ProtClassify3D):
                 distances[idx1, idx0] = distance
 
         # Ensure that the result matrix is symmetrical
-        assert(np.array_equal(distances, np.transpose(distances)))
+        assert(np.array_equal(distances, distances.T))
         return distances
 
     def _getPairMatrix(self, distances, maxDistance):
         pairs = distances <= maxDistance
-        np.fill_diagonal(pairs, False)
+        np.fill_diagonal(pairs, False) # Do not compute correlations with itself
         return pairs
 
     def _getCorrelation(self, class0, class1):
@@ -250,7 +289,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         correlations = np.zeros_like(pairs, dtype=float)
 
         # Ensure that the pairs matrix is symmetrical
-        assert(np.array_equal(pairs, np.transpose(pairs)))
+        assert(np.array_equal(pairs, pairs.T))
 
         # Compute the symmetric matrix with the correlations
         for idx0, idx1 in zip(*np.nonzero(pairs)):
@@ -265,11 +304,11 @@ class XmippProtSplitvolume(ProtClassify3D):
                 correlations[idx1, idx0] = correlation
 
             elif idx0 == idx1:
-                # Correlation on the diagonal is 1
+                # Correlation with itself is 1
                 correlations[idx0, idx0] = 1.0
 
         # Ensure that the result matrix is symmetrical
-        assert(np.array_equal(correlations, np.transpose(correlations)))
+        assert(np.array_equal(correlations, correlations.T))
         return correlations
 
     def _classifySpectrum(self, eigenVectors):
@@ -295,7 +334,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         # https://people.csail.mit.edu/jshun/6886-s18/lectures/lecture13-1.pdf#page=11
         l = csgraph.laplacian(graph)
         values, vectors = linalg.eigsh(l, k=componentCount, which='SM')
-        assert(values == sorted(values))
+        assert(np.array_equal(values, sorted(values)))
         labels = self._classifySpectrum(vectors)
 
         return labels
@@ -311,17 +350,10 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return result
 
-    def _removeEdges(self, graph, labels):
-        result = sparse.csr_matrix(graph.shape, dtype=graph.dtype)
-
-        # Copy the edges only if both vertices correspond to the same component
-        for pos in zip(*graph.nonzero()):
-            if labels[pos[0]] == labels[pos[1]]:
-                result[pos] = graph[pos]
-        
-        return result
-
     def _minimumCut(self, graph, componentCount):
+        # Convert graph to integers
+        graph = sparse.csr_matrix(graph*(2**20), dtype=int)
+
         # Obtain the component labels from the graph
         nComponents, labels = csgraph.connected_components(graph)
 
@@ -335,14 +367,22 @@ class XmippProtSplitvolume(ProtClassify3D):
             # Use the residual graph to determine separated components
             # Then remove the edges connecting different components
             # http://web.stanford.edu/class/archive/cs/cs161/cs161.1172/CS161Lecture16.pdf
-            # https://www.baeldung.com/cs/minimum-cut-graphs
-            nComponents, labels = csgraph.connected_components(flow.residual)
-            graph = self._removeEdges(graph, labels)
+            # https://cp-algorithms.com/graph/edmonds_karp.html
+            residual = graph - flow.residual # flow.residual is antisymmetric
+            residual = residual.minimum(residual.T) # Use the most restrictive flow
+            residual.eliminate_zeros()
+            nComponents, labels = csgraph.connected_components(residual)
+        
+            # Only keep the edges where both vertices correspond to the same component
+            for pos in zip(*graph.nonzero()):
+                if labels[pos[0]] != labels[pos[1]]:
+                    graph[pos] = 0
+            graph.eliminale_zeros()
 
         return labels
 
     def _reconstructVolume(self, path, particles, xmdSuffix=''):
-        # Convert the particles to a xmimpp metadata file
+        # Convert the particles to a xmipp metadata file
         fnParticles = self._getTmpPath('particles_'+xmdSuffix+'.xmd')
         writeSetOfParticles(particles, fnParticles)
 
