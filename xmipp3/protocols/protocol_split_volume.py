@@ -68,7 +68,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         myDict = {
             'distances': 'distances.csv',
             'correlations': 'correlations.csv',
-            'adjacency': 'adjacency.csv',
+            'weights': 'weights.csv',
             'labels': 'labels.csv',
             'representative': f'{suffixFmt}_volume_{classFmt}.vol'
         }
@@ -86,9 +86,9 @@ class XmippProtSplitvolume(ProtClassify3D):
                       validators=[Range(0, 180)], default=15,
                       help='Maximum angular distance for considering the correlation of two classes. '
                       'Valid range: 0 to 180 deg')
-        form.addParam('maxComparisonCount', IntParam, label="Maximum number of classes to be compared", 
+        form.addParam('maxNeighbors', IntParam, label="Maximum number of neighbors", 
                       validators=[GT(0)], default=8,
-                      help='Number of classes among which the aligned correlation is computed.')
+                      help='Number of neighbors to consider for each directional class.')
 
         form.addSection(label='Graph partition')
         form.addParam('graphPartitionMethod', EnumParam, label="Graph partition method", 
@@ -104,7 +104,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         self._insertFunctionStep('convertInputStep')
         self._insertFunctionStep('computeAngularDistancesStep')
         self._insertFunctionStep('computeCorrelationStep')
-        self._insertFunctionStep('buildGraphStep')
+        self._insertFunctionStep('computeWeightsStep')
         self._insertFunctionStep('graphPartitionStep')
         self._insertFunctionStep('createOutputStep')
 
@@ -134,19 +134,26 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Save output data
         self._writeCorrelations(correlations)
 
-    def buildGraphStep(self):
+    def computeWeightsStep(self):
         # Read input data
         correlations = self._readCorrelations()
 
-        # Compute the adjacencies
-        adjacency = correlations # TODO
+        # Compute the adjacency from objective function
+        weights = correlations # TODO
+
+        # Limit the number of neighbors
+        nNeighbors = self.maxNeighbors.get()
+        for row in weights:
+            # Delete the lowest correlations and leave only "nNeighbors"
+            indices = np.argsort(weights)
+            row[indices[:-nNeighbors]] = 0
 
         # Save output data
-        self._writeAdjacency(adjacency)
+        self._writeWeights(weights)
 
     def graphPartitionStep(self):
         # Read input data
-        adjacency = self._readAdjacency()
+        adjacency = self._readWeights()
         graph = sparse.csr_matrix(adjacency)
         
         # Partition the graph according to the selected method
@@ -185,7 +192,7 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _validate(self):
         result = []
 
-        if self.maxComparisonCount.get() >= len(self.directionalClasses.get()):
+        if self.maxNeighbors.get() >= len(self.directionalClasses.get()):
             result.append('Comparison count should be less than the length of the input directional classes')
 
         return result
@@ -221,12 +228,12 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _readCorrelations(self):
         return self._readMatrix(self._getExtraPath(self._getFileName('correlations')), dtype=float)
 
-    def _writeAdjacency(self, correlations):
+    def _writeWeights(self, correlations):
         assert(correlations.dtype==float)
-        self._writeMatrix(self._getExtraPath(self._getFileName('adjacency')), correlations, fmt='%.8f')
+        self._writeMatrix(self._getExtraPath(self._getFileName('weights')), correlations, fmt='%.8f')
     
-    def _readAdjacency(self):
-        return self._readMatrix(self._getExtraPath(self._getFileName('adjacency')), dtype=float)
+    def _readWeights(self):
+        return self._readMatrix(self._getExtraPath(self._getFileName('weights')), dtype=float)
 
     def _writeLabels(self, labels):
         assert(labels.dtype==int)
@@ -332,7 +339,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         # "standing waves" in the graph and use them to partition it
         # https://es.mathworks.com/help/matlab/math/partition-graph-with-laplacian-matrix.html
         # https://people.csail.mit.edu/jshun/6886-s18/lectures/lecture13-1.pdf#page=11
-        l = csgraph.laplacian(graph)
+        l = csgraph.laplacian(graph, normed=True)
         values, vectors = linalg.eigsh(l, k=componentCount, which='SM')
         assert(np.array_equal(values, sorted(values)))
         labels = self._classifySpectrum(vectors)
@@ -343,6 +350,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         result = None
 
         # Among all the connected vertices, get the least connected ones
+        # TODO determine another way to partition
         for pos in zip(*graph.nonzero()):
             if (not result or graph[pos] < graph[result]) and labels[pos[0]] == component:
                 assert(labels[pos[1]] == component) # The destination vertex should also be in the same component
