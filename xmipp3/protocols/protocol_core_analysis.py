@@ -45,8 +45,8 @@ CLASSES_CORE = '_core'
 
 
 class XmippProtCoreAnalysis(ProtClassify2D):
-    """ Analyzes the core of a 2D classification. The core is calculated through the Mahalanobis distance
-    from each image to the center of the class. """
+    """ Analyzes the core of a 2D classification. The core is calculated through
+    the Mahalanobis distance from each image to the center of the class. """
     
     _label = 'core analysis'
     
