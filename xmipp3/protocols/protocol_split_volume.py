@@ -94,9 +94,9 @@ class XmippProtSplitvolume(ProtClassify3D):
         form.addParam('graphPartitionMethod', EnumParam, label="Graph partition method", 
                       choices=['Spectral',  'Minimum cut'], default=0,
                       help='The method used for partitioning the graph')
-        form.addParam('graphPartitionCount', IntParam, label="Number of components", 
+        form.addParam('graphPartitionCount', IntParam, label="Minimum number of components", 
                       validators=[GE(2)], default=2,
-                      help='Number of graphs to obtain')
+                      help='Minimum number of classes to obtain')
         form.addParallelSection()
     
     #--------------------------- INSERT steps functions --------------------------------------------
@@ -325,7 +325,7 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         # Iterate over the pow 2 indices, summing their weights in 
         # decreasing order (binary counting)
-        labels = np.zeros(nVertices)
+        labels = np.zeros(nVertices, dtype=int)
         for i in range(1, nVectorsLog2+1):
             w = eigenVectors[:, 2**i-1] # Extract the eigenvector
             r = 2**(nVectorsLog2-i)
@@ -364,6 +364,7 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         # Obtain the component labels from the graph
         nComponents, labels = csgraph.connected_components(graph)
+        labels = labels.astype(int)
 
         # Repeatedly cut the graph until the desired amount of components is obtained
         while nComponents < componentCount:
@@ -380,6 +381,7 @@ class XmippProtSplitvolume(ProtClassify3D):
             residual = residual.minimum(residual.T) # Use the most restrictive flow
             residual.eliminate_zeros()
             nComponents, labels = csgraph.connected_components(residual)
+            labels = labels.astype(int)
         
             # Only keep the edges where both vertices correspond to the same component
             for pos in zip(*graph.nonzero()):
