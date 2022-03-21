@@ -79,7 +79,7 @@ class XmippProtConsensusPicking(ProtParticlePicking):
                       label="Input coordinates", important=True,
                       help='Select the set of coordinates to compare')
         form.addParam('consensusRadius', params.IntParam, default=10,
-                      label="Radius",
+                      label="Radius",  allowsPointers=True, allowsNull=True,
                       help="All coordinates within this radius (in pixels) "
                            "are presumed to correspond to the same particle")
         form.addParam('consensus', params.IntParam, default=-1,
