@@ -28,6 +28,7 @@
 Protocol to split a volume in two volumes based on a set of images
 """
 
+from unittest import result
 from pyworkflow.constants import BETA
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, StringParam, BooleanParam, EnumParam
@@ -89,6 +90,9 @@ class XmippProtSplitvolume(ProtClassify3D):
         form.addParam('maxNeighbors', IntParam, label="Maximum number of neighbors", 
                       validators=[GT(0)], default=8,
                       help='Number of neighbors to consider for each directional class.')
+        form.addParam('enforceUndirected', BooleanParam, label="Enforce undirected", 
+                      default=False, expertLevel=LEVEL_ADVANCED,
+                      help='Enforce a undirected graph')
 
         form.addSection(label='Graph partition')
         form.addParam('graphPartitionMethod', EnumParam, label="Graph partition method", 
@@ -113,8 +117,11 @@ class XmippProtSplitvolume(ProtClassify3D):
         self._particleList = self._getParticleList(self.directionalClasses.get())
 
     def computeAngularDistancesStep(self):
+        # Read input data
+        particles = self._particleList
+
         # Perform the computation
-        distances = self._getAngularDistanceMatrix(self._particleList)
+        distances = self._calculateAngularDistanceMatrix(particles)
 
         # Save output data
         self._writeAngularDistances(distances)
@@ -126,10 +133,10 @@ class XmippProtSplitvolume(ProtClassify3D):
         particles = self._particleList
 
         # Compute the class pairs to be considered
-        pairs = self._getPairMatrix(distances, maxAngularDistance)
+        pairs = self._calculatePairMatrix(distances, maxAngularDistance)
 
         # Compute the correlation
-        correlations = self._getCorrelationMatrix(particles, pairs)
+        correlations = self._calculateCorrelationMatrix(particles, pairs)
 
         # Save output data
         self._writeCorrelations(correlations)
@@ -138,15 +145,20 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Read input data
         correlations = self._readCorrelations()
 
-        # Compute the adjacency from objective function
-        weights = correlations # TODO
+        # Calculate weights from correlations
+        weights = self._calculateWeights(correlations)
 
         # Limit the number of neighbors
         nNeighbors = self.maxNeighbors.get()
         for row in weights:
             # Delete the lowest correlations and leave only "nNeighbors"
-            indices = np.argsort(weights)
+            indices = np.argsort(row)
             row[indices[:-nNeighbors]] = 0
+
+        # Make the graph undirected if requested
+        isUndirected = self.enforceUndirected.get()
+        if isUndirected:
+            weights = np.maximum(weights, weights.T)
 
         # Save output data
         self._writeWeights(weights)
@@ -172,7 +184,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Read input data
         labels = self._readLabels()
         particles = self.directionalClasses.get()
-        nClasses = max(labels) + 1
+        nClasses = int(labels.max()) + 1
 
         # Create the output elements
         classes = self._createOutputClasses(particles, nClasses, labels, 'output')
@@ -228,21 +240,23 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _readCorrelations(self):
         return self._readMatrix(self._getExtraPath(self._getFileName('correlations')), dtype=float)
 
-    def _writeWeights(self, correlations):
-        assert(correlations.dtype==float)
-        self._writeMatrix(self._getExtraPath(self._getFileName('weights')), correlations, fmt='%.8f')
+    def _writeWeights(self, weights):
+        assert(weights.dtype==np.uint)
+        self._writeMatrix(self._getExtraPath(self._getFileName('weights')), weights, fmt='%d')
     
     def _readWeights(self):
-        return self._readMatrix(self._getExtraPath(self._getFileName('weights')), dtype=float)
+        return self._readMatrix(self._getExtraPath(self._getFileName('weights')), dtype=np.uint)
 
     def _writeLabels(self, labels):
-        assert(labels.dtype==int)
-        self._writeMatrix(self._getExtraPath(self._getFileName('labels')), labels, fmt='%i')
+        assert(labels.dtype==np.uint)
+        self._writeMatrix(self._getExtraPath(self._getFileName('labels')), labels, fmt='%d')
 
     def _readLabels(self):
-        return self._readMatrix(self._getExtraPath(self._getFileName('labels')), dtype=int)
+        return self._readMatrix(self._getExtraPath(self._getFileName('labels')), dtype=np.uint)
 
     def _getParticleList(self, particles):
+        """Converts a set of particles into a list"""
+
         result = []
 
         for particle in particles:
@@ -251,7 +265,12 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(len(result) == len(particles))
         return result
     
-    def _getAngularDistanceMatrix(self, classes):
+    def _calculateAngularDistanceMatrix(self, classes):
+        """ Given a set of images, it computes the angular
+            distances among all pairs. The result is represented
+            by a symmetrical matrix with the angles in radians
+        """
+
         # Shorthands for some variables
         nClasses = len(classes)
 
@@ -281,18 +300,31 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(np.array_equal(distances, distances.T))
         return distances
 
-    def _getPairMatrix(self, distances, maxDistance):
+    def _calculatePairMatrix(self, distances, maxDistance):
+        """ Computes a symmetrical matrix of booleans
+            where image pairs set to true are closer than
+            the given threshold. The diagonal is se to false
+            as the comparison with itself is not meaningful
+        """
         pairs = distances <= maxDistance
         np.fill_diagonal(pairs, False) # Do not compute correlations with itself
         return pairs
 
-    def _getCorrelation(self, class0, class1):
+    def _calculateCorrelation(self, class0, class1):
+        """ Computes the correlation of two images
+            after aligning them
+        """
         img0 = xmippLib.Image(class0.getLocation())
         img1 = xmippLib.Image(class1.getLocation())
         corr = img0.correlationAfterAlignment(img1)
         return max(corr, 0.0)
 
-    def _getCorrelationMatrix(self, classes, pairs):
+    def _calculateCorrelationMatrix(self, classes, pairs):
+        """ Computes the correlations between image pairs
+            defined by pairs mask matrix. Pairs should be 
+            symmetrical. Therefore, the resulting matrix is 
+            also symmetrical.
+        """
         correlations = np.zeros_like(pairs, dtype=float)
 
         # Ensure that the pairs matrix is symmetrical
@@ -306,7 +338,7 @@ class XmippProtSplitvolume(ProtClassify3D):
                 class1 = classes[idx1]
 
                 # Write it on symmetrical positions
-                correlation = self._getCorrelation(class0, class1)
+                correlation = self._calculateCorrelation(class0, class1)
                 correlations[idx0, idx1] = correlation
                 correlations[idx1, idx0] = correlation
 
@@ -314,31 +346,69 @@ class XmippProtSplitvolume(ProtClassify3D):
                 # Correlation with itself is 1
                 correlations[idx0, idx0] = 1.0
 
-        # Ensure that the result matrix is symmetrical
+        # Ensure that the result matrix is symmetrical and in [0, 1]
         assert(np.array_equal(correlations, correlations.T))
+        assert(np.all(correlations >= 0.0))
+        assert(np.all(correlations <= 1.0))
         return correlations
 
+    def _calculateWeights(self, correlations):
+        """ Given a matrix of correlations among neighboring 
+            images, it computes the adjacency matrix with
+            interger weights
+            TODO: improve the algorithm
+        """
+        # Normalize respect the smallest nonzero correlation
+        minVal = np.min(correlations[np.nonzero(correlations)])
+        maxVal = np.max(correlations)
+        result = (correlations - minVal) / (maxVal - minVal)
+        result = np.maximum(result, 0)
+
+        # Square to emphasize large values
+        result *= result
+
+        # Scale to be representable by integers
+        result *= 2**10
+
+        assert(np.all(result >= 0))
+        assert(np.all(result <= 2**10))
+        return result.astype(np.uint)
+
     def _classifySpectrum(self, eigenVectors):
+        """ Given a matrix with the eigenvectors with the smallest 
+            eigenvalues of the laplacian matrix of a network, it 
+            returns a classification of each vertex using a standing 
+            wave metaphore. This consists in interpreting the eigenvectors 
+            with the smallest eigenvalues as harmonics. Therefore, 
+            each class has a unique combination of wave phases. Then 
+            each vertex is classified according to its signs for each 
+            eigenvector.
+            https://people.csail.mit.edu/jshun/6886-s18/lectures/lecture13-1.pdf#page=11
+            https://es.mathworks.com/help/matlab/math/partition-graph-with-laplacian-matrix.html
+        """
         nVertices, nVectors = eigenVectors.shape
         nVectorsLog2 = math.trunc(math.log2(nVectors))
         assert(2**nVectorsLog2==nVectors) # TODO generalize for non pow2 classifications
 
         # Iterate over the pow 2 indices, summing their weights in 
         # decreasing order (binary counting)
-        labels = np.zeros(nVertices, dtype=int)
+        labels = np.zeros(nVertices, dtype=np.uint)
         for i in range(1, nVectorsLog2+1):
             w = eigenVectors[:, 2**i-1] # Extract the eigenvector
             r = 2**(nVectorsLog2-i)
-            labels += r*(w>=0)
+            labels += r*(w>=0).astype(np.uint)
 
         return labels
 
     def _spectralPartition(self, graph, componentCount):
-        # Decompose the laplacian matrix of the graph into its N
-        # smallest eigenvectors. Then interpret these vectors as
+        """ Performs a spectral partition of the graph into componentCount components
+        """
+        # Convert the graph into doubles, required for linear algebra operations
+        graph = graph.astype(np.double)
+
+        # Decompose the laplacian matrix of the graph into N
+        # eigenvectors with the smallest eigenvalues. Then interpret these vectors as
         # "standing waves" in the graph and use them to partition it
-        # https://es.mathworks.com/help/matlab/math/partition-graph-with-laplacian-matrix.html
-        # https://people.csail.mit.edu/jshun/6886-s18/lectures/lecture13-1.pdf#page=11
         l = csgraph.laplacian(graph, normed=True)
         values, vectors = linalg.eigsh(l, k=componentCount, which='SM')
         assert(np.array_equal(values, sorted(values)))
@@ -346,11 +416,16 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return labels
 
-    def _getSourceSinkVertices(self, graph, labels, component):
+    def _getSourceSinkVertices(self, graph, labels):
+        """Selects the least connected pair of vertices in the biggest component
+        TODO: Improve this algorithm
+        """
         result = None
 
+        # Partition the biggest component
+        component = stats.mode(labels)
+
         # Among all the connected vertices, get the least connected ones
-        # TODO determine another way to partition
         for pos in zip(*graph.nonzero()):
             if (not result or graph[pos] < graph[result]) and labels[pos[0]] == component:
                 assert(labels[pos[1]] == component) # The destination vertex should also be in the same component
@@ -358,36 +433,61 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return result
 
+    def _getGraphComponents(self, graph):
+        """ Returns the number of components of the graph
+            and a array of labels which assigns a component
+            to each vertex
+        """
+        nComponents, labels = csgraph.connected_components(graph)
+        return nComponents, labels.astype(np.uint)
+
+    def _calculateResidualGraph(graph, source, sink):
+        """ Obtains the residual graph for the maximum
+            flow analysis of the given graph between
+            source and sink vertices
+        """
+        # Perform maximum flow analysis
+        flow = csgraph.maximum_flow(graph, source, sink)
+
+        # Flow should be an antisymmetric matrix
+        assert(flow.residual == -flow.residual.T)
+
+        # Use the residual graph to determine separated components
+        # Then remove the edges connecting different components
+        # http://web.stanford.edu/class/archive/cs/cs161/cs161.1172/CS161Lecture16.pdf
+        # https://cp-algorithms.com/graph/edmonds_karp.html
+        residual = graph - flow.residual # Comptute the available flow
+        residual = residual.minimum(residual.T) # Use the most restrictive flow
+        residual.eliminate_zeros()
+
+        return residual
+
     def _minimumCut(self, graph, componentCount):
-        # Convert graph to integers
-        graph = sparse.csr_matrix(graph*(2**20), dtype=int)
+        """ Performs a minimum cut of the graph into
+            componentCount elements. If componentCount
+            is > 2, the cuts are done iteratively
+        """
+
+        # Copy the graph, as it will be modified
+        graph = graph.copy()
 
         # Obtain the component labels from the graph
-        nComponents, labels = csgraph.connected_components(graph)
-        labels = labels.astype(int)
+        nComponents, labels = self._getGraphComponents(graph)
 
         # Repeatedly cut the graph until the desired amount of components is obtained
         while nComponents < componentCount:
             # Perform a maximum flow analysis with the biggest component of the graph
-            component = stats.mode(labels)
-            source, sink = self._getSourceSinkVertices(graph, labels, component)
-            flow = csgraph.maximum_flow(graph, source, sink)
+            source, sink = self._getSourceSinkVertices(graph, labels)
+            residual = self._calculateResidualGraph(source, sink)
 
-            # Use the residual graph to determine separated components
-            # Then remove the edges connecting different components
-            # http://web.stanford.edu/class/archive/cs/cs161/cs161.1172/CS161Lecture16.pdf
-            # https://cp-algorithms.com/graph/edmonds_karp.html
-            residual = graph - flow.residual # flow.residual is antisymmetric
-            residual = residual.minimum(residual.T) # Use the most restrictive flow
-            residual.eliminate_zeros()
-            nComponents, labels = csgraph.connected_components(residual)
-            labels = labels.astype(int)
+            # Partition the residual graph
+            nComponents, labels = self._getGraphComponents(residual)
         
             # Only keep the edges where both vertices correspond to the same component
             for pos in zip(*graph.nonzero()):
                 if labels[pos[0]] != labels[pos[1]]:
                     graph[pos] = 0
-            graph.eliminale_zeros()
+            graph.eliminate_zeros()
 
         return labels
 
