@@ -28,7 +28,6 @@
 Protocol to split a volume in two volumes based on a set of images
 """
 
-from unittest import result
 from pyworkflow.constants import BETA
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, StringParam, BooleanParam, EnumParam

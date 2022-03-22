@@ -28,34 +28,35 @@
 This module implement the wrappers aroung Xmipp CL2D protocol
 visualization program.
 """
-from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO
+from cProfile import label
+from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import IntParam, LabelParam, BooleanParam
 
-from xmipp3.viewers import XmippViewer
 from xmipp3.protocols.protocol_split_volume import XmippProtSplitvolume
 
 import numpy as np
 import matplotlib.pyplot as plt
 
-class XmippViewerSplitVolume(XmippViewer):
+class XmippViewerSplitVolume(ProtocolViewer):
     """ Viewer for Split Volumes protocol
     """
     _label = 'viewer split volume'
     _targets = [XmippProtSplitvolume]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
     
-    def __init__(self, **args):
-        XmippViewer.__init__(self, **args)
+    def __init__(self, **kwargs):
+        ProtocolViewer.__init__(self, **kwargs)
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
+        form.addSection(label='Graph')
         form.addParam('displayDistanceImage', LabelParam, label='Angular distance matrix',
                         help='Shows an image where each pixel\'s colour corresponds to '
                         'the angular distance computed for each image pair')
         form.addParam('displayCorrelationImage', LabelParam, label='Correlation matrix',
                         help='Shows an image where each pixel\'s colour corresponds to '
                         'the correlation computed for each image pair')
-        form.addParam('displayAdjacencyImage', LabelParam, label='Adjacency matrix',
+        form.addParam('displayWeightImage', LabelParam, label='Weight matrix',
                         help='Shows an image where each pixel\'s colour corresponds to '
                         'the weight of each graph edge')
         form.addParam('displayLabelImage', LabelParam, label='Classification',
@@ -68,7 +69,7 @@ class XmippViewerSplitVolume(XmippViewer):
         return {
             'displayDistanceImage': self._displayDistanceImage,
             'displayCorrelationImage': self._displayCorrelationImage,
-            'displayAdjacencyImage': self._displayAdjacencyImage,
+            'displayWeightImage': self._displayWeightImage,
             'displayLabelImage': self._displayLabelImage,
             'displayLabelHistogram': self._displayLabelHistogram,
         }
@@ -82,17 +83,23 @@ class XmippViewerSplitVolume(XmippViewer):
         correlations = self._readCorrelations()
         return self._showImagePairImage(correlations, 'Correlation')
     
-    def _displayAdjacencyImage(self, e):
-        correlations = self._readAdjacency()
-        return self._showImagePairImage(correlations, 'Adjacency')
+    def _displayWeightImage(self, e):
+        weights = self._readWeights()
+        return self._showImagePairImage(weights, 'Weights')
 
     def _displayLabelImage(self, e):
-        labels = self._readLabels(labels, 'Classification')
-        return self._showStrip(labels)
+        labels = self._readLabels()
+        labels = np.array([labels]) # It needs to be bidimensional to work
+
+        fig, ax = plt.subplots()
+        plt.colorbar(ax.imshow(labels, origin='lower', aspect='auto', interpolation='none'))
+        ax.set_xlabel('Image number')
+        ax.set_title('Classification')
+        return [fig]
 
     def _displayLabelHistogram(self, e):
-        labels = self._readLabels(labels, 'Class sizes')
-        nClasses = max(labels)+1
+        labels = self._readLabels()
+        nClasses = int(labels.max())+1
 
         fig, ax = plt.subplots()
         ax.hist(labels, bins=nClasses)
@@ -108,8 +115,8 @@ class XmippViewerSplitVolume(XmippViewer):
     def _readCorrelations(self):
         return self.protocol._readCorrelations()
 
-    def _readAdjacency(self):
-        return self.protocol._readAdjacency()
+    def _readWeights(self):
+        return self.protocol._readWeights()
 
     def _readLabels(self):
         return self.protocol._readLabels()
@@ -119,13 +126,6 @@ class XmippViewerSplitVolume(XmippViewer):
         plt.colorbar(ax.imshow(img, origin='lower', aspect='auto', interpolation='none'))
         ax.set_xlabel('Image number')
         ax.set_ylabel('Image number')
-        ax.set_title(title)
-        return [fig]
-
-    def _showStrip(self, data, title):
-        fig, ax = plt.subplots()
-        plt.colorbar(ax.imshow(data, origin='lower', aspect='auto', interpolation='none'))
-        ax.set_xlabel('Image number')
         ax.set_title(title)
         return [fig]
 
