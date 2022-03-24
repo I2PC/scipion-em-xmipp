@@ -43,6 +43,8 @@ from xmipp3.convert import writeSetOfParticles
 import math
 import itertools
 import numpy as np
+import multiprocessing as mp
+from multiprocessing.pool import ThreadPool
 
 from scipy import sparse
 from scipy import stats
@@ -100,10 +102,14 @@ class XmippProtSplitvolume(ProtClassify3D):
         form.addParam('graphPartitionCount', IntParam, label="Minimum number of components", 
                       validators=[GE(2)], default=2,
                       help='Minimum number of classes to obtain')
-        form.addParallelSection()
+        form.addParallelSection(threads=mp.cpu_count(), mpi=0)
     
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
+        # Create the thread pool
+        if self.numberOfThreads > 1:
+            self.threadPool = ThreadPool(int(self.numberOfThreads))
+
         self._insertFunctionStep('convertInputStep')
         self._insertFunctionStep('computeAngularDistancesStep')
         self._insertFunctionStep('computeCorrelationStep')
@@ -113,14 +119,15 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def convertInputStep(self):
-        self._particleList = self._getParticleList(self.directionalClasses.get())
+        self.images = self._getImageList(self.directionalClasses.get())
+        self.xmippImages = self._getXmippImageList(self.images)
 
     def computeAngularDistancesStep(self):
         # Read input data
-        particles = self._particleList
+        images = self.images
 
         # Perform the computation
-        distances = self._calculateAngularDistanceMatrix(particles)
+        distances = self._calculateAngularDistanceMatrix(images)
 
         # Save output data
         self._writeAngularDistances(distances)
@@ -129,13 +136,13 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Read input data
         distances = self._readAngularDistances()
         maxAngularDistance = np.radians(self.maxAngularDistance.get())
-        particles = self._particleList
+        images = self.xmippImages
 
         # Compute the class pairs to be considered
         pairs = self._calculatePairMatrix(distances, maxAngularDistance)
 
         # Compute the correlation
-        correlations = self._calculateCorrelationMatrix(particles, pairs)
+        correlations = self._calculateCorrelationMatrix(images, pairs, self._getThreadPool())
 
         # Save output data
         self._writeCorrelations(correlations)
@@ -182,11 +189,11 @@ class XmippProtSplitvolume(ProtClassify3D):
     def createOutputStep(self):
         # Read input data
         labels = self._readLabels()
-        particles = self.directionalClasses.get()
+        images = self.directionalClasses.get()
         nClasses = int(labels.max()) + 1
 
         # Create the output elements
-        classes = self._createOutputClasses(particles, nClasses, labels, 'output')
+        classes = self._createOutputClasses(images, nClasses, labels, 'output')
         volumes = self._createOutputVolumes(classes, 'output')
 
         # Define the output
@@ -218,6 +225,9 @@ class XmippProtSplitvolume(ProtClassify3D):
         pass
 
     #--------------------------- UTILS functions ---------------------------------------------------
+    def _getThreadPool(self):
+        return getattr(self, 'threadPool', None)
+
     def _writeMatrix(self, path, x, fmt='%s'):
         # Determine the format
         np.savetxt(path, x, delimiter=',', fmt=fmt) # CSV
@@ -253,17 +263,20 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _readLabels(self):
         return self._readMatrix(self._getExtraPath(self._getFileName('labels')), dtype=np.uint)
 
-    def _getParticleList(self, particles):
+    def _getImageList(self, images):
         """Converts a set of particles into a list"""
-
-        result = []
-
-        for particle in particles:
-            result.append(particle.clone())
-
-        assert(len(result) == len(particles))
+        f = lambda img : img.clone()
+        result = list(map(f, images))
+        assert(len(result) == len(images))
         return result
     
+    def _getXmippImageList(self, images):
+        """Converts a list of images into xmipp images"""
+        f = lambda img : xmippLib.Image(img.getLocation())
+        result = list(map(f, images))
+        assert(len(result) == len(images))
+        return result
+
     def _calculateAngularDistanceMatrix(self, classes):
         """ Given a set of images, it computes the angular
             distances among all pairs. The result is represented
@@ -309,41 +322,74 @@ class XmippProtSplitvolume(ProtClassify3D):
         np.fill_diagonal(pairs, False) # Do not compute correlations with itself
         return pairs
 
-    def _calculateCorrelation(self, class0, class1):
-        """ Computes the correlation of two images
-            after aligning them
-        """
-        img0 = xmippLib.Image(class0.getLocation())
-        img1 = xmippLib.Image(class1.getLocation())
-        corr = img0.correlationAfterAlignment(img1)
-        return max(corr, 0.0)
-
-    def _calculateCorrelationMatrix(self, classes, pairs):
-        """ Computes the correlations between image pairs
-            defined by pairs mask matrix. Pairs should be 
-            symmetrical. Therefore, the resulting matrix is 
-            also symmetrical.
+    def _calculateCorrelationMatrixOne(self, images, pairs):
+        """ Calculates correlations among image pairs with a single thread
         """
         correlations = np.zeros_like(pairs, dtype=float)
-
-        # Ensure that the pairs matrix is symmetrical
-        assert(np.array_equal(pairs, pairs.T))
-
+        
         # Compute the symmetric matrix with the correlations
         for idx0, idx1 in zip(*np.nonzero(pairs)):
             if idx0 < idx1:
                 # Calculate the corrrelation
-                class0 = classes[idx0]
-                class1 = classes[idx1]
+                image0 = images[idx0]
+                image1 = images[idx1]
 
                 # Write it on symmetrical positions
-                correlation = self._calculateCorrelation(class0, class1)
+                correlation = image0.correlationAfterAlignment(image1)
                 correlations[idx0, idx1] = correlation
                 correlations[idx1, idx0] = correlation
 
             elif idx0 == idx1:
                 # Correlation with itself is 1
                 correlations[idx0, idx0] = 1.0
+
+        return correlations
+
+    def _calculateCorrelationMatrixParallel(self, images, pairs, threadPool):
+        """ Calculates correlations among image pairs with multiple threads
+        """
+        correlations = np.zeros_like(pairs, dtype=float)
+        
+        # Select the image pairs to be processed
+        imagePairs = {}
+        for idx0, idx1 in zip(*np.nonzero(pairs)):
+            if idx0 < idx1:
+                # Calculate the corrrelation
+                image0 = images[idx0]
+                image1 = images[idx1]
+
+                imagePairs[(idx0, idx1)] = (image0, image1)
+
+            elif idx0 == idx1:
+                # Correlation with itself is 1
+                correlations[idx0, idx0] = 1.0
+
+        # Compute the correlations in parallel
+        results = threadPool.starmap(xmippLib.Image.correlationAfterAlignment, imagePairs.values())
+        assert(len(imagePairs) == len(results))
+
+        # Write the results
+        for (idx0, idx1), correlation in zip(imagePairs.keys(), results):
+            correlations[idx0, idx1] = correlation
+            correlations[idx1, idx0] = correlation
+
+        return correlations
+
+    def _calculateCorrelationMatrix(self, images, pairs, threadPool=None):
+        """ Computes the correlations between image pairs
+            defined by pairs mask matrix. Pairs should be 
+            symmetrical. Therefore, the resulting matrix is 
+            also symmetrical.
+        """
+
+        # Ensure that the pairs matrix is symmetrical
+        assert(np.array_equal(pairs, pairs.T))
+
+        # Compute the matrix with or without parallelization
+        if threadPool:
+            correlations = self._calculateCorrelationMatrixParallel(images, pairs, threadPool)
+        else:
+            correlations = self._calculateCorrelationMatrixOne(images, pairs)
 
         # Ensure that the result matrix is symmetrical and in [0, 1]
         assert(np.array_equal(correlations, correlations.T))
@@ -477,7 +523,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         while nComponents < componentCount:
             # Perform a maximum flow analysis with the biggest component of the graph
             source, sink = self._getSourceSinkVertices(graph, labels)
-            residual = self._calculateResidualGraph(source, sink)
+            residual = self._calculateResidualGraph(graph, source, sink)
 
             # Partition the residual graph
             nComponents, labels = self._getGraphComponents(residual)
