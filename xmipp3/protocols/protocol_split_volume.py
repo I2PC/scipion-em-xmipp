@@ -28,6 +28,7 @@
 Protocol to split a volume in two volumes based on a set of images
 """
 
+from email.policy import default
 from pyworkflow.constants import BETA
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, StringParam, BooleanParam, EnumParam
@@ -84,10 +85,17 @@ class XmippProtSplitvolume(ProtClassify3D):
                       help='Select a set of particles with angles. Preferrably the output of a run of directional classes')
 
         form.addSection(label='Graph building')
-        form.addParam('maxAngularDistance', FloatParam, label="Maximum angular distance (deg)", 
-                      validators=[Range(0, 180)], default=15,
-                      help='Maximum angular distance for considering the correlation of two classes. '
+        form.addParam('maxAngularDistanceMethod', EnumParam, label='Maximum angular distance method',
+                      choices=['Threshold', 'Percentile'], default=0,
+                      help='Determines how the maximum angular distance is obtained.')
+        form.addParam('maxAngularDistanceThreshold', FloatParam, label="Maximum angular distance threshold (deg)", 
+                      validators=[Range(0, 180)], default=15, condition='maxAngularDistanceMethod==0',
+                      help='Maximum angular distance value for considering the correlation of two classes. '
                       'Valid range: 0 to 180 deg')
+        form.addParam('maxAngularDistancePercentile', FloatParam, label="Maximum angular distance percentile (%)", 
+                      validators=[Range(0, 100)], default=10, condition='maxAngularDistanceMethod==1',
+                      help='Maximum angular distance percentile for considering the correlation of two classes. '
+                      'Valid range: 0 to 100%')
         form.addParam('maxNeighbors', IntParam, label="Maximum number of neighbors", 
                       validators=[GT(0)], default=8,
                       help='Number of neighbors to consider for each directional class.')
@@ -135,11 +143,13 @@ class XmippProtSplitvolume(ProtClassify3D):
     def computeCorrelationStep(self):
         # Read input data
         distances = self._readAngularDistances()
-        maxAngularDistance = np.radians(self.maxAngularDistance.get())
+        maxAngularDistance = self._getMaxAngularDistance(distances)
         images = self.xmippImages
 
         # Compute the class pairs to be considered
         pairs = self._calculatePairMatrix(distances, maxAngularDistance)
+        print(f'Considering {np.count_nonzero(pairs)} image pairs with an '
+              f'angular distance of up to {np.degrees(maxAngularDistance)} deg')
 
         # Compute the correlation
         correlations = self._calculateCorrelationMatrix(images, pairs, self._getThreadPool())
@@ -227,6 +237,13 @@ class XmippProtSplitvolume(ProtClassify3D):
     #--------------------------- UTILS functions ---------------------------------------------------
     def _getThreadPool(self):
         return getattr(self, 'threadPool', None)
+
+    def _getMaxAngularDistance(self, distances):
+        method = self.maxAngularDistanceMethod.get()
+        if method == 0:
+            return np.radians(self.maxAngularDistanceThreshold.get())
+        elif method == 1:
+            return np.percentile(distances, self.maxAngularDistancePercentile.get())
 
     def _writeMatrix(self, path, x, fmt='%s'):
         # Determine the format

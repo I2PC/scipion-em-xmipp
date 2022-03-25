@@ -35,6 +35,7 @@ from pyworkflow.protocol.params import IntParam, LabelParam, BooleanParam
 from xmipp3.protocols.protocol_split_volume import XmippProtSplitvolume
 
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 class XmippViewerSplitVolume(ProtocolViewer):
@@ -66,8 +67,8 @@ class XmippViewerSplitVolume(ProtocolViewer):
                         help='Shows a bar plot with the sizes of each class')
         form.addParam('displayProjectionClassification', LabelParam, label='Projection classification',
                         help='Shows a 3D representation of the classification')
-        form.addParam('displayAngularGraph', LabelParam, label='3D Graph',
-                        help='Shows a 3D representation of the graph')
+        form.addParam('displayAngularNetwork', LabelParam, label='3D network',
+                        help='Shows a 3D representation of the network')
 
     def _getVisualizeDict(self):
         return {
@@ -77,7 +78,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
             'displayLabelImage': self._displayLabelImage,
             'displayLabelHistogram': self._displayLabelHistogram,
             'displayProjectionClassification': self._displayProjectionClassification,
-            'displayAngularGraph': self._displayAngularGraph,
+            'displayAngularNetwork': self._displayAngularNetwork,
         }
     
     # --------------------------- DEFINE display functions ----------------------
@@ -122,27 +123,30 @@ class XmippViewerSplitVolume(ProtocolViewer):
         # Plot the projection angles with the classification
         fig = plt.figure()
         ax = plt.axes(projection='3d')
-        ax.set_title('Projections')
-        fig.colorbar(ax.scatter3D(points[:,0], points[:,1], points[:,2], c=labels))
+        ax.set_title('Projection Classification')
+        fig.colorbar(ax.scatter3D(points[:,0], points[:,1], points[:,2], c=labels), label='Classes')
 
         return [fig]
 
-    def _displayAngularGraph(self, e):
+    def _displayAngularNetwork(self, e):
         images = self._readImages()
-        points = np.array(self._getProjectionUnitSphere(images))
         labels = self._readLabels()
         weights = self._readWeights()
+        points = np.array(self._getProjectionUnitSphere(images))
+        edges = np.array(self._getEdgeVectors(points, weights))
 
         # Plot the projection angles with the classification
         fig = plt.figure()
         ax = plt.axes(projection='3d')
-        ax.set_title('3D graph')
-        fig.colorbar(ax.scatter3D(points[:,0], points[:,1], points[:,2], c=labels))
+        ax.set_title('3D Network')
+        fig.colorbar(ax.scatter3D(points[:,0], points[:,1], points[:,2], c=labels), label='Classes')
 
         # Plot the edges
-        for edge in zip(*np.nonzero(weights)):
-            ax.plot3D(points[edge,0], points[edge,1], points[edge,2], 'gray')
-
+        colormap = mpl.cm.get_cmap('plasma')
+        norm = mpl.colors.Normalize()
+        ax.quiver3D(edges[:,0], edges[:,1], edges[:,2], edges[:,3], edges[:,4], edges[:,5], 
+                    arrow_length_ratio=0, linewidths=0.5, colors=colormap(norm(edges[:,6])))
+        fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colormap), label='Edge weights')
         return [fig]
 
     # --------------------------- UTILS functions -----------------------------
@@ -169,6 +173,18 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
         assert(len(images) == len(points))
         return points
+
+    def _getEdgeVectors(self, points, weights):
+        result = []
+
+        for (src, dst) in zip(*np.nonzero(weights)):
+            srcPos = points[src]
+            dstPos = points[dst]
+            delta = dstPos - srcPos
+            weight = weights[src,dst]
+            result.append(np.concatenate((srcPos, delta, np.array([weight]))))
+
+        return result
 
     def _showImagePairImage(self, img, title):
         fig, ax = plt.subplots()
