@@ -34,6 +34,7 @@ from pyworkflow.protocol.params import IntParam, LabelParam, BooleanParam
 
 from xmipp3.protocols.protocol_split_volume import XmippProtSplitvolume
 
+import math
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -51,7 +52,16 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
-        form.addSection(label='Graph')
+        form.addSection(label='Classes')
+        form.addParam('displayLabelHistogram', LabelParam, label='Class sizes',
+                        help='Shows a bar plot with the sizes of each class')
+        form.addParam('displayLabelImage', LabelParam, label='Classification',
+                        help='Shows an image where each column\'s colour corresponds to '
+                        'the label assigned to each image')
+        form.addParam('displayProjectionClassification', LabelParam, label='Projection classification',
+                        help='Shows a 3D representation of the classification')
+
+        form.addSection(label='Image pairs')
         form.addParam('displayDistanceImage', LabelParam, label='Angular distance matrix',
                         help='Shows an image where each pixel\'s colour corresponds to '
                         'the angular distance computed for each image pair')
@@ -61,50 +71,26 @@ class XmippViewerSplitVolume(ProtocolViewer):
         form.addParam('displayWeightImage', LabelParam, label='Weight matrix',
                         help='Shows an image where each pixel\'s colour corresponds to '
                         'the weight of each graph edge')
-        form.addParam('displayLabelImage', LabelParam, label='Classification',
-                        help='Shows an image where each column\'s colour corresponds to '
-                        'the label assigned to each image')
-        form.addParam('displayLabelHistogram', LabelParam, label='Class sizes',
-                        help='Shows a bar plot with the sizes of each class')
-        form.addParam('displayProjectionClassification', LabelParam, label='Projection classification',
-                        help='Shows a 3D representation of the classification')
+
+        form.addSection(label='Networks')
         form.addParam('displayAngularNetwork', LabelParam, label='3D network',
                         help='Shows a 3D representation of the network')
+        form.addParam('displayDisjointAngularNetwork', LabelParam, label='Disjoint 3D network',
+                        help='Shows a 3D representation of the network with a projection for each class')
 
     def _getVisualizeDict(self):
         return {
+            'displayLabelHistogram': self._displayLabelHistogram,
+            'displayLabelImage': self._displayLabelImage,
+            'displayProjectionClassification': self._displayProjectionClassification,
             'displayDistanceImage': self._displayDistanceImage,
             'displayCorrelationImage': self._displayCorrelationImage,
             'displayWeightImage': self._displayWeightImage,
-            'displayLabelImage': self._displayLabelImage,
-            'displayLabelHistogram': self._displayLabelHistogram,
-            'displayProjectionClassification': self._displayProjectionClassification,
             'displayAngularNetwork': self._displayAngularNetwork,
+            'displayDisjointAngularNetwork': self._displayDisjointAngularNetwork,
         }
     
     # --------------------------- DEFINE display functions ----------------------
-    def _displayDistanceImage(self, e):
-        distances = self._readAngularDistances()
-        return self._showImagePairImage(distances, 'Angular distances')
-
-    def _displayCorrelationImage(self, e):
-        correlations = self._readCorrelations()
-        return self._showImagePairImage(correlations, 'Correlation')
-    
-    def _displayWeightImage(self, e):
-        weights = self._readWeights()
-        return self._showImagePairImage(weights, 'Weights')
-
-    def _displayLabelImage(self, e):
-        labels = self._readLabels()
-        labels = np.array([labels]) # It needs to be bidimensional to work
-
-        fig, ax = plt.subplots()
-        fig.colorbar(ax.imshow(labels, origin='lower', aspect='auto', interpolation='none'))
-        ax.set_xlabel('Image number')
-        ax.set_title('Classification')
-        return [fig]
-
     def _displayLabelHistogram(self, e):
         labels = self._readLabels()
         nClasses = int(labels.max())+1
@@ -116,9 +102,17 @@ class XmippViewerSplitVolume(ProtocolViewer):
         ax.set_title('Class sizes')
         return [fig]
 
+    def _displayLabelImage(self, e):
+        labels = self._readLabels()
+
+        fig, ax = plt.subplots()
+        self._plotClassification(fig, ax, labels)
+        ax.set_title('Classification')
+        return [fig]
+    
     def _displayProjectionClassification(self, e):
         images = self._readImages()
-        points = np.array(self._getProjectionUnitSphere(images))
+        points = self._getProjectionUnitSphere(images)
         labels = self._readLabels()
 
         # Plot the projection angles with the classification
@@ -128,17 +122,71 @@ class XmippViewerSplitVolume(ProtocolViewer):
         self._plotProjectionClassification(fig, ax, points, labels)
         return [fig]
 
+    def _displayDistanceImage(self, e):
+        distances = self._readAngularDistances()
+
+        fig, ax = plt.subplots()
+        self._plotMatrix(fig, ax, distances, 'Angle (rad)')
+        ax.set_title('Angular distances')
+        return [fig]
+
+    def _displayCorrelationImage(self, e):
+        correlations = self._readCorrelations()
+        
+        fig, ax = plt.subplots()
+        self._plotMatrix(fig, ax, correlations, 'Correlation')
+        ax.set_title('Correlations')
+        return [fig]
+    
+    def _displayWeightImage(self, e):
+        weights = self._readWeights()
+
+        fig, ax = plt.subplots()
+        self._plotMatrix(fig, ax, weights, 'Weight')
+        ax.set_title('Weights')
+        return [fig]
+
     def _displayAngularNetwork(self, e):
         images = self._readImages()
         labels = self._readLabels()
         weights = self._readWeights()
-        points = np.array(self._getProjectionUnitSphere(images))
+        points = self._getProjectionUnitSphere(images)
         edges, edgeWeights = self._getEdgeLines(points, weights)
 
         # Plot the projection angles with the classification
         fig = plt.figure()
         ax = plt.axes(projection='3d')
         ax.set_title('3D Network')
+        self._plotProjectionClassification(fig, ax, points, labels)
+        self._plotNetworkEdges(fig, ax, edges, edgeWeights)
+        return [fig]
+
+    def _displayDisjointAngularNetwork(self, e):
+        images = self._readImages()
+        labels = self._readLabels()
+        weights = self._readWeights()
+        points = self._getProjectionUnitSphere(images)
+        nClasses = int(max(labels)) + 1
+
+        # Reorder items
+        indices = np.argsort(labels)
+        labels = labels[indices]
+        weights = weights[indices,:][:,indices] # Reorder columns and rows
+        points = points[indices]
+
+        # Apply an offset to the spheres
+        thetas = 2*math.pi*labels / nClasses
+        radius = 1.5*max(nClasses/math.pi, 1)
+        offsets = radius*np.column_stack((np.cos(thetas), np.sin(thetas), np.zeros_like(thetas)))
+        points += offsets
+
+        # Obtain the edges of the graph
+        edges, edgeWeights = self._getEdgeLines(points, weights)
+
+        # Plot the projection angles with the classification
+        fig = plt.figure()
+        ax = plt.axes(projection='3d')
+        ax.set_title('Classified 3D Network')
         self._plotProjectionClassification(fig, ax, points, labels)
         self._plotNetworkEdges(fig, ax, edges, edgeWeights)
         return [fig]
@@ -163,9 +211,9 @@ class XmippViewerSplitVolume(ProtocolViewer):
         # Multiply the transform of the images by the unit x vector.
         # This is equivalent to selecting the first column.
         f = lambda img : img.getTransform().getMatrix()[0:3, 0]
-        points = list(map(f, images))
+        points = np.array(list(map(f, images)))
 
-        assert(len(images) == len(points))
+        assert(len(images) == points.shape[0])
         return points
 
     def _getEdgeLines(self, points, weights):
@@ -187,24 +235,36 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
         return edges, edgeWeights
 
-    def _showImagePairImage(self, img, title):
-        fig, ax = plt.subplots()
-        fig.colorbar(ax.imshow(img, origin='lower', aspect='auto', interpolation='none'))
-        ax.set_xlabel('Image number')
-        ax.set_ylabel('Image number')
-        ax.set_title(title)
-        return [fig]
+    def _getScalarColorMap(self):
+        return mpl.cm.plasma
 
-    def _plotProjectionClassification(self, fig, ax, points, labels):
+    def _getClassificationColorMap(self, labels):
         nLabels = int(max(labels)) + 1
         colours = [mpl.cm.jet(i / (nLabels-1)) for i in range(nLabels)]
-        colormap = mpl.colors.ListedColormap(colours)
+        return mpl.colors.ListedColormap(colours)
+
+    def _plotMatrix(self, fig, ax, img, label):
+        colormap = self._getScalarColorMap()
+        norm = mpl.colors.Normalize()
+        ax.imshow(img, origin='lower', aspect='auto', interpolation='none', cmap=colormap, norm=norm)
+        ax.set_xlabel('Image number')
+        ax.set_ylabel('Image number')
+        fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colormap), label=label)
+
+    def _plotClassification(self, fig, ax, labels):
+        colormap = self._getClassificationColorMap(labels)
+        norm = mpl.colors.Normalize()
+        ax.imshow(np.array([labels]), origin='lower', aspect='auto', interpolation='none', cmap=colormap, norm=norm)
+        fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colormap), label='Classes', ticks=np.arange(colormap.N))
+
+    def _plotProjectionClassification(self, fig, ax, points, labels):
+        colormap = self._getClassificationColorMap(labels)
         norm = mpl.colors.Normalize()
         ax.scatter3D(points[:,0], points[:,1], points[:,2], c=labels, cmap=colormap, norm=norm)
-        fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colormap), label='Classes', ticks=np.arange(nLabels))
+        fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colormap), label='Classes', ticks=np.arange(colormap.N))
 
     def _plotNetworkEdges(self, fig, ax, edges, weights):
-        colormap = mpl.cm.plasma
+        colormap = self._getScalarColorMap()
         norm = mpl.colors.Normalize()
         lines = mpl3d.art3d.Line3DCollection(edges, linewidths=0.5, colors=colormap(norm(weights)))
         ax.add_collection(lines)
