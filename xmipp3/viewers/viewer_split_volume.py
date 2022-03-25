@@ -37,6 +37,7 @@ from xmipp3.protocols.protocol_split_volume import XmippProtSplitvolume
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import mpl_toolkits.mplot3d as mpl3d
 
 class XmippViewerSplitVolume(ProtocolViewer):
     """ Viewer for Split Volumes protocol
@@ -124,8 +125,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         fig = plt.figure()
         ax = plt.axes(projection='3d')
         ax.set_title('Projection Classification')
-        fig.colorbar(ax.scatter3D(points[:,0], points[:,1], points[:,2], c=labels), label='Classes')
-
+        self._plotProjectionClassification(fig, ax, points, labels)
         return [fig]
 
     def _displayAngularNetwork(self, e):
@@ -133,20 +133,14 @@ class XmippViewerSplitVolume(ProtocolViewer):
         labels = self._readLabels()
         weights = self._readWeights()
         points = np.array(self._getProjectionUnitSphere(images))
-        edges = np.array(self._getEdgeVectors(points, weights))
+        edges, edgeWeights = self._getEdgeLines(points, weights)
 
         # Plot the projection angles with the classification
         fig = plt.figure()
         ax = plt.axes(projection='3d')
         ax.set_title('3D Network')
-        fig.colorbar(ax.scatter3D(points[:,0], points[:,1], points[:,2], c=labels), label='Classes')
-
-        # Plot the edges
-        colormap = mpl.cm.get_cmap('plasma')
-        norm = mpl.colors.Normalize()
-        ax.quiver3D(edges[:,0], edges[:,1], edges[:,2], edges[:,3], edges[:,4], edges[:,5], 
-                    arrow_length_ratio=0, linewidths=0.5, colors=colormap(norm(edges[:,6])))
-        fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colormap), label='Edge weights')
+        self._plotProjectionClassification(fig, ax, points, labels)
+        self._plotNetworkEdges(fig, ax, edges, edgeWeights)
         return [fig]
 
     # --------------------------- UTILS functions -----------------------------
@@ -174,17 +168,24 @@ class XmippViewerSplitVolume(ProtocolViewer):
         assert(len(images) == len(points))
         return points
 
-    def _getEdgeVectors(self, points, weights):
-        result = []
+    def _getEdgeLines(self, points, weights):
+        edges = []
+        edgeWeights = []
+
+        # Make the matrix symmetric as we do not consider directionality
+        weights = np.maximum(weights, weights.T)
 
         for (src, dst) in zip(*np.nonzero(weights)):
-            srcPos = points[src]
-            dstPos = points[dst]
-            delta = dstPos - srcPos
-            weight = weights[src,dst]
-            result.append(np.concatenate((srcPos, delta, np.array([weight]))))
+            # Only consider if it is in the lower triangle
+            if (src <= dst):
+                srcPoint = points[src]
+                dstPoint = points[dst]
+                line = np.row_stack((srcPoint, dstPoint))
+                edges.append(line)
+                edgeWeights.append(weights[src,dst])
+        assert(len(edges) == len(edgeWeights))
 
-        return result
+        return edges, edgeWeights
 
     def _showImagePairImage(self, img, title):
         fig, ax = plt.subplots()
@@ -193,4 +194,19 @@ class XmippViewerSplitVolume(ProtocolViewer):
         ax.set_ylabel('Image number')
         ax.set_title(title)
         return [fig]
+
+    def _plotProjectionClassification(self, fig, ax, points, labels):
+        nLabels = int(max(labels)) + 1
+        colours = [mpl.cm.jet(i / (nLabels-1)) for i in range(nLabels)]
+        colormap = mpl.colors.ListedColormap(colours)
+        norm = mpl.colors.Normalize()
+        ax.scatter3D(points[:,0], points[:,1], points[:,2], c=labels, cmap=colormap, norm=norm)
+        fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colormap), label='Classes', ticks=np.arange(nLabels))
+
+    def _plotNetworkEdges(self, fig, ax, edges, weights):
+        colormap = mpl.cm.plasma
+        norm = mpl.colors.Normalize()
+        lines = mpl3d.art3d.Line3DCollection(edges, linewidths=0.5, colors=colormap(norm(weights)))
+        ax.add_collection(lines)
+        fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colormap), label='Edge weights')
 
