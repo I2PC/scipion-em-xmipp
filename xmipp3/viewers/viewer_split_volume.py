@@ -64,6 +64,10 @@ class XmippViewerSplitVolume(ProtocolViewer):
                         'the label assigned to each image')
         form.addParam('displayLabelHistogram', LabelParam, label='Class sizes',
                         help='Shows a bar plot with the sizes of each class')
+        form.addParam('displayProjectionClassification', LabelParam, label='Projection classification',
+                        help='Shows a 3D representation of the classification')
+        form.addParam('displayAngularGraph', LabelParam, label='3D Graph',
+                        help='Shows a 3D representation of the graph')
 
     def _getVisualizeDict(self):
         return {
@@ -72,6 +76,8 @@ class XmippViewerSplitVolume(ProtocolViewer):
             'displayWeightImage': self._displayWeightImage,
             'displayLabelImage': self._displayLabelImage,
             'displayLabelHistogram': self._displayLabelHistogram,
+            'displayProjectionClassification': self._displayProjectionClassification,
+            'displayAngularGraph': self._displayAngularGraph,
         }
     
     # --------------------------- DEFINE display functions ----------------------
@@ -92,7 +98,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         labels = np.array([labels]) # It needs to be bidimensional to work
 
         fig, ax = plt.subplots()
-        plt.colorbar(ax.imshow(labels, origin='lower', aspect='auto', interpolation='none'))
+        fig.colorbar(ax.imshow(labels, origin='lower', aspect='auto', interpolation='none'))
         ax.set_xlabel('Image number')
         ax.set_title('Classification')
         return [fig]
@@ -108,7 +114,41 @@ class XmippViewerSplitVolume(ProtocolViewer):
         ax.set_title('Class sizes')
         return [fig]
 
+    def _displayProjectionClassification(self, e):
+        images = self._readImages()
+        points = np.array(self._getProjectionUnitSphere(images))
+        labels = self._readLabels()
+
+        # Plot the projection angles with the classification
+        fig = plt.figure()
+        ax = plt.axes(projection='3d')
+        ax.set_title('Projections')
+        fig.colorbar(ax.scatter3D(points[:,0], points[:,1], points[:,2], c=labels))
+
+        return [fig]
+
+    def _displayAngularGraph(self, e):
+        images = self._readImages()
+        points = np.array(self._getProjectionUnitSphere(images))
+        labels = self._readLabels()
+        weights = self._readWeights()
+
+        # Plot the projection angles with the classification
+        fig = plt.figure()
+        ax = plt.axes(projection='3d')
+        ax.set_title('3D graph')
+        fig.colorbar(ax.scatter3D(points[:,0], points[:,1], points[:,2], c=labels))
+
+        # Plot the edges
+        for edge in zip(*np.nonzero(weights)):
+            ax.plot3D(points[edge,0], points[edge,1], points[edge,2], 'gray')
+
+        return [fig]
+
     # --------------------------- UTILS functions -----------------------------
+    def _readImages(self):
+        return self.protocol.directionalClasses.get()
+
     def _readAngularDistances(self):
         return self.protocol._readAngularDistances()
 
@@ -121,9 +161,18 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _readLabels(self):
         return self.protocol._readLabels()
 
+    def _getProjectionUnitSphere(self, images):
+        # Multiply the transform of the images by the unit x vector.
+        # This is equivalent to selecting the first column.
+        f = lambda img : img.getTransform().getMatrix()[0:3, 0]
+        points = list(map(f, images))
+
+        assert(len(images) == len(points))
+        return points
+
     def _showImagePairImage(self, img, title):
         fig, ax = plt.subplots()
-        plt.colorbar(ax.imshow(img, origin='lower', aspect='auto', interpolation='none'))
+        fig.colorbar(ax.imshow(img, origin='lower', aspect='auto', interpolation='none'))
         ax.set_xlabel('Image number')
         ax.set_ylabel('Image number')
         ax.set_title(title)
