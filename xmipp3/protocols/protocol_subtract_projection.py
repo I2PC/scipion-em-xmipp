@@ -51,7 +51,8 @@ class XmippProtSubtractProjection(EMProtocol):
         form.addParam('maskVol', PointerParam, pointerClass='VolumeMask', label='Volume mask', allowsNull=True,
                       help='3D mask for the input volume. This mask is not mandatory but advisable.')
         form.addParam('mask', PointerParam, pointerClass='VolumeMask', label="Mask for region to keep", allowsNull=True,
-                      help='Specify a 3D mask for the region of the input volume that you want to keep.')
+                      help='Specify a 3D mask for the region of the input volume that you want to keep. If no mask is '
+                           'selected, the whole image will be subtracted')
         form.addParam('resol', FloatParam, label="Filter at resolution: ", default=3, allowsNull=True,
                       expertLevel=LEVEL_ADVANCED,
                       help='Resolution (A) at which subtraction will be performed, filtering the volume projections.'
@@ -76,7 +77,7 @@ class XmippProtSubtractProjection(EMProtocol):
     # --------------------------- STEPS functions --------------------------------------------
     def convertStep(self):
         writeSetOfParticles(self.particles.get(), self._getExtraPath(self.INPUT_PARTICLES))
-        
+
     def subtractionStep(self):
         vol = self.vol.get().clone()
         fnVol = vol.getFileName()
@@ -96,6 +97,18 @@ class XmippProtSubtractProjection(EMProtocol):
             args += ' --maskVol %s' % self.maskVol.get().getFileName()
         if self.mask.get() is not None:
             args += ' --mask %s' % self.mask.get().getFileName()
+        else:
+            involdim = vol.getDim()
+            fnDescr = self._getExtraPath("mask.descr")
+            fhDescr = open(fnDescr, 'w')
+            fhDescr.write("%d %d %d 0" % (involdim[0], involdim[1], involdim[2]))
+            fhDescr.close()
+            mskKeep = self._getExtraPath("mask_keep.mrc")
+            args_mask_keep = "-i %s -o %s" % (fnDescr, mskKeep)
+            self.runJob("xmipp_phantom_create", args_mask_keep, numberOfMpi=1)
+            args_imageheader2 = "-i %s --sampling_rate %f" % (mskKeep, vol.getSamplingRate())
+            self.runJob("xmipp_image_header", args_imageheader2, numberOfMpi=1)
+            args += ' --mask %s --subAll' % mskKeep
         self.runJob(program, args)
 
     def createOutputStep(self):
