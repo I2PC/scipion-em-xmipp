@@ -127,11 +127,12 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     def _displayDisjointProjectionClassification(self, e):
         images = self._readImages()
-        points = self._getProjectionSphere(images)
         labels = self._readLabels()
+        points = self._getProjectionSphere(images)
+        offsets = self._calculateDisjointProjectionSphereOffsets(labels)
 
-        # Separate
-        labels, points, _ = self._getDisjointProjectionSpheres(labels, points)
+        # Apply an offset to the points
+        points += offsets
 
         # Plot the projection angles with the classification
         fig = plt.figure()
@@ -184,9 +185,10 @@ class XmippViewerSplitVolume(ProtocolViewer):
         labels = self._readLabels()
         weights = self._readWeights()
         points = self._getProjectionSphere(images)
+        offsets = self._calculateDisjointProjectionSphereOffsets(labels)
 
-        # Separate points into disjoint spheres
-        labels, points, weights = self._getDisjointProjectionSpheres(labels, points, weights)
+        # Apply a offset to the points
+        points += offsets
 
         # Obtain the edges of the graph
         edges, edgeWeights = self._getEdgeLines(points, weights)
@@ -224,23 +226,15 @@ class XmippViewerSplitVolume(ProtocolViewer):
         assert(len(images) == points.shape[0])
         return points
 
-    def _getDisjointProjectionSpheres(self, labels, points, weights=None):
+    def _calculateDisjointProjectionSphereOffsets(self, labels):
         nClasses = int(max(labels)) + 1
 
-        # Reorder items
-        indices = np.argsort(labels)
-        labels = labels[indices]
-        points = points[indices]
-        if weights is not None: 
-            weights = weights[indices,:][:,indices] # Reorder columns and rows
-
-        # Apply an offset to the spheres
+        # Calculate a offset in a circumference for each point
         thetas = 2*math.pi*labels / nClasses
-        radius = 1.5*max(nClasses/math.pi, 1)
+        radius = 1.5*max(nClasses/math.pi, 1) # For N<=3 the limiting factor is the radius. The perimeter is otherwise
         offsets = radius*np.column_stack((np.cos(thetas), np.sin(thetas), np.zeros_like(thetas)))
-        points += offsets
-
-        return labels, points, weights
+        
+        return offsets
 
     def _getEdgeLines(self, points, weights):
         edges = []
