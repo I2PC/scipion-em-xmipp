@@ -60,6 +60,8 @@ class XmippViewerSplitVolume(ProtocolViewer):
                         'the label assigned to each image')
         form.addParam('displayProjectionClassification', LabelParam, label='Projection classification',
                         help='Shows a 3D representation of the classification')
+        form.addParam('displayDisjointProjectionClassification', LabelParam, label='Disjoint projection classification',
+                        help='Shows a 3D representation of the classification with a projection sphere for each class')
 
         form.addSection(label='Image pairs')
         form.addParam('displayDistanceImage', LabelParam, label='Angular distance matrix',
@@ -76,13 +78,14 @@ class XmippViewerSplitVolume(ProtocolViewer):
         form.addParam('displayAngularNetwork', LabelParam, label='3D network',
                         help='Shows a 3D representation of the network')
         form.addParam('displayDisjointAngularNetwork', LabelParam, label='Disjoint 3D network',
-                        help='Shows a 3D representation of the network with a projection for each class')
+                        help='Shows a 3D representation of the network with a projection sphere for each class')
 
     def _getVisualizeDict(self):
         return {
             'displayLabelHistogram': self._displayLabelHistogram,
             'displayLabelImage': self._displayLabelImage,
             'displayProjectionClassification': self._displayProjectionClassification,
+            'displayDisjointProjectionClassification': self._displayDisjointProjectionClassification,
             'displayDistanceImage': self._displayDistanceImage,
             'displayCorrelationImage': self._displayCorrelationImage,
             'displayWeightImage': self._displayWeightImage,
@@ -112,8 +115,23 @@ class XmippViewerSplitVolume(ProtocolViewer):
     
     def _displayProjectionClassification(self, e):
         images = self._readImages()
-        points = self._getProjectionUnitSphere(images)
+        points = self._getProjectionSphere(images)
         labels = self._readLabels()
+
+        # Plot the projection angles with the classification
+        fig = plt.figure()
+        ax = plt.axes(projection='3d')
+        ax.set_title('Projection Classification')
+        self._plotProjectionClassification(fig, ax, points, labels)
+        return [fig]
+
+    def _displayDisjointProjectionClassification(self, e):
+        images = self._readImages()
+        points = self._getProjectionSphere(images)
+        labels = self._readLabels()
+
+        # Separate
+        labels, points, _ = self._getDisjointProjectionSpheres(labels, points)
 
         # Plot the projection angles with the classification
         fig = plt.figure()
@@ -150,7 +168,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         images = self._readImages()
         labels = self._readLabels()
         weights = self._readWeights()
-        points = self._getProjectionUnitSphere(images)
+        points = self._getProjectionSphere(images)
         edges, edgeWeights = self._getEdgeLines(points, weights)
 
         # Plot the projection angles with the classification
@@ -165,20 +183,10 @@ class XmippViewerSplitVolume(ProtocolViewer):
         images = self._readImages()
         labels = self._readLabels()
         weights = self._readWeights()
-        points = self._getProjectionUnitSphere(images)
-        nClasses = int(max(labels)) + 1
+        points = self._getProjectionSphere(images)
 
-        # Reorder items
-        indices = np.argsort(labels)
-        labels = labels[indices]
-        weights = weights[indices,:][:,indices] # Reorder columns and rows
-        points = points[indices]
-
-        # Apply an offset to the spheres
-        thetas = 2*math.pi*labels / nClasses
-        radius = 1.5*max(nClasses/math.pi, 1)
-        offsets = radius*np.column_stack((np.cos(thetas), np.sin(thetas), np.zeros_like(thetas)))
-        points += offsets
+        # Separate points into disjoint spheres
+        labels, points, weights = self._getDisjointProjectionSpheres(labels, points, weights)
 
         # Obtain the edges of the graph
         edges, edgeWeights = self._getEdgeLines(points, weights)
@@ -207,7 +215,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _readLabels(self):
         return self.protocol._readLabels()
 
-    def _getProjectionUnitSphere(self, images):
+    def _getProjectionSphere(self, images):
         # Multiply the transform of the images by the unit x vector.
         # This is equivalent to selecting the first column.
         f = lambda img : img.getTransform().getMatrix()[0:3, 0]
@@ -215,6 +223,24 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
         assert(len(images) == points.shape[0])
         return points
+
+    def _getDisjointProjectionSpheres(self, labels, points, weights=None):
+        nClasses = int(max(labels)) + 1
+
+        # Reorder items
+        indices = np.argsort(labels)
+        labels = labels[indices]
+        points = points[indices]
+        if weights is not None: 
+            weights = weights[indices,:][:,indices] # Reorder columns and rows
+
+        # Apply an offset to the spheres
+        thetas = 2*math.pi*labels / nClasses
+        radius = 1.5*max(nClasses/math.pi, 1)
+        offsets = radius*np.column_stack((np.cos(thetas), np.sin(thetas), np.zeros_like(thetas)))
+        points += offsets
+
+        return labels, points, weights
 
     def _getEdgeLines(self, points, weights):
         edges = []
