@@ -30,17 +30,19 @@ from pwem import emlib
 from pwem.protocols import EMProtocol
 
 from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam
+from pyworkflow.protocol.params import Range, GE, GT, LE, LT
 from pyworkflow.object import Float, List, Object
 from pyworkflow.constants import BETA
 from pyworkflow.protocol.constants import STEPS_PARALLEL
+from pyworkflow.utils.path import makePath
 
 import math
-import pickle
+import csv
 import collections
 import itertools
 import multiprocessing as mp
 import numpy as np
-import matplotlib.pyplot as plt
+import os.path
 
 from xmipp3.convert.convert import setXmippAttribute
 
@@ -55,44 +57,42 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
     def __init__(self, *args, **kwargs):
         EMProtocol.__init__(self, *args, **kwargs)
-        #self.stepsExecutionMode = STEPS_PARALLEL # TODO does not work properly if threading
         self._createFileNames()
         
     def _createFileNames(self):
+        iterFmt='i%(iter)06d'
+
         myDict = {
-            'objective_function': 'objective_func.pkl',
-            'clusterings': 'clusterings.pkl',
-            'elbows': 'elbows.pkl',
-            'random_consensus_sizes': 'random_consensus_sizes.pkl',
-            'random_consensus_size_ratios': 'random_consensus_size_ratios.pkl',
-            'size_percentiles': 'size_percentiles.pkl',
-            'size_ratio_percentiles': 'relative_size_percentiles.pkl',
-            'summary': 'summary.txt',
+            'intersections': f'intersections.csv',
+            'clustering': f'clusterings/i{iterFmt}.csv',
+            'objective_values': f'objective_values.csv'
         }
         self._updateFilenamesDict(myDict)
 
     def _defineParams(self, form):
         # Input data
         form.addSection(label='Input')
-        form.addParam('inputMultiClasses', MultiPointerParam, important=True,
-                      label="Input Classes", pointerClass='SetOfClasses3D',
-                      help='Select several sets of classes where '
-                           'to evaluate the intersections.')
+        form.addParam('inputClasses', MultiPointerParam, pointerClass='SetOfClasses3D', label="Input classes", 
+                      important=True,
+                      help='Select several sets of classes where to evaluate the '
+                           'intersections.')
 
         # Consensus
         form.addSection(label='Consensus clustering')
-        form.addParam('manualClusterCount', IntParam, default=-1,
-                      label='Manual Number of Clusters',
-                      help='Set the final number of clusters. Disabled if <= 0')
-        form.addParam('automaticClusterCount', EnumParam,
-                      choices=['Yes', 'No'], default=0,
-                      label='Guess the Number of Clusters', display=EnumParam.DISPLAY_HLIST,
-                      help='Deduce the number of clusters based on the shape of the objective function')
-
+        form.addParam('clusteringMethod', EnumParam, label='Clustering method',
+                      choices=['Manual', 'Origin', 'Angle', 'PLL'], default=0,
+                      help='Method used to automatically determine the number of classes')
+        form.addParam('clusteringManualCount', IntParam, label='Cluster count',
+                      condition='clusteringMethod==0', validators=[GE(2)], default=3,
+                      help='Number of clusters to be obtained manually')
+        form.addParam('clusteringAngle', IntParam, label='Angle',
+                      condition='clusteringMethod==2', validators=[Range(0, 90)], default=45,
+                      help='Angle to determine the cluster count')
+        
         # Reference random classification
         form.addSection(label='Reference random classification')
-        form.addParam('numRand', IntParam, default=0,
-                      label='Number of random classifications',
+        form.addParam('randomClassificationCount', IntParam, label='Number of random classifications',
+                      validators=[GE(0)], default=0,
                       help='Number of random classifications used for computing the significance of the actual '
                            'clusters. 0 for skipping this step')
         form.addParallelSection()
@@ -100,28 +100,47 @@ class XmippProtConsensusClasses3D(EMProtocol):
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
         """ Inserting one step for each intersections analysis """
+        self._insertFunctionStep('convertInputStep')
+        self._insertFunctionStep('intersectStep')
+        self._insertFunctionStep('ensembleStep')
 
-        # Intersect all input classes
-        self._insertFunctionStep('populateStep')
-        for i in range(1, len(self.inputMultiClasses)):
-            self._insertFunctionStep('compareStep', i)
+    def convertInputStep(self):
+        self.classificationMatrix = self._convertInputClassifications(self.inputClasses)
+    
+    def intersectStep(self):
+        classifications = self.classificationMatrix
 
-        # Determine if ensemble is needed
-        if self.manualClusterCount.get() > 0 or self.automaticClusterCount.get() == 0:
-            self._insertFunctionStep('ensembleStep')
+        # Compute the intersection among all classes
+        intersections = self._calculateClassificationIntersections(classifications)
 
-        # Determine if automatic clustering is enabled
-        if self.automaticClusterCount.get() == 0:
-            self._insertFunctionStep('findElbowsStep')
+        # Write the result to disk
+        self._writeIntersections(intersections)
         
-        # All prior steps are executed sequentially. Depend on the last one
-        outputPrerequisites = [len(self._steps)]
+    def ensembleStep(self, numClusters=1):
+        # Read input data
+        classifications = self.classificationMatrix
+        intersections = self._readIntersections()
 
-        # Perform a reference random classification if requested. It can be executed in parallel to the previous steps
-        if self.numRand.get() > 0:
-            outputPrerequisites.append(self._insertFunctionStep('checkSignificanceStep', prerequisites=[]))
+        # Iteratively ensemble intersections until only 1 remains
+        allIntersections, allObValues = self._ensembleIntersections(classifications, intersections, numClusters)
 
-        self._insertFunctionStep('createOutputStep', prerequisites=outputPrerequisites)
+        # Reverse them so that their size increases with the index
+        allIntersections.reverse()
+        allObValues.reverse()
+
+        # Save the results
+        self._writeEnsembledIntersections(allIntersections)
+        self._writeObjectiveValues(allObValues)
+
+
+
+
+
+
+
+
+
+
 
     def populateStep(self, classificationIdx=0):
         """ Initializes attributes to be able to start comparing """
@@ -174,58 +193,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         # Overwrite previous intersections with the new ones
         self.intersectionList = List(intersections)
-
-    def ensembleStep(self, numClusters=1):
-        """ Ensemble clustering by COSS that merges interactions of clusters based
-            on entropy minimization """
-        # Obtain the classification as a list of list of sets
-        classifications = self._getClassificationParticleIds()
-
-        # Initialize with values before merging
-        allIntersections = [self.intersectionList]  # Stores the intersections of all iterations
-        allObValues = [0.0]
-        intersectionParticleIds = self._getIntersectionParticleIds(self.intersectionList)
-
-        # Iterations of merging clusters
-        while len(allIntersections[-1]) > numClusters:
-            # Reshape the cluster matrix (list of sets instead of list of list of sets)
-            allClusters = list(itertools.chain(*classifications))
-
-            # Compute the similarity vectors
-            similarityVectors = []
-            for intersection in intersectionParticleIds:
-                similarityVectors.append(self._buildSimilarityVector(intersection, allClusters))
-
-            # For each possible pair of intersections compute the cost of merging them
-            n = len(intersectionParticleIds)
-            obValues = {}
-            for i in range(n - 1):
-                for j in range(i + 1, n):
-                    # Objective function to minimize for each merged pair
-                    obValues[(i, j)] = self._objectiveFunction(intersectionParticleIds, [i, j], similarityVectors)
-
-            values = list(obValues.values())
-            keys = list(obValues.keys())
-
-            # Select the minimum cost pair and merge them
-            minObValue = min(values)
-            mergePair = keys[values.index(minObValue)]
-            mergedIntersections = self._mergeIntersections(allIntersections[-1], mergePair)
-
-            # Update the particle ids for the next iteration
-            intersectionParticleIds = self._getIntersectionParticleIds(mergedIntersections)
-
-            # Save the data for the next iteration
-            allIntersections.append(mergedIntersections)
-            allObValues.append(minObValue)
-
-        # Reverse objective values so they go from largest to smallest
-        allIntersections.reverse()
-        allObValues.reverse()
-
-        # Save the results
-        self.ensembleIntersectionLists = List(allIntersections)
-        self.ensembleObValues = List(allObValues)
 
     def findElbowsStep(self):
         """" Finds elbows of the COSS ensemble process """
@@ -387,6 +354,181 @@ class XmippProtConsensusClasses3D(EMProtocol):
         return errors
 
     # --------------------------- UTILS functions ------------------------------
+    def _writeClassification(self, path, classification):
+        with open(path, 'w') as file:
+            writer = csv.writer(file)
+            writer.writerows(classification)
+
+    def _readClassification(self, path):
+        with open(path, 'r') as file:
+            reader = csv.reader(file)
+            return list(map(lambda row : set(map(lambda id : int(id), row)), reader))
+        
+    def _writeIntersections(self, intersections):
+        self._writeClassification(self._getExtraPath(self._getFileName('intersections')), intersections)
+
+    def _readIntersections(self):
+        return self._readClassification(self._getExtraPath(self._getFileName('intersections')))
+
+    def _writeEnsembledIntersections(self, allIntersections):
+        # Create the path
+        makePath(os.path.dirname(self._getExtraPath(self._getFileName('clustering', iter=0))))
+
+        # Write all
+        for iter, intersections in enumerate(allIntersections, start=1):
+            assert(len(intersections) == iter)
+            self._writeClassification(self._getExtraPath(self._getFileName('clustering', iter=iter)), intersections)
+
+    def _readEnsembledIntersections(self):
+        allIntersections = []
+        while os.path.exists(path := self._getExtraPath(self._getFileName('clustering', iter=len(allIntersections)))):
+            intersections = self._readClassification(path)
+            allIntersections.append(intersections)
+
+        return allIntersections
+
+    def _writeObjectiveValues(self, allObValues):
+        with open(self._getExtraPath(self._getFileName('objective_values')), 'w') as file:
+            writer = csv.writer(file)
+            writer.writerow(allObValues)
+
+    def _readObjectiveValues(self):
+        with open(self._getExtraPath(self._getFileName('objective_values')), 'r') as file:
+            reader = csv.reader(file)
+            return list(map(lambda obValue : float(obValue), next(reader)))
+
+    def _convertInputClassifications(self, classification):
+        """ Returns the list of lists of sets that stores the set of ids of each class"""
+        f = lambda classification : list(map(lambda cls : cls.getIdSet(), classification.get()))
+        result = list(map(f, classification))
+        return result
+
+    def _calculateClassificationIntersections(self, classifications):
+        # Start with the first classification
+        result = classifications[0]
+
+        for i in range(1, len(classifications)):
+            classification = classifications[i]
+            intersections = []
+
+            # Perform the intersection with previous classes
+            for cls0 in result:
+                for cls1 in classification:
+                    intersection = cls0 & cls1
+                    if intersection:
+                        intersections.append(intersection)
+
+            # Use the new intersection for the next step
+            result = intersections
+
+        return result
+
+    def _calculateSubsetSimilarity(self, n, c):
+        """ Return the similarity of intersection subset (n) with class subset (c) """
+        inter = len(n.intersection(c))
+        return inter / len(n)
+
+    def _buildSimilarityVector(self, n, cs):
+        """ Build the similarity vector of n subset with each c subset in cs """
+        return list(map(self._calculateSubsetSimilarity, itertools.repeat(n), cs))
+
+    def _calculateEntropy(self, p):
+        """ Return the entropy of the elements in a vector """
+        H = 0
+        for i in range(len(p)):
+            H += p[i] * math.log(p[i], 2)
+        return -H
+
+    def _calculateDistribution(self, ns, indices=[]):
+        """ Return the vector of distribution (p) from the n subsets in ns
+            If two indices are given, these two subsets are merged in the distribution """
+        p = np.array([])
+        if len(indices) == 2:
+            # Merging two subsets
+            N = len(ns) - 1
+            for i in range(len(ns)):
+                if i not in indices:
+                    p = np.append(p, len(ns[i]))
+            p = np.append(p, len(ns[indices[0]].union(ns[indices[1]])))
+        else:
+            N = len(ns)
+            for n in ns:
+                p = np.append(p, len(n))
+        return p / N
+
+    def _calculateCosineSimilarity(self, v1, v2):
+        """ Return the cosine similarity of two vectors that is used as similarity """
+        return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+
+    def _objectiveFunction(self, ns, indices, vs, eps=0.01):
+        """Objective function to minimize based on the entropy and the similarity between the clusters to merge
+        """
+        p = self._calculateDistribution(ns)
+        pi = self._calculateDistribution(ns, indices)
+        h = self._calculateEntropy(p)
+        hi = self._calculateEntropy(pi)
+
+        sv = self._calculateCosineSimilarity(vs[indices[0]], vs[indices[1]])
+        return (h - hi) / (sv + eps)
+
+    def _ensembleIntersectionPair(self, intersections, indices):
+        """ Return a list of subsets where the intersections[indices] have been merged """
+        # Divide the input intersections into the ones referred by indices and not
+        selection = [intersections[i] for i in indices]  # intersection[indices]
+        result = [intersections[i] for i in range(len(intersections)) if i not in indices]  # intersections - selection
+
+        # Merge all the selected clusters into the same one
+        merged = set.union(*selection)
+        
+        # Add the merged items to the result
+        result.append(merged)
+        return result
+
+    def _ensembleCheapestIntersectionPair(self, allClasses, intersections):
+        """ Merges the lest costly pair of intersections """
+        # Compute the similarity vectors
+        similarityVectors = list(map(self._buildSimilarityVector, intersections, itertools.repeat(allClasses)))
+
+        # For each possible pair of intersections compute the cost of merging them
+        obValues = {}
+        for pair in itertools.permutations(range(len(intersections)), r=2):
+            obValues[pair] = self._objectiveFunction(intersections, pair, similarityVectors)
+
+        values = list(obValues.values())
+        keys = list(obValues.keys())
+
+        # Select the minimum cost pair and merge them
+        obValue = min(values)
+        mergePair = keys[values.index(obValue)]
+        mergedIntersections = self._ensembleIntersectionPair(intersections, mergePair)
+
+        return mergedIntersections, obValue
+
+    def _ensembleIntersections(self, classifications, intersections, numClusters=1):
+        """ Ensemble clustering by COSS that merges interactions of clusters based
+            on entropy minimization """
+        # Results
+        allIntersections = [intersections]
+        allObValues = [0.0]
+
+        # Obtain a list with all source classes
+        allClasses = list(itertools.chain(*classifications))
+
+        # Iteratively merge intersections
+        while len(allIntersections[-1]) > numClusters:
+            mergedIntersections, obValue = self._ensembleCheapestIntersectionPair(allClasses, allIntersections[-1])
+            allIntersections.append(mergedIntersections)
+            allObValues.append(obValue)
+
+        assert(len(allIntersections) == len(allObValues))
+        return allIntersections, allObValues
+            
+
+
+
+
+
+
     def _getClusterLengths(self):
         """ Returns a list of lists that stores the lengths of each classification """
         result = []
@@ -410,85 +552,10 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         return result
 
-    def _getClassificationParticleIds(self):
-        """ Returns the list of lists of sets that stores the clusters of each classification """
-        result = []
 
-        for classification in self.inputMultiClasses:
-            classification = classification.get()
 
-            particleIds = []
-            for cluster in classification:
-                particleIds.append(cluster.getIdSet())
-            result.append(particleIds)
 
-        return result
 
-    def _mergeIntersections(self, intersections, indices):
-        """ Return a list of subsets where the intersections[indices] have been merged """
-        # Divide the input intersections into the ones referred by indices and not
-        selection = [intersections[i] for i in indices]  # intersection[indices]
-        result = [intersections[i] for i in range(len(intersections)) if i not in indices]  # intersections - selection
-
-        # Merge all the selected clusters into the same one
-        merged = selection[0]
-        for i in range(1, len(selection)):
-            merged = merged.merge(selection[i])
-
-        # Add the merged items to the result
-        result.append(merged)
-        return result
-
-    def _calculateSubsetSimilarity(self, n, c):
-        """ Return the similarity of intersection subset (n) with class subset (c) """
-        inter = len(n.intersection(c))
-        return inter / len(n)
-
-    def _buildSimilarityVector(self, n, cs):
-        """ Build the similarity vector of n subset with each c subset in cs """
-        v = []
-        for c in cs:
-            v.append(self._calculateSubsetSimilarity(n, c))
-        return v
-
-    def _calculateEntropy(self, p):
-        """ Return the entropy of the elements in a vector """
-        H = 0
-        for i in range(len(p)):
-            H += p[i] * math.log(p[i], 2)
-        return -H
-
-    def _calculateDistribution(self, ns, indexs=[]):
-        """ Return the vector of distribution (p) from the n subsets in ns
-            If two indexs are given, these two subsets are merged in the distribution """
-        p = np.array([])
-        if len(indexs) == 2:
-            # Merging two subsets
-            N = len(ns) - 1
-            for i in range(len(ns)):
-                if i not in indexs:
-                    p = np.append(p, len(ns[i]))
-            p = np.append(p, len(ns[indexs[0]].union(ns[indexs[1]])))
-        else:
-            N = len(ns)
-            for n in ns:
-                p = np.append(p, len(n))
-        return p / N
-
-    def _calculateCosineSimilarity(self, v1, v2):
-        """ Return the cosine similarity of two vectors that is used as similarity """
-        return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
-
-    def _objectiveFunction(self, ns, indexs, vs, eps=0.01):
-        """Objective function to minimize based on the entropy and the similarity between the clusters to merge
-        """
-        p = self._calculateDistribution(ns)
-        pi = self._calculateDistribution(ns, indexs)
-        h = self._calculateEntropy(p)
-        hi = self._calculateEntropy(pi)
-
-        sv = self._calculateCosineSimilarity(vs[indexs[0]], vs[indexs[1]])
-        return (h - hi) / (sv + eps)
 
     def _normalizeValues(self, x):
         """Normalize values to range 0 to 1"""
