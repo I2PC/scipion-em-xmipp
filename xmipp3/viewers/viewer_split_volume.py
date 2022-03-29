@@ -218,9 +218,9 @@ class XmippViewerSplitVolume(ProtocolViewer):
         return self.protocol._readLabels()
 
     def _getProjectionSphere(self, images):
-        # Multiply the transform of the images by the unit x vector.
+        # Multiply the transform of the images by the unit z vector.
         # This is equivalent to selecting the first column.
-        f = lambda img : img.getTransform().getMatrix()[0:3, 0]
+        f = lambda img : img.getTransform().getMatrix()[0:3, 2]
         points = np.array(list(map(f, images)))
 
         assert(len(images) == points.shape[0])
