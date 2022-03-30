@@ -28,24 +28,25 @@
 
 from pwem import emlib
 from pwem.protocols import EMProtocol
+from pwem.objects import Volume
 
 from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam
 from pyworkflow.protocol.params import Range, GE, GT, LE, LT
 from pyworkflow.object import Float, List, Object
 from pyworkflow.constants import BETA
 from pyworkflow.protocol.constants import STEPS_PARALLEL
-from pyworkflow.utils.path import makePath
+from pyworkflow.utils.path import makePath, cleanPattern
+
+from xmipp3.convert import setXmippAttribute, writeSetOfParticles
 
 import math
 import csv
 import collections
 import itertools
-import multiprocessing as mp
-import numpy as np
 import os.path
-
-from xmipp3.convert.convert import setXmippAttribute
-
+import numpy as np
+import multiprocessing as mp
+from multiprocessing.pool import ThreadPool
 
 class XmippProtConsensusClasses3D(EMProtocol):
     """ Compare several SetOfClasses3D.
@@ -61,6 +62,8 @@ class XmippProtConsensusClasses3D(EMProtocol):
         
     def _createFileNames(self):
         iterFmt='i%(iter)06d'
+        classFmt='c%(cls)02d'
+        nameFmt='%(name)s'
 
         myDict = {
             'intersections': f'intersections.csv',
@@ -69,13 +72,14 @@ class XmippProtConsensusClasses3D(EMProtocol):
             'elbows': f'elbows.csv',
             'reference_sizes': f'reference_sizes.csv',
             'reference_relative_sizes': f'reference_relative_sizes.csv',
+            'volume': f'volumes/{nameFmt}_{classFmt}.vol'
         }
         self._updateFilenamesDict(myDict)
 
     def _defineParams(self, form):
         # Input data
         form.addSection(label='Input')
-        form.addParam('inputClasses', MultiPointerParam, pointerClass='SetOfClasses3D', label="Input classes", 
+        form.addParam('inputClassifications', MultiPointerParam, pointerClass='SetOfClasses3D', label="Input classes", 
                       important=True,
                       help='Select several sets of classes where to evaluate the '
                            'intersections.')
@@ -98,19 +102,34 @@ class XmippProtConsensusClasses3D(EMProtocol):
                       validators=[GE(0)], default=0,
                       help='Number of random classifications used for computing the significance of the actual '
                            'clusters. 0 for skipping this step')
-        form.addParallelSection()
+        form.addParallelSection(mpi=0, threads=mp.cpu_count())
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
         """ Inserting one step for each intersections analysis """
-        self._insertFunctionStep('convertInputStep')
-        self._insertFunctionStep('intersectStep')
+
+        # Setup parallel processing
+        if self.numberOfThreads > 1:
+            self.threadPool = ThreadPool(int(self.numberOfThreads))
+
+        # Convert the input parameters
+        convertInputStepIdx = self._insertFunctionStep('convertInputStep')
+        outputPrerequisites = []
+
+        # Intersect and ensemble
+        self._insertFunctionStep('intersectStep', prerequisites=[convertInputStepIdx])
         self._insertFunctionStep('ensembleStep')
-        self._insertFunctionStep('findElbowsStep')
-        self._insertFunctionStep('checkSignificanceStep')
+        outputPrerequisites.append(self._insertFunctionStep('findElbowsStep'))
+
+        # Perform a random classification and use it as a reference
+        if self.randomClassificationCount.get() > 0:
+            outputPrerequisites.append(self._insertFunctionStep('checkSignificanceStep', prerequisites=[convertInputStepIdx]))
+
+        # Lastly create the output    
+        self._insertFunctionStep('createOutputStep', prerequisites=outputPrerequisites)
 
     def convertInputStep(self):
-        self.classifications = self._convertInputClassifications(self.inputClasses)
+        self.classifications = self._convertInputClassifications(self.inputClassifications)
     
     def intersectStep(self):
         classifications = self.classifications
@@ -127,14 +146,14 @@ class XmippProtConsensusClasses3D(EMProtocol):
         intersections = self._readIntersections()
 
         # Iteratively ensemble intersections until only 1 remains
-        allIntersections, allObValues = self._ensembleIntersections(classifications, intersections, numClusters)
+        allClusterings, allObValues = self._ensembleIntersections(classifications, intersections, numClusters)
 
         # Reverse them so that their size increases with the index
-        allIntersections.reverse()
+        allClusterings.reverse()
         allObValues.reverse()
 
         # Save the results
-        self._writeEnsembledIntersections(allIntersections)
+        self._writeAllClusterings(allClusterings)
         self._writeObjectiveValues(allObValues)
 
     def findElbowsStep(self):
@@ -148,9 +167,13 @@ class XmippProtConsensusClasses3D(EMProtocol):
         # Calculate the elbows
         elbows = {
             'origin': self._findElbowOrigin(normNumClusters, normObValues),
-            'angle': self._findElbowAngle(normNumClusters, normObValues),
+            'angle': self._findElbowAngle(normNumClusters, normObValues, -np.radians(self.clusteringAngle.get())),
             'pll': self._findElbowPll(obValues)
         }
+
+        # Start counting at 1
+        for key in elbows.keys():
+            elbows[key] += 1
 
         # Save the results
         self._writeElbows(elbows)
@@ -169,286 +192,88 @@ class XmippProtConsensusClasses3D(EMProtocol):
         consensusSizes.sort()
         consensusRelativeSizes.sort()
 
-        # Calculate common percentiles
-        #percentiles = [90, 95, 99, 100]  # Common values for percentiles. Add on your own taste. 100 is the max value
-        #sizePercentiles = np.percentile(consensusSizes, percentiles)
-        #sizeRatioPercentiles = np.percentile(consensusSizeRatios, percentiles)
-
         # Write results to disk
         self._writeReferenceClassificationSizes(consensusSizes)
         self._writeReferenceClassificationRelativeSizes(consensusRelativeSizes)
 
     def createOutputStep(self):
-        # Always output all the initial intersections
-        outputClassesInitial = self._createOutput3DClassWithAttributes(self.intersectionList, 'initial')
-        self._defineOutputs(outputClasses_initial=outputClassesInitial)
+        # Read all the necessary data from disk
+        manualClusterCount = self.clusteringManualCount.get()
+        initialClusterCount = self._readClusteringCount()
+        elbows = self._readElbows()
+        consensusSizes = self._readReferenceClassificationSizes()
+        consensusRelativeSizes = self._readReferenceClassificationRelativeSizes()
 
-        for item in self.inputMultiClasses:
-            self._defineSourceRelation(item, outputClassesInitial)
+        # Append the manual and initial indices to the elbow
+        if manualClusterCount > 0:
+            elbows['manual'] = manualClusterCount
+        elbows['initial'] =  initialClusterCount
 
-        # Check if the ensemble step has been performed
-        if hasattr(self, 'ensembleIntersectionLists'):
-            manualClusterCount = self.manualClusterCount.get()
-            automaticClusterCount = self.automaticClusterCount.get()
+        # Read selected clusters
+        clusterings = dict(zip(elbows.keys(), map(self._readClustering, elbows.values())))
 
-            # Check if a manual cluster count was given
-            if manualClusterCount > 0:
-                i = min(manualClusterCount, len(self.ensembleIntersectionLists)) - 1  # Most restrictive one
-                outputClassesManual = self._createOutput3DClassWithAttributes(self.ensembleIntersectionLists[i], 'manual')
-                self._defineOutputs(outputClasses_manual=outputClassesManual)
+        # Create the output classes and define them
+        particles = self.inputClassifications[0].get().getImages()
+        outputClasses = dict(zip(
+            map(lambda name : 'outputClasses_'+name,
+                clusterings.keys() 
+            ),
+            map(self._createOutputClasses3D,
+                itertools.repeat(particles),
+                clusterings.values(),
+                clusterings.keys(),
+                itertools.repeat(consensusSizes),
+                itertools.repeat(consensusRelativeSizes)
+            )
+        ))
+        self._defineOutputs(**outputClasses)
 
-                # Establish output relations
-                for item in self.inputMultiClasses:
-                    self._defineSourceRelation(item, outputClassesManual)
+        # Create the output volumes and define them
+        outputVolumes = dict(zip(
+            map(lambda name : 'outputVolumes_'+name,
+                clusterings.keys() 
+            ),
+            map(self._createOutputVolumes,
+                outputClasses.values(),
+                clusterings.keys()
+            )
+        ))
+        self._defineOutputs(**outputVolumes)
 
-            # Check if automatic cluster count is enabled
-            if automaticClusterCount == 0:
-                elbows = self.elbows.get()
-                for key, value in elbows.items():
-                    outputClassesName = 'outputClasses_' + key
-                    outputClasses = self._createOutput3DClassWithAttributes(self.ensembleIntersectionLists[value], key)
-                    self._defineOutputs(**{outputClassesName: outputClasses})
-
-                    # Establish output relations
-                    for item in self.inputMultiClasses:
-                        self._defineSourceRelation(item, outputClasses)
-
-
-
-
-
-
-    def populateStep(self, classificationIdx=0):
-        """ Initializes attributes to be able to start comparing """
-
-        # Select the given classification
-        classification = self.inputMultiClasses[classificationIdx].get()
-
-        # At the beginning, use the given classification as the intersection
-        # (consider it as a intersection with the 'all' set, AKA the identity for this operation)
-        intersections = []
-        for cluster in classification:
-            clusterId = cluster.getObjId()
-            particleIds = cluster.getIdSet()
-
-            # Build a intersection-like structure to store it on the intersection list
-            intersection = XmippProtConsensusClasses3D.ClassIntersection(particleIds, classificationIdx, clusterId)
-
-            # Do not append classes that have no elements
-            if intersection:
-                intersections.append(intersection)
-
-        # Store the results
-        self.intersectionList = List(intersections)
-
-    def compareStep(self, classification1Idx):
-        """ Intersects the given classification with all the previous intersections """
-
-        # Select the given classification
-        classification1 = self.inputMultiClasses[classification1Idx].get()
-
-        print('Computing intersections between classes from classification %s and '
-              'the previous ones:' % (classification1.getNameId()))
-
-        # Intersect all the classes from the given classification with the previous intersection
-        intersections = []
-        for cluster1 in classification1:
-            cluster1Id = cluster1.getObjId()
-            particleIds1 = cluster1.getIdSet()
-
-            # Build a intersection-like structure to intersect it against the other
-            intersector = XmippProtConsensusClasses3D.ClassIntersection(particleIds1, classification1Idx, cluster1Id)
-
-            for currIntersection in self.intersectionList:
-                # Intersect the previous intersection with the intersector
-                intersection = currIntersection.intersect(intersector)
-
-                # Do not append classes that have no elements
-                if intersection:
-                    intersections.append(intersection)
-
-        # Overwrite previous intersections with the new ones
-        self.intersectionList = List(intersections)
-
-    def findElbowsStep2(self):
-        """" Finds elbows of the COSS ensemble process """
-        # Shorthands for variables
-        numClusters = list(range(1, 1+len(self.ensembleObValues)))
-        obValues = self.ensembleObValues
-
-
-        # Normalize clusters and obValues
-        normc = self._normalizeValues(numClusters)
-        normo = self._normalizeValues(obValues)
-
-        # Find different kinds of elbows
-        elbow_idx_origin = self._findClosestPointToOrigin(normc, normo)
-        elbow_idx_angle, _ = self._findElbowAngle(normc, normo)
-        elbow_idx_pll = np.argmax(pll)
-
-        # Parse all elbow info to pass to other functions
-        elbows = {
-            'origin': elbow_idx_origin,
-            'angle': elbow_idx_angle,
-            'pll': elbow_idx_pll
-        }
-
-        # Save relevant data for analysis
-        self.elbows = Object(elbows)
-
-    def checkSignificanceStep2(self):
-        """ Create random partitions of same size to compare the quality
-         of the classification """
-
-        # Set up multi-threading
-        threadPool = mp.Pool(int(self.numberOfThreads))
-
-        # Obtain the execution parameters
-        numExec = self.numRand.get()
-
-        # Obtain the group sizes
-        clusterLengths = self._getClusterLengths()
-
-        # Calculate the total particle count
-        numParticles = sum(clusterLengths[0])
-
-        # Repeatedly obtain a consensus of a random classification of same size
-        consensus = threadPool.starmap(
-            XmippProtConsensusClasses3D.RandomConsensus(),
-            itertools.repeat((clusterLengths, numParticles), numExec)
-        )
-        threadPool.close()
-        consensus = list(itertools.chain(*consensus))
-
-        # Obtain the size and its ratio
-        consensusSizes = [len(s) for s in consensus]
-        consensusSizeRatios = [s.getSizeRatio() for s in consensus]
-        consensusSizes.sort()
-        consensusSizeRatios.sort()
-
-        # Calculate common percentiles
-        percentiles = [90, 95, 99, 100]  # Common values for percentiles. Add on your own taste. 100 is the max value
-        sizePercentiles = np.percentile(consensusSizes, percentiles)
-        sizeRatioPercentiles = np.percentile(consensusSizeRatios, percentiles)
-
-        # Store the results
-        self.randomConsensusSizes = List(consensusSizes)
-        self.randomConsensusSizeRatios = List(consensusSizeRatios)
-        self.randomConsensusSizePercentiles = Object({key: value for key, value in zip(percentiles, sizePercentiles)})
-        self.randomConsensusSizeRatioPercentiles = Object({key: value for key, value in zip(percentiles, sizeRatioPercentiles)})
-
-    def createOutputStep2(self):
-        """Save the output classes"""
-        self._saveOutputs() # Saves data into pkl files for later visualization
-
-        # Always output all the initial intersections
-        outputClassesInitial = self._createOutput3DClassWithAttributes(self.intersectionList, 'initial')
-        self._defineOutputs(outputClasses_initial=outputClassesInitial)
-
-        for item in self.inputMultiClasses:
-            self._defineSourceRelation(item, outputClassesInitial)
-
-        # Check if the ensemble step has been performed
-        if hasattr(self, 'ensembleIntersectionLists'):
-            manualClusterCount = self.manualClusterCount.get()
-            automaticClusterCount = self.automaticClusterCount.get()
-
-            # Check if a manual cluster count was given
-            if manualClusterCount > 0:
-                i = min(manualClusterCount, len(self.ensembleIntersectionLists)) - 1  # Most restrictive one
-                outputClassesManual = self._createOutput3DClassWithAttributes(self.ensembleIntersectionLists[i], 'manual')
-                self._defineOutputs(outputClasses_manual=outputClassesManual)
-
-                # Establish output relations
-                for item in self.inputMultiClasses:
-                    self._defineSourceRelation(item, outputClassesManual)
-
-            # Check if automatic cluster count is enabled
-            if automaticClusterCount == 0:
-                elbows = self.elbows.get()
-                for key, value in elbows.items():
-                    outputClassesName = 'outputClasses_' + key
-                    outputClasses = self._createOutput3DClassWithAttributes(self.ensembleIntersectionLists[value], key)
-                    self._defineOutputs(**{outputClassesName: outputClasses})
-
-                    # Establish output relations
-                    for item in self.inputMultiClasses:
-                        self._defineSourceRelation(item, outputClasses)
+        # Stablish source output relationships
+        sources = list(self.inputClassifications)
+        destinations = list(outputClasses.values()) + list(outputVolumes.values())
+        for src in sources:
+            for dst in destinations:
+                self._defineSourceRelation(src, dst)
 
     # --------------------------- INFO functions -------------------------------
     def _summary(self):
         summary = []
-
-        # Show automatically obtained elbows
-        if hasattr(self, 'elbows'):
-            summary.append('Number of Classes')
-            elbows = self.elbows.get()
-
-            for key, value in elbows.items():
-                summary.append(f'{key}: {value+1}')
-
-        # Check if common percentiles of sizes are going to be shown
-        if hasattr(self, 'randomConsensusSizePercentiles'):
-            summary.append('Common consensus size percentiles')
-            percentiles = self.randomConsensusSizePercentiles.get()
-
-            # Add all the values to the summary
-            for key, value in percentiles.items():
-                summary.append(f'{key}%: {value}')
-
-        # Check if common percentiles of ratios are going to be shown
-        if hasattr(self, 'randomConsensusSizeRatioPercentiles'):
-            summary.append('Common consensus size ratio percentiles')
-            percentiles = self.randomConsensusSizeRatioPercentiles.get()
-
-            # Add all the values to the summary
-            for key, value in percentiles.items():
-                summary.append(str(key) + '%: ' + str(value))
-
         return summary
 
     def _methods(self):
-        methods = []
-        return methods
+        pass
 
     def _validate(self):
         errors = []
-        
-        max_nClusters = np.prod([len(self.inputMultiClasses[i].get()) for i in range(len(self.inputMultiClasses))])
-        if self.manualClusterCount.get() > max_nClusters:
-            errors.append("Too many clusters selected for output")
-
-        particles0 = self.inputMultiClasses[0].get().getImages()
-        for i in range(1, len(self.inputMultiClasses)):
-            particles1 = self.inputMultiClasses[i].get().getImages()
-            if particles0 != particles1:
-                errors.append(f"SetOfClasses #{i} was made with different particles")
-
         return errors
 
     # --------------------------- UTILS functions ------------------------------
     def _getThreadPool(self):
         return getattr(self, 'threadPool', None)
 
-    def _writeList(self, path, lst):
-        with open(path, 'w') as file:
-            writer = csv.writer(file)
-            writer.writerow(lst)
-
-    def _readList(self, path, dtype=str):
-        with open(path, 'r') as file:
-            reader = csv.reader(file)
-            return list(map(lambda value : dtype(value), next(reader)))
-
-    def _writeTable(self, path, table):
-        with open(path, 'w') as file:
-            writer = csv.writer(file)
-            writer.writerows(table)
+    def _writeTable(self, path, table, fmt='%s'):
+        np.savetxt(path, table, delimiter=',', fmt=fmt)
 
     def _readTable(self, path, dtype=str):
-        with open(path, 'r') as file:
-            reader = csv.reader(file)
-            return list(map(lambda row : list(map(lambda value : dtype(value), row)), reader))
+        return np.genfromtxt(path, delimiter=',', dtype=dtype)
+
+    def _writeList(self, path, lst, fmt='%s'):
+        self._writeTable(path, lst, fmt)
+
+    def _readList(self, path, dtype=str):
+        return self._readTable(path, dtype=dtype)
         
     def _writeClassification(self, path, classification):
         with open(path, 'w') as file:
@@ -481,23 +306,29 @@ class XmippProtConsensusClasses3D(EMProtocol):
     def _readIntersections(self):
         return self._readClassification(self._getExtraPath(self._getFileName('intersections')))
 
-    def _writeEnsembledIntersections(self, allIntersections):
+    def _writeClustering(self, iter, clustering):
+        self._writeClassification(self._getExtraPath(self._getFileName('clustering', iter=iter)), clustering)
+
+    def _readClustering(self, iter):
+        return self._readClassification(self._getExtraPath(self._getFileName('clustering', iter=iter)))
+
+    def _readClusteringCount(self):
+        count = 0
+        while os.path.exists(self._getExtraPath(self._getFileName('clustering', iter=count+1))):
+            count += 1
+        return count
+
+    def _writeAllClusterings(self, clusterings):   
         # Create the path
         makePath(os.path.dirname(self._getExtraPath(self._getFileName('clustering', iter=0))))
 
         # Write all
-        for iter, intersections in enumerate(allIntersections, start=1):
-            assert(len(intersections) == iter)
-            path = self._getExtraPath(self._getFileName('clustering', iter=iter))
-            self._writeClassification(path, intersections)
+        for iter, clustering in enumerate(clusterings, start=1):
+            assert(len(clustering) == iter)
+            self._writeClustering(iter, clustering)
 
-    def _readEnsembledIntersections(self):
-        allIntersections = []
-        while os.path.exists(path := self._getExtraPath(self._getFileName('clustering', iter=len(allIntersections)))):
-            intersections = self._readClassification(path)
-            allIntersections.append(intersections)
-
-        return allIntersections
+    def _readAllClusterings(self):
+        return list(map(self._readClustering, range(1, 1+self._readClusteringCount())))
 
     def _writeObjectiveValues(self, allObValues):
         self._writeList(self._getExtraPath(self._getFileName('objective_values')), allObValues)
@@ -786,6 +617,56 @@ class XmippProtConsensusClasses3D(EMProtocol):
         consensusSizes = list(map(len, consensus))
         consensusSizeRatios = list(map(XmippProtConsensusClasses3D.ParticleCluster.getRelativeSize, consensus))
         return consensusSizes, consensusSizeRatios
+
+    def _createOutputClasses3D(self, particles, clustering, name, randomConsensusSizes=None, randomConsensusRelativeSizes=None):
+        outputClasses = self._createSetOfClasses3D(particles, suffix=name)
+
+        # Create a list with the filenames of the representatives
+        representatives = list(map(
+            lambda cls : self._getExtraPath(self._getFileName('volume', name=name, cls=cls)), 
+            range(len(clustering))
+        ))
+
+        # Fill the output
+        loader = XmippProtConsensusClasses3D.ClassesLoader(
+            clustering, 
+            representatives,
+            randomConsensusSizes,
+            randomConsensusRelativeSizes
+        )
+        loader.fillClasses(outputClasses)
+
+        return outputClasses
+
+    def _reconstructVolume(self, path, particles, xmdSuffix=''):
+        # Convert the particles to a xmipp metadata file
+        fnParticles = self._getTmpPath('particles_'+xmdSuffix+'.xmd')
+        writeSetOfParticles(particles, fnParticles)
+
+        # Reconstruct the volume
+        args  = f'-i {fnParticles} '
+        args += f'-o {path} '
+        args += f'--max_resolution 0.25 '
+        args += f'-v 0'
+        self.runJob('xmipp_reconstruct_fourier', args)
+
+        # Clear the metadata file
+        cleanPattern(fnParticles)
+
+    def _createOutputVolumes(self, classes, name):
+        outputVolumes = self._createSetOfVolumes(name)
+
+        # Ensure that the file path is created
+        makePath(os.path.dirname(self._getExtraPath(self._getFileName('volume', name='', cls=0))))
+
+        outputVolumes.setSamplingRate(classes.getImages().getSamplingRate())
+        for i, cls in enumerate(classes):
+            vol = cls.getRepresentative()
+            vol.setObjId(cls.getObjId())
+            self._reconstructVolume(vol.getFileName(), cls, name+str(i))
+            outputVolumes.append(vol)
+        
+        return outputVolumes
     
     class ParticleCluster:
         """ Keeps track of the information related to successive class intersections.
@@ -821,81 +702,13 @@ class XmippProtConsensusClasses3D(EMProtocol):
             sourceSize = max(self.getSourceSize(), *otherSourceSizes)
             return XmippProtConsensusClasses3D.ParticleCluster(particleIds, sourceSize)
 
-
-
-    def _getIntersectionParticleIds(self, intersections):
-        """ Return the list of sets from a list of intersections """
-        result = []
-
-        for intersection in intersections:
-            result.append(intersection.particleIds)
-
-        return result
-
-    def _saveOutputs(self):
-        rmScipionListWrapper = lambda x: list(x)
-        rmScipionObjWrapper = lambda x: x.get()
-        self._storeAttributeIfExists(self._getFileName('clusterings'), 'ensembleIntersectionLists', rmScipionListWrapper)
-        self._storeAttributeIfExists(self._getFileName('objective_function'), 'ensembleObValues', rmScipionListWrapper)
-        self._storeAttributeIfExists(self._getFileName('elbows'), 'elbows', rmScipionObjWrapper)
-        self._storeAttributeIfExists(self._getFileName('random_consensus_sizes'), 'randomConsensusSizes', rmScipionListWrapper)
-        self._storeAttributeIfExists(self._getFileName('random_consensus_size_ratios'), 'randomConsensusSizeRatios', rmScipionListWrapper)
-        self._storeAttributeIfExists(self._getFileName('size_percentiles'), 'randomConsensusSizePercentiles', rmScipionObjWrapper)
-        self._storeAttributeIfExists(self._getFileName('size_ratio_percentiles'), 'randomConsensusSizeRatioPercentiles', rmScipionObjWrapper)
-
-    def _storeAttributeIfExists(self, filename, attribute, func=None):
-        """ Saves an attribute identified by its name, 
-            only if it exists. Returns true if successful """
-        result = hasattr(self, attribute)
-
-        if result:
-            self._storeAttribute(filename, attribute, func)
-
-        return result
-
-    def _storeAttribute(self, filename, attribute, func=None):
-        """ Saves an attribute identified by its name"""
-        self._storeObject(filename, getattr(self, attribute), func)
-
-    def _storeObject(self, filename, obj, func=None):
-        """ Saves an object """
-        path = self._getExtraPath(filename)
-
-        # Apply a transformation if necessary
-        if func is not None:
-            obj = func(obj)
-
-        with open(path, 'wb') as f:
-            pickle.dump(obj, f)
-
-    def _createOutput3DClassWithAttributes(self, clustering, name):
-        randomConsensusSizes = getattr(self, 'randomConsensusSizes', None)
-        randomConsensusRelativeSizes = getattr(self, 'randomConsensusSizeRatios', None)
-        return self._createOutput3DClass(clustering, name, randomConsensusSizes, randomConsensusRelativeSizes)
-
-    def _createOutput3DClass(self, clustering, name, randomConsensusSizes=None, randomConsensusRelativeSizes=None):
-        inputParticles = self.inputMultiClasses[0].get().getImages()
-        outputClasses = self._createSetOfClasses3D(inputParticles, suffix=name)
-
-        # Fill the output
-        loader = XmippProtConsensusClasses3D.ClassesLoader(
-            clustering, 
-            self.inputMultiClasses,
-            randomConsensusSizes,
-            randomConsensusRelativeSizes
-        )
-        loader.fillClasses(outputClasses)
-
-        return outputClasses
-
-
     class ClassesLoader:
         """ Helper class to produce classes
         """
-        def __init__(self, classes, inputClasses, randomConsensusSizes=None, randomConsensusRelativeSizes=None):
-            self.classes = classes
-            self.classification = self._createClassification(classes)
-            self.representatives = self._createRepresentatives(classes, inputClasses)
+        def __init__(self, clustering, representatives, randomConsensusSizes=None, randomConsensusRelativeSizes=None):
+            self.clustering = clustering
+            self.classification = self._createClassification(clustering)
+            self.representatives = representatives
             self.randomConsensusSizes = randomConsensusSizes
             self.randomConsensusRelativeSizes = randomConsensusRelativeSizes
 
@@ -915,48 +728,37 @@ class XmippProtConsensusClasses3D(EMProtocol):
             classIdx = classId-1
 
             # Set the representative
-            item.setRepresentative(self.representatives[classIdx])
+            vol = Volume(self.representatives[classIdx])
+            item.setRepresentative(vol)
 
             # Set the size p-value
             if self.randomConsensusSizes is not None:
-                size = len(self.classes[classIdx])
+                size = len(self.clustering[classIdx])
                 percentile = self._findPercentile(self.randomConsensusSizes, size)
                 pValue = 1 - percentile
-                setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
+                #setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
 
 
             # Set the relative size p-value
             if self.randomConsensusRelativeSizes is not None:
-                size = self.classes[classIdx].getSizeRatio()
+                size = self.clustering[classIdx].getRelativeSize()
                 percentile = self._findPercentile(self.randomConsensusRelativeSizes, size)
                 pValue = 1 - percentile
-                setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE, Float(pValue))
+                #setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE, Float(pValue))
 
-        def _createClassification(self, classes):
+        def _createClassification(self, clustering):
             # Fill the classification data (particle-class mapping)
             result = {}
-            for cls, data in enumerate(classes):
-                for particleId in data.particleIds:
+            for cls, data in enumerate(clustering):
+                for particleId in data.getParticleIds():
                     result[particleId] = cls + 1 
 
             return collections.OrderedDict(sorted(result.items())) 
 
-        def  _createRepresentatives(self, classes, inputClasses):
-            result = [None]*len(classes)
-
-            for cls, data in enumerate(classes):
-                classificationIdx = data.representativeClassificationIndex
-                clusterId = data.representativeClusterId
-                classification = inputClasses[classificationIdx].get()
-                cluster = classification[clusterId]
-                result[cls] = cluster.getRepresentative()
-
-            return result
-        
         def _findPercentile(self, data, value):
-            """ Given an array of values (data), finds the corresponding percentile of value.
+            """ Given an array of values (data), finds the corresponding percentile of the value.
                 Percentile is returned in range [0, 1] """
-            assert(sorted(data) == data)  # In order to iterate it in ascending order
+            assert(np.array_equal(sorted(data), data))  # In order to iterate it in ascending order
 
             # Count the number of elements that are smaller than the given value
             i = 0
@@ -965,64 +767,3 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
             # Convert it into a percentage
             return float(i) / float(len(data))
-
-    class RandomConsensus:
-        def __call__(self, C, N):
-            """ Obtains the intersections of a consensus
-                of a random classification of sizes defined in C of
-                N elements. C is a list of lists, where de sum of each
-                row must equal N """
-
-            # Create random partitions of same size
-            randomClassification = self._makeRandomClassification(C, N)
-
-            # Compute the repeated classifications
-            return self._makeConsensus(randomClassification)
-
-        def _makeRandomClassification(self, C, N):
-            """ Randomly classifies N element indices into groups with
-            sizes defined by rows of C """
-            Cp = []
-
-            for Ci in C:
-                assert(sum(Ci) == N)  # The groups should address all the elements TODO: Maybe LEQ?
-                x = np.argsort(np.random.uniform(size=N)).tolist()  # Shuffles a [0, N) iota
-
-                # Select the number random indices requested by each group
-                Cip = []
-                first = 0
-                for s in Ci:
-                    Cip.append(x[first:first + s])
-                    first += s
-
-                # Add the random classification to the result
-                Cp.append(Cip)
-
-            return Cp
-
-        def _makeConsensus(self, C):
-            """ Computes the groups of elements that are equally
-                classified for all the classifications of Cp """
-
-            assert(len(C) > 0)  # There should be at least one classification
-
-            # Convert the classification into a intersection list
-            Cp = [[XmippProtConsensusClasses3D.ClassIntersection(i) for i in c] for c in C]
-
-            # Initialize a list of sets containing the groups of the first classification
-            S = Cp[0]
-
-            # For the remaining classifications, compute the elements that repeatedly appear in the same group
-            for i in range(1, len(Cp)):
-                Sp = []
-                for s1 in S:
-                    for s2 in Cp[i]:
-                        # Obtain only the elements in common for this combination
-                        news = s1.intersect(s2)
-
-                        # A group is only formed if non-empty
-                        if news:
-                            Sp.append(news)
-                S = Sp
-
-            return S
