@@ -143,15 +143,55 @@ class XmippProtCenterParticles(ProtClassify2D):
 
     def createOutputStep(self):
         inputParticles = self.inputClasses.get().getImages()
+
+        outputClasses = self._createSetOfClasses2D(inputParticles)
+        self._fillClasses(outputClasses)
+        result = {'outputClasses': outputClasses}
+        self._defineOutputs(**result)
+        self._defineSourceRelation(self.inputClasses, outputClasses)
+
         outputParticles = self._createSetOfParticles()
         outputParticles.copyInfo(inputParticles)
-
         self._fillParticles(outputParticles)
         result = {'outputParticles': outputParticles}
         self._defineOutputs(**result)
         self._defineSourceRelation(self.inputClasses, outputParticles)
 
     # --------------------------- UTILS functions ------------------------------
+    def _fillClasses(self, outputClasses):
+        """ Create the SetOfClasses2D """
+        inputSet = self.inputClasses.get().getImages()
+        myRep = md.MetaData('classes@' + self._getExtraPath(
+            'final_classes.xmd'))
+
+        for row in md.iterRows(myRep):
+            fn = row.getValue(md.MDL_IMAGE)
+            rep = Particle()
+            rep.setLocation(xmippToLocation(fn))
+            repId = row.getObjId()
+            newClass = Class2D(objId=repId)
+            newClass.setAlignment2D()
+            newClass.copyInfo(inputSet)
+            newClass.setAcquisition(inputSet.getAcquisition())
+            newClass.setRepresentative(rep)
+            outputClasses.append(newClass)
+
+        i = 1
+        mdBlocks = md.getBlocksInMetaDataFile(self._getExtraPath(
+            'final_classes.xmd'))
+        for block in mdBlocks:
+            if block.startswith('class00'):
+                mdClass = md.MetaData(block + "@" + self._getExtraPath(
+                    'final_classes.xmd'))
+                imgClassId = i
+                newClass = outputClasses[imgClassId]
+                newClass.enableAppend()
+                for row in md.iterRows(mdClass):
+                    part = rowToParticle(row)
+                    newClass.append(part)
+                i += 1
+                newClass.setAlignment2D()
+                outputClasses.update(newClass)
 
     def _fillParticles(self, outputParticles):
         """ Create the SetOfParticles and SetOfCoordinates"""
