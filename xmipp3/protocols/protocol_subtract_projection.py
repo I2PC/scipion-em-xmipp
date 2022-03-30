@@ -88,7 +88,7 @@ class XmippProtSubtractProjection(EMProtocol):
         ts = vol.getSamplingRate()
         program = "xmipp_subtract_projection"
         args = '-i %s --ref %s -o %s --iter %d --lambda %f --sampling %f --padding %f --fmask_width %f' % \
-               (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles.xmd"),
+               (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles"),
                 self.iter.get(), self.rfactor.get(), ts, self.pad.get(), self.mwidth.get())
         resol = self.resol.get()
         if resol:
