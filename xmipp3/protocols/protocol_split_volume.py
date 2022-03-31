@@ -28,7 +28,6 @@
 Protocol to split a volume in two volumes based on a set of images
 """
 
-from email.policy import default
 from pyworkflow.constants import BETA
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, StringParam, BooleanParam, EnumParam
@@ -36,7 +35,7 @@ from pyworkflow.protocol.params import LT, LE, GE, GT, Range
 from pyworkflow.utils.path import copyFile, makePath, createLink, cleanPattern, cleanPath, moveFile
 
 from pwem.protocols import ProtClassify3D
-from pwem.objects import Volume
+from pwem.objects import Volume, Image
 
 import xmippLib
 from xmipp3.convert import writeSetOfParticles
@@ -80,7 +79,7 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _defineParams(self, form):
         form.addSection(label='Input')
         form.addParam('directionalClasses', PointerParam, label="Directional classes", 
-                      pointerClass='SetOfAverages', pointerCondition='hasAlignmentProj',
+                      pointerClass='SetOfClasses2D',
                       important=True, 
                       help='Select a set of particles with angles. Preferrably the output of a run of directional classes')
 
@@ -127,8 +126,10 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def convertInputStep(self):
-        self.images = self._getImageList(self.directionalClasses.get())
-        self.xmippImages = self._getXmippImageList(self.images)
+        directionalClasses = self.directionalClasses.get()
+        self.images = self._convertClass2DRepresentatives(directionalClasses)
+        self.reprojections = self._convertClass2DReprojections(directionalClasses)
+        self.xmippImages = self._convertToXmippImages(self.images)
 
     def computeAngularDistancesStep(self):
         # Read input data
@@ -142,12 +143,13 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def computeCorrelationStep(self):
         # Read input data
+        reprojections = self.reprojections
         distances = self._readAngularDistances()
         maxAngularDistance = self._getMaxAngularDistance(distances)
         images = self.xmippImages
 
         # Compute the class pairs to be considered
-        pairs = self._calculatePairMatrix(distances, maxAngularDistance)
+        pairs = self._calculatePairMatrix(distances, reprojections, maxAngularDistance)
         print(f'Considering {np.count_nonzero(pairs)} image pairs with an '
               f'angular distance of up to {np.degrees(maxAngularDistance)} deg')
 
@@ -199,15 +201,14 @@ class XmippProtSplitvolume(ProtClassify3D):
     def createOutputStep(self):
         # Read input data
         labels = self._readLabels()
-        images = self.directionalClasses.get()
-        nClasses = int(labels.max()) + 1
 
         # Create the output elements
-        classes = self._createOutputClasses(images, nClasses, labels, 'output')
+        averages = self._createOutputAverages(self.directionalClasses.get(), 'output')
+        classes = self._createOutputClasses(averages, labels, 'output')
         volumes = self._createOutputVolumes(classes, 'output')
 
         # Define the output
-        self._defineOutputs(outputClasses=classes, outputVolumes=volumes)
+        self._defineOutputs(outputAverages=averages, outputClasses=classes, outputVolumes=volumes)
 
         # Establish source-output relations
         sources = [self.directionalClasses]
@@ -280,18 +281,22 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _readLabels(self):
         return self._readMatrix(self._getExtraPath(self._getFileName('labels')), dtype=np.uint)
 
-    def _getImageList(self, images):
-        """Converts a set of particles into a list"""
-        f = lambda img : img.clone()
-        result = list(map(f, images))
-        assert(len(result) == len(images))
+    def _convertClass2DRepresentatives(self, classes):
+        """Converts a set of classes2d into a list of images"""
+        f = lambda cls : cls.getRepresentative().clone()
+        result = list(map(f, classes))
         return result
     
-    def _getXmippImageList(self, images):
+    def _convertClass2DReprojections(self, classes):
+        """Converts a set of classes2d into a list of reprojection images"""
+        f = lambda cls : cls.reprojection.clone()
+        result = list(map(f, classes))
+        return result
+
+    def _convertToXmippImages(self, images):
         """Converts a list of images into xmipp images"""
-        f = lambda img : xmippLib.Image(img.getLocation())
-        result = list(map(f, images))
-        assert(len(result) == len(images))
+        locations = map(Image.getLocation, images)
+        result = list(map(xmippLib.Image, locations))
         return result
 
     def _calculateAngularDistanceMatrix(self, classes):
@@ -329,14 +334,29 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(np.array_equal(distances, distances.T))
         return distances
 
-    def _calculatePairMatrix(self, distances, maxDistance):
+    def _calculatePairMatrix(self, distances, reprojections, maxDistance):
         """ Computes a symmetrical matrix of booleans
             where image pairs set to true are closer than
-            the given threshold. The diagonal is se to false
-            as the comparison with itself is not meaningful
+            the given threshold. It also avoids comparisons
+            among image pairs corresponding to the same 
+            solid angle. Therefore, the diagonal is
+            always set to false.
         """
+
+        # Consider only distances closer than the threshold
         pairs = distances <= maxDistance
-        np.fill_diagonal(pairs, False) # Do not compute correlations with itself
+
+        # Remove comparisons with itself. This is redundant,
+        # as it would be done when removing by reprojections.
+        # Hovever is cheaper to do like this.
+        np.fill_diagonal(pairs, False)
+
+        # Remove all the comparisons corresponding to its same reprojection
+        for idx0, idx1 in zip(*np.nonzero(pairs)):
+            if reprojections[idx0] == reprojections[idx1]:
+                print(f'{idx0} {idx1}')
+                pairs[idx0, idx1] = False
+
         return pairs
 
     def _calculateCorrelationMatrixOne(self, images, pairs):
@@ -421,7 +441,7 @@ class XmippProtSplitvolume(ProtClassify3D):
             TODO: improve the algorithm
         """
         # Normalize respect the smallest nonzero correlation
-        minVal = np.min(correlations[np.nonzero(correlations)])
+        minVal = 0.9*np.min(correlations[np.nonzero(correlations)])
         maxVal = np.max(correlations)
         result = (correlations - minVal) / (maxVal - minVal)
         result = np.maximum(result, 0)
@@ -553,9 +573,9 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return labels
 
-    def _reconstructVolume(self, path, particles, xmdSuffix=''):
+    def _reconstructVolume(self, path, particles):
         # Convert the particles to a xmipp metadata file
-        fnParticles = self._getTmpPath('particles_'+xmdSuffix+'.xmd')
+        fnParticles = path+'_particles.xmd'
         writeSetOfParticles(particles, fnParticles)
 
         # Reconstruct the volume
@@ -568,43 +588,57 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Clear the metadata file
         cleanPattern(fnParticles)
 
-    def _createOutputClasses(self, particles, nClasses, classification, suffix=''):
-        result = self._createSetOfClasses3D(particles, suffix)
+    def _createOutputAverages(self, classes, suffix=''):
+        result = self._createSetOfAverages(suffix=suffix)
 
-        # Create a list with all the representative filenames
-        representatives = []
-        for i in range(nClasses):
-            path = self._getExtraPath(self._getFileName('representative', suffix=suffix, cls=i))
-            representatives.append(path)
+        # Set the appropriate info for the set
+        result.copyInfo(classes.getImages())
+        result.setAlignmentProj()
+
+        # Copy the representatives
+        representatives = self._convertClass2DRepresentatives(classes)
+        for rep in representatives:
+            result.append(rep)
+
+        return result
+
+    def _createOutputClasses(self, images, classification, suffix=''):
+        result = self._createSetOfClasses3D(images, suffix)
 
         # Classify input particles
-        loader = XmippProtSplitvolume.ClassesLoader(classification, representatives)
+        repCbk = lambda cls : self._getExtraPath(self._getFileName('representative', suffix=suffix, cls=cls))
+        loader = XmippProtSplitvolume.ClassesLoader(classification, repCbk)
         loader.fillClasses(result)
+
+        # Create the representatives
+        for cls in result:
+            representative = cls.getRepresentative()
+            self._reconstructVolume(representative.getFileName(), cls)
 
         return result
 
     def _createOutputVolumes(self, classes, suffix=''):
         result = self._createSetOfVolumes(suffix)
         result.setSamplingRate(classes.getImages().getSamplingRate())
-        for i, cls in enumerate(classes):
-            vol = cls.getRepresentative()
-            vol.setObjId(cls.getObjId())
-            self._reconstructVolume(vol.getFileName(), cls, suffix+str(i))
-            result.append(vol)
+
+        for cls in classes:
+            volume = cls.getRepresentative().clone()
+            volume.setObjId(cls.getObjId())
+            result.append(volume)
         
         return result
 
     class ClassesLoader:
         """ Helper class to produce classes
         """
-        def __init__(self, classification, representatives):
+        def __init__(self, classification, representativeCallback):
             self.classification = classification
-            self.representatives = representatives
+            self.representativeCallback = representativeCallback
 
         def fillClasses(self, clsSet):
             clsSet.classifyItems(updateItemCallback=self._updateParticle,
-                                updateClassCallback=self._updateClass,
                                 itemDataIterator=iter(self.classification),
+                                updateClassCallback=self._updateClass,
                                 doClone=False)
 
         def _updateParticle(self, item, cls):
@@ -612,9 +646,5 @@ class XmippProtSplitvolume(ProtClassify3D):
             item.setClassId(classId)
 
         def _updateClass(self, item):
-            classId = item.getObjId()
-            classIdx = classId-1
-
-            # Set the representative
-            vol = Volume(self.representatives[classIdx])
-            item.setRepresentative(vol)
+            location = self.representativeCallback(item.getObjId()-1)
+            item.setRepresentative(Volume(location=location))

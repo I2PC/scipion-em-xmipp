@@ -203,7 +203,8 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     # --------------------------- UTILS functions -----------------------------
     def _readImages(self):
-        return self.protocol.directionalClasses.get()
+        classes = self.protocol.directionalClasses.get()
+        return self.protocol._convertClass2DRepresentatives(classes)
 
     def _readAngularDistances(self):
         return self.protocol._readAngularDistances()
