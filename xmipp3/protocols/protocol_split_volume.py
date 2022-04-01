@@ -35,7 +35,7 @@ from pyworkflow.protocol.params import LT, LE, GE, GT, Range
 from pyworkflow.utils.path import copyFile, makePath, createLink, cleanPattern, cleanPath, moveFile
 
 from pwem.protocols import ProtClassify3D
-from pwem.objects import Volume, Image
+from pwem.objects import Volume, Image, Particle
 
 import xmippLib
 from xmipp3.convert import writeSetOfParticles
@@ -45,6 +45,7 @@ import itertools
 import numpy as np
 import multiprocessing as mp
 from multiprocessing.pool import ThreadPool
+from collections import Counter
 
 from scipy import sparse
 from scipy import stats
@@ -68,6 +69,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         suffixFmt='%(suffix)s'
 
         myDict = {
+            'directions': 'directions.csv',
             'distances': 'distances.csv',
             'correlations': 'correlations.csv',
             'weights': 'weights.csv',
@@ -82,6 +84,9 @@ class XmippProtSplitvolume(ProtClassify3D):
                       pointerClass='SetOfClasses2D',
                       important=True, 
                       help='Select a set of particles with angles. Preferrably the output of a run of directional classes')
+        form.addParam('minClassesPerDirection', IntParam, label="Minumum number of classes per direction", 
+                      validators=[GT(0)], default=1, expertLevel=LEVEL_ADVANCED,
+                      help='Required number of classes per solid angle.')
 
         form.addSection(label='Graph building')
         form.addParam('maxAngularDistanceMethod', EnumParam, label='Maximum angular distance method',
@@ -99,7 +104,7 @@ class XmippProtSplitvolume(ProtClassify3D):
                       validators=[GT(0)], default=8,
                       help='Number of neighbors to consider for each directional class.')
         form.addParam('enforceUndirected', BooleanParam, label="Enforce undirected", 
-                      default=False, expertLevel=LEVEL_ADVANCED,
+                      default=True, expertLevel=LEVEL_ADVANCED,
                       help='Enforce a undirected graph')
 
         form.addSection(label='Graph partition')
@@ -115,7 +120,7 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _insertAllSteps(self):
         # Create the thread pool
         if self.numberOfThreads > 1:
-            self.threadPool = ThreadPool(int(self.numberOfThreads))
+            self.threadPool = ThreadPool(processes=int(self.numberOfThreads))
 
         self._insertFunctionStep('convertInputStep')
         self._insertFunctionStep('computeAngularDistancesStep')
@@ -127,13 +132,27 @@ class XmippProtSplitvolume(ProtClassify3D):
     #--------------------------- STEPS functions ---------------------------------------------------
     def convertInputStep(self):
         directionalClasses = self.directionalClasses.get()
-        self.images = self._convertClass2DRepresentatives(directionalClasses)
-        self.reprojections = self._convertClass2DReprojections(directionalClasses)
-        self.xmippImages = self._convertToXmippImages(self.images)
+
+        # Calculate the ids of the directions of each class
+        directionIds = self._calculateDirectionIds(directionalClasses)
+
+        # Create a mask for selecting input classes
+        minClassesPerDirection = self.minClassesPerDirection.get()
+        selectionMask = self._calculateDirectionSelectionMask(directionIds, minClassesPerDirection)
+
+        # Apply mask
+        images = self._convertClasses2DRepresentatives(directionalClasses, selectionMask)
+        if selectionMask is not None:
+            directionIds = directionIds[selectionMask]
+        assert(len(images) == len(directionIds))
+
+        # Save the output data
+        self._writeInputImages(directionalClasses, images)
+        self._writeDirectionIds(directionIds)
 
     def computeAngularDistancesStep(self):
         # Read input data
-        images = self.images
+        images = self._readInputImages()
 
         # Perform the computation
         distances = self._calculateAngularDistanceMatrix(images)
@@ -143,13 +162,13 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def computeCorrelationStep(self):
         # Read input data
-        reprojections = self.reprojections
+        images = self._readInputImages()
+        directionIds = self._readDirectionIds()
         distances = self._readAngularDistances()
         maxAngularDistance = self._getMaxAngularDistance(distances)
-        images = self.xmippImages
 
         # Compute the class pairs to be considered
-        pairs = self._calculatePairMatrix(distances, reprojections, maxAngularDistance)
+        pairs = self._calculatePairMatrix(distances, directionIds, maxAngularDistance)
         print(f'Considering {np.count_nonzero(pairs)} image pairs with an '
               f'angular distance of up to {np.degrees(maxAngularDistance)} deg')
 
@@ -178,6 +197,10 @@ class XmippProtSplitvolume(ProtClassify3D):
         if isUndirected:
             weights = np.maximum(weights, weights.T)
 
+        # Print information about the graph
+        nComponents, _ = self._getGraphComponents(weights)
+        print(f'The unpartitioned graph has {nComponents} components')
+
         # Save output data
         self._writeWeights(weights)
 
@@ -200,19 +223,15 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def createOutputStep(self):
         # Read input data
+        images = self._getInputImages()
         labels = self._readLabels()
 
-        # Create the average set for the classes
-        averages = self._createOutputAverages(self.directionalClasses.get(), 'output')
-        self._store(averages)
-        self._defineSourceRelation(self.directionalClasses, averages)
-
         # Create the output elements
-        classes = self._createOutputClasses(averages, labels, 'output')
+        classes = self._createOutputClasses(images, labels, 'output')
         volumes = self._createOutputVolumes(classes, 'output')
 
         # Define the output
-        sources = [averages]
+        sources = [images]
         outputs = {
             'outputClasses': classes,
             'outputVolumes': volumes
@@ -252,12 +271,39 @@ class XmippProtSplitvolume(ProtClassify3D):
         elif method == 1:
             return np.percentile(distances, self.maxAngularDistancePercentile.get())
 
+    def _setInputImages(self, images):
+        self._images = images
+
+    def _getInputImages(self):
+        return self._images
+
+    def _writeInputImages(self, classes, images):
+        result = self._createSetOfParticles('input')
+        result.copyInfo(classes.getImages())
+
+        for image in images:
+            result.append(image)
+        
+        self._store(result)
+        self._defineSourceRelation(classes, result)
+        self._setInputImages(result)
+
+    def _readInputImages(self):
+        return list(map(Particle.clone, self._getInputImages()))
+
     def _writeMatrix(self, path, x, fmt='%s'):
         # Determine the format
         np.savetxt(path, x, delimiter=',', fmt=fmt) # CSV
 
     def _readMatrix(self, path, dtype=float):
         return np.genfromtxt(path, delimiter=',', dtype=dtype) # CSV
+
+    def _writeDirectionIds(self, directions):
+        assert(directions.dtype==np.uint)
+        self._writeMatrix(self._getExtraPath(self._getFileName('directions')), directions, fmt='%d')
+
+    def _readDirectionIds(self):
+        return self._readMatrix(self._getExtraPath(self._getFileName('directions')), dtype=np.uint)
 
     def _writeAngularDistances(self, distances):
         assert(distances.dtype==float)
@@ -287,22 +333,43 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _readLabels(self):
         return self._readMatrix(self._getExtraPath(self._getFileName('labels')), dtype=np.uint)
 
-    def _convertClass2DRepresentatives(self, classes):
-        """Converts a set of classes2d into a list of images"""
-        f = lambda cls : cls.getRepresentative().clone()
-        result = list(map(f, classes))
-        return result
-    
-    def _convertClass2DReprojections(self, classes):
-        """Converts a set of classes2d into a list of reprojection images"""
-        f = lambda cls : cls.reprojection.clone()
-        result = list(map(f, classes))
-        return result
+    def _calculateDirectionIds(self, classes):
+        reprojections = list(map(lambda cls : cls.reprojection.getLocation(), classes))
 
-    def _convertToXmippImages(self, images):
-        """Converts a list of images into xmipp images"""
-        locations = map(Image.getLocation, images)
-        result = list(map(xmippLib.Image, locations))
+        # Create a dictionary assotiating reprojections and its ids
+        uniqueReprojections = set(reprojections)
+        uniqueReprojectionIds = range(len(uniqueReprojections))
+        reprojectionIds = dict(zip(uniqueReprojections, uniqueReprojectionIds))
+
+        # Map the reprojections to its ids
+        ids = list(map(reprojectionIds.__getitem__, reprojections))
+        return np.array(ids, dtype=np.uint)
+
+    def _calculateDirectionSelectionMask(self, directionIds, minClassesPerDirection=1):
+        if minClassesPerDirection > 1:
+            repetitions = Counter(directionIds)
+            return list(map(
+                lambda id : repetitions[id] >= minClassesPerDirection, 
+                directionIds
+            ))
+        else:
+            return None
+
+    def _convertClasses2DRepresentatives(self, classes, mask=None):
+        """ Converts a set of directional classes 2d into its representatives 
+        """
+        result = []
+
+        # Define the mask if not defined
+        if mask is None:
+            mask = [True]*len(classes)
+        
+        # Copy the class representatives where mask
+        for cls, msk in zip(classes, mask):
+            if msk:
+                result.append(cls.getRepresentative().clone())
+
+        assert(len(result) == np.count_nonzero(mask))
         return result
 
     def _calculateAngularDistanceMatrix(self, classes):
@@ -340,7 +407,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(np.array_equal(distances, distances.T))
         return distances
 
-    def _calculatePairMatrix(self, distances, reprojections, maxDistance):
+    def _calculatePairMatrix(self, distances, directionIds, maxDistance):
         """ Computes a symmetrical matrix of booleans
             where image pairs set to true are closer than
             the given threshold. It also avoids comparisons
@@ -359,11 +426,16 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         # Remove all the comparisons corresponding to its same reprojection
         for idx0, idx1 in zip(*np.nonzero(pairs)):
-            if reprojections[idx0] == reprojections[idx1]:
-                print(f'{idx0} {idx1}')
+            if directionIds[idx0] == directionIds[idx1]:
                 pairs[idx0, idx1] = False
 
         return pairs
+
+    def _convertToXmippImages(self, images):
+        """Converts a list of images into xmipp images"""
+        locations = map(Image.getLocation, images)
+        result = list(map(xmippLib.Image, locations))
+        return result
 
     def _calculateCorrelationMatrixOne(self, images, pairs):
         """ Calculates correlations among image pairs with a single thread
@@ -428,11 +500,14 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Ensure that the pairs matrix is symmetrical
         assert(np.array_equal(pairs, pairs.T))
 
+        # Convert to xmipp images in order to use correlation functions
+        xmippImages = self._convertToXmippImages(images)
+
         # Compute the matrix with or without parallelization
         if threadPool:
-            correlations = self._calculateCorrelationMatrixParallel(images, pairs, threadPool)
+            correlations = self._calculateCorrelationMatrixParallel(xmippImages, pairs, threadPool)
         else:
-            correlations = self._calculateCorrelationMatrixOne(images, pairs)
+            correlations = self._calculateCorrelationMatrixOne(xmippImages, pairs)
 
         # Ensure that the result matrix is symmetrical and in [0, 1]
         assert(np.array_equal(correlations, correlations.T))
@@ -493,6 +568,10 @@ class XmippProtSplitvolume(ProtClassify3D):
         """
         # Convert the graph into doubles, required for linear algebra operations
         graph = graph.astype(np.double)
+
+        # In order to use eigsh, graph matrix needs to be symmetric (undirected graph)
+        if np.array_equal(graph, graph.T):
+            raise ValueError('Input graph must be undirected')
 
         # Decompose the laplacian matrix of the graph into N
         # eigenvectors with the smallest eigenvalues. Then interpret these vectors as
@@ -593,20 +672,6 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         # Clear the metadata file
         cleanPattern(fnParticles)
-
-    def _createOutputAverages(self, classes, suffix=''):
-        result = self._createSetOfAverages(suffix=suffix)
-
-        # Set the appropriate info for the set
-        result.copyInfo(classes.getImages())
-        result.setAlignmentProj()
-
-        # Copy the representatives
-        representatives = self._convertClass2DRepresentatives(classes)
-        for rep in representatives:
-            result.append(rep)
-
-        return result
 
     def _createOutputClasses(self, images, classification, suffix=''):
         result = self._createSetOfClasses3D(images, suffix)

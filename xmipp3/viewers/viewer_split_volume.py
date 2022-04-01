@@ -28,7 +28,6 @@
 This module implement the wrappers aroung Xmipp CL2D protocol
 visualization program.
 """
-from cProfile import label
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import IntParam, LabelParam, BooleanParam
 
@@ -203,8 +202,18 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     # --------------------------- UTILS functions -----------------------------
     def _readImages(self):
-        classes = self.protocol.directionalClasses.get()
-        return self.protocol._convertClass2DRepresentatives(classes)
+        # TODO read from self.protocol._images
+        directionalClasses = self.protocol.directionalClasses.get()
+
+        # Calculate the ids of the directions of each class
+        directionIds = self.protocol._calculateDirectionIds(directionalClasses)
+
+        # Create a mask for selecting input classes
+        minClassesPerDirection = self.protocol.minClassesPerDirection.get()
+        selectionMask = self.protocol._calculateDirectionSelectionMask(directionIds, minClassesPerDirection)
+
+        # Apply mask
+        return self.protocol._convertClasses2DRepresentatives(directionalClasses, selectionMask)
 
     def _readAngularDistances(self):
         return self.protocol._readAngularDistances()
