@@ -944,6 +944,39 @@ class TestXmippCL2D(TestXmippBase):
         self.assertIsNotNone(protCL2DInitialCore.outputClasses, "There was a problem with CL2D with initial class and core analysis")
 
 
+class TestXmippCL2DCoreAnalysis(TestXmippBase):
+    """This class check if the protocol to core Analysis with CL2D in Xmipp works properly."""
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        TestXmippBase.setData('mda')
+        cls.protImport = cls.runImportParticles(cls.particlesFn, 3.5)
+
+    def test_cl2dCoreAnalysis(self):
+        print("Run CL2D core analysis")
+        # Run CL2D with random class and no core analysis
+        protCL2DRandomNoCore = self.newProtocol(XmippProtCL2D,
+                                                numberOfClasses=3, numberOfInitialClasses=1,
+                                                doCore=False, numberOfIterations=4, numberOfMpi=2)
+        protCL2DRandomNoCore.inputParticles.set(self.protImport.outputParticles)
+        protCL2DRandomNoCore.setObjLabel("CL2D with random class and no core analysis")
+        self.launchProtocol(protCL2DRandomNoCore)
+        self.assertIsNotNone(protCL2DRandomNoCore.outputClasses,
+                             "There was a problem with CL2D with random class and no core analysis")
+
+        # Run Core Analysis
+        protCL2DCoreAnalysis = self.newProtocol(XmippProtCoreAnalysis,
+                                                numberOfClasses=3, thZscore=1.5,
+                                                thPCAZscore=1.5, numberOfMpi=2)
+        protCL2DCoreAnalysis.inputClasses.set(protCL2DRandomNoCore.outputClasses)
+        protCL2DCoreAnalysis.setObjLabel("Core analysis")
+        self.launchProtocol(protCL2DCoreAnalysis)
+        self.assertIsNotNone(protCL2DCoreAnalysis.outputClasses_core,
+                             "There was a problem with CL2D Core Analysis")
+
+
+
 class TestXmippProtCL2DAlign(TestXmippBase):
     """This class check if the protocol to align particles in Xmipp works properly."""
     @classmethod
