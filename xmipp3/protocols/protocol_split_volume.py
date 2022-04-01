@@ -398,6 +398,11 @@ class XmippProtSplitvolume(ProtClassify3D):
                 diffMtx = np.matmul(rotMtx0, rotMtx1.T)
                 distance = math.acos(np.clip((np.trace(diffMtx) - 1)/2, -1.0, +1.0))
 
+                # Note that antipodes are actually equivalent for projections. Therefore,
+                # for distances larger than pi/2, the projections are getting closer
+                # TODO: Speak with COSS about it
+                distance = min(distance, math.pi-distance)
+
                 # Write the result on symmetrical positions
                 distances[idx0, idx1] = distance
                 distances[idx1, idx0] = distance
