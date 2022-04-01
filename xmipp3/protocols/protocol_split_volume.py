@@ -574,7 +574,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         graph = graph.astype(np.double)
 
         # In order to use eigsh, graph matrix needs to be symmetric (undirected graph)
-        if np.array_equal(graph, graph.T):
+        if not np.array_equal(graph.toarray(), graph.T.toarray()):
             raise ValueError('Input graph must be undirected')
 
         # Decompose the laplacian matrix of the graph into N
@@ -594,7 +594,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         result = None
 
         # Partition the biggest component
-        component = stats.mode(labels)
+        component = stats.mode(labels)[0]
 
         # Among all the connected vertices, get the least connected ones
         for pos in zip(*graph.nonzero()):
@@ -612,7 +612,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         nComponents, labels = csgraph.connected_components(graph)
         return nComponents, labels.astype(np.uint)
 
-    def _calculateResidualGraph(graph, source, sink):
+    def _calculateResidualGraph(self, graph, source, sink):
         """ Obtains the residual graph for the maximum
             flow analysis of the given graph between
             source and sink vertices
@@ -620,8 +620,8 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Perform maximum flow analysis
         flow = csgraph.maximum_flow(graph, source, sink)
 
-        # Flow should be an antisymmetric matrix
-        assert(flow.residual == -flow.residual.T)
+        # The flow matrix should be antisymmetric
+        assert(np.array_equal(flow.residual.toarray(), -flow.residual.T.toarray()))
 
         # Use the residual graph to determine separated components
         # Then remove the edges connecting different components
