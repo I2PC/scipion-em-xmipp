@@ -202,19 +202,25 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Read input data
         labels = self._readLabels()
 
-        # Create the output elements
+        # Create the average set for the classes
         averages = self._createOutputAverages(self.directionalClasses.get(), 'output')
+        self._store(averages)
+        self._defineSourceRelation(self.directionalClasses, averages)
+
+        # Create the output elements
         classes = self._createOutputClasses(averages, labels, 'output')
         volumes = self._createOutputVolumes(classes, 'output')
 
         # Define the output
-        self._defineOutputs(outputAverages=averages, outputClasses=classes, outputVolumes=volumes)
+        sources = [averages]
+        outputs = {
+            'outputClasses': classes,
+            'outputVolumes': volumes
+        }
 
-        # Establish source-output relations
-        sources = [self.directionalClasses]
-        destinations = [classes, volumes]
+        self._defineOutputs(**outputs)
         for src in sources:
-            for dst in destinations:
+            for dst in outputs.values():
                 self._defineSourceRelation(src, dst)
 
     #--------------------------- INFO functions ----------------------------------------------------
