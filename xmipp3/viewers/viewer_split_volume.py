@@ -51,7 +51,11 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
-        form.addSection(label='Classes')
+        form.addSection(label='Input classes')
+        form.addParam('displayInputClassification', LabelParam, label='Input classification',
+                        help='Shows 3D representation of the input classes')
+
+        form.addSection(label='Output classes')
         form.addParam('displayLabelHistogram', LabelParam, label='Class sizes',
                         help='Shows a bar plot with the sizes of each class')
         form.addParam('displayLabelImage', LabelParam, label='Classification',
@@ -81,6 +85,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     def _getVisualizeDict(self):
         return {
+            'displayInputClassification': self._displayInputClassification,
             'displayLabelHistogram': self._displayLabelHistogram,
             'displayLabelImage': self._displayLabelImage,
             'displayProjectionClassification': self._displayProjectionClassification,
@@ -93,6 +98,27 @@ class XmippViewerSplitVolume(ProtocolViewer):
         }
     
     # --------------------------- DEFINE display functions ----------------------
+    def _displayInputClassification(self, e):
+        images = self._readImages()
+        directionIds = self._readDirectionIds()
+        points = self._getProjectionSphere(images)
+        labels = self._getDirectionIdLabels(directionIds)
+        
+        # Scale the points to be concentric
+        scales = self._calculateConcentricProjectionSphereScales(labels, 0.2)
+        points *= np.column_stack(tuple([scales]*3))
+
+        # Obtain the edges joining members of the same class
+        edges = self._getDirectionIdEdgeLines(points, directionIds)
+
+        # Plot the projection angles with the classification
+        fig = plt.figure()
+        ax = plt.axes(projection='3d')
+        ax.set_title('Input Classification')
+        self._plotProjectionClassification(fig, ax, points, labels)
+        self._plotNetworkEdges(fig, ax, edges)
+        return [fig]
+
     def _displayLabelHistogram(self, e):
         labels = self._readLabels()
         nClasses = int(labels.max())+1
@@ -176,7 +202,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         ax = plt.axes(projection='3d')
         ax.set_title('3D Network')
         self._plotProjectionClassification(fig, ax, points, labels)
-        self._plotNetworkEdges(fig, ax, edges, edgeWeights)
+        self._plotWeightedNetworkEdges(fig, ax, edges, edgeWeights)
         return [fig]
 
     def _displayDisjointAngularNetwork(self, e):
@@ -197,12 +223,15 @@ class XmippViewerSplitVolume(ProtocolViewer):
         ax = plt.axes(projection='3d')
         ax.set_title('Classified 3D Network')
         self._plotProjectionClassification(fig, ax, points, labels)
-        self._plotNetworkEdges(fig, ax, edges, edgeWeights)
+        self._plotWeightedNetworkEdges(fig, ax, edges, edgeWeights)
         return [fig]
 
     # --------------------------- UTILS functions -----------------------------
     def _readImages(self):
         return self.protocol._readInputImages()
+
+    def _readDirectionIds(self):
+        return self.protocol._readDirectionIds()
 
     def _readAngularDistances(self):
         return self.protocol._readAngularDistances()
@@ -216,6 +245,15 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _readLabels(self):
         return self.protocol._readLabels()
 
+    def _getDirectionIdLabels(self, directionIds):
+        result = np.zeros_like(directionIds)
+
+        # Count items with the same id before it
+        for i in range(len(result)):
+            result[i] = np.count_nonzero(directionIds[:i] == directionIds[i])
+
+        return result
+
     def _getProjectionSphere(self, images):
         # Multiply the transform of the images by the unit z vector.
         # This is equivalent to selecting the first column.
@@ -224,6 +262,9 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
         assert(len(images) == points.shape[0])
         return points
+
+    def _calculateConcentricProjectionSphereScales(self, labels, step=0.2):
+        return 1 + step*labels
 
     def _calculateDisjointProjectionSphereOffsets(self, labels):
         nClasses = int(max(labels)) + 1
@@ -234,6 +275,14 @@ class XmippViewerSplitVolume(ProtocolViewer):
         offsets = radius*np.column_stack((np.cos(thetas), np.sin(thetas), np.zeros_like(thetas)))
         
         return offsets
+
+    def _getDirectionIdEdgeLines(self, points, directionIds):
+        result = []
+
+        for id in np.unique(directionIds):
+            result.append(points[directionIds==id])
+
+        return result
 
     def _getEdgeLines(self, points, weights):
         edges = []
@@ -282,7 +331,11 @@ class XmippViewerSplitVolume(ProtocolViewer):
         ax.scatter3D(points[:,0], points[:,1], points[:,2], c=labels, cmap=colormap, norm=norm)
         fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colormap), label='Classes', ticks=np.arange(colormap.N))
 
-    def _plotNetworkEdges(self, fig, ax, edges, weights):
+    def _plotNetworkEdges(self, fig, ax, edges):
+        lines = mpl3d.art3d.Line3DCollection(edges, linewidths=0.5)
+        ax.add_collection(lines)
+
+    def _plotWeightedNetworkEdges(self, fig, ax, edges, weights):
         colormap = self._getScalarColorMap()
         norm = mpl.colors.Normalize()
         lines = mpl3d.art3d.Line3DCollection(edges, linewidths=0.5, colors=colormap(norm(weights)))
