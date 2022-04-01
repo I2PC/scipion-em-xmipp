@@ -272,7 +272,7 @@ class XmippProtSplitvolume(ProtClassify3D):
             return np.percentile(distances, self.maxAngularDistancePercentile.get())
 
     def _setInputImages(self, images):
-        self._images = images
+        self._insertChild('_images', images)
 
     def _getInputImages(self):
         return self._images
@@ -284,9 +284,8 @@ class XmippProtSplitvolume(ProtClassify3D):
         for image in images:
             result.append(image)
         
-        self._store(result)
+        self._setInputImages(result) # This needs to happen before
         self._defineSourceRelation(classes, result)
-        self._setInputImages(result)
 
     def _readInputImages(self):
         return list(map(Particle.clone, self._getInputImages()))
