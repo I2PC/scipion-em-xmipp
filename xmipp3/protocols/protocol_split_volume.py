@@ -89,6 +89,11 @@ class XmippProtSplitvolume(ProtClassify3D):
                       help='Required number of classes per solid angle.')
 
         form.addSection(label='Graph building')
+        form.addParam('considerAntipodes', BooleanParam, label='Consider antipodes',
+                      default=True, expertLevel=LEVEL_ADVANCED,
+                      help='Due to the nature of the projections, antipodes can be considered to be '
+                      'equivalent. This option toggles wether to consider values larger than 90º to be '
+                      'actually closer.')
         form.addParam('maxAngularDistanceMethod', EnumParam, label='Maximum angular distance method',
                       choices=['Threshold', 'Percentile'], default=0,
                       help='Determines how the maximum angular distance is obtained.')
@@ -100,11 +105,14 @@ class XmippProtSplitvolume(ProtClassify3D):
                       validators=[Range(0, 100)], default=10, condition='maxAngularDistanceMethod==1',
                       help='Maximum angular distance percentile for considering the correlation of two classes. '
                       'Valid range: 0 to 100%')
-        form.addParam('maxNeighbors', IntParam, label="Maximum number of neighbors", 
-                      validators=[GT(0)], default=8,
-                      help='Number of neighbors to consider for each directional class.')
-        form.addParam('enforceUndirected', BooleanParam, label="Enforce undirected", 
-                      default=True, expertLevel=LEVEL_ADVANCED,
+        form.addParam('maxCorrelations', IntParam, label="Maximum number of correlations", 
+                      validators=[GE(0)], default=12, expertLevel=LEVEL_ADVANCED,
+                      help='Maximum number of correlations to consider for each directional class. Use 0 to disable this limit')
+        form.addParam('maxDegree', IntParam, label="Maximum degree of each node of the graph", 
+                      validators=[GE(0)], default=8, expertLevel=LEVEL_ADVANCED,
+                      help='Maximum out-degree of each node of the graph. Use 0 to disable degree limitation')
+        form.addParam('enforceUndirected', EnumParam, label="Enforce undirected", 
+                      choices=['No', 'Or', 'And'], default=1, expertLevel=LEVEL_ADVANCED,
                       help='Enforce a undirected graph')
 
         form.addSection(label='Graph partition')
@@ -157,6 +165,10 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Perform the computation
         distances = self._calculateAngularDistanceMatrix(images)
 
+        # Reflect the distance for values larger than pi/2
+        if self.considerAntipodes.get():
+            distances = np.minimum(distances, math.pi-distances)
+
         # Save output data
         self._writeAngularDistances(distances)
 
@@ -166,9 +178,10 @@ class XmippProtSplitvolume(ProtClassify3D):
         directionIds = self._readDirectionIds()
         distances = self._readAngularDistances()
         maxAngularDistance = self._getMaxAngularDistance(distances)
+        maxCorrelations = self.maxCorrelations.get() if self.maxCorrelations.get() > 0 else None
 
         # Compute the class pairs to be considered
-        pairs = self._calculatePairMatrix(distances, directionIds, maxAngularDistance)
+        pairs = self._calculateCorrelationPairMatrix(distances, directionIds, maxAngularDistance, maxCorrelations)
         print(f'Considering {np.count_nonzero(pairs)} image pairs with an '
               f'angular distance of up to {np.degrees(maxAngularDistance)} deg')
 
@@ -181,21 +194,11 @@ class XmippProtSplitvolume(ProtClassify3D):
     def computeWeightsStep(self):
         # Read input data
         correlations = self._readCorrelations()
+        maxDegree = self.maxDegree.get() if self.maxDegree.get() > 0 else None
+        enforceUndirected = {0: None, 1: 'or', 2: 'and'}[self.enforceUndirected.get()]
 
         # Calculate weights from correlations
-        weights = self._calculateWeights(correlations)
-
-        # Limit the number of neighbors
-        nNeighbors = self.maxNeighbors.get()
-        for row in weights:
-            # Delete the lowest correlations and leave only "nNeighbors"
-            indices = np.argsort(row)
-            row[indices[:-nNeighbors]] = 0
-
-        # Make the graph undirected if requested
-        isUndirected = self.enforceUndirected.get()
-        if isUndirected:
-            weights = np.maximum(weights, weights.T)
+        weights = self._calculateWeights(correlations, maxDegree, enforceUndirected)
 
         # Print information about the graph
         nComponents, _ = csgraph.connected_components(weights)
@@ -245,10 +248,6 @@ class XmippProtSplitvolume(ProtClassify3D):
     #--------------------------- INFO functions ----------------------------------------------------
     def _validate(self):
         result = []
-
-        if self.maxNeighbors.get() >= len(self.directionalClasses.get()):
-            result.append('Comparison count should be less than the length of the input directional classes')
-
         return result
     
     def _citations(self):
@@ -398,11 +397,6 @@ class XmippProtSplitvolume(ProtClassify3D):
                 diffMtx = np.matmul(rotMtx0, rotMtx1.T)
                 distance = math.acos(np.clip((np.trace(diffMtx) - 1)/2, -1.0, +1.0))
 
-                # Note that antipodes are actually equivalent for projections. Therefore,
-                # for distances larger than pi/2, the projections are getting closer
-                # TODO: Speak with COSS about it
-                distance = min(distance, math.pi-distance)
-
                 # Write the result on symmetrical positions
                 distances[idx0, idx1] = distance
                 distances[idx1, idx0] = distance
@@ -411,7 +405,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(np.array_equal(distances, distances.T))
         return distances
 
-    def _calculatePairMatrix(self, distances, directionIds, maxDistance):
+    def _calculateCorrelationPairMatrix(self, distances, directionIds, maxDistance, maxCorrelations=None):
         """ Computes a symmetrical matrix of booleans
             where image pairs set to true are closer than
             the given threshold. It also avoids comparisons
@@ -422,6 +416,13 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         # Consider only distances closer than the threshold
         pairs = distances <= maxDistance
+
+        # Limit the number of correlations to be computed
+        if maxCorrelations is not None:
+            assert(maxCorrelations > 0)
+            for pairRow, distanceRow in zip(pairs, distances):
+                indices = np.argsort(distanceRow)
+                pairRow[indices[maxCorrelations+1:]] = False
 
         # Remove comparisons with itself. This is redundant,
         # as it would be done when removing by reprojections.
@@ -519,7 +520,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(np.all(correlations <= 1.0))
         return correlations
 
-    def _calculateWeights(self, correlations):
+    def _calculateWeights(self, correlations, maxDegree=None, enforceUndirected=None):
         """ Given a matrix of correlations among neighboring 
             images, it computes the adjacency matrix with
             interger weights
@@ -528,18 +529,34 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Normalize respect the smallest nonzero correlation
         minVal = 0.9*np.min(correlations[np.nonzero(correlations)])
         maxVal = np.max(correlations)
-        result = (correlations - minVal) / (maxVal - minVal)
-        result = np.maximum(result, 0)
+        weights = (correlations - minVal) / (maxVal - minVal)
+        weights = np.maximum(weights, 0)
 
         # Square to emphasize large values
-        result *= result
+        weights *= weights
 
         # Scale to be representable by integers
-        result *= 2**10
+        weights *= 2**10
 
-        assert(np.all(result >= 0))
-        assert(np.all(result <= 2**10))
-        return result.astype(np.uint)
+        # Limit the degree
+        if maxDegree is not None:
+            assert(maxDegree > 0)
+            for row in weights:
+                # Delete the lowest weights and only leave maxDegree
+                indices = np.argsort(row)
+                row[indices[:-maxDegree]] = 0
+
+        # Enforce undirectionality
+        if enforceUndirected is not None:
+            operations = {
+                'or': np.maximum,
+                'and': np.minimum
+            }
+            weights = operations[enforceUndirected](weights, weights.T)
+
+        assert(np.all(weights >= 0))
+        assert(np.all(weights <= 2**10))
+        return weights.astype(np.uint)
 
     def _classifySpectrum(self, eigenVectors):
         """ Given a matrix with the eigenvectors with the smallest 
@@ -629,9 +646,12 @@ class XmippProtSplitvolume(ProtClassify3D):
             # Select the largest component
             component = stats.mode(labels)[0]
 
-            # Only consider pairs that belong to the same direction id
+            # Only consider pairs that are not directly connected
             # TODO if the graph is undirected use combinations
-            indices = itertools.permutations(*np.where(labels==component), r=2)
+            indices = filter(
+                lambda pos : graph[pos] == 0,
+                itertools.permutations(*np.where(labels==component), r=2)
+            )
 
             # Perform a maximum flow analysis among all the considered source-sink pairs
             residual = self._maximumFlow(graph, indices)
