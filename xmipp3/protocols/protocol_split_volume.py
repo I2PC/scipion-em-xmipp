@@ -198,7 +198,7 @@ class XmippProtSplitvolume(ProtClassify3D):
             weights = np.maximum(weights, weights.T)
 
         # Print information about the graph
-        nComponents, _ = self._getGraphComponents(weights)
+        nComponents, _ = csgraph.connected_components(weights)
         print(f'The unpartitioned graph has {nComponents} components')
 
         # Save output data
@@ -587,38 +587,17 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return labels
 
-    def _getSourceSinkVertices(self, graph, labels):
-        """Selects the least connected pair of vertices in the biggest component
-        TODO: Improve this algorithm
+    def _maximumFlow(self, graph, indices):
+        """ Finds the maximum flow between any of the vertices
+            defined in indices as (source, sink)
         """
-        result = None
-
-        # Partition the biggest component
-        component = stats.mode(labels)[0]
-
-        # Among all the connected vertices, get the least connected ones
-        for pos in zip(*graph.nonzero()):
-            if (not result or graph[pos] < graph[result]) and labels[pos[0]] == component:
-                assert(labels[pos[1]] == component) # The destination vertex should also be in the same component
-                result = pos
-
-        return result
-
-    def _getGraphComponents(self, graph):
-        """ Returns the number of components of the graph
-            and a array of labels which assigns a component
-            to each vertex
-        """
-        nComponents, labels = csgraph.connected_components(graph)
-        return nComponents, labels.astype(np.uint)
-
-    def _calculateResidualGraph(self, graph, source, sink):
-        """ Obtains the residual graph for the maximum
-            flow analysis of the given graph between
-            source and sink vertices
-        """
-        # Perform maximum flow analysis
-        flow = csgraph.maximum_flow(graph, source, sink)
+        # Perform a maximum flow analysis among the specified vertices
+        # and select the one with the largest flow
+        flow = None
+        for source, sink in indices:
+            f = csgraph.maximum_flow(graph, source, sink)
+            if flow is None or flow.flow_value < f.flow_value:
+                flow = f
 
         # The flow matrix should be antisymmetric
         assert(np.array_equal(flow.residual.toarray(), -flow.residual.T.toarray()))
@@ -643,24 +622,29 @@ class XmippProtSplitvolume(ProtClassify3D):
         graph = graph.copy()
 
         # Obtain the component labels from the graph
-        nComponents, labels = self._getGraphComponents(graph)
+        nComponents, labels = csgraph.connected_components(graph)
 
         # Repeatedly cut the graph until the desired amount of components is obtained
         while nComponents < componentCount:
-            # Perform a maximum flow analysis with the biggest component of the graph
-            source, sink = self._getSourceSinkVertices(graph, labels)
-            residual = self._calculateResidualGraph(graph, source, sink)
+            # Select the largest component
+            component = stats.mode(labels)[0]
+
+            # Only consider pairs that belong to the same direction id
+            # TODO if the graph is undirected use combinations
+            indices = itertools.permutations(*np.where(labels==component), r=2)
+
+            # Perform a maximum flow analysis among all the considered source-sink pairs
+            residual = self._maximumFlow(graph, indices)
 
             # Partition the residual graph
-            nComponents, labels = self._getGraphComponents(residual)
-        
             # Only keep the edges where both vertices correspond to the same component
+            nComponents, labels = csgraph.connected_components(residual)
             for pos in zip(*graph.nonzero()):
                 if labels[pos[0]] != labels[pos[1]]:
                     graph[pos] = 0
             graph.eliminate_zeros()
 
-        return labels
+        return labels.astype(np.uint)
 
     def _reconstructVolume(self, path, particles):
         # Convert the particles to a xmipp metadata file
