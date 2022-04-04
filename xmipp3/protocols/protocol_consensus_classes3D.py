@@ -32,12 +32,12 @@ from pwem.objects import Volume
 
 from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam
 from pyworkflow.protocol.params import Range, GE, GT, LE, LT
-from pyworkflow.object import Float, List, Object
+from pyworkflow.object import Float
 from pyworkflow.constants import BETA
 from pyworkflow.protocol.constants import STEPS_PARALLEL
-from pyworkflow.utils.path import makePath, cleanPattern
+from pyworkflow.utils.path import makePath
 
-from xmipp3.convert import setXmippAttribute, writeSetOfParticles
+from xmipp3.convert import setXmippAttribute
 
 import math
 import csv
