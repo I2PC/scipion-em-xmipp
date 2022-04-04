@@ -52,7 +52,6 @@ class XmippProtCenterParticles(ProtClassify2D):
                       label="Input Classes",
                       help='Set of classes to be realing')
         form.addParallelSection(threads=0, mpi=0)
-
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
         self._insertFunctionStep('realignStep')
@@ -120,6 +119,10 @@ class XmippProtCenterParticles(ProtClassify2D):
                     resultMat.setMatrix(resultMatrix)
                     rowOut=md.Row()
                     rowOut.copyFromRow(rowIn)
+                    print('rowOut.getValue(md.MDL_XCOOR): {}'.format(rowOut.getValue(
+                        md.MDL_XCOOR)))#None
+                    print('rowIn.getValue(md.MDL_XCOOR): {}'.format(rowIn.getValue(
+                        md.MDL_XCOOR)))#None
                     alignmentToRow(resultMat, rowOut, ALIGN_2D)
                     if flag_psi==False:
                         newAngle = rowOut.getValue(md.MDL_ANGLE_PSI)
@@ -130,6 +133,11 @@ class XmippProtCenterParticles(ProtClassify2D):
                     inPoint = np.array([[0.],[0.],[0.],[1.]])
                     invResultMat = np.linalg.inv(resultMatrix)
                     centerPoint = np.dot(invResultMat,inPoint)
+                    print('centerPoint: {}'.format(centerPoint))#[[-0.22759346]    [-2.22834146]    [ 0.][1.]
+                    print('md.MDL_XCOOR: {}'.format(md.MDL_XCOOR))#37
+                    print('rowOut.getValue(md.MDL_XCOOR): {}'.format(rowOut.getValue(
+                        md.MDL_XCOOR)))#None
+
                     rowOut.setValue(md.MDL_XCOOR, rowOut.getValue(
                         md.MDL_XCOOR)+int(centerPoint[0]))
                     rowOut.setValue(md.MDL_YCOOR, rowOut.getValue(
