@@ -656,9 +656,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             minNonAstigmatic, maxNonAstigmatic = \
                 self._getCritNonAstigmaticValidity()
 
-            #ctfX = self.xmippCTF[ctfId]
             if self.xmippCTF == INPUT1:
-                #ctfX = self.allCtf1.get(ctfId)
                 ctfX = ctf
             elif self.xmippCTF == INPUT2:
                 ctfX = self.allCtf2.get(ctfId)
@@ -826,7 +824,6 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         errors = []
         if self.useCritXmipp.get() and not self.calculateConsensus.get():
             if self.usingXmipp(self.inputCTF.get().getFirstItem()):
-                #self.xmippCTF = self.inputCTF.get()
                 self.xmippCTF = INPUT1
             else:
                 errors.append("The primary CTF input ( _Input CTF_ ) must be "
@@ -834,10 +831,8 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                               "protocol.")
         if self.useCritXmipp.get() and self.calculateConsensus.get():
             if self.usingXmipp(self.inputCTF.get().getFirstItem()):
-                #self.xmippCTF = self.inputCTF.get()
                 self.xmippCTF = INPUT1
             elif self.usingXmipp(self.inputCTF2.get().getFirstItem()):
-                #self.xmippCTF = self.inputCTF2.get()
                 self.xmippCTF = INPUT2
             else:
                 errors.append("One of the CTF inputs ( _Input CTF_ or "
