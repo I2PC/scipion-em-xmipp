@@ -449,7 +449,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         # For each possible pair of intersections compute the cost of merging them
         obValues = {}
-        for pair in itertools.permutations(range(len(intersections)), r=2):
+        for pair in itertools.combinations(range(len(intersections)), r=2):
             obValues[pair] = self._objectiveFunction(intersections, pair, similarityVectors)
 
         values = list(obValues.values())
