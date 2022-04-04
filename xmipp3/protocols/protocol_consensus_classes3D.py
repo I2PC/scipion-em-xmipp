@@ -62,8 +62,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
         
     def _createFileNames(self):
         iterFmt='i%(iter)06d'
-        classFmt='c%(cls)02d'
-        nameFmt='%(name)s'
 
         myDict = {
             'intersections': f'intersections.csv',
@@ -72,7 +70,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
             'elbows': f'elbows.csv',
             'reference_sizes': f'reference_sizes.csv',
             'reference_relative_sizes': f'reference_relative_sizes.csv',
-            'volume': f'volumes/{nameFmt}_{classFmt}.vol'
         }
         self._updateFilenamesDict(myDict)
 
@@ -129,10 +126,10 @@ class XmippProtConsensusClasses3D(EMProtocol):
         self._insertFunctionStep('createOutputStep', prerequisites=outputPrerequisites)
 
     def convertInputStep(self):
-        self.classifications = self._convertInputClassifications(self.inputClassifications)
+        pass
     
     def intersectStep(self):
-        classifications = self.classifications
+        classifications = self._getInputClassifications()
 
         # Compute the intersection among all classes
         intersections = self._calculateClassificationIntersections(classifications)
@@ -142,7 +139,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         
     def ensembleStep(self, numClusters=1):
         # Read input data
-        classifications = self.classifications
+        classifications = self._getInputClassifications()
         intersections = self._readIntersections()
 
         # Iteratively ensemble intersections until only 1 remains
@@ -179,7 +176,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         self._writeElbows(elbows)
 
     def checkSignificanceStep(self):
-        classifications = self.classifications
+        classifications = self._getInputClassifications()
         numRand = self.randomClassificationCount.get()
         threadPool = self._getThreadPool()
 
@@ -228,21 +225,9 @@ class XmippProtConsensusClasses3D(EMProtocol):
         ))
         self._defineOutputs(**outputClasses)
 
-        # Create the output volumes and define them
-        outputVolumes = dict(zip(
-            map(lambda name : 'outputVolumes_'+name,
-                clusterings.keys() 
-            ),
-            map(self._createOutputVolumes,
-                outputClasses.values(),
-                clusterings.keys()
-            )
-        ))
-        self._defineOutputs(**outputVolumes)
-
         # Stablish source output relationships
         sources = list(self.inputClassifications)
-        destinations = list(outputClasses.values()) + list(outputVolumes.values())
+        destinations = list(outputClasses.values())
         for src in sources:
             for dst in destinations:
                 self._defineSourceRelation(src, dst)
@@ -257,11 +242,24 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
     def _validate(self):
         errors = []
+
+        # Ensure that all classifications are made of the same images
+        images = self.inputClassifications[0].get().getImages()
+        for i in range(1, len(self.inputClassifications)):
+            if self.inputClassifications[i].get().getImages() != images:
+                errors.append(f'Classification {i} has been done with different images')
+
         return errors
 
     # --------------------------- UTILS functions ------------------------------
     def _getThreadPool(self):
         return getattr(self, 'threadPool', None)
+
+    def _getInputClassifications(self):
+        if not hasattr(self, '_classifications'):
+            self._classifications = self._convertInputClassifications(self.inputClassifications)
+        
+        return self._classifications
 
     def _writeTable(self, path, table, fmt='%s'):
         np.savetxt(path, table, delimiter=',', fmt=fmt)
@@ -278,14 +276,56 @@ class XmippProtConsensusClasses3D(EMProtocol):
     def _writeClassification(self, path, classification):
         with open(path, 'w') as file:
             writer = csv.writer(file)
-            writer.writerows(map(lambda cluster : cluster.getParticleIds(), classification))
+            
+            # Write the header
+            header = ['Representative index', 'Representative path', 'Source size', 'Particle ids']
+            writer.writerow(header)
+
+            # Transform the classification
+            def f(cls):
+                result = []
+                
+                # Add the location of the representative
+                representative = cls.getRepresentative()
+                location = representative.getLocation() if representative is not None else (0, '')
+                result += list(location)
+
+                # Add the source size
+                result += [cls.getSourceSize()]
+
+                # Add the particles
+                result += list(cls.getParticleIds())
+
+                assert(len(result) == (len(cls) + 3))
+                return result
+            writer.writerows(map(f, classification))
 
     def _readClassification(self, path):
         with open(path, 'r') as file:
             reader = csv.reader(file)
-            f0 = lambda id : int(id)
-            f1 = lambda row : XmippProtConsensusClasses3D.ParticleCluster(map(f0, row))
-            return list(map(f1, reader))
+
+            # Ignore the header
+            next(reader)
+
+            # Transform each row to a ParticleCluster in a classification
+            def f(row):
+                ite = iter(row)
+
+                # Parse the representative
+                index = int(next(ite))
+                path = next(ite)
+                representative = Volume(location=(index, path))
+
+                # Parse the source size
+                sourceSize = int(next(ite))
+
+                # Parse the id set
+                particleIds = set(map(lambda id : int(id), ite))
+
+                result = XmippProtConsensusClasses3D.ParticleCluster(particleIds, representative, sourceSize)
+                assert(len(row) == (len(result) + 3))
+                return result
+            return list(map(f, reader))
 
     def _writeDictionary(self, path, d):
         with open(path, 'w') as file:
@@ -356,9 +396,13 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
     def _convertInputClassifications(self, classifications):
         """ Returns the list of lists of sets that stores the set of ids of each class"""
-        f0 = lambda cls : XmippProtConsensusClasses3D.ParticleCluster(cls.getIdSet())
-        f1 = lambda classification : list(map(f0, classification.get()))
-        result = list(map(f1, classifications))
+        def class3dToParticleCluster(cls):
+            return XmippProtConsensusClasses3D.ParticleCluster(
+                cls.getIdSet(),
+                cls.getRepresentative().clone()
+            )
+        f = lambda classification : list(map(class3dToParticleCluster, classification.get()))
+        result = list(map(f, classifications))
         return result
     
     def _calculateClassificationIntersections(self, classifications):
@@ -623,8 +667,8 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         # Create a list with the filenames of the representatives
         representatives = list(map(
-            lambda cls : self._getExtraPath(self._getFileName('volume', name=name, cls=cls)), 
-            range(len(clustering))
+            XmippProtConsensusClasses3D.ParticleCluster.getRepresentative,
+            clustering
         ))
 
         # Fill the output
@@ -637,56 +681,30 @@ class XmippProtConsensusClasses3D(EMProtocol):
         loader.fillClasses(outputClasses)
 
         return outputClasses
-
-    def _reconstructVolume(self, path, particles, xmdSuffix=''):
-        # Convert the particles to a xmipp metadata file
-        fnParticles = self._getTmpPath('particles_'+xmdSuffix+'.xmd')
-        writeSetOfParticles(particles, fnParticles)
-
-        # Reconstruct the volume
-        args  = f'-i {fnParticles} '
-        args += f'-o {path} '
-        args += f'--max_resolution 0.25 '
-        args += f'-v 0'
-        self.runJob('xmipp_reconstruct_fourier', args)
-
-        # Clear the metadata file
-        cleanPattern(fnParticles)
-
-    def _createOutputVolumes(self, classes, name):
-        outputVolumes = self._createSetOfVolumes(name)
-
-        # Ensure that the file path is created
-        makePath(os.path.dirname(self._getExtraPath(self._getFileName('volume', name='', cls=0))))
-
-        outputVolumes.setSamplingRate(classes.getImages().getSamplingRate())
-        for i, cls in enumerate(classes):
-            vol = cls.getRepresentative()
-            vol.setObjId(cls.getObjId())
-            self._reconstructVolume(vol.getFileName(), cls, name+str(i))
-            outputVolumes.append(vol)
-        
-        return outputVolumes
     
     class ParticleCluster:
         """ Keeps track of the information related to successive class intersections.
             It is instantiated with a single class and allows to perform intersections
             and unions with it"""
-        def __init__(self, particleIds, sourceSize=None):
+        def __init__(self, particleIds, representative=None, sourceSize=None):
             self._particleIds = set(particleIds)  # Particle ids belonging to this intersection
+            self._representative = representative
             self._sourceSize = sourceSize if sourceSize is not None else len(self._particleIds)  # The size of the representative class
 
         def __len__(self):
             return len(self._particleIds)
 
         def intersection(self, *others):
-            return self._combine('intersection', *others)
+            return self._combine(set.intersection, min, XmippProtConsensusClasses3D.ParticleCluster.getSourceSize, *others)
 
         def union(self, *others):
-            return self._combine('union', *others)
+            return self._combine(set.union, max, len, *others)
 
         def getParticleIds(self):
             return self._particleIds
+
+        def getRepresentative(self):
+            return self._representative
 
         def getSourceSize(self):
             return self._sourceSize
@@ -694,13 +712,19 @@ class XmippProtConsensusClasses3D(EMProtocol):
         def getRelativeSize(self):
             return len(self) / self.getSourceSize()
 
-        def _combine(self, operation, *others):
-            otherParticleIds = map(XmippProtConsensusClasses3D.ParticleCluster.getParticleIds, others)
-            otherSourceSizes = map(XmippProtConsensusClasses3D.ParticleCluster.getSourceSize, others)
+        def _combine(self, operation, selector, selectionCriteria, *others):
+            allItems = (self, ) + others
+            
+            # Perform the requested operation among the id sets
+            allParticleIds = map(XmippProtConsensusClasses3D.ParticleCluster.getParticleIds, allItems)
+            particleIds = operation(*allParticleIds)
 
-            particleIds = getattr(set, operation)(self.getParticleIds(), *otherParticleIds)
-            sourceSize = max(self.getSourceSize(), *otherSourceSizes)
-            return XmippProtConsensusClasses3D.ParticleCluster(particleIds, sourceSize)
+            # Select the class with the appropriate criteria
+            selection = selector(allItems, key=selectionCriteria)
+            representative = selection.getRepresentative()
+            sourceSize = selection.getSourceSize()
+
+            return XmippProtConsensusClasses3D.ParticleCluster(particleIds, representative, sourceSize)
 
     class ClassesLoader:
         """ Helper class to produce classes
@@ -728,15 +752,14 @@ class XmippProtConsensusClasses3D(EMProtocol):
             classIdx = classId-1
 
             # Set the representative
-            vol = Volume(self.representatives[classIdx])
-            item.setRepresentative(vol)
+            item.setRepresentative(self.representatives[classIdx])
 
             # Set the size p-value
             if self.randomConsensusSizes is not None:
                 size = len(self.clustering[classIdx])
                 percentile = self._findPercentile(self.randomConsensusSizes, size)
                 pValue = 1 - percentile
-                #setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
+                setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
 
 
             # Set the relative size p-value
@@ -744,7 +767,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
                 size = self.clustering[classIdx].getRelativeSize()
                 percentile = self._findPercentile(self.randomConsensusRelativeSizes, size)
                 pValue = 1 - percentile
-                #setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE, Float(pValue))
+                setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE, Float(pValue))
 
         def _createClassification(self, clustering):
             # Fill the classification data (particle-class mapping)
