@@ -210,7 +210,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         clusterings = dict(zip(elbows.keys(), map(self._readClustering, elbows.values())))
 
         # Create the output classes and define them
-        particles = self.inputClassifications[0].get().getImages()
+        particles = self._getInputParticles()
         outputClasses = dict(zip(
             map(lambda name : 'outputClasses_'+name,
                 clusterings.keys() 
@@ -244,9 +244,9 @@ class XmippProtConsensusClasses3D(EMProtocol):
         errors = []
 
         # Ensure that all classifications are made of the same images
-        images = self.inputClassifications[0].get().getImages()
+        images = self._getInputParticles(0)
         for i in range(1, len(self.inputClassifications)):
-            if self.inputClassifications[i].get().getImages() != images:
+            if self._getInputParticles(i) != images:
                 errors.append(f'Classification {i} has been done with different images')
 
         return errors
@@ -254,6 +254,9 @@ class XmippProtConsensusClasses3D(EMProtocol):
     # --------------------------- UTILS functions ------------------------------
     def _getThreadPool(self):
         return getattr(self, 'threadPool', None)
+
+    def _getInputParticles(self, i=0):
+        return self.inputClassifications[i].get().getImages()
 
     def _getInputClassifications(self):
         if not hasattr(self, '_classifications'):
@@ -371,7 +374,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         return list(map(self._readClustering, range(1, 1+self._readClusteringCount())))
 
     def _writeObjectiveValues(self, allObValues):
-        self._writeList(self._getExtraPath(self._getFileName('objective_values')), allObValues)
+        self._writeList(self._getExtraPath(self._getFileName('objective_values')), allObValues, '%f')
 
     def _readObjectiveValues(self):
         return self._readList(self._getExtraPath(self._getFileName('objective_values')), dtype=float)
@@ -383,16 +386,16 @@ class XmippProtConsensusClasses3D(EMProtocol):
         return self._readDictionary(self._getExtraPath(self._getFileName('elbows')), dtype=int)
 
     def _writeReferenceClassificationSizes(self, sizes):
-        self._writeList(self._getExtraPath(self._getFileName('reference_sizes')), sizes)
+        self._writeList(self._getExtraPath(self._getFileName('reference_sizes')), sizes, '%d')
 
     def _readReferenceClassificationSizes(self):
         return self._readList(self._getExtraPath(self._getFileName('reference_sizes')), dtype=int)
 
     def _writeReferenceClassificationRelativeSizes(self, sizes):
-        self._writeList(self._getExtraPath(self._getFileName('reference_relative_sizes')), sizes)
+        self._writeList(self._getExtraPath(self._getFileName('reference_relative_sizes')), sizes, '%f')
 
     def _readReferenceClassificationRelativeSizes(self):
-        return self._readList(self._getExtraPath(self._getFileName('reference_relative_sizes')), dtype=int)
+        return self._readList(self._getExtraPath(self._getFileName('reference_relative_sizes')), dtype=float)
 
     def _convertInputClassifications(self, classifications):
         """ Returns the list of lists of sets that stores the set of ids of each class"""
@@ -692,7 +695,10 @@ class XmippProtConsensusClasses3D(EMProtocol):
             self._sourceSize = sourceSize if sourceSize is not None else len(self._particleIds)  # The size of the representative class
 
         def __len__(self):
-            return len(self._particleIds)
+            return len(self.getParticleIds())
+
+        def __eq__(self, other):
+            return self.getParticleIds() == other.getParticleIds()
 
         def intersection(self, *others):
             return self._combine(set.intersection, min, XmippProtConsensusClasses3D.ParticleCluster.getSourceSize, *others)

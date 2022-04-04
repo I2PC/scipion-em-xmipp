@@ -28,6 +28,7 @@
 This module implement the wrappers aroung Xmipp CL2D protocol
 visualization program.
 """
+from email import header
 from pyworkflow.gui import IconButton, Icon
 from pyworkflow.gui.form import FormWindow
 from pyworkflow.object import Object
@@ -57,71 +58,39 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
 
     def __init__(self, **kwargs):
         ProtocolViewer.__init__(self, **kwargs)
-        self._loadAttributes()
 
     def _defineParams(self, form):
         # Particles section
         form.addSection(label='Classes')
-        if hasattr(self, '_clusterings'):
-            form.addParam('displayClasses', IntParam, label='Custom number of classes',
-                            validators=[GT(0), LE(len(self._clusterings))], default=len(self._clusterings),
-                            help='Open a GUI to visualize the class of the given iteration. Warning: It takes time to open')
+        form.addParam('displayClasses', IntParam, label='Custom number of classes',
+                      validators=[GE(1)], default=1,
+                      help='Open a GUI to visualize the class of the given iteration. Warning: It takes time to open')
 
-        if hasattr(self.protocol, 'outputClasses_initial'):
-            form.addParam('displayInitialClasses', LabelParam, label='Initial classes')
-        
-        if hasattr(self.protocol, 'outputClasses_manual'):
-            form.addParam('displayManualClasses', LabelParam, label='Manual number of classes')
-        
-        if hasattr(self.protocol, 'outputClasses_origin'):
-            form.addParam('displayOriginClasses', LabelParam, label='Number of classes by proximity to origin')
-
-        if hasattr(self.protocol, 'outputClasses_angle'):
-            form.addParam('displayAngleClasses', LabelParam, label='Number of classes by angle')
-
-        if hasattr(self.protocol, 'outputClasses_pll'):
-            form.addParam('displayPllClasses', LabelParam, label='Number of classes by profile likelihood')
+        form.addParam('displayInitialClasses', LabelParam, label='Initial classes')
+        form.addParam('displayManualClasses', LabelParam, label='Manual number of classes')
+        form.addParam('displayOriginClasses', LabelParam, label='Number of classes by proximity to origin')
+        form.addParam('displayAngleClasses', LabelParam, label='Number of classes by angle')
+        form.addParam('displayPllClasses', LabelParam, label='Number of classes by profile likelihood')
 
         # Graph section
         form.addSection(label='Graphs')
-        if hasattr(self, '_clusterings') and hasattr(self, '_objectiveFunctionValues'):
-            form.addParam('displayDendrogram', LabelParam, label='Dendrogram',
-                          help='Open a GUI to visualize the dendogram each number of clusters')
-            form.addParam('displayDendrogramLog', LabelParam, label='Dendrogram (log)',
-                          help='Open a GUI to visualize the dendogram each number'
-                          ' of clusters with a logarithmic "y" axis')
+        form.addParam('displayDendrogram', LabelParam, label='Dendrogram',
+                        help='Open a GUI to visualize the dendogram each number of clusters')
+        form.addParam('displayDendrogramLog', LabelParam, label='Dendrogram (log)',
+                        help='Open a GUI to visualize the dendogram each number'
+                        ' of clusters with a logarithmic "y" axis')
 
-        if hasattr(self, '_objectiveFunctionValues') and hasattr(self, '_elbows'):
-            form.addParam('displayObjectiveFunction', LabelParam, label='Objective Function',
-                          help='Open a GUI to visualize the objective function for each number of clusters')
-            form.addParam('displayObjectiveFunctionLog', LabelParam, label='Objective Function (log)',
-                          help='Open a GUI to visualize the objective function'
-                          ' for each number of clusters with a logarithmic "y" axis')
+        form.addParam('displayObjectiveFunction', LabelParam, label='Objective Function',
+                        help='Open a GUI to visualize the objective function for each number of clusters')
+        form.addParam('displayObjectiveFunctionLog', LabelParam, label='Objective Function (log)',
+                        help='Open a GUI to visualize the objective function'
+                        ' for each number of clusters with a logarithmic "y" axis')
 
         # Reference classification section
         form.addSection(label='Reference classification consensus')
-        if hasattr(self, '_sizeRatioPercentiles'):
-            form.addParam('displayReferenceClassificationSizePercentiles', LabelParam, label='Reference Classification Size Percentiles',
-                          help='Open a GUI to visualize a table with the most'
-                          ' common percentiles of the sizes of a random classification consensus')
-
-        if hasattr(self, '_sizeRatioPercentiles'):
-            form.addParam('displayReferenceClassificationSizeRatioPercentiles', LabelParam, label='Reference Classification Size Ratio Percentiles',
-                          help='Open a GUI to visualize a table with the most common percentiles'
-                          ' sizes of a random classification consensus'
-                          ' compared to the original cluster size')
-
-        #form.addParam('chooseNumberOfClusters', IntParam, default=-1,
-        #              label='Number of Clusters',
-        #              help='Choose the final number of clusters in the consensus clustering. Press the eye')
-
-        #TODO: set an apply button to change the number of clusters instead of using the eye
-        '''command = self._chooseNumberOfClusters()
-        btn = IconButton(self.getWindow(), "Apply", Icon.ACTION_CONTINUE, command=command)
-        btn.config(relief="flat", activebackground=None, compound='left',
-                   fg='black', overrelief="raised")
-        btn.bind('<Button-1>')
-        btn.grid(row=2, column=2, sticky='nw')'''
+        form.addParam('displayReferenceClassificationSizePercentiles', LabelParam, label='Reference classification consensus size percentiles',
+                        help='Open a GUI to visualize a table with the most'
+                        ' common percentiles of the sizes of a random classification consensus')
 
     def _getVisualizeDict(self):
         return {
@@ -136,30 +105,56 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
             'displayObjectiveFunction': self._visualizeObjectiveFunction,
             'displayObjectiveFunctionLog': self._visualizeObjectiveFunctionLog,
             'displayReferenceClassificationSizePercentiles': self._visualizeReferenceClassificationSizes,
-            'displayReferenceClassificationSizeRatioPercentiles': self._visualizeReferenceClassificationSizeRatios,
         }
 
-        # TODO: remove when done
-        #return {'chooseNumberOfClusters': self._chooseNumberOfClusters,
-        #        'displayObjectiveFunction': self._visualizeObjectiveFunction}
-
     # --------------------------- UTILS functions ------------------------------
-    def _loadAttributes(self):
-        self._loadAttributeIfExists(self.protocol._getFileName('clusterings'), '_clusterings')
-        self._loadAttributeIfExists(self.protocol._getFileName('objective_function'), '_objectiveFunctionValues')
-        self._loadAttributeIfExists(self.protocol._getFileName('elbows'), '_elbows')
-        self._loadAttributeIfExists(self.protocol._getFileName('random_consensus_sizes'), '_randomConsensusSizes')
-        self._loadAttributeIfExists(self.protocol._getFileName('random_consensus_size_ratios'), '_randomConsensusSizeRatios')
-        self._loadAttributeIfExists(self.protocol._getFileName('size_percentiles'), '_sizePercentiles')
-        self._loadAttributeIfExists(self.protocol._getFileName('size_ratio_percentiles'), '_sizeRatioPercentiles')
+    def _getInputParticles(self):
+        return self.protocol._getInputParticles()
+
+    def _getInputClassifications(self):
+        return self.protocol._getInputClassifications()
+
+    def _readIntersections(self):
+        return self.protocol._readIntersections()
+
+    def _readClustering(self, iter):
+        return self.protocol._readClustering(iter)
+
+    def _readClusteringCount(self):
+        return self.protocol._readClusteringCount()
+
+    def _readAllClusterings(self):
+        return self.protocol._readAllClusterings()
+
+    def _readObjectiveValues(self):
+        return self.protocol._readObjectiveValues()
+    
+    def _readElbows(self):
+        return self.protocol._readElbows()
+
+    def _readReferenceClassificationSizes(self):
+        return self.protocol._readReferenceClassificationSizes()
+
+    def _readReferenceClassificationRelativeSizes(self):
+        return self.protocol._readReferenceClassificationRelativeSizes()
 
     def _visualizeClasses(self, e):
-        # Shorthands:
-        ite = self.displayClasses.get() - 1
-        clustering = self._clusterings[ite]
+        # Read data
+        count = self.displayClasses.get()
+        particles = self._getInputParticles()
+        clustering = self._readClustering(count)
+        randomConsensusSizes = self._readReferenceClassificationSizes()
+        randomConsensusRelativeSizes = self._readReferenceClassificationRelativeSizes()
 
         # Create the output classes and show them
-        outputClasses = self.protocol._createOutput3DClass(clustering, 'viewer_'+str(ite), self._randomConsensusSizes, self._randomConsensusSizeRatios)
+        outputClasses = self.protocol._createOutputClasses3D(
+            particles,
+            clustering, 
+            'viewer_'+str(count),
+            randomConsensusSizes, 
+            randomConsensusRelativeSizes
+        )
+
         return self._showSetOfClasses3D(outputClasses)
     
     def _visualizeInitialClasses(self, e):
@@ -178,34 +173,53 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
         return self._showSetOfClasses3D(self.protocol.outputClasses_pll)
 
     def _visualizeDendrogram(self, e):
-        plot_dendrogram(list(reversed(self._clusterings)), list(reversed(self._objectiveFunctionValues)), False)
+        clusterings = self._readAllClusterings()
+        objectiveFunction = self._readObjectiveValues()
+
+        fig, ax = plt.subplots()
+        self._plotDendrogram(fig, ax, list(reversed(clusterings)), list(reversed(objectiveFunction)))
+        return [fig]
         
     def _visualizeDendrogramLog(self, e):
-        plot_dendrogram(list(reversed(self._clusterings)), list(reversed(self._objectiveFunctionValues)), True)
+        clusterings = self._readAllClusterings()
+        objectiveFunction = self._readObjectiveValues()
+
+        fig, ax = plt.subplots()
+        self._plotDendrogram(fig, ax, list(reversed(clusterings)), list(reversed(objectiveFunction)))
+        ax.set_yscale('log')
+        return [fig]
         
     def _visualizeObjectiveFunction(self, e):
-        plot_function_and_elbows(self._objectiveFunctionValues, self._elbows, False)
+        objectiveFunction = self._readObjectiveValues()
+        elbows = self._readElbows()
+
+        fig, ax = plt.subplots()
+        self._plotObjectiveFunctionAndElbows(fig, ax, objectiveFunction, elbows)
+        return [fig]
     
     def _visualizeObjectiveFunctionLog(self, e):
-        plot_function_and_elbows(self._objectiveFunctionValues, self._elbows, True)
+        objectiveFunction = self._readObjectiveValues()
+        elbows = self._readElbows()
+
+        fig, ax = plt.subplots()
+        self._plotObjectiveFunctionAndElbows(fig, ax, objectiveFunction[:-1], elbows)
+        ax.set_yscale('log')
+        return [fig]
 
     def _visualizeReferenceClassificationSizes(self, e):
-        show_percentile_table(self._sizePercentiles, 'Size percentiles')
+        randomConsensusSizes = self._readReferenceClassificationSizes()
+        randomConsensusRelativeSizes = self._readReferenceClassificationRelativeSizes()
 
-    def _visualizeReferenceClassificationSizeRatios(self, e):
-        show_percentile_table(self._sizeRatioPercentiles, 'Size ratio percentiles')
-
-    def _loadAttributeIfExists(self, filename, attribute):
-        self._loadAttribute(filename, attribute) # TODO: add exception handling for when the file does not exist
-
-    def _loadAttribute(self, filename, attribute):
-        setattr(self, attribute, self._loadObject(filename))
-
-    def _loadObject(self, filename):
-        path = self.protocol._getExtraPath(filename)
-        with open(path, 'rb') as f:
-            result = pickle.load(f)
-        return result
+        # Calculate the percentiles
+        percentiles = [1, 5, 10, 25, 50, 75, 90, 95, 99]
+        randomConsensusSizePercentiles = np.percentile(randomConsensusSizes, percentiles)
+        randomConsensusRelativeSizePercentiles = np.percentile(randomConsensusRelativeSizes, percentiles)
+        
+        # Create a table with the data
+        data = list(zip(percentiles, randomConsensusSizePercentiles, randomConsensusRelativeSizePercentiles))
+        header = ['Percentile (%)', 'Size percentile', 'Relative size percentile']
+        title = 'Reference classification consensus size percentiles'
+        return TableView(header, data, title=title)
 
     def _showSetOfClasses3D(self, classes):
         labels = 'enabled id _size _representative._filename _xmipp_classIntersectionSizePValue _xmipp_classIntersectionRelativeSizePValue'
@@ -217,145 +231,65 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
                                         SORT_BY: '_size desc',
                                         MODE: MODE_MD})]
 
-    def _chooseNumberOfClusters(self, e=None):
-        views=[]
-        nClusters = list(range(1, 1+len(self._clusterings)))
-        elbow_nclust = nClusters[self._elbowIdx]
+    def _plotDendrogram(self, fig, ax, clusterings, obValues):
+        """ Plot the dendrogram from the objective functions of the merge
+            between the groups of images """
 
-        nclust = self.chooseNumberOfClusters.get()
-        if nclust == -1:
-            nclust = elbow_nclust
-        elif nclust > max(nClusters):
-            nclust = max(nClusters)
+        # Initialize required values
+        linkageMatrix = np.zeros((len(clusterings)-1, 4))
+        clsIds = np.arange(len(clusterings))
+        nIntersections = len(clusterings[0])
 
-        scipion_clustering = self._buildSetOfClasses(nclust)
-        self.protocol._defineOutputs(outputClasses=scipion_clustering)
-        for item in self.protocol.inputMultiClasses:
-            self.protocol._defineSourceRelation(item, scipion_clustering)
+        # Loop over each iteration of clustering
+        for i in range(len(clusterings)-1):
+            # Find the sets that were merged
+            clsMerged = []
+            assert(len(clusterings[i]) == len(clsIds))
+            for cls, clsId in zip(clusterings[i], clsIds):
+                if cls not in clusterings[i+1]:
+                    clsMerged.append(clsId)
+            assert(len(clsMerged) == 2)
+            clsMerged = np.array(clsMerged)
+            
+            # Find original number of sets within new set
+            nCls = list(map(lambda x : linkageMatrix[x,3] if (x >= 0) else 1, clsMerged - nIntersections))
 
-        #TODO: esto es un objeto SetOfClasses3D pero no sabemos como lanzar un viewer con el sin tener el protocolo
-        #views.append(ObjectView(self._project, self.protocol.strId()))
-        return views
+            # Create linkage matrix
+            linkageMatrix[i, 0:2] = clsMerged  # ids of merged sets
+            linkageMatrix[i, 2] = obValues[i+1]   # objective function as distance
+            linkageMatrix[i, 3] = sum(nCls)  # total number of original sets
 
-    def _buildSetOfClasses(self, nclust):
-        '''From a list of clusterings, nclust index it and that clustering
-        is converted into a scipion setOfClasses'''
-        clustIdx = self.nclusters.index(nclust)
-        clustering = self._allClusterings[clustIdx]
+            # Change set ids to reflect new set of clusters
+            for id in clsMerged:
+                clsIds = np.delete(clsIds, np.argwhere(clsIds == id))
+            clsIds = np.append(clsIds, len(clusterings)+i)
 
-        inputParticles = self.protocol.inputMultiClasses[0].get().getImages()
-        outputClasses = self.protocol._createSetOfClasses3D(inputParticles)
-        for classItem in clustering:
-            numOfPart = classItem[0]
-            partIds = classItem[1]
-            setRepId = classItem[2]
-            clsRepId = classItem[3]
+        # Plot resulting dendrogram
+        hierarchy.dendrogram(linkageMatrix, ax=ax)
+        ax.set_title('Dendrogram')
+        ax.set_xlabel('sets ids')
+        ax.set_ylabel('objective function')
+        ax.set_ylim([np.min(linkageMatrix[:, 2]), np.max(linkageMatrix[:, 2])])
 
-            setRep = self.protocol.inputMultiClasses[setRepId].get()
-            clRep = setRep[clsRepId]
+    def _plotObjectiveFunctionAndElbows(self, fig, ax, obValues, elbows):
+        """ Plots the objective function and elbows """
 
-            newClass = Class3D()
-            # newClass.copyInfo(clRep)
-            newClass.setAcquisition(clRep.getAcquisition())
-            newClass.setRepresentative(clRep.getRepresentative())
+        # Shorthands for some variables
+        numClusters = np.arange(1, 1+len(obValues))
 
-            outputClasses.append(newClass)
+        # Plot obValues vs numClusters
+        ax.plot(numClusters, obValues)
 
-            enabledClass = outputClasses[newClass.getObjId()]
-            enabledClass.enableAppend()
-            for itemId in partIds:
-                enabledClass.append(inputParticles[itemId])
-            outputClasses.update(enabledClass)
+        # Show elbows as scatter points
+        for key, value in elbows.items():
+            value -= 1 # Value uses 1-based indexing
+            label = key + ': ' + str(numClusters[value])
+            ax.scatter([numClusters[value]], [obValues[value]], label=label, color='green')
 
-        return outputClasses
-
-
-
-# Plotting functions
-
-def plot_dendrogram(clusterings, obValues, logarithmic=False):
-    """ Plot the dendrogram from the objective functions of the merge
-        between the groups of images """
-
-    # Initialize required values
-    linkage_matrix = np.zeros((len(clusterings)-1, 4))
-    set_ids = np.arange(len(clusterings))
-    original_num_sets = len(clusterings)
-
-    # Loop over each iteration of clustering
-    for i in range(len(clusterings)-1):
-        # Find the two sets that were merged
-        sets_merged = []
-        for set_info, set_id in zip(clusterings[i], set_ids):
-            if set_info not in clusterings[i+1]:
-                sets_merged.append(set_id)
+        # Configure the figure
+        ax.legend()
+        ax.set_xlabel('Number of clusters')
+        ax.set_ylabel('Objective values')
+        ax.set_title('Objective values for each number of clusters')
+        ax.set_ylim([np.min(obValues), np.max(obValues)])
         
-        # Find original number of sets within new set
-        if sets_merged[0] - original_num_sets < 0:
-            n1 = 1
-        else:
-            n1 = linkage_matrix[sets_merged[0]-original_num_sets, 3]
-        if sets_merged[1] - original_num_sets < 0:
-            n2 = 1
-        else:
-            n2 = linkage_matrix[sets_merged[1]-original_num_sets, 3]
-
-        # Create linkage matrix
-        linkage_matrix[i, 0] = sets_merged[0]  # set id of merged set
-        linkage_matrix[i, 1] = sets_merged[1]  # set id of merged set
-        linkage_matrix[i, 2] = obValues[i+1]   # objective function as distance
-        linkage_matrix[i, 3] = n1+n2  # total number of original sets
-
-        # Change set ids to reflect new set of clusters
-        set_ids = np.delete(set_ids, np.argwhere(set_ids == sets_merged[0]))
-        set_ids = np.delete(set_ids, np.argwhere(set_ids == sets_merged[1]))
-        set_ids = np.append(set_ids, len(clusterings)+i)
-
-    # Plot resulting dendrogram
-    plt.figure()
-    dn = hierarchy.dendrogram(linkage_matrix)
-    plt.title('Dendrogram')
-    plt.xlabel('sets ids')
-    plt.ylabel('objective function')
-    plt.tight_layout()
-
-    if logarithmic is True:
-        plt.yscale('log')
-        plt.ylim([np.min(linkage_matrix[:, 2]), np.max(linkage_matrix[:, 2])])
-
-    plt.show()
-
-def plot_function_and_elbows(obValues, elbows, logarithmic=False):
-    """ Plots the objective function and elbows """
-
-    # Shorthands for some variables
-    numClusters = np.arange(1, 1+len(obValues))
-
-    # Begin drawing
-    plt.figure()
-
-    # Plot obValues vs numClusters
-    plt.plot(numClusters, obValues)
-
-    # Show elbows as scatter points
-    for key, value in elbows.items():
-        label = key + ': ' + str(numClusters[value])
-        plt.scatter([numClusters[value]], [obValues[value]], label=label, color='green')
-
-    # Configure the figure
-    plt.legend()
-    plt.xlabel('Number of clusters')
-    plt.ylabel('Objective values')
-    plt.title('Objective values for each number of clusters')
-    plt.tight_layout()
-
-    if logarithmic is True:
-        plt.yscale('log')
-        plt.ylim([np.min(obValues), np.max(obValues)])
-    
-    plt.show()
-
-def show_percentile_table(data, title=None):
-    header = ('Percentile', 'Value')
-    data = list(data.items())
-    return TableView(header, data, None, title)
