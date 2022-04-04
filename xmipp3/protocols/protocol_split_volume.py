@@ -49,6 +49,7 @@ from collections import Counter
 
 from scipy import sparse
 from scipy import stats
+from scipy import special
 from scipy.sparse import csgraph
 from scipy.sparse import linalg
 
@@ -195,7 +196,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Read input data
         correlations = self._readCorrelations()
         maxDegree = self.maxDegree.get() if self.maxDegree.get() > 0 else None
-        enforceUndirected = {0: None, 1: 'or', 2: 'and'}[self.enforceUndirected.get()]
+        enforceUndirected = {0: None, 1: 'max', 2: 'min', 3: 'avg'}[self.enforceUndirected.get()]
 
         # Calculate weights from correlations
         weights = self._calculateWeights(correlations, maxDegree, enforceUndirected)
@@ -520,20 +521,41 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(np.all(correlations <= 1.0))
         return correlations
 
+    def _smoothStep(self, x, xMin=0, xMax=1, N=1):
+        """ Performs the Nth order Hermite interpolation
+            of x between xMin and xMax
+        """
+        if xMin == xMax:
+            # In case xMin == xMax use a normal step to avoid division by zero
+            result = np.where(x < xMin, 0, 1)
+
+        else:
+            # Based on:
+            # https://stackoverflow.com/questions/45165452/how-to-implement-a-smooth-clamp-function-in-python
+
+            # Obtain the "progress" inside the range [xMin, xMax]. If outside the range, clamp to 0 or 1
+            t = np.clip((x - xMin) / (xMax - xMin), 0, 1)
+        
+            # Calculate
+            result = np.zeros_like(t)
+            for n in range(N + 1):
+                result += special.comb(N + n, n) * special.comb(2*N + 1, N - n) * (-t) ** n
+            result *= t ** (N + 1)
+
+        return result
+
     def _calculateWeights(self, correlations, maxDegree=None, enforceUndirected=None):
         """ Given a matrix of correlations among neighboring 
             images, it computes the adjacency matrix with
             interger weights
             TODO: improve the algorithm
         """
-        # Normalize respect the smallest nonzero correlation
-        minVal = 0.9*np.min(correlations[np.nonzero(correlations)])
-        maxVal = np.max(correlations)
-        weights = (correlations - minVal) / (maxVal - minVal)
-        weights = np.maximum(weights, 0)
+        # Calculate lower and upper percentiles for the non zero correlations
+        values = correlations[np.nonzero(correlations)]
+        [minVal, maxVal] = np.percentile(values, [50, 80])
 
-        # Square to emphasize large values
-        weights *= weights
+        # Perform a Hermite interpolation of the correlations
+        weights = self._smoothStep(correlations, xMin=minVal, xMax=maxVal, N=1)
 
         # Scale to be representable by integers
         weights *= 2**10
@@ -549,8 +571,9 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Enforce undirectionality
         if enforceUndirected is not None:
             operations = {
-                'or': np.maximum,
-                'and': np.minimum
+                'max': np.maximum,
+                'min': np.minimum,
+                'avg': lambda x, y : (x+y)/2
             }
             weights = operations[enforceUndirected](weights, weights.T)
 
