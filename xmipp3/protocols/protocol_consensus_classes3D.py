@@ -83,14 +83,11 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
         # Consensus
         form.addSection(label='Consensus clustering')
-        form.addParam('clusteringMethod', EnumParam, label='Clustering method',
-                      choices=['Manual', 'Origin', 'Angle', 'PLL'], default=0,
-                      help='Method used to automatically determine the number of classes')
-        form.addParam('clusteringManualCount', IntParam, label='Cluster count',
-                      condition='clusteringMethod==0', validators=[GE(2)], default=3,
+        form.addParam('clusteringManualCount', IntParam, label='Manual cluster count',
+                      validators=[GE(2)], default=3,
                       help='Number of clusters to be obtained manually')
-        form.addParam('clusteringAngle', IntParam, label='Angle',
-                      condition='clusteringMethod==2', validators=[Range(0, 90)], default=45,
+        form.addParam('clusteringAngle', IntParam, label='Objective function threshold angle',
+                      validators=[Range(0, 90)], default=45,
                       help='Angle to determine the cluster count')
         
         # Reference random classification
