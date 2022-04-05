@@ -44,7 +44,7 @@ import math
 import itertools
 import numpy as np
 import multiprocessing as mp
-from multiprocessing.pool import ThreadPool
+from concurrent.futures import ThreadPoolExecutor
 from collections import Counter
 
 from scipy import sparse
@@ -82,7 +82,7 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _defineParams(self, form):
         form.addSection(label='Input')
         form.addParam('directionalClasses', PointerParam, label="Directional classes", 
-                      pointerClass='SetOfClasses2D',
+                      pointerClass='SetOfClasses2D', pointerCondition='hasRepresentatives', 
                       important=True, 
                       help='Select a set of particles with angles. Preferrably the output of a run of directional classes')
         form.addParam('minClassesPerDirection', IntParam, label="Minumum number of classes per direction", 
@@ -129,7 +129,7 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _insertAllSteps(self):
         # Create the thread pool
         if self.numberOfThreads > 1:
-            self.threadPool = ThreadPool(processes=int(self.numberOfThreads))
+            self._threadPool = ThreadPoolExecutor(int(self.numberOfThreads))
 
         self._insertFunctionStep('convertInputStep')
         self._insertFunctionStep('computeAngularDistancesStep')
@@ -262,7 +262,7 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     #--------------------------- UTILS functions ---------------------------------------------------
     def _getThreadPool(self):
-        return getattr(self, 'threadPool', None)
+        return getattr(self, '_threadPool', None)
 
     def _getMaxAngularDistance(self, distances):
         method = self.maxAngularDistanceMethod.get()
@@ -486,11 +486,14 @@ class XmippProtSplitvolume(ProtClassify3D):
                 correlations[idx0, idx0] = 1.0
 
         # Compute the correlations in parallel
-        results = threadPool.starmap(xmippLib.Image.correlationAfterAlignment, imagePairs.values())
+        results = dict(zip(
+            imagePairs.keys(),
+            threadPool.map(xmippLib.Image.correlationAfterAlignment, *zip(*imagePairs.values()))
+        ))
         assert(len(imagePairs) == len(results))
 
         # Write the results
-        for (idx0, idx1), correlation in zip(imagePairs.keys(), results):
+        for (idx0, idx1), correlation in results.items():
             correlations[idx0, idx1] = correlation
             correlations[idx1, idx0] = correlation
 
