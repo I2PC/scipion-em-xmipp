@@ -51,6 +51,13 @@ class XmippProtCenterParticles(ProtClassify2D):
                       important=True,
                       label="Input Classes",
                       help='Set of classes to be realing')
+        form.addParam('inputMics', params.PointerParam,
+                      pointerClass='SetOfMicrographs',
+                      important=True,
+                      label="Set of micrographs",
+                      help='Set of micrographs related to the selected input '
+                           'classes')
+
         form.addParallelSection(threads=0, mpi=0)
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
