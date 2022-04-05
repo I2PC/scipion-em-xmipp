@@ -74,6 +74,7 @@ class XmippProtSplitvolume(ProtClassify3D):
             'distances': 'distances.csv',
             'correlations': 'correlations.csv',
             'weights': 'weights.csv',
+            'fiedler': 'fiedler.csv',
             'labels': 'labels.csv',
             'representative': f'{suffixFmt}_volume_{classFmt}.vol'
         }
@@ -113,16 +114,9 @@ class XmippProtSplitvolume(ProtClassify3D):
                       validators=[GE(0)], default=8, expertLevel=LEVEL_ADVANCED,
                       help='Maximum out-degree of each node of the graph. Use 0 to disable degree limitation')
         form.addParam('enforceUndirected', EnumParam, label="Enforce undirected", 
-                      choices=['No', 'Or', 'And'], default=1, expertLevel=LEVEL_ADVANCED,
+                      choices=['No', 'Or', 'And', 'Average'], default=1, expertLevel=LEVEL_ADVANCED,
                       help='Enforce a undirected graph')
 
-        form.addSection(label='Graph partition')
-        form.addParam('graphPartitionMethod', EnumParam, label="Graph partition method", 
-                      choices=['Spectral',  'Minimum cut'], default=0,
-                      help='The method used for partitioning the graph')
-        form.addParam('graphPartitionCount', IntParam, label="Minimum number of components", 
-                      validators=[GE(2)], default=2,
-                      help='Minimum number of classes to obtain')
         form.addParallelSection(threads=mp.cpu_count(), mpi=0)
     
     #--------------------------- INSERT steps functions --------------------------------------------
@@ -135,7 +129,8 @@ class XmippProtSplitvolume(ProtClassify3D):
         self._insertFunctionStep('computeAngularDistancesStep')
         self._insertFunctionStep('computeCorrelationStep')
         self._insertFunctionStep('computeWeightsStep')
-        self._insertFunctionStep('graphPartitionStep')
+        self._insertFunctionStep('computeEigenvectorsStep')
+        self._insertFunctionStep('classifyGraphStep')
         self._insertFunctionStep('createOutputStep')
 
     #--------------------------- STEPS functions ---------------------------------------------------
@@ -208,21 +203,25 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Save output data
         self._writeWeights(weights)
 
-    def graphPartitionStep(self):
+    def computeEigenvectorsStep(self):
         # Read input data
         adjacency = self._readWeights()
         graph = sparse.csr_matrix(adjacency)
-        
-        # Partition the graph according to the selected method
-        partitionFunctions = {
-            0: self._spectralPartition,
-            1: self._minimumCut
-        }
-        partitionFunction = partitionFunctions[self.graphPartitionMethod.get()]
-        partitionCount = self.graphPartitionCount.get()
-        labels = partitionFunction(graph, partitionCount)
-        
-        # Save the output
+
+        # Compute the fiedler vector
+        fiedler = self._calculateFiedlerVector(graph)
+
+        # Write the result
+        self._writeFiedlerVector(fiedler)
+
+    def classifyGraphStep(self):
+        # Read the input data
+        fiedler = self._readFiedlerVector()
+
+        # Classify the images
+        labels = self._classifyFiedlerVector(fiedler)
+
+        # Write the result
         self._writeLabels(labels)
 
     def createOutputStep(self):
@@ -319,11 +318,18 @@ class XmippProtSplitvolume(ProtClassify3D):
         return self._readMatrix(self._getExtraPath(self._getFileName('correlations')), dtype=float)
 
     def _writeWeights(self, weights):
-        assert(weights.dtype==np.uint)
-        self._writeMatrix(self._getExtraPath(self._getFileName('weights')), weights, fmt='%d')
+        assert(weights.dtype==float)
+        self._writeMatrix(self._getExtraPath(self._getFileName('weights')), weights, fmt='%f')
     
     def _readWeights(self):
-        return self._readMatrix(self._getExtraPath(self._getFileName('weights')), dtype=np.uint)
+        return self._readMatrix(self._getExtraPath(self._getFileName('weights')), dtype=float)
+
+    def _writeFiedlerVector(self, fiedler):
+        assert(fiedler.dtype==float)
+        self._writeMatrix(self._getExtraPath(self._getFileName('fiedler')), fiedler, fmt='%f')
+
+    def _readFiedlerVector(self):
+        return self._readMatrix(self._getExtraPath(self._getFileName('fiedler')), dtype=float)
 
     def _writeLabels(self, labels):
         assert(labels.dtype==np.uint)
@@ -553,15 +559,15 @@ class XmippProtSplitvolume(ProtClassify3D):
             interger weights
             TODO: improve the algorithm
         """
-        # Calculate lower and upper percentiles for the non zero correlations
-        values = correlations[np.nonzero(correlations)]
-        [minVal, maxVal] = np.percentile(values, [50, 80])
 
         # Perform a Hermite interpolation of the correlations
-        weights = self._smoothStep(correlations, xMin=minVal, xMax=maxVal, N=1)
+        weights = np.zeros_like(correlations)
+        for i in range(len(weights)):
+            # Calculate lower and upper percentiles for the non zero correlations
+            values = correlations[i, np.nonzero(correlations[i])]
+            [minVal, maxVal] = np.percentile(values, [50, 80])
 
-        # Scale to be representable by integers
-        weights *= 2**10
+            weights[i] = self._smoothStep(correlations[i], xMin=minVal, xMax=maxVal, N=1)
 
         # Limit the degree
         if maxDegree is not None:
@@ -581,10 +587,10 @@ class XmippProtSplitvolume(ProtClassify3D):
             weights = operations[enforceUndirected](weights, weights.T)
 
         assert(np.all(weights >= 0))
-        assert(np.all(weights <= 2**10))
-        return weights.astype(np.uint)
+        assert(np.all(weights <= 1))
+        return weights
 
-    def _classifySpectrum(self, eigenVectors):
+    def _calculateFiedlerVector(self, graph):
         """ Given a matrix with the eigenvectors with the smallest 
             eigenvalues of the laplacian matrix of a network, it 
             returns a classification of each vertex using a standing 
@@ -596,101 +602,25 @@ class XmippProtSplitvolume(ProtClassify3D):
             https://people.csail.mit.edu/jshun/6886-s18/lectures/lecture13-1.pdf#page=11
             https://es.mathworks.com/help/matlab/math/partition-graph-with-laplacian-matrix.html
         """
-        nVertices, nVectors = eigenVectors.shape
-        nVectorsLog2 = math.trunc(math.log2(nVectors))
-        assert(2**nVectorsLog2==nVectors) # TODO generalize for non pow2 classifications
-
-        # Iterate over the pow 2 indices, summing their weights in 
-        # decreasing order (binary counting)
-        labels = np.zeros(nVertices, dtype=np.uint)
-        for i in range(1, nVectorsLog2+1):
-            w = eigenVectors[:, 2**i-1] # Extract the eigenvector
-            r = 2**(nVectorsLog2-i)
-            labels += r*(w>=0).astype(np.uint)
-
-        return labels
-
-    def _spectralPartition(self, graph, componentCount):
-        """ Performs a spectral partition of the graph into componentCount components
-        """
-        # Convert the graph into doubles, required for linear algebra operations
-        graph = graph.astype(np.double)
-
         # In order to use eigsh, graph matrix needs to be symmetric (undirected graph)
         if not np.array_equal(graph.toarray(), graph.T.toarray()):
             raise ValueError('Input graph must be undirected')
 
         # Decompose the laplacian matrix of the graph into N
-        # eigenvectors with the smallest eigenvalues. Then interpret these vectors as
-        # "standing waves" in the graph and use them to partition it
+        # eigenvectors with the smallest eigenvalues
         l = csgraph.laplacian(graph, normed=True)
-        values, vectors = linalg.eigsh(l, k=componentCount, which='SM')
+        values, vectors = linalg.eigsh(l, k=2, which='SM')
         assert(np.array_equal(values, sorted(values)))
-        labels = self._classifySpectrum(vectors)
 
-        return labels
+        # Fiedler vector corresponds to second eigenvector
+        # with the smallest eigenvalue
+        return vectors[:,1]
 
-    def _maximumFlow(self, graph, indices):
-        """ Finds the maximum flow between any of the vertices
-            defined in indices as (source, sink)
+    def _classifyFiedlerVector(self, fiedler):
+        """ Classify the fiedler vector into nPartition classes
         """
-        # Perform a maximum flow analysis among the specified vertices
-        # and select the one with the largest flow
-        flow = None
-        for source, sink in indices:
-            f = csgraph.maximum_flow(graph, source, sink)
-            if flow is None or flow.flow_value < f.flow_value:
-                flow = f
-
-        # The flow matrix should be antisymmetric
-        assert(np.array_equal(flow.residual.toarray(), -flow.residual.T.toarray()))
-
-        # Use the residual graph to determine separated components
-        # Then remove the edges connecting different components
-        # http://web.stanford.edu/class/archive/cs/cs161/cs161.1172/CS161Lecture16.pdf
-        # https://cp-algorithms.com/graph/edmonds_karp.html
-        residual = graph - flow.residual # Comptute the available flow
-        residual = residual.minimum(residual.T) # Use the most restrictive flow
-        residual.eliminate_zeros()
-
-        return residual
-
-    def _minimumCut(self, graph, componentCount):
-        """ Performs a minimum cut of the graph into
-            componentCount elements. If componentCount
-            is > 2, the cuts are done iteratively
-        """
-
-        # Copy the graph, as it will be modified
-        graph = graph.copy()
-
-        # Obtain the component labels from the graph
-        nComponents, labels = csgraph.connected_components(graph)
-
-        # Repeatedly cut the graph until the desired amount of components is obtained
-        while nComponents < componentCount:
-            # Select the largest component
-            component = stats.mode(labels)[0]
-
-            # Only consider pairs that are not directly connected
-            # TODO if the graph is undirected use combinations
-            indices = filter(
-                lambda pos : graph[pos] == 0,
-                itertools.permutations(*np.where(labels==component), r=2)
-            )
-
-            # Perform a maximum flow analysis among all the considered source-sink pairs
-            residual = self._maximumFlow(graph, indices)
-
-            # Partition the residual graph
-            # Only keep the edges where both vertices correspond to the same component
-            nComponents, labels = csgraph.connected_components(residual)
-            for pos in zip(*graph.nonzero()):
-                if labels[pos[0]] != labels[pos[1]]:
-                    graph[pos] = 0
-            graph.eliminate_zeros()
-
-        return labels.astype(np.uint)
+        result = np.where(fiedler > 0, 0, 1)
+        return result.astype(np.uint)
 
     def _reconstructVolume(self, path, particles):
         # Convert the particles to a xmipp metadata file

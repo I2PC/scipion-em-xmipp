@@ -38,6 +38,7 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d as mpl3d
+from collections import Counter
 
 class XmippViewerSplitVolume(ProtocolViewer):
     """ Viewer for Split Volumes protocol
@@ -77,6 +78,23 @@ class XmippViewerSplitVolume(ProtocolViewer):
                         help='Shows an image where each pixel\'s colour corresponds to '
                         'the weight of each graph edge')
 
+        form.addSection(label='Fiedler vector')
+        form.addParam('displayFiedlerVector', LabelParam, label='Sorted Fiedler Vector',
+                        help='Shows a graph of the sorted Fiedler vector')
+        form.addParam('displayFiedlerVectorDerivative', LabelParam, label='Sorted Fiedler Vector derivative',
+                        help='Shows a graph of derivative the sorted Fiedler vector')
+        form.addParam('displaySortedWeightImage', LabelParam, label='Sorted weight matrix',
+                        help='Shows an image where each pixel\'s colour corresponds to '
+                        'the weight of each graph edge sorted according to the fiedler vector')
+        form.addParam('displayGraphCutMetric', LabelParam, label='Graph cut metric',
+                        help='Shows the graph cut cost function in terms of the sorted Fiedler Vector')
+        form.addParam('displayRatioCutMetric', LabelParam, label='Ratio cut metric',
+                        help='Shows the ratio cut cost function in terms of the sorted Fiedler Vector')
+        form.addParam('displayNormalizedCutMetric', LabelParam, label='Normalized cut metric',
+                        help='Shows the normalized cut cost function in terms of the sorted Fiedler Vector')
+        form.addParam('displayQuotientCutMetric', LabelParam, label='Quotient cut metric',
+                        help='Shows the quotient cut cost function in terms of the sorted Fiedler Vector')
+
         form.addSection(label='Networks')
         form.addParam('displayAngularNetwork', LabelParam, label='3D network',
                         help='Shows a 3D representation of the network')
@@ -93,6 +111,13 @@ class XmippViewerSplitVolume(ProtocolViewer):
             'displayDistanceImage': self._displayDistanceImage,
             'displayCorrelationImage': self._displayCorrelationImage,
             'displayWeightImage': self._displayWeightImage,
+            'displayFiedlerVector': self._displayFiedlerVector,
+            'displayFiedlerVectorDerivative': self._displayFiedlerVectorDerivative,
+            'displaySortedWeightImage': self._displaySortedWeightImage,
+            'displayGraphCutMetric': self._displayGraphCutMetric,
+            'displayRatioCutMetric': self._displayRatioCutMetric,
+            'displayNormalizedCutMetric': self._displayNormalizedCutMetric,
+            'displayQuotientCutMetric': self._displayQuotientCutMetric,
             'displayAngularNetwork': self._displayAngularNetwork,
             'displayDisjointAngularNetwork': self._displayDisjointAngularNetwork,
         }
@@ -190,6 +215,76 @@ class XmippViewerSplitVolume(ProtocolViewer):
         ax.set_title('Weights')
         return [fig]
 
+    def _displayFiedlerVector(self, e):
+        fiedler = self._readFiedlerVector()
+
+        x = np.arange(len(fiedler))
+        y = np.sort(fiedler)
+        
+        fig, ax = plt.subplots()
+        ax.plot(x, y)
+        ax.set_title('Sorted Fiedler Vector')
+        return [fig]
+
+    def _displayFiedlerVectorDerivative(self, e):
+        fiedler = self._readFiedlerVector()
+
+        x = np.arange(len(fiedler)-1)
+        y = np.diff(np.sort(fiedler))
+        
+        fig, ax = plt.subplots()
+        ax.plot(x, y)
+        ax.set_title('Sorted Fiedler Vector derivative')
+        return [fig]
+
+    def _displaySortedWeightImage(self, e):
+        weights = self._readWeights()
+        fiedler = self._readFiedlerVector()
+
+        indices = np.argsort(fiedler)
+        weights = weights[:,indices][indices,:]
+
+        fig, ax = plt.subplots()
+        self._plotMatrix(fig, ax, weights, 'Weight')
+        ax.set_title('Sorted weights')
+        return [fig]
+
+    def _displayGraphCutMetric(self, e):
+        weights = self._readWeights()
+        fiedler = self._readFiedlerVector()
+
+        fig, ax = plt.subplots()
+        self._plotCutMetric(fig, ax, self._calculateGraphCutMetric, weights, fiedler)
+        ax.set_title('Graph cut metric')
+        return [fig]
+        
+    def _displayRatioCutMetric(self, e):
+        weights = self._readWeights()
+        fiedler = self._readFiedlerVector()
+
+        fig, ax = plt.subplots()
+        self._plotCutMetric(fig, ax, self._calculateRatioCutMetric, weights, fiedler)
+        ax.set_title('Ratio cut metric')
+        return [fig]
+    
+    def _displayNormalizedCutMetric(self, e):
+        weights = self._readWeights()
+        fiedler = self._readFiedlerVector()
+
+        fig, ax = plt.subplots()
+        self._plotCutMetric(fig, ax, self._calculateNormalizedCutMetric, weights, fiedler)
+        ax.set_title('Normalized cut metric')
+        return [fig]
+
+    def _displayQuotientCutMetric(self, e):
+        weights = self._readWeights()
+        fiedler = self._readFiedlerVector()
+
+        fig, ax = plt.subplots()
+        self._plotCutMetric(fig, ax, self._calculateQuotientCutMetric, weights, fiedler)
+        ax.set_title('Quotient cut metric')
+        return [fig]
+
     def _displayAngularNetwork(self, e):
         images = self._readImages()
         labels = self._readLabels()
@@ -241,6 +336,9 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     def _readWeights(self):
         return self.protocol._readWeights()
+
+    def _readFiedlerVector(self):
+        return self.protocol._readFiedlerVector()
 
     def _readLabels(self):
         return self.protocol._readLabels()
@@ -311,6 +409,37 @@ class XmippViewerSplitVolume(ProtocolViewer):
         colours = [mpl.cm.jet(i / (nLabels-1)) for i in range(nLabels)]
         return mpl.colors.ListedColormap(colours)
 
+    def _calculateGraphCutMetric(self, graph, labels):
+        cost = 0
+        for idx0, idx1 in zip(*np.nonzero(graph)):
+            if labels[idx0] != labels[idx1]:
+                cost += graph[idx0, idx1]
+        return cost
+
+    def _calculateGraphVolumes(self, graph, labels):
+        result = np.zeros(np.max(labels)+1)
+        degrees = np.sum(graph, axis=1)
+
+        for i in range(len(labels)):
+            result[labels[i]] += degrees[i]
+
+        return result
+
+    def _calculateRatioCutMetric(self, graph, labels):
+        graphCut = self._calculateGraphCutMetric(graph, labels)
+        counts = np.array(list(Counter(labels).values()))
+        return graphCut * np.sum(1/counts) # Inverse sum of sizes
+
+    def _calculateNormalizedCutMetric(self, graph, labels):
+        graphCut = self._calculateGraphCutMetric(graph, labels)
+        volumes = self._calculateGraphVolumes(graph, labels)
+        return graphCut * np.sum(1/volumes) # Inverse sum of sizes
+
+    def _calculateQuotientCutMetric(self, graph, labels):
+        graphCut = self._calculateGraphCutMetric(graph, labels)
+        volumes = self._calculateGraphVolumes(graph, labels)
+        return graphCut * 1/np.min(volumes)
+
     def _plotMatrix(self, fig, ax, img, label):
         colormap = self._getScalarColorMap()
         norm = mpl.colors.Normalize()
@@ -342,3 +471,20 @@ class XmippViewerSplitVolume(ProtocolViewer):
         ax.add_collection(lines)
         fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colormap), label='Edge weights')
 
+    def _plotCutMetric(self, fig, ax, metric, graph, fiedler):
+        indices = np.argsort(fiedler)
+
+        x = np.arange(1, len(indices)-1)
+        y = np.zeros(len(x))
+
+        for cut in x:
+            # Make a fictitious classification at cut
+            labels = np.zeros(len(indices), dtype=int)
+            labels[indices[cut:]] = 1
+
+            # Calculate the cut function
+            y[cut-1] = metric(graph, labels)
+
+        ax.plot(x, y)
+        ax.set_xlabel('Cut position')
+        ax.set_ylabel('Metric value')
