@@ -119,10 +119,6 @@ class XmippProtCenterParticles(ProtClassify2D):
                     resultMat.setMatrix(resultMatrix)
                     rowOut=md.Row()
                     rowOut.copyFromRow(rowIn)
-                    print('rowOut.getValue(md.MDL_XCOOR): {}'.format(rowOut.getValue(
-                        md.MDL_XCOOR)))#None
-                    print('rowIn.getValue(md.MDL_XCOOR): {}'.format(rowIn.getValue(
-                        md.MDL_XCOOR)))#None
                     alignmentToRow(resultMat, rowOut, ALIGN_2D)
                     if flag_psi==False:
                         newAngle = rowOut.getValue(md.MDL_ANGLE_PSI)
@@ -133,10 +129,6 @@ class XmippProtCenterParticles(ProtClassify2D):
                     inPoint = np.array([[0.],[0.],[0.],[1.]])
                     invResultMat = np.linalg.inv(resultMatrix)
                     centerPoint = np.dot(invResultMat,inPoint)
-                    print('centerPoint: {}'.format(centerPoint))#[[-0.22759346]    [-2.22834146]    [ 0.][1.]
-                    print('md.MDL_XCOOR: {}'.format(md.MDL_XCOOR))#37
-                    print('rowOut.getValue(md.MDL_XCOOR): {}'.format(rowOut.getValue(
-                        md.MDL_XCOOR)))#None
 
                     rowOut.setValue(md.MDL_XCOOR, rowOut.getValue(
                         md.MDL_XCOOR)+int(centerPoint[0]))
@@ -217,4 +209,13 @@ class XmippProtCenterParticles(ProtClassify2D):
         summary.append("Realignment of %s classes."
                        % self.inputClasses.get().getSize())
         return summary
+
+    def _validate(self):
+        errors = []
+        try:
+            self.inputClasses.get().getImages().getAcquisition()
+        except AttributeError:
+            errors.append('InputClasses has not clases')
+
+        return errors
 
