@@ -254,7 +254,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         fiedler = self._readFiedlerVector()
 
         fig, ax = plt.subplots()
-        self._plotCutMetric(fig, ax, self._calculateGraphCutMetric, weights, fiedler)
+        self._plotCutMetric(fig, ax, self.protocol._calculateGraphCutMetric, weights, fiedler)
         ax.set_title('Graph cut metric')
         return [fig]
         
@@ -263,7 +263,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         fiedler = self._readFiedlerVector()
 
         fig, ax = plt.subplots()
-        self._plotCutMetric(fig, ax, self._calculateRatioCutMetric, weights, fiedler)
+        self._plotCutMetric(fig, ax, self.protocol._calculateRatioCutMetric, weights, fiedler)
         ax.set_title('Ratio cut metric')
         return [fig]
     
@@ -272,7 +272,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         fiedler = self._readFiedlerVector()
 
         fig, ax = plt.subplots()
-        self._plotCutMetric(fig, ax, self._calculateNormalizedCutMetric, weights, fiedler)
+        self._plotCutMetric(fig, ax, self.protocol._calculateNormalizedCutMetric, weights, fiedler)
         ax.set_title('Normalized cut metric')
         return [fig]
 
@@ -281,7 +281,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         fiedler = self._readFiedlerVector()
 
         fig, ax = plt.subplots()
-        self._plotCutMetric(fig, ax, self._calculateQuotientCutMetric, weights, fiedler)
+        self._plotCutMetric(fig, ax, self.protocol._calculateQuotientCutMetric, weights, fiedler)
         ax.set_title('Quotient cut metric')
         return [fig]
 
@@ -409,36 +409,6 @@ class XmippViewerSplitVolume(ProtocolViewer):
         colours = [mpl.cm.jet(i / (nLabels-1)) for i in range(nLabels)]
         return mpl.colors.ListedColormap(colours)
 
-    def _calculateGraphCutMetric(self, graph, labels):
-        cost = 0
-        for idx0, idx1 in zip(*np.nonzero(graph)):
-            if labels[idx0] != labels[idx1]:
-                cost += graph[idx0, idx1]
-        return cost
-
-    def _calculateGraphVolumes(self, graph, labels):
-        result = np.zeros(np.max(labels)+1)
-        degrees = np.sum(graph, axis=1)
-
-        for i in range(len(labels)):
-            result[labels[i]] += degrees[i]
-
-        return result
-
-    def _calculateRatioCutMetric(self, graph, labels):
-        graphCut = self._calculateGraphCutMetric(graph, labels)
-        counts = np.array(list(Counter(labels).values()))
-        return graphCut * np.sum(1/counts) # Inverse sum of sizes
-
-    def _calculateNormalizedCutMetric(self, graph, labels):
-        graphCut = self._calculateGraphCutMetric(graph, labels)
-        volumes = self._calculateGraphVolumes(graph, labels)
-        return graphCut * np.sum(1/volumes) # Inverse sum of sizes
-
-    def _calculateQuotientCutMetric(self, graph, labels):
-        graphCut = self._calculateGraphCutMetric(graph, labels)
-        volumes = self._calculateGraphVolumes(graph, labels)
-        return graphCut * 1/np.min(volumes)
 
     def _plotMatrix(self, fig, ax, img, label):
         colormap = self._getScalarColorMap()
@@ -474,17 +444,10 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _plotCutMetric(self, fig, ax, metric, graph, fiedler):
         indices = np.argsort(fiedler)
 
-        x = np.arange(1, len(indices)-1)
-        y = np.zeros(len(x))
-
-        for cut in x:
-            # Make a fictitious classification at cut
-            labels = np.zeros(len(indices), dtype=int)
-            labels[indices[cut:]] = 1
-
-            # Calculate the cut function
-            y[cut-1] = metric(graph, labels)
-
+        x = np.arange(1, len(indices))
+        y = self.protocol._calculateMetricValues(graph, indices, metric) 
+        assert(len(x) == len(y))
+        
         ax.plot(x, y)
         ax.set_xlabel('Cut position')
         ax.set_ylabel('Metric value')

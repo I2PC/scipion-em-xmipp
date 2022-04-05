@@ -216,10 +216,11 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def classifyGraphStep(self):
         # Read the input data
+        graph = self._readWeights()
         fiedler = self._readFiedlerVector()
 
         # Classify the images
-        labels = self._classifyFiedlerVector(fiedler)
+        labels = self._classifyFiedlerVector(graph, fiedler, self._calculateQuotientCutMetric)
 
         # Write the result
         self._writeLabels(labels)
@@ -616,11 +617,79 @@ class XmippProtSplitvolume(ProtClassify3D):
         # with the smallest eigenvalue
         return vectors[:,1]
 
-    def _classifyFiedlerVector(self, fiedler):
-        """ Classify the fiedler vector into nPartition classes
+    def _calculateGraphVolumes(self, graph, labels):
+        result = np.zeros(int(np.max(labels))+1)
+        degrees = np.sum(graph, axis=1)
+
+        for i in range(len(labels)):
+            result[labels[i]] += degrees[i]
+
+        return result
+
+    def _calculateGraphCutMetric(self, graph, labels):
+        cost = 0
+        for idx0, idx1 in zip(*np.nonzero(graph)):
+            if labels[idx0] != labels[idx1]:
+                cost += graph[idx0, idx1]
+        return cost
+
+    def _calculateRatioCutMetric(self, graph, labels):
+        graphCut = self._calculateGraphCutMetric(graph, labels)
+        counts = np.array(list(Counter(labels).values()))
+        return graphCut * np.sum(1/counts) # Inverse sum of sizes
+
+    def _calculateNormalizedCutMetric(self, graph, labels):
+        graphCut = self._calculateGraphCutMetric(graph, labels)
+        volumes = self._calculateGraphVolumes(graph, labels)
+        return graphCut * np.sum(1/volumes) # Inverse sum of sizes
+
+    def _calculateQuotientCutMetric(self, graph, labels):
+        graphCut = self._calculateGraphCutMetric(graph, labels)
+        volumes = self._calculateGraphVolumes(graph, labels)
+        return graphCut * 1/np.min(volumes)
+
+    def _calculateCutLabels(self, ordering, cut):
+        """ Obtains a the labels for a graph bipartition
+            at cut (cut is the index of last vertex that 
+            is member of the class 0) with the vertex priority 
+            given by ordering
         """
-        result = np.where(fiedler > 0, 0, 1)
-        return result.astype(np.uint)
+        labels = np.zeros(len(ordering), dtype=np.uint)
+        labels[ordering[cut+1:]] = 1
+        return labels
+
+    def _calculateMetricValues(self, graph, ordering, metric):
+        """ Obtains the values of the metric function
+            for each possible cut given by the vertex
+            priority defined by ordering
+        """
+        # Make an array for all possible cuts
+        values = np.zeros(len(ordering)-1)
+
+        # Calculate the cost metric for each cut
+        for i in range(len(values)):
+            # Make a fictitious classification at cut
+            labels = self._calculateCutLabels(ordering, i)
+
+            # Calculate the metric for it
+            values[i] = metric(graph, labels)
+
+        return values
+
+    def _classifyFiedlerVector(self, graph, fiedler, metric):
+        """ Partition the graph into 2 components which
+            minimize the given metric
+        """
+        # Sort the fiedler vector so that it represents the cut priority of each vertex
+        indices = np.argsort(fiedler)
+
+        # Calculate the metric function values
+        metricValues = self._calculateMetricValues(graph, indices, metric)
+
+        # Calculate the cheapest cut
+        labels = self._calculateCutLabels(indices, np.argmin(metricValues))
+
+        return labels
 
     def _reconstructVolume(self, path, particles):
         # Convert the particles to a xmipp metadata file
