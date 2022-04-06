@@ -1,6 +1,7 @@
 # ******************************************************************************
 # *
 # * Authors:     Amaya Jimenez Moreno (ajimenez@cnb.csic.es)
+# *              Alberto García Mena (alberto.garcia@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
