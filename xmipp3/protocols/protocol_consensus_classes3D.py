@@ -386,21 +386,29 @@ class XmippProtConsensusClasses3D(EMProtocol):
         self._writeList(self._getExtraPath(self._getFileName('reference_sizes')), sizes, '%d')
 
     def _readReferenceClassificationSizes(self):
-        return self._readList(self._getExtraPath(self._getFileName('reference_sizes')), dtype=int)
+        path = self._getExtraPath(self._getFileName('reference_sizes'))
+        if os.path.exists(path):
+            return self._readList(path, dtype=int)
+        else:
+            return None
 
     def _writeReferenceClassificationRelativeSizes(self, sizes):
         self._writeList(self._getExtraPath(self._getFileName('reference_relative_sizes')), sizes, '%f')
 
     def _readReferenceClassificationRelativeSizes(self):
-        return self._readList(self._getExtraPath(self._getFileName('reference_relative_sizes')), dtype=float)
+        path = self._getExtraPath(self._getFileName('reference_relative_sizes'))
+        if os.path.exists(path):
+            return self._readList(path, dtype=float)
+        else:
+            return None
 
     def _convertInputClassifications(self, classifications):
         """ Returns the list of lists of sets that stores the set of ids of each class"""
         def class3dToParticleCluster(cls):
-            return XmippProtConsensusClasses3D.ParticleCluster(
-                cls.getIdSet(),
-                cls.getRepresentative().clone()
-            )
+            ids = cls.getIdSet()
+            rep = cls.getRepresentative().clone() if cls.hasRepresentative() else None
+            return XmippProtConsensusClasses3D.ParticleCluster(ids, rep)
+
         f = lambda classification : list(map(class3dToParticleCluster, classification.get()))
         result = list(map(f, classifications))
         return result
