@@ -30,6 +30,7 @@ visualization program.
 """
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import IntParam, LabelParam, BooleanParam
+from pwem.viewers import DataView
 
 from xmipp3.protocols.protocol_split_volume import XmippProtSplitvolume
 
@@ -140,7 +141,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         fig = plt.figure()
         ax = plt.axes(projection='3d')
         ax.set_title('Input Classification')
-        self._plotProjectionClassification(fig, ax, points, labels)
+        self._plotProjectionClassification(fig, ax, points, images, labels)
         self._plotNetworkEdges(fig, ax, edges)
         return [fig]
 
@@ -172,7 +173,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         fig = plt.figure()
         ax = plt.axes(projection='3d')
         ax.set_title('Projection Classification')
-        self._plotProjectionClassification(fig, ax, points, labels)
+        self._plotProjectionClassification(fig, ax, points, images, labels)
         return [fig]
 
     def _displayDisjointProjectionClassification(self, e):
@@ -188,7 +189,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         fig = plt.figure()
         ax = plt.axes(projection='3d')
         ax.set_title('Projection Classification')
-        self._plotProjectionClassification(fig, ax, points, labels)
+        self._plotProjectionClassification(fig, ax, points, images, labels)
         return [fig]
 
     def _displayDistanceImage(self, e):
@@ -296,7 +297,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         fig = plt.figure()
         ax = plt.axes(projection='3d')
         ax.set_title('3D Network')
-        self._plotProjectionClassification(fig, ax, points, labels)
+        self._plotProjectionClassification(fig, ax, points, images, labels)
         self._plotWeightedNetworkEdges(fig, ax, edges, edgeWeights)
         return [fig]
 
@@ -317,7 +318,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         fig = plt.figure()
         ax = plt.axes(projection='3d')
         ax.set_title('Classified 3D Network')
-        self._plotProjectionClassification(fig, ax, points, labels)
+        self._plotProjectionClassification(fig, ax, points, images, labels)
         self._plotWeightedNetworkEdges(fig, ax, edges, edgeWeights)
         return [fig]
 
@@ -424,11 +425,12 @@ class XmippViewerSplitVolume(ProtocolViewer):
         ax.imshow(np.array([labels]), origin='lower', aspect='auto', interpolation='none', cmap=colormap, norm=norm)
         fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colormap), label='Classes', ticks=np.arange(colormap.N))
 
-    def _plotProjectionClassification(self, fig, ax, points, labels):
+    def _plotProjectionClassification(self, fig, ax, points, images, labels):
         colormap = self._getClassificationColorMap(labels)
         norm = mpl.colors.Normalize()
-        ax.scatter3D(points[:,0], points[:,1], points[:,2], c=labels, cmap=colormap, norm=norm)
+        ax.scatter3D(points[:,0], points[:,1], points[:,2], c=labels, cmap=colormap, norm=norm, picker=True)
         fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colormap), label='Classes', ticks=np.arange(colormap.N))
+        self._openImageOnClick(fig, ax, images)
 
     def _plotNetworkEdges(self, fig, ax, edges):
         lines = mpl3d.art3d.Line3DCollection(edges, linewidths=0.5)
@@ -451,3 +453,14 @@ class XmippViewerSplitVolume(ProtocolViewer):
         ax.plot(x, y)
         ax.set_xlabel('Cut position')
         ax.set_ylabel('Metric value')
+
+    def _openImageOnClick(self, fig, ax, images):
+        def callback(event):
+            if event.mouseevent.inaxes == ax and event.mouseevent.dblclick:
+                index = event.ind[0]
+                image = images[index]
+                path = '%s@%s' % image.getLocation()
+                print(path)
+                DataView(path).show()
+
+        return fig.canvas.callbacks.connect('pick_event', callback)
