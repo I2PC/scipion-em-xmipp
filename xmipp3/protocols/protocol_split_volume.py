@@ -110,12 +110,15 @@ class XmippProtSplitvolume(ProtClassify3D):
         form.addParam('maxCorrelations', IntParam, label="Maximum number of correlations", 
                       validators=[GE(0)], default=12, expertLevel=LEVEL_ADVANCED,
                       help='Maximum number of correlations to consider for each directional class. Use 0 to disable this limit')
-        form.addParam('maxDegree', IntParam, label="Maximum degree of each node of the graph", 
-                      validators=[GE(0)], default=8, expertLevel=LEVEL_ADVANCED,
-                      help='Maximum out-degree of each node of the graph. Use 0 to disable degree limitation')
+        #form.addParam('maxDegree', IntParam, label="Maximum degree of each node of the graph", 
+        #              validators=[GE(0)], default=8, expertLevel=LEVEL_ADVANCED,
+        #              help='Maximum out-degree of each node of the graph. Use 0 to disable degree limitation')
         form.addParam('enforceUndirected', EnumParam, label="Enforce undirected", 
-                      choices=['No', 'Or', 'And', 'Average'], default=1, expertLevel=LEVEL_ADVANCED,
+                      choices=['Or', 'And', 'Average'], default=1, expertLevel=LEVEL_ADVANCED,
                       help='Enforce a undirected graph')
+        form.addParam('graphMetric', EnumParam, label="Cut metric", 
+                      choices=['Graph cut', 'Ratio cut', 'Normalized cut', 'Quotient cut'], default=3, expertLevel=LEVEL_ADVANCED,
+                      help='Objective function to minimize when cutting the graph in half')
 
         form.addParallelSection(threads=mp.cpu_count(), mpi=0)
     
@@ -161,10 +164,6 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Perform the computation
         distances = self._calculateAngularDistanceMatrix(images)
 
-        # Reflect the distance for values larger than pi/2
-        if self.considerAntipodes.get():
-            distances = np.minimum(distances, math.pi-distances)
-
         # Save output data
         self._writeAngularDistances(distances)
 
@@ -176,9 +175,13 @@ class XmippProtSplitvolume(ProtClassify3D):
         maxAngularDistance = self._getMaxAngularDistance(distances)
         maxCorrelations = self.maxCorrelations.get() if self.maxCorrelations.get() > 0 else None
 
+        # Reflect the distance for values larger than pi/2 when considering antipodes
+        if self.considerAntipodes.get():
+            distances = np.minimum(distances, math.pi-distances)
+
         # Compute the class pairs to be considered
-        pairs = self._calculateCorrelationPairMatrix(distances, directionIds, maxAngularDistance, maxCorrelations)
-        print(f'Considering {np.count_nonzero(pairs)} image pairs with an '
+        pairs = self._calculateCorrelationPairs(distances, directionIds, maxAngularDistance, maxCorrelations)
+        print(f'Considering {len(pairs)} image pairs with an '
               f'angular distance of up to {np.degrees(maxAngularDistance)} deg')
 
         # Compute the correlation
@@ -190,11 +193,14 @@ class XmippProtSplitvolume(ProtClassify3D):
     def computeWeightsStep(self):
         # Read input data
         correlations = self._readCorrelations()
-        maxDegree = self.maxDegree.get() if self.maxDegree.get() > 0 else None
-        enforceUndirected = {0: None, 1: 'max', 2: 'min', 3: 'avg'}[self.enforceUndirected.get()]
+        symmetrize = {
+            0: np.maximum, 
+            1: np.minimum, 
+            2: lambda x, y : (x+y)/2
+        }[self.enforceUndirected.get()]
 
         # Calculate weights from correlations
-        weights = self._calculateWeights(correlations, maxDegree, enforceUndirected)
+        weights = self._calculateWeights(correlations, symmetrize)
 
         # Print information about the graph
         nComponents, _ = csgraph.connected_components(weights)
@@ -218,9 +224,15 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Read the input data
         graph = self._readWeights()
         fiedler = self._readFiedlerVector()
+        metric = {
+            0: self._calculateGraphCutMetric,
+            1: self._calculateRatioCutMetric,
+            2: self._calculateNormalizedCutMetric,
+            3: self._calculateQuotientCutMetric
+        }[self.graphMetric.get()]
 
         # Classify the images
-        labels = self._classifyFiedlerVector(graph, fiedler, self._calculateQuotientCutMetric)
+        labels = self._classifyFiedlerVector(graph, fiedler, metric)
 
         # Write the result
         self._writeLabels(labels)
@@ -413,24 +425,19 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(np.array_equal(distances, distances.T))
         return distances
 
-    def _calculateCorrelationPairMatrix(self, distances, directionIds, maxDistance, maxCorrelations=None):
-        """ Computes a symmetrical matrix of booleans
-            where image pairs set to true are closer than
-            the given threshold. It also avoids comparisons
-            among image pairs corresponding to the same 
-            solid angle. Therefore, the diagonal is
-            always set to false.
+    def _calculateCorrelationPairs(self, distances, directionIds, maxDistance, maxCorrelations):
+        """ Computes the indices of a matrix where to compute
+            the correlations. In order to do so, it considers
+            a distance threshold and a maximum number of correlations
+            per each row
         """
-
         # Consider only distances closer than the threshold
         pairs = distances <= maxDistance
 
         # Limit the number of correlations to be computed
-        if maxCorrelations is not None:
-            assert(maxCorrelations > 0)
-            for pairRow, distanceRow in zip(pairs, distances):
-                indices = np.argsort(distanceRow)
-                pairRow[indices[maxCorrelations+1:]] = False
+        for pairRow, distanceRow in zip(pairs, distances):
+            indices = np.argsort(distanceRow)
+            pairRow[indices[maxCorrelations+1:]] = False
 
         # Remove comparisons with itself. This is redundant,
         # as it would be done when removing by reprojections.
@@ -438,11 +445,11 @@ class XmippProtSplitvolume(ProtClassify3D):
         np.fill_diagonal(pairs, False)
 
         # Remove all the comparisons corresponding to its same reprojection
-        for idx0, idx1 in zip(*np.nonzero(pairs)):
+        for idx0, idx1 in np.argwhere(pairs):
             if directionIds[idx0] == directionIds[idx1]:
                 pairs[idx0, idx1] = False
 
-        return pairs
+        return np.argwhere(pairs)
 
     def _convertToXmippImages(self, images):
         """Converts a list of images into xmipp images"""
@@ -450,83 +457,46 @@ class XmippProtSplitvolume(ProtClassify3D):
         result = list(map(xmippLib.Image, locations))
         return result
 
-    def _calculateCorrelationMatrixOne(self, images, pairs):
-        """ Calculates correlations among image pairs with a single thread
-        """
-        correlations = np.zeros_like(pairs, dtype=float)
-        
-        # Compute the symmetric matrix with the correlations
-        for idx0, idx1 in zip(*np.nonzero(pairs)):
-            if idx0 < idx1:
-                # Calculate the corrrelation
-                image0 = images[idx0]
-                image1 = images[idx1]
-
-                # Write it on symmetrical positions
-                correlation = image0.correlationAfterAlignment(image1)
-                correlations[idx0, idx1] = correlation
-                correlations[idx1, idx0] = correlation
-
-            elif idx0 == idx1:
-                # Correlation with itself is 1
-                correlations[idx0, idx0] = 1.0
-
-        return correlations
-
-    def _calculateCorrelationMatrixParallel(self, images, pairs, threadPool):
-        """ Calculates correlations among image pairs with multiple threads
-        """
-        correlations = np.zeros_like(pairs, dtype=float)
-        
-        # Select the image pairs to be processed
-        imagePairs = {}
-        for idx0, idx1 in zip(*np.nonzero(pairs)):
-            if idx0 < idx1:
-                # Calculate the corrrelation
-                image0 = images[idx0]
-                image1 = images[idx1]
-
-                imagePairs[(idx0, idx1)] = (image0, image1)
-
-            elif idx0 == idx1:
-                # Correlation with itself is 1
-                correlations[idx0, idx0] = 1.0
-
-        # Compute the correlations in parallel
-        results = dict(zip(
-            imagePairs.keys(),
-            threadPool.map(xmippLib.Image.correlationAfterAlignment, *zip(*imagePairs.values()))
-        ))
-        assert(len(imagePairs) == len(results))
-
-        # Write the results
-        for (idx0, idx1), correlation in results.items():
-            correlations[idx0, idx1] = correlation
-            correlations[idx1, idx0] = correlation
-
-        return correlations
-
     def _calculateCorrelationMatrix(self, images, pairs, threadPool=None):
         """ Computes the correlations between image pairs
-            defined by pairs mask matrix. Pairs should be 
-            symmetrical. Therefore, the resulting matrix is 
-            also symmetrical.
+            defined by pairs array
         """
-
-        # Ensure that the pairs matrix is symmetrical
-        assert(np.array_equal(pairs, pairs.T))
+        correlations = np.zeros((len(images), )*2, dtype=float)
+        
+        def minmax(iterable):
+            return min(iterable), max(iterable)
 
         # Convert to xmipp images in order to use correlation functions
         xmippImages = self._convertToXmippImages(images)
+        
+        # Select the image pairs to be processed.
+        # Diagonal is directly written as it is trivial
+        imagePairs = {}
+        for pair in pairs:
+            if pair[0] == pair[1]:
+                # Correlation with itself is 1
+                correlations[tuple(pair)] = 1.0
 
-        # Compute the matrix with or without parallelization
-        if threadPool:
-            correlations = self._calculateCorrelationMatrixParallel(xmippImages, pairs, threadPool)
-        else:
-            correlations = self._calculateCorrelationMatrixOne(xmippImages, pairs)
+            else:
+                # Refer to the lower triangle of the matrix
+                pair = minmax(pair)
 
-        # Ensure that the result matrix is symmetrical and in [0, 1]
-        assert(np.array_equal(correlations, correlations.T))
+                # Add it if not defined
+                if pair not in imagePairs:
+                    imagePairs[pair] = (xmippImages[pair[0]], xmippImages[pair[1]])
+
+        # Compute the correlations using parallelization if requested
+        mapFunc = threadPool.map if threadPool is not None else map
+        computedCorrelations = dict(zip(
+            imagePairs.keys(),
+            mapFunc(xmippLib.Image.correlationAfterAlignment, *zip(*imagePairs.values()))
+        ))
+
+        # Write the computed correlations to the resulting matrix
+        for pair in pairs:
+            correlations[tuple(pair)] = computedCorrelations[minmax(pair)]
+
+        # Ensure that the result matrix is in [0, 1]
         assert(np.all(correlations >= 0.0))
         assert(np.all(correlations <= 1.0))
         return correlations
@@ -554,38 +524,24 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return result
 
-    def _calculateWeights(self, correlations, maxDegree=None, enforceUndirected=None):
+    def _calculateWeights(self, correlations, symmetrizeFun, lower=50, upper=80):
         """ Given a matrix of correlations among neighboring 
             images, it computes the adjacency matrix with
             interger weights
             TODO: improve the algorithm
         """
 
-        # Perform a Hermite interpolation of the correlations
+        # Perform a Hermite interpolation of the correlations between the given percentiles
         weights = np.zeros_like(correlations)
-        for i in range(len(weights)):
+        for weightRow, correlationRow in zip(weights, correlations):
             # Calculate lower and upper percentiles for the non zero correlations
-            values = correlations[i, np.nonzero(correlations[i])]
-            [minVal, maxVal] = np.percentile(values, [50, 80])
+            values = correlationRow[np.nonzero(correlationRow)]
+            [minVal, maxVal] = np.percentile(values, [lower, upper])
 
-            weights[i] = self._smoothStep(correlations[i], xMin=minVal, xMax=maxVal, N=1)
+            weightRow[:] = self._smoothStep(correlationRow, xMin=minVal, xMax=maxVal, N=1)
 
-        # Limit the degree
-        if maxDegree is not None:
-            assert(maxDegree > 0)
-            for row in weights:
-                # Delete the lowest weights and only leave maxDegree
-                indices = np.argsort(row)
-                row[indices[:-maxDegree]] = 0
-
-        # Enforce undirectionality
-        if enforceUndirected is not None:
-            operations = {
-                'max': np.maximum,
-                'min': np.minimum,
-                'avg': lambda x, y : (x+y)/2
-            }
-            weights = operations[enforceUndirected](weights, weights.T)
+        # Ensure the graph is symmetric
+        weights = symmetrizeFun(weights, weights.T)
 
         assert(np.all(weights >= 0))
         assert(np.all(weights <= 1))
