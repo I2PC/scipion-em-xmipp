@@ -79,6 +79,7 @@ class XmippProtSubtractProjection(EMProtocol):
                '--sigma %d' % (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self.mask.get().getFileName(),
                                self._getExtraPath("output_particles"), vol.getSamplingRate(), self.resol.get(),
                                self.mwidth.get(), self.pad.get(), self.sigma.get())
+        args += ' --save %s' % self._getExtraPath()  # JUST FOR SAVING INTERM FILES -> DELETE
         self.runJob("xmipp_subtract_projection", args)
 
     def createOutputStep(self):
