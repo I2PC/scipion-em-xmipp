@@ -35,7 +35,7 @@ from pyworkflow.protocol.params import LT, LE, GE, GT, Range
 from pyworkflow.utils.path import copyFile, makePath, createLink, cleanPattern, cleanPath, moveFile
 
 from pwem.protocols import ProtClassify3D
-from pwem.objects import Volume, Image, Particle
+from pwem.objects import Volume, Image, Particle, Class2D
 
 import xmippLib
 from xmipp3.convert import writeSetOfParticles
@@ -86,13 +86,19 @@ class XmippProtSplitvolume(ProtClassify3D):
                       pointerClass='SetOfClasses2D', pointerCondition='hasRepresentatives', 
                       important=True, 
                       help='Select a set of particles with angles. Preferrably the output of a run of directional classes')
-        form.addParam('minClassesPerDirection', IntParam, label="Minumum number of classes per direction", 
-                      validators=[GT(0)], default=1, expertLevel=LEVEL_ADVANCED,
+        form.addParam('minClassSize', IntParam, label="Minumum class size percentile (%)", 
+                      validators=[Range(0, 100)], default=50,
                       help='Required number of classes per solid angle.')
+        form.addParam('minClassesPerDirection', IntParam, label="Minumum number of classes per direction", 
+                      validators=[GT(0)], default=1,
+                      help='Required number of classes per solid angle.')
+        form.addParam('keepBestDirections', IntParam, label="Keep best directions (%)", 
+                      validators=[Range(0, 100)], default=30,
+                      help='Percentage of directions to be used')
 
         form.addSection(label='Graph building')
         form.addParam('considerAntipodes', BooleanParam, label='Consider antipodes',
-                      default=True, expertLevel=LEVEL_ADVANCED,
+                      default=True,
                       help='Due to the nature of the projections, antipodes can be considered to be '
                       'equivalent. This option toggles wether to consider values larger than 90º to be '
                       'actually closer.')
@@ -108,16 +114,16 @@ class XmippProtSplitvolume(ProtClassify3D):
                       help='Maximum angular distance percentile for considering the correlation of two classes. '
                       'Valid range: 0 to 100%')
         form.addParam('maxCorrelations', IntParam, label="Maximum number of correlations", 
-                      validators=[GE(0)], default=12, expertLevel=LEVEL_ADVANCED,
+                      validators=[GE(0)], default=12,
                       help='Maximum number of correlations to consider for each directional class. Use 0 to disable this limit')
         #form.addParam('maxDegree', IntParam, label="Maximum degree of each node of the graph", 
         #              validators=[GE(0)], default=8, expertLevel=LEVEL_ADVANCED,
         #              help='Maximum out-degree of each node of the graph. Use 0 to disable degree limitation')
         form.addParam('enforceUndirected', EnumParam, label="Enforce undirected", 
-                      choices=['Or', 'And', 'Average'], default=1, expertLevel=LEVEL_ADVANCED,
+                      choices=['Or', 'And', 'Average'], default=1,
                       help='Enforce a undirected graph')
         form.addParam('graphMetric', EnumParam, label="Cut metric", 
-                      choices=['Graph cut', 'Ratio cut', 'Normalized cut', 'Quotient cut'], default=3, expertLevel=LEVEL_ADVANCED,
+                      choices=['Graph cut', 'Ratio cut', 'Normalized cut', 'Quotient cut'], default=3,
                       help='Objective function to minimize when cutting the graph in half')
 
         form.addParallelSection(threads=mp.cpu_count(), mpi=0)
@@ -138,23 +144,30 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def convertInputStep(self):
-        directionalClasses = self.directionalClasses.get()
-
-        # Calculate the ids of the directions of each class
-        directionIds = self._calculateDirectionIds(directionalClasses)
-
-        # Create a mask for selecting input classes
+        # Read input data
+        directionalClasses = self._convertClasses2D(self.directionalClasses.get())
+        minClassSize = self.minClassSize.get()
         minClassesPerDirection = self.minClassesPerDirection.get()
-        selectionMask = self._calculateDirectionSelectionMask(directionIds, minClassesPerDirection)
+        keepBestDirections = self.keepBestDirections.get()
+
+        # Obtain the directions IDs for the input data and the images
+        directionIds = self._calculateDirectionIds(directionalClasses)
+        images = np.array(list(map(Class2D.getRepresentative, directionalClasses)))
+
+        # Mask the input according to the input parameters
+        mask = np.ones(len(directionalClasses), dtype=bool)
+        mask = self._calculateClassSizeMask(directionalClasses, minClassSize, mask)
+        mask = self._calculateDirectionSizeSelectionMask(directionIds, minClassesPerDirection, mask)
+        mask = self._calculateDirectionSelectionMask(directionIds, images, keepBestDirections, mask)
+        print(f'Using {np.count_nonzero(mask)} images out of {len(images)} '\
+              f'({100*np.count_nonzero(mask)/len(images)}%)')
 
         # Apply mask
-        images = self._convertClasses2DRepresentatives(directionalClasses, selectionMask)
-        if selectionMask is not None:
-            directionIds = directionIds[selectionMask]
-        assert(len(images) == len(directionIds))
+        directionIds = directionIds[mask]
+        images = images[mask]
 
         # Save the output data
-        self._writeInputImages(directionalClasses, images)
+        self._writeInputImages(images)
         self._writeDirectionIds(directionIds)
 
     def computeAngularDistancesStep(self):
@@ -247,7 +260,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         volumes = self._createOutputVolumes(classes, 'output')
 
         # Define the output
-        sources = [images]
+        sources = [self.directionalClasses]
         outputs = {
             'outputClasses': classes,
             'outputVolumes': volumes
@@ -289,15 +302,17 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _getInputImages(self):
         return self._images
 
-    def _writeInputImages(self, classes, images):
+    def _writeInputImages(self, images):
         result = self._createSetOfParticles('input')
-        result.copyInfo(classes.getImages())
+        result.setAcquisition(images[0].getAcquisition())
+        result.setSamplingRate(images[0].getSamplingRate())
+        result.setHasCTF(images[0].hasCTF())
+        result.setAlignmentProj()
 
         for image in images:
             result.append(image)
         
-        self._setInputImages(result) # This needs to happen before
-        self._defineSourceRelation(classes, result)
+        self._setInputImages(result)
 
     def _readInputImages(self):
         return list(map(Particle.clone, self._getInputImages()))
@@ -363,31 +378,62 @@ class XmippProtSplitvolume(ProtClassify3D):
         ids = list(map(reprojectionIds.__getitem__, reprojections))
         return np.array(ids, dtype=np.uint)
 
-    def _calculateDirectionSelectionMask(self, directionIds, minClassesPerDirection=1):
+    def _calculateClassSizeMask(self, classes, sizePercentile, mask):
+        sizes = list(map(len, classes))
+        threshold = np.percentile(sizes, sizePercentile)
+        mask = np.logical_and(mask, sizes >= threshold)
+        return mask
+
+    def _calculateDirectionSizeSelectionMask(self, directionIds, minClassesPerDirection, mask):
         if minClassesPerDirection > 1:
-            repetitions = Counter(directionIds)
-            return list(map(
-                lambda id : repetitions[id] >= minClassesPerDirection, 
-                directionIds
-            ))
+            repetitions = Counter(directionIds[mask]) # Only count where selected
+            return np.array(list(map(
+                lambda enable, id: enable and repetitions[id] >= minClassesPerDirection, 
+                mask,
+                directionIds,
+            )))
         else:
-            return None
+            # Nothing to do
+            return mask
 
-    def _convertClasses2DRepresentatives(self, classes, mask=None):
-        """ Converts a set of directional classes 2d into its representatives 
-        """
+    def _calculateDirectionSelectionMask(self, directionIds, images, keepBestDirections, mask, threadPool=None):
+        if keepBestDirections < 100:
+            # Map function used to compute correlations in parallel
+            mapFunc = threadPool.map if threadPool is not None else map
+
+            # For all directions compute the correlation among its members
+            directionDisparities = {}
+            for direction in np.unique(directionIds):
+                selection = np.logical_and(mask, directionIds==direction)
+                if np.count_nonzero(selection) >= 2:
+                    # Compute all the correlations among the image pairs
+                    directionImages = map(xmippLib.Image, map(Particle.getLocation, images[selection]))
+                    imagePairs = itertools.combinations(directionImages, r=2)
+                    correlations = mapFunc(xmippLib.Image.correlationAfterAlignment, *zip(*imagePairs))
+
+                    # Use the minimum correlation as the disparity
+                    directionDisparities[direction] = min(correlations)
+                else:
+                    directionDisparities[direction] = 0
+
+            # Compute the threshold
+            threshold = np.percentile(list(directionDisparities.values()), 100-keepBestDirections)
+
+            # Select only the directions that have a disparity above threshold
+            return np.array(list(map(
+                lambda enable, id: enable and directionDisparities[id] >= threshold, 
+                mask,
+                directionIds,
+            )))
+
+        else:
+            # Nothing to do
+            return mask
+
+    def _convertClasses2D(self, classes):
         result = []
-
-        # Define the mask if not defined
-        if mask is None:
-            mask = [True]*len(classes)
-        
-        # Copy the class representatives where mask
-        for cls, msk in zip(classes, mask):
-            if msk:
-                result.append(cls.getRepresentative().clone())
-
-        assert(len(result) == np.count_nonzero(mask))
+        for cls in classes:
+            result.append(cls.clone())
         return result
 
     def _calculateAngularDistanceMatrix(self, classes):
