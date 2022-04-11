@@ -89,7 +89,7 @@ class XmippProtTriggerData(EMProtocol):
                       label='Send signal to stop a stream?',
                       help='If NO is selected, normal functionality.'
                            'If YES is selected it will send a signal to a connected'
-                           'Trigger data protocol.')
+                           ' Trigger data protocol.')
         form.addParam('triggerProt', PointerParam,
                       pointerClass=self.getClassName(),
                       condition='triggerSignal', allowsNull=True,
