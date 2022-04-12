@@ -50,8 +50,9 @@ from multiprocessing.pool import ThreadPool
 
 class XmippProtConsensusClasses3D(EMProtocol):
     """ Compare several SetOfClasses3D.
-        Return the consensus clustering based on a objective function that uses the similarity between clusters
-        intersections and the entropy of the clustering formed.
+        Return the consensus clustering based on a objective function
+        that uses the similarity between clusters intersections and
+        the entropy of the clustering formed.
     """
     _label = 'consensus clustering 3D'
     _devStatus = BETA
@@ -101,30 +102,21 @@ class XmippProtConsensusClasses3D(EMProtocol):
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
         """ Inserting one step for each intersections analysis """
-
-        # Setup parallel processing
-        if self.numberOfThreads > 1:
-            self.threadPool = ThreadPool(int(self.numberOfThreads))
-
-        # Convert the input parameters
-        convertInputStepIdx = self._insertFunctionStep('convertInputStep')
         outputPrerequisites = []
+        self._setupThreadPool(int(self.numberOfThreads))
 
         # Intersect and ensemble
-        self._insertFunctionStep('intersectStep', prerequisites=[convertInputStepIdx])
+        self._insertFunctionStep('intersectStep', prerequisites=[])
         self._insertFunctionStep('ensembleStep')
         outputPrerequisites.append(self._insertFunctionStep('findElbowsStep'))
 
         # Perform a random classification and use it as a reference
         if self.randomClassificationCount.get() > 0:
-            outputPrerequisites.append(self._insertFunctionStep('checkSignificanceStep', prerequisites=[convertInputStepIdx]))
+            outputPrerequisites.append(self._insertFunctionStep('checkSignificanceStep', prerequisites=[]))
 
         # Lastly create the output    
         self._insertFunctionStep('createOutputStep', prerequisites=outputPrerequisites)
 
-    def convertInputStep(self):
-        pass
-    
     def intersectStep(self):
         classifications = self._getInputClassifications()
 
@@ -230,13 +222,6 @@ class XmippProtConsensusClasses3D(EMProtocol):
                 self._defineSourceRelation(src, dst)
 
     # --------------------------- INFO functions -------------------------------
-    def _summary(self):
-        summary = []
-        return summary
-
-    def _methods(self):
-        pass
-
     def _validate(self):
         errors = []
 
@@ -250,7 +235,11 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
     # --------------------------- UTILS functions ------------------------------
     def _getThreadPool(self):
-        return getattr(self, 'threadPool', None)
+        return getattr(self, '_threadPool', None)
+
+    def _setupThreadPool(self, maxThreads):
+        if maxThreads > 1:
+            self._threadPool = ThreadPool(processes=maxThreads)
 
     def _getInputParticles(self, i=0):
         return self.inputClassifications[i].get().getImages()
