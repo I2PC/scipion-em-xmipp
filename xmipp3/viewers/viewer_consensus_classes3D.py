@@ -86,11 +86,12 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
                         help='Open a GUI to visualize the objective function'
                         ' for each number of clusters with a logarithmic "y" axis')
 
-        # Reference classification section
-        form.addSection(label='Reference classification consensus')
-        form.addParam('displayReferenceClassificationSizePercentiles', LabelParam, label='Reference classification consensus size percentiles',
-                        help='Open a GUI to visualize a table with the most'
-                        ' common percentiles of the sizes of a random classification consensus')
+        # Reference classification section (only if exists)
+        if self._readReferenceClassificationSizes() is not None:
+            form.addSection(label='Reference classification consensus')
+            form.addParam('displayReferenceClassificationSizePercentiles', LabelParam, label='Reference classification consensus size percentiles',
+                            help='Open a GUI to visualize a table with the most'
+                            ' common percentiles of the sizes of a random classification consensus')
 
     def _getVisualizeDict(self):
         return {
@@ -219,7 +220,7 @@ class XmippConsensusClasses3DViewer(ProtocolViewer):
         data = list(zip(percentiles, randomConsensusSizePercentiles, randomConsensusRelativeSizePercentiles))
         header = ['Percentile (%)', 'Size percentile', 'Relative size percentile']
         title = 'Reference classification consensus size percentiles'
-        return TableView(header, data, title=title)
+        return [TableView(header, data, title=title)]
 
     def _showSetOfClasses3D(self, classes):
         labels = 'enabled id _size _representative._filename _xmipp_classIntersectionSizePValue _xmipp_classIntersectionRelativeSizePValue'

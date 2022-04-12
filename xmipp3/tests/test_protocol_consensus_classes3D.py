@@ -225,3 +225,21 @@ class TestConsensusClasses3D(BaseTest):
         self.assertEqual(setOfIntersections.getSize(), 61,
                          "The number of the outputClasses is wrong")
         self.checkPopulation(setOfIntersections, 75)
+
+    def testConsensus7(self):
+        print("\n", greenStr("Test Consensus with four sets and a random reference classification".center(75, '-')))
+
+        # preparing and launching the protocol
+        pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
+                                           inputClassifications=[self.set1,
+                                                                 self.set2,
+                                                                 self.set3,
+                                                                 self.set5 ],
+                                           randomClassificationCount=1000 )
+        self.proj.launchProtocol(pConsClass, wait=True)
+        setOfIntersections = pConsClass.outputClasses_initial
+
+        # Ensure that the intersection size has been written
+        for cls in setOfIntersections:
+            self.assertIsNotNone(cls._xmipp_classIntersectionSizePValue)
+            self.assertIsNotNone(cls._xmipp_classIntersectionRelativeSizePValue)
