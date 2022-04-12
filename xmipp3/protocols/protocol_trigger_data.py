@@ -173,7 +173,7 @@ class XmippProtTriggerData(EMProtocol):
         if self.triggerWait.get():
             print('Waiting for signal to stop the stream')
             if self.waitingHasFinished():
-                print('STOPPED BY YOUNGER BROTHER')
+                print('Stopped by received signal from a trigger data protocol')
                 self.finished = True
 
         outputStep = self._getFirstJoinStep()
@@ -184,7 +184,7 @@ class XmippProtTriggerData(EMProtocol):
                 outputStep.setStatus(cons.STATUS_NEW)
                 # Send the signal to the connected protocol
                 if self.triggerSignal.get():
-                    print('STOPPING MY OLDER BROTHER')
+                    print('Sending signal to stop the input trigger data protocol')
                     self.stopWait()
         else:
             delayId = self._insertFunctionStep('delayStep', prerequisites=[])
