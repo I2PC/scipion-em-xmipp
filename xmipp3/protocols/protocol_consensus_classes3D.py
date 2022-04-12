@@ -26,6 +26,7 @@
 # *
 # **************************************************************************
 
+from unittest import result
 from pwem import emlib
 from pwem.protocols import EMProtocol
 from pwem.objects import Volume
@@ -433,27 +434,15 @@ class XmippProtConsensusClasses3D(EMProtocol):
 
     def _calculateEntropy(self, p):
         """ Return the entropy of the elements in a vector """
-        H = 0
-        for i in range(len(p)):
-            H += p[i] * math.log(p[i], 2)
-        return -H
+        result = -sum(map(lambda x : x*math.log2(x), p))
+        assert(result >= 0) # Entropy cannot be negative
+        return result
 
-    def _calculateDistribution(self, ns, indices=[]):
+    def _calculateDistribution(self, ns):
         """ Return the vector of distribution (p) from the n subsets in ns
-            If two indices are given, these two subsets are merged in the distribution """
-        p = np.array([])
-        if len(indices) == 2:
-            # Merging two subsets
-            N = len(ns) - 1
-            for i in range(len(ns)):
-                if i not in indices:
-                    p = np.append(p, len(ns[i]))
-            p = np.append(p, len(ns[indices[0]].union(ns[indices[1]])))
-        else:
-            N = len(ns)
-            for n in ns:
-                p = np.append(p, len(n))
-        return p / N
+        """
+        p = list(map(len, ns))
+        return np.array(p) / sum(p)
 
     def _calculateCosineSimilarity(self, v1, v2):
         """ Return the cosine similarity of two vectors that is used as similarity """
@@ -463,11 +452,12 @@ class XmippProtConsensusClasses3D(EMProtocol):
         """Objective function to minimize based on the entropy and the similarity between the clusters to merge
         """
         p = self._calculateDistribution(ns)
-        pi = self._calculateDistribution(ns, indices)
+        pi = self._calculateDistribution(self._ensembleIntersectionPair(ns, indices))
         h = self._calculateEntropy(p)
         hi = self._calculateEntropy(pi)
 
         sv = self._calculateCosineSimilarity(vs[indices[0]], vs[indices[1]])
+
         return (h - hi) / (sv + eps)
 
     def _ensembleIntersectionPair(self, intersections, indices):
