@@ -65,7 +65,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
                         'the label assigned to each image')
         form.addParam('displayProjectionClassification', LabelParam, label='Projection classification',
                         help='Shows a 3D representation of the classification')
-        form.addParam('displayDisjointProjectionClassification', LabelParam, label='Disjoint projection classification',
+        form.addParam('displayProjectionClassificationDisjoint', LabelParam, label='Disjoint projection classification',
                         help='Shows a 3D representation of the classification with a projection sphere for each class')
 
         form.addSection(label='Image pairs')
@@ -97,10 +97,14 @@ class XmippViewerSplitVolume(ProtocolViewer):
                         help='Shows the quotient cut cost function in terms of the sorted Fiedler Vector')
 
         form.addSection(label='Networks')
-        form.addParam('displayAngularNetwork', LabelParam, label='3D network',
-                        help='Shows a 3D representation of the network')
-        form.addParam('displayDisjointAngularNetwork', LabelParam, label='Disjoint 3D network',
-                        help='Shows a 3D representation of the network with a projection sphere for each class')
+        form.addParam('displayCorrelation3dNetwork', LabelParam, label='3D correlation network',
+                        help='Shows a 3D representation of the correlation network')
+        form.addParam('displayCorrelation3dNetworkDisjoint', LabelParam, label='Disjoint 3D correlation network',
+                        help='Shows a 3D representation of the correlation network with a projection sphere for each class')
+        form.addParam('displayWeight3dNetwork', LabelParam, label='3D weight network',
+                        help='Shows a 3D representation of the weight network')
+        form.addParam('displayWeight3dNetworkDisjoint', LabelParam, label='Disjoint 3D weight network',
+                        help='Shows a 3D representation of the weight network with a projection sphere for each class')
 
     def _getVisualizeDict(self):
         return {
@@ -108,7 +112,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
             'displayLabelHistogram': self._displayLabelHistogram,
             'displayLabelImage': self._displayLabelImage,
             'displayProjectionClassification': self._displayProjectionClassification,
-            'displayDisjointProjectionClassification': self._displayDisjointProjectionClassification,
+            'displayProjectionClassificationDisjoint': self._displayProjectionClassificationDisjoint,
             'displayDistanceImage': self._displayDistanceImage,
             'displayCorrelationImage': self._displayCorrelationImage,
             'displayWeightImage': self._displayWeightImage,
@@ -119,8 +123,10 @@ class XmippViewerSplitVolume(ProtocolViewer):
             'displayRatioCutMetric': self._displayRatioCutMetric,
             'displayNormalizedCutMetric': self._displayNormalizedCutMetric,
             'displayQuotientCutMetric': self._displayQuotientCutMetric,
-            'displayAngularNetwork': self._displayAngularNetwork,
-            'displayDisjointAngularNetwork': self._displayDisjointAngularNetwork,
+            'displayCorrelation3dNetwork': self._displayCorrelation3dNetwork,
+            'displayCorrelation3dNetworkDisjoint': self._displayCorrelation3dNetworkDisjoint,
+            'displayWeight3dNetwork': self._displayWeight3dNetwork,
+            'displayWeight3dNetworkDisjoint': self._displayWeight3dNetworkDisjoint,
         }
     
     # --------------------------- DEFINE display functions ----------------------
@@ -132,7 +138,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         
         # Scale the points to be concentric
         scales = self._calculateConcentricProjectionSphereScales(labels, 0.2)
-        points *= np.column_stack(tuple([scales]*3))
+        points *= np.column_stack((scales, )*3)
 
         # Obtain the edges joining members of the same class
         edges = self._getDirectionIdEdgeLines(points, directionIds)
@@ -166,8 +172,8 @@ class XmippViewerSplitVolume(ProtocolViewer):
     
     def _displayProjectionClassification(self, e):
         images = self._readImages()
-        points = self._getProjectionSphere(images)
         labels = self._readLabels()
+        points = self._getProjectionSphere(images)
 
         # Plot the projection angles with the classification
         fig = plt.figure()
@@ -176,13 +182,13 @@ class XmippViewerSplitVolume(ProtocolViewer):
         self._plotProjectionClassification(fig, ax, points, images, labels)
         return [fig]
 
-    def _displayDisjointProjectionClassification(self, e):
+    def _displayProjectionClassificationDisjoint(self, e):
         images = self._readImages()
         labels = self._readLabels()
         points = self._getProjectionSphere(images)
-        offsets = self._calculateDisjointProjectionSphereOffsets(labels)
 
         # Apply an offset to the points
+        offsets = self._calculateDisjointProjectionSphereOffsets(labels)
         points += offsets
 
         # Plot the projection angles with the classification
@@ -286,29 +292,69 @@ class XmippViewerSplitVolume(ProtocolViewer):
         ax.set_title('Quotient cut metric')
         return [fig]
 
-    def _displayAngularNetwork(self, e):
+    def _displayCorrelation3dNetwork(self, e):
         images = self._readImages()
+        correlations = self._readCorrelations()
         labels = self._readLabels()
-        weights = self._readWeights()
         points = self._getProjectionSphere(images)
+
+        # Obtain the edges of the graph
+        edges, edgeWeights = self._getEdgeLines(points, correlations)
+
+        # Plot the projection angles with the classification
+        fig = plt.figure()
+        ax = plt.axes(projection='3d')
+        ax.set_title('3D Correlation Network')
+        self._plotProjectionClassification(fig, ax, points, images, labels)
+        self._plotWeightedNetworkEdges(fig, ax, edges, edgeWeights)
+        return [fig]
+
+    def _displayCorrelation3dNetworkDisjoint(self, e):
+        images = self._readImages()
+        correlations = self._readCorrelations()
+        labels = self._readLabels()
+        points = self._getProjectionSphere(images)
+
+        # Apply a offset to the points
+        offsets = self._calculateDisjointProjectionSphereOffsets(labels)
+        points += offsets
+
+        # Obtain the edges of the graph
+        edges, edgeWeights = self._getEdgeLines(points, correlations)
+
+        # Plot the projection angles with the classification
+        fig = plt.figure()
+        ax = plt.axes(projection='3d')
+        ax.set_title('3D Correlation Network')
+        self._plotProjectionClassification(fig, ax, points, images, labels)
+        self._plotWeightedNetworkEdges(fig, ax, edges, edgeWeights)
+        return [fig]
+
+    def _displayWeight3dNetwork(self, e):
+        images = self._readImages()
+        weights = self._readWeights()
+        labels = self._readLabels()
+        points = self._getProjectionSphere(images)
+
+        # Obtain the edges of the graph
         edges, edgeWeights = self._getEdgeLines(points, weights)
 
         # Plot the projection angles with the classification
         fig = plt.figure()
         ax = plt.axes(projection='3d')
-        ax.set_title('3D Network')
+        ax.set_title('3D Weight Network')
         self._plotProjectionClassification(fig, ax, points, images, labels)
         self._plotWeightedNetworkEdges(fig, ax, edges, edgeWeights)
         return [fig]
 
-    def _displayDisjointAngularNetwork(self, e):
+    def _displayWeight3dNetworkDisjoint(self, e):
         images = self._readImages()
-        labels = self._readLabels()
         weights = self._readWeights()
+        labels = self._readLabels()
         points = self._getProjectionSphere(images)
-        offsets = self._calculateDisjointProjectionSphereOffsets(labels)
 
         # Apply a offset to the points
+        offsets = self._calculateDisjointProjectionSphereOffsets(labels)
         points += offsets
 
         # Obtain the edges of the graph
@@ -317,7 +363,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         # Plot the projection angles with the classification
         fig = plt.figure()
         ax = plt.axes(projection='3d')
-        ax.set_title('Classified 3D Network')
+        ax.set_title('3D Weight Network')
         self._plotProjectionClassification(fig, ax, points, images, labels)
         self._plotWeightedNetworkEdges(fig, ax, edges, edgeWeights)
         return [fig]
@@ -354,13 +400,23 @@ class XmippViewerSplitVolume(ProtocolViewer):
         return result
 
     def _getProjectionSphere(self, images):
-        # Multiply the transform of the images by the unit z vector.
-        # This is equivalent to selecting the first column.
-        f = lambda img : img.getTransform().getMatrix()[0:3, 2]
-        points = np.array(list(map(f, images)))
+        return np.array(list(map(self.protocol._getProjectionDirection, images)))
 
-        assert(len(images) == points.shape[0])
-        return points
+    def _calculateDistanceMinimizationMirrors(self, points, directionIds):
+        result = np.zeros(len(directionIds))
+
+        for idx0 in range(len(result)):
+            # Find a prior occurrence of the same class directionId
+            idx1 = np.argmax(directionIds[:idx0+1]==directionIds[idx0])
+            assert(idx1 <= idx0)
+
+            # Only consider flipping when there is a prior occurrence
+            if idx0 != idx1:
+                # Flip the projection when the distance is larger than 90º
+                if np.dot(points[idx0], points[idx1]) < 0:
+                    result[idx0] = -1
+
+        return result
 
     def _calculateConcentricProjectionSphereScales(self, labels, step=0.2):
         return 1 + step*labels
@@ -392,7 +448,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
         for (src, dst) in zip(*np.nonzero(weights)):
             # Only consider if it is in the lower triangle
-            if (src <= dst):
+            if src <= dst:
                 srcPoint = points[src]
                 dstPoint = points[dst]
                 line = np.row_stack((srcPoint, dstPoint))
@@ -457,10 +513,11 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _openImageOnClick(self, fig, ax, images):
         def callback(event):
             if event.mouseevent.inaxes == ax and event.mouseevent.dblclick:
-                index = event.ind[0]
-                image = images[index]
-                path = '%s@%s' % image.getLocation()
-                print(path)
-                DataView(path).show()
+                indices = event.ind
+                if len(indices) == 1:
+                    index = event.ind[0]
+                    image = images[index]
+                    path = '%s@%s' % image.getLocation()
+                    DataView(path).show()
 
         return fig.canvas.callbacks.connect('pick_event', callback)

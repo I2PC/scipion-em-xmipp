@@ -97,11 +97,6 @@ class XmippProtSplitvolume(ProtClassify3D):
                       help='Percentage of directions to be used')
 
         form.addSection(label='Graph building')
-        form.addParam('considerAntipodes', BooleanParam, label='Consider antipodes',
-                      default=True,
-                      help='Due to the nature of the projections, antipodes can be considered to be '
-                      'equivalent. This option toggles wether to consider values larger than 90º to be '
-                      'actually closer.')
         form.addParam('maxAngularDistanceMethod', EnumParam, label='Maximum angular distance method',
                       choices=['Threshold', 'Percentile'], default=0,
                       help='Determines how the maximum angular distance is obtained.')
@@ -187,10 +182,6 @@ class XmippProtSplitvolume(ProtClassify3D):
         distances = self._readAngularDistances()
         maxAngularDistance = self._getMaxAngularDistance(distances)
         maxCorrelations = self.maxCorrelations.get() if self.maxCorrelations.get() > 0 else None
-
-        # Reflect the distance for values larger than pi/2 when considering antipodes
-        if self.considerAntipodes.get():
-            distances = np.minimum(distances, math.pi-distances)
 
         # Compute the class pairs to be considered
         pairs = self._calculateCorrelationPairs(distances, directionIds, maxAngularDistance, maxCorrelations)
@@ -436,36 +427,48 @@ class XmippProtSplitvolume(ProtClassify3D):
             result.append(cls.clone())
         return result
 
+    def _getProjectionDirection(self, image):
+        # Multiply by the unit z vector, as projection is performed in this direction
+        return image.getTransform().getRotationMatrix()[:, 2]
+
+    def _calculateAngularDistance(self, image0, image1):
+        """ Given two rotation matrices it computes the
+            angle between their transformations
+        """
+        # Obtain the projection directions of the images
+        dir0 = self._getProjectionDirection(image0)
+        dir1 = self._getProjectionDirection(image1)
+
+        # Calculate the cosine of the angle between projections
+        c = np.dot(dir0, dir1)
+
+        # As projections in the antipodes are equivalent (but mirrored) also consider
+        # the complementary angle and choose the smallest one
+        c = abs(c)
+
+        # Clip to 1 as floating point errors may lead to values slightly 
+        # outside of the domain of acos
+        c = min(c, 1.0)
+
+        # Obtain the angle from the cosine
+        angle = math.acos(c)
+
+        return angle
+
     def _calculateAngularDistanceMatrix(self, classes):
         """ Given a set of images, it computes the angular
             distances among all pairs. The result is represented
             by a symmetrical matrix with the angles in radians
         """
-
-        # Shorthands for some variables
-        nClasses = len(classes)
-
         # Compute a symmetric matrix with the angular distances.
         # Do not compute the diagonal, as the distance with itself is zero.
-        distances = np.zeros(shape=(nClasses, nClasses))
+        distances = np.zeros(shape=(len(classes), )*2)
         for idx0, class0 in enumerate(classes):
             for idx1, class1 in enumerate(itertools.islice(classes, idx0)):
-                # Obtain the rotation matrices of the directional classes
-                rotMtx0 = class0.getTransform().getRotationMatrix()
-                rotMtx1 = class1.getTransform().getRotationMatrix()
-
-                # Compute the angular distance. Based on:
-                # http://www.boris-belousov.net/2016/12/01/quat-dist/
-                # Rotation matrix is supposed to be orthonormal. Therefore, transpose is cheaper than inversion
-                # Clip is used inside the arccos because floating point errors may lead to values slightly 
-                # outside of its domain
-                assert(np.allclose(np.linalg.inv(rotMtx1), rotMtx1.T))
-                diffMtx = np.matmul(rotMtx0, rotMtx1.T)
-                distance = math.acos(np.clip((np.trace(diffMtx) - 1)/2, -1.0, +1.0))
-
                 # Write the result on symmetrical positions
-                distances[idx0, idx1] = distance
-                distances[idx1, idx0] = distance
+                angle = self._calculateAngularDistance(class0, class1)
+                distances[idx0, idx1] = angle
+                distances[idx1, idx0] = angle
 
         # Ensure that the result matrix is symmetrical
         assert(np.array_equal(distances, distances.T))
