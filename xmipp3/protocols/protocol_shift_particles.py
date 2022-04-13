@@ -61,6 +61,11 @@ class XmippProtShiftParticles(EMProtocol):
         form.addParam('inputMask', PointerParam, pointerClass='VolumeMask', label="Volume mask", allowsNull=True,
                       condition='not option', help='3D mask to compute the center of mass, the particles will be '
                                                    'shifted to the computed center of mass')
+        form.addParam('applyShift', BooleanParam, label='Apply shift to particles?', default='True',
+                      help='Yes: the output particles have shift applied. No: output particles have the computed shift '
+                           'in the transform matrix of the metadata, but it is not applied (i.e. the output images are '
+                           'the same of input images). This option takes less time and the shift could be applied later'
+                           ' using protocol "xmipp3 - apply alignment 2d" or by re-extracting the particles.')
         form.addParam('boxSizeBool', BooleanParam, label='Use original box size for the shifted particles?',
                       default='True', help='Use input particles box size for the shifted particles.')
         form.addParam('boxSize', IntParam, label='Final box size', condition='not boxSizeBool',
@@ -109,7 +114,9 @@ class XmippProtShiftParticles(EMProtocol):
             interp = 'linear'
         else:
             interp = 'spline'
-        args += ' --apply_transform --dont_wrap --interp %s' % interp
+        if self.applyShift.get():
+            args += ' --apply_transform'
+        args += ' --dont_wrap --interp %s' % interp
         if self.inv.get():
             args += ' --inverse'
         self.runJob(program, args)
