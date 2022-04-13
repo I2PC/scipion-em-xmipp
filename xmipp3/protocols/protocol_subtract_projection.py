@@ -48,8 +48,11 @@ class XmippProtSubtractProjection(EMProtocol):
         form.addParam('particles', PointerParam, pointerClass='SetOfParticles', label="Particles: ",
                       help='Specify a SetOfParticles')
         form.addParam('vol', PointerParam, pointerClass='Volume', label="Reference volume ", help='Specify a volume.')
-        form.addParam('mask', PointerParam, pointerClass='VolumeMask', label='Mask for region to keep',
-                      help='Specify a 3D mask for the region of the input volume that you want to keep')
+        # form.addParam('maskVol', PointerParam, pointerClass='VolumeMask', label='Reference volume mask',
+        #               help='Specify a 3D mask for the reference input volume to narrow down it')
+        form.addParam('mask', PointerParam, pointerClass='VolumeMask', label='Mask for region to keep', allowsNull=True,
+                      help='Specify a 3D mask for the region of the input volume that you want to keep. '
+                           'If no mask is given, the subtraction is performed in whole images.')
         form.addParam('mwidth', FloatParam, label="Extra width for final mask (in A): ", default=40,
                       expertLevel=LEVEL_ADVANCED, help='length in A to add for each side to the mask for final result')
         form.addParam('resol', FloatParam, label="Maximum resolution: ", default=3,  expertLevel=LEVEL_ADVANCED,
@@ -75,10 +78,14 @@ class XmippProtSubtractProjection(EMProtocol):
         fnVol = vol.getFileName()
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
-        args = '-i %s --ref %s --mask %s -o %s --sampling %f --max_resolution %f --fmask_width %f --padding %f ' \
-               '--sigma %d' % (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self.mask.get().getFileName(),
-                               self._getExtraPath("output_particles"), vol.getSamplingRate(), self.resol.get(),
-                               self.mwidth.get(), self.pad.get(), self.sigma.get())
+        args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --fmask_width %f --padding %f ' \
+               '--sigma %d' % \
+               (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles"),
+                vol.getSamplingRate(), self.resol.get(), self.mwidth.get(), self.pad.get(), self.sigma.get())
+        mask = self.mask.get()
+        if mask is not None:
+            args += ' --mask %s' % mask.getFileName()
+        # args += ' --maskVol %s' % self.maskVol.get().getFileName()
         args += ' --save %s' % self._getExtraPath()  # JUST FOR SAVING INTERM FILES -> DELETE
         self.runJob("xmipp_subtract_projection", args)
 
