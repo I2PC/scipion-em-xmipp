@@ -72,7 +72,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         form.addParam('displayDistanceImage', LabelParam, label='Angular distance matrix',
                         help='Shows an image where each pixel\'s colour corresponds to '
                         'the angular distance computed for each image pair')
-        form.addParam('displayCorrelationImage', LabelParam, label='Correlation matrix',
+        form.addParam('displayComparisonImage', LabelParam, label='Comparison matrix',
                         help='Shows an image where each pixel\'s colour corresponds to '
                         'the correlation computed for each image pair')
         form.addParam('displayWeightImage', LabelParam, label='Weight matrix',
@@ -97,9 +97,9 @@ class XmippViewerSplitVolume(ProtocolViewer):
                         help='Shows the quotient cut cost function in terms of the sorted Fiedler Vector')
 
         form.addSection(label='Networks')
-        form.addParam('displayCorrelation3dNetwork', LabelParam, label='3D correlation network',
+        form.addParam('displayComparison3dNetwork', LabelParam, label='3D comparison network',
                         help='Shows a 3D representation of the correlation network')
-        form.addParam('displayCorrelation3dNetworkDisjoint', LabelParam, label='Disjoint 3D correlation network',
+        form.addParam('displayComparison3dNetworkDisjoint', LabelParam, label='Disjoint 3D comparison network',
                         help='Shows a 3D representation of the correlation network with a projection sphere for each class')
         form.addParam('displayWeight3dNetwork', LabelParam, label='3D weight network',
                         help='Shows a 3D representation of the weight network')
@@ -114,7 +114,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
             'displayProjectionClassification': self._displayProjectionClassification,
             'displayProjectionClassificationDisjoint': self._displayProjectionClassificationDisjoint,
             'displayDistanceImage': self._displayDistanceImage,
-            'displayCorrelationImage': self._displayCorrelationImage,
+            'displayComparisonImage': self._displayComparisonImage,
             'displayWeightImage': self._displayWeightImage,
             'displayFiedlerVector': self._displayFiedlerVector,
             'displayFiedlerVectorDerivative': self._displayFiedlerVectorDerivative,
@@ -123,8 +123,8 @@ class XmippViewerSplitVolume(ProtocolViewer):
             'displayRatioCutMetric': self._displayRatioCutMetric,
             'displayNormalizedCutMetric': self._displayNormalizedCutMetric,
             'displayQuotientCutMetric': self._displayQuotientCutMetric,
-            'displayCorrelation3dNetwork': self._displayCorrelation3dNetwork,
-            'displayCorrelation3dNetworkDisjoint': self._displayCorrelation3dNetworkDisjoint,
+            'displayComparison3dNetwork': self._displayComparison3dNetwork,
+            'displayComparison3dNetworkDisjoint': self._displayComparison3dNetworkDisjoint,
             'displayWeight3dNetwork': self._displayWeight3dNetwork,
             'displayWeight3dNetworkDisjoint': self._displayWeight3dNetworkDisjoint,
         }
@@ -206,12 +206,12 @@ class XmippViewerSplitVolume(ProtocolViewer):
         ax.set_title('Angular distances')
         return [fig]
 
-    def _displayCorrelationImage(self, e):
-        correlations = self._readCorrelations()
+    def _displayComparisonImage(self, e):
+        comparisons = self._readComparisons()
         
         fig, ax = plt.subplots()
-        self._plotMatrix(fig, ax, correlations, 'Correlation')
-        ax.set_title('Correlations')
+        self._plotMatrix(fig, ax, comparisons, 'Similarity')
+        ax.set_title('Comparisons')
         return [fig]
     
     def _displayWeightImage(self, e):
@@ -292,26 +292,26 @@ class XmippViewerSplitVolume(ProtocolViewer):
         ax.set_title('Quotient cut metric')
         return [fig]
 
-    def _displayCorrelation3dNetwork(self, e):
+    def _displayComparison3dNetwork(self, e):
         images = self._readImages()
-        correlations = self._readCorrelations()
+        comparisons = self._readComparisons()
         labels = self._readLabels()
         points = self._getProjectionSphere(images)
 
         # Obtain the edges of the graph
-        edges, edgeWeights = self._getEdgeLines(points, correlations)
+        edges, edgeWeights = self._getEdgeLines(points, comparisons)
 
         # Plot the projection angles with the classification
         fig = plt.figure()
         ax = plt.axes(projection='3d')
-        ax.set_title('3D Correlation Network')
+        ax.set_title('3D Comparison Network')
         self._plotProjectionClassification(fig, ax, points, images, labels)
         self._plotWeightedNetworkEdges(fig, ax, edges, edgeWeights)
         return [fig]
 
-    def _displayCorrelation3dNetworkDisjoint(self, e):
+    def _displayComparison3dNetworkDisjoint(self, e):
         images = self._readImages()
-        correlations = self._readCorrelations()
+        comparisons = self._readComparisons()
         labels = self._readLabels()
         points = self._getProjectionSphere(images)
 
@@ -320,12 +320,12 @@ class XmippViewerSplitVolume(ProtocolViewer):
         points += offsets
 
         # Obtain the edges of the graph
-        edges, edgeWeights = self._getEdgeLines(points, correlations)
+        edges, edgeWeights = self._getEdgeLines(points, comparisons)
 
         # Plot the projection angles with the classification
         fig = plt.figure()
         ax = plt.axes(projection='3d')
-        ax.set_title('3D Correlation Network')
+        ax.set_title('3D Comparison Network')
         self._plotProjectionClassification(fig, ax, points, images, labels)
         self._plotWeightedNetworkEdges(fig, ax, edges, edgeWeights)
         return [fig]
@@ -378,8 +378,8 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _readAngularDistances(self):
         return self.protocol._readAngularDistances()
 
-    def _readCorrelations(self):
-        return self.protocol._readCorrelations()
+    def _readComparisons(self):
+        return self.protocol._readComparisons()
 
     def _readWeights(self):
         return self.protocol._readWeights()

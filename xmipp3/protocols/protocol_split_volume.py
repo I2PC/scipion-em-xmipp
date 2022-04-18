@@ -72,7 +72,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         myDict = {
             'directions': 'directions.csv',
             'distances': 'distances.csv',
-            'correlations': 'correlations.csv',
+            'comparisons': 'comparisons.csv',
             'weights': 'weights.csv',
             'fiedler': 'fiedler.csv',
             'labels': 'labels.csv',
@@ -102,15 +102,15 @@ class XmippProtSplitvolume(ProtClassify3D):
                       help='Determines how the maximum angular distance is obtained.')
         form.addParam('maxAngularDistanceThreshold', FloatParam, label="Maximum angular distance threshold (deg)", 
                       validators=[Range(0, 180)], default=15, condition='maxAngularDistanceMethod==0',
-                      help='Maximum angular distance value for considering the correlation of two classes. '
+                      help='Maximum angular distance value for considering the comparison of two classes. '
                       'Valid range: 0 to 180 deg')
         form.addParam('maxAngularDistancePercentile', FloatParam, label="Maximum angular distance percentile (%)", 
                       validators=[Range(0, 100)], default=10, condition='maxAngularDistanceMethod==1',
-                      help='Maximum angular distance percentile for considering the correlation of two classes. '
+                      help='Maximum angular distance percentile for considering the comparison of two classes. '
                       'Valid range: 0 to 100%')
-        form.addParam('maxCorrelations', IntParam, label="Maximum number of correlations", 
+        form.addParam('maxNeighbors', IntParam, label="Maximum number of neighbors", 
                       validators=[GE(0)], default=12,
-                      help='Maximum number of correlations to consider for each directional class. Use 0 to disable this limit')
+                      help='Maximum number of comparisons to consider for each directional class. Use 0 to disable this limit')
         #form.addParam('maxDegree', IntParam, label="Maximum degree of each node of the graph", 
         #              validators=[GE(0)], default=8, expertLevel=LEVEL_ADVANCED,
         #              help='Maximum out-degree of each node of the graph. Use 0 to disable degree limitation')
@@ -131,7 +131,7 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         self._insertFunctionStep('convertInputStep')
         self._insertFunctionStep('computeAngularDistancesStep')
-        self._insertFunctionStep('computeCorrelationStep')
+        self._insertFunctionStep('compareImagesStep')
         self._insertFunctionStep('computeWeightsStep')
         self._insertFunctionStep('computeEigenvectorsStep')
         self._insertFunctionStep('classifyGraphStep')
@@ -153,7 +153,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         mask = np.ones(len(directionalClasses), dtype=bool)
         mask = self._calculateClassSizeMask(directionalClasses, minClassSize, mask)
         mask = self._calculateDirectionSizeSelectionMask(directionIds, minClassesPerDirection, mask)
-        mask = self._calculateDirectionSelectionMask(directionIds, images, keepBestDirections, mask)
+        mask = self._calculateDirectionDisparitySelectionMask(directionIds, images, keepBestDirections, mask)
         print(f'Using {np.count_nonzero(mask)} images out of {len(images)} '\
               f'({100*np.count_nonzero(mask)/len(images)}%)')
 
@@ -175,36 +175,40 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Save output data
         self._writeAngularDistances(distances)
 
-    def computeCorrelationStep(self):
+    def compareImagesStep(self):
         # Read input data
         images = self._readInputImages()
         directionIds = self._readDirectionIds()
         distances = self._readAngularDistances()
         maxAngularDistance = self._getMaxAngularDistance(distances)
-        maxCorrelations = self.maxCorrelations.get() if self.maxCorrelations.get() > 0 else None
+        maxNeighbors = self.maxNeighbors.get() if self.maxNeighbors.get() > 0 else None
 
-        # Compute the class pairs to be considered
-        pairs = self._calculateCorrelationPairs(distances, directionIds, maxAngularDistance, maxCorrelations)
+        # Compute the image pairs to be considered
+        pairs = self._calculateImagePairs(distances, directionIds, maxAngularDistance, maxNeighbors)
         print(f'Considering {len(pairs)} image pairs with an '
               f'angular distance of up to {np.degrees(maxAngularDistance)} deg')
 
-        # Compute the correlation
-        correlations = self._calculateCorrelationMatrix(images, pairs, self._getThreadPool())
+        # Compute the comparisons
+        comparisons = self._calculateComparisonMatrix(
+            images, pairs, 
+            xmippLib.Image.correlationAfterAlignment, 
+            self._getThreadPool()
+        )
 
         # Save output data
-        self._writeCorrelations(correlations)
+        self._writeComparisons(comparisons)
 
     def computeWeightsStep(self):
         # Read input data
-        correlations = self._readCorrelations()
-        symmetrize = {
+        comparisons = self._readComparisons()
+        symmetrizeFunc = {
             0: np.maximum, 
             1: np.minimum, 
             2: lambda x, y : (x+y)/2
         }[self.enforceUndirected.get()]
 
-        # Calculate weights from correlations
-        weights = self._calculateWeights(correlations, symmetrize)
+        # Calculate weights from comparisons
+        weights = self._calculateWeights(comparisons, symmetrizeFunc)
 
         # Print information about the graph
         nComponents, _ = csgraph.connected_components(weights)
@@ -329,12 +333,12 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _readAngularDistances(self):
         return self._readMatrix(self._getExtraPath(self._getFileName('distances')), dtype=float)
 
-    def _writeCorrelations(self, correlations):
-        assert(correlations.dtype==float)
-        self._writeMatrix(self._getExtraPath(self._getFileName('correlations')), correlations, fmt='%.8f')
+    def _writeComparisons(self, comparisons):
+        assert(comparisons.dtype==float)
+        self._writeMatrix(self._getExtraPath(self._getFileName('comparisons')), comparisons, fmt='%.8f')
     
-    def _readCorrelations(self):
-        return self._readMatrix(self._getExtraPath(self._getFileName('correlations')), dtype=float)
+    def _readComparisons(self):
+        return self._readMatrix(self._getExtraPath(self._getFileName('comparisons')), dtype=float)
 
     def _writeWeights(self, weights):
         assert(weights.dtype==float)
@@ -356,6 +360,18 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def _readLabels(self):
         return self._readMatrix(self._getExtraPath(self._getFileName('labels')), dtype=np.uint)
+
+    def _convertClasses2D(self, classes):
+        result = []
+        for cls in classes:
+            result.append(cls.clone())
+        return result
+
+    def _convertToXmippImages(self, images):
+        """Converts a list of images into xmipp images"""
+        locations = map(Image.getLocation, images)
+        result = list(map(xmippLib.Image, locations))
+        return result
 
     def _calculateDirectionIds(self, classes):
         reprojections = list(map(lambda cls : cls.reprojection.getLocation(), classes))
@@ -387,20 +403,17 @@ class XmippProtSplitvolume(ProtClassify3D):
             # Nothing to do
             return mask
 
-    def _calculateDirectionSelectionMask(self, directionIds, images, keepBestDirections, mask, threadPool=None):
+    def _calculateDirectionDisparitySelectionMask(self, directionIds, images, keepBestDirections, mask):
         if keepBestDirections < 100:
-            # Map function used to compute correlations in parallel
-            mapFunc = threadPool.map if threadPool is not None else map
-
             # For all directions compute the correlation among its members
             directionDisparities = {}
             for direction in np.unique(directionIds):
                 selection = np.logical_and(mask, directionIds==direction)
                 if np.count_nonzero(selection) >= 2:
                     # Compute all the correlations among the image pairs
-                    directionImages = map(xmippLib.Image, map(Particle.getLocation, images[selection]))
+                    directionImages = self._convertToXmippImages(images[selection])
                     imagePairs = itertools.combinations(directionImages, r=2)
-                    correlations = mapFunc(xmippLib.Image.correlationAfterAlignment, *zip(*imagePairs))
+                    correlations = map(xmippLib.Image.correlationAfterAlignment, *zip(*imagePairs))
 
                     # Use the minimum correlation as the disparity
                     directionDisparities[direction] = min(correlations)
@@ -421,12 +434,6 @@ class XmippProtSplitvolume(ProtClassify3D):
             # Nothing to do
             return mask
 
-    def _convertClasses2D(self, classes):
-        result = []
-        for cls in classes:
-            result.append(cls.clone())
-        return result
-
     def _getProjectionDirection(self, image):
         # Multiply by the unit z vector, as projection is performed in this direction
         return image.getTransform().getRotationMatrix()[:, 2]
@@ -439,14 +446,15 @@ class XmippProtSplitvolume(ProtClassify3D):
         dir0 = self._getProjectionDirection(image0)
         dir1 = self._getProjectionDirection(image1)
 
-        # Calculate the cosine of the angle between projections
+        # Calculate the cosine of the angle between projections. 
+        # Note that dir0 and dir1 are normalized
         c = np.dot(dir0, dir1)
 
         # As projections in the antipodes are equivalent (but mirrored) also consider
         # the complementary angle and choose the smallest one
         c = abs(c)
 
-        # Clip to 1 as floating point errors may lead to values slightly 
+        # Clip to [0, 1] as floating point errors may lead to values slightly 
         # outside of the domain of acos
         c = min(c, 1.0)
 
@@ -455,38 +463,37 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return angle
 
-    def _calculateAngularDistanceMatrix(self, classes):
+    def _calculateAngularDistanceMatrix(self, images):
         """ Given a set of images, it computes the angular
             distances among all pairs. The result is represented
             by a symmetrical matrix with the angles in radians
         """
         # Compute a symmetric matrix with the angular distances.
         # Do not compute the diagonal, as the distance with itself is zero.
-        distances = np.zeros(shape=(len(classes), )*2)
-        for idx0, class0 in enumerate(classes):
-            for idx1, class1 in enumerate(itertools.islice(classes, idx0)):
-                # Write the result on symmetrical positions
-                angle = self._calculateAngularDistance(class0, class1)
-                distances[idx0, idx1] = angle
-                distances[idx1, idx0] = angle
+        distances = np.zeros(shape=(len(images), )*2)
+        for idx0, idx1 in itertools.combinations(range(len(images)), r=2):
+            # Write the result on symmetrical positions
+            angle = self._calculateAngularDistance(images[idx0], images[idx1])
+            distances[idx0, idx1] = angle
+            distances[idx1, idx0] = angle
 
         # Ensure that the result matrix is symmetrical
         assert(np.array_equal(distances, distances.T))
         return distances
 
-    def _calculateCorrelationPairs(self, distances, directionIds, maxDistance, maxCorrelations):
+    def _calculateImagePairs(self, distances, directionIds, maxDistance, maxNeighbors):
         """ Computes the indices of a matrix where to compute
-            the correlations. In order to do so, it considers
-            a distance threshold and a maximum number of correlations
+            the comparisons. In order to do so, it considers
+            a distance threshold and a maximum number of comparisons
             per each row
         """
         # Consider only distances closer than the threshold
         pairs = distances <= maxDistance
 
-        # Limit the number of correlations to be computed
+        # Limit the number of comparisons to be computed
         for pairRow, distanceRow in zip(pairs, distances):
             indices = np.argsort(distanceRow)
-            pairRow[indices[maxCorrelations+1:]] = False
+            pairRow[indices[maxNeighbors+1:]] = False
 
         # Remove comparisons with itself. This is redundant,
         # as it would be done when removing by reprojections.
@@ -500,55 +507,44 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return np.argwhere(pairs)
 
-    def _convertToXmippImages(self, images):
-        """Converts a list of images into xmipp images"""
-        locations = map(Image.getLocation, images)
-        result = list(map(xmippLib.Image, locations))
-        return result
-
-    def _calculateCorrelationMatrix(self, images, pairs, threadPool=None):
-        """ Computes the correlations between image pairs
+    def _calculateComparisonMatrix(self, images, pairs, compareFunc, threadPool=None):
+        """ Computes the comparisons between image pairs
             defined by pairs array
         """
-        correlations = np.zeros((len(images), )*2, dtype=float)
         
         def minmax(iterable):
             return min(iterable), max(iterable)
 
-        # Convert to xmipp images in order to use correlation functions
+        # Convert to xmipp images in order to use functions that deal with its data
         xmippImages = self._convertToXmippImages(images)
         
         # Select the image pairs to be processed.
         # Diagonal is directly written as it is trivial
         imagePairs = {}
         for pair in pairs:
-            if pair[0] == pair[1]:
-                # Correlation with itself is 1
-                correlations[tuple(pair)] = 1.0
+            # Refer to the lower triangle of the matrix
+            pair = minmax(pair)
 
-            else:
-                # Refer to the lower triangle of the matrix
-                pair = minmax(pair)
+            # Add it if not defined
+            if pair not in imagePairs:
+                imagePairs[pair] = (xmippImages[pair[0]], xmippImages[pair[1]])
 
-                # Add it if not defined
-                if pair not in imagePairs:
-                    imagePairs[pair] = (xmippImages[pair[0]], xmippImages[pair[1]])
-
-        # Compute the correlations using parallelization if requested
+        # Compute the comparisons using parallelization if requested
         mapFunc = threadPool.map if threadPool is not None else map
-        computedCorrelations = dict(zip(
+        computedComparisons = dict(zip(
             imagePairs.keys(),
-            mapFunc(xmippLib.Image.correlationAfterAlignment, *zip(*imagePairs.values()))
+            mapFunc(compareFunc, *zip(*imagePairs.values()))
         ))
 
-        # Write the computed correlations to the resulting matrix
+        # Write the computed comparisons to the resulting matrix
+        comparisons = np.zeros((len(images), )*2, dtype=float)
         for pair in pairs:
-            correlations[tuple(pair)] = computedCorrelations[minmax(pair)]
+            comparisons[tuple(pair)] = computedComparisons[minmax(pair)]
 
         # Ensure that the result matrix is in [0, 1]
-        assert(np.all(correlations >= 0.0))
-        assert(np.all(correlations <= 1.0))
-        return correlations
+        assert(np.all(comparisons >= 0.0))
+        assert(np.all(comparisons <= 1.0))
+        return comparisons
 
     def _smoothStep(self, x, xMin=0, xMax=1, N=1):
         """ Performs the Nth order Hermite interpolation
@@ -573,38 +569,33 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return result
 
-    def _calculateWeights(self, correlations, symmetrizeFun, lower=50, upper=80):
-        """ Given a matrix of correlations among neighboring 
+    def _calculateWeights(self, comparisons, symmetrizeFunc, lower=50, upper=80):
+        """ Given a matrix of comparisons among neighboring 
             images, it computes the adjacency matrix with
             interger weights
             TODO: improve the algorithm
         """
 
-        # Perform a Hermite interpolation of the correlations between the given percentiles
-        weights = np.zeros_like(correlations)
-        for weightRow, correlationRow in zip(weights, correlations):
-            # Calculate lower and upper percentiles for the non zero correlations
-            values = correlationRow[np.nonzero(correlationRow)]
+        # Perform a Hermite interpolation of the comparisons between the given percentiles
+        weights = np.zeros_like(comparisons)
+        for weightRow, compRow in zip(weights, comparisons):
+            # Calculate lower and upper percentiles for the non zero comparisons
+            values = compRow[np.nonzero(compRow)]
             [minVal, maxVal] = np.percentile(values, [lower, upper])
 
-            weightRow[:] = self._smoothStep(correlationRow, xMin=minVal, xMax=maxVal, N=1)
+            weightRow[:] = self._smoothStep(compRow, xMin=minVal, xMax=maxVal, N=1)
 
         # Ensure the graph is symmetric
-        weights = symmetrizeFun(weights, weights.T)
+        weights = symmetrizeFunc(weights, weights.T)
 
         assert(np.all(weights >= 0))
         assert(np.all(weights <= 1))
         return weights
 
     def _calculateFiedlerVector(self, graph):
-        """ Given a matrix with the eigenvectors with the smallest 
-            eigenvalues of the laplacian matrix of a network, it 
-            returns a classification of each vertex using a standing 
-            wave metaphore. This consists in interpreting the eigenvectors 
-            with the smallest eigenvalues as harmonics. Therefore, 
-            each class has a unique combination of wave phases. Then 
-            each vertex is classified according to its signs for each 
-            eigenvector.
+        """ Given a adjacency matrix, it computes the Fiedler vector, this is,
+            the eigenvector with the second smallest eigenvalue of its laplacian
+            matrix
             https://people.csail.mit.edu/jshun/6886-s18/lectures/lecture13-1.pdf#page=11
             https://es.mathworks.com/help/matlab/math/partition-graph-with-laplacian-matrix.html
         """
@@ -622,7 +613,15 @@ class XmippProtSplitvolume(ProtClassify3D):
         # with the smallest eigenvalue
         return vectors[:,1]
 
+    def _calculateGraphSizes(self, labels):
+        """ Computes the vertex count of each component of the graph
+        """
+        counter  = Counter(labels)
+        return np.array(list(counter.values()))
+
     def _calculateGraphVolumes(self, graph, labels):
+        """ Computes the volume of each component of the graph
+        """
         result = np.zeros(int(np.max(labels))+1)
         degrees = np.sum(graph, axis=1)
 
@@ -640,13 +639,13 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def _calculateRatioCutMetric(self, graph, labels):
         graphCut = self._calculateGraphCutMetric(graph, labels)
-        counts = np.array(list(Counter(labels).values()))
-        return graphCut * np.sum(1/counts) # Inverse sum of sizes
+        sizes = self._calculateGraphSizes(labels)
+        return graphCut * np.sum(1/sizes) # Inverse sum of sizes
 
     def _calculateNormalizedCutMetric(self, graph, labels):
         graphCut = self._calculateGraphCutMetric(graph, labels)
         volumes = self._calculateGraphVolumes(graph, labels)
-        return graphCut * np.sum(1/volumes) # Inverse sum of sizes
+        return graphCut * np.sum(1/volumes) # Inverse sum of volumes
 
     def _calculateQuotientCutMetric(self, graph, labels):
         graphCut = self._calculateGraphCutMetric(graph, labels)
