@@ -1,6 +1,7 @@
 # **************************************************************************
 # *
 # * Authors:     J.M. De la Rosa Trevin (jmdelarosa@cnb.csic.es)
+# *              Oier Lauzirika Zarrabeitia (oierlauzi@bizkaia.eu)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -28,23 +29,17 @@
 This module implement the wrappers aroung Xmipp CL2D protocol
 visualization program.
 """
-from email import header
-from pyworkflow.gui import IconButton, Icon
-from pyworkflow.gui.form import FormWindow
-from pyworkflow.object import Object
 from pyworkflow.viewer import (ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO)
 from pyworkflow.protocol.params import StringParam, LabelParam, IntParam
 from pyworkflow.protocol.params import GE, GT, LE, LT
 
 from pwem.viewers import TableView, ObjectView
-from pwem.objects import Class3D
 from pwem.viewers.showj import *
 
 from xmipp3.protocols.protocol_consensus_classes3D import XmippProtConsensusClasses3D
 
 from scipy.cluster import hierarchy
 
-import pickle
 import matplotlib.pyplot as plt
 import numpy as np
 
