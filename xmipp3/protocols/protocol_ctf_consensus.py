@@ -48,6 +48,8 @@ from xmipp3.convert import setXmippAttribute, getScipionObj
 
 ACCEPTED = 'Accepted'
 DISCARDED = 'Discarded'
+INPUT1 = 1
+INPUT2 = 2
 
 class XmippProtCTFConsensus(ProtCTFMicrographs):
     """
@@ -654,7 +656,14 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
             minNonAstigmatic, maxNonAstigmatic = \
                 self._getCritNonAstigmaticValidity()
 
-            ctfX = self.xmippCTF[ctfId]
+            if self.xmippCTF == INPUT1:
+                ctfX = ctf
+            elif self.xmippCTF == INPUT2:
+                ctfX = self.allCtf2.get(ctfId)
+            else:
+                raise Exception("No xmipp ctf was found")
+
+
             secondCondition = (
                 compareValue(ctfX, '_xmipp_ctfCritFirstZero', 'lt', firstZero) or
                 compareValue(ctfX, '_xmipp_ctfCritfirstZeroRatio', 'lt', minFirstZero) or
@@ -815,16 +824,16 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
         errors = []
         if self.useCritXmipp.get() and not self.calculateConsensus.get():
             if self.usingXmipp(self.inputCTF.get().getFirstItem()):
-                self.xmippCTF = self.inputCTF.get()
+                self.xmippCTF = INPUT1
             else:
                 errors.append("The primary CTF input ( _Input CTF_ ) must be "
                               "estimated using the _Xmipp - CTF estimation_ "
                               "protocol.")
         if self.useCritXmipp.get() and self.calculateConsensus.get():
             if self.usingXmipp(self.inputCTF.get().getFirstItem()):
-                self.xmippCTF = self.inputCTF.get()
+                self.xmippCTF = INPUT1
             elif self.usingXmipp(self.inputCTF2.get().getFirstItem()):
-                self.xmippCTF = self.inputCTF2.get()
+                self.xmippCTF = INPUT2
             else:
                 errors.append("One of the CTF inputs ( _Input CTF_ or "
                               "_Secundary CTF_) must be estimated using the "
