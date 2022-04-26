@@ -42,17 +42,18 @@ from xmipp3.convert import writeSetOfParticles
 
 import math
 import itertools
+import pywt
+import PIL.Image
 import numpy as np
 import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor
 from collections import Counter
 
+from scipy import special
 from scipy import sparse
 from scipy import stats
-from scipy import special
 from scipy.sparse import csgraph
 from scipy.sparse import linalg
-
 
 class XmippProtSplitvolume(ProtClassify3D):
     """Split volume in two"""
@@ -97,6 +98,9 @@ class XmippProtSplitvolume(ProtClassify3D):
                       help='Percentage of directions to be used')
 
         form.addSection(label='Graph building')
+        form.addParam('imageDistanceMetric', EnumParam, label='Image distance metric',
+                      choices=['Correlation', 'Wassertain', 'Entropy'], default=1,
+                      help='Distance metric used when comparing image pairs.')
         form.addParam('maxAngularDistanceMethod', EnumParam, label='Maximum angular distance method',
                       choices=['Threshold', 'Percentile'], default=0,
                       help='Determines how the maximum angular distance is obtained.')
@@ -111,9 +115,6 @@ class XmippProtSplitvolume(ProtClassify3D):
         form.addParam('maxNeighbors', IntParam, label="Maximum number of neighbors", 
                       validators=[GE(0)], default=12,
                       help='Maximum number of comparisons to consider for each directional class. Use 0 to disable this limit')
-        #form.addParam('maxDegree', IntParam, label="Maximum degree of each node of the graph", 
-        #              validators=[GE(0)], default=8, expertLevel=LEVEL_ADVANCED,
-        #              help='Maximum out-degree of each node of the graph. Use 0 to disable degree limitation')
         form.addParam('enforceUndirected', EnumParam, label="Enforce undirected", 
                       choices=['Or', 'And', 'Average'], default=1,
                       help='Enforce a undirected graph')
@@ -181,7 +182,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         directionIds = self._readDirectionIds()
         distances = self._readAngularDistances()
         maxAngularDistance = self._getMaxAngularDistance(distances)
-        maxNeighbors = self.maxNeighbors.get() if self.maxNeighbors.get() > 0 else None
+        maxNeighbors = self._getMaxNeighbors()
 
         # Compute the image pairs to be considered
         pairs = self._calculateImagePairs(distances, directionIds, maxAngularDistance, maxNeighbors)
@@ -191,9 +192,13 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Compute the comparisons
         comparisons = self._calculateComparisonMatrix(
             images, pairs, 
-            xmippLib.Image.correlationAfterAlignment, 
+            self._getImageCompareFunc(), 
             self._getThreadPool()
         )
+
+        # Get the similarity ponderation based on the distance
+        ponderation = self._calculateDistancePonderation(distances, 0.5) # TODO dertermine sigma
+        comparisons *= ponderation
 
         # Save output data
         self._writeComparisons(comparisons)
@@ -201,14 +206,10 @@ class XmippProtSplitvolume(ProtClassify3D):
     def computeWeightsStep(self):
         # Read input data
         comparisons = self._readComparisons()
-        symmetrizeFunc = {
-            0: np.maximum, 
-            1: np.minimum, 
-            2: lambda x, y : (x+y)/2
-        }[self.enforceUndirected.get()]
+        symmetrizeFunc = self._getSymmetrizeFunc()
 
         # Calculate weights from comparisons
-        weights = self._calculateWeights(comparisons, symmetrizeFunc)
+        weights = self._calculateWeights(comparisons, symmetrizeFunc, 40, 90)
 
         # Print information about the graph
         nComponents, _ = csgraph.connected_components(weights)
@@ -232,12 +233,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Read the input data
         graph = self._readWeights()
         fiedler = self._readFiedlerVector()
-        metric = {
-            0: self._calculateGraphCutMetric,
-            1: self._calculateRatioCutMetric,
-            2: self._calculateNormalizedCutMetric,
-            3: self._calculateQuotientCutMetric
-        }[self.graphMetric.get()]
+        metric = self._getGraphPartitionMetricFunc()
 
         # Classify the images
         labels = self._classifyFiedlerVector(graph, fiedler, metric)
@@ -284,12 +280,48 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _getThreadPool(self):
         return getattr(self, '_threadPool', None)
 
+    def _getImageCompareFunc(self):
+        options = [
+            self._compareImagesCorrelation,
+            self._compareImagesWassertein,
+            self._compareImagesEntropy
+        ]
+        selection = self.imageDistanceMetric.get()
+
+        return options[selection]
+
     def _getMaxAngularDistance(self, distances):
         method = self.maxAngularDistanceMethod.get()
         if method == 0:
             return np.radians(self.maxAngularDistanceThreshold.get())
         elif method == 1:
             return np.percentile(distances, self.maxAngularDistancePercentile.get())
+
+    def _getMaxNeighbors(self):
+        count = self.maxNeighbors.get()
+        
+        return count if count > 0 else None
+
+    def _getSymmetrizeFunc(self):
+        options = [
+            np.maximum, 
+            np.minimum, 
+            lambda x, y : (x+y)/2
+        ]
+        selection = self.enforceUndirected.get()
+
+        return options[selection]
+
+    def _getGraphPartitionMetricFunc(self):
+        options = [
+            self._calculateGraphCutMetric,
+            self._calculateRatioCutMetric,
+            self._calculateNormalizedCutMetric,
+            self._calculateQuotientCutMetric
+        ]
+        selection = self.graphMetric.get()
+        
+        return options[selection]
 
     def _setInputImages(self, images):
         self._insertChild('_images', images)
@@ -413,19 +445,19 @@ class XmippProtSplitvolume(ProtClassify3D):
                     # Compute all the correlations among the image pairs
                     directionImages = self._convertToXmippImages(images[selection])
                     imagePairs = itertools.combinations(directionImages, r=2)
-                    correlations = map(xmippLib.Image.correlationAfterAlignment, *zip(*imagePairs))
+                    correlations = map(self._getImageCompareFunc(), *zip(*imagePairs))
 
-                    # Use the minimum correlation as the disparity
-                    directionDisparities[direction] = min(correlations)
+                    # Use the maximum correlation as the disparity
+                    directionDisparities[direction] = max(correlations)
                 else:
-                    directionDisparities[direction] = 0
+                    directionDisparities[direction] = 1
 
             # Compute the threshold
-            threshold = np.percentile(list(directionDisparities.values()), 100-keepBestDirections)
+            threshold = np.percentile(list(directionDisparities.values()), keepBestDirections)
 
-            # Select only the directions that have a disparity above threshold
+            # Select only the directions that have a disparity below the threshold
             return np.array(list(map(
-                lambda enable, id: enable and directionDisparities[id] >= threshold, 
+                lambda enable, id: enable and directionDisparities[id] <= threshold, 
                 mask,
                 directionIds,
             )))
@@ -507,6 +539,89 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return np.argwhere(pairs)
 
+    def _subtractAlignedImages(self, img0, img1, doMask=True):
+        # Align img1 respect img0
+        img1 = img0.alignConsideringMirrors(img1)
+        diff = img0.adjustAndSubtract(img1)
+        result = diff.getData()
+
+        assert(np.isclose(np.mean(result), 0))
+        return result
+
+    def _compareImagesCorrelation(self, img0, img1):
+        correlation = img0.correlationAfterAlignment(img1)
+
+        # Clip the values lower than 0 to 0
+        result = max(correlation, 0.0)
+
+        assert(result >= 0)
+        assert(result <= 1)
+        return result
+
+    def _compareImagesWassertein(self, img0, img1, wavelet='sym5', nLevels=None):
+        # Based on:
+        # https://github.com/ComputationalCryoEM/ASPIRE-Python/blob/master/src/aspire/operators/wemd.py
+
+        # Align the images and compute the difference
+        diff = self._subtractAlignedImages(img0, img1)
+
+        # Set the default Wavelet transform level count if not given
+        if nLevels is None:
+            nLevels = math.ceil(math.log2(max(diff.shape))) + 1
+        
+        # Compute the Wavelet transform
+        dwt = pywt.wavedecn(diff, wavelet, mode="zero", level=nLevels)
+        detailCoefficients = dwt[1:]
+        assert(len(detailCoefficients) == nLevels)
+
+        weightedCoefficients = []
+        r = diff.ndim / 2 + 1 # 2 for 2D
+        for j, details in enumerate(detailCoefficients):
+            level = nLevels - j - 1 # Levels are in descending order
+            weight = 2 ** (r*level) 
+            for detail in details.values():
+                weightedCoefficients.append(weight*detail.flatten())
+
+        # Compute the Wasserstein distance
+        distance = np.linalg.norm(np.concatenate(weightedCoefficients), ord=1)
+
+        # Map the distance to the [0, 1] range, considering 1 as equal
+        result = math.exp(-distance/1e6) # TODO obtain 1e6
+
+        assert(result >= 0)
+        assert(result <= 1)
+        return result
+
+    def _compareImagesEntropy(self, img0, img1, nBins=(16, )*2):
+        # Align the images and compute the difference
+        diff = self._subtractAlignedImages(img0, img1)
+
+        # Square the difference image to obtain the absolute value
+        diff *= diff
+
+        # Calculate the spatial probability distribution
+        bins = np.array(PIL.Image.fromarray(diff).resize(nBins, PIL.Image.BOX))
+        bins /= np.sum(bins)
+        assert(np.all(bins >= 0))
+        assert(np.all(bins <= 1))
+        assert(np.isclose(np.sum(bins), 1))
+
+        # Calculate the Shannon entropy
+        entropy = -np.sum(bins*np.log2(bins))
+
+        # The maximum entropy is obtained for a uniform distribution, this is,
+        # a probability distribution with p_i = 1/N. Therefore, the maximum 
+        # entropy value is -N*(1/N)*log(1/N)=-log2(1/N)=log2(N)
+        # Normalize the result to [0, 1]
+        result = entropy / np.log2(np.prod(bins.shape))
+
+        # Modulate the result with the total energy
+        result *= math.exp(-np.mean(diff))
+
+        assert(result >= 0)
+        assert(result <= 1)
+        return result
+
     def _calculateComparisonMatrix(self, images, pairs, compareFunc, threadPool=None):
         """ Computes the comparisons between image pairs
             defined by pairs array
@@ -546,6 +661,9 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(np.all(comparisons <= 1.0))
         return comparisons
 
+    def _calculateDistancePonderation(self, distances, sigma):
+        return stats.norm.cdf(distances, loc=0, scale=sigma)
+
     def _smoothStep(self, x, xMin=0, xMax=1, N=1):
         """ Performs the Nth order Hermite interpolation
             of x between xMin and xMax
@@ -581,9 +699,9 @@ class XmippProtSplitvolume(ProtClassify3D):
         for weightRow, compRow in zip(weights, comparisons):
             # Calculate lower and upper percentiles for the non zero comparisons
             values = compRow[np.nonzero(compRow)]
-            [minVal, maxVal] = np.percentile(values, [lower, upper])
-
-            weightRow[:] = self._smoothStep(compRow, xMin=minVal, xMax=maxVal, N=1)
+            if len(values) > 0:
+                [minVal, maxVal] = np.percentile(values, [lower, upper])
+                weightRow[:] = self._smoothStep(compRow, xMin=minVal, xMax=maxVal, N=1)
 
         # Ensure the graph is symmetric
         weights = symmetrizeFunc(weights, weights.T)
@@ -603,7 +721,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         if not np.array_equal(graph.toarray(), graph.T.toarray()):
             raise ValueError('Input graph must be undirected')
 
-        # Decompose the laplacian matrix of the graph into N
+        # Decompose the laplacian matrix of the graph into 2
         # eigenvectors with the smallest eigenvalues
         l = csgraph.laplacian(graph, normed=True)
         values, vectors = linalg.eigsh(l, k=2, which='SM')

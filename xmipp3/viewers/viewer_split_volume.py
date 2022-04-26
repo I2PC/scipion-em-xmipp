@@ -400,7 +400,14 @@ class XmippViewerSplitVolume(ProtocolViewer):
         return result
 
     def _getProjectionSphere(self, images):
-        return np.array(list(map(self.protocol._getProjectionDirection, images)))
+        points = np.array(list(map(self.protocol._getProjectionDirection, images)))
+
+        # Force points to the upper hemisphere
+        scale = np.ones(len(points))
+        scale = np.where(points[:,2] < 0, -scale, scale)
+        points *= np.column_stack((scale, )*3)
+
+        return points
 
     def _calculateDistanceMinimizationMirrors(self, points, directionIds):
         result = np.zeros(len(directionIds))
