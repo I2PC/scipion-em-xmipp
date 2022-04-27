@@ -166,14 +166,11 @@ class TestCenterParticles(BaseTest):
         if protRealing.isFailed():
             self.assertTrue(False)
         if not protRealing.hasAttribute('outputClasses') or not \
-                protRealing.hasAttribute('outputParticles') or not \
-                protRealing.hasAttribute('outputCoordinates'):
+                protRealing.hasAttribute('outputParticles'):
             self.assertTrue(False)
         if protRealing.outputClasses.getSize() != numClasses:
             self.assertTrue(False)
-        if protRealing.outputParticles.getSize() != \
-                protRealing.outputCoordinates.getSize():
-            self.assertTrue(False)
+
 
 
 
