@@ -39,7 +39,7 @@ class XmippProtSubtractProjection(EMProtocol):
     with the same angles that input particles have. Then, each particle and the correspondent projection of the
     reference volume are numerically adjusted and subtracted using a mask which denotes the region to keep. """
 
-    _label = 'subtract projection'
+    _label = 'subtract projections'
     INPUT_PARTICLES = "input_particles.xmd"
 
     # --------------------------- DEFINE param functions --------------------------------------------
@@ -57,6 +57,9 @@ class XmippProtSubtractProjection(EMProtocol):
                       expertLevel=LEVEL_ADVANCED, help='length in A to add for each side to the mask for final result')
         form.addParam('resol', FloatParam, label="Maximum resolution: ", default=3,  expertLevel=LEVEL_ADVANCED,
                       help='Maximum resolution (in A) of the data ')
+        form.addParam('limit_freq', BooleanParam, label="Limit frequency?: ", default=False, expertLevel=LEVEL_ADVANCED,
+                      help='Limit frequency in the adjustment process to the frequency correspondent to the resolution'
+                           ' indicated in "Maximum resolution" field above')
         form.addParam('sigma', FloatParam, label="Decay of the filter (sigma): ", default=3, expertLevel=LEVEL_ADVANCED,
                       help='Decay of the filter (sigma) to smooth the mask transition')
         form.addParam('pad', IntParam, label="Fourier padding factor: ", default=1, expertLevel=LEVEL_ADVANCED,
@@ -79,9 +82,10 @@ class XmippProtSubtractProjection(EMProtocol):
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
         args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --fmask_width %f --padding %f ' \
-               '--sigma %d' % \
+               '--sigma %d --limit_freq %d' % \
                (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles"),
-                vol.getSamplingRate(), self.resol.get(), self.mwidth.get(), self.pad.get(), self.sigma.get())
+                vol.getSamplingRate(), self.resol.get(), self.mwidth.get(), self.pad.get(), self.sigma.get(),
+                int(self.limit_freq.get()))
         mask = self.mask.get()
         if mask is not None:
             args += ' --mask %s' % mask.getFileName()
