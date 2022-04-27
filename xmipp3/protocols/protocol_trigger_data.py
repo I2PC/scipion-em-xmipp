@@ -43,16 +43,16 @@ class XmippProtTriggerData(EMProtocol):
     Waits until certain number of images is prepared and then
     send them to output.
     It can be done in 3 ways:
-        - If *Send all particles to output?*' is _No_:
-            Once the number of images is reached, a setOfImages is returned and
-            the protocols finished (ending the streaming from this point).
-        - If *Send all particles to output?*' is _Yes_ and:
-            - If *Split particles to multiple sets?* is _Yes_:
+        - If "Send all items to output?" is _No_:
+            Once the number of items is reached, a setOfImages is returned and
+            the protocol finishes (ending the streaming from this point).
+        - If "Send all items to output?" is _Yes_ and:
+            - If "Split items to multiple sets?" is _Yes_:
                 Multiple closed outputs will be returned as soon as
-                the number of images is reached.
-            - If *Split particles to multiple sets?* is _No_:
+                the number of items is reached.
+            - If "Split items to multiple sets?" is _No_:
                 Only one output is returned and it is growing up in batches of
-                a certain number of images (completely in streaming).
+                a certain number of items (completely in streaming).
     """
     _label = 'trigger data'
     _lastUpdateVersion = VERSION_2_0
@@ -67,7 +67,7 @@ class XmippProtTriggerData(EMProtocol):
                       label='Input images', important=True)
         form.addParam('triggerWait', BooleanParam, default=False,
                       label='Wait for signal to stop the stream?',
-                      help='If NO is selected, normal functionality.'
+                      help='If NO is selected, normal functionality.\n'
                            'If YES is selected it will wait for a signal to stop the stream.')
         form.addParam('outputSize', IntParam, default=10000,
                       label='Minimum output size',
@@ -87,7 +87,7 @@ class XmippProtTriggerData(EMProtocol):
                            'is returned')
         form.addParam('triggerSignal', BooleanParam, default=False,
                       label='Send signal to stop a stream?',
-                      help='If NO is selected, normal functionality.'
+                      help='If NO is selected, normal functionality.\n'
                            'If YES is selected it will send a signal to a connected'
                            ' Trigger data protocol.')
         form.addParam('triggerProt', PointerParam,
