@@ -71,6 +71,9 @@ class XmippProtSplitvolume(ProtClassify3D):
                       pointerClass='SetOfClasses2D', pointerCondition='hasRepresentatives', 
                       important=True, 
                       help='Select a set of particles with angles. Preferrably the output of a run of directional classes')
+        form.addParam('mask', PointerParam, label="Mask", 
+                      pointerClass='Mask', allowsNull=True,
+                      help='Mask used when comparing image pairs')
         form.addParam('minClassSize', IntParam, label="Minumum class size percentile (%)", 
                       validators=[Range(0, 100)], default=50,
                       help='Required number of classes per solid angle.')
@@ -126,27 +129,32 @@ class XmippProtSplitvolume(ProtClassify3D):
     def convertInputStep(self):
         # Read input data
         directionalClasses = self._convertClasses2D(self.directionalClasses.get())
-        minClassSize = self.minClassSize.get()
+        inputMask = self.mask.get()
+        minClassSizePercentile = self.minClassSize.get()
         minClassesPerDirection = self.minClassesPerDirection.get()
-        keepBestDirections = self.keepBestDirections.get()
+        bestDirectionsPercentage = self.keepBestDirections.get()
 
-        # Obtain the directions IDs for the input data and the images
-        directionIds = self._calculateDirectionIds(directionalClasses)
-        images = np.array(list(map(Class2D.getRepresentative, directionalClasses)))
+        # Convert images
+        images = np.array(self._convertClassRepresentatives(directionalClasses), dtype=object)
+        directionIds = np.array(self._calculateDirectionIds(directionalClasses), dtype=np.uint)
+        classSizes = np.array(self._calculateClassSizes(directionalClasses), dtype=np.uint)
 
-        # Mask the input according to the input parameters
-        mask = np.ones(len(images), dtype=bool)
-        mask = self._calculateClassSizeMask(directionalClasses, minClassSize, mask)
-        mask = self._calculateDirectionSizeSelectionMask(directionIds, minClassesPerDirection, mask)
-        mask = self._calculateDirectionDisparitySelectionMask(directionIds, images, keepBestDirections, mask)
-        print(f'Using {np.count_nonzero(mask)} images out of {len(images)} '\
-              f'({100*np.count_nonzero(mask)/len(images)}%)')
+        # Convert the compare mask
+        compareMask = self._convertCompareMask(inputMask, images)
+        self._writeCompareMask(compareMask)
 
-        # Apply mask
-        directionIds = directionIds[mask]
-        images = images[mask]
+        # Filter the input images
+        selection = np.ones(len(images), dtype=bool)
+        selection = self._calculateClassSizeMask(classSizes, minClassSizePercentile, selection)
+        selection = self._calculateDirectionSizeSelectionMask(directionIds, minClassesPerDirection, selection)
+        selection = self._calculateDirectionDisparitySelectionMask(directionIds, images, bestDirectionsPercentage, selection)
 
-        # Save the output data
+        print(f'Using {np.count_nonzero(selection)} images out of {len(images)} '\
+              f'({100*np.count_nonzero(selection)/len(images)}%)')
+
+        images = images[selection]
+        directionIds = directionIds[selection]
+
         self._writeInputImages(images)
         self._writeDirectionIds(directionIds)
 
@@ -181,7 +189,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         )
 
         # Get the similarity ponderation based on the distance
-        ponderation = self._calculateDistancePonderation(distances, 0.5) # TODO dertermine sigma
+        ponderation = self._calculateDistancePonderation(distances, maxAngularDistance)
         comparisons *= ponderation
 
         # Save output data
@@ -247,6 +255,14 @@ class XmippProtSplitvolume(ProtClassify3D):
                 self._defineSourceRelation(src, dst)
 
     #--------------------------- INFO functions ----------------------------------------------------
+    def _validate(self):
+        result = []
+
+        if self.mask.get() is not None:
+            if self.mask.get().getDim() != self.directionalClasses.get().getDimensions():
+                result.append('Mask and Directional Class representatives must have the same size')
+
+        return result
 
     #--------------------------- UTILS functions ---------------------------------------------------
     def _getThreadPool(self):
@@ -352,6 +368,13 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _readDirectionIds(self):
         return self._loadMatrix('directions', dtype=np.uint)
 
+    def _writeCompareMask(self, mask):
+        assert(mask.dtype==bool)
+        self._storeMatrix('mask', mask, fmt='%d')
+    
+    def _readCompareMask(self):
+        return self._loadMatrix('mask', dtype=bool)
+
     def _writeAngularDistances(self, distances):
         assert(distances.dtype==float)
         self._storeMatrix('distances', distances, fmt='%.8f')
@@ -399,6 +422,9 @@ class XmippProtSplitvolume(ProtClassify3D):
         result = list(map(xmippLib.Image, locations))
         return result
 
+    def _convertClassRepresentatives(self, classes):
+        return list(map(Class2D.getRepresentative, classes))
+
     def _calculateDirectionIds(self, classes):
         reprojections = list(map(lambda cls : cls.reprojection.getLocation(), classes))
 
@@ -409,12 +435,14 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         # Map the reprojections to its ids
         ids = list(map(reprojectionIds.__getitem__, reprojections))
-        return np.array(ids, dtype=np.uint)
+        return ids
 
-    def _calculateClassSizeMask(self, classes, sizePercentile, mask):
-        sizes = np.array(list(map(len, classes)))
-        threshold = np.percentile(sizes, sizePercentile)
-        mask = np.logical_and(mask, sizes >= threshold)
+    def _calculateClassSizes(self, classes):
+        return list(map(len, classes))
+
+    def _calculateClassSizeMask(self, classSizes, sizePercentile, mask):
+        threshold = np.percentile(classSizes, sizePercentile)
+        mask = np.logical_and(mask, classSizes >= threshold)
         return mask
 
     def _calculateDirectionSizeSelectionMask(self, directionIds, minClassesPerDirection, mask):
@@ -461,6 +489,13 @@ class XmippProtSplitvolume(ProtClassify3D):
         else:
             # Nothing to do
             return mask
+
+    def _convertCompareMask(self, mask, images, dtype=bool):
+        if mask is not None:
+            return xmippLib.Image(mask.getLocation()).getData().astype(dtype)
+        else:
+            dimensions = images[0].getDim()
+            return np.ones(dimensions[0:2], dtype=dtype) 
 
     def _getProjectionDirection(self, image):
         # Multiply by the unit z vector, as projection is performed in this direction
@@ -539,8 +574,16 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _subtractAlignedImages(self, img0, img1):
         # Align img1 respect img0
         img1 = img0.alignConsideringMirrors(img1)
-        diff = img0.adjustAndSubtract(img1)
-        result = diff.getData()
+        img0 = img0.getData()
+        img1 = img1.getData()
+
+        # Mask both images to consider alignment wrapping
+        mask = self._readCompareMask()
+        img0 *= mask
+        img1 *= mask
+
+        # Subtract adjusting their mean so that the difference has a mean of 0
+        result = img0 - img1*(np.mean(img0)/np.mean(img1))
 
         assert(np.isclose(np.mean(result), 0))
         return result
@@ -565,7 +608,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Set the default Wavelet transform level count if not given
         if nLevels is None:
             nLevels = math.ceil(math.log2(max(diff.shape))) + 1
-        
+
         # Compute the Wavelet transform
         dwt = pywt.wavedecn(diff, wavelet, mode="zero", level=nLevels)
         detailCoefficients = dwt[1:]
@@ -580,10 +623,12 @@ class XmippProtSplitvolume(ProtClassify3D):
                 weightedCoefficients.append(weight*detail.flatten())
 
         # Compute the Wasserstein distance
-        distance = np.linalg.norm(np.concatenate(weightedCoefficients), ord=1)
+        allWeightedCoefficients = np.concatenate(weightedCoefficients)
+        distance = np.linalg.norm(allWeightedCoefficients, ord=1) # Use the Manhattan norm
 
         # Map the distance to the [0, 1] range, considering 1 as equal
-        result = math.exp(-distance/1e6) # TODO obtain 1e6
+        factor = len(allWeightedCoefficients) * 16
+        result = math.exp(-distance/factor) # TODO use a linear function
 
         assert(result >= 0)
         assert(result <= 1)
@@ -658,7 +703,22 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(np.all(comparisons <= 1.0))
         return comparisons
 
-    def _calculateDistancePonderation(self, distances, sigma):
+    def _calculateDistancePonderation(self, distances, maxDistance):
+        """ Gives each of the distances a ponderation to stimulate
+            the similarity metric for images that are far away.
+            For this purpose, the Cumulative Normal Distribution Function
+            is used, so that images that are close are penalized 
+            with a ponderation of 0.5, whilst images that are maxDistance 
+            appart will receive a ponderation of 0.9999 (virtually 1)
+        """
+
+        # Calculate the typical deviation assuming a quasi-1 probability for distance being
+        # smaller than maxDistance. PPF (Percent Point Function) is the same as Inverse CDF
+        pMaxDistance = 1-1e-4 # Probability for distance being smaller than maxDistance.
+        sigma = maxDistance / stats.norm.ppf(pMaxDistance, loc=0, scale=1)
+        assert(np.isclose(stats.norm.cdf(maxDistance, loc=0, scale=sigma), pMaxDistance))
+
+        # Calculate the Cumulative Normal Distribution Function for the distances.
         return stats.norm.cdf(distances, loc=0, scale=sigma)
 
     def _smoothStep(self, x, xMin=0, xMax=1, N=1):
