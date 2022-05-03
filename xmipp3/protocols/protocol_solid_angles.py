@@ -127,6 +127,8 @@ class XmippProtSolidAngles(ProtAnalysis3D):
                       label='Refine angles',
                       help="Refine the angles of the classes using a "
                            "continuous angular assignment")
+        form.addParam('refineType', params.EnumParam, choices=['Global', 'Local'], default=0,
+                      label='Refinement Type')
 
         form.addParam('cl2dIterations', params.IntParam, default=5,
                       expertLevel=params.LEVEL_ADVANCED,
@@ -404,58 +406,64 @@ class XmippProtSolidAngles(ProtAnalysis3D):
                     numberOfMpi=1)
 
     def refineAnglesStep(self):
-        fnTmpDir = self._getTmpPath()
         fnDirectional = self._getDirectionalClassesFn()
-        inputParticles = self.inputParticles.get()
         newTs = readInfoField(self._getExtraPath(),"sampling",emlib.MDL_SAMPLINGRATE)
         newXdim = readInfoField(self._getExtraPath(),"size",emlib.MDL_XSIZE)
-
-        # Generate projections
-        fnGallery = join(fnTmpDir, "gallery.stk")
-        fnGalleryMd = join(fnTmpDir, "gallery.doc")
-        fnVol = self._getInputVolFn()
-        args = "-i %s -o %s --sampling_rate %f --sym %s" % \
-               (fnVol, fnGallery, 5.0, self.symmetryGroup)
-        args += " --compute_neighbors --angular_distance -1 --experimental_images %s" % fnDirectional
-        self.runJob("xmipp_angular_project_library", args,
-                    numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
-
-        # Global angular assignment
         maxShift = 0.15 * newXdim
-        fnAngles = join(fnTmpDir, "angles_iter001_00.xmd")
-        if not self.useGpu.get():
-            args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation 0' % \
-                   (fnDirectional, fnGalleryMd, maxShift, fnTmpDir)
-            self.runJob('xmipp_reconstruct_significant', args,
+
+        if self.refineType.get() == 0:
+            # Perform a global angular asignment before the local one
+            fnTmpDir = self._getTmpPath()
+
+            # Generate projections
+            fnGallery = join(fnTmpDir, "gallery.stk")
+            fnGalleryMd = join(fnTmpDir, "gallery.doc")
+            fnVol = self._getInputVolFn()
+            args = "-i %s -o %s --sampling_rate %f --sym %s" % \
+                (fnVol, fnGallery, 5.0, self.symmetryGroup)
+            args += " --compute_neighbors --angular_distance -1 --experimental_images %s" % fnDirectional
+            self.runJob("xmipp_angular_project_library", args,
                         numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
-        else:
-            count=0
-            GpuListCuda=''
-            if self.useQueueForSteps() or self.useQueue():
-                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
-                GpuList = GpuList.split(",")
-                for elem in GpuList:
-                    GpuListCuda = GpuListCuda+str(count)+' '
-                    count+=1
+
+            # Global angular assignment
+            maxShift = 0.15 * newXdim
+            fnAngles = join(fnTmpDir, "angles_iter001_00.xmd")
+            if not self.useGpu.get():
+                args = '-i %s --initgallery %s --maxShift %d --odir %s --dontReconstruct --useForValidation 0' % \
+                    (fnDirectional, fnGalleryMd, maxShift, fnTmpDir)
+                self.runJob('xmipp_reconstruct_significant', args,
+                            numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
             else:
-                GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
-                GpuListAux = ''
-                for elem in self.getGpuList():
-                    GpuListCuda = GpuListCuda+str(count)+' '
-                    GpuListAux = GpuListAux+str(elem)+','
-                    count+=1
-                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+                count=0
+                GpuListCuda=''
+                if self.useQueueForSteps() or self.useQueue():
+                    GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                    GpuList = GpuList.split(",")
+                    for elem in GpuList:
+                        GpuListCuda = GpuListCuda+str(count)+' '
+                        count+=1
+                else:
+                    GpuList = ' '.join([str(elem) for elem in self.getGpuList()])
+                    GpuListAux = ''
+                    for elem in self.getGpuList():
+                        GpuListCuda = GpuListCuda+str(count)+' '
+                        GpuListAux = GpuListAux+str(elem)+','
+                        count+=1
+                    os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
 
-            args = '-i %s -r %s -o %s --dev %s ' % (fnDirectional, fnGalleryMd, fnAngles, GpuListCuda)
-            self.runJob(CUDA_ALIGN_SIGNIFICANT, args, numberOfMpi=1)
+                args = '-i %s -r %s -o %s --dev %s ' % (fnDirectional, fnGalleryMd, fnAngles, GpuListCuda)
+                self.runJob(CUDA_ALIGN_SIGNIFICANT, args, numberOfMpi=1)
 
-        self.runJob("xmipp_metadata_utilities",
-                    "-i %s --operate drop_column ref" % fnAngles, numberOfMpi=1)
-        self.runJob("xmipp_metadata_utilities",
-                    "-i %s --set join %s ref2" % (fnAngles, fnDirectional),
-                    numberOfMpi=1)
+            self.runJob("xmipp_metadata_utilities",
+                        "-i %s --operate drop_column ref" % fnAngles, numberOfMpi=1)
+            self.runJob("xmipp_metadata_utilities",
+                        "-i %s --set join %s ref2" % (fnAngles, fnDirectional),
+                        numberOfMpi=1)
+        else:
+            fnAngles = fnDirectional
 
         # Local angular assignment
+        fnVol = self._getInputVolFn()
         fnAnglesLocalStk = self._getPath("directional_local_classes.stk")
         args = "-i %s -o %s --sampling %f --Rmax %d --padding %d --ref %s --max_resolution %f --applyTo image1 " % \
                (fnAngles, fnAnglesLocalStk, newTs, newXdim / 2, 2, fnVol,
@@ -464,9 +472,8 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         args += " --optimizeAngles --max_angular_change %f" % self.angularDistance
         self.runJob("xmipp_angular_continuous_assign2", args,
                     numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
-        moveFile(self._getPath("directional_local_classes.xmd"),
-                 self._getDirectionalClassesFn())
 
+        moveFile(fnAnglesLocalStk, fnDirectional) # Overwrite
         cleanPattern(self._getExtraPath("direction_*"))
 
     def splitVolumeStep(self):
