@@ -29,9 +29,9 @@
 from os.path import basename
 from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-import pwem.emlib.metadata as md
+from pwem import emlib
 from pwem.protocols import EMProtocol
-from xmipp3.convert import writeSetOfParticles
+from xmipp3.convert import writeSetOfParticles, readSetOfParticles
 
 
 class XmippProtSubtractProjection(EMProtocol):
@@ -48,8 +48,6 @@ class XmippProtSubtractProjection(EMProtocol):
         form.addParam('particles', PointerParam, pointerClass='SetOfParticles', label="Particles: ",
                       help='Specify a SetOfParticles')
         form.addParam('vol', PointerParam, pointerClass='Volume', label="Reference volume ", help='Specify a volume.')
-        # form.addParam('maskVol', PointerParam, pointerClass='VolumeMask', label='Reference volume mask',
-        #               help='Specify a 3D mask for the reference input volume to narrow down it')
         form.addParam('mask', PointerParam, pointerClass='VolumeMask', label='Mask for region to keep', allowsNull=True,
                       help='Specify a 3D mask for the region of the input volume that you want to keep. '
                            'If no mask is given, the subtraction is performed in whole images.')
@@ -89,7 +87,6 @@ class XmippProtSubtractProjection(EMProtocol):
         mask = self.mask.get()
         if mask is not None:
             args += ' --mask %s' % mask.getFileName()
-        # args += ' --maskVol %s' % self.maskVol.get().getFileName()
         args += ' --save %s' % self._getExtraPath()  # JUST FOR SAVING INTERM FILES -> DELETE
         self.runJob("xmipp_subtract_projection", args)
 
@@ -98,8 +95,7 @@ class XmippProtSubtractProjection(EMProtocol):
         inputSet = self.particles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
-        outputSet.copyItems(inputSet, updateItemCallback=self._updateItem,
-                            itemDataIterator=md.iterRows(self._getExtraPath(self.INPUT_PARTICLES)))
+        readSetOfParticles(self._getExtraPath('input_particles.xmd'), outputSet,  extraLabels=[emlib.MDL_SUBTRACTION_R2])
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(inputSet, outputSet)
 
@@ -117,10 +113,3 @@ class XmippProtSubtractProjection(EMProtocol):
             methods.append("Volume projections subtracted to particles keeping the region in %s"
                            % basename(self.mask.get().getFileName()))
         return methods
-
-    # --------------------------- UTLIS functions --------------------------------------------
-    def _updateItem(self, item, row):
-        newFn = row.getValue(md.MDL_IMAGE)
-        self.ix = self.ix + 1
-        newFn = newFn.split('@')[1]
-        item.setLocation(self.ix, newFn)
