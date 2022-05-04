@@ -473,7 +473,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         self.runJob("xmipp_angular_continuous_assign2", args,
                     numberOfMpi=self.numberOfMpi.get() * self.numberOfThreads.get())
 
-        moveFile(fnAnglesLocalStk, fnDirectional) # Overwrite
+        moveFile(self._getPath("directional_local_classes.xmd"), fnDirectional) # Overwrite
         cleanPattern(self._getExtraPath("direction_*"))
 
     def splitVolumeStep(self):
