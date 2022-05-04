@@ -97,6 +97,11 @@ class XmippProtSolidAngles(ProtAnalysis3D):
                       help="In degrees. An image belongs to a group if its "
                            "distance is smaller than this value")
 
+        form.addParam('considerMirrors', params.BooleanParam, default=True,
+                      expertLevel=params.LEVEL_ADVANCED,
+                      label='Consider Mirrors',
+                      help="Consider mirrors when comparing images")
+
         form.addParam('maxShift', params.FloatParam, default=15,
                       expertLevel=params.LEVEL_ADVANCED,
                       label='Maximum shift',
@@ -234,7 +239,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         args += '--method fourier 1 0.25 bspline --compute_neighbors '
         args += '--angular_distance %f ' % self.angularDistance
         args += '--experimental_images %s ' % self._getInputParticlesFn()
-        args += '--max_tilt_angle 90 '
+        args += '--max_tilt_angle %d ' % (90 if self.considerMirrors else 180)
 
         # Create a gallery of projections of the input volume
         # with the given angular sampling
@@ -245,7 +250,8 @@ class XmippProtSolidAngles(ProtAnalysis3D):
         args += '-o %s ' % self._getExtraPath("neighbours.xmd")
         args += '--dist %f ' % self.angularDistance
         args += '--sym %s ' % self.symmetryGroup
-        args += '--check_mirrors '
+        if self.considerMirrors:
+            args += '--check_mirrors '
 
         # Compute several groups of the experimental images into
         # different angular neighbourhoods
