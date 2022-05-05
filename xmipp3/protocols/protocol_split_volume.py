@@ -72,9 +72,6 @@ class XmippProtSplitvolume(ProtClassify3D):
                       pointerClass='SetOfClasses2D', pointerCondition='hasRepresentatives', 
                       important=True, 
                       help='Select a set of particles with angles. Preferrably the output of a run of directional classes')
-        form.addParam('mask', PointerParam, label="Mask", 
-                      pointerClass='Mask', allowsNull=True,
-                      help='Mask used when comparing image pairs')
         form.addParam('minClassSize', IntParam, label="Minumum class size percentile (%)", 
                       validators=[Range(0, 100)], default=50,
                       help='Required number of classes per solid angle.')
@@ -91,6 +88,9 @@ class XmippProtSplitvolume(ProtClassify3D):
                       help='Distance metric used when comparing image pairs.')
         form.addParam('considerMirrors', BooleanParam, label='Consider mirrors', default=False,
                       help='Consider image mirrors when aligning the images')
+        form.addParam('mask', PointerParam, label="Mask", 
+                      pointerClass='Mask', allowsNull=True,
+                      help='Mask used when comparing image pairs')
 
         form.addSection(label='Graph building')
         form.addParam('maxAngularDistanceMethod', EnumParam, label='Maximum angular distance method',
@@ -140,7 +140,6 @@ class XmippProtSplitvolume(ProtClassify3D):
         minClassSizePercentile = self.minClassSize.get()
         minClassesPerDirection = self.minClassesPerDirection.get()
         bestDirectionsPercentage = self.keepBestDirections.get()
-        compareFunc = self._getImageCompareFunc()
 
         # Convert images
         images = np.array(self._convertClassRepresentatives(directionalClasses), dtype=object)
@@ -152,6 +151,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         self._writeCompareMask(compareMask)
 
         # Filter the input images
+        compareFunc = self._getImageCompareFunc(images[0].getDim())
         selection = np.ones(len(images), dtype=bool)
         selection = self._calculateClassSizeMask(classSizes, minClassSizePercentile, selection)
         selection = self._calculateDirectionSizeSelectionMask(directionIds, minClassesPerDirection, selection)
@@ -210,7 +210,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         images = self._readInputImages()
         pairs = self._readImagePairs()
         ponderations = self._readDistancePonderation()
-        compareFunc = self._getImageCompareFunc()
+        compareFunc = self._getImageCompareFunc(images[0].getDim())
         threadPool = self._getThreadPool()
         indices = tuple(pairs.T)
 
@@ -307,12 +307,15 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _getThreadPool(self):
         return getattr(self, '_threadPool', None)
 
-    def _getImageCompareFunc(self):
+    def _getImageCompareFunc(self, shape):
+        considerMirrors = self._getConsiderMirrors()
+        mask = self._readCompareMask()
+
         options = [
-            self._compareImagesPower,
-            self._compareImagesCorrelation,
-            self._compareImagesWasserstein,
-            self._compareImagesEntropy
+            self.PowerImageComparator(considerMirrors, mask),
+            self.CorrelationImageComparator(considerMirrors, mask),
+            self.WassersteinImageComparator(considerMirrors, mask, math.ceil(math.log2(max(shape))) + 1, 'sym5'),
+            self.EntropyImageComparator(considerMirrors, mask, (16, )*2)
         ]
         selection = self.imageDistanceMetric.get()
         return options[selection]
@@ -687,118 +690,6 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return np.argwhere(pairs)
 
-    def _alignImage(self, imgRef, img):
-        if self._getConsiderMirrors():
-            return imgRef.alignConsideringMirrors(img)
-        else:
-            return imgRef.align(img)
-
-    def _subtractAlignedImages(self, img0, img1):
-        # Align img1 respect img0
-        img1 = self._alignImage(img0, img1)
-        img0 = img0.getData()
-        img1 = img1.getData()
-
-        # Mask both images to consider alignment wrapping
-        mask = self._readCompareMask()
-        img0 *= mask
-        img1 *= mask
-
-        # Subtract adjusting their mean so that the difference has a mean of 0
-        result = img0 - img1*(np.mean(img0)/np.mean(img1))
-
-        assert(np.isclose(np.mean(result), 0))
-        return result
-
-    def _compareImagesPower(self, img0, img1):
-        # Align the images and compute the difference
-        diff = self._subtractAlignedImages(img0, img1)
-        power = np.std(diff)
-
-        # Ensure that the result matrix is in [0, 1]
-        result = math.exp(-power)
-
-        assert(result >= 0)
-        assert(result <= 1)
-        return result, diff
-
-    def _compareImagesCorrelation(self, img0, img1):
-        correlation = img0.correlationAfterAlignment(img1)
-
-        # Clip the values lower than 0 to 0
-        result = max(correlation, 0.0)
-
-        assert(result >= 0)
-        assert(result <= 1)
-        return result, None
-
-    def _compareImagesWasserstein(self, img0, img1, wavelet='sym5', nLevels=None):
-        # Based on:
-        # https://github.com/ComputationalCryoEM/ASPIRE-Python/blob/master/src/aspire/operators/wemd.py
-
-        # Align the images and compute the difference
-        diff = self._subtractAlignedImages(img0, img1)
-
-        # Set the default Wavelet transform level count if not given
-        if nLevels is None:
-            nLevels = math.ceil(math.log2(max(diff.shape))) + 1
-
-        # Compute the Wavelet transform
-        dwt = pywt.wavedecn(diff, wavelet, mode="zero", level=nLevels)
-        detailCoefficients = dwt[1:]
-        assert(len(detailCoefficients) == nLevels)
-
-        weightedCoefficients = []
-        r = diff.ndim / 2 + 1 # 2 for 2D
-        for j, details in enumerate(detailCoefficients):
-            level = nLevels - j - 1 # Levels are in descending order
-            weight = 2 ** (r*level) 
-            for detail in details.values():
-                weightedCoefficients.append(weight*detail.flatten())
-
-        # Compute the Wasserstein distance
-        allWeightedCoefficients = np.concatenate(weightedCoefficients)
-        distance = np.linalg.norm(allWeightedCoefficients, ord=1) # Use the Manhattan norm
-
-        # Map the distance to the [0, 1] range, considering 1 as equal
-        # TODO consider using other methods
-        factor = len(allWeightedCoefficients) * 16
-        result = math.exp(-distance/factor)
-
-        assert(result >= 0)
-        assert(result <= 1)
-        return result, diff
-
-    def _compareImagesEntropy(self, img0, img1, nBins=(16, )*2):
-        # Align the images and compute the difference
-        diff = self._subtractAlignedImages(img0, img1)
-
-        # Square the difference image to obtain the absolute value
-        power = diff ** 2
-
-        # Calculate the spatial probability distribution
-        bins = np.array(PIL.Image.fromarray(power).resize(nBins, PIL.Image.BOX))
-        bins /= np.sum(bins)
-        assert(np.all(bins >= 0))
-        assert(np.all(bins <= 1))
-        assert(np.isclose(np.sum(bins), 1))
-
-        # Calculate the Shannon entropy
-        entropy = -np.sum(bins*np.log2(bins))
-
-        # The maximum entropy is obtained for a uniform distribution, this is,
-        # a probability distribution with p_i = 1/N. Therefore, the maximum 
-        # entropy value is -N*(1/N)*log(1/N)=-log2(1/N)=log2(N)
-        # Normalize the result to [0, 1]
-        result = entropy / np.log2(np.prod(bins.shape))
-
-        # Modulate the result with the total energy
-        result *= math.exp(-np.mean(power))
-
-        assert(result >= 0)
-        assert(result <= 1)
-        return result, diff
-
     def _computeComparisons(self, images, pairs, compareFunc, threadPool=None):
         """ Computes the comparisons between image pairs
             defined by pairs array
@@ -1062,6 +953,177 @@ class XmippProtSplitvolume(ProtClassify3D):
             result.append(volume)
         
         return result
+
+    class ImageComparatorBase:
+        def __init__(self, considerMirrors, mask):
+            self.alignFunc = xmippLib.Image.alignConsideringMirrors if considerMirrors else xmippLib.Image.align
+            self.mask = mask
+            
+        def _alignImages(self, imgRef, img):
+            return self.alignFunc(imgRef, img)
+
+        def _maskAlignedImages(self, img0, img1):
+            # Align img1 respect img0
+            img1 = self._alignImages(img0, img1)
+            img0 = img0.getData()
+            img1 = img1.getData()
+
+            # Mask both images to consider alignment wrapping
+            img0 *= self.mask
+            img1 *= self.mask
+
+            return img0, img1
+
+        def _subtractAlignedImages(self, img0, img1):
+            # Align and mask both images
+            img0, img1 = self._maskAlignedImages(img0, img1)
+
+            # Subtract adjusting their mean so that the difference has a mean of 0
+            result = img0 - img1*(np.mean(img0)/np.mean(img1))
+
+            assert(np.isclose(np.mean(result), 0))
+            return result
+
+    class PowerImageComparator(ImageComparatorBase):
+        def __init__(self, considerMirrors, mask):
+            super().__init__(considerMirrors, mask)
+
+        def __call__(self, img0, img1):
+            # Align the images and compute the difference
+            difference = self._subtractAlignedImages(img0, img1)
+            power = np.std(difference)
+
+            # Ensure that the result matrix is in [0, 1]
+            result = math.exp(-power)
+
+            assert(result >= 0)
+            assert(result <= 1)
+            return result, difference
+
+    class CorrelationImageComparator(ImageComparatorBase):
+        def __init__(self, considerMirrors, mask):
+            super().__init__(considerMirrors, mask)
+
+        def __call__(self, img0, img1):
+            # Mask the aligned images
+            img0, img1 = self._maskAlignedImages(img0, img1)
+
+            # Compute the correlation index
+            correlation = np.corrcoef(img0, img1)
+            difference = img0 - img1
+
+            # Clip the result to [0, 1]
+            result = max(correlation, 0)
+
+            assert(result >= 0)
+            assert(result <= 1)
+            return result, difference
+
+    class WassersteinImageComparator(ImageComparatorBase):
+        def __init__(self, considerMirrors, mask, nLevels, wavelet='sym5'):
+            super().__init__(considerMirrors, mask)
+            self.nLevels = nLevels
+            self.wavelet = wavelet
+
+        def __call__(self, img0, img1):
+            # Based on:
+            # https://github.com/ComputationalCryoEM/ASPIRE-Python/blob/master/src/aspire/operators/wemd.py
+
+            # Align and subtract the input images
+            difference = self._subtractAlignedImages(img0, img1)
+
+            # Compute the Wavelet transform
+            coefficients = self._computeWaveletCoefficients(difference)
+
+            # Apply the weights to the coefficients
+            weightedCoefficients = []
+            weights = self._computeWeights(difference.ndim)
+            for details, weight in zip(coefficients, weights):
+                for detail in details.values():
+                    weightedCoefficients.append(weight*detail.flatten())
+
+            # Compute the Wasserstein distance
+            allWeightedCoefficients = np.concatenate(weightedCoefficients)
+            distance = np.linalg.norm(allWeightedCoefficients, ord=1) # Use the Manhattan norm
+
+            # Map the distance to the [0, 1] range, considering 1 as equal
+            # TODO consider using other methods
+            factor = len(allWeightedCoefficients) * 16
+            result = math.exp(-distance/factor)
+
+            assert(result >= 0)
+            assert(result <= 1)
+            return result, difference
+
+        def _computeWaveletCoefficients(self, residual):
+            dwt = pywt.wavedecn(residual, self.wavelet, mode='zero', level=self.nLevels)
+            coefficients = dwt[-1:0:-1] # All except the first one reversed
+
+            assert(len(coefficients) == self.nLevels)
+            return coefficients
+
+        def _computeWeights(self, nDim):
+            r = nDim/2 + 1  # 2 for 2D
+            levels = np.arange(self.nLevels) # Reversed
+            exponents = r*levels
+            weights = 2 ** exponents
+
+            assert(len(weights) == self.nLevels)
+            return weights
+
+    class EntropyImageComparator(ImageComparatorBase):
+        def __init__(self, considerMirrors, mask, nBins):
+            super().__init__(considerMirrors, mask)
+            self.nBins = nBins
+
+        def __call__(self, img0, img1):
+            # Align the images and compute the difference
+            difference = self._subtractAlignedImages(img0, img1)
+
+            # Square the difference image to obtain the absolute value
+            power = difference ** 2
+
+            # Calculate the spatial probability distribution
+            bins = self._computeBins(power)
+
+            # Calculate the Shannon entropy
+            result = self._computeNormalizedShannonEntropy(bins.flat)
+
+            # Modulate the result with the total energy
+            result *= math.exp(-np.mean(power))
+
+            assert(result >= 0)
+            assert(result <= 1)
+            return result, difference
+
+        def _computeBins(self, power):
+            # Resize the power image using the box filter.
+            # This will sum the values of all pixels 
+            bins = np.array(PIL.Image.fromarray(power).resize(self.nBins, PIL.Image.BOX))
+
+            # Normalize the values
+            bins /= np.sum(bins)
+
+            assert(np.all(bins >= 0))
+            assert(np.all(bins <= 1))
+            assert(np.isclose(np.sum(bins), 1))
+            return bins
+
+        def _computeNormalizedShannonEntropy(self, pdf):
+            entropy = -np.sum(pdf*np.log(pdf))
+
+            # The maximum entropy is obtained for a uniform distribution, this is,
+            # a probability distribution with p_i = 1/N. Therefore, the maximum 
+            # entropy value is -N*(1/N)*log(1/N)=-log2(1/N)=log2(N)
+            # Normalize the result to [0, 1]
+            maxEntropy = np.log(len(pdf))
+
+            # Normalize the entropy
+            entropy /= maxEntropy
+
+            assert(entropy <= 1)
+            assert(entropy >= 0)
+            return entropy
 
     class ClassesLoader:
         """ Helper class to produce classes
