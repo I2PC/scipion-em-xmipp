@@ -140,6 +140,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         minClassSizePercentile = self.minClassSize.get()
         minClassesPerDirection = self.minClassesPerDirection.get()
         bestDirectionsPercentage = self.keepBestDirections.get()
+        compareFunc = self._getImageCompareFunc()
 
         # Convert images
         images = np.array(self._convertClassRepresentatives(directionalClasses), dtype=object)
@@ -154,7 +155,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         selection = np.ones(len(images), dtype=bool)
         selection = self._calculateClassSizeMask(classSizes, minClassSizePercentile, selection)
         selection = self._calculateDirectionSizeSelectionMask(directionIds, minClassesPerDirection, selection)
-        selection = self._calculateDirectionDisparitySelectionMask(directionIds, images, bestDirectionsPercentage, selection)
+        selection = self._calculateDirectionDisparitySelectionMask(directionIds, images, compareFunc, bestDirectionsPercentage, selection)
 
         print(f'Using {np.count_nonzero(selection)} images out of {len(images)} '\
               f'({100*np.count_nonzero(selection)/len(images)}%)')
@@ -368,7 +369,10 @@ class XmippProtSplitvolume(ProtClassify3D):
         self._setInputImages(result)
 
     def _readInputImages(self):
-        return list(map(Particle.clone, self._getInputImages()))
+        result = []
+        for img in self._getInputImages():
+            result.append(img.clone())
+        return result
 
     def _writeMatrix(self, path, x, fmt='%s'):
         # Determine the format
@@ -568,10 +572,8 @@ class XmippProtSplitvolume(ProtClassify3D):
             # Nothing to do
             return mask
 
-    def _calculateDirectionDisparitySelectionMask(self, directionIds, images, keepBestDirections, mask):
+    def _calculateDirectionDisparitySelectionMask(self, directionIds, images, compareFunc, keepBestDirections, mask):
         if keepBestDirections < 100:
-            compareFunc = self._getImageCompareFunc()
-
             # For all directions compute the correlation among its members
             directionDisparities = {}
             for direction in np.unique(directionIds):
@@ -687,7 +689,7 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def _alignImage(self, imgRef, img):
         if self._getConsiderMirrors():
-            return imgRef.alignConsideringMirrors()
+            return imgRef.alignConsideringMirrors(img)
         else:
             return imgRef.align(img)
 
