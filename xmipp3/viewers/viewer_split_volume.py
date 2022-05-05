@@ -30,7 +30,7 @@ visualization program.
 """
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import IntParam, LabelParam, BooleanParam
-from pwem.viewers import DataView
+from pwem.viewers import DataView, ObjectView
 
 from xmipp3.protocols.protocol_split_volume import XmippProtSplitvolume
 
@@ -39,7 +39,6 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d as mpl3d
-from collections import Counter
 
 class XmippViewerSplitVolume(ProtocolViewer):
     """ Viewer for Split Volumes protocol
@@ -72,12 +71,16 @@ class XmippViewerSplitVolume(ProtocolViewer):
         form.addParam('displayDistanceImage', LabelParam, label='Angular distance matrix',
                         help='Shows an image where each pixel\'s colour corresponds to '
                         'the angular distance computed for each image pair')
+        form.addParam('displayPonderationImage', LabelParam, label='Distance ponderation matrix',
+                        help='Shows an image where each pixel\'s colour corresponds to '
+                        'the distance ponderation computed for each image pair')
         form.addParam('displayComparisonImage', LabelParam, label='Comparison matrix',
                         help='Shows an image where each pixel\'s colour corresponds to '
-                        'the correlation computed for each image pair')
+                        'the comparison computed for each image pair')
         form.addParam('displayWeightImage', LabelParam, label='Weight matrix',
                         help='Shows an image where each pixel\'s colour corresponds to '
                         'the weight of each graph edge')
+        form.addParam('displayWeightTable', LabelParam, label='Weight table')
 
         form.addSection(label='Fiedler vector')
         form.addParam('displayFiedlerVector', LabelParam, label='Sorted Fiedler Vector',
@@ -115,7 +118,9 @@ class XmippViewerSplitVolume(ProtocolViewer):
             'displayProjectionClassificationDisjoint': self._displayProjectionClassificationDisjoint,
             'displayDistanceImage': self._displayDistanceImage,
             'displayComparisonImage': self._displayComparisonImage,
+            'displayPonderationImage': self._displayPonderationImage,
             'displayWeightImage': self._displayWeightImage,
+            'displayWeightTable': self._displayWeightTable,
             'displayFiedlerVector': self._displayFiedlerVector,
             'displayFiedlerVectorDerivative': self._displayFiedlerVectorDerivative,
             'displaySortedWeightImage': self._displaySortedWeightImage,
@@ -206,6 +211,14 @@ class XmippViewerSplitVolume(ProtocolViewer):
         ax.set_title('Angular distances')
         return [fig]
 
+    def _displayPonderationImage(self, e):
+        ponderations = self._readDistancePonderation()
+        
+        fig, ax = plt.subplots()
+        self._plotMatrix(fig, ax, ponderations, 'Multiplier')
+        ax.set_title('Ponderations')
+        return [fig]
+    
     def _displayComparisonImage(self, e):
         comparisons = self._readComparisons()
         
@@ -213,7 +226,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         self._plotMatrix(fig, ax, comparisons, 'Similarity')
         ax.set_title('Comparisons')
         return [fig]
-    
+
     def _displayWeightImage(self, e):
         weights = self._readWeights()
 
@@ -221,6 +234,10 @@ class XmippViewerSplitVolume(ProtocolViewer):
         self._plotMatrix(fig, ax, weights, 'Weight')
         ax.set_title('Weights')
         return [fig]
+
+    def _displayWeightTable(self, e):
+        path = self.protocol._getWeightMetaDataFileName()
+        return [ObjectView(self._project, None, path)]
 
     def _displayFiedlerVector(self, e):
         fiedler = self._readFiedlerVector()
@@ -378,6 +395,9 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _readAngularDistances(self):
         return self.protocol._readAngularDistances()
 
+    def _readDistancePonderation(self):
+        return self.protocol._readDistancePonderation()
+
     def _readComparisons(self):
         return self.protocol._readComparisons()
 
@@ -403,27 +423,12 @@ class XmippViewerSplitVolume(ProtocolViewer):
         points = np.array(list(map(self.protocol._getProjectionDirection, images)))
 
         # Force points to the upper hemisphere
-        scale = np.ones(len(points))
-        scale = np.where(points[:,2] < 0, -scale, scale)
-        points *= np.column_stack((scale, )*3)
+        if self.protocol._getConsiderMirrors():
+            scale = np.ones(len(points))
+            scale = np.where(points[:,2] < 0, -scale, scale)
+            points *= np.column_stack((scale, )*3)
 
         return points
-
-    def _calculateDistanceMinimizationMirrors(self, points, directionIds):
-        result = np.zeros(len(directionIds))
-
-        for idx0 in range(len(result)):
-            # Find a prior occurrence of the same class directionId
-            idx1 = np.argmax(directionIds[:idx0+1]==directionIds[idx0])
-            assert(idx1 <= idx0)
-
-            # Only consider flipping when there is a prior occurrence
-            if idx0 != idx1:
-                # Flip the projection when the distance is larger than 90º
-                if np.dot(points[idx0], points[idx1]) < 0:
-                    result[idx0] = -1
-
-        return result
 
     def _calculateConcentricProjectionSphereScales(self, labels, step=0.2):
         return 1 + step*labels
