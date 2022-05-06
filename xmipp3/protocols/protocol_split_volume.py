@@ -127,6 +127,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         self._insertFunctionStep('computeImagePairsStep')
         self._insertFunctionStep('computeDistancePonderationStep')
         self._insertFunctionStep('computeImageComparisonsStep')
+        self._insertFunctionStep('computeCommonNeighborsStep')
         self._insertFunctionStep('computeWeightsStep')
         self._insertFunctionStep('computeFiedlerVectorStep')
         self._insertFunctionStep('partitionGraphStep')
@@ -228,6 +229,16 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Save output data
         self._writeComparisonDifferences(differences)
         self._writeComparisons(comparisonMatrix)
+
+    def computeCommonNeighborsStep(self):
+        # Read input data
+        adjacency = None #TODO
+        
+        # Intersect each projection's neighbors with its the rest
+        counts = self._calculateCommonNeighborCounts(adjacency)
+
+        # Save the output data
+        self._writeCommonNeighborCounts(counts)
 
     def computeWeightsStep(self):
         # Read input data
@@ -507,6 +518,13 @@ class XmippProtSplitvolume(ProtClassify3D):
         path = self._getWeightMetaDataFileName()
         md.write(path)
 
+    def _writeCommonNeighborCounts(self, neighbors):
+        assert(neighbors.dtype==int)
+        self._storeMatrix('neighbors', neighbors, fmt='%d')
+    
+    def _readCommonNeighborCounts(self):
+        return self._loadMatrix('neighbors', dtype=int)
+
     def _writeWeights(self, weights):
         assert(weights.dtype==float)
         self._storeMatrix('weights', weights, fmt='%.8f')
@@ -784,6 +802,27 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return result
 
+    def _calculateCommonNeighborCounts(self, adjacency):
+        """ Given a boolean adjacency matrix, computes the neighbor
+            set intersection and considers the intersection size as 
+            the weight
+        """
+        result = np.zeros_like(adjacency, dtype=int)
+
+        for idx0, idx1 in itertools.combinations(range(len(result)), r=2):
+            # Intersect the neighbors of both projections and count them
+            row0 = adjacency[idx0]
+            row1 = adjacency[idx1]
+            intersection = np.logical_and(row0, row1)
+            count = np.count_nonzero(intersection)
+
+            # Write the result on symmetrical positions
+            result[idx0, idx1] = count
+            result[idx1, idx0] = count
+        
+        assert(np.array_equal(result, result.T))
+        return result
+        
     def _calculateWeights(self, comparisons, symmetrizeFunc, lower=50, upper=80):
         """ Given a matrix of comparisons among neighboring 
             images, it computes the adjacency matrix with
