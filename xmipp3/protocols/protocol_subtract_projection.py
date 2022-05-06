@@ -39,7 +39,7 @@ class XmippProtSubtractProjection(EMProtocol):
     with the same angles that input particles have. Then, each particle and the correspondent projection of the
     reference volume are numerically adjusted and subtracted using a mask which denotes the region to keep. """
 
-    _label = 'subtract projections'
+    _label = 'subtract projection'
     INPUT_PARTICLES = "input_particles.xmd"
 
     # --------------------------- DEFINE param functions --------------------------------------------
@@ -51,8 +51,8 @@ class XmippProtSubtractProjection(EMProtocol):
         form.addParam('mask', PointerParam, pointerClass='VolumeMask', label='Mask for region to keep', allowsNull=True,
                       help='Specify a 3D mask for the region of the input volume that you want to keep. '
                            'If no mask is given, the subtraction is performed in whole images.')
-        form.addParam('mwidth', FloatParam, label="Extra width for final mask (in A): ", default=40,
-                      expertLevel=LEVEL_ADVANCED, help='length in A to add for each side to the mask for final result')
+        form.addParam('mwidth', FloatParam, label="Extra width in final mask: ", default=40, expertLevel=LEVEL_ADVANCED,
+                      help='Length (in A) to add for each side to the final result mask. -1 means no mask.')
         form.addParam('resol', FloatParam, label="Maximum resolution: ", default=3,  expertLevel=LEVEL_ADVANCED,
                       help='Maximum resolution (in A) of the data ')
         form.addParam('limit_freq', BooleanParam, label="Limit frequency?: ", default=False, expertLevel=LEVEL_ADVANCED,
@@ -60,9 +60,8 @@ class XmippProtSubtractProjection(EMProtocol):
                            ' indicated in "Maximum resolution" field above')
         form.addParam('sigma', FloatParam, label="Decay of the filter (sigma): ", default=3, expertLevel=LEVEL_ADVANCED,
                       help='Decay of the filter (sigma) to smooth the mask transition')
-        form.addParam('pad', IntParam, label="Fourier padding factor: ", default=1, expertLevel=LEVEL_ADVANCED,
+        form.addParam('pad', IntParam, label="Fourier padding factor: ", default=2, expertLevel=LEVEL_ADVANCED,
                       help='The volume is zero padded by this factor to produce projections')
-        form.addParallelSection(threads=0, mpi=8)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -95,7 +94,7 @@ class XmippProtSubtractProjection(EMProtocol):
         inputSet = self.particles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
-        readSetOfParticles(self._getExtraPath('input_particles.xmd'), outputSet,  extraLabels=[emlib.MDL_SUBTRACTION_R2])
+        readSetOfParticles(self._getExtraPath('input_particles.xmd'), outputSet, extraLabels=[emlib.MDL_SUBTRACTION_R2])
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(inputSet, outputSet)
 
