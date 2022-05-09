@@ -26,8 +26,8 @@
 # *
 # **************************************************************************
 
-from os.path import basename
 from pyworkflow.protocol.params import PointerParam, EnumParam, FloatParam
+from pwem.convert.headers import setMRCSamplingRate
 from pwem.objects.data import Volume
 from pwem.protocols import EMProtocol
 
@@ -80,6 +80,7 @@ class XmippProtRotateVolume(EMProtocol):
         inputVol = self.vol.get()
         outputVol.copyInfo(inputVol)
         outputVol.setLocation(self._getExtraPath('rotated_vol.mrc'))
+        setMRCSamplingRate(outputVol.getFileName(), inputVol.getSamplingRate())
         self._defineOutputs(outputParticles=outputVol)
         self._defineSourceRelation(inputVol, outputVol)
 
