@@ -26,7 +26,6 @@
 # *
 # **************************************************************************
 
-from os.path import basename
 from pyworkflow.protocol.params import PointerParam, EnumParam, FloatParam
 from pwem.objects.data import Volume
 from pwem.protocols import EMProtocol
