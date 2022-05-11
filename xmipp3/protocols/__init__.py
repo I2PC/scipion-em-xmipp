@@ -85,6 +85,7 @@ from .protocol_projmatch import XmippProtProjMatch
 from .protocol_random_conical_tilt import XmippProtRCT
 from .protocol_ransac import XmippProtRansac
 from .protocol_center_particles import XmippProtCenterParticles
+from .protocol_deep_classify import XmippProtDeepClassify
 from .protocol_reconstruct_fourier import XmippProtReconstructFourier
 from .protocol_reconstruct_highres import XmippProtReconstructHighRes
 from .protocol_reconstruct_significant import XmippProtReconstructSignificant
