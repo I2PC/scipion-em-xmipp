@@ -73,10 +73,13 @@ class XmippProtDeepClassify(ProtClassify2D):
             classImage = row.getValue(md.MDL_IMAGE)
             classCount = row.getValue(md.MDL_CLASS_COUNT)
             refNum = row.getValue(md.MDL_REF)
+            print(classImage)
+            print(classCount)
+            
             
             cl.append(classImage) 
 
-        
+        print(refNum)
         print(cl[0].split("@")[0])
   
         count=0
