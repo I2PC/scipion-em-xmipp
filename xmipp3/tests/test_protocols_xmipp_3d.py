@@ -1476,12 +1476,6 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.launchProtocol(protCreateGallery)
         self.assertIsNotNone(protCreateGallery.getFiles(),
                              "There was a problem with create gallery")
-        protCreateMask = self.newProtocol(XmippProtCreateMask3D,
-                                          inputVolume=protCreatePhantom2items.outputVolume,
-                                          threshold=0.1)
-        self.launchProtocol(protCreateMask)
-        self.assertIsNotNone(protCreateMask.getFiles(),
-                             "There was a problem with the 3D mask of the 2 items phantom")
         protCreatePhantom1item = self.newProtocol(XmippProtPhantom,
                                                   desc='80 80 80 0\nsph + 1 -15 -15 0 10',
                                                   sampling=1.0)
@@ -1497,7 +1491,6 @@ class TestXmippProjSubtraction(TestXmippBase):
         protSubtractProj = self.newProtocol(XmippProtSubtractProjection,
                                             particles=protCreateGallery.outputReprojections,
                                             vol=protCreatePhantom2items.outputVolume,
-                                            maskVol=protCreateMask.outputMask,
                                             mask=protCreateMaskKeep.outputMask,
                                             saveFiles=True)
         self.launchProtocol(protSubtractProj)
@@ -1519,7 +1512,6 @@ class TestXmippProjSubtraction(TestXmippBase):
         protSubtractProjShift = self.newProtocol(XmippProtSubtractProjection,
                                                  particles=protCreateGalleryShift.outputReprojections,
                                                  vol=protCreatePhantom2items.outputVolume,
-                                                 maskVol=protCreateMask.outputMask,
                                                  mask=protCreateMaskKeep.outputMask,
                                                  saveFiles=True)
         self.launchProtocol(protSubtractProjShift)
@@ -1538,7 +1530,6 @@ class TestXmippProjSubtraction(TestXmippBase):
         protSubtractProjCTF = self.newProtocol(XmippProtSubtractProjection,
                                                particles=protSimulateCTF.outputParticles,
                                                vol=protCreatePhantom2items.outputVolume,
-                                               maskVol=protCreateMask.outputMask,
                                                mask=protCreateMaskKeep.outputMask,
                                                saveFiles=True)
         self.launchProtocol(protSubtractProjCTF)
@@ -1558,7 +1549,6 @@ class TestXmippProjSubtraction(TestXmippBase):
         protSubtractProjNoise = self.newProtocol(XmippProtSubtractProjection,
                                                  particles=protAddNoise.outputParticles,
                                                  vol=protCreatePhantom2items.outputVolume,
-                                                 maskVol=protCreateMask.outputMask,
                                                  mask=protCreateMaskKeep.outputMask,
                                                  saveFiles=True)
         self.launchProtocol(protSubtractProjNoise)
@@ -1577,7 +1567,6 @@ class TestXmippProjSubtraction(TestXmippBase):
         protSubtractProjNoiseCTF = self.newProtocol(XmippProtSubtractProjection,
                                                     particles=protAddNoiseCTF.outputParticles,
                                                     vol=protCreatePhantom2items.outputVolume,
-                                                    maskVol=protCreateMask.outputMask,
                                                     mask=protCreateMaskKeep.outputMask,
                                                     saveFiles=True)
         self.launchProtocol(protSubtractProjNoiseCTF)
@@ -1622,7 +1611,6 @@ class TestXmippProjSubtraction(TestXmippBase):
         protSubtractProjOver = self.newProtocol(XmippProtSubtractProjection,
                                                 particles=protCreateGalleryOver.outputReprojections,
                                                 vol=protCreatePhantom2Over.outputVolume,
-                                                maskVol=protCreateMaskOver.outputMask,
                                                 mask=protCreateMaskKeepOver.outputMask,
                                                 saveFiles=True)
         self.launchProtocol(protSubtractProjOver)
@@ -1646,7 +1634,6 @@ class TestXmippProjSubtraction(TestXmippBase):
         protSubtractProjNoiseCTFOver = self.newProtocol(XmippProtSubtractProjection,
                                                         particles=protAddNoiseCTFOver.outputParticles,
                                                         vol=protCreatePhantom2Over.outputVolume,
-                                                        maskVol=protCreateMaskOver.outputMask,
                                                         mask=protCreateMaskKeepOver.outputMask,
                                                         saveFiles=True)
         self.launchProtocol(protSubtractProjNoiseCTFOver)
