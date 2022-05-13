@@ -30,6 +30,8 @@ visualization program.
 """
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import IntParam, LabelParam, BooleanParam
+from pyworkflow.protocol.params import LT, LE, GE, GT, Range
+
 from pwem.viewers import DataView, ObjectView
 
 from xmipp3.protocols.protocol_split_volume import XmippProtSplitvolume
@@ -52,11 +54,20 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
+        form.addSection(label='Configuration')
+        form.addParam('partitionLevel', IntParam, label='Partition level',
+                      validators=[GE(0)], default=0)
+        form.addParam('partitionComponent', IntParam, label='Partition component',
+                      validators=[GE(0)], default=0)
+
         form.addSection(label='Input classes')
+        form.addParam('displayInputImages', LabelParam, label='Input images')
+        form.addParam('displaySelectedImages', LabelParam, label='Selected images')
+        form.addParam('displayDiscardedImages', LabelParam, label='Discarded images')
         form.addParam('displayInputClassification', LabelParam, label='Input classification',
                         help='Shows 3D representation of the input classes')
 
-        form.addSection(label='Output classes')
+        form.addSection(label='Intermediate classes')
         form.addParam('displayLabelHistogram', LabelParam, label='Class sizes',
                         help='Shows a bar plot with the sizes of each class')
         form.addParam('displayLabelImage', LabelParam, label='Classification',
@@ -109,8 +120,21 @@ class XmippViewerSplitVolume(ProtocolViewer):
         form.addParam('displayWeight3dNetworkDisjoint', LabelParam, label='Disjoint 3D weight network',
                         help='Shows a 3D representation of the weight network with a projection sphere for each class')
 
+    #--------------------------- INFO functions ----------------------------------------------------
+    def _validate(self):
+        result = []
+
+        # TODO validate partition level and component
+
+        return result
+
+    # --------------------------- DEFINE display functions ----------------------
+    
     def _getVisualizeDict(self):
         return {
+            'displayInputImages': self._displayInputImages,
+            'displaySelectedImages': self._displaySelectedImages,
+            'displayDiscardedImages': self._displayDiscardedImages,
             'displayInputClassification': self._displayInputClassification,
             'displayLabelHistogram': self._displayLabelHistogram,
             'displayLabelImage': self._displayLabelImage,
@@ -134,16 +158,25 @@ class XmippViewerSplitVolume(ProtocolViewer):
             'displayWeight3dNetworkDisjoint': self._displayWeight3dNetworkDisjoint,
         }
     
-    # --------------------------- DEFINE display functions ----------------------
+    def _displayInputImages(self, e):
+        inputImages = self.protocol._getInputImages()
+        return [ObjectView(self._project, inputImages.strId(), inputImages.getFileName())]
+
+    def _displaySelectedImages(self, e):
+        selectedImages = self.protocol._getSelectedImages()
+        return [ObjectView(self._project, selectedImages.strId(), selectedImages.getFileName())]
+
+    def _displayDiscardedImages(self, e):
+        discardedImages = self.protocol._getDiscardedImages()
+        return [ObjectView(self._project, discardedImages.strId(), discardedImages.getFileName())]
+
     def _displayInputClassification(self, e):
         images = self._readImages()
-        directionIds = self._readDirectionIds()
-        points = self._getProjectionSphere(images)
-        labels = self._getDirectionIdLabels(directionIds)
-        
-        # Scale the points to be concentric
-        scales = self._calculateConcentricProjectionSphereScales(labels, 0.2)
-        points *= np.column_stack((scales, )*3)
+        directionIds = self._getDirectionIds(images)
+        directionClassification = self._getDirectionIdLabels(directionIds)
+
+        # Get the projection sphere
+        points = self._getProjectionSphere(images, directionClassification)
 
         # Obtain the edges joining members of the same class
         edges = self._getDirectionIdEdgeLines(points, directionIds)
@@ -152,7 +185,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         fig = plt.figure()
         ax = plt.axes(projection='3d')
         ax.set_title('Input Classification')
-        self._plotProjectionClassification(fig, ax, points, images, labels)
+        self._plotProjectionClassification(fig, ax, points, images, directionClassification)
         self._plotNetworkEdges(fig, ax, edges)
         return [fig]
 
@@ -168,10 +201,12 @@ class XmippViewerSplitVolume(ProtocolViewer):
         return [fig]
 
     def _displayLabelImage(self, e):
-        labels = self._readLabels()
+        labels = self._readLabels('all')
 
         fig, ax = plt.subplots()
         self._plotClassification(fig, ax, labels)
+        ax.set_xlabel('Particle number')
+        ax.set_ylabel('Level')
         ax.set_title('Classification')
         return [fig]
     
@@ -387,10 +422,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     # --------------------------- UTILS functions -----------------------------
     def _readImages(self):
-        return self.protocol._readInputImages()
-
-    def _readDirectionIds(self):
-        return self.protocol._readDirectionIds()
+        return self.protocol._readSelectedImages()
 
     def _readAngularDistances(self):
         return self.protocol._readAngularDistances()
@@ -407,8 +439,12 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _readFiedlerVector(self):
         return self.protocol._readFiedlerVector()
 
-    def _readLabels(self):
-        return self.protocol._readLabels()
+    def _readLabels(self, level=-1):
+        labels = self.protocol._readLabels()
+        return labels if level == 'all' else labels[level]
+
+    def _getDirectionIds(self, images):
+        return self.protocol._getDirectionIds(images)
 
     def _getDirectionIdLabels(self, directionIds):
         result = np.zeros_like(directionIds)
@@ -419,18 +455,24 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
         return result
 
-    def _getProjectionSphere(self, images):
+    def _getProjectionSphere(self, images, labels=None):
         points = np.array(list(map(self.protocol._getProjectionDirection, images)))
 
-        # Force points to the upper hemisphere
-        if self.protocol._getConsiderMirrors():
-            scale = np.ones(len(points))
-            scale = np.where(points[:,2] < 0, -scale, scale)
-            points *= np.column_stack((scale, )*3)
+        if labels is None:
+            directionIds = self._getDirectionIds(images)
+            labels = self._getDirectionIdLabels(directionIds)
 
+        # Calculate a scale based on the labels
+        scale = self._calculateConcentricProjectionSphereScales(labels)
+
+        # Force points to the upper hemisphere if considering mirrors
+        if self.protocol._getConsiderMirrors():
+            scale = np.where(points[:,2] < 0, -scale, scale)
+
+        points *= np.column_stack((scale, )*3)
         return points
 
-    def _calculateConcentricProjectionSphereScales(self, labels, step=0.2):
+    def _calculateConcentricProjectionSphereScales(self, labels, step=0.25):
         return 1 + step*labels
 
     def _calculateDisjointProjectionSphereOffsets(self, labels):
@@ -474,10 +516,9 @@ class XmippViewerSplitVolume(ProtocolViewer):
         return mpl.cm.plasma
 
     def _getClassificationColorMap(self, labels):
-        nLabels = int(max(labels)) + 1
+        nLabels = int(np.max(labels)) + 1
         colours = [mpl.cm.jet(i / (nLabels-1)) for i in range(nLabels)]
         return mpl.colors.ListedColormap(colours)
-
 
     def _plotMatrix(self, fig, ax, img, label):
         colormap = self._getScalarColorMap()
@@ -490,7 +531,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _plotClassification(self, fig, ax, labels):
         colormap = self._getClassificationColorMap(labels)
         norm = mpl.colors.Normalize()
-        ax.imshow(np.array([labels]), origin='lower', aspect='auto', interpolation='none', cmap=colormap, norm=norm)
+        ax.imshow(labels, origin='lower', aspect='auto', interpolation='none', cmap=colormap, norm=norm)
         fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colormap), label='Classes', ticks=np.arange(colormap.N))
 
     def _plotProjectionClassification(self, fig, ax, points, images, labels):

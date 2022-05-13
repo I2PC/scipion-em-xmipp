@@ -37,6 +37,7 @@ from pyworkflow.utils.path import copyFile, makePath, createLink, cleanPattern, 
 from pwem import emlib
 from pwem.protocols import ProtClassify3D
 from pwem.objects import Volume, Image, Particle, Class2D
+from pwem.constants import ALIGN_PROJ
 
 import xmippLib
 from xmipp3.convert import writeSetOfParticles, locationToXmipp
@@ -49,6 +50,7 @@ import numpy as np
 import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor
 from collections import Counter
+from functools import partial
 
 from scipy import special
 from scipy import sparse
@@ -72,9 +74,6 @@ class XmippProtSplitvolume(ProtClassify3D):
                       pointerClass='SetOfClasses2D', pointerCondition='hasRepresentatives', 
                       important=True, 
                       help='Select a set of particles with angles. Preferrably the output of a run of directional classes')
-        form.addParam('minClassSize', IntParam, label="Minumum class size percentile (%)", 
-                      validators=[Range(0, 100)], default=50,
-                      help='Required number of classes per solid angle.')
         form.addParam('minClassesPerDirection', IntParam, label="Minumum number of classes per direction", 
                       validators=[GT(0)], default=1,
                       help='Required number of classes per solid angle.')
@@ -107,12 +106,30 @@ class XmippProtSplitvolume(ProtClassify3D):
         form.addParam('maxNeighbors', IntParam, label="Maximum number of neighbors", 
                       validators=[GE(0)], default=12,
                       help='Maximum number of comparisons to consider for each directional class. Use 0 to disable this limit')
+        form.addParam('weightCalculationMethod', EnumParam, label='Edge weight calculation method',
+                      choices=['None', 'Interpolate percentiles globally', 'Interpolate percentiles locally', 
+                      'Common neighbors globally', 'Common neighbors locally'], default=0,
+                      help='Method used to calculate edge weights')
+        form.addParam('weightCalculationInterpolateLower', FloatParam, label='Interpolation lower percentile',
+                      validators=[Range(0, 100)], default=40, condition='weightCalculationMethod==1 or weightCalculationMethod==2',
+                      help='Lower percentile used for interpolating comparison values')
+        form.addParam('weightCalculationInterpolateUpper', FloatParam, label='Interpolation upper percentile',
+                      validators=[Range(0, 100)], default=90, condition='weightCalculationMethod==1 or weightCalculationMethod==2',
+                      help='Lower percentile used for interpolating comparison values')
+        form.addParam('weightCalculationNeighborPercentile', FloatParam, label='Neighbor threshold percentile',
+                      validators=[Range(0, 100)], default=60, condition='weightCalculationMethod==3 or weightCalculationMethod==4',
+                      help='Lower percentile used for interpolating comparison values')
         form.addParam('enforceUndirected', EnumParam, label="Enforce undirected", 
                       choices=['Or', 'And', 'Average'], default=1,
                       help='Enforce a undirected graph')
+        
+        form.addSection(label='Graph cut')
         form.addParam('graphMetric', EnumParam, label="Cut metric", 
                       choices=['Graph cut', 'Ratio cut', 'Normalized cut', 'Quotient cut'], default=3,
                       help='Objective function to minimize when cutting the graph in half')
+        form.addParam('graphCutLevels', IntParam, label='Cut levels',
+                       validators=[GT(1)], default=3,
+                       help='Number of recursive graph cuts to perform')
 
         form.addParallelSection(threads=mp.cpu_count(), mpi=0)
     
@@ -120,56 +137,67 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _insertAllSteps(self):
         # Create the thread pool
         if self.numberOfThreads > 1:
-            self._threadPool = ThreadPoolExecutor(int(self.numberOfThreads))
+            self._threadPool = ThreadPoolExecutor(max_workers=int(self.numberOfThreads))
 
         self._insertFunctionStep('convertInputStep')
+        self._insertFunctionStep('filterInputStep')
         self._insertFunctionStep('computeAngularDistancesStep')
         self._insertFunctionStep('computeImagePairsStep')
         self._insertFunctionStep('computeDistancePonderationStep')
         self._insertFunctionStep('computeImageComparisonsStep')
-        self._insertFunctionStep('computeCommonNeighborsStep')
         self._insertFunctionStep('computeWeightsStep')
-        self._insertFunctionStep('computeFiedlerVectorStep')
         self._insertFunctionStep('partitionGraphStep')
-        self._insertFunctionStep('createOutputStep')
+        self._insertFunctionStep('reconstructVolumesStep')
+        #self._insertFunctionStep('createOutputStep')
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def convertInputStep(self):
         # Read input data
-        directionalClasses = self._convertClasses2D(self.directionalClasses.get())
+        directionalClasses = self.directionalClasses.get()
         inputMask = self.mask.get()
-        minClassSizePercentile = self.minClassSize.get()
+
+        # Convert data
+        classes = self._convertClasses2D(directionalClasses)
+        images = self._convertClassRepresentatives(classes)
+        directionIds = self._calculateDirectionIds(classes)
+        compareMask = self._convertCompareMask(inputMask, images)
+
+        # Write direction IDs to images in ClassId field
+        for image, directionId in zip(images, directionIds):
+            image.setClassId(directionId)
+
+        # Save output data
+        self._writeInputImages(images)
+        self._writeCompareMask(compareMask)
+        self._defineSourceRelation(self.directionalClasses, self._getInputImages())
+
+    def filterInputStep(self):
+        # Read input data
+        images = self._readInputImages()
         minClassesPerDirection = self.minClassesPerDirection.get()
         bestDirectionsPercentage = self.keepBestDirections.get()
 
-        # Convert images
-        images = np.array(self._convertClassRepresentatives(directionalClasses), dtype=object)
-        directionIds = np.array(self._calculateDirectionIds(directionalClasses), dtype=np.uint)
-        classSizes = np.array(self._calculateClassSizes(directionalClasses), dtype=np.uint)
+        # Select the input images
+        selection = np.array(list(map(Particle.isEnabled, images)), dtype=bool)
+        selection = self._calculateDirectionSizeSelection(images, minClassesPerDirection, selection)
+        selection = self._calculateDirectionDisparitySelection(images, bestDirectionsPercentage, selection)
 
-        # Convert the compare mask
-        compareMask = self._convertCompareMask(inputMask, images)
-        self._writeCompareMask(compareMask)
+        # Filter the images
+        selectedImages = images[selection]
+        discardedImages = images[~selection]
 
-        # Filter the input images
-        compareFunc = self._getImageCompareFunc(images[0].getDim())
-        selection = np.ones(len(images), dtype=bool)
-        selection = self._calculateClassSizeMask(classSizes, minClassSizePercentile, selection)
-        selection = self._calculateDirectionSizeSelectionMask(directionIds, minClassesPerDirection, selection)
-        selection = self._calculateDirectionDisparitySelectionMask(directionIds, images, compareFunc, bestDirectionsPercentage, selection)
-
-        print(f'Using {np.count_nonzero(selection)} images out of {len(images)} '\
-              f'({100*np.count_nonzero(selection)/len(images)}%)')
-
-        images = images[selection]
-        directionIds = directionIds[selection]
-
-        self._writeInputImages(images)
-        self._writeDirectionIds(directionIds)
+        print(f'Using {len(selectedImages)} projections out of {len(images)} '\
+              f'({100*len(selectedImages)/len(images)}%)')
+        
+        # Save output data
+        self._writeSelectedImages(selectedImages)
+        self._writeDiscardedImages(discardedImages)
+        self._defineSourceRelation(self._getInputImages(), self._getSelectedImages())
+        self._defineSourceRelation(self._getInputImages(), self._getDiscardedImages())
 
     def computeAngularDistancesStep(self):
         # Read input data
-        images = self._readInputImages()
+        images = self._readSelectedImages()
         considerAntipodes = self._getConsiderMirrors()
 
         # Perform the computation
@@ -180,12 +208,13 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def computeImagePairsStep(self):
         # Read input data
+        images = self._readSelectedImages()
         distances = self._readAngularDistances()
-        directionIds = self._readDirectionIds()
         maxAngularDistance = self._getMaxAngularDistance(distances)
         maxNeighbors = self._getMaxNeighbors()
 
         # Compute the image pairs to be considered
+        directionIds = self._getDirectionIds(images)
         pairs = self._calculateImagePairs(distances, directionIds, maxAngularDistance, maxNeighbors)
         print(f'Considering {len(pairs)} image pairs with an '
               f'angular distance of up to {np.degrees(maxAngularDistance)} deg')
@@ -208,17 +237,13 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def computeImageComparisonsStep(self):
         # Read input data
-        images = self._readInputImages()
+        images = self._readSelectedImages()
         pairs = self._readImagePairs()
         ponderations = self._readDistancePonderation()
-        compareFunc = self._getImageCompareFunc(images[0].getDim())
-        threadPool = self._getThreadPool()
         indices = tuple(pairs.T)
 
         # Compute the comparisons
-        comparisons, differences = self._computeComparisons(
-            images, pairs, compareFunc, threadPool
-        )
+        comparisons, differences = self._computeComparisons(images, pairs)
 
         # Apply the ponderation to the comparisons
         comparisons *= ponderations[indices] # TODO consider removing
@@ -230,58 +255,56 @@ class XmippProtSplitvolume(ProtClassify3D):
         self._writeComparisonDifferences(differences)
         self._writeComparisons(comparisonMatrix)
 
-    def computeCommonNeighborsStep(self):
-        # Read input data
-        adjacency = None #TODO
-        
-        # Intersect each projection's neighbors with its the rest
-        counts = self._calculateCommonNeighborCounts(adjacency)
-
-        # Save the output data
-        self._writeCommonNeighborCounts(counts)
-
     def computeWeightsStep(self):
         # Read input data
-        images = self._readInputImages()
+        images = self._readSelectedImages()
         distances = self._readAngularDistances()
         pairs = self._readImagePairs()
         ponderations = self._readDistancePonderation()
         comparisons = self._readComparisons()
+        weightFunc = self._getWeightCalculationFunc()
         symmetrizeFunc = self._getSymmetrizeFunc()
         
         # Calculate weights from comparisons
-        weights = self._calculateWeights(comparisons, symmetrizeFunc, 40, 90)
+        weights = weightFunc(comparisons)
         
-        # Print information about the graph
-        nComponents, _ = csgraph.connected_components(weights)
-        print(f'The unpartitioned graph has {nComponents} components')
+        # Ensure the graph is symmetric
+        weights = symmetrizeFunc(weights, weights.T)
 
         # Save output data
         self._writeWeights(weights)
         self._writeWeightMetaData(images, pairs, distances, comparisons, ponderations, weights)
 
-    def computeFiedlerVectorStep(self):
-        # Read input data
-        adjacency = self._readWeights()
-        graph = sparse.csr_matrix(adjacency)
-
-        # Compute the fiedler vector
-        fiedler = self._calculateFiedlerVector(graph)
-
-        # Write the result
-        self._writeFiedlerVector(fiedler)
-
     def partitionGraphStep(self):
         # Read the input data
-        graph = self._readWeights()
-        fiedler = self._readFiedlerVector()
+        adjacency = self._readWeights()
         metric = self._getGraphPartitionMetricFunc()
+        nLevels = self.graphCutLevels.get()
 
-        # Partition the graph using the Fiedler vector
-        labels = self._partitionFiedlerVector(graph, fiedler, metric)
+        # Partition the graph recursively up to some amount of levels
+        graph = sparse.csr_matrix(adjacency)
+        
+        # Obtain information about the graph
+        nComponents, labels = csgraph.connected_components(adjacency)
+        print(f'The unpartitioned graph has {nComponents} components')
+
+        # Partition the graph
+        labels = self._partitionGraphMultiLevel(graph, labels, metric, nLevels)
 
         # Write the result
         self._writeLabels(labels)
+
+    def reconstructVolumesStep(self):
+        # Read the input data
+        images = self._readSelectedImages()
+        labels = self._readLabels()
+
+        # Reconstruct a volume for each top-level partition
+        for cls in np.unique(labels[-1]):
+            selection = labels[-1] == cls
+            partitionImages = images[selection]
+            path = self._getPartitionVolumeFileName(cls)
+            self._reconstructVolume(path, partitionImages)
 
     def createOutputStep(self):
         # Read input data
@@ -318,15 +341,21 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _getThreadPool(self):
         return getattr(self, '_threadPool', None)
 
-    def _getImageCompareFunc(self, shape):
+    def _getMapFunc(self):
+        pool = self._getThreadPool()
+        return pool.map if pool is not None else map
+
+    def _getImageAlignFunc(self):
         considerMirrors = self._getConsiderMirrors()
         mask = self._readCompareMask()
+        return self.ImageAligner(considerMirrors, mask)
 
+    def _getImageCompareFunc(self, shape):
         options = [
-            self.PowerImageComparator(considerMirrors, mask),
-            self.CorrelationImageComparator(considerMirrors, mask),
-            self.WassersteinImageComparator(considerMirrors, mask, math.ceil(math.log2(max(shape))) + 1, 'sym5'),
-            self.EntropyImageComparator(considerMirrors, mask, (16, )*2)
+            self.PowerImageComparator(),
+            self.CorrelationImageComparator(),
+            self.WassersteinImageComparator(math.ceil(math.log2(max(shape))) + 1, 'sym5'),
+            self.EntropyImageComparator((16, )*2)
         ]
         selection = self.imageDistanceMetric.get()
         return options[selection]
@@ -344,6 +373,21 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def _getConsiderMirrors(self):
         return self.considerMirrors.get()
+
+    def _getWeightCalculationFunc(self):
+        lower = self.weightCalculationInterpolateLower.get()
+        upper = self.weightCalculationInterpolateUpper.get()
+        threshold=self.weightCalculationNeighborPercentile.get() 
+
+        options = [
+            lambda x : x,
+            partial(self._calculateWeightsInterpolationGlobal, lower=lower, upper=upper),
+            partial(self._calculateWeightsInterpolationLocal, lower=lower, upper=upper),
+            partial(self._calculateWeightsCommonNeighborCountsGlobal, threshold=threshold),
+            partial(self._calculateWeightsCommonNeighborCountsLocal, threshold=threshold)
+        ]
+        selection = self.weightCalculationMethod.get()
+        return options[selection]
 
     def _getSymmetrizeFunc(self):
         options = [
@@ -364,14 +408,14 @@ class XmippProtSplitvolume(ProtClassify3D):
         selection = self.graphMetric.get()
         return options[selection]
 
-    def _setInputImages(self, images):
-        self._insertChild('_images', images)
+    def _setSetOfImages(self, name, images):
+        self._insertChild('_'+name, images)
 
-    def _getInputImages(self):
-        return self._images
+    def _getSetOfImages(self, name):
+        return getattr(self, '_'+name)
 
-    def _writeInputImages(self, images):
-        result = self._createSetOfParticles('input')
+    def _writeSetOfImages(self, name, images):
+        result = self._createSetOfParticles('_'+name)
         result.setAcquisition(images[0].getAcquisition())
         result.setSamplingRate(images[0].getSamplingRate())
         result.setHasCTF(images[0].hasCTF())
@@ -380,13 +424,43 @@ class XmippProtSplitvolume(ProtClassify3D):
         for image in images:
             result.append(image)
         
-        self._setInputImages(result)
+        self._setSetOfImages(name, result)
+
+    def _readSetOfImages(self, name):
+        images = self._getSetOfImages(name)
+
+        result = np.empty(len(images), dtype=object)
+        for i, img in enumerate(images):
+            result[i] = img.clone()
+
+        return result
+
+    def _writeInputImages(self, images):
+        self._writeSetOfImages('inputImages', images)
+    
+    def _getInputImages(self):
+        return self._getSetOfImages('inputImages')
 
     def _readInputImages(self):
-        result = []
-        for img in self._getInputImages():
-            result.append(img.clone())
-        return result
+        return self._readSetOfImages('inputImages')
+
+    def _writeSelectedImages(self, images):
+        self._writeSetOfImages('selectedImages', images)
+
+    def _getSelectedImages(self):
+        return self._getSetOfImages('selectedImages')
+    
+    def _readSelectedImages(self):
+        return self._readSetOfImages('selectedImages')
+
+    def _writeDiscardedImages(self, images):
+        self._writeSetOfImages('discardedImages', images)
+    
+    def _getDiscardedImages(self):
+        return self._getSetOfImages('discardedImages')
+    
+    def _readDiscardedImages(self):
+        return self._readSetOfImages('discardedImages')
 
     def _writeMatrix(self, path, x, fmt='%s'):
         # Determine the format
@@ -430,13 +504,6 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(result is not None)
         assert(result.dtype==dtype)
         return result
-
-    def _writeDirectionIds(self, directions):
-        assert(directions.dtype==np.uint)
-        self._storeMatrix('directions', directions, fmt='%d')
-
-    def _readDirectionIds(self):
-        return self._loadMatrix('directions', dtype=np.uint)
 
     def _writeCompareMask(self, mask):
         assert(mask.dtype==bool)
@@ -532,19 +599,15 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _readWeights(self):
         return self._loadMatrix('weights', dtype=float)
 
-    def _writeFiedlerVector(self, fiedler):
-        assert(fiedler.dtype==float)
-        self._storeMatrix('fiedler', fiedler, fmt='%.8f')
-
-    def _readFiedlerVector(self):
-        return self._loadMatrix('fiedler', dtype=float)
-
     def _writeLabels(self, labels):
         assert(labels.dtype==np.uint)
         self._storeMatrix('labels', labels, fmt='%d')
 
     def _readLabels(self):
         return self._loadMatrix('labels', dtype=np.uint)
+
+    def _getPartitionVolumeFileName(self, cls):
+        return self._getExtraPath(f'partition_{cls:04d}.vol')
 
     def _convertClasses2D(self, classes):
         result = []
@@ -571,59 +634,62 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         # Map the reprojections to its ids
         ids = list(map(reprojectionIds.__getitem__, reprojections))
-        return ids
+        return np.array(ids, dtype=np.uint)
 
-    def _calculateClassSizes(self, classes):
-        return list(map(len, classes))
-
-    def _calculateClassSizeMask(self, classSizes, sizePercentile, mask):
-        threshold = np.percentile(classSizes, sizePercentile)
-        mask = np.logical_and(mask, classSizes >= threshold)
+    def _calculateDirectionSizeSelection(self, images, minClassesPerDirection, mask):
+        if minClassesPerDirection > 1:
+            directionIds = self._getDirectionIds(images)
+            repetitions = Counter(directionIds[mask]) # Only count where selected
+            selection = np.array(list(map(
+                lambda directionId : repetitions[directionId] >= minClassesPerDirection, 
+                directionIds
+            )))
+            mask = np.logical_and(mask, selection)
+        
         return mask
 
-    def _calculateDirectionSizeSelectionMask(self, directionIds, minClassesPerDirection, mask):
-        if minClassesPerDirection > 1:
-            repetitions = Counter(directionIds[mask]) # Only count where selected
-            return np.array(list(map(
-                lambda enable, id: enable and repetitions[id] >= minClassesPerDirection, 
-                mask,
-                directionIds,
-            )))
-        else:
-            # Nothing to do
-            return mask
-
-    def _calculateDirectionDisparitySelectionMask(self, directionIds, images, compareFunc, keepBestDirections, mask):
+    def _calculateDirectionDisparitySelection(self, images, keepBestDirections, mask):
         if keepBestDirections < 100:
-            # For all directions compute the correlation among its members
-            directionDisparities = {}
-            for direction in np.unique(directionIds):
-                selection = np.logical_and(mask, directionIds==direction)
-                if np.count_nonzero(selection) >= 2:
-                    # Compare all image pairs possible for this direction
-                    directionImages = self._convertToXmippImages(images[selection])
-                    imagePairs = itertools.combinations(directionImages, r=2)
-                    comparisons = map(compareFunc, *zip(*imagePairs))
-                    comparisons = map(lambda tpl : tpl[0], comparisons) # Ignore the difference
+            directionIds = self._getDirectionIds(images)
 
-                    # Use the maximum comparison as the disparity
-                    directionDisparities[direction] = max(comparisons)
-                else:
-                    directionDisparities[direction] = 1 # 1 is considered as "equal"
+            def selectDirectionImages(directionId):
+                selection = np.logical_and(mask, directionIds==directionId)
+                return np.argwhere(selection).T[0]
 
+            def computeDirectionImagePairs(selection):
+                return list(itertools.combinations(selection, r=2))
+
+            # Select image pairs for each direction
+            uniqueDirections = np.arange(max(directionIds)+1)
+            assert(np.array_equal(uniqueDirections, np.unique(directionIds)))
+            directionImagePairs = list(map(computeDirectionImagePairs, map(selectDirectionImages, uniqueDirections)))
+
+            # Flatten the image pair list
+            allImagePairs = sum(directionImagePairs, [])
+
+            # Compute comparisons among them
+            comparisons, _ = self._computeComparisons(images, allImagePairs)
+            assert(len(comparisons) == len(allImagePairs))
+
+            # For all directions select the most dissimilar pair (lowest value)
+            directionDisparities = np.zeros_like(uniqueDirections, dtype=float)
+            for directionId, pairs in enumerate(directionImagePairs):
+                disparity = 1
+                for pair in pairs:
+                    disparity = min(disparity, comparisons[allImagePairs.index(pair)])
+                directionDisparities[directionId] = disparity
+                
             # Compute the threshold
-            threshold = np.percentile(list(directionDisparities.values()), keepBestDirections)
+            threshold = np.percentile(directionDisparities, keepBestDirections)
 
             # Select only the directions that have a disparity below the threshold
-            return np.array(list(map(
-                lambda enable, id: enable and directionDisparities[id] <= threshold, 
-                mask,
+            selection = np.array(list(map(
+                lambda id: directionDisparities[id] <= threshold, 
                 directionIds,
             )))
+            mask = np.logical_and(mask, selection)
 
-        else:
-            # Nothing to do
-            return mask
+        return mask
 
     def _convertCompareMask(self, mask, images, dtype=bool):
         if mask is not None:
@@ -631,6 +697,9 @@ class XmippProtSplitvolume(ProtClassify3D):
         else:
             dimensions = images[0].getDim()
             return np.ones(dimensions[0:2], dtype=dtype) 
+
+    def _getDirectionIds(self, images):
+        return np.array(list(map(Particle.getClassId, images)), dtype=np.uint)
 
     def _getProjectionDirection(self, image):
         # Multiply by the unit z vector, as projection is performed in this direction
@@ -708,39 +777,37 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return np.argwhere(pairs)
 
-    def _computeComparisons(self, images, pairs, compareFunc, threadPool=None):
+    def _computeComparisons(self, images, pairs):
         """ Computes the comparisons between image pairs
             defined by pairs array
         """
         def minmax(iterable):
             return min(iterable), max(iterable)
 
-        mapFunc = threadPool.map if threadPool is not None else map
+        # Get the functions
+        alignFunc = self._getImageAlignFunc()
+        compareFunc = self._getImageCompareFunc(images[0].getDim())
+        mapFunc = self._getMapFunc()
 
         # Convert to xmipp images in order to use functions that deal with its data
         xmippImages = self._convertToXmippImages(images)
         
         # Select unique image pairs to be processed.
-        imagePairs = {}
-        for pair in pairs:
-            # Refer to the lower triangle of the matrix
-            pair = minmax(pair)
+        uniquePairs = set(map(minmax, pairs))
+        uniqueImagePairs = map(lambda pair : (xmippImages[pair[0]], xmippImages[pair[1]]), uniquePairs)
 
-            # Add it if not defined
-            if pair not in imagePairs:
-                imagePairs[pair] = (xmippImages[pair[0]], xmippImages[pair[1]])
+        # Align images
+        alignedImages = mapFunc(alignFunc, *zip(*uniqueImagePairs))
 
-        # Compute the comparisons using parallelization if requested
-        computedComparisons = dict(zip(
-            imagePairs.keys(),
-            mapFunc(compareFunc, *zip(*imagePairs.values()))
-        ))
+        # Compare images
+        computedComparisons = mapFunc(compareFunc, *zip(*alignedImages))
+        pairComparisons = dict(zip(uniquePairs, computedComparisons))
 
         # Write the computed comparisons to the resulting matrix
         comparisons = np.zeros(len(pairs), dtype=float)
         differences = np.empty(len(pairs), dtype=object)
         for i, pair in enumerate(pairs):
-            comparisons[i], differences[i] = computedComparisons[minmax(pair)]
+            comparisons[i], differences[i] = pairComparisons[minmax(pair)]
 
         # Ensure that the result matrix is in [0, 1]
         assert(np.all(comparisons >= 0.0))
@@ -802,13 +869,46 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return result
 
-    def _calculateCommonNeighborCounts(self, adjacency):
+    def _calculateWeightsInterpolationGlobal(self, comparisons, lower=50, upper=80):
+        """ Given a matrix of comparisons among neighboring 
+            images, it computes the adjacency matrix globally
+            interpolating comparison values
+        """
+
+        values = comparisons[np.nonzero(comparisons)]
+        [minVal, maxVal] = np.percentile(values, [lower, upper])
+        weights = self._smoothStep(comparisons, xMin=minVal, xMax=maxVal, N=1)
+        
+        assert(np.all(weights >= 0))
+        assert(np.all(weights <= 1))
+        return weights
+
+    def _calculateWeightsInterpolationLocal(self, comparisons, lower=50, upper=80):
+        """ Given a matrix of comparisons among neighboring 
+            images, it computes the adjacency matrix locally
+            interpolating comparison values
+        """
+
+        # Perform a Hermite interpolation of the comparisons between the given percentiles
+        weights = np.zeros_like(comparisons)
+        for weightRow, compRow in zip(weights, comparisons):
+            # Calculate lower and upper percentiles for the non zero comparisons
+            values = compRow[np.nonzero(compRow)]
+            if len(values) > 0:
+                [minVal, maxVal] = np.percentile(values, [lower, upper])
+                weightRow[:] = self._smoothStep(compRow, xMin=minVal, xMax=maxVal, N=1)
+
+        assert(np.all(weights >= 0))
+        assert(np.all(weights <= 1))
+        return weights
+    
+    def _calculateWeightsCommonNeighborCounts(self, adjacency):
         """ Given a boolean adjacency matrix, computes the neighbor
             set intersection and considers the intersection size as 
             the weight
         """
-        result = np.zeros_like(adjacency, dtype=int)
 
+        result = np.zeros_like(adjacency, dtype=float)
         for idx0, idx1 in itertools.combinations(range(len(result)), r=2):
             # Intersect the neighbors of both projections and count them
             row0 = adjacency[idx0]
@@ -820,33 +920,22 @@ class XmippProtSplitvolume(ProtClassify3D):
             result[idx0, idx1] = count
             result[idx1, idx0] = count
         
+        # Normalize
+        result /= np.max(result)
+
         assert(np.array_equal(result, result.T))
+        assert(np.all(np.diagonal(result) == 0))
+        assert(np.all(result >= 0))
+        assert(np.all(result <= 1))
         return result
-        
-    def _calculateWeights(self, comparisons, symmetrizeFunc, lower=50, upper=80):
-        """ Given a matrix of comparisons among neighboring 
-            images, it computes the adjacency matrix with
-            interger weights
-        """
 
-        # Perform a Hermite interpolation of the comparisons between the given percentiles
-        weights = np.zeros_like(comparisons)
-        for weightRow, compRow in zip(weights, comparisons):
-            # Calculate lower and upper percentiles for the non zero comparisons
-            values = compRow[np.nonzero(compRow)]
-            if len(values) > 0:
-                [minVal, maxVal] = np.percentile(values, [lower, upper])
-                weightRow[:] = self._smoothStep(compRow, xMin=minVal, xMax=maxVal, N=1)
-        #values = comparisons[np.nonzero(comparisons)]
-        #[minVal, maxVal] = np.percentile(values, [lower, upper])
-        #weights = self._smoothStep(comparisons, xMin=minVal, xMax=maxVal, N=1)
+    def _calculateWeightsCommonNeighborCountsGlobal(self, comparisons, threshold):
+        adjacency = self._calculateWeightsInterpolationGlobal(comparisons, threshold, threshold).astype(bool)
+        return self._calculateWeightsCommonNeighborCounts(adjacency)
 
-        # Ensure the graph is symmetric
-        weights = symmetrizeFunc(weights, weights.T)
-
-        assert(np.all(weights >= 0))
-        assert(np.all(weights <= 1))
-        return weights
+    def _calculateWeightsCommonNeighborCountsLocal(self, comparisons, threshold):
+        adjacency = self._calculateWeightsInterpolationLocal(comparisons, threshold, threshold).astype(bool)
+        return self._calculateWeightsCommonNeighborCounts(adjacency)
 
     def _calculateFiedlerVector(self, graph):
         """ Given a adjacency matrix, it computes the Fiedler vector, this is,
@@ -952,10 +1041,49 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return labels
 
+    def _partitionGraph(self, graph, metric):
+        # Compute the fiedler vector
+        fiedler = self._calculateFiedlerVector(graph)
+
+        # Partition it
+        labels = self._partitionFiedlerVector(graph, fiedler, metric)
+
+        return labels, fiedler
+
+    def _partitionGraphMultiLevel(self, graph, labels, metric, nLevels):
+        result = np.zeros((nLevels, len(labels)), dtype=np.uint)
+
+        # Write the provided labels into the first row
+        result[0,:] = labels
+
+        # Recursively divide into 2 subgroups
+        for level in range(1, nLevels):
+            # Initialize the new level data
+            prevLabels = result[level-1]
+            result[level] = 2*prevLabels
+
+            for component in np.unique(prevLabels):
+                # Select the vertices classified as this component
+                selection = prevLabels == component
+
+                # Only partition if possible
+                if np.count_nonzero(selection) > 2:
+                    # Build the adjacency matrix for the component
+                    componentGraph = graph[selection, :][:, selection]
+                    assert(componentGraph.shape[0] == componentGraph.shape[1])
+
+                    # Partition it
+                    componentPartition, _ = self._partitionGraph(componentGraph, metric)
+
+                    # Compute the new labels
+                    result[level, selection] += componentPartition
+
+        return result
+
     def _reconstructVolume(self, path, particles):
         # Convert the particles to a xmipp metadata file
         fnParticles = path+'_particles.xmd'
-        writeSetOfParticles(particles, fnParticles)
+        writeSetOfParticles(particles, fnParticles, alignType=ALIGN_PROJ)
 
         # Reconstruct the volume
         args  = f'-i {fnParticles} '
@@ -965,7 +1093,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         self.runJob('xmipp_reconstruct_fourier', args)
 
         # Clear the metadata file
-        cleanPattern(fnParticles)
+        #cleanPattern(fnParticles)
 
     def _createOutputClasses(self, images, classification, suffix=''):
         result = self._createSetOfClasses3D(images, suffix)
@@ -993,15 +1121,12 @@ class XmippProtSplitvolume(ProtClassify3D):
         
         return result
 
-    class ImageComparatorBase:
+    class ImageAligner:
         def __init__(self, considerMirrors, mask):
             self.alignFunc = xmippLib.Image.alignConsideringMirrors if considerMirrors else xmippLib.Image.align
             self.mask = mask
             
-        def _alignImages(self, imgRef, img):
-            return self.alignFunc(imgRef, img)
-
-        def _maskAlignedImages(self, img0, img1):
+        def __call__(self, img0, img1):
             # Align img1 respect img0
             img1 = self._alignImages(img0, img1)
             img0 = img0.getData()
@@ -1012,24 +1137,14 @@ class XmippProtSplitvolume(ProtClassify3D):
             img1 *= self.mask
 
             return img0, img1
+        
+        def _alignImages(self, imgRef, img):
+            return self.alignFunc(imgRef, img)
 
-        def _subtractAlignedImages(self, img0, img1):
-            # Align and mask both images
-            img0, img1 = self._maskAlignedImages(img0, img1)
-
-            # Subtract adjusting their mean so that the difference has a mean of 0
-            result = img0 - img1*(np.mean(img0)/np.mean(img1))
-
-            assert(np.isclose(np.mean(result), 0))
-            return result
-
-    class PowerImageComparator(ImageComparatorBase):
-        def __init__(self, considerMirrors, mask):
-            super().__init__(considerMirrors, mask)
-
+    class PowerImageComparator:
         def __call__(self, img0, img1):
-            # Align the images and compute the difference
-            difference = self._subtractAlignedImages(img0, img1)
+            # Compute the difference
+            difference = img0 - img1*(np.mean(img0)/np.mean(img1))
             power = np.std(difference)
 
             # Ensure that the result matrix is in [0, 1]
@@ -1039,14 +1154,8 @@ class XmippProtSplitvolume(ProtClassify3D):
             assert(result <= 1)
             return result, difference
 
-    class CorrelationImageComparator(ImageComparatorBase):
-        def __init__(self, considerMirrors, mask):
-            super().__init__(considerMirrors, mask)
-
+    class CorrelationImageComparator:
         def __call__(self, img0, img1):
-            # Mask the aligned images
-            img0, img1 = self._maskAlignedImages(img0, img1)
-
             # Compute the correlation index
             correlation = np.corrcoef(img0, img1)
             difference = img0 - img1
@@ -1058,9 +1167,8 @@ class XmippProtSplitvolume(ProtClassify3D):
             assert(result <= 1)
             return result, difference
 
-    class WassersteinImageComparator(ImageComparatorBase):
-        def __init__(self, considerMirrors, mask, nLevels, wavelet='sym5'):
-            super().__init__(considerMirrors, mask)
+    class WassersteinImageComparator:
+        def __init__(self, nLevels, wavelet='sym5'):
             self.nLevels = nLevels
             self.wavelet = wavelet
 
@@ -1068,8 +1176,9 @@ class XmippProtSplitvolume(ProtClassify3D):
             # Based on:
             # https://github.com/ComputationalCryoEM/ASPIRE-Python/blob/master/src/aspire/operators/wemd.py
 
-            # Align and subtract the input images
-            difference = self._subtractAlignedImages(img0, img1)
+            # Subtract the input images so that the mean is zero
+            difference = img0 - img1*(np.mean(img0)/np.mean(img1))
+            assert(np.isclose(np.mean(difference), 0))
 
             # Compute the Wavelet transform
             coefficients = self._computeWaveletCoefficients(difference)
@@ -1110,14 +1219,13 @@ class XmippProtSplitvolume(ProtClassify3D):
             assert(len(weights) == self.nLevels)
             return weights
 
-    class EntropyImageComparator(ImageComparatorBase):
-        def __init__(self, considerMirrors, mask, nBins):
-            super().__init__(considerMirrors, mask)
+    class EntropyImageComparator:
+        def __init__(self, nBins):
             self.nBins = nBins
 
         def __call__(self, img0, img1):
             # Align the images and compute the difference
-            difference = self._subtractAlignedImages(img0, img1)
+            difference = img0 - img1*(np.mean(img0)/np.mean(img1))
 
             # Square the difference image to obtain the absolute value
             power = difference ** 2
