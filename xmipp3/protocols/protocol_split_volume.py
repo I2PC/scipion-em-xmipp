@@ -28,6 +28,7 @@
 Protocol to split a volume in two volumes based on a set of images
 """
 
+from re import A
 from pyworkflow.constants import BETA
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, StringParam, BooleanParam, EnumParam
@@ -51,12 +52,14 @@ import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor
 from collections import Counter
 from functools import partial
+from sklearn.preprocessing import normalize
 
 from scipy import special
 from scipy import sparse
 from scipy import stats
 from scipy.sparse import csgraph
 from scipy.sparse import linalg
+
 
 class XmippProtSplitvolume(ProtClassify3D):
     """Split volume in two"""
@@ -277,6 +280,7 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def partitionGraphStep(self):
         # Read the input data
+        images = self._readSelectedImages()
         adjacency = self._readWeights()
         metric = self._getGraphPartitionMetricFunc()
         nLevels = self.graphCutLevels.get()
@@ -288,8 +292,12 @@ class XmippProtSplitvolume(ProtClassify3D):
         nComponents, labels = csgraph.connected_components(adjacency)
         print(f'The unpartitioned graph has {nComponents} components')
 
+        # Get the projection directions
+        directions = list(map(self._getProjectionDirection, images))
+        directions = np.array(directions)
+
         # Partition the graph
-        labels = self._partitionGraphMultiLevel(graph, labels, metric, nLevels)
+        labels = self._partitionGraphMultiLevel(graph, labels, directions, metric, 0.9)
 
         # Write the result
         self._writeLabels(labels)
@@ -1025,6 +1033,37 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return values
 
+    def _selectUnfinishedComponents(self, directions, labels, threshold):
+        result = {}
+
+        for component in np.unique(labels):
+            # Select the images that belong to this component
+            selection = labels == component
+
+            # Obtain the extrinsic spherical average direction of the selected images
+            direction = normalize(np.mean(directions[selection], axis=0))
+
+            # Project all the image projection directions onto the average direction
+            projections = np.dot(directions, direction) # (Matrix multiplication, dot of rows and column)
+
+            # Determine the furthest point of the selection
+            maxDistance = np.min(projections[selection])
+
+            # Select the points that are within the selection cone
+            intersection = projections >= maxDistance
+
+            # Compute the score for the intersection
+            nSelection = np.count_nonzero(selection)
+            nIntersection = np.count_nonzero(intersection)
+            assert(nIntersection >= nSelection)
+            score = (nIntersection - nSelection) / nIntersection
+
+            # Determine if the component needs to be partitioned
+            if score < threshold:
+                result.add(component)
+
+        return result
+
     def _partitionFiedlerVector(self, graph, fiedler, metric):
         """ Partition the graph into 2 components which
             minimize the given metric
@@ -1050,33 +1089,44 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return labels, fiedler
 
-    def _partitionGraphMultiLevel(self, graph, labels, metric, nLevels):
-        result = np.zeros((nLevels, len(labels)), dtype=np.uint)
+    def _partitionGraphComponents(self, graph, labels, components, metric):
+        result = np.empty_like(labels)
 
-        # Write the provided labels into the first row
-        result[0,:] = labels
+        componentCounter = 0
+        for component in np.unique(components):
+            # Select the vertices classified as this component
+            selection = labels == component
 
-        # Recursively divide into 2 subgroups
-        for level in range(1, nLevels):
-            # Initialize the new level data
-            prevLabels = result[level-1]
-            result[level] = 2*prevLabels
+            # Determine if it needs to be partitioned
+            if component in components:
+                # Build the adjacency matrix for the component
+                componentGraph = graph[selection, :][:, selection]
+                assert(componentGraph.shape[0] == componentGraph.shape[1])
 
-            for component in np.unique(prevLabels):
-                # Select the vertices classified as this component
-                selection = prevLabels == component
+                # Partition it
+                componentPartition, _ = self._partitionGraph(componentGraph, metric)
 
-                # Only partition if possible
-                if np.count_nonzero(selection) > 2:
-                    # Build the adjacency matrix for the component
-                    componentGraph = graph[selection, :][:, selection]
-                    assert(componentGraph.shape[0] == componentGraph.shape[1])
+                # Compute the new labels
+                result[selection] = componentCounter + componentPartition
+                componentCounter += 2
+            
+            else:
+                result[selection] = componentCounter
+                componentCounter += 1
 
-                    # Partition it
-                    componentPartition, _ = self._partitionGraph(componentGraph, metric)
+        return result
 
-                    # Compute the new labels
-                    result[level, selection] += componentPartition
+    def _partitionGraphMultiLevel(self, graph, labels, directions, metric, threshold):
+        result = [labels]
+        unfinished = self._selectUnfinishedComponents(directions, labels, threshold)
+
+        # Partition the graph
+        while len(unfinished) > 0:
+            prevLabels = result[-1]
+            nextLabels = self._partitionGraphComponents(graph, prevLabels, unfinished, metric)
+
+            result.append(nextLabels)
+            unfinished = self._selectUnfinishedComponents(directions, nextLabels, threshold)
 
         return result
 
