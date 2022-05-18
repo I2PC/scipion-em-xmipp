@@ -36,6 +36,8 @@ from xmipp3.base import XmippProtocol
 from xmipp3.convert import getImageLocation
 
 class XmippProtDeepHand(EMProtocol, XmippProtocol):
+    """Protocol to returns handedness of structure from trained deep learning model
+    """
 
     _label ="deep hand"
     _conda_env = "xmipp_deepHand"
