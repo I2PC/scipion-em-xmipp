@@ -130,9 +130,10 @@ class XmippProtSplitvolume(ProtClassify3D):
         form.addParam('graphMetric', EnumParam, label="Cut metric", 
                       choices=['Graph cut', 'Ratio cut', 'Normalized cut', 'Quotient cut'], default=3,
                       help='Objective function to minimize when cutting the graph in half')
-        form.addParam('graphCutLevels', IntParam, label='Cut levels',
-                       validators=[GT(1)], default=3,
-                       help='Number of recursive graph cuts to perform')
+        form.addParam('graphComponentMinOverlap', FloatParam, label='Minimum component overlap (%)',
+                       validators=[Range(0, 100)], default=50,
+                       help='When recursively partitioning the graph, determine if a component needs to '
+                       'be partitioned when the overlap is smaller than the threshold')
 
         form.addParallelSection(threads=mp.cpu_count(), mpi=0)
     
@@ -283,13 +284,14 @@ class XmippProtSplitvolume(ProtClassify3D):
         images = self._readSelectedImages()
         adjacency = self._readWeights()
         metric = self._getGraphPartitionMetricFunc()
-        nLevels = self.graphCutLevels.get()
+        overlap = self.graphComponentMinOverlap.get() / 100
 
         # Partition the graph recursively up to some amount of levels
         graph = sparse.csr_matrix(adjacency)
         
         # Obtain information about the graph
         nComponents, labels = csgraph.connected_components(adjacency)
+        labels = labels.astype(np.uint)
         print(f'The unpartitioned graph has {nComponents} components')
 
         # Get the projection directions
@@ -297,7 +299,8 @@ class XmippProtSplitvolume(ProtClassify3D):
         directions = np.array(directions)
 
         # Partition the graph
-        labels = self._partitionGraphMultiLevel(graph, labels, directions, metric, 0.9)
+        labels = self._partitionGraphMultiLevel(graph, labels, directions, metric, overlap)
+        print(labels)
 
         # Write the result
         self._writeLabels(labels)
@@ -1034,33 +1037,39 @@ class XmippProtSplitvolume(ProtClassify3D):
         return values
 
     def _selectUnfinishedComponents(self, directions, labels, threshold):
-        result = {}
+        result = set()
+        COS45 = 1/math.sqrt(2)
 
         for component in np.unique(labels):
             # Select the images that belong to this component
             selection = labels == component
 
-            # Obtain the extrinsic spherical average direction of the selected images
-            direction = normalize(np.mean(directions[selection], axis=0))
+            if np.count_nonzero(selection) > 1:
+                # Obtain the extrinsic spherical average direction of the selected images
+                direction = np.mean(directions[selection], axis=0)
+                direction /= np.linalg.norm(direction)
+                assert(np.isclose(np.linalg.norm(direction), 1))
 
-            # Project all the image projection directions onto the average direction
-            projections = np.dot(directions, direction) # (Matrix multiplication, dot of rows and column)
+                # Project all the image projection directions onto the average direction
+                projections = np.dot(directions, direction) # (Matrix multiplication, dot of rows and column)
 
-            # Determine the furthest point of the selection
-            maxDistance = np.min(projections[selection])
+                # Determine the furthest point of the selection
+                maxDistance = np.min(projections[selection])
 
-            # Select the points that are within the selection cone
-            intersection = projections >= maxDistance
+                # Do not consider splitting components with a cone smaller than 90º
+                if maxDistance < COS45:
+                    # Select the points that are within the selection cone
+                    intersection = projections >= maxDistance
 
-            # Compute the score for the intersection
-            nSelection = np.count_nonzero(selection)
-            nIntersection = np.count_nonzero(intersection)
-            assert(nIntersection >= nSelection)
-            score = (nIntersection - nSelection) / nIntersection
+                    # Compute the score for the intersection
+                    nSelection = np.count_nonzero(selection)
+                    nIntersection = np.count_nonzero(intersection)
+                    assert(nIntersection >= nSelection)
+                    score = (nIntersection - nSelection) / nIntersection
 
-            # Determine if the component needs to be partitioned
-            if score < threshold:
-                result.add(component)
+                    # Determine if the component needs to be partitioned
+                    if score < threshold:
+                        result.add(component)
 
         return result
 
@@ -1081,19 +1090,27 @@ class XmippProtSplitvolume(ProtClassify3D):
         return labels
 
     def _partitionGraph(self, graph, metric):
-        # Compute the fiedler vector
-        fiedler = self._calculateFiedlerVector(graph)
+        nVertices = graph.shape[0]
 
-        # Partition it
-        labels = self._partitionFiedlerVector(graph, fiedler, metric)
+        if nVertices > 2:
+            # Compute the fiedler vector
+            fiedler = self._calculateFiedlerVector(graph)
 
-        return labels, fiedler
+            # Partition it
+            labels = self._partitionFiedlerVector(graph, fiedler, metric)
+
+        else:
+            # 2 nodes. Trivial partition
+            labels = np.arange(nVertices, dtype=np.uint)
+
+        assert(nVertices == len(labels))
+        return labels
 
     def _partitionGraphComponents(self, graph, labels, components, metric):
         result = np.empty_like(labels)
 
         componentCounter = 0
-        for component in np.unique(components):
+        for component in np.unique(labels):
             # Select the vertices classified as this component
             selection = labels == component
 
@@ -1104,7 +1121,7 @@ class XmippProtSplitvolume(ProtClassify3D):
                 assert(componentGraph.shape[0] == componentGraph.shape[1])
 
                 # Partition it
-                componentPartition, _ = self._partitionGraph(componentGraph, metric)
+                componentPartition = self._partitionGraph(componentGraph, metric)
 
                 # Compute the new labels
                 result[selection] = componentCounter + componentPartition
@@ -1128,7 +1145,7 @@ class XmippProtSplitvolume(ProtClassify3D):
             result.append(nextLabels)
             unfinished = self._selectUnfinishedComponents(directions, nextLabels, threshold)
 
-        return result
+        return np.array(result)
 
     def _reconstructVolume(self, path, particles):
         # Convert the particles to a xmipp metadata file
