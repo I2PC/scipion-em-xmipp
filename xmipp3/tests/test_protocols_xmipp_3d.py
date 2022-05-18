@@ -1488,12 +1488,6 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.launchProtocol(protCreateMaskKeep)
         self.assertIsNotNone(protCreateMaskKeep.getFiles(),
                              "There was a problem with the 3D mask of the 1 item phantom")
-        # protApplyMask = self.newProtocol(XmippProtMaskVolumes,
-        #                                  source=1,
-        #                                  inputMask=protCreateMaskKeep.outputMask)
-        # self.launchProtocol(protApplyMask)
-        # self.assertIsNotNone(protApplyMask.getFiles(),
-        #                      "There was a problem applying the 3D mask")
         protSubtractProj = self.newProtocol(XmippProtSubtractProjection,
                                             particles=protCreateGallery.outputReprojections,
                                             vol=protCreatePhantom1item.outputVolume)
