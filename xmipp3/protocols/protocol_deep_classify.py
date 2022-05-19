@@ -26,6 +26,7 @@
 # ******************************************************************************
 
 import numpy as np
+import random
 
 from pyworkflow import VERSION_2_0
 from pwem.constants import ALIGN_2D
@@ -68,6 +69,8 @@ class XmippProtDeepClassify(ProtClassify2D):
                             writeParticles=True)
         
         cl = []
+        listImage = []
+        
         for row in md.iterRows(inputMdName):
         
             classImage = row.getValue(md.MDL_IMAGE)
@@ -84,17 +87,39 @@ class XmippProtDeepClassify(ProtClassify2D):
   
         count=0
         mdBlocks = md.getBlocksInMetaDataFile(inputMdName)
+        
         for block in mdBlocks:
-                        
-            if block.startswith('class' + cl[0].split("@")[0]):
-                print(cl[1].split("@")[0])
+                    
+            listImage.append([]) 
+                       
+            if block.startswith('class' + cl[count].split("@")[0]):
+                
                 mdClass = md.MetaData(block + "@" + inputMdName)
-                count+=1
+                
                 for rowIn in md.iterRows(mdClass):
                     image = rowIn.getValue(md.MDL_IMAGE)
-                    print(image)
+                    listImage[count].append(image)
 
+                count+=1
  
+        # print(listImage[4])
+        
+        #select class-image pair randomly
+
+        n = np.random.randint(0,refNum-1)
+        print("random class = ",n)
+        clTest = cl[n]
+        imTest = np.random.choice(listImage[n])
+        print(clTest, imTest)
+        
+        
+
+
+
+
+
+
+
 
 
 
