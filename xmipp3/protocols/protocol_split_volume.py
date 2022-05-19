@@ -45,12 +45,12 @@ from xmipp3.convert import writeSetOfParticles, locationToXmipp
 
 import math
 import itertools
+import collections
 import pywt
 import PIL.Image
 import numpy as np
 import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor
-from collections import Counter
 from functools import partial
 from sklearn.preprocessing import normalize
 
@@ -151,7 +151,8 @@ class XmippProtSplitvolume(ProtClassify3D):
         self._insertFunctionStep('computeImageComparisonsStep')
         self._insertFunctionStep('computeWeightsStep')
         self._insertFunctionStep('partitionGraphStep')
-        self._insertFunctionStep('reconstructVolumesStep')
+        self._insertFunctionStep('reconstructPartitionVolumesStep')
+        self._insertFunctionStep('compareVolumesStep')
         #self._insertFunctionStep('createOutputStep')
 
     #--------------------------- STEPS functions ---------------------------------------------------
@@ -257,7 +258,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         
         # Save output data
         self._writeComparisonDifferences(differences)
-        self._writeComparisons(comparisonMatrix)
+        self._writeImageComparisons(comparisonMatrix)
 
     def computeWeightsStep(self):
         # Read input data
@@ -265,7 +266,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         distances = self._readAngularDistances()
         pairs = self._readImagePairs()
         ponderations = self._readDistancePonderation()
-        comparisons = self._readComparisons()
+        comparisons = self._readImageComparisons()
         weightFunc = self._getWeightCalculationFunc()
         symmetrizeFunc = self._getSymmetrizeFunc()
         
@@ -300,22 +301,29 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         # Partition the graph
         labels = self._partitionGraphMultiLevel(graph, labels, directions, metric, overlap)
-        print(labels)
 
         # Write the result
-        self._writeLabels(labels)
+        self._writePartitionLabels(labels)
 
-    def reconstructVolumesStep(self):
+    def reconstructPartitionVolumesStep(self):
         # Read the input data
         images = self._readSelectedImages()
-        labels = self._readLabels()
+        labels = self._readPartitionLabels(-1)
 
         # Reconstruct a volume for each top-level partition
-        for cls in np.unique(labels[-1]):
-            selection = labels[-1] == cls
+        for cls in np.unique(labels):
+            selection = labels == cls
             partitionImages = images[selection]
             path = self._getPartitionVolumeFileName(cls)
             self._reconstructVolume(path, partitionImages)
+
+    def compareVolumesStep(self):
+        labels = self._readPartitionLabels(-1)
+        volumes = self._readPartitionVolumes(np.unique(labels))
+
+        comparisons = self._computeVolumeComparisons(volumes)
+
+        self._writeVolumeComparisons(comparisons)
 
     def createOutputStep(self):
         # Read input data
@@ -480,15 +488,13 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _readMatrix(self, path, dtype=float):
         return np.genfromtxt(path, delimiter=',', dtype=dtype) # CSV
 
-    def _writeNdarrayAsStack(self, path, arr):
-        imageOut = xmippLib.Image()
-        imageOut.setData(arr)
-        imageOut.write(path)
+    def _writeNdarrayAsStack(self, path, arr, imageObj=xmippLib.Image()):
+        imageObj.setData(arr)
+        imageObj.write(path)
 
-    def _readNdarrayAsStack(self, path):
-        imageIn = xmippLib.Image
-        imageIn.read(path)
-        return imageIn.getData()
+    def _readNdarrayAsStack(self, path, imageObj=xmippLib.Image()):
+        imageObj.read(path)
+        return imageObj.getData()
 
     def _storeMatrix(self, attribute, x, fmt):
         """ Stores an ndarray to disk and as an attribute 
@@ -556,12 +562,12 @@ class XmippProtSplitvolume(ProtClassify3D):
         path = self._getComparisonDifferencesStackFileName()
         self._writeNdarrayAsStack(path, differences)
 
-    def _writeComparisons(self, weights):
-        assert(weights.dtype==float)
-        self._storeMatrix('comparisons', weights, fmt='%.8f')
+    def _writeImageComparisons(self, comparisons):
+        assert(comparisons.dtype==float)
+        self._storeMatrix('image_comparisons', comparisons, fmt='%.8f')
     
-    def _readComparisons(self):
-        return self._loadMatrix('comparisons', dtype=float)
+    def _readImageComparisons(self):
+        return self._loadMatrix('image_comparisons', dtype=float)
 
     def _getWeightMetaDataFileName(self):
         return self._getExtraPath('weights.xmd')
@@ -610,15 +616,40 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _readWeights(self):
         return self._loadMatrix('weights', dtype=float)
 
-    def _writeLabels(self, labels):
+    def _writePartitionLabels(self, labels):
         assert(labels.dtype==np.uint)
-        self._storeMatrix('labels', labels, fmt='%d')
+        self._storeMatrix('partitions', labels, fmt='%d')
 
-    def _readLabels(self):
-        return self._loadMatrix('labels', dtype=np.uint)
+    def _readPartitionLabels(self, level=None):
+        result = self._loadMatrix('partitions', dtype=np.uint)
+
+        if level is not None:
+            result = result[level]
+
+        return result
 
     def _getPartitionVolumeFileName(self, cls):
         return self._getExtraPath(f'partition_{cls:04d}.vol')
+
+    def _readPartitionVolume(self, cls, imageObj=xmippLib.Image()):
+        path = self._getPartitionVolumeFileName(cls)
+        return self._readNdarrayAsStack(path, imageObj=imageObj)
+
+    def _readPartitionVolumes(self, classes):
+        result = np.empty(len(classes), dtype=object)
+
+        imgObj = xmippLib.Image() # Cache to avoid reallocations
+        for i, cls in enumerate(classes):
+            result[i] = self._readPartitionVolume(cls, imageObj=imgObj)
+
+        return result
+
+    def _writeVolumeComparisons(self, comparisons):
+        assert(comparisons.dtype==float)
+        self._storeMatrix('volume_comparisons', comparisons, fmt='%.8f')
+    
+    def _readVolumeComparisons(self):
+        return self._loadMatrix('volume_comparisons', dtype=float)
 
     def _convertClasses2D(self, classes):
         result = []
@@ -650,7 +681,7 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _calculateDirectionSizeSelection(self, images, minClassesPerDirection, mask):
         if minClassesPerDirection > 1:
             directionIds = self._getDirectionIds(images)
-            repetitions = Counter(directionIds[mask]) # Only count where selected
+            repetitions = collections.Counter(directionIds[mask]) # Only count where selected
             selection = np.array(list(map(
                 lambda directionId : repetitions[directionId] >= minClassesPerDirection, 
                 directionIds
@@ -972,7 +1003,7 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _calculateGraphSizes(self, labels):
         """ Computes the vertex count of each component of the graph
         """
-        counter  = Counter(labels)
+        counter = collections.Counter(labels)
         return np.array(list(counter.values()))
 
     def _calculateGraphVolumes(self, graph, labels):
@@ -1161,6 +1192,26 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         # Clear the metadata file
         #cleanPattern(fnParticles)
+
+    def _computeVolumeComparisons(self, volumes):
+        result = np.zeros((len(volumes), )*2, dtype=float)
+
+        compareFunc = self._getImageCompareFunc(volumes[0].shape)
+        mapFunc = self._getMapFunc()
+
+        # Compare all volume pairs
+        pairs = list(itertools.combinations(range(len(result)), r=2))
+        volumePairs = map(lambda pair : (volumes[pair[0]], volumes[pair[1]]), pairs)
+        comparisons = mapFunc(compareFunc, *zip(*volumePairs))
+        comparisons = list(map(lambda x : x[0], comparisons))
+
+        # Write the result on symmetrical positions
+        for (idx0, idx1), comparison in zip(pairs, comparisons):
+            result[idx0, idx1] = comparison
+            result[idx1, idx0] = comparison
+
+        assert(np.array_equal(result, result.T))
+        return result
 
     def _createOutputClasses(self, images, classification, suffix=''):
         result = self._createSetOfClasses3D(images, suffix)

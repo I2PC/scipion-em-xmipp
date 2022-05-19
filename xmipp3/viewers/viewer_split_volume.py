@@ -190,7 +190,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         return [fig]
 
     def _displayLabelHistogram(self, e):
-        labels = self._readLabels()
+        labels = self._readPartitionLabels(-1)
         nClasses = int(labels.max())+1
 
         fig, ax = plt.subplots()
@@ -201,7 +201,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         return [fig]
 
     def _displayLabelImage(self, e):
-        labels = self._readLabels('all')
+        labels = self._readPartitionLabels()
 
         fig, ax = plt.subplots()
         self._plotClassification(fig, ax, labels)
@@ -212,7 +212,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
     
     def _displayProjectionClassification(self, e):
         images = self._readImages()
-        labels = self._readLabels()
+        labels = self._readPartitionLabels(-1)
         points = self._getProjectionSphere(images)
 
         # Plot the projection angles with the classification
@@ -224,7 +224,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     def _displayProjectionClassificationDisjoint(self, e):
         images = self._readImages()
-        labels = self._readLabels()
+        labels = self._readPartitionLabels(-1)
         points = self._getProjectionSphere(images)
 
         # Apply an offset to the points
@@ -255,7 +255,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         return [fig]
     
     def _displayComparisonImage(self, e):
-        comparisons = self._readComparisons()
+        comparisons = self._readImageComparisons()
         
         fig, ax = plt.subplots()
         self._plotMatrix(fig, ax, comparisons, 'Similarity')
@@ -346,8 +346,8 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     def _displayComparison3dNetwork(self, e):
         images = self._readImages()
-        comparisons = self._readComparisons()
-        labels = self._readLabels()
+        comparisons = self._readImageComparisons()
+        labels = self._readPartitionLabels(-1)
         points = self._getProjectionSphere(images)
 
         # Obtain the edges of the graph
@@ -363,8 +363,8 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     def _displayComparison3dNetworkDisjoint(self, e):
         images = self._readImages()
-        comparisons = self._readComparisons()
-        labels = self._readLabels()
+        comparisons = self._readImageComparisons()
+        labels = self._readPartitionLabels(-1)
         points = self._getProjectionSphere(images)
 
         # Apply a offset to the points
@@ -385,7 +385,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _displayWeight3dNetwork(self, e):
         images = self._readImages()
         weights = self._readWeights()
-        labels = self._readLabels()
+        labels = self._readPartitionLabels(-1)
         points = self._getProjectionSphere(images)
 
         # Obtain the edges of the graph
@@ -402,7 +402,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _displayWeight3dNetworkDisjoint(self, e):
         images = self._readImages()
         weights = self._readWeights()
-        labels = self._readLabels()
+        labels = self._readPartitionLabels(-1)
         points = self._getProjectionSphere(images)
 
         # Apply a offset to the points
@@ -430,8 +430,8 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _readDistancePonderation(self):
         return self.protocol._readDistancePonderation()
 
-    def _readComparisons(self):
-        return self.protocol._readComparisons()
+    def _readImageComparisons(self):
+        return self.protocol._readImageComparisons()
 
     def _readWeights(self):
         return self.protocol._readWeights()
@@ -439,9 +439,8 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _readFiedlerVector(self):
         return self.protocol._readFiedlerVector()
 
-    def _readLabels(self, level=-1):
-        labels = self.protocol._readLabels()
-        return labels if level == 'all' else labels[level]
+    def _readPartitionLabels(self, level=None):
+        return self.protocol._readPartitionLabels(level)
 
     def _getDirectionIds(self, images):
         return self.protocol._getDirectionIds(images)
