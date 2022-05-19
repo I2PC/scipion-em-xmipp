@@ -251,7 +251,8 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
                 outputStep.setStatus(STATUS_NEW)
 
     def createOutputStep(self):
-        pass
+        self._closeOutputSet()
+        #pass
 
     # --------------------------- INFO functions -------------------------------
     def _validate(self):

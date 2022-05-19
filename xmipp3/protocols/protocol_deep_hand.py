@@ -30,11 +30,14 @@ from pwem.objects import Volume
 
 from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam
 from pyworkflow.object import Float
+from pyworkflow.utils.path import cleanPath
 
 from xmipp3.base import XmippProtocol
 from xmipp3.convert import getImageLocation
 
 class XmippProtDeepHand(EMProtocol, XmippProtocol):
+    """Protocol to returns handedness of structure from trained deep learning model
+    """
 
     _label ="deep hand"
     _conda_env = "xmipp_deepHand"
@@ -131,6 +134,10 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
         else:
             self._defineOutputs(outputVol=self.inputVolume.get())
         self._defineSourceRelation(self.inputVolume, self.outputVol)
+
+        cleanPath(self._getPath('resizedVol.mrc'))
+        cleanPath(self._getPath('mask.mrc'))
+        cleanPath(self._getPath('filteredVol.mrc'))
 
 # --------------------------- INFO functions -------------------------------
     def _summary(self):
