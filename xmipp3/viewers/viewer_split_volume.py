@@ -37,6 +37,7 @@ from pwem.viewers import DataView, ObjectView
 from xmipp3.protocols.protocol_split_volume import XmippProtSplitvolume
 
 import math
+import collections
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -191,10 +192,12 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     def _displayLabelHistogram(self, e):
         labels = self._readPartitionLabels(-1)
-        nClasses = int(labels.max())+1
+        counts = collections.Counter(labels)
+        x = np.unique(labels)
+        y = np.array(list(map(counts.__getitem__, x)))
 
         fig, ax = plt.subplots()
-        ax.hist(labels, bins=nClasses)
+        ax.bar(x, y)
         ax.set_xlabel('Class number')
         ax.set_ylabel('Class size')
         ax.set_title('Class sizes')
