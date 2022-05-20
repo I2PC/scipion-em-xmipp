@@ -92,6 +92,10 @@ class XmippProtDenoiseParticles(ProtProcessParticles):
         if isinstance(self.inputClasses.get(), SetOfVolumes):
             writeSetOfClasses2D(self.inputClasses.get(), classesMd)
         else:
+            writeSetOfParticles(self.inputClasses.get(), classesMd)
+        if isinstance(self.inputClasses.get(), SetOfVolumes):
+            writeSetOfClasses2D(self.inputClasses.get(), classesMd)
+        else:
             writeSetOfParticles(self.inputParticles.get(), classesMd)
 
         fnRoot = self._getExtraPath('pca')

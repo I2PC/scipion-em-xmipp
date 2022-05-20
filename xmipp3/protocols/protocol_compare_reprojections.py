@@ -147,7 +147,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             args += " --oresiduals %s" % self.fnResiduals
 
         if self.ignoreCTF:
-            args += " --ignoreCTF"
+            args += " --ignoreCTF "
         if self.optimizeGray:
             args += "--optimizeGray --max_gray_scale 0.95 "
         self.runJob("xmipp_angular_continuous_assign2", args)
