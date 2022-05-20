@@ -39,6 +39,10 @@ from pwem.objects import Class3D
 import pickle
 import matplotlib.pyplot as plt
 
+FILE_OBJECTIVE_FDATA = 'ObjectiveFData.pkl'
+FILE_CLUSTERINGS = 'clusterings.pkl'
+FILE_ELBOWCLUSTERS = 'elbowclusters.pkl'
+
 
 class XmippClasses3DViewer(ProtocolViewer):
     """ Visualization of results from the consensus classes 3D protocol
@@ -54,19 +58,19 @@ class XmippClasses3DViewer(ProtocolViewer):
         self._allClusterings = self.getClusterings()
 
     def getObjectiveFData(self):
-        loadPath = self.protocol._getExtraPath('ObjectiveFData.pkl')
+        loadPath = self.protocol._getExtraPath(FILE_OBJECTIVE_FDATA)
         with open(loadPath, 'rb') as f:
             self._ObjFData = pickle.load(f)
         return self._ObjFData
 
     def getClusterings(self):
-        loadPath = self.protocol._getExtraPath('clusterings.pkl')
+        loadPath = self.protocol._getExtraPath(FILE_CLUSTERINGS)
         with open(loadPath, 'rb') as f:
             self._allClusterings = pickle.load(f)
         return self._allClusterings
 
     def getElbowIndex(self):
-        loadPath = self.protocol._getExtraPath('elbowclusters.pkl')
+        loadPath = self.protocol._getExtraPath(FILE_ELBOWCLUSTERS)
         with open(loadPath, 'rb') as f:
             self.elbowIndex = pickle.load(f)
         return self.elbowIndex
