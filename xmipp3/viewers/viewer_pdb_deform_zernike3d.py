@@ -30,13 +30,13 @@ import pyworkflow.viewer as pwviewer
 import pwem.viewers.views as vi
 import pyworkflow.protocol.params as params
 from pwem.viewers import ChimeraView
-from xmipp3.protocols.protocol_pdb_deform_zernike3d import XmippProtDeformPDBZernike3D
+from xmipp3.protocols.protocol_apply_zernike3d import XmippApplyZernike3D
 
 
 class XmippPDBDeformViewer(pwviewer.ProtocolViewer):
     """ Visualize the deformation applied to the PDB file """
     _label = 'viewer pdb deform sph'
-    _targets = [XmippProtDeformPDBZernike3D]
+    _targets = [XmippApplyZernike3D]
     _environments = [pwviewer.DESKTOP_TKINTER, pwviewer.WEB_DJANGO]
     OPEN_FILE = "open %s\n"
 

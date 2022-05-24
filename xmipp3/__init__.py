@@ -61,7 +61,8 @@ class Plugin(pwem.Plugin):
 
         environ.update({
             'PATH': pwem.Config.CUDA_BIN,
-            'LD_LIBRARY_PATH': pwem.Config.CUDA_LIB
+            'LD_LIBRARY_PATH': pwem.Config.CUDA_LIB,
+            'TF_FORCE_GPU_ALLOW_GROWTH': 'true'
         }, position=pwutils.Environ.END)
 
         if os.path.isfile(getXmippPath('xmippEnv.json')):

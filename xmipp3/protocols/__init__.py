@@ -30,7 +30,7 @@ from .protocol_preprocess import *
 
 from .protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from .protocol_align_volume import XmippProtAlignVolume, XmippProtAlignVolumeForWeb
-from .protocol_angular_graph_consistency import XmippProtAngularGraphConsistency
+# from .protocol_angular_graph_consistency import XmippProtAngularGraphConsistency
 from .protocol_preprocess.protocol_add_noise import (XmippProtAddNoiseVolumes,
                                                      XmippProtAddNoiseParticles)
 from .protocol_apply_alignment import XmippProtApplyAlignment
@@ -135,7 +135,10 @@ from .protocol_metaprotocol_golden_highres import XmippMetaProtGoldenHighRes
 # from .protocol_apply_deformation_zernike3d import XmippProtApplyZernike3D
 # from .protocol_kmeans_clustering import XmippProtKmeansSPH
 from .protocol_structure_map import XmippProtStructureMap
-from .protocol_pdb_deform_zernike3d import XmippProtDeformPDBZernike3D
+from .protocol_apply_zernike3d import XmippApplyZernike3D
 from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtraction
 from .protocol_volume_consensus import XmippProtVolConsensus
 from .protocol_classes_2d_mapping import XmippProtCL2DMap
+from .protocol_reconstruct_zart import XmippProtReconstructZART
+from .protocol_compute_priors_zernike3d import XmippProtComputePriorsZernike3D
+from .protocol_particle_assign_prior_zernike3d import XmippProtAssignPriorsZernike3D
