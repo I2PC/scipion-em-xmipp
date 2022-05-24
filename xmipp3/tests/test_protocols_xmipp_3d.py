@@ -1526,7 +1526,7 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.assertEqual(protSubtractProjCTF.outputParticles.getSize(), 181, ERROR_SIZE_PART)
         protAddNoise = self.newProtocol(XmippProtAddNoiseParticles,
                                         input=protCreateGallery.outputReprojections,
-                                        gaussianStd=50.0)
+                                        gaussianStd=15.0)
         self.launchProtocol(protAddNoise)
         self.assertIsNotNone(protAddNoise.outputParticles,
                              "There was a problem with add noise protocol")
@@ -1542,7 +1542,7 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.assertEqual(protSubtractProjNoise.outputParticles.getSize(), 181, ERROR_SIZE_PART)
         protAddNoiseCTF = self.newProtocol(XmippProtAddNoiseParticles,
                                            input=protSimulateCTF.outputParticles,
-                                           gaussianStd=50.0)
+                                           gaussianStd=15.0)
         self.launchProtocol(protAddNoiseCTF)
         self.assertIsNotNone(protAddNoiseCTF.outputParticles,
                              "There was a problem with add noise to ctf particles protocol")
@@ -1607,7 +1607,7 @@ class TestXmippProjSubtraction(TestXmippBase):
                              "There was a problem with overlap CTF simulation")
         protAddNoiseCTFOver = self.newProtocol(XmippProtAddNoiseParticles,
                                                input=protSimulateCTFOver.outputParticles,
-                                               gaussianStd=50.0)
+                                               gaussianStd=15.0)
         self.launchProtocol(protAddNoiseCTFOver)
         self.assertIsNotNone(protAddNoiseCTFOver.outputParticles,
                              "There was a problem with add noise to ctf overlap particles protocol")
