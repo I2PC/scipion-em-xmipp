@@ -86,11 +86,10 @@ class XmippProtSubtractProjection(EMProtocol):
         mask = self.mask.get()
         if mask is not None:
             args += ' --mask %s' % mask.getFileName()
-        args += ' --save %s' % self._getExtraPath()  # JUST FOR SAVING INTERM FILES -> DELETE
+        args += ' --save %s' % self._getExtraPath()
         self.runJob("xmipp_subtract_projection", args)
 
     def createOutputStep(self):
-        self.ix = 0  # initiate counter for particle file name
         inputSet = self.particles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
