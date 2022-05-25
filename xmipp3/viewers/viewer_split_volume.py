@@ -69,7 +69,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
                         help='Shows 3D representation of the input classes')
 
         form.addSection(label='Intermediate classes')
-        form.addParam('displayLabelHistogram', LabelParam, label='Class sizes',
+        form.addParam('displayPartitionLabelHistogram', LabelParam, label='Class sizes',
                         help='Shows a bar plot with the sizes of each class')
         form.addParam('displayLabelImage', LabelParam, label='Classification',
                         help='Shows an image where each column\'s colour corresponds to '
@@ -137,7 +137,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
             'displaySelectedImages': self._displaySelectedImages,
             'displayDiscardedImages': self._displayDiscardedImages,
             'displayInputClassification': self._displayInputClassification,
-            'displayLabelHistogram': self._displayLabelHistogram,
+            'displayPartitionLabelHistogram': self._displayPartitionLabelHistogram,
             'displayLabelImage': self._displayLabelImage,
             'displayProjectionClassification': self._displayProjectionClassification,
             'displayProjectionClassificationDisjoint': self._displayProjectionClassificationDisjoint,
@@ -190,17 +190,29 @@ class XmippViewerSplitVolume(ProtocolViewer):
         self._plotNetworkEdges(fig, ax, edges)
         return [fig]
 
-    def _displayLabelHistogram(self, e):
+    def _displayPartitionLabelHistogram(self, e):
         labels = self._readPartitionLabels(-1)
         counts = collections.Counter(labels)
         x = np.unique(labels)
         y = np.array(list(map(counts.__getitem__, x)))
 
         fig, ax = plt.subplots()
-        ax.bar(x, y)
+        ax.bar(x, y, picker=True)
         ax.set_xlabel('Class number')
         ax.set_ylabel('Class size')
         ax.set_title('Class sizes')
+
+
+        def callback(event):
+            if event.mouseevent.inaxes == ax and event.mouseevent.dblclick:
+                rect = event.artist
+                x = round(rect.get_x() + rect.get_width()/2)
+                cls = int(x)
+                path = self.protocol._getPartitionVolumeFileName(cls)
+                DataView(path).show()
+
+        fig.canvas.callbacks.connect('pick_event', callback)
+        
         return [fig]
 
     def _displayLabelImage(self, e):

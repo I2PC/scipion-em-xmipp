@@ -28,7 +28,6 @@
 Protocol to split a volume in two volumes based on a set of images
 """
 
-from re import A
 from pyworkflow.constants import BETA
 from pyworkflow.protocol.constants import LEVEL_ADVANCED, STEPS_PARALLEL
 from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, StringParam, BooleanParam, EnumParam
@@ -45,13 +44,13 @@ from xmipp3.convert import writeSetOfParticles, locationToXmipp
 
 import math
 import itertools
+import functools
 import collections
 import pywt
 import PIL.Image
 import numpy as np
 import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor
-from functools import partial
 from sklearn.preprocessing import normalize
 
 from scipy import special
@@ -111,7 +110,7 @@ class XmippProtSplitvolume(ProtClassify3D):
                       help='Maximum number of comparisons to consider for each directional class. Use 0 to disable this limit')
         form.addParam('weightCalculationMethod', EnumParam, label='Edge weight calculation method',
                       choices=['None', 'Interpolate percentiles globally', 'Interpolate percentiles locally', 
-                      'Common neighbors globally', 'Common neighbors locally'], default=0,
+                      'Common neighbors globally', 'Common neighbors locally', 'Region grow'], default=0,
                       help='Method used to calculate edge weights')
         form.addParam('weightCalculationInterpolateLower', FloatParam, label='Interpolation lower percentile',
                       validators=[Range(0, 100)], default=40, condition='weightCalculationMethod==1 or weightCalculationMethod==2',
@@ -276,6 +275,11 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Ensure the graph is symmetric
         weights = symmetrizeFunc(weights, weights.T)
 
+        if False: # TODO add parameter if considered
+            directionIds = self._getDirectionIds(images)
+            penalizations = self._calculateDirectionPenalizations(directionIds)
+            weights += penalizations
+
         # Save output data
         self._writeWeights(weights)
         self._writeWeightMetaData(images, pairs, distances, comparisons, ponderations, weights)
@@ -300,7 +304,9 @@ class XmippProtSplitvolume(ProtClassify3D):
         directions = np.array(directions)
 
         # Partition the graph
-        labels = self._partitionGraphMultiLevel(graph, labels, directions, metric, overlap)
+        #labels = self._partitionGraphMultiLevel(graph, labels, directions, metric, overlap)
+        labels = self._partitionGraphSpectral(graph, metric)
+        #labels = self._partitionGraphRgb(graph)
 
         # Write the result
         self._writePartitionLabels(labels)
@@ -400,10 +406,11 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         options = [
             lambda x : x,
-            partial(self._calculateWeightsInterpolationGlobal, lower=lower, upper=upper),
-            partial(self._calculateWeightsInterpolationLocal, lower=lower, upper=upper),
-            partial(self._calculateWeightsCommonNeighborCountsGlobal, threshold=threshold),
-            partial(self._calculateWeightsCommonNeighborCountsLocal, threshold=threshold)
+            functools.partial(self._calculateWeightsInterpolationGlobal, lower=lower, upper=upper),
+            functools.partial(self._calculateWeightsInterpolationLocal, lower=lower, upper=upper),
+            functools.partial(self._calculateWeightsCommonNeighborCountsGlobal, threshold=threshold),
+            functools.partial(self._calculateWeightsCommonNeighborCountsLocal, threshold=threshold),
+            functools.partial(self._calculateWeightsRegionGrow, N=2)
         ]
         selection = self.weightCalculationMethod.get()
         return options[selection]
@@ -435,10 +442,12 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def _writeSetOfImages(self, name, images):
         result = self._createSetOfParticles('_'+name)
-        result.setAcquisition(images[0].getAcquisition())
-        result.setSamplingRate(images[0].getSamplingRate())
-        result.setHasCTF(images[0].hasCTF())
-        result.setAlignmentProj()
+
+        if len(images):
+            result.setAcquisition(images[0].getAcquisition())
+            result.setSamplingRate(images[0].getSamplingRate())
+            result.setHasCTF(images[0].hasCTF())
+            result.setAlignmentProj()
 
         for image in images:
             result.append(image)
@@ -622,7 +631,12 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def _readPartitionLabels(self, level=None):
         result = self._loadMatrix('partitions', dtype=np.uint)
+        
+        # Ensure the data is 2D
+        if result.ndim < 2:
+            result.shape = (1, len(result))
 
+        # Select a level if requested
         if level is not None:
             result = result[level]
 
@@ -979,6 +993,73 @@ class XmippProtSplitvolume(ProtClassify3D):
         adjacency = self._calculateWeightsInterpolationLocal(comparisons, threshold, threshold).astype(bool)
         return self._calculateWeightsCommonNeighborCounts(adjacency)
 
+    def _traverseGraph(self, vertex, graph, N=1):
+        visited = set()
+
+        front = set([vertex]) # Vertices to be traversed in the next iteration
+        while len(front) > 0:
+            # Append the front to the visited vertices
+            assert(len(visited.intersection(front)) == 0)
+            visited.update(front)
+            
+            # For each vertex in the front select its best N neighbors
+            nextFront = set()
+            for v in front:
+                # Select best N indices that have not been visited
+                neighbors = set(np.argsort(graph[v])[-N:])
+                neighbors -= visited
+                nextFront.update(neighbors)
+
+            # Set up for next iteration
+            front = nextFront
+
+        return visited
+
+    def _calculateGraphRegions(self, graph, N=1):
+        mapFunc = self._getMapFunc()
+        traverseFunc = functools.partial(self._traverseGraph, graph=graph, N=N)
+        nVertices = graph.shape[0]
+
+        # Perform a region grow from each vertex
+        regions = list(mapFunc(traverseFunc, range(nVertices)))
+
+        return regions
+
+    def _calculateRegionSimilarity(self, region0, region1):
+        intersection = region0.intersection(region1)
+        return len(intersection) / min(len(region0), len(region1))
+
+    def _compareGraphRegions(self, regions):
+        result = np.zeros((len(regions), )*2)
+
+        for idx0, idx1 in itertools.combinations(range(len(regions)), r=2):
+            region0 = regions[idx0]
+            region1 = regions[idx1]
+            
+            similarity = self._calculateRegionSimilarity(region0, region1)
+            result[idx0, idx1] = similarity
+            result[idx1, idx0] = similarity
+
+        assert(np.array_equal(result, result.T))
+        return result
+
+    def _calculateWeightsRegionGrow(self, comparisons, N=1):
+        regions = self._calculateGraphRegions(comparisons, N)
+        return self._compareGraphRegions(regions)
+
+    def _calculateDirectionPenalizations(self, directionIds):
+        """ Returns a matrix with '-1' written in positions
+            where two images belong to the same direction
+        """
+        result = np.zeros((len(directionIds), )*2)
+
+        for direction in np.unique(directionIds):
+            selection = np.argwhere(directionIds == direction).T[0]
+            for pair in itertools.permutations(selection, r=2):
+                result[pair] = -1
+
+        return result
+
     def _calculateFiedlerVector(self, graph):
         """ Given a adjacency matrix, it computes the Fiedler vector, this is,
             the eigenvector with the second smallest eigenvalue of its laplacian
@@ -990,11 +1071,30 @@ class XmippProtSplitvolume(ProtClassify3D):
         if not np.array_equal(graph.toarray(), graph.T.toarray()):
             raise ValueError('Input graph must be undirected')
 
+        # Compute the laplacian matrix, this is the degree diagonal
+        # matrix minus the adjacency
+        l = csgraph.laplacian(graph)
+
         # Decompose the laplacian matrix of the graph into 2
-        # eigenvectors with the smallest eigenvalues
-        l = csgraph.laplacian(graph, normed=True)
-        values, vectors = linalg.eigsh(l, k=2, which='SM')
-        assert(np.array_equal(values, sorted(values)))
+        # eigenvectors with the smallest eigenvalues.
+        # eigsh is not used because documentation states 
+        # that input matrix must be PD. Laplacian is PSD.
+        # The first eigenvector is known, provide it as an
+        # starting point
+        nVertices = graph.shape[0]
+        nMaxIter = 1e3 * nVertices
+        v0 = np.full(nVertices, 1/math.sqrt(nVertices))
+        values, vectors = linalg.eigs(l, k=2, which='SM', v0=v0, maxiter=nMaxIter)
+        values, vectors = np.real(values), np.real(vectors)
+
+        # Eigenvalues should be in increasing magnitude order
+        assert(np.array_equal(np.abs(values), sorted(np.abs(values))))
+
+        # The first eigenvalue should be 0 and its corresponding
+        # eigenvector should be 1s normalized:
+        # https://youtu.be/zZae_C2BU_4?t=2489
+        assert(np.isclose(values[0], 0))
+        assert(np.allclose(vectors[:,0], v0))
 
         # Fiedler vector corresponds to second eigenvector
         # with the smallest eigenvalue
@@ -1120,7 +1220,7 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return labels
 
-    def _partitionGraph(self, graph, metric):
+    def _partitionGraphSpectral(self, graph, metric):
         nVertices = graph.shape[0]
 
         if nVertices > 2:
@@ -1137,6 +1237,20 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(nVertices == len(labels))
         return labels
 
+    def _partitionGraphRgb(self, graph):
+        # Find the furthest pair of nodes
+        distances = csgraph.dijkstra(graph, directed=False)
+        assert(np.allclose(distances, distances.T))
+        pair = np.unravel_index(np.argmax(distances), distances.shape)
+
+        # Get the distances from one of the external nodes to the rest
+        values = distances[pair[0], :]
+        indices = np.argsort(values)
+
+        # Calculate the labels
+        result = indices >= (len(indices) / 2)
+        return result.astype(np.uint)
+
     def _partitionGraphComponents(self, graph, labels, components, metric):
         result = np.empty_like(labels)
 
@@ -1152,7 +1266,7 @@ class XmippProtSplitvolume(ProtClassify3D):
                 assert(componentGraph.shape[0] == componentGraph.shape[1])
 
                 # Partition it
-                componentPartition = self._partitionGraph(componentGraph, metric)
+                componentPartition = self._partitionGraphSpectral(componentGraph, metric)
 
                 # Compute the new labels
                 result[selection] = componentCounter + componentPartition
