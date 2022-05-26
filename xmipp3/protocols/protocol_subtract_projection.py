@@ -35,9 +35,7 @@ from xmipp3.convert import writeSetOfParticles, readSetOfParticles
 
 
 class XmippProtSubtractProjection(EMProtocol):
-    """ This protocol computes the subtraction between particles and a reference volume, by computing its projections
-    with the same angles that input particles have. Then, each particle and the correspondent projection of the
-    reference volume are numerically adjusted and subtracted using a mask which denotes the region to keep. """
+    """ This protocol computes the subtraction between particles and a reference volume, by computing its projections with the same angles that input particles have. Then, each particle and the correspondent projection of the reference volume are numerically adjusted and subtracted using a mask which denotes the region to keep. """
 
     _label = 'subtract projection'
     INPUT_PARTICLES = "input_particles.xmd"
@@ -98,6 +96,22 @@ class XmippProtSubtractProjection(EMProtocol):
         self._defineSourceRelation(inputSet, outputSet)
 
     # --------------------------- INFO functions --------------------------------------------
+    def _validate(self):
+        errors = []
+        part = self.particles.get().getFirstItem()
+        vol = self.vol.get()
+        mask = self.mask.get()
+        if part.getDim()[0] != vol.getDim()[0]:
+            errors.append("Input particles and volume should have same X and Y dimensions")
+        if part.getSamplingRate() != vol.getSamplingRate():
+            errors.append("Input particles and volume should have same sampling rate")
+        if mask:
+            if vol.getSamplingRate() != mask.getSamplingRate():
+                errors.append("Input volume and mask should have same sampling rate")
+            if vol.getDim() != mask.getDim():
+                errors.append("Input volume and mask should have same dimensions")
+        return errors
+
     def _summary(self):
         summary = ["Volume: %s\nSet of particles: %s\nMask: %s" %
                    (self.vol.get().getFileName(), self.particles.get(), self.mask.get().getFileName())]

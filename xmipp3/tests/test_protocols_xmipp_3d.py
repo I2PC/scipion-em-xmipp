@@ -1463,6 +1463,8 @@ class TestXmippProjSubtraction(TestXmippBase):
         ERROR_DIM = "There was a problem with the dimensions of output "
         ERROR_SR = "There was a problem with the sampling rate value of output "
 
+        # Create input data: phantom with two spheres and its projections (particles), phantom with one sphere
+        # (reference volume) and its mask
         protCreatePhantom2items = self.newProtocol(XmippProtPhantom,
                                                desc='80 80 80 0\nsph + 1 15 15 0 10\nsph + 5 -15 -15 0 10',
                                                sampling=1.0)
@@ -1488,6 +1490,8 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.launchProtocol(protCreateMaskKeep)
         self.assertIsNotNone(protCreateMaskKeep.getFiles(),
                              "There was a problem with the 3D mask of the 1 item phantom")
+
+        # Subtraction of particles - reference volume with and without mask
         protSubtractProj = self.newProtocol(XmippProtSubtractProjection,
                                             particles=protCreateGallery.outputReprojections,
                                             vol=protCreatePhantom1item.outputVolume)
@@ -1509,6 +1513,8 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.assertEqual(protSubtractProjMask.outputParticles.getFirstItem().getDim(), (80, 80, 1),
                          (ERROR_DIM, "particles"))
         self.assertEqual(protSubtractProjMask.outputParticles.getSize(), 181, ERROR_SIZE_PART)
+
+        # Add CTF and noise to particles (projections of the two spheres phantom) and perform the subtraction
         protSimulateCTF = self.newProtocol(XmippProtSimulateCTF,
                                            inputParticles=protCreateGallery.outputReprojections)
         self.launchProtocol(protSimulateCTF)
@@ -1556,6 +1562,8 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.assertEqual(protSubtractProjNoiseCTF.outputParticles.getFirstItem().getDim(), (80, 80, 1),
                          (ERROR_DIM, "particles"))
         self.assertEqual(protSubtractProjNoiseCTF.outputParticles.getSize(), 181, ERROR_SIZE_PART)
+
+        # Create a new phantom with two *overlapping* spheres and project it to create the particles
         protCreatePhantom2Over = self.newProtocol(XmippProtPhantom,
                                                   desc='80 80 80 0\nsph + 1 5 5 0 10\nsph + 5 -5 -5 0 10',
                                                   sampling=1.0)
@@ -1567,6 +1575,8 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.launchProtocol(protCreateGalleryOver)
         self.assertIsNotNone(protCreateGalleryOver.getFiles(),
                              "There was a problem with create gallery overlap")
+
+        # Create phantom with just one of the two overlapping spheres to use it as reference volume and mask
         protCreatePhantom1Over = self.newProtocol(XmippProtPhantom,
                                                   desc='80 80 80 0\nsph + 1 -5 -5 0 10',
                                                   sampling=1.0)
@@ -1579,6 +1589,8 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.launchProtocol(protCreateMaskKeepOver)
         self.assertIsNotNone(protCreateMaskKeepOver.getFiles(),
                              "There was a problem with the 3D mask of the 1 item overlap phantom")
+
+        # Perform subtraction of overlapping particles with and without mask, noise and CTF
         protSubtractProjOver = self.newProtocol(XmippProtSubtractProjection,
                                                 particles=protCreateGalleryOver.outputReprojections,
                                                 vol=protCreatePhantom1Over.outputVolume,
