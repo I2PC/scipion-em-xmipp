@@ -1333,7 +1333,7 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return swap, cost
         
-    def _partitionGraphKernighanLin(self, graph, labels=None):
+    def _partitionGraphKernighanLin(self, graph, labels=None, padding=0.0):
         """ Partitions the graph using the Kerninghan Lin
             algorithm. A initial partition can be provided
             to iteratively improve it. If it is not given, 
@@ -1346,14 +1346,18 @@ class XmippProtSplitvolume(ProtClassify3D):
             fiedler = self._calculateFiedlerVector(graph)
             labels = fiedler >= np.median(fiedler)
         
-        # Ensure that there is a even amount of vertices
+        # Pad to an even amount of vertices
         N = len(labels)
-        if N % 2 != 0:
-            NEW_N = N+1
+        nVertices = 2*math.ceil(N*(1+padding)/2)
+        assert(nVertices>=N)
+        if nVertices > N:
+            # Padding is required
+            nPadding = nVertices - N
             graph = graph.copy()
-            labels = labels.copy()
-            graph.resize(NEW_N, NEW_N)
-            labels.resize(NEW_N)
+            graph.resize(nVertices, nVertices)
+            labels = np.append(labels, [False]*(nPadding-nPadding//2) + [True]*(nPadding//2))
+            assert(graph.shape[0] == len(labels))
+            assert(graph.shape[1] == len(labels))
 
         # Iteratively swap vertices among classes until it is not beneficial
         while True:
