@@ -56,6 +56,7 @@ from sklearn.preprocessing import normalize
 from scipy import special
 from scipy import sparse
 from scipy import stats
+from scipy import optimize
 from scipy.sparse import csgraph
 from scipy.sparse import linalg
 
@@ -275,7 +276,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Ensure the graph is symmetric
         weights = symmetrizeFunc(weights, weights.T)
 
-        if False: # TODO add parameter if considered
+        if True: # TODO add parameter if considered
             directionIds = self._getDirectionIds(images)
             penalizations = self._calculateDirectionPenalizations(directionIds)
             weights += penalizations
@@ -305,8 +306,8 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         # Partition the graph
         #labels = self._partitionGraphMultiLevel(graph, labels, directions, metric, overlap)
-        labels = self._partitionGraphSpectral(graph, metric)
-        #labels = self._partitionGraphRgb(graph)
+        #labels = self._partitionGraphSpectral(graph, metric)
+        labels = self._partitionGraphKernighanLin(graph)
 
         # Write the result
         self._writePartitionLabels(labels)
@@ -1237,21 +1238,141 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(nVertices == len(labels))
         return labels
 
-    def _partitionGraphRgb(self, graph):
-        # Find the furthest pair of nodes
-        distances = csgraph.dijkstra(graph, directed=False)
-        assert(np.allclose(distances, distances.T))
-        pair = np.unravel_index(np.argmax(distances), distances.shape)
+    def _calculateKerninghanLinCostReduction(self, graph, labels):
+        """ The cost reduction value (D) is defined for each
+            vertex as the difference between the external (E) 
+            and internal (I) costs (D=E-I). The external cost
+            is the sum of all edges that emanate from a 
+            particular vertex and go to a vertex that does not
+            belong to the same partition. Similarly, the internal
+            cost is the sum of all edges that stay inside the same
+            component.
+            http://users.ece.northwestern.edu/~haizhou/357/lec2.pdf#page=6
+        """
+        signs = 2*labels - 1
+        result = graph.dot(signs)
+        result *= -signs
 
-        # Get the distances from one of the external nodes to the rest
-        values = distances[pair[0], :]
-        indices = np.argsort(values)
+        return result
 
-        # Calculate the labels
-        result = indices >= (len(indices) / 2)
-        return result.astype(np.uint)
+    def _calculateKerninghanLinMaximumSwapGain(self, graph, delta, classA, classB):
+        """ Maximizes the objective function Da + Db - 2*Cab where
+            Da is the cost a cost reduction of a vertex "a" belonging
+            to classA, Db is a cost reduction of a vertex belonging to 
+            classB and Cab is the weight of the edge joining them. 
+            This function returns the vertex pair to swap and its cost
+        """
 
-    def _partitionGraphComponents(self, graph, labels, components, metric):
+        # Define the objective function to maximize
+        def objFunc(pair):
+            a, b = pair
+            da = delta[a]
+            db = delta[b]
+            c = graph[a,b]
+            return da + db - 2*c
+
+        # Maximize the objective function
+        gain = -math.inf
+        pair = ()
+        for x in itertools.product(np.nonzero(classA)[0], np.nonzero(classB)[0]):
+            y = objFunc(x)
+            if y >= gain:
+                pair, gain = x, y
+
+        return pair, gain
+
+    def _calculateKerninghanLinPass(self, graph, labels):
+        """ Kerninghan Lin algorithm is iterative. This function
+            computes one iteration of the algorithm. It takes
+            the grapg itself and the previous classification
+            and it returns a vector representing vertices
+            to be swapped and the gain of that swap.
+        """
+        N = len(labels)
+        V2 = 2*np.array([1, -1])
+
+        # Create a mask for each class an ensure they define a balanced bisection
+        classA = labels.copy()
+        classB = ~classA
+        if np.count_nonzero(classA) != np.count_nonzero(classB):
+            raise ValueError('Both classes must have the same size')
+
+        # Calculate the cost reduction for each vertex
+        delta = self._calculateKerninghanLinCostReduction(graph, labels)
+
+        # Calculate the cost of swapping all nodes
+        allSwaps = np.zeros((N//2, 2), dtype=np.uint)
+        allCosts = np.zeros(N//2)
+        for i in range(len(allCosts)):
+            (a, b), g = self._calculateKerninghanLinMaximumSwapGain(graph, delta, classA, classB)
+
+            # Do not consider these classes anymore
+            classA[a] = False
+            classB[b] = False
+
+            # Update the D values for next iteration
+            deltaUpdate = graph[:,[a, b]].dot(V2)
+            delta[classA] += deltaUpdate[classA]
+            delta[classB] -= deltaUpdate[classB]
+
+            # Store the results
+            allSwaps[i,:] = a, b
+            allCosts[i] = g
+        
+        # Ensure all was consumed
+        assert(np.all(~classA))
+        assert(np.all(~classB))
+
+        # Integrate costs and take the maximum
+        costFunction = np.cumsum(allCosts)
+        k = np.argmax(costFunction)
+
+        # Select the result
+        swap = allSwaps[:k+1].flatten()
+        cost = costFunction[k]
+
+        return swap, cost
+        
+    def _partitionGraphKernighanLin(self, graph, labels=None):
+        """ Partitions the graph using the Kerninghan Lin
+            algorithm. A initial partition can be provided
+            to iteratively improve it. If it is not given, 
+            it will compute it using the Fiedler approach
+        """
+        EPSILON = 1e-9
+
+        # Ensure the initial partition is defined
+        if labels is None:
+            fiedler = self._calculateFiedlerVector(graph)
+            labels = fiedler >= np.median(fiedler)
+        
+        # Ensure that there is a even amount of vertices
+        N = len(labels)
+        if N % 2 != 0:
+            NEW_N = N+1
+            graph = graph.copy()
+            labels = labels.copy()
+            graph.resize(NEW_N, NEW_N)
+            labels.resize(NEW_N)
+
+        # Iteratively swap vertices among classes until it is not beneficial
+        while True:
+            # Obtain the indices to swap and its cost
+            swap, cost = self._calculateKerninghanLinPass(graph, labels)
+            print(cost, flush=True)
+
+            # Swap the labels if necessary
+            if cost > EPSILON:
+                labels[swap] = ~labels[swap]
+            else:
+                break
+
+        # Convert the partition
+        labels = labels[:N].astype(np.uint)
+
+        return labels
+
+    def _partitionGraphComponents(self, graph, labels, components, partitionFunc):
         result = np.empty_like(labels)
 
         componentCounter = 0
@@ -1266,7 +1387,7 @@ class XmippProtSplitvolume(ProtClassify3D):
                 assert(componentGraph.shape[0] == componentGraph.shape[1])
 
                 # Partition it
-                componentPartition = self._partitionGraphSpectral(componentGraph, metric)
+                componentPartition = partitionFunc(componentGraph)
 
                 # Compute the new labels
                 result[selection] = componentCounter + componentPartition
@@ -1278,14 +1399,14 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return result
 
-    def _partitionGraphMultiLevel(self, graph, labels, directions, metric, threshold):
+    def _partitionGraphMultiLevel(self, graph, labels, directions, threshold, partitionFunc):
         result = [labels]
         unfinished = self._selectUnfinishedComponents(directions, labels, threshold)
 
         # Partition the graph
         while len(unfinished) > 0:
             prevLabels = result[-1]
-            nextLabels = self._partitionGraphComponents(graph, prevLabels, unfinished, metric)
+            nextLabels = partitionFunc(graph, prevLabels, unfinished)
 
             result.append(nextLabels)
             unfinished = self._selectUnfinishedComponents(directions, nextLabels, threshold)
