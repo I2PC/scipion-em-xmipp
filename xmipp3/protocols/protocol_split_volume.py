@@ -127,13 +127,15 @@ class XmippProtSplitvolume(ProtClassify3D):
                       help='Enforce a undirected graph')
         
         form.addSection(label='Graph cut')
-        form.addParam('graphMetric', EnumParam, label="Cut metric", 
+        form.addParam('graphCutAlgorithm', EnumParam, label='Graph cut algorithm',
+                      choices=['Spectral', 'Kerningham Lin'], default=1)
+        form.addParam('graphCutMetric', EnumParam, label="Cut metric", 
                       choices=['Graph cut', 'Ratio cut', 'Normalized cut', 'Quotient cut'], default=3,
-                      help='Objective function to minimize when cutting the graph in half')
-        form.addParam('graphComponentMinOverlap', FloatParam, label='Minimum component overlap (%)',
-                       validators=[Range(0, 100)], default=50,
-                       help='When recursively partitioning the graph, determine if a component needs to '
-                       'be partitioned when the overlap is smaller than the threshold')
+                      condition='graphCutAlgorithm==0',
+                      help='Objective function to minimize when cutting the graph in two pieces')
+        form.addParam('graphCutPadding', FloatParam, label='Padding (%)', 
+                      condition='graphCutAlgorithm==1', validators=[Range(0, 100)], default=10,
+                      help='Amount of extra vertices added to allow unbalanced partitions.')
 
         form.addParallelSection(threads=mp.cpu_count(), mpi=0)
     
@@ -151,9 +153,8 @@ class XmippProtSplitvolume(ProtClassify3D):
         self._insertFunctionStep('computeImageComparisonsStep')
         self._insertFunctionStep('computeWeightsStep')
         self._insertFunctionStep('partitionGraphStep')
-        self._insertFunctionStep('reconstructPartitionVolumesStep')
-        self._insertFunctionStep('compareVolumesStep')
-        #self._insertFunctionStep('createOutputStep')
+        self._insertFunctionStep('reconstructVolumesStep')
+        self._insertFunctionStep('createOutputStep')
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def convertInputStep(self):
@@ -264,6 +265,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Read input data
         images = self._readSelectedImages()
         distances = self._readAngularDistances()
+        directionIds = self._getDirectionIds(images)
         pairs = self._readImagePairs()
         ponderations = self._readDistancePonderation()
         comparisons = self._readImageComparisons()
@@ -276,10 +278,9 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Ensure the graph is symmetric
         weights = symmetrizeFunc(weights, weights.T)
 
-        if True: # TODO add parameter if considered
-            directionIds = self._getDirectionIds(images)
-            penalizations = self._calculateDirectionPenalizations(directionIds)
-            weights += penalizations
+        # Apply a negative weight to particle edges belonging to the same direction
+        penalizations = self._calculateDirectionPenalizations(directionIds)
+        weights += penalizations
 
         # Save output data
         self._writeWeights(weights)
@@ -287,12 +288,10 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def partitionGraphStep(self):
         # Read the input data
-        images = self._readSelectedImages()
         adjacency = self._readWeights()
-        metric = self._getGraphPartitionMetricFunc()
-        overlap = self.graphComponentMinOverlap.get() / 100
+        cutFunc = self._getGraphCutFunc()
 
-        # Partition the graph recursively up to some amount of levels
+        # Convert the adjacency to a sparse representation
         graph = sparse.csr_matrix(adjacency)
         
         # Obtain information about the graph
@@ -300,19 +299,13 @@ class XmippProtSplitvolume(ProtClassify3D):
         labels = labels.astype(np.uint)
         print(f'The unpartitioned graph has {nComponents} components')
 
-        # Get the projection directions
-        directions = list(map(self._getProjectionDirection, images))
-        directions = np.array(directions)
-
         # Partition the graph
-        #labels = self._partitionGraphMultiLevel(graph, labels, directions, metric, overlap)
-        #labels = self._partitionGraphSpectral(graph, metric)
-        labels = self._partitionGraphKernighanLin(graph)
+        labels = cutFunc(graph)
 
         # Write the result
         self._writePartitionLabels(labels)
 
-    def reconstructPartitionVolumesStep(self):
+    def reconstructVolumesStep(self):
         # Read the input data
         images = self._readSelectedImages()
         labels = self._readPartitionLabels(-1)
@@ -324,18 +317,10 @@ class XmippProtSplitvolume(ProtClassify3D):
             path = self._getPartitionVolumeFileName(cls)
             self._reconstructVolume(path, partitionImages)
 
-    def compareVolumesStep(self):
-        labels = self._readPartitionLabels(-1)
-        volumes = self._readPartitionVolumes(np.unique(labels))
-
-        comparisons = self._computeVolumeComparisons(volumes)
-
-        self._writeVolumeComparisons(comparisons)
-
     def createOutputStep(self):
         # Read input data
-        images = self._getInputImages()
-        labels = self._readLabels()
+        images = self._getSelectedImages()
+        labels = self._readPartitionLabels(-1)
 
         # Create the output elements
         classes = self._createOutputClasses(images, labels, 'output')
@@ -432,7 +417,17 @@ class XmippProtSplitvolume(ProtClassify3D):
             self._calculateNormalizedCutMetric,
             self._calculateQuotientCutMetric
         ]
-        selection = self.graphMetric.get()
+        selection = self.graphCutMetric.get()
+        return options[selection]
+
+    def _getGraphCutFunc(self):
+        metric = self._getGraphPartitionMetricFunc()
+        padding = self.graphCutPadding.get() / 100
+        options = [
+            functools.partial(self._partitionGraphSpectral, metric=metric),
+            functools.partial(self._partitionGraphKernighanLin, padding=padding),
+        ]
+        selection = self.graphCutAlgorithm.get()
         return options[selection]
 
     def _setSetOfImages(self, name, images):
@@ -822,15 +817,8 @@ class XmippProtSplitvolume(ProtClassify3D):
                 indices = np.argsort(distanceRow)
                 pairRow[indices[maxNeighbors+1:]] = False
 
-        # Remove comparisons with itself. This is redundant,
-        # as it would be done when removing by reprojections.
-        # Hovever is cheaper to do like this.
+        # Remove comparisons with itself
         np.fill_diagonal(pairs, False)
-
-        # Remove all the comparisons corresponding to its same reprojection
-        for idx0, idx1 in np.argwhere(pairs):
-            if directionIds[idx0] == directionIds[idx1]:
-                pairs[idx0, idx1] = False
 
         return np.argwhere(pairs)
 
@@ -1055,7 +1043,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         result = np.zeros((len(directionIds), )*2)
 
         for direction in np.unique(directionIds):
-            selection = np.argwhere(directionIds == direction).T[0]
+            selection = np.nonzero(directionIds == direction)[0]
             for pair in itertools.permutations(selection, r=2):
                 result[pair] = -1
 
@@ -1168,43 +1156,6 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return values
 
-    def _selectUnfinishedComponents(self, directions, labels, threshold):
-        result = set()
-        COS45 = 1/math.sqrt(2)
-
-        for component in np.unique(labels):
-            # Select the images that belong to this component
-            selection = labels == component
-
-            if np.count_nonzero(selection) > 1:
-                # Obtain the extrinsic spherical average direction of the selected images
-                direction = np.mean(directions[selection], axis=0)
-                direction /= np.linalg.norm(direction)
-                assert(np.isclose(np.linalg.norm(direction), 1))
-
-                # Project all the image projection directions onto the average direction
-                projections = np.dot(directions, direction) # (Matrix multiplication, dot of rows and column)
-
-                # Determine the furthest point of the selection
-                maxDistance = np.min(projections[selection])
-
-                # Do not consider splitting components with a cone smaller than 90º
-                if maxDistance < COS45:
-                    # Select the points that are within the selection cone
-                    intersection = projections >= maxDistance
-
-                    # Compute the score for the intersection
-                    nSelection = np.count_nonzero(selection)
-                    nIntersection = np.count_nonzero(intersection)
-                    assert(nIntersection >= nSelection)
-                    score = (nIntersection - nSelection) / nIntersection
-
-                    # Determine if the component needs to be partitioned
-                    if score < threshold:
-                        result.add(component)
-
-        return result
-
     def _partitionFiedlerVector(self, graph, fiedler, metric):
         """ Partition the graph into 2 components which
             minimize the given metric
@@ -1238,7 +1189,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(nVertices == len(labels))
         return labels
 
-    def _calculateKerninghanLinCostReduction(self, graph, labels):
+    def _calculateKerninghanLinCostReductions(self, graph, labels):
         """ The cost reduction value (D) is defined for each
             vertex as the difference between the external (E) 
             and internal (I) costs (D=E-I). The external cost
@@ -1274,7 +1225,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Maximize the objective function
         gain = -math.inf
         pair = ()
-        for x in itertools.product(np.nonzero(classA)[0], np.nonzero(classB)[0]):
+        for x in itertools.product(classA, classB):
             y = objFunc(x)
             if y >= gain:
                 pair, gain = x, y
@@ -1291,14 +1242,14 @@ class XmippProtSplitvolume(ProtClassify3D):
         N = len(labels)
         V2 = 2*np.array([1, -1])
 
-        # Create a mask for each class an ensure they define a balanced bisection
-        classA = labels.copy()
-        classB = ~classA
-        if np.count_nonzero(classA) != np.count_nonzero(classB):
+        # Create a vertex set for each class
+        classA = list(np.nonzero( labels)[0])
+        classB = list(np.nonzero(~labels)[0])
+        if len(classA) != len(classB):
             raise ValueError('Both classes must have the same size')
 
         # Calculate the cost reduction for each vertex
-        delta = self._calculateKerninghanLinCostReduction(graph, labels)
+        delta = self._calculateKerninghanLinCostReductions(graph, labels)
 
         # Calculate the cost of swapping all nodes
         allSwaps = np.zeros((N//2, 2), dtype=np.uint)
@@ -1306,12 +1257,14 @@ class XmippProtSplitvolume(ProtClassify3D):
         for i in range(len(allCosts)):
             (a, b), g = self._calculateKerninghanLinMaximumSwapGain(graph, delta, classA, classB)
 
-            # Do not consider these classes anymore
-            classA[a] = False
-            classB[b] = False
+            # Do not consider these vertices anymore
+            classA.remove(a)
+            classB.remove(b)
 
             # Update the D values for next iteration
-            deltaUpdate = graph[:,[a, b]].dot(V2)
+            # Da' = Da + 2Cxa - 2Cxb for x in A \ a
+            # Db' = Db + 2Cxb - 2Cxa for x in B \ b
+            deltaUpdate = graph[:,[a, b]].dot(V2) # 2Cxa - 2Cxb
             delta[classA] += deltaUpdate[classA]
             delta[classB] -= deltaUpdate[classB]
 
@@ -1320,8 +1273,8 @@ class XmippProtSplitvolume(ProtClassify3D):
             allCosts[i] = g
         
         # Ensure all was consumed
-        assert(np.all(~classA))
-        assert(np.all(~classB))
+        assert(len(classA) == 0)
+        assert(len(classB) == 0)
 
         # Integrate costs and take the maximum
         costFunction = np.cumsum(allCosts)
@@ -1338,6 +1291,8 @@ class XmippProtSplitvolume(ProtClassify3D):
             algorithm. A initial partition can be provided
             to iteratively improve it. If it is not given, 
             it will compute it using the Fiedler approach
+            This implementation is based on these slides:
+            http://users.ece.northwestern.edu/~haizhou/357/lec2.pdf
         """
         EPSILON = 1e-9
 
@@ -1352,18 +1307,21 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(nVertices>=N)
         if nVertices > N:
             # Padding is required
-            nPadding = nVertices - N
             graph = graph.copy()
             graph.resize(nVertices, nVertices)
-            labels = np.append(labels, [False]*(nPadding-nPadding//2) + [True]*(nPadding//2))
-            assert(graph.shape[0] == len(labels))
-            assert(graph.shape[1] == len(labels))
+            
+            padding0 = nVertices//2 - np.count_nonzero(~labels)
+            padding1 = nVertices//2 - np.count_nonzero( labels)
+            labels = np.append(labels, [False]*padding0 + [True]*padding1)
+
+        assert(graph.shape[0] == len(labels))
+        assert(graph.shape[1] == len(labels))
+        assert(np.count_nonzero(labels) == np.count_nonzero(~labels))
 
         # Iteratively swap vertices among classes until it is not beneficial
         while True:
             # Obtain the indices to swap and its cost
             swap, cost = self._calculateKerninghanLinPass(graph, labels)
-            print(cost, flush=True)
 
             # Swap the labels if necessary
             if cost > EPSILON:
@@ -1376,48 +1334,11 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return labels
 
-    def _partitionGraphComponents(self, graph, labels, components, partitionFunc):
-        result = np.empty_like(labels)
-
-        componentCounter = 0
-        for component in np.unique(labels):
-            # Select the vertices classified as this component
-            selection = labels == component
-
-            # Determine if it needs to be partitioned
-            if component in components:
-                # Build the adjacency matrix for the component
-                componentGraph = graph[selection, :][:, selection]
-                assert(componentGraph.shape[0] == componentGraph.shape[1])
-
-                # Partition it
-                componentPartition = partitionFunc(componentGraph)
-
-                # Compute the new labels
-                result[selection] = componentCounter + componentPartition
-                componentCounter += 2
-            
-            else:
-                result[selection] = componentCounter
-                componentCounter += 1
-
-        return result
-
-    def _partitionGraphMultiLevel(self, graph, labels, directions, threshold, partitionFunc):
-        result = [labels]
-        unfinished = self._selectUnfinishedComponents(directions, labels, threshold)
-
-        # Partition the graph
-        while len(unfinished) > 0:
-            prevLabels = result[-1]
-            nextLabels = partitionFunc(graph, prevLabels, unfinished)
-
-            result.append(nextLabels)
-            unfinished = self._selectUnfinishedComponents(directions, nextLabels, threshold)
-
-        return np.array(result)
-
     def _reconstructVolume(self, path, particles):
+        """ Given a list of particles, with angular assignment
+            it reconstructs a volume from them
+        """
+
         # Convert the particles to a xmipp metadata file
         fnParticles = path+'_particles.xmd'
         writeSetOfParticles(particles, fnParticles, alignType=ALIGN_PROJ)
@@ -1430,40 +1351,15 @@ class XmippProtSplitvolume(ProtClassify3D):
         self.runJob('xmipp_reconstruct_fourier', args)
 
         # Clear the metadata file
-        #cleanPattern(fnParticles)
-
-    def _computeVolumeComparisons(self, volumes):
-        result = np.zeros((len(volumes), )*2, dtype=float)
-
-        compareFunc = self._getImageCompareFunc(volumes[0].shape)
-        mapFunc = self._getMapFunc()
-
-        # Compare all volume pairs
-        pairs = list(itertools.combinations(range(len(result)), r=2))
-        volumePairs = map(lambda pair : (volumes[pair[0]], volumes[pair[1]]), pairs)
-        comparisons = mapFunc(compareFunc, *zip(*volumePairs))
-        comparisons = list(map(lambda x : x[0], comparisons))
-
-        # Write the result on symmetrical positions
-        for (idx0, idx1), comparison in zip(pairs, comparisons):
-            result[idx0, idx1] = comparison
-            result[idx1, idx0] = comparison
-
-        assert(np.array_equal(result, result.T))
-        return result
+        cleanPattern(fnParticles)
 
     def _createOutputClasses(self, images, classification, suffix=''):
         result = self._createSetOfClasses3D(images, suffix)
 
         # Classify input particles
-        repCbk = lambda cls : self._getExtraPath(f'{suffix}_volume_c{cls:02d}.vol')
+        repCbk = self._getPartitionVolumeFileName
         loader = XmippProtSplitvolume.ClassesLoader(classification, repCbk)
         loader.fillClasses(result)
-
-        # Create the representatives
-        for cls in result:
-            representative = cls.getRepresentative()
-            self._reconstructVolume(representative.getFileName(), cls)
 
         return result
 
