@@ -55,29 +55,12 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
-        form.addSection(label='Configuration')
-        form.addParam('partitionLevel', IntParam, label='Partition level',
-                      validators=[GE(0)], default=0)
-        form.addParam('partitionComponent', IntParam, label='Partition component',
-                      validators=[GE(0)], default=0)
-
         form.addSection(label='Input classes')
         form.addParam('displayInputImages', LabelParam, label='Input images')
         form.addParam('displaySelectedImages', LabelParam, label='Selected images')
         form.addParam('displayDiscardedImages', LabelParam, label='Discarded images')
         form.addParam('displayInputClassification', LabelParam, label='Input classification',
                         help='Shows 3D representation of the input classes')
-
-        form.addSection(label='Intermediate classes')
-        form.addParam('displayPartitionLabelHistogram', LabelParam, label='Class sizes',
-                        help='Shows a bar plot with the sizes of each class')
-        form.addParam('displayLabelImage', LabelParam, label='Classification',
-                        help='Shows an image where each column\'s colour corresponds to '
-                        'the label assigned to each image')
-        form.addParam('displayProjectionClassification', LabelParam, label='Projection classification',
-                        help='Shows a 3D representation of the classification')
-        form.addParam('displayProjectionClassificationDisjoint', LabelParam, label='Disjoint projection classification',
-                        help='Shows a 3D representation of the classification with a projection sphere for each class')
 
         form.addSection(label='Image pairs')
         form.addParam('displayDistanceImage', LabelParam, label='Angular distance matrix',
@@ -94,23 +77,6 @@ class XmippViewerSplitVolume(ProtocolViewer):
                         'the weight of each graph edge')
         form.addParam('displayWeightTable', LabelParam, label='Weight table')
 
-        form.addSection(label='Fiedler vector')
-        form.addParam('displayFiedlerVector', LabelParam, label='Sorted Fiedler Vector',
-                        help='Shows a graph of the sorted Fiedler vector')
-        form.addParam('displayFiedlerVectorDerivative', LabelParam, label='Sorted Fiedler Vector derivative',
-                        help='Shows a graph of derivative the sorted Fiedler vector')
-        form.addParam('displaySortedWeightImage', LabelParam, label='Sorted weight matrix',
-                        help='Shows an image where each pixel\'s colour corresponds to '
-                        'the weight of each graph edge sorted according to the fiedler vector')
-        form.addParam('displayGraphCutMetric', LabelParam, label='Graph cut metric',
-                        help='Shows the graph cut cost function in terms of the sorted Fiedler Vector')
-        form.addParam('displayRatioCutMetric', LabelParam, label='Ratio cut metric',
-                        help='Shows the ratio cut cost function in terms of the sorted Fiedler Vector')
-        form.addParam('displayNormalizedCutMetric', LabelParam, label='Normalized cut metric',
-                        help='Shows the normalized cut cost function in terms of the sorted Fiedler Vector')
-        form.addParam('displayQuotientCutMetric', LabelParam, label='Quotient cut metric',
-                        help='Shows the quotient cut cost function in terms of the sorted Fiedler Vector')
-
         form.addSection(label='Networks')
         form.addParam('displayComparison3dNetwork', LabelParam, label='3D comparison network',
                         help='Shows a 3D representation of the correlation network')
@@ -121,13 +87,18 @@ class XmippViewerSplitVolume(ProtocolViewer):
         form.addParam('displayWeight3dNetworkDisjoint', LabelParam, label='Disjoint 3D weight network',
                         help='Shows a 3D representation of the weight network with a projection sphere for each class')
 
+        form.addSection(label='Partition')
+        form.addParam('displayPartitionLabelHistogram', LabelParam, label='Class sizes',
+                        help='Shows a bar plot with the sizes of each class')
+        form.addParam('displayLabelImage', LabelParam, label='Classification',
+                        help='Shows an image where each column\'s colour corresponds to '
+                        'the label assigned to each image')
+        form.addParam('displayProjectionClassification', LabelParam, label='Projection classification',
+                        help='Shows a 3D representation of the classification')
+        form.addParam('displayProjectionClassificationDisjoint', LabelParam, label='Disjoint projection classification',
+                        help='Shows a 3D representation of the classification with a projection sphere for each class')
+
     #--------------------------- INFO functions ----------------------------------------------------
-    def _validate(self):
-        result = []
-
-        # TODO validate partition level and component
-
-        return result
 
     # --------------------------- DEFINE display functions ----------------------
     
@@ -137,26 +108,19 @@ class XmippViewerSplitVolume(ProtocolViewer):
             'displaySelectedImages': self._displaySelectedImages,
             'displayDiscardedImages': self._displayDiscardedImages,
             'displayInputClassification': self._displayInputClassification,
-            'displayPartitionLabelHistogram': self._displayPartitionLabelHistogram,
-            'displayLabelImage': self._displayLabelImage,
-            'displayProjectionClassification': self._displayProjectionClassification,
-            'displayProjectionClassificationDisjoint': self._displayProjectionClassificationDisjoint,
             'displayDistanceImage': self._displayDistanceImage,
             'displayComparisonImage': self._displayComparisonImage,
             'displayPonderationImage': self._displayPonderationImage,
             'displayWeightImage': self._displayWeightImage,
             'displayWeightTable': self._displayWeightTable,
-            'displayFiedlerVector': self._displayFiedlerVector,
-            'displayFiedlerVectorDerivative': self._displayFiedlerVectorDerivative,
-            'displaySortedWeightImage': self._displaySortedWeightImage,
-            'displayGraphCutMetric': self._displayGraphCutMetric,
-            'displayRatioCutMetric': self._displayRatioCutMetric,
-            'displayNormalizedCutMetric': self._displayNormalizedCutMetric,
-            'displayQuotientCutMetric': self._displayQuotientCutMetric,
             'displayComparison3dNetwork': self._displayComparison3dNetwork,
             'displayComparison3dNetworkDisjoint': self._displayComparison3dNetworkDisjoint,
             'displayWeight3dNetwork': self._displayWeight3dNetwork,
             'displayWeight3dNetworkDisjoint': self._displayWeight3dNetworkDisjoint,
+            'displayPartitionLabelHistogram': self._displayPartitionLabelHistogram,
+            'displayLabelImage': self._displayLabelImage,
+            'displayProjectionClassification': self._displayProjectionClassification,
+            'displayProjectionClassificationDisjoint': self._displayProjectionClassificationDisjoint,
         }
     
     def _displayInputImages(self, e):
@@ -188,69 +152,6 @@ class XmippViewerSplitVolume(ProtocolViewer):
         ax.set_title('Input Classification')
         self._plotProjectionClassification(fig, ax, points, images, directionClassification)
         self._plotNetworkEdges(fig, ax, edges)
-        return [fig]
-
-    def _displayPartitionLabelHistogram(self, e):
-        labels = self._readPartitionLabels(-1)
-        counts = collections.Counter(labels)
-        x = np.unique(labels)
-        y = np.array(list(map(counts.__getitem__, x)))
-
-        fig, ax = plt.subplots()
-        ax.bar(x, y, picker=True)
-        ax.set_xlabel('Class number')
-        ax.set_ylabel('Class size')
-        ax.set_title('Class sizes')
-
-
-        def callback(event):
-            if event.mouseevent.inaxes == ax and event.mouseevent.dblclick:
-                rect = event.artist
-                x = round(rect.get_x() + rect.get_width()/2)
-                cls = int(x)
-                path = self.protocol._getPartitionVolumeFileName(cls)
-                DataView(path).show()
-
-        fig.canvas.callbacks.connect('pick_event', callback)
-        
-        return [fig]
-
-    def _displayLabelImage(self, e):
-        labels = self._readPartitionLabels()
-
-        fig, ax = plt.subplots()
-        self._plotClassification(fig, ax, labels)
-        ax.set_xlabel('Particle number')
-        ax.set_ylabel('Level')
-        ax.set_title('Classification')
-        return [fig]
-    
-    def _displayProjectionClassification(self, e):
-        images = self._readImages()
-        labels = self._readPartitionLabels(-1)
-        points = self._getProjectionSphere(images)
-
-        # Plot the projection angles with the classification
-        fig = plt.figure()
-        ax = plt.axes(projection='3d')
-        ax.set_title('Projection Classification')
-        self._plotProjectionClassification(fig, ax, points, images, labels)
-        return [fig]
-
-    def _displayProjectionClassificationDisjoint(self, e):
-        images = self._readImages()
-        labels = self._readPartitionLabels(-1)
-        points = self._getProjectionSphere(images)
-
-        # Apply an offset to the points
-        offsets = self._calculateDisjointProjectionSphereOffsets(labels)
-        points += offsets
-
-        # Plot the projection angles with the classification
-        fig = plt.figure()
-        ax = plt.axes(projection='3d')
-        ax.set_title('Projection Classification')
-        self._plotProjectionClassification(fig, ax, points, images, labels)
         return [fig]
 
     def _displayDistanceImage(self, e):
@@ -289,80 +190,10 @@ class XmippViewerSplitVolume(ProtocolViewer):
         path = self.protocol._getWeightMetaDataFileName()
         return [ObjectView(self._project, None, path)]
 
-    def _displayFiedlerVector(self, e):
-        fiedler = self._readFiedlerVector()
-
-        x = np.arange(len(fiedler))
-        y = np.sort(fiedler)
-        
-        fig, ax = plt.subplots()
-        ax.plot(x, y)
-        ax.set_title('Sorted Fiedler Vector')
-        return [fig]
-
-    def _displayFiedlerVectorDerivative(self, e):
-        fiedler = self._readFiedlerVector()
-
-        x = np.arange(len(fiedler)-1)
-        y = np.diff(np.sort(fiedler))
-        
-        fig, ax = plt.subplots()
-        ax.plot(x, y)
-        ax.set_title('Sorted Fiedler Vector derivative')
-        return [fig]
-
-    def _displaySortedWeightImage(self, e):
-        weights = self._readWeights()
-        fiedler = self._readFiedlerVector()
-
-        indices = np.argsort(fiedler)
-        weights = weights[:,indices][indices,:]
-
-        fig, ax = plt.subplots()
-        self._plotMatrix(fig, ax, weights, 'Weight')
-        ax.set_title('Sorted weights')
-        return [fig]
-
-    def _displayGraphCutMetric(self, e):
-        weights = self._readWeights()
-        fiedler = self._readFiedlerVector()
-
-        fig, ax = plt.subplots()
-        self._plotCutMetric(fig, ax, self.protocol._calculateGraphCutMetric, weights, fiedler)
-        ax.set_title('Graph cut metric')
-        return [fig]
-        
-    def _displayRatioCutMetric(self, e):
-        weights = self._readWeights()
-        fiedler = self._readFiedlerVector()
-
-        fig, ax = plt.subplots()
-        self._plotCutMetric(fig, ax, self.protocol._calculateRatioCutMetric, weights, fiedler)
-        ax.set_title('Ratio cut metric')
-        return [fig]
-    
-    def _displayNormalizedCutMetric(self, e):
-        weights = self._readWeights()
-        fiedler = self._readFiedlerVector()
-
-        fig, ax = plt.subplots()
-        self._plotCutMetric(fig, ax, self.protocol._calculateNormalizedCutMetric, weights, fiedler)
-        ax.set_title('Normalized cut metric')
-        return [fig]
-
-    def _displayQuotientCutMetric(self, e):
-        weights = self._readWeights()
-        fiedler = self._readFiedlerVector()
-
-        fig, ax = plt.subplots()
-        self._plotCutMetric(fig, ax, self.protocol._calculateQuotientCutMetric, weights, fiedler)
-        ax.set_title('Quotient cut metric')
-        return [fig]
-
     def _displayComparison3dNetwork(self, e):
         images = self._readImages()
         comparisons = self._readImageComparisons()
-        labels = self._readPartitionLabels(-1)
+        labels = self._readPartitionLabels()
         points = self._getProjectionSphere(images)
 
         # Obtain the edges of the graph
@@ -379,7 +210,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _displayComparison3dNetworkDisjoint(self, e):
         images = self._readImages()
         comparisons = self._readImageComparisons()
-        labels = self._readPartitionLabels(-1)
+        labels = self._readPartitionLabels()
         points = self._getProjectionSphere(images)
 
         # Apply a offset to the points
@@ -400,7 +231,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _displayWeight3dNetwork(self, e):
         images = self._readImages()
         weights = self._readWeights()
-        labels = self._readPartitionLabels(-1)
+        labels = self._readPartitionLabels()
         points = self._getProjectionSphere(images)
 
         # Obtain the edges of the graph
@@ -417,7 +248,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _displayWeight3dNetworkDisjoint(self, e):
         images = self._readImages()
         weights = self._readWeights()
-        labels = self._readPartitionLabels(-1)
+        labels = self._readPartitionLabels()
         points = self._getProjectionSphere(images)
 
         # Apply a offset to the points
@@ -433,6 +264,68 @@ class XmippViewerSplitVolume(ProtocolViewer):
         ax.set_title('3D Weight Network')
         self._plotProjectionClassification(fig, ax, points, images, labels)
         self._plotWeightedNetworkEdges(fig, ax, edges, edgeWeights)
+        return [fig]
+
+    def _displayPartitionLabelHistogram(self, e):
+        labels = self._readPartitionLabels()
+        counts = collections.Counter(labels)
+        x = np.unique(labels)
+        y = np.array(list(map(counts.__getitem__, x)))
+
+        fig, ax = plt.subplots()
+        ax.bar(x, y, picker=True)
+        ax.set_xlabel('Class number')
+        ax.set_ylabel('Class size')
+        ax.set_title('Class sizes')
+
+        def callback(event):
+            if event.mouseevent.inaxes == ax and event.mouseevent.dblclick:
+                rect = event.artist
+                x = round(rect.get_x() + rect.get_width()/2)
+                cls = int(x)
+                path = self.protocol._getPartitionVolumeFileName(cls)
+                DataView(path).show()
+
+        fig.canvas.callbacks.connect('pick_event', callback)
+        
+        return [fig]
+
+    def _displayLabelImage(self, e):
+        labels = self._readPartitionLabels()
+
+        fig, ax = plt.subplots()
+        self._plotClassification(fig, ax, labels.reshape(1, len(labels)))
+        ax.set_xlabel('Particle number')
+        ax.set_ylabel('Level')
+        ax.set_title('Classification')
+        return [fig]
+    
+    def _displayProjectionClassification(self, e):
+        images = self._readImages()
+        labels = self._readPartitionLabels()
+        points = self._getProjectionSphere(images)
+
+        # Plot the projection angles with the classification
+        fig = plt.figure()
+        ax = plt.axes(projection='3d')
+        ax.set_title('Projection Classification')
+        self._plotProjectionClassification(fig, ax, points, images, labels)
+        return [fig]
+
+    def _displayProjectionClassificationDisjoint(self, e):
+        images = self._readImages()
+        labels = self._readPartitionLabels()
+        points = self._getProjectionSphere(images)
+
+        # Apply an offset to the points
+        offsets = self._calculateDisjointProjectionSphereOffsets(labels)
+        points += offsets
+
+        # Plot the projection angles with the classification
+        fig = plt.figure()
+        ax = plt.axes(projection='3d')
+        ax.set_title('Projection Classification')
+        self._plotProjectionClassification(fig, ax, points, images, labels)
         return [fig]
 
     # --------------------------- UTILS functions -----------------------------
@@ -451,11 +344,8 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _readWeights(self):
         return self.protocol._readWeights()
 
-    def _readFiedlerVector(self):
-        return self.protocol._readFiedlerVector()
-
-    def _readPartitionLabels(self, level=None):
-        return self.protocol._readPartitionLabels(level)
+    def _readPartitionLabels(self):
+        return self.protocol._readPartitionLabels()
 
     def _getDirectionIds(self, images):
         return self.protocol._getDirectionIds(images)
@@ -565,17 +455,6 @@ class XmippViewerSplitVolume(ProtocolViewer):
         lines = mpl3d.art3d.Line3DCollection(edges, linewidths=0.5, colors=colormap(norm(weights)))
         ax.add_collection(lines)
         fig.colorbar(mpl.cm.ScalarMappable(norm=norm, cmap=colormap), label='Edge weights')
-
-    def _plotCutMetric(self, fig, ax, metric, graph, fiedler):
-        indices = np.argsort(fiedler)
-
-        x = np.arange(1, len(indices))
-        y = self.protocol._calculateMetricValues(graph, indices, metric) 
-        assert(len(x) == len(y))
-        
-        ax.plot(x, y)
-        ax.set_xlabel('Cut position')
-        ax.set_ylabel('Metric value')
 
     def _openImageOnClick(self, fig, ax, images):
         def callback(event):

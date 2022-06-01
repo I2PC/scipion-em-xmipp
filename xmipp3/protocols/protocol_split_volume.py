@@ -306,7 +306,7 @@ class XmippProtSplitvolume(ProtClassify3D):
     def reconstructVolumesStep(self):
         # Read the input data
         images = self._readSelectedImages()
-        labels = self._readPartitionLabels(-1)
+        labels = self._readPartitionLabels()
 
         # Reconstruct a volume for each top-level partition
         for cls in np.unique(labels):
@@ -318,7 +318,7 @@ class XmippProtSplitvolume(ProtClassify3D):
     def createOutputStep(self):
         # Read input data
         images = self._getSelectedImages()
-        labels = self._readPartitionLabels(-1)
+        labels = self._readPartitionLabels()
 
         # Create the output elements
         classes = self._createOutputClasses(images, labels, 'output')
@@ -605,13 +605,6 @@ class XmippProtSplitvolume(ProtClassify3D):
         path = self._getWeightMetaDataFileName()
         md.write(path)
 
-    def _writeCommonNeighborCounts(self, neighbors):
-        assert(neighbors.dtype==int)
-        self._storeMatrix('neighbors', neighbors, fmt='%d')
-    
-    def _readCommonNeighborCounts(self):
-        return self._loadMatrix('neighbors', dtype=int)
-
     def _writeWeights(self, weights):
         assert(weights.dtype==float)
         self._storeMatrix('weights', weights, fmt='%.8f')
@@ -621,20 +614,10 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def _writePartitionLabels(self, labels):
         assert(labels.dtype==np.uint)
-        self._storeMatrix('partitions', labels, fmt='%d')
+        self._storeMatrix('partition', labels, fmt='%d')
 
-    def _readPartitionLabels(self, level=None):
-        result = self._loadMatrix('partitions', dtype=np.uint)
-        
-        # Ensure the data is 2D
-        if result.ndim < 2:
-            result.shape = (1, len(result))
-
-        # Select a level if requested
-        if level is not None:
-            result = result[level]
-
-        return result
+    def _readPartitionLabels(self):
+        return self._loadMatrix('partition', dtype=np.uint)
 
     def _getPartitionVolumeFileName(self, cls):
         return self._getExtraPath(f'partition_{cls:04d}.vol')
@@ -651,13 +634,6 @@ class XmippProtSplitvolume(ProtClassify3D):
             result[i] = self._readPartitionVolume(cls, imageObj=imgObj)
 
         return result
-
-    def _writeVolumeComparisons(self, comparisons):
-        assert(comparisons.dtype==float)
-        self._storeMatrix('volume_comparisons', comparisons, fmt='%.8f')
-    
-    def _readVolumeComparisons(self):
-        return self._loadMatrix('volume_comparisons', dtype=float)
 
     def _convertClasses2D(self, classes):
         result = []
