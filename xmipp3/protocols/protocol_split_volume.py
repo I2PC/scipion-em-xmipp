@@ -51,12 +51,10 @@ import PIL.Image
 import numpy as np
 import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor
-from sklearn.preprocessing import normalize
 
 from scipy import special
 from scipy import sparse
 from scipy import stats
-from scipy import optimize
 from scipy.sparse import csgraph
 from scipy.sparse import linalg
 
