@@ -1203,14 +1203,13 @@ class XmippProtSplitvolume(ProtClassify3D):
         """
 
         # Compute the cost for all possible pairs in matrix form
-        a = np.stack((delta[classA], )*len(classB), axis=1)
-        b = np.stack((delta[classB], )*len(classA), axis=0)
-        w = graph[classA,:][:,classB]
-        gains = a + b - 2*w
+        m = np.meshgrid(delta[classB], delta[classA]) # deltaA in columns, deltaB in rows
+        w = graph[classA,:][:,classB] # Select the sub matrix with A as rows and B as columns
+        gains = np.sum(m, axis=0) - 2*w # Da + Db - 2ab in (a, b) position
 
-        pair = np.unravel_index(np.argmax(gains), gains.shape)
-        gain = gains[pair]
-        pair = (classA[pair[0]], classB[pair[1]])
+        a, b = np.unravel_index(np.argmax(gains), gains.shape)
+        gain = gains[a, b]
+        pair = (classA[a], classB[b])
         return pair, gain
 
     def _calculateKerninghanLinPass(self, graph, labels):
@@ -1325,7 +1324,7 @@ class XmippProtSplitvolume(ProtClassify3D):
 
             for component in np.unique(prevLabels):
                 # Build the adjacency matrix for the component
-                selection = labels == component
+                selection = prevLabels == component
                 componentGraph = graph[selection, :][:, selection]
                 assert(componentGraph.shape[0] == componentGraph.shape[1])
                 
