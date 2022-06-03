@@ -66,7 +66,10 @@ class XmippProtLocalCTF(ProtAnalysis3D):
                       expertLevel=LEVEL_ADVANCED, help="The reprojection is modified as a*P+b, b is restricted to the "
                                                        "interval [-maxGrayShift,maxGrayShift]")
         form.addParam('sameDefocus', BooleanParam, label="Force defocusV to be equal than defocusU", default=True,
-                      expertLevel=LEVEL_ADVANCED)
+                      expertLevel=LEVEL_ADVANCED,
+                      help="As the CTF usually suffers from astigmatism (it is not spherical but ellipsoidal), the "
+                           "defocus vary if computed in X or Y direction, being defocus U value the defocus in X "
+                           "direction and defocus V value the defocus in Y direction.")
         form.addParallelSection(threads=0, mpi=8)
     
     # --------------------------- INSERT steps functions --------------------------------------------
