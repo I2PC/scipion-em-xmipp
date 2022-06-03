@@ -47,13 +47,11 @@ from xmipp3.convert import readSetOfParticles, writeSetOfParticles
 
 
 class XmippProtScreenParticles(ProtProcessParticles):
-    """ Attach different merit values to every particle in order to
-        prune the set.
-        zScore evaluates the similarity of a particles with an average
-        (lower zScore -> high similarity).
-        SSNR evaluates the signal/noise ration in the Fourier space.
-        Variance evaluates the varaince on the micrographs context where
-        the particle was picked.
+    """Protocol to attach different merit values to every particle metadata for subsequent pruning the set.
+There are different merit values to be calculated:
+    - zScore evaluates the similarity of a particles with an average (lower zScore -> higher similarity).
+    - SSNR evaluates the signal/noise ration in the Fourier space.
+    - Variance evaluates the varaince on the micrographs context where the particle was picked.
     """
 
     _label = 'screen particles'
