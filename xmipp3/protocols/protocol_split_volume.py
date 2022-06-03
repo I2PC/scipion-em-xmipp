@@ -121,14 +121,15 @@ class XmippProtSplitvolume(ProtClassify3D):
                       validators=[Range(0, 100)], default=60, condition='weightCalculationMethod==3 or weightCalculationMethod==4',
                       help='Lower percentile used for interpolating comparison values')
         form.addParam('enforceUndirected', EnumParam, label="Enforce undirected", 
-                      choices=['Or', 'And', 'Average'], default=1,
+                      choices=['Maximum algebraic', 'Maximum magnitude', 'Minimum algebraic', 'Minimum magnitude', 'Average'], 
+                      default=1,
                       help='Enforce a undirected graph')
         
         form.addSection(label='Graph cut')
         form.addParam('graphCutAlgorithm', EnumParam, label='Graph cut algorithm',
                       choices=['Spectral', 'Kerningham Lin'], default=1)
         form.addParam('graphCutMetric', EnumParam, label="Cut metric", 
-                      choices=['Graph cut', 'Ratio cut', 'Normalized cut', 'Quotient cut'], default=3,
+                      choices=['None', 'Graph cut', 'Ratio cut', 'Normalized cut', 'Quotient cut'], default=3,
                       condition='graphCutAlgorithm==0',
                       help='Objective function to minimize when cutting the graph in two pieces')
         form.addParam('graphCutPadding', FloatParam, label='Padding (%)', 
@@ -276,12 +277,14 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Calculate weights from comparisons
         weights = weightFunc(comparisons)
         
+        # Apply a negative weight to particle edges belonging to the same direction
+        sameDirections = np.nonzero(self._calculateSameDirectionIdMask(directionIds))
+        degrees = np.sum(weights, axis=1)
+        weights[sameDirections] -= 1 # Make negative
+        weights[sameDirections] *= degrees[sameDirections[0]] # Amplify by its degree
+
         # Ensure the graph is symmetric
         weights = symmetrizeFunc(weights, weights.T)
-
-        # Apply a negative weight to particle edges belonging to the same direction
-        penalizations = self._calculateDirectionPenalizations(directionIds)
-        weights += penalizations
 
         # Save output data
         self._writeWeights(weights)
@@ -404,8 +407,10 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def _getSymmetrizeFunc(self):
         options = [
-            np.maximum, 
-            np.minimum, 
+            np.maximum,
+            lambda x, y : np.where(np.abs(x) > np.abs(y), x, y),
+            np.minimum,
+            lambda x, y : np.where(np.abs(x) < np.abs(y), x, y),
             lambda x, y : (x+y)/2
         ]
         selection = self.enforceUndirected.get()
@@ -413,6 +418,7 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def _getGraphPartitionMetricFunc(self):
         options = [
+            None,
             self._calculateGraphCutMetric,
             self._calculateRatioCutMetric,
             self._calculateNormalizedCutMetric,
@@ -1024,17 +1030,15 @@ class XmippProtSplitvolume(ProtClassify3D):
         regions = self._calculateGraphRegions(comparisons, N)
         return self._compareGraphRegions(regions)
 
-    def _calculateDirectionPenalizations(self, directionIds):
-        """ Returns a matrix with '-1' written in positions
-            where two images belong to the same direction
-        """
-        result = np.zeros((len(directionIds), )*2)
+    def _calculateSameDirectionIdMask(self, directionIds):
+        result = np.zeros((len(directionIds), )*2, dtype=bool)
 
-        for direction in np.unique(directionIds):
-            selection = np.nonzero(directionIds == direction)[0]
+        for directionId in np.unique(directionIds):
+            selection = np.nonzero(directionIds == directionId)[0]
             for pair in itertools.permutations(selection, r=2):
-                result[pair] = -1
+                result[pair] = True
 
+        assert(np.array_equal(result, result.T))
         return result
 
     def _calculateFiedlerVector(self, graph):
@@ -1144,23 +1148,27 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return values
 
-    def _partitionFiedlerVector(self, graph, fiedler, metric):
+    def _partitionFiedlerVector(self, graph, fiedler, metric=None):
         """ Partition the graph into 2 components which
             minimize the given metric
         """
-        # Sort the fiedler vector so that it represents the cut priority of each vertex
-        indices = np.argsort(fiedler)
+        if metric is not None:
+            # Sort the fiedler vector so that it represents the cut priority of each vertex
+            indices = np.argsort(fiedler)
 
-        # Calculate the metric function values
-        metricValues = self._calculateMetricValues(graph, indices, metric)
+            # Calculate the metric function values
+            metricValues = self._calculateMetricValues(graph, indices, metric)
 
-        # Calculate the cheapest cut
-        cut = np.argmin(metricValues)
-        labels = self._calculateCutLabels(indices, cut)
+            # Calculate the cheapest cut
+            cut = np.argmin(metricValues)
+            labels = self._calculateCutLabels(indices, cut)
+
+        else:
+            labels = fiedler >= 0
 
         return labels
 
-    def _partitionGraphSpectral(self, graph, metric):
+    def _partitionGraphSpectral(self, graph, metric=None):
         nVertices = graph.shape[0]
 
         if nVertices > 2:
@@ -1275,14 +1283,15 @@ class XmippProtSplitvolume(ProtClassify3D):
             http://users.ece.northwestern.edu/~haizhou/357/lec2.pdf
         """
         EPSILON = 1e-9
+        N = graph.shape[0]
 
         # Ensure the initial partition is defined
         if labels is None:
             fiedler = self._calculateFiedlerVector(graph)
             labels = fiedler >= np.median(fiedler)
+            #labels = np.array([False]*(N//2) + [True]*(N-N//2))
+            #random.shuffle(labels)
         
-        # Pad to an even amount of vertices
-        N = len(labels)
         nVertices = 2*math.ceil(N*(1+padding)/2)
         assert(nVertices>=N)
         if nVertices > N:
@@ -1320,19 +1329,28 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         for level in range(1, nLevels):
             prevLabels = result[level-1]
-            nextLabels = 2*prevLabels
+            nextLabels = np.zeros_like(prevLabels)
 
+            componentCounter = 0
             for component in np.unique(prevLabels):
                 # Build the adjacency matrix for the component
                 selection = prevLabels == component
-                componentGraph = graph[selection, :][:, selection]
-                assert(componentGraph.shape[0] == componentGraph.shape[1])
-                
-                # Partition it
-                componentPartition = partitionFunc(componentGraph)
 
-                # Compute the labels
-                nextLabels[selection] += componentPartition
+                if np.count_nonzero(selection) > 1:
+                    componentGraph = graph[selection, :][:, selection]
+                    assert(componentGraph.shape[0] == componentGraph.shape[1])
+                
+                    # Partition it
+                    componentPartition = partitionFunc(componentGraph)
+
+                    # Compute the labels
+                    nextLabels[selection] = componentCounter + componentPartition
+                    componentCounter += 2
+                
+                else:
+                    # No partition
+                    nextLabels[selection] = componentCounter
+                    componentCounter += 1
 
             # Write the result of this level
             result[level,:] = nextLabels
