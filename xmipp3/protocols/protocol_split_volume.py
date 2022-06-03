@@ -134,6 +134,9 @@ class XmippProtSplitvolume(ProtClassify3D):
         form.addParam('graphCutPadding', FloatParam, label='Padding (%)', 
                       condition='graphCutAlgorithm==1', validators=[Range(0, 100)], default=10,
                       help='Amount of extra vertices added to allow unbalanced partitions.')
+        form.addParam('graphCutLevels', IntParam, label='Cut levels', 
+                      validators=[GE(1)], default=2,
+                      help='Number of recursive partitions to perform. This will lead to 2^(N-1) classes')
 
         form.addParallelSection(threads=mp.cpu_count(), mpi=0)
     
@@ -288,17 +291,17 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Read the input data
         adjacency = self._readWeights()
         cutFunc = self._getGraphCutFunc()
+        nLevels = self.graphCutLevels.get()
 
         # Convert the adjacency to a sparse representation
         graph = sparse.csr_matrix(adjacency)
         
         # Obtain information about the graph
         nComponents, labels = csgraph.connected_components(adjacency)
-        labels = labels.astype(np.uint)
         print(f'The unpartitioned graph has {nComponents} components')
 
         # Partition the graph
-        labels = cutFunc(graph)
+        labels = self._partitionGraphMultilevel(graph, labels, nLevels, cutFunc)
 
         # Write the result
         self._writePartitionLabels(labels)
@@ -306,7 +309,7 @@ class XmippProtSplitvolume(ProtClassify3D):
     def reconstructVolumesStep(self):
         # Read the input data
         images = self._readSelectedImages()
-        labels = self._readPartitionLabels()
+        labels = self._readPartitionLabels(-1)
 
         # Reconstruct a volume for each top-level partition
         for cls in np.unique(labels):
@@ -318,7 +321,7 @@ class XmippProtSplitvolume(ProtClassify3D):
     def createOutputStep(self):
         # Read input data
         images = self._getSelectedImages()
-        labels = self._readPartitionLabels()
+        labels = self._readPartitionLabels(-1)
 
         # Create the output elements
         classes = self._createOutputClasses(images, labels, 'output')
@@ -614,10 +617,21 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def _writePartitionLabels(self, labels):
         assert(labels.dtype==np.uint)
-        self._storeMatrix('partition', labels, fmt='%d')
+        self._storeMatrix('partitions', labels, fmt='%d')
 
-    def _readPartitionLabels(self):
-        return self._loadMatrix('partition', dtype=np.uint)
+    def _readPartitionLabels(self, level=None):
+        result = self._loadMatrix('partitions', dtype=np.uint)
+
+        # Ensure the data is 2D
+        if result.ndim < 2:
+            result.shape = (1, len(result))
+        assert(result.ndim==2)
+
+        # Select a level if requested
+        if level is not None:
+            result = result[level]
+
+        return result
 
     def _getPartitionVolumeFileName(self, cls):
         return self._getExtraPath(f'partition_{cls:04d}.vol')
@@ -1307,6 +1321,31 @@ class XmippProtSplitvolume(ProtClassify3D):
         labels = labels[:N].astype(np.uint)
 
         return labels
+
+    def _partitionGraphMultilevel(self, graph, labels, nLevels, partitionFunc):
+        result = np.zeros((nLevels, len(labels)), dtype=np.uint)
+        result[0,:] = labels
+
+        for level in range(1, nLevels):
+            prevLabels = result[level-1]
+            nextLabels = 2*prevLabels
+
+            for component in np.unique(prevLabels):
+                # Build the adjacency matrix for the component
+                selection = labels == component
+                componentGraph = graph[selection, :][:, selection]
+                assert(componentGraph.shape[0] == componentGraph.shape[1])
+                
+                # Partition it
+                componentPartition = partitionFunc(componentGraph)
+
+                # Compute the labels
+                nextLabels[selection] += componentPartition
+
+            # Write the result of this level
+            result[level,:] = nextLabels
+
+        return result
 
     def _reconstructVolume(self, path, particles):
         """ Given a list of particles, with angular assignment

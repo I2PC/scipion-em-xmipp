@@ -193,7 +193,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _displayComparison3dNetwork(self, e):
         images = self._readImages()
         comparisons = self._readImageComparisons()
-        labels = self._readPartitionLabels()
+        labels = self._readPartitionLabels(-1)
         points = self._getProjectionSphere(images)
 
         # Obtain the edges of the graph
@@ -210,7 +210,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _displayComparison3dNetworkDisjoint(self, e):
         images = self._readImages()
         comparisons = self._readImageComparisons()
-        labels = self._readPartitionLabels()
+        labels = self._readPartitionLabels(-1)
         points = self._getProjectionSphere(images)
 
         # Apply a offset to the points
@@ -231,7 +231,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _displayWeight3dNetwork(self, e):
         images = self._readImages()
         weights = self._readWeights()
-        labels = self._readPartitionLabels()
+        labels = self._readPartitionLabels(-1)
         points = self._getProjectionSphere(images)
 
         # Obtain the edges of the graph
@@ -248,7 +248,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _displayWeight3dNetworkDisjoint(self, e):
         images = self._readImages()
         weights = self._readWeights()
-        labels = self._readPartitionLabels()
+        labels = self._readPartitionLabels(-1)
         points = self._getProjectionSphere(images)
 
         # Apply a offset to the points
@@ -267,7 +267,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         return [fig]
 
     def _displayPartitionLabelHistogram(self, e):
-        labels = self._readPartitionLabels()
+        labels = self._readPartitionLabels(-1)
         counts = collections.Counter(labels)
         x = np.unique(labels)
         y = np.array(list(map(counts.__getitem__, x)))
@@ -294,7 +294,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
         labels = self._readPartitionLabels()
 
         fig, ax = plt.subplots()
-        self._plotClassification(fig, ax, labels.reshape(1, len(labels)))
+        self._plotClassification(fig, ax, labels)
         ax.set_xlabel('Particle number')
         ax.set_ylabel('Level')
         ax.set_title('Classification')
@@ -302,7 +302,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
     
     def _displayProjectionClassification(self, e):
         images = self._readImages()
-        labels = self._readPartitionLabels()
+        labels = self._readPartitionLabels(-1)
         points = self._getProjectionSphere(images)
 
         # Plot the projection angles with the classification
@@ -314,7 +314,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     def _displayProjectionClassificationDisjoint(self, e):
         images = self._readImages()
-        labels = self._readPartitionLabels()
+        labels = self._readPartitionLabels(-1)
         points = self._getProjectionSphere(images)
 
         # Apply an offset to the points
@@ -344,8 +344,8 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _readWeights(self):
         return self.protocol._readWeights()
 
-    def _readPartitionLabels(self):
-        return self.protocol._readPartitionLabels()
+    def _readPartitionLabels(self, level=None):
+        return self.protocol._readPartitionLabels(level)
 
     def _getDirectionIds(self, images):
         return self.protocol._getDirectionIds(images)
