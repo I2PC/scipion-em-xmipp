@@ -1202,22 +1202,15 @@ class XmippProtSplitvolume(ProtClassify3D):
             This function returns the vertex pair to swap and its cost
         """
 
-        # Define the objective function to maximize
-        def objFunc(pair):
-            a, b = pair
-            da = delta[a]
-            db = delta[b]
-            c = graph[a,b]
-            return da + db - 2*c
+        # Compute the cost for all possible pairs in matrix form
+        a = np.stack((delta[classA], )*len(classB), axis=1)
+        b = np.stack((delta[classB], )*len(classA), axis=0)
+        w = graph[classA,:][:,classB]
+        gains = a + b - 2*w
 
-        # Maximize the objective function
-        gain = -math.inf
-        pair = ()
-        for x in itertools.product(classA, classB):
-            y = objFunc(x)
-            if y >= gain:
-                pair, gain = x, y
-
+        pair = np.unravel_index(np.argmax(gains), gains.shape)
+        gain = gains[pair]
+        pair = (classA[pair[0]], classB[pair[1]])
         return pair, gain
 
     def _calculateKerninghanLinPass(self, graph, labels):
