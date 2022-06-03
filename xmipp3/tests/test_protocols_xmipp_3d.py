@@ -1208,6 +1208,9 @@ class TestXmippVolSubtraction(TestXmippBase):
         cls.vol2 = cls.dataset.getFile('volumes/volume_2_iter_002.mrc')
 
     def testXmippVolSub(self):
+        ERROR_DIM = "There was a problem with the dimensions of output volume"
+        ERROR_SR = "There was a problem with the sampling rate value of output volume"
+
         print("Import Volume 1")
         protImportVol1 = self.newProtocol(ProtImportVolumes,
                                          objLabel='Volume',
@@ -1248,9 +1251,9 @@ class TestXmippVolSubtraction(TestXmippBase):
                                       vol2=protImportVol2.outputVolume,
                                       masks=False)
         self.launchProtocol(protVolAdj)
-        self.assertIsNotNone(protVolAdj.outputVolume,
-                             "There was a problem with Volumes adjust")
-
+        self.assertIsNotNone(protVolAdj.outputVolume, "There was a problem with Volumes adjust")
+        self.assertEqual(protVolAdj.outputVolume.getSamplingRate(), 7.08, ERROR_SR)
+        self.assertEqual(protVolAdj.outputVolume.getDim(), (64, 64, 64), ERROR_DIM)
         protVolAdjNoE = self.newProtocol(XmippProtVolAdjust,
                                          vol1=protImportVol1.outputVolume,
                                          vol2=protImportVol2.outputVolume,
@@ -1259,6 +1262,8 @@ class TestXmippVolSubtraction(TestXmippBase):
         self.launchProtocol(protVolAdjNoE)
         self.assertIsNotNone(protVolAdjNoE.outputVolume,
                              "There was a problem with Volumes adjust without computing energy")
+        self.assertEqual(protVolAdj.outputVolume.getSamplingRate(), 7.08, ERROR_SR)
+        self.assertEqual(protVolAdj.outputVolume.getDim(), (64, 64, 64), ERROR_DIM)
 
         protVolAdjNoRadAvg = self.newProtocol(XmippProtVolAdjust,
                                               vol1=protImportVol1.outputVolume,
@@ -1268,6 +1273,8 @@ class TestXmippVolSubtraction(TestXmippBase):
         self.launchProtocol(protVolAdjNoRadAvg)
         self.assertIsNotNone(protVolAdjNoRadAvg.outputVolume,
                              "There was a problem with Volumes adjust without radial average")
+        self.assertEqual(protVolAdj.outputVolume.getSamplingRate(), 7.08, ERROR_SR)
+        self.assertEqual(protVolAdj.outputVolume.getDim(), (64, 64, 64), ERROR_DIM)
 
         print("Run volume subtraction")
         protVolSub = self.newProtocol(XmippProtVolSubtraction,
@@ -1278,6 +1285,8 @@ class TestXmippVolSubtraction(TestXmippBase):
         self.launchProtocol(protVolSub)
         self.assertIsNotNone(protVolSub.outputVolume,
                              "There was a problem with Volumes subtraction")
+        self.assertEqual(protVolAdj.outputVolume.getSamplingRate(), 7.08, ERROR_SR)
+        self.assertEqual(protVolAdj.outputVolume.getDim(), (64, 64, 64), ERROR_DIM)
 
         protVolSubNoE = self.newProtocol(XmippProtVolSubtraction,
                                          vol1=protImportVol1.outputVolume,
@@ -1288,6 +1297,8 @@ class TestXmippVolSubtraction(TestXmippBase):
         self.launchProtocol(protVolSubNoE)
         self.assertIsNotNone(protVolSubNoE.outputVolume,
                              "There was a problem with Volumes subtraction without computing energy")
+        self.assertEqual(protVolAdj.outputVolume.getSamplingRate(), 7.08, ERROR_SR)
+        self.assertEqual(protVolAdj.outputVolume.getDim(), (64, 64, 64), ERROR_DIM)
 
         protVolSubMask = self.newProtocol(XmippProtVolSubtraction,
                                       vol1=protImportVol1.outputVolume,
@@ -1298,6 +1309,8 @@ class TestXmippVolSubtraction(TestXmippBase):
         self.launchProtocol(protVolSubMask)
         self.assertIsNotNone(protVolSubMask.outputVolume,
                              "There was a problem with Volumes subtraction with masks")
+        self.assertEqual(protVolAdj.outputVolume.getSamplingRate(), 7.08, ERROR_SR)
+        self.assertEqual(protVolAdj.outputVolume.getDim(), (64, 64, 64), ERROR_DIM)
 
         protVolSubRadAvg = self.newProtocol(XmippProtVolSubtraction,
                                       vol1=protImportVol1.outputVolume,
@@ -1306,6 +1319,8 @@ class TestXmippVolSubtraction(TestXmippBase):
         self.launchProtocol(protVolSubRadAvg)
         self.assertIsNotNone(protVolSubRadAvg.outputVolume,
                              "There was a problem with Volumes subtraction radial average")
+        self.assertEqual(protVolAdj.outputVolume.getSamplingRate(), 7.08, ERROR_SR)
+        self.assertEqual(protVolAdj.outputVolume.getDim(), (64, 64, 64), ERROR_DIM)
 
         protVolSubPdb = self.newProtocol(XmippProtVolSubtraction,
                                       vol1=protImportVol1.outputVolume,
@@ -1313,16 +1328,18 @@ class TestXmippVolSubtraction(TestXmippBase):
                                       pdbObj=protImportPdb.outputPdb,
                                       masks=False)
         self.launchProtocol(protVolSubPdb)
-        self.assertIsNotNone(protVolSubPdb.outputVolume,
-                             "There was a problem with Volumes subtraction pdb")
+        self.assertIsNotNone(protVolSubPdb.outputVolume, "There was a problem with Volumes subtraction pdb")
+        self.assertEqual(protVolAdj.outputVolume.getSamplingRate(), 7.08, ERROR_SR)
+        self.assertEqual(protVolAdj.outputVolume.getDim(), (64, 64, 64), ERROR_DIM)
 
         print("Run volume consensus")
         protVolConsensus = self.newProtocol(XmippProtVolConsensus,
                                             vols=[protImportVol1.outputVolume, protImportVol2.outputVolume,
                                                   protVolAdj.outputVolume])
         self.launchProtocol(protVolConsensus)
-        self.assertIsNotNone(protVolConsensus.outputVolume,
-                             "There was a problem with Volumes consensus")
+        self.assertIsNotNone(protVolConsensus.outputVolume, "There was a problem with Volumes consensus")
+        self.assertEqual(protVolAdj.outputVolume.getSamplingRate(), 7.08, ERROR_SR)
+        self.assertEqual(protVolAdj.outputVolume.getDim(), (64, 64, 64), ERROR_DIM)
 
 
 class TestXmippVolPhantom(TestXmippBase):
