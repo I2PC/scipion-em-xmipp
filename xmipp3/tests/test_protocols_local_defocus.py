@@ -62,3 +62,66 @@ class TestXmippLocalDefocusEstimation(BaseTest):
                          "There was a problem with size of set of particles")
         self.assertEqual(protEstimateLocalDefocus.outputParticles.getFirstItem().getSamplingRate(), 4,
                          "There was a problem with the sampling rate value of output particles")
+        # self.assertEqual(protEstimateLocalDefocus.outputParticles.getFirstItem().getCTF().getDefocusU(),
+        #                  protSimulateCTF.outputParticles.getFirstItem().getCTF().getDefocusU(),
+        #                  "There was a problem with the defocus U value of first output particle")
+        # self.assertEqual(protEstimateLocalDefocus.outputParticles.getFirstItem().getCTF().getDefocusV(),
+        #                  protSimulateCTF.outputParticles.getFirstItem().getCTF().getDefocusV(),
+        #                  "There was a problem with the defocus V value of first output particle")
+        # self.assertEqual(protEstimateLocalDefocus.outputParticles.getFirstItem().getCTF().getDefocusAngle(),
+        #                  protSimulateCTF.outputParticles.getFirstItem().getCTF().getDefocusAngle(),
+        #                  "There was a problem with the defocus angle value of first output particle")
+
+    def testXmippLocalDefocusConsensus(self):
+        protSimulateCTF2 = self.newProtocol(XmippProtSimulateCTF,
+                                            inputParticles=self.protCreateGallery.outputReprojections)
+        self.launchProtocol(protSimulateCTF2)
+        self.assertIsNotNone(protSimulateCTF2.outputParticles, "There was a problem with CTF simulation")
+
+        protEstimateLocalDefocus2 = self.newProtocol(XmippProtLocalCTF,
+                                                     inputSet=protSimulateCTF2.outputParticles,
+                                                     inputVolume=self.protCreatePhantom.outputVolume)
+        self.launchProtocol(protEstimateLocalDefocus2)
+        self.assertIsNotNone(protEstimateLocalDefocus2.outputParticles.getFiles(),
+                             "There was a problem with second CTF estimation")
+
+        protSimulateCTF3 = self.newProtocol(XmippProtSimulateCTF,
+                                            inputParticles=self.protCreateGallery.outputReprojections)
+        self.launchProtocol(protSimulateCTF3)
+        self.assertIsNotNone(protSimulateCTF3.outputParticles, "There was a problem with CTF simulation")
+
+        protEstimateLocalDefocus3 = self.newProtocol(XmippProtLocalCTF,
+                                                     inputSet=protSimulateCTF3.outputParticles,
+                                                     inputVolume=self.protCreatePhantom.outputVolume)
+        self.launchProtocol(protEstimateLocalDefocus3)
+        self.assertIsNotNone(protEstimateLocalDefocus3.outputParticles.getFiles(),
+                             "There was a problem with second CTF estimation")
+
+        protConsensusLocalDefocus = self.newProtocol(XmippProtConsensusLocalCTF,
+                                                     inputSet=self.protCreateGallery.outputReprojections,
+                                                     inputSets=[protEstimateLocalDefocus2.outputParticles,
+                                                                protEstimateLocalDefocus3.outputParticles])
+        self.launchProtocol(protConsensusLocalDefocus)
+        self.assertIsNotNone(protConsensusLocalDefocus.outputParticles.getFiles(),
+                             "There was a problem with consensus of local defocus estimation")
+        self.assertEqual(protConsensusLocalDefocus.outputParticles.getDim(), (40, 40, 181),
+                         "There was a problem with size of set of particles after consensus")
+        self.assertEqual(protConsensusLocalDefocus.outputParticles.getFirstItem().getSamplingRate(), 4,
+                         "There was a problem with the sampling rate value of output consensus particles")
+
+# class TestXmippAnalyzeLocalDefocus(BaseTest):
+#     """ Testing protocol analyze local defocus
+#     """
+#     @classmethod
+#     def setUpClass(cls):
+#         tests.setupTestOutput(cls)
+#         cls.dataset = DataSet.getDataSet('xmipp_tutorial')
+#         cls.micsFn = cls.dataset.getFile('micrographs/BPV_1386.mrc')
+#
+#     def testXmippAnalyzeLocalDefocus(self):
+#         protImportMics = self.newProtocol(ProtImportMicrographs,
+#                                           filesPath=self.micsFn,
+#                                           samplingRate=1.237,
+#                                           voltage=300)
+#         self.launchProtocol(protImportMics)
+#         self.assertIsNotNone(protImportMics.outputMicrographs, "There was a problem with the import")
