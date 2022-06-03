@@ -26,7 +26,7 @@ from pyworkflow.tests import BaseTest, setupTestProject
 
 from pwem import emlib
 
-from xmipp3.protocols import XmippProtReconstructFourier, XmippProtCTFCorrectWiener2D, \
+from xmipp3.protocols import XmippProtReconstructFourier, \
                              XmippProtCreateMask3D, XmippProtCreateGallery
 
 
@@ -44,14 +44,6 @@ class TestReconstructFourier(BaseTest):
         self.assertIsNotNone(o, "Output: %s is None" % outName)
         for c in conditions:
             self.assertTrue(eval(c), 'Condition failed: ' + c)
-
-    def correctCTF(self, particles):
-        correctCTF = self.newProtocol(XmippProtCTFCorrectWiener2D,
-                                      objLabel='Xmipp particles (sphere) - CTF corrected',
-                                      inputParticles=particles)
-        self.launchProtocol(correctCTF)
-        self.assertIsNotNone(correctCTF.outputParticles)
-        return correctCTF
 
     def createPhantomSphere(self):
         spherePhantom = self.newProtocol(XmippProtCreateMask3D,
