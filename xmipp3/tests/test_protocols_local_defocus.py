@@ -24,7 +24,8 @@
 from pyworkflow.tests import BaseTest, DataSet
 import pyworkflow.tests as tests
 
-from xmipp3.protocols import XmippProtPhantom, XmippProtCreateGallery, XmippProtSimulateCTF, XmippProtLocalCTF
+from xmipp3.protocols import XmippProtPhantom, XmippProtCreateGallery, XmippProtSimulateCTF, \
+    XmippProtLocalCTF, XmippProtConsensusLocalCTF
 from pwem.protocols import ProtImportMicrographs
 
 
@@ -34,27 +35,26 @@ class TestXmippLocalDefocusEstimation(BaseTest):
     @classmethod
     def setUpClass(cls):
         tests.setupTestProject(cls)
+        cls.protCreatePhantom = cls.newProtocol(XmippProtPhantom)
+        cls.launchProtocol(cls.protCreatePhantom)
+        cls.assertIsNotNone(cls.protCreatePhantom.getFiles(), "There was a problem with phantom creation")
 
-    def testXmippLocalDefocus(self):
-        protCreatePhantom = self.newProtocol(XmippProtPhantom)
-        self.launchProtocol(protCreatePhantom)
-        self.assertIsNotNone(protCreatePhantom.getFiles(),  "There was a problem with phantom creation")
-
-        protCreateGallery = self.newProtocol(XmippProtCreateGallery,
-                                             inputVolume=protCreatePhantom.outputVolume,
+        cls.protCreateGallery = cls.newProtocol(XmippProtCreateGallery,
+                                             inputVolume=cls.protCreatePhantom.outputVolume,
                                              rotStep=15.0,
                                              tiltStep=90.0)
-        self.launchProtocol(protCreateGallery)
-        self.assertIsNotNone(protCreateGallery.getFiles(), "There was a problem with create gallery")
+        cls.launchProtocol(cls.protCreateGallery)
+        cls.assertIsNotNone(cls.protCreateGallery.getFiles(), "There was a problem with create gallery")
 
-        protSimulateCTF = self.newProtocol(XmippProtSimulateCTF,
-                                           inputParticles=protCreateGallery.outputReprojections)
+    def testXmippLocalDefocus(self):
+        protSimulateCTF = self.newProtocol(XmippProtSimulateCTF)
+        protSimulateCTF.inputParticles.set(self.protCreateGallery.outputReprojections)
         self.launchProtocol(protSimulateCTF)
         self.assertIsNotNone(protSimulateCTF.outputParticles, "There was a problem with CTF simulation")
 
         protEstimateLocalDefocus = self.newProtocol(XmippProtLocalCTF,
                                                     inputSet=protSimulateCTF.outputParticles,
-                                                    inputVolume=protCreatePhantom.outputVolume)
+                                                    inputVolume=self.protCreatePhantom.outputVolume)
         self.launchProtocol(protEstimateLocalDefocus)
         self.assertIsNotNone(protEstimateLocalDefocus.outputParticles.getFiles(),
                              "There was a problem with CTF estimation")
@@ -62,21 +62,3 @@ class TestXmippLocalDefocusEstimation(BaseTest):
                          "There was a problem with size of set of particles")
         self.assertEqual(protEstimateLocalDefocus.outputParticles.getFirstItem().getSamplingRate(), 4,
                          "There was a problem with the sampling rate value of output particles")
-
-
-class TestXmippAnalyzeLocalDefocus(BaseTest):
-    """ Testing protocol analyze local defocus
-    """
-    @classmethod
-    def setUpClass(cls):
-        tests.setupTestOutput(cls)
-        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
-        cls.micsFn = cls.dataset.getFile('allMics')
-
-    def testXmippAnalyzeLocalDefocus(self):
-        protImportMics = self.newProtocol(ProtImportMicrographs,
-                                          filesPath=self.micsFn,
-                                          samplingRate=1.237,
-                                          voltage=300)
-        self.launchProtocol(protImportMics)
-        self.assertIsNotNone(protImportMics.outputMicrographs, "There was a problem with the import")
