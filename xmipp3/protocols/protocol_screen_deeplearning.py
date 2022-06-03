@@ -99,7 +99,7 @@ class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
                           default='1', allowsNull=True,
                           condition='(numberOfNegativeSets<=0 or numberOfNegativeSets >=%d) and '
                                     '(not doContinue or keepTraining)' % num,
-                          help='Select the weigth for the negative set of particles. '
+                          help='Select the weigh for the negative set of particles. '
                                'The weight value indicates the number of times '
                                'each image may be included at most per epoch. '
                                'Positive particles are weighted with 1. '
@@ -124,14 +124,14 @@ class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
                       condition="not doContinue or keepTraining",
                       help='Learning rate for neural network training')
         form.addParam('auto_stopping', params.BooleanParam,
-                      label='Auto stop training when convergency is detected?',
+                      label='Auto stop training when convergence is detected?',
                       default=True, condition="not doContinue or keepTraining",
                       help='If you set to *Yes*, the program will automatically '
                            'stop training if there is no improvement for '
                            'consecutive 2 epochs, learning rate will be '
                            'decreased by a factor 10. '
                            'If learningRate_t < 0.01*learningrate_0 training will stop. '
-                           'Warning: Sometimes convergency seems to be reached, '
+                           'Warning: Sometimes convergence seems to be reached, '
                            'but after time, improvement can still happen. '
                            'Not recommended for very small data sets (<100 true particles)')
         form.addParam('l2RegStrength', params.FloatParam,
@@ -145,7 +145,7 @@ class XmippProtScreenDeepLearning(ProtProcessParticles, XmippProtocol):
                       label="Number of models for ensemble",
                       default=2, expertLevel=params.LEVEL_ADVANCED,
                       condition="not doContinue",
-                      help='Number of models to fit in order to build an ensamble. '
+                      help='Number of models to fit in order to build an ensemble. '
                            'Tipical values are 1 to 5. The more the better '
                            'until a point where no gain is obtained. '
                            'Each model increases running time linearly')
