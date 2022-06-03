@@ -45,10 +45,11 @@ class TestReconstructFourier(BaseTest):
         for c in conditions:
             self.assertTrue(eval(c), 'Condition failed: ' + c)
 
-    def createPhantomSphere(self):
+    def createPhantomCube(self):
         spherePhantom = self.newProtocol(XmippProtCreateMask3D,
                                          objLabel='Target volume',
                                          source=1,
+                                         geo=1,
                                          size=128)
         self.launchProtocol(spherePhantom)
         self.assertIsNotNone(spherePhantom.outputMask)
@@ -65,8 +66,8 @@ class TestReconstructFourier(BaseTest):
         return projections
 
     def test_reconstruct_fourier(self):
-        spherePhantom = self.createPhantomSphere()
-        projections = self.createProjections(spherePhantom.outputMask)
+        cubePhantom = self.createPhantomCube()
+        projections = self.createProjections(cubePhantom.outputMask)
 
         validateProt = self.newProtocol(XmippProtReconstructFourier,
                                 objLabel='Fourier reconstruction',
@@ -75,8 +76,8 @@ class TestReconstructFourier(BaseTest):
         self.launchProtocol(validateProt)
         self.checkOutput(validateProt, 'outputVolume')
 
-        # Check if spheres are similar
-        sphere_phantom = emlib.Image(spherePhantom.outputMask.getFileName())
+        # Check if cubes are similar
+        sphere_phantom = emlib.Image(cubePhantom.outputMask.getFileName())
         sphere_reconstructed = emlib.Image(validateProt.outputVolume.getFileName())
         corr = sphere_phantom.correlation(sphere_reconstructed)
         self.assertAlmostEqual(corr, 0.98, delta=0.01, msg="There was an error during the reconstruction process")
