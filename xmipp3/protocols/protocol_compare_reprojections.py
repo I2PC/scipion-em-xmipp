@@ -129,6 +129,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
     def produceResiduals(self, fnVol, fnAngles, Ts):
         anglesOutFn = self._getExtraPath("anglesCont.stk")
         projectionsOutFn = self._getExtraPath("projections.stk")
+        fnVol = self._getTmpPath("volume.vol")
         xdim = self._getDimensions()
         args = "-i %s -o %s --ref %s --optimizeAngles --optimizeShift --max_shift %d --oprojections %s --sampling %f" \
                % (fnAngles, anglesOutFn, fnVol, floor(xdim*0.05), projectionsOutFn, Ts)
@@ -137,7 +138,7 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             args += " --oresiduals %s" % self.fnResiduals
 
         if self.ignoreCTF:
-            args += " --ignoreCTF"
+            args += " --ignoreCTF "
         if self.optimizeGray:
             args += "--optimizeGray --max_gray_scale 0.95 "
         self.runJob("xmipp_angular_continuous_assign2", args)
