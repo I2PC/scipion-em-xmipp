@@ -177,8 +177,8 @@ class XmippProtTriggerData(EMProtocol):
             if len(self.images) >= self.outputSize:
                 print('Sending signal to stop the input trigger data protocol')
                 self.stopWait()
-        #
 
+        # Wait for trigger data signal
         if self.triggerWait.get():
             print('Waiting for signal to stop the stream')
             if self.waitingHasFinished():
@@ -191,10 +191,6 @@ class XmippProtTriggerData(EMProtocol):
             self._fillingOutput()  # To do the last filling
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(cons.STATUS_NEW)
-                # Send the signal to the connected protocol
-                # if self.triggerSignal.get():
-                #     print('Sending signal to stop the input trigger data protocol')
-                #     self.stopWait()
         else:
             delayId = self._insertFunctionStep('delayStep', prerequisites=[])
             deps.append(delayId)
