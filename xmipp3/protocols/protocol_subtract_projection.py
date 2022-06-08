@@ -29,15 +29,13 @@
 from os.path import basename
 from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
-import pwem.emlib.metadata as md
+from pwem import emlib
 from pwem.protocols import EMProtocol
-from xmipp3.convert import writeSetOfParticles
+from xmipp3.convert import writeSetOfParticles, readSetOfParticles
 
 
 class XmippProtSubtractProjection(EMProtocol):
-    """ This protocol computes the subtraction between particles and a initial volume, by computing its projections
-    with the same angles that input particles have. Then, each particle and the correspondent projection of the initial
-    volume are numerically adjusted and subtracted using a mask which denotes the region to keep. """
+    """ This protocol computes the subtraction between particles and a reference volume, by computing its projections with the same angles that input particles have. Then, each particle and the correspondent projection of the reference volume are numerically adjusted and subtracted using a mask which denotes the region to keep. """
 
     _label = 'subtract projection'
     INPUT_PARTICLES = "input_particles.xmd"
@@ -46,27 +44,22 @@ class XmippProtSubtractProjection(EMProtocol):
     def _defineParams(self, form):
         form.addSection(label='Input')
         form.addParam('particles', PointerParam, pointerClass='SetOfParticles', label="Particles: ",
-                      help='Specify a SetOfParticles.')
-        form.addParam('vol', PointerParam, pointerClass='Volume', label="Initial volume ", help='Specify a volume.')
-        form.addParam('maskVol', PointerParam, pointerClass='VolumeMask', label='Volume mask', allowsNull=True,
-                      help='3D mask for the input volume. This mask is not mandatory but advisable.')
-        form.addParam('mask', PointerParam, pointerClass='VolumeMask', label="Mask for region to keep", allowsNull=True,
-                      help='Specify a 3D mask for the region of the input volume that you want to keep. If no mask is '
-                           'selected, the whole image will be subtracted')
-        form.addParam('resol', FloatParam, label="Filter at resolution: ", default=3, allowsNull=True,
-                      expertLevel=LEVEL_ADVANCED,
-                      help='Resolution (A) at which subtraction will be performed, filtering the volume projections.'
-                           'Value 0 implies no filtering.')
-        form.addParam('sigma', FloatParam, label="Decay of the filter (sigma): ", default=3, condition='resol',
-                      help='Decay of the filter (sigma parameter) to smooth the mask transition',
-                      expertLevel=LEVEL_ADVANCED)
-        form.addParam('iter', IntParam, label="Number of iterations: ", default=5, expertLevel=LEVEL_ADVANCED,
-                      help='Number of iterations for the adjustment process of the images before the subtraction itself'
-                           'several iterations are recommended to improve the adjustment.')
-        form.addParam('rfactor', FloatParam, label="Relaxation factor (lambda): ", default=1,
-                      expertLevel=LEVEL_ADVANCED,
-                      help='Relaxation factor for Fourier amplitude projector (POCS), it should be between 0 and 1, '
-                           'being 1 no relaxation and 0 no modification of volume 2 amplitudes')
+                      help='Specify a SetOfParticles')
+        form.addParam('vol', PointerParam, pointerClass='Volume', label="Reference volume ", help='Specify a volume.')
+        form.addParam('mask', PointerParam, pointerClass='VolumeMask', label='Mask for region to keep', allowsNull=True,
+                      help='Specify a 3D mask for the region of the input volume that you want to keep. '
+                           'If no mask is given, the subtraction is performed in whole images.')
+        form.addParam('mwidth', FloatParam, label="Extra width in final mask: ", default=40, expertLevel=LEVEL_ADVANCED,
+                      help='Length (in A) to add for each side to the final result mask. -1 means no mask.')
+        form.addParam('resol', FloatParam, label="Maximum resolution: ", default=3,  expertLevel=LEVEL_ADVANCED,
+                      help='Maximum resolution (in A) of the data ')
+        form.addParam('limit_freq', BooleanParam, label="Limit frequency?: ", default=False, expertLevel=LEVEL_ADVANCED,
+                      help='Limit frequency in the adjustment process to the frequency correspondent to the resolution'
+                           ' indicated in "Maximum resolution" field above')
+        form.addParam('sigma', FloatParam, label="Decay of the filter (sigma): ", default=3, expertLevel=LEVEL_ADVANCED,
+                      help='Decay of the filter (sigma) to smooth the mask transition')
+        form.addParam('pad', IntParam, label="Fourier padding factor: ", default=2, expertLevel=LEVEL_ADVANCED,
+                      help='The volume is zero padded by this factor to produce projections')
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -83,52 +76,47 @@ class XmippProtSubtractProjection(EMProtocol):
         fnVol = vol.getFileName()
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
-        resol = self.resol.get()
-        iters = self.iter.get()
-        program = "xmipp_subtract_projection"
-        args = '-i %s --ref %s -o %s --iter %s --lambda %s' % (self._getExtraPath(self.INPUT_PARTICLES), fnVol,
-                                                               self._getExtraPath("output_particles"), iters,
-                                                               self.rfactor.get())
-        args += ' --saveProj %s' % self._getExtraPath('')
-        if resol:
-            fc = vol.getSamplingRate()/resol
-            args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
-        if self.maskVol.get() is not None:
-            args += ' --maskVol %s' % self.maskVol.get().getFileName()
-        if self.mask.get() is not None:
-            args += ' --mask %s' % self.mask.get().getFileName()
-        else:
-            involdim = vol.getDim()
-            fnDescr = self._getExtraPath("mask.descr")
-            fhDescr = open(fnDescr, 'w')
-            fhDescr.write("%d %d %d 0" % (involdim[0], involdim[1], involdim[2]))
-            fhDescr.close()
-            mskKeep = self._getExtraPath("mask_keep.mrc")
-            args_mask_keep = "-i %s -o %s" % (fnDescr, mskKeep)
-            self.runJob("xmipp_phantom_create", args_mask_keep, numberOfMpi=1)
-            args_imageheader2 = "-i %s --sampling_rate %f" % (mskKeep, vol.getSamplingRate())
-            self.runJob("xmipp_image_header", args_imageheader2, numberOfMpi=1)
-            args += ' --mask %s --subAll' % mskKeep
-        self.runJob(program, args)
+        args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --fmask_width %f --padding %f ' \
+               '--sigma %d --limit_freq %d' % \
+               (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles"),
+                vol.getSamplingRate(), self.resol.get(), self.mwidth.get(), self.pad.get(), self.sigma.get(),
+                int(self.limit_freq.get()))
+        mask = self.mask.get()
+        if mask is not None:
+            args += ' --mask %s' % mask.getFileName()
+        args += ' --save %s' % self._getExtraPath()
+        self.runJob("xmipp_subtract_projection", args)
 
     def createOutputStep(self):
-        self.ix = 0  # initiate counter for particle file name
         inputSet = self.particles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
-        outputSet.copyItems(inputSet, updateItemCallback=self._updateItem,
-                            itemDataIterator=md.iterRows(self._getExtraPath(self.INPUT_PARTICLES)))
+        readSetOfParticles(self._getExtraPath('input_particles.xmd'), outputSet, extraLabels=[emlib.MDL_SUBTRACTION_R2])
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(inputSet, outputSet)
 
     # --------------------------- INFO functions --------------------------------------------
+    def _validate(self):
+        errors = []
+        part = self.particles.get().getFirstItem()
+        vol = self.vol.get()
+        mask = self.mask.get()
+        if part.getDim()[0] != vol.getDim()[0]:
+            errors.append("Input particles and volume should have same X and Y dimensions")
+        if part.getSamplingRate() != vol.getSamplingRate():
+            errors.append("Input particles and volume should have same sampling rate")
+        if mask:
+            if vol.getSamplingRate() != mask.getSamplingRate():
+                errors.append("Input volume and mask should have same sampling rate")
+            if vol.getDim() != mask.getDim():
+                errors.append("Input volume and mask should have same dimensions")
+        if self.resol.get() == 0:
+            errors.append("Resolution (angstroms) should be bigger than 0")
+        return errors
+
     def _summary(self):
-        summary = ["Volume: %s" % self.vol.get().getFileName()]
-        summary.append("Set of particles: %s" % self.particles.get())
-        if self.mask:
-            summary.append("Mask: %s" % self.mask.get().getFileName())
-        if self.resol.get() != 0:
-            summary.append("Subtraction at resolution %f A" % self.resol.get())
+        summary = ["Volume: %s\nSet of particles: %s\nMask: %s" %
+                   (self.vol.get().getFileName(), self.particles.get(), self.mask.get().getFileName())]
         return summary
 
     def _methods(self):
@@ -136,24 +124,6 @@ class XmippProtSubtractProjection(EMProtocol):
         if not hasattr(self, 'outputParticles'):
             methods.append("Output particles not ready yet.")
         else:
-            methods.append("Volume projections from %s subtracted from particles" %
-                           basename(self.vol.get().getFileName()))
-            if self.mask:
-                methods.append("with mask %s" % basename(self.mask.get().getFileName()))
-            if self.resol.get() != 0:
-                methods.append(" at resolution %f A" % self.resol.get())
+            methods.append("Volume projections subtracted to particles keeping the region in %s"
+                           % basename(self.mask.get().getFileName()))
         return methods
-
-    def _validate(self):
-        errors = []
-        rfactor = self.rfactor.get()
-        if rfactor < 0 or rfactor > 1:
-            errors.append('Relaxation factor (lambda) must be between 0 and 1')
-        return errors
-
-    # --------------------------- UTLIS functions --------------------------------------------
-    def _updateItem(self, item, row):
-        newFn = row.getValue(md.MDL_IMAGE)
-        self.ix = self.ix + 1
-        newFn = newFn.split('@')[1]
-        item.setLocation(self.ix, newFn)
