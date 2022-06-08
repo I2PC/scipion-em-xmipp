@@ -30,8 +30,7 @@ from pwem.protocols import ProtImportMicrographs
 
 
 class TestXmippLocalDefocusEstimation(BaseTest):
-    """ Testing local defocus estimation
-    """
+    """ Testing local defocus estimation """
     @classmethod
     def setUpClass(cls):
         tests.setupTestProject(cls)
@@ -62,3 +61,47 @@ class TestXmippLocalDefocusEstimation(BaseTest):
                          "There was a problem with size of set of particles")
         self.assertEqual(protEstimateLocalDefocus.outputParticles.getFirstItem().getSamplingRate(), 4,
                          "There was a problem with the sampling rate value of output particles")
+        self.assertEqual(protEstimateLocalDefocus.outputParticles.getFirstItem().getCTF().getDefocusU(),
+                         protEstimateLocalDefocus.outputParticles.getFirstItem().getCTF().getDefocusV(),
+                         "Defocus U and defocus V should be equal if sameDefocus option is set to True")
+
+
+class TestXmippLocalDefocusEstimationConsensus(TestXmippLocalDefocusEstimation):
+    """ Testing local defocus estimation consensus """
+
+    def testXmippLocalDefocusConsensus(self):
+        protSimulateCTF2 = self.newProtocol(XmippProtSimulateCTF,
+                                            inputParticles=self.protCreateGallery.outputReprojections)
+        self.launchProtocol(protSimulateCTF2)
+        self.assertIsNotNone(protSimulateCTF2.outputParticles, "There was a problem with second CTF simulation")
+
+        protEstimateLocalDefocus2 = self.newProtocol(XmippProtLocalCTF,
+                                                     inputSet=protSimulateCTF2.outputParticles,
+                                                     inputVolume=self.protCreatePhantom.outputVolume)
+        self.launchProtocol(protEstimateLocalDefocus2)
+        self.assertIsNotNone(protEstimateLocalDefocus2.outputParticles.getFiles(),
+                             "There was a problem with second CTF estimation")
+
+        protSimulateCTF3 = self.newProtocol(XmippProtSimulateCTF,
+                                            inputParticles=self.protCreateGallery.outputReprojections)
+        self.launchProtocol(protSimulateCTF3)
+        self.assertIsNotNone(protSimulateCTF3.outputParticles, "There was a problem with third CTF simulation")
+
+        protEstimateLocalDefocus3 = self.newProtocol(XmippProtLocalCTF,
+                                                     inputSet=protSimulateCTF3.outputParticles,
+                                                     inputVolume=self.protCreatePhantom.outputVolume)
+        self.launchProtocol(protEstimateLocalDefocus3)
+        self.assertIsNotNone(protEstimateLocalDefocus3.outputParticles.getFiles(),
+                             "There was a problem with third CTF estimation")
+
+        protConsensusLocalDefocus = self.newProtocol(XmippProtConsensusLocalCTF,
+                                                     inputSet=protSimulateCTF2.outputParticles,
+                                                     inputSets=[protEstimateLocalDefocus2.outputParticles,
+                                                                protEstimateLocalDefocus3.outputParticles])
+        self.launchProtocol(protConsensusLocalDefocus)
+        self.assertIsNotNone(protConsensusLocalDefocus.outputParticles.getFiles(),
+                             "There was a problem with consensus of local defocus estimation")
+        self.assertEqual(protConsensusLocalDefocus.outputParticles.getDim(), (40, 40, 181),
+                         "There was a problem with size of set of particles after consensus")
+        self.assertEqual(protConsensusLocalDefocus.outputParticles.getFirstItem().getSamplingRate(), 4,
+                         "There was a problem with the sampling rate value of output consensus particles")
