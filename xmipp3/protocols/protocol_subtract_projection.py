@@ -110,6 +110,8 @@ class XmippProtSubtractProjection(EMProtocol):
                 errors.append("Input volume and mask should have same sampling rate")
             if vol.getDim() != mask.getDim():
                 errors.append("Input volume and mask should have same dimensions")
+        if self.resol.get() == 0:
+            errors.append("Resolution (angstroms) should be bigger than 0")
         return errors
 
     def _summary(self):
