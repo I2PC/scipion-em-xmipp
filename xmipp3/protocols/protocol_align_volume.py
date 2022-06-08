@@ -82,7 +82,7 @@ class XmippProtAlignVolume(ProtAlignVolume):
                       help='Select the volume mask object')
         
         form.addSection(label='Search strategy')
-        form.addParam('alignmentAlgorithm', params.EnumParam, default=ALIGN_ALGORITHM_EXHAUSTIVE, 
+        form.addParam('alignmentAlgorithm', params.EnumParam, default=ALIGN_ALGORITHM_FAST_FOURIER,
                       choices=['exhaustive',
                                'local', 
                                'exhaustive + local', 
