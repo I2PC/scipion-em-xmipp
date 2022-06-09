@@ -138,7 +138,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _displayInputClassification(self, e):
         images = self._readImages()
         directionIds = self._getDirectionIds(images)
-        directionClassification = self._getDirectionIdLabels(directionIds)
+        directionClassification = self._calculateDirectionalLabels(directionIds)
 
         # Get the projection sphere
         points = self._getProjectionSphere(images, directionClassification)
@@ -350,21 +350,15 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _getDirectionIds(self, images):
         return self.protocol._getDirectionIds(images)
 
-    def _getDirectionIdLabels(self, directionIds):
-        result = np.zeros_like(directionIds)
-
-        # Count items with the same id before it
-        for i in range(len(result)):
-            result[i] = np.count_nonzero(directionIds[:i] == directionIds[i])
-
-        return result
+    def _calculateDirectionalLabels(self, directionIds):
+        return self.protocol._calculateDirectionalLabels(directionIds)
 
     def _getProjectionSphere(self, images, labels=None):
         points = np.array(list(map(self.protocol._getProjectionDirection, images)))
 
         if labels is None:
             directionIds = self._getDirectionIds(images)
-            labels = self._getDirectionIdLabels(directionIds)
+            labels = self._calculateDirectionalLabels(directionIds)
 
         # Calculate a scale based on the labels
         scale = self._calculateConcentricProjectionSphereScales(labels)

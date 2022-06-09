@@ -38,6 +38,8 @@ from pwem import emlib
 from pwem.protocols import ProtClassify3D
 from pwem.objects import Volume, Image, Particle, Class2D
 from pwem.constants import ALIGN_PROJ
+import scipy
+from sklearn.preprocessing import scale
 
 import xmippLib
 from xmipp3.convert import writeSetOfParticles, locationToXmipp
@@ -46,6 +48,7 @@ import math
 import itertools
 import functools
 import collections
+import random
 import pywt
 import PIL.Image
 import numpy as np
@@ -107,23 +110,19 @@ class XmippProtSplitvolume(ProtClassify3D):
         form.addParam('maxNeighbors', IntParam, label="Maximum number of neighbors", 
                       validators=[GE(0)], default=12,
                       help='Maximum number of comparisons to consider for each directional class. Use 0 to disable this limit')
-        form.addParam('weightCalculationMethod', EnumParam, label='Edge weight calculation method',
-                      choices=['None', 'Interpolate percentiles globally', 'Interpolate percentiles locally', 
-                      'Common neighbors globally', 'Common neighbors locally', 'Region grow'], default=0,
-                      help='Method used to calculate edge weights')
-        form.addParam('weightCalculationInterpolateLower', FloatParam, label='Interpolation lower percentile',
-                      validators=[Range(0, 100)], default=40, condition='weightCalculationMethod==1 or weightCalculationMethod==2',
-                      help='Lower percentile used for interpolating comparison values')
-        form.addParam('weightCalculationInterpolateUpper', FloatParam, label='Interpolation upper percentile',
-                      validators=[Range(0, 100)], default=90, condition='weightCalculationMethod==1 or weightCalculationMethod==2',
-                      help='Lower percentile used for interpolating comparison values')
-        form.addParam('weightCalculationNeighborPercentile', FloatParam, label='Neighbor threshold percentile',
-                      validators=[Range(0, 100)], default=60, condition='weightCalculationMethod==3 or weightCalculationMethod==4',
-                      help='Lower percentile used for interpolating comparison values')
-        form.addParam('enforceUndirected', EnumParam, label="Enforce undirected", 
-                      choices=['Maximum algebraic', 'Maximum magnitude', 'Minimum algebraic', 'Minimum magnitude', 'Average'], 
-                      default=1,
-                      help='Enforce a undirected graph')
+        group = form.addGroup('Weight interpolation percentiles', 
+                help='TODO')
+        group.addParam('transformWeightInterpolationMin', FloatParam, label='Minimum',
+                       validators=[Range(0, 100)], default=10)
+        group.addParam('transformWeightInterpolationLower', FloatParam, label='Lower',
+                       validators=[Range(0, 100)], default=20)
+        group.addParam('transformWeightInterpolationUpper', FloatParam, label='Upper',
+                       validators=[Range(0, 100)], default=80)
+        group.addParam('transformWeightInterpolationMax', FloatParam, label='Maximum',
+                       validators=[Range(0, 100)], default=90)
+        form.addParam('transformWeightsCosine', BooleanParam, label='Cosine distance', 
+                        default=True,
+                       help='Apply the cosine distance to image pairs')
         
         form.addSection(label='Graph cut')
         form.addParam('graphCutAlgorithm', EnumParam, label='Graph cut algorithm',
@@ -216,14 +215,12 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def computeImagePairsStep(self):
         # Read input data
-        images = self._readSelectedImages()
         distances = self._readAngularDistances()
         maxAngularDistance = self._getMaxAngularDistance(distances)
         maxNeighbors = self._getMaxNeighbors()
 
         # Compute the image pairs to be considered
-        directionIds = self._getDirectionIds(images)
-        pairs = self._calculateImagePairs(distances, directionIds, maxAngularDistance, maxNeighbors)
+        pairs = self._calculateImagePairs(distances, maxAngularDistance, maxNeighbors)
         print(f'Considering {len(pairs)} image pairs with an '
               f'angular distance of up to {np.degrees(maxAngularDistance)} deg')
 
@@ -254,7 +251,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         comparisons, differences = self._computeComparisons(images, pairs)
 
         # Apply the ponderation to the comparisons
-        comparisons *= ponderations[indices] # TODO consider removing
+        #comparisons *= ponderations[indices] # TODO consider removing
 
         # Convert to matrix form
         comparisonMatrix = self._calculateComparisonMatrix(images, pairs, comparisons)
@@ -267,33 +264,30 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Read input data
         images = self._readSelectedImages()
         distances = self._readAngularDistances()
-        directionIds = self._getDirectionIds(images)
         pairs = self._readImagePairs()
         ponderations = self._readDistancePonderation()
         comparisons = self._readImageComparisons()
-        weightFunc = self._getWeightCalculationFunc()
-        symmetrizeFunc = self._getSymmetrizeFunc()
-        
-        # Calculate weights from comparisons
-        weights = weightFunc(comparisons)
-        
-        # Apply a negative weight to particle edges belonging to the same direction
-        sameDirections = np.nonzero(self._calculateSameDirectionIdMask(directionIds))
-        degrees = np.sum(weights, axis=1)
-        weights[sameDirections] -= 1 # Make negative
-        weights[sameDirections] *= degrees[sameDirections[0]] # Amplify by its degree
+        min = self.transformWeightInterpolationMin.get()
+        lower = self.transformWeightInterpolationLower.get()
+        upper = self.transformWeightInterpolationUpper.get()
+        max = self.transformWeightInterpolationMax.get()
 
-        # Ensure the graph is symmetric
-        weights = symmetrizeFunc(weights, weights.T)
+        weights = self._calculateWeightsInterpolationStaircase(comparisons, min, lower, upper, max)
+
+        if self.transformWeightsCosine:
+            weights = self._calculateWeightsCosine(weights)
 
         # Save output data
         self._writeWeights(weights)
         self._writeWeightMetaData(images, pairs, distances, comparisons, ponderations, weights)
 
+
+
     def partitionGraphStep(self):
         # Read the input data
+        images = self._readSelectedImages()
         adjacency = self._readWeights()
-        cutFunc = self._getGraphCutFunc()
+        directionIds = self._getDirectionIds(images)
         nLevels = self.graphCutLevels.get()
 
         # Convert the adjacency to a sparse representation
@@ -303,8 +297,11 @@ class XmippProtSplitvolume(ProtClassify3D):
         nComponents, labels = csgraph.connected_components(adjacency)
         print(f'The unpartitioned graph has {nComponents} components')
 
+        # Merge insignificant classes and do not consider them for partitioning
+        labels = self._discardSmallClasses(labels, 32)
+        
         # Partition the graph
-        labels = self._partitionGraphMultilevel(graph, labels, nLevels, cutFunc)
+        labels = self._partitionGraphMultilevel(graph, labels, directionIds, nLevels, 32)
 
         # Write the result
         self._writePartitionLabels(labels)
@@ -389,20 +386,17 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _getConsiderMirrors(self):
         return self.considerMirrors.get()
 
-    def _getWeightCalculationFunc(self):
-        lower = self.weightCalculationInterpolateLower.get()
-        upper = self.weightCalculationInterpolateUpper.get()
-        threshold=self.weightCalculationNeighborPercentile.get() 
+    def _getWeightInterpolationFunc(self):
+        lower = self.transformWeightInterpolationLower.get()
+        upper = self.transformWeightInterpolationUpper.get()
 
         options = [
             lambda x : x,
             functools.partial(self._calculateWeightsInterpolationGlobal, lower=lower, upper=upper),
             functools.partial(self._calculateWeightsInterpolationLocal, lower=lower, upper=upper),
-            functools.partial(self._calculateWeightsCommonNeighborCountsGlobal, threshold=threshold),
-            functools.partial(self._calculateWeightsCommonNeighborCountsLocal, threshold=threshold),
-            functools.partial(self._calculateWeightsRegionGrow, N=2)
+            functools.partial(self._calculateWeightsInterpolationStaircase, lower=lower, upper=upper),
         ]
-        selection = self.weightCalculationMethod.get()
+        selection = self.transformWeightsInterpolation.get()
         return options[selection]
 
     def _getSymmetrizeFunc(self):
@@ -413,7 +407,7 @@ class XmippProtSplitvolume(ProtClassify3D):
             lambda x, y : np.where(np.abs(x) < np.abs(y), x, y),
             lambda x, y : (x+y)/2
         ]
-        selection = self.enforceUndirected.get()
+        selection = self.transformWeightSymmetrize.get()
         return options[selection]
 
     def _getGraphPartitionMetricFunc(self):
@@ -747,6 +741,26 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _getDirectionIds(self, images):
         return np.array(list(map(Particle.getClassId, images)), dtype=np.uint)
 
+    def _calculateDirectionalLabels(self, directionIds):
+        result = np.zeros_like(directionIds)
+
+        # Obtain the frequencies of each direction
+        counter = collections.Counter(directionIds)
+
+        cyclicLabel = itertools.cycle(range(2))
+        for i, directionId in enumerate(directionIds):
+            if counter[directionId] > 1:
+                # Count items with the same id before it
+                label = np.count_nonzero(directionIds[:i] == directionId)
+
+            else:
+                # Assign a cyclic label to it
+                label = next(cyclicLabel)
+
+            result[i] = label
+
+        return result
+
     def _getProjectionDirection(self, image):
         # Multiply by the unit z vector, as projection is performed in this direction
         return image.getTransform().getRotationMatrix()[:, 2]
@@ -796,7 +810,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(np.all(np.diagonal(distances) == 0))
         return distances
 
-    def _calculateImagePairs(self, distances, directionIds, maxDistance, maxNeighbors):
+    def _calculateImagePairs(self, distances, maxDistance, maxNeighbors):
         """ Computes the indices of a matrix where to compute
             the comparisons. In order to do so, it considers
             a distance threshold and a maximum number of comparisons
@@ -807,9 +821,9 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         # Limit the number of comparisons to be computed
         if maxNeighbors is not None:
-            for pairRow, distanceRow in zip(pairs, distances):
-                indices = np.argsort(distanceRow)
-                pairRow[indices[maxNeighbors+1:]] = False
+            indices = np.argsort(distances, axis=1)
+            for pairRow, ordering in zip(pairs, indices):
+                pairRow[ordering[maxNeighbors+1:]] = False
 
         # Remove comparisons with itself
         np.fill_diagonal(pairs, False)
@@ -914,8 +928,7 @@ class XmippProtSplitvolume(ProtClassify3D):
             interpolating comparison values
         """
 
-        values = comparisons[np.nonzero(comparisons)]
-        [minVal, maxVal] = np.percentile(values, [lower, upper])
+        [minVal, maxVal] = self._calculateWeightInterpolationThresholds(comparisons, [lower, upper])
         weights = self._smoothStep(comparisons, xMin=minVal, xMax=maxVal, N=1)
         
         assert(np.all(weights >= 0))
@@ -932,115 +945,44 @@ class XmippProtSplitvolume(ProtClassify3D):
         weights = np.zeros_like(comparisons)
         for weightRow, compRow in zip(weights, comparisons):
             # Calculate lower and upper percentiles for the non zero comparisons
-            values = compRow[np.nonzero(compRow)]
-            if len(values) > 0:
-                [minVal, maxVal] = np.percentile(values, [lower, upper])
-                weightRow[:] = self._smoothStep(compRow, xMin=minVal, xMax=maxVal, N=1)
+            [minVal, maxVal] = self._calculateWeightInterpolationThresholds(compRow, [lower, upper])
+            weightRow[:] = self._smoothStep(compRow, xMin=minVal, xMax=maxVal, N=1)
 
         assert(np.all(weights >= 0))
         assert(np.all(weights <= 1))
         return weights
     
-    def _calculateWeightsCommonNeighborCounts(self, adjacency):
-        """ Given a boolean adjacency matrix, computes the neighbor
-            set intersection and considers the intersection size as 
-            the weight
-        """
-
-        result = np.zeros_like(adjacency, dtype=float)
-        for idx0, idx1 in itertools.combinations(range(len(result)), r=2):
-            # Intersect the neighbors of both projections and count them
-            row0 = adjacency[idx0]
-            row1 = adjacency[idx1]
-            intersection = np.logical_and(row0, row1)
-            count = np.count_nonzero(intersection)
-
-            # Write the result on symmetrical positions
-            result[idx0, idx1] = count
-            result[idx1, idx0] = count
+    def _calculateWeightsInterpolationStaircase(self, comparisons, min, lower, upper, max):
+        values = comparisons[np.nonzero(comparisons)]
+        x00, x01, x10, x11 = np.percentile(values, [min, lower, upper, max])
         
-        # Normalize
-        result /= np.max(result)
+        step0 = np.nonzero(np.logical_and(comparisons, comparisons<=x01))
+        step1 = np.nonzero(np.logical_and(comparisons, comparisons>=x10))
 
-        assert(np.array_equal(result, result.T))
-        assert(np.all(np.diagonal(result) == 0))
-        assert(np.all(result >= 0))
-        assert(np.all(result <= 1))
+        result = np.zeros_like(comparisons)
+        result[step0] = -self._smoothStep(comparisons[step0], x01, x00)
+        result[step1] = +self._smoothStep(comparisons[step1], x10, x11)
+
         return result
 
-    def _calculateWeightsCommonNeighborCountsGlobal(self, comparisons, threshold):
-        adjacency = self._calculateWeightsInterpolationGlobal(comparisons, threshold, threshold).astype(bool)
-        return self._calculateWeightsCommonNeighborCounts(adjacency)
+    def _calculateWeightsCosine(self, comparisons):
+        # Consider comparison with itself to be 1
+        v = comparisons.copy()
+        np.fill_diagonal(v, 1)
 
-    def _calculateWeightsCommonNeighborCountsLocal(self, comparisons, threshold):
-        adjacency = self._calculateWeightsInterpolationLocal(comparisons, threshold, threshold).astype(bool)
-        return self._calculateWeightsCommonNeighborCounts(adjacency)
+        # Normalize each row
+        v /= np.linalg.norm(v, axis=1)[:,np.newaxis]
+        assert(np.allclose(np.linalg.norm(v, axis=1), 1))
 
-    def _traverseGraph(self, vertex, graph, N=1):
-        visited = set()
+        # Compute the dot product (cosine of the normalzied vectors)
+        result = np.dot(v, v.T)
 
-        front = set([vertex]) # Vertices to be traversed in the next iteration
-        while len(front) > 0:
-            # Append the front to the visited vertices
-            assert(len(visited.intersection(front)) == 0)
-            visited.update(front)
-            
-            # For each vertex in the front select its best N neighbors
-            nextFront = set()
-            for v in front:
-                # Select best N indices that have not been visited
-                neighbors = set(np.argsort(graph[v])[-N:])
-                neighbors -= visited
-                nextFront.update(neighbors)
-
-            # Set up for next iteration
-            front = nextFront
-
-        return visited
-
-    def _calculateGraphRegions(self, graph, N=1):
-        mapFunc = self._getMapFunc()
-        traverseFunc = functools.partial(self._traverseGraph, graph=graph, N=N)
-        nVertices = graph.shape[0]
-
-        # Perform a region grow from each vertex
-        regions = list(mapFunc(traverseFunc, range(nVertices)))
-
-        return regions
-
-    def _calculateRegionSimilarity(self, region0, region1):
-        intersection = region0.intersection(region1)
-        return len(intersection) / min(len(region0), len(region1))
-
-    def _compareGraphRegions(self, regions):
-        result = np.zeros((len(regions), )*2)
-
-        for idx0, idx1 in itertools.combinations(range(len(regions)), r=2):
-            region0 = regions[idx0]
-            region1 = regions[idx1]
-            
-            similarity = self._calculateRegionSimilarity(region0, region1)
-            result[idx0, idx1] = similarity
-            result[idx1, idx0] = similarity
-
+        # Do not consider comparisons with itself
+        np.fill_diagonal(result, 0)
+        
         assert(np.array_equal(result, result.T))
         return result
-
-    def _calculateWeightsRegionGrow(self, comparisons, N=1):
-        regions = self._calculateGraphRegions(comparisons, N)
-        return self._compareGraphRegions(regions)
-
-    def _calculateSameDirectionIdMask(self, directionIds):
-        result = np.zeros((len(directionIds), )*2, dtype=bool)
-
-        for directionId in np.unique(directionIds):
-            selection = np.nonzero(directionIds == directionId)[0]
-            for pair in itertools.permutations(selection, r=2):
-                result[pair] = True
-
-        assert(np.array_equal(result, result.T))
-        return result
-
+    
     def _calculateFiedlerVector(self, graph):
         """ Given a adjacency matrix, it computes the Fiedler vector, this is,
             the eigenvector with the second smallest eigenvalue of its laplacian
@@ -1052,21 +994,23 @@ class XmippProtSplitvolume(ProtClassify3D):
         if not np.array_equal(graph.toarray(), graph.T.toarray()):
             raise ValueError('Input graph must be undirected')
 
+        # In order to use eigsh, the graph laplacian must be PSD.
+        # This condition is only satisfied if the graph has 
+        # possitive edges
+        graph = graph.maximum(0)
+
         # Compute the laplacian matrix, this is the degree diagonal
         # matrix minus the adjacency
         l = csgraph.laplacian(graph)
+        nVertices = l.shape[0]
 
         # Decompose the laplacian matrix of the graph into 2
         # eigenvectors with the smallest eigenvalues.
-        # eigsh is not used because documentation states 
-        # that input matrix must be PD. Laplacian is PSD.
         # The first eigenvector is known, provide it as an
         # starting point
-        nVertices = graph.shape[0]
         nMaxIter = 1e3 * nVertices
         v0 = np.full(nVertices, 1/math.sqrt(nVertices))
-        values, vectors = linalg.eigs(l, k=2, which='SM', v0=v0, maxiter=nMaxIter)
-        values, vectors = np.real(values), np.real(vectors)
+        values, vectors = linalg.eigsh(l, k=2, which='SM', v0=v0, maxiter=nMaxIter)
 
         # Eigenvalues should be in increasing magnitude order
         assert(np.array_equal(np.abs(values), sorted(np.abs(values))))
@@ -1215,6 +1159,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         w = graph[classA,:][:,classB] # Select the sub matrix with A as rows and B as columns
         gains = np.sum(m, axis=0) - 2*w # Da + Db - 2ab in (a, b) position
 
+        # Maximize the cost function
         a, b = np.unravel_index(np.argmax(gains), gains.shape)
         gain = gains[a, b]
         pair = (classA[a], classB[b])
@@ -1282,15 +1227,13 @@ class XmippProtSplitvolume(ProtClassify3D):
             This implementation is based on these slides:
             http://users.ece.northwestern.edu/~haizhou/357/lec2.pdf
         """
-        EPSILON = 1e-9
+        EPSILON = 1e-6
         N = graph.shape[0]
 
         # Ensure the initial partition is defined
         if labels is None:
-            fiedler = self._calculateFiedlerVector(graph)
-            labels = fiedler >= np.median(fiedler)
-            #labels = np.array([False]*(N//2) + [True]*(N-N//2))
-            #random.shuffle(labels)
+            labels = np.array([False]*(N//2) + [True]*(N-N//2))
+            random.shuffle(labels)
         
         nVertices = 2*math.ceil(N*(1+padding)/2)
         assert(nVertices>=N)
@@ -1308,12 +1251,17 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(np.count_nonzero(labels) == np.count_nonzero(~labels))
 
         # Iteratively swap vertices among classes until it is not beneficial
+        i = 0
         while True:
             # Obtain the indices to swap and its cost
-            swap, cost = self._calculateKerninghanLinPass(graph, labels)
+            swap, gain = self._calculateKerninghanLinPass(graph, labels)
+
+            # Print information
+            print(f'KL iteration{i} gain: {gain}')
+            i+=1
 
             # Swap the labels if necessary
-            if cost > EPSILON:
+            if gain > EPSILON:
                 labels[swap] = ~labels[swap]
             else:
                 break
@@ -1323,7 +1271,8 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return labels
 
-    def _partitionGraphMultilevel(self, graph, labels, nLevels, partitionFunc):
+    def _partitionGraphMultilevel(self, graph, labels, directionIds, nLevels, minSize=16):
+        # Initialize the result matrix
         result = np.zeros((nLevels, len(labels)), dtype=np.uint)
         result[0,:] = labels
 
@@ -1331,17 +1280,27 @@ class XmippProtSplitvolume(ProtClassify3D):
             prevLabels = result[level-1]
             nextLabels = np.zeros_like(prevLabels)
 
-            componentCounter = 0
+            componentCounter = 1
             for component in np.unique(prevLabels):
                 # Build the adjacency matrix for the component
                 selection = prevLabels == component
 
-                if np.count_nonzero(selection) > 1:
+                if component == 0:
+                    # Leave the zero component untouched
+                    nextLabels[selection] = 0
+
+                elif np.count_nonzero(selection) > minSize:
+                    # Partition components larger than the threshold
                     componentGraph = graph[selection, :][:, selection]
+                    componentDirectionalLabels = self._calculateDirectionalLabels(directionIds[selection]).astype(bool)
                     assert(componentGraph.shape[0] == componentGraph.shape[1])
                 
                     # Partition it
-                    componentPartition = partitionFunc(componentGraph)
+                    componentPartition = self._partitionGraphKernighanLin(
+                        componentGraph, 
+                        componentDirectionalLabels,
+                        0.25
+                    )
 
                     # Compute the labels
                     nextLabels[selection] = componentCounter + componentPartition
@@ -1355,6 +1314,21 @@ class XmippProtSplitvolume(ProtClassify3D):
             # Write the result of this level
             result[level,:] = nextLabels
 
+        return result
+
+    def _discardSmallClasses(self, labels, threshold=16):
+        counter = collections.Counter(labels)
+
+        result = np.empty_like(labels, dtype=np.uint)
+        i = 1
+        for label in np.unique(labels):
+            # Transform the label according to its frequency
+            if counter[label] < threshold:
+                result[labels==label] = 0
+            else:
+                result[labels==label] = i
+                i += 1
+        
         return result
 
     def _reconstructVolume(self, path, particles):
@@ -1562,9 +1536,8 @@ class XmippProtSplitvolume(ProtClassify3D):
                                 doClone=False)
 
         def _updateParticle(self, item, cls):
-            classId = cls + 1
-            item.setClassId(classId)
+            item.setClassId(cls)
 
         def _updateClass(self, item):
-            location = self.representativeCallback(item.getObjId()-1)
+            location = self.representativeCallback(item.getObjId())
             item.setRepresentative(Volume(location=location))
