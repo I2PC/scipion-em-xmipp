@@ -38,8 +38,6 @@ from pwem import emlib
 from pwem.protocols import ProtClassify3D
 from pwem.objects import Volume, Image, Particle, Class2D
 from pwem.constants import ALIGN_PROJ
-import scipy
-from sklearn.preprocessing import scale
 
 import xmippLib
 from xmipp3.convert import writeSetOfParticles, locationToXmipp
