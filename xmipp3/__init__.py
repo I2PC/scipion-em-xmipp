@@ -149,7 +149,7 @@ class Plugin(pwem.Plugin):
                               "touch {bindingsToken} && "
                               "rm {installedToken} 2> /dev/null")
         bindingsAndLibsTgt = [os.path.join(Config.getBindingsFolder(), 'xmipp_base.py'),
-                              os.path.join(Config.getBindingsFolder(), 'xmippLib.so'),
+                              os.path.join(Config.getLibFolder(), 'xmippLib.so'),
                               os.path.join(Config.getLibFolder(), 'libXmipp.so'),
                               installVars['bindingsToken']]
 
