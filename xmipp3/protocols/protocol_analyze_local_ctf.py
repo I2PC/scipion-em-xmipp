@@ -27,14 +27,11 @@
 # **************************************************************************
 
 import numpy as np
-
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import PointerParam
-
 from pwem import emlib
 from pwem.protocols import ProtAnalysis3D
 import pwem.emlib.metadata as md
-
 from xmipp3.convert import readSetOfMicrographs, writeSetOfMicrographs
 
 
@@ -47,7 +44,7 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
     
-    #--------------------------- DEFINE param functions --------------------------------------------
+    # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
         form.addParam('inputMics', PointerParam, label="Input micrographs",
@@ -55,21 +52,21 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
         form.addParam('inputSet', PointerParam, label="Input images",
                       pointerClass='SetOfParticles', help="Set of particles with assigned local defocus")
 
-    #--------------------------- INSERT steps functions --------------------------------------------
+    # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self._insertFunctionStep("analyzeDefocus")
         self._insertFunctionStep("createOutputStep")
 
-    #--------------------------- STEPS functions ---------------------------------------------------
+    # --------------------------- STEPS functions ---------------------------------------------------
     def analyzeDefocus(self):
         """compute R2 coefficient of each micrograph and prepare data to be later displayed in the viewer as a 3D
         representation of the distribution of particles in the micrograph"""
-        micIds=[]
-        particleIds=[]
-        x=[]
-        y=[]
-        defocusU=[]
-        defocusV=[]
+        micIds = []
+        particleIds = []
+        x = []
+        y = []
+        defocusU = []
+        defocusV = []
         for particle in self.inputSet.get():
             micIds.append(particle.getMicId())
             particleIds.append(particle.getObjId())
@@ -78,14 +75,13 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
             y.append(yi)
             defocusU.append(particle.getCTF().getDefocusU())
             defocusV.append(particle.getCTF().getDefocusV())
-
         uniqueMicIds = list(set(micIds))
-        self.R2={}
+        self.R2 = {}
 
         md = emlib.MetaData()
 
         for micId in uniqueMicIds:
-            idx = [i for i,j in enumerate(micIds) if j==micId]
+            idx = [i for i, j in enumerate(micIds) if j == micId]
             defocusUbyId = []
             defocusVbyId = []
             meanDefocusbyId = []
@@ -102,26 +98,25 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
                 particleIdsbyMicId.append(particleIds[idxi])
 
             #defocus = c*y + b*x + a = A * X; A=[x(i),y(i)]
-            A = np.column_stack([np.ones(len(xbyId)),xbyId,ybyId])
-            polynomial, residuals, _, _ = np.linalg.lstsq(A,meanDefocusbyId,rcond=None)
+            A = np.column_stack([np.ones(len(xbyId)), xbyId, ybyId])
+            polynomial, residuals, _, _ = np.linalg.lstsq(A, meanDefocusbyId, rcond=None)
             meanDefocusbyIdArray = np.asarray(meanDefocusbyId)
             coefficients = np.asarray(polynomial)
             self.R2[micId] = 1 - residuals / sum((meanDefocusbyIdArray - meanDefocusbyIdArray.mean()) ** 2)
             mdBlock = emlib.MetaData()
-            for xi, yi, deltafi, parti in zip(xbyId,ybyId,meanDefocusbyId,particleIdsbyMicId):
+            for xi, yi, deltafi, parti in zip(xbyId, ybyId, meanDefocusbyId, particleIdsbyMicId):
                 objId = mdBlock.addObject()
-                mdBlock.setValue(emlib.MDL_ITEM_ID,parti,objId)
-                mdBlock.setValue(emlib.MDL_XCOOR,xi,objId)
-                mdBlock.setValue(emlib.MDL_YCOOR,yi,objId)
-                mdBlock.setValue(emlib.MDL_CTF_DEFOCUSA,deltafi,objId)
+                mdBlock.setValue(emlib.MDL_ITEM_ID, parti, objId)
+                mdBlock.setValue(emlib.MDL_XCOOR, xi, objId)
+                mdBlock.setValue(emlib.MDL_YCOOR, yi, objId)
+                mdBlock.setValue(emlib.MDL_CTF_DEFOCUSA, deltafi, objId)
                 estimatedVal = coefficients[2]*yi + coefficients[1]*xi + coefficients[0]
                 residuali = deltafi - estimatedVal
-                mdBlock.setValue(emlib.MDL_CTF_DEFOCUS_RESIDUAL,residuali,objId)
-            mdBlock.write("mic_%d@%s"%(micId,self._getExtraPath("micrographDefoci.xmd")),emlib.MD_APPEND)
+                mdBlock.setValue(emlib.MDL_CTF_DEFOCUS_RESIDUAL, residuali, objId)
+            mdBlock.write("mic_%d@%s" % (micId, self._getExtraPath("micrographDefoci.xmd")), emlib.MD_APPEND)
             objId = md.addObject()
-            md.setValue(emlib.MDL_CTF_DEFOCUS_COEFS,coefficients.tolist(),objId)
-            md.write(self._getExtraPath("micrographCoef.xmd"),emlib.MD_APPEND)
-
+            md.setValue(emlib.MDL_CTF_DEFOCUS_COEFS, coefficients.tolist(), objId)
+            md.write(self._getExtraPath("micrographCoef.xmd"), emlib.MD_APPEND)
 
     def createOutputStep(self):
         """create as output a setOfParticles and add the columns of corresponding computed metadata"""
@@ -143,8 +138,7 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
         self._defineSourceRelation(self.inputSet, outputSet)
         self._defineSourceRelation(inputMicSet, outputSet)
 
-
-    #--------------------------- INFO functions --------------------------------------------
+    # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
         summary = []
         summary.append("Local defocus analyzed for %i particles" % self.inputSet.get().getSize())
