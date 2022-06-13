@@ -54,7 +54,7 @@ class XmippAnalyzeLocalCTFViewer(ProtocolViewer):
     def _defineParams(self, form):
         form.addSection(label='Visualization')
         form.addParam('displayR2', LabelParam, default=False, label='Display micrograph R2')
-        form.addParam('displayLocalDefocus', IntParam, label='Display local defocus of micrograph:',
+        form.addParam('displayLocalDefocus', IntParam, label='Display local defocus of micrograph:', allowsNull=True,
                       help="""Type the ID of the micrograph to see particle local defocus of the selected micrograph. 
                       It is possible that not all the micrographs are available""")
 
@@ -63,7 +63,7 @@ class XmippAnalyzeLocalCTFViewer(ProtocolViewer):
                 'displayLocalDefocus': self._viewLocalDefocus,
                 }
 
-    def _viewLocalDefocus(self):
+    def _viewLocalDefocus(self, paramName=None):
         """display a 3D view of where the particles are placed in the micrograph taking as height the value estimated
         for local defoci"""
         views = []
@@ -90,15 +90,14 @@ class XmippAnalyzeLocalCTFViewer(ProtocolViewer):
                 print(e)
         return views
 
-    def _viewR2(self):
+    def _viewR2(self, paramName=None):
         views = []
         if hasattr(self.protocol, "outputMicrographs"):
             obj = self.protocol.outputMicrographs
             fn = obj.getFileName()
             labels = 'id _filename _xmipp_ctfDefocusR2'
-            views.append(ObjectView(self._project, obj.strId(), fn,
-                                          viewParams={showj.ORDER: labels,
-                                                      showj.VISIBLE: labels,
-                                                      showj.RENDER: None,
-                                                      showj.MODE: showj.MODE_MD}))
+            views.append(ObjectView(self._project, obj.strId(), fn, viewParams={showj.ORDER: labels,
+                                                                                showj.VISIBLE: labels,
+                                                                                showj.RENDER: None,
+                                                                                showj.MODE: showj.MODE_MD}))
         return views
