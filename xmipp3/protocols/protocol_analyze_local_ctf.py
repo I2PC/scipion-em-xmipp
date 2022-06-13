@@ -77,9 +77,8 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
             defocusV.append(particle.getCTF().getDefocusV())
         uniqueMicIds = list(set(micIds))
         self.R2 = {}
-
         md = emlib.MetaData()
-
+        
         for micId in uniqueMicIds:
             idx = [i for i, j in enumerate(micIds) if j == micId]
             defocusUbyId = []
@@ -97,7 +96,7 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
                 ybyId.append(y[idxi])
                 particleIdsbyMicId.append(particleIds[idxi])
 
-            #defocus = c*y + b*x + a = A * X; A=[x(i),y(i)]
+            # defocus = c*y + b*x + a = A * X; A=[x(i),y(i)]
             A = np.column_stack([np.ones(len(xbyId)), xbyId, ybyId])
             polynomial, residuals, _, _ = np.linalg.lstsq(A, meanDefocusbyId, rcond=None)
             meanDefocusbyIdArray = np.asarray(meanDefocusbyId)
