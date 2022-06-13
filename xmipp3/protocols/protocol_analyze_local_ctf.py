@@ -78,7 +78,7 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
         uniqueMicIds = list(set(micIds))
         self.R2 = {}
         md = emlib.MetaData()
-        
+
         for micId in uniqueMicIds:
             idx = [i for i, j in enumerate(micIds) if j == micId]
             defocusUbyId = []
@@ -98,7 +98,11 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
 
             # defocus = c*y + b*x + a = A * X; A=[x(i),y(i)]
             A = np.column_stack([np.ones(len(xbyId)), xbyId, ybyId])
-            polynomial, residuals, _, _ = np.linalg.lstsq(A, meanDefocusbyId, rcond=None)
+            polynomial, _, _, _ = np.linalg.lstsq(A, meanDefocusbyId, rcond=None)
+            residuals = 0
+            for Ai, bi in zip(A, meanDefocusbyId):
+                residuali = bi - (Ai[0]*polynomial[0] + Ai[1]*polynomial[1] + Ai[2]*polynomial[2])
+                residuals += residuali*residuali
             meanDefocusbyIdArray = np.asarray(meanDefocusbyId)
             coefficients = np.asarray(polynomial)
             self.R2[micId] = 1 - residuals / sum((meanDefocusbyIdArray - meanDefocusbyIdArray.mean()) ** 2)
@@ -124,7 +128,7 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
         writeSetOfMicrographs(inputMicSet, fnMics)
         mdMics = md.MetaData(fnMics)
         for objId in mdMics:
-            micId = mdMics.getValue(emlib.MDL_ITEM_ID,objId)
+            micId = mdMics.getValue(emlib.MDL_ITEM_ID, objId)
             if micId in self.R2:
                 micR2 = float(self.R2[micId])
                 mdMics.setValue(emlib.MDL_CTF_DEFOCUS_R2, micR2, objId)
