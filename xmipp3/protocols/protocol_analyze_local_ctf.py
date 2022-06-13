@@ -105,7 +105,11 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
                 residuals += residuali*residuali
             meanDefocusbyIdArray = np.asarray(meanDefocusbyId)
             coefficients = np.asarray(polynomial)
-            self.R2[micId] = 1 - residuals / sum((meanDefocusbyIdArray - meanDefocusbyIdArray.mean()) ** 2)
+            den = sum((meanDefocusbyIdArray - meanDefocusbyIdArray.mean()) ** 2)
+            if den == 0:
+                self.R2[micId] = 0
+            else:
+                self.R2[micId] = 1 - residuals / den
             mdBlock = emlib.MetaData()
             for xi, yi, deltafi, parti in zip(xbyId, ybyId, meanDefocusbyId, particleIdsbyMicId):
                 objId = mdBlock.addObject()
