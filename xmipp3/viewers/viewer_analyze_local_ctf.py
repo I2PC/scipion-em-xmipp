@@ -28,11 +28,9 @@
 import numpy as np
 from pwem import emlib
 from os.path import exists
-
 from pyworkflow.viewer import (ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO)
 from pyworkflow.protocol.params import IntParam, LabelParam
 from pwem.viewers import ObjectView, showj
-
 from xmipp3.protocols.protocol_analyze_local_ctf import XmippProtAnalyzeLocalCTF
 from .plotter import XmippPlotter
 
@@ -56,44 +54,43 @@ class XmippAnalyzeLocalCTFViewer(ProtocolViewer):
     def _defineParams(self, form):
         form.addSection(label='Visualization')
         form.addParam('displayR2', LabelParam, default=False, label='Display micrograph R2')
-        form.addParam('displayLocalDefocus', IntParam, default=1,
-                      label='Display local defocus of micrograph:',
+        form.addParam('displayLocalDefocus', IntParam, label='Display local defocus of micrograph:',
                       help="""Type the ID of the micrograph to see particle local defocus of the selected micrograph. 
                       It is possible that not all the micrographs are available""")
 
     def _getVisualizeDict(self):
-        return {'displayR2' : self._viewR2,
+        return {'displayR2': self._viewR2,
                 'displayLocalDefocus': self._viewLocalDefocus,
                 }
 
-    def _viewLocalDefocus(self, paramName=None):
+    def _viewLocalDefocus(self):
         """display a 3D view of where the particles are placed in the micrograph taking as height the value estimated
-        for local defocues"""
-        views=[]
-        fnDefoci="%s"%(self.protocol._getExtraPath("micrographDefoci.xmd"))
+        for local defoci"""
+        views = []
+        fnDefoci = "%s" % self.protocol._getExtraPath("micrographDefoci.xmd")
         if exists(fnDefoci):
             try:
-                mdPoints = emlib.MetaData("mic_%d@%s"%(self.displayLocalDefocus.get(),fnDefoci))
+                mdPoints = emlib.MetaData("mic_%d@%s" % (self.displayLocalDefocus.get(), fnDefoci))
 
                 x = mdPoints.getColumnValues(emlib.MDL_XCOOR)
                 y = mdPoints.getColumnValues(emlib.MDL_YCOOR)
                 defocusA = mdPoints.getColumnValues(emlib.MDL_CTF_DEFOCUSA)
                 residuals = mdPoints.getColumnValues(emlib.MDL_CTF_DEFOCUS_RESIDUAL)
 
-                title="Micrograph %d defocus"%self.displayLocalDefocus.get()
+                title="Micrograph %d defocus" % self.displayLocalDefocus.get()
                 xplotter = XmippPlotter(windowTitle=title)
                 a = xplotter.createSubPlot(title, 'x', 'y', projection='3d')
                 a.set_zlabel('Defocus')
                 a.scatter(x, y, defocusA, c='r', marker='o')
                 a.scatter(x, y, np.asarray(defocusA)-np.asarray(residuals), c='b', marker='^')
-                legends = ['Avg. defocus','Adjusted defocus']
+                legends = ['Avg. defocus', 'Adjusted defocus']
                 xplotter.showLegend(legends, loc=1)
                 views.append(xplotter)
             except Exception as e:
                 print(e)
         return views
 
-    def _viewR2(self, paramName=None):
+    def _viewR2(self):
         views = []
         if hasattr(self.protocol, "outputMicrographs"):
             obj = self.protocol.outputMicrographs
@@ -105,6 +102,3 @@ class XmippAnalyzeLocalCTFViewer(ProtocolViewer):
                                                       showj.RENDER: None,
                                                       showj.MODE: showj.MODE_MD}))
         return views
-
-
-
