@@ -85,7 +85,7 @@ class XmippProtCenterParticles(ProtClassify2D):
         centeredStack = md.MetaData(centeredStackName)
 
         listName = []
-        listTransform=[]
+        listTransform = []
         for rowStk in md.iterRows(centeredStack):
             listName.append(rowStk.getValue(md.MDL_IMAGE))
         for rowMd in md.iterRows(centeredMd):
@@ -104,16 +104,19 @@ class XmippProtCenterParticles(ProtClassify2D):
                            MD_APPEND)
 
         mdImages = md.MetaData()
-        i=0
+        i = 0
         mdBlocks = md.getBlocksInMetaDataFile(inputMdName)
         resultMat = Transform()
+        self.particlesCentered = 0
+
         for block in mdBlocks:
             if block.startswith('class00'):
                 newMat = listTransform[i]
                 newMatrix = newMat.getMatrix()
                 mdClass = md.MetaData(block + "@" + inputMdName)
                 mdNewClass = md.MetaData()
-                i+=1
+                i += 1
+                j = 0
                 for rowIn in md.iterRows(mdClass):
                     #To create the transformation matrix (and its parameters)
                     #  for the realigned particles
@@ -138,14 +141,22 @@ class XmippProtCenterParticles(ProtClassify2D):
                     invResultMat = np.linalg.inv(resultMatrix)
                     centerPoint = np.dot(invResultMat,inPoint)
 
+                    if int(centerPoint[0]) < 1 and int(centerPoint[1]) < 1:
+                        self.particlesCentered += 1
+                        print(
+                            "class {}, particle: {}\n centeredX: {}"
+                            .format(i, j, int(centerPoint[0])))
                     rowOut.setValue(md.MDL_XCOOR, rowOut.getValue(
                         md.MDL_XCOOR)+int(centerPoint[0]))
                     rowOut.setValue(md.MDL_YCOOR, rowOut.getValue(
                         md.MDL_YCOOR)+int(centerPoint[1]))
+
                     rowOut.addToMd(mdNewClass)
+                    j += 1
                 mdNewClass.write(block + "@" + self._getExtraPath(
                     'final_classes.xmd'), MD_APPEND)
                 mdImages.unionAll(mdNewClass)
+        print('centered: {}'.format(self.particlesCentered))
         mdImages.write(self._getExtraPath('final_images.xmd'))
 
 
@@ -160,7 +171,8 @@ class XmippProtCenterParticles(ProtClassify2D):
 
         outputParticles = self._createSetOfParticles()
         outputParticles.copyInfo(inputParticles)
-        self._fillParticles(outputParticles)
+
+        self._fillParticles(outputParticles, inputParticles)
         result = {'outputParticles': outputParticles}
         self._defineOutputs(**result)
         self._defineSourceRelation(self.inputClasses, outputParticles)
@@ -201,21 +213,56 @@ class XmippProtCenterParticles(ProtClassify2D):
                 newClass.setAlignment2D()
                 outputClasses.update(newClass)
 
-    def _fillParticles(self, outputParticles):
-        """ Create the SetOfParticles and SetOfCoordinates"""
+    def _fillParticles(self, outputParticles, inputParticles):
+        """ Create the SetOfParticles"""
         myParticles = md.MetaData(self._getExtraPath('final_images.xmd'))
         outputParticles.enableAppend()
+
+        #Calculating the scale that relates the coordinates with the actual
+        # position in the mic
+        scale = inputParticles.getSamplingRate() / \
+                self.inputMics.get().getSamplingRate()
+        #Dictionary with the name and id of the inpt mics
+        micDictname = {}
+        micDictId = {}
+        for mic in self.inputMics.get():
+            micKey = mic.getMicName()
+            micDictname[micKey] = mic.clone()
+            micKey2 = mic.getObjId()
+            micDictId[micKey2] = mic.clone()
+
         for row in md.iterRows(myParticles):
             #To create the new particle
             p = rowToParticle(row)
-            outputParticles.append(p)
 
+            #To create the new coordinate
+            newCoord = Coordinate()
+            coord = p.getCoordinate()
+            if coord.getMicName() is not None:
+                micKey = coord.getMicName()
+                micDict = micDictname
+            else:
+                micKey = coord.getMicId()
+                micDict = micDictId
+            mic = micDict.get(micKey, None)
+            if mic is None:
+                print("Skipping particle, key %s not found" % micKey)
+            else:
+                newCoord.copyObjId(p)
+                x, y = coord.getPosition()
+                newCoord.setPosition(x * scale, y * scale)
+                #print('Scale: {}'.format(scale))
+                newCoord.setMicrograph(mic)
+                p.setCoordinate(newCoord)
+            #Storing the new particle
+            outputParticles.append(p)
 
     # --------------------------- INFO functions -------------------------------
     def _summary(self):
         summary = []
         summary.append("Realignment of %s classes."
                        % self.inputClasses.get().getSize())
+        # summary.append("%i particles centered" % self.particlesCentered)
         return summary
 
     def _validate(self):
