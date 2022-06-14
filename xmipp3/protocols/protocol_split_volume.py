@@ -48,7 +48,6 @@ import functools
 import collections
 import random
 import pywt
-import PIL.Image
 import numpy as np
 import multiprocessing as mp
 from concurrent.futures import ThreadPoolExecutor
@@ -85,7 +84,7 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         form.addSection(label='Image comparison')
         form.addParam('imageDistanceMetric', EnumParam, label='Image distance metric',
-                      choices=['Power', 'Correlation', 'Wasserstein', 'Entropy'], default=2,
+                      choices=['Pearson', 'Wasserstein'], default=1,
                       help='Distance metric used when comparing image pairs.')
         form.addParam('considerMirrors', BooleanParam, label='Consider mirrors', default=False,
                       help='Consider image mirrors when aligning the images')
@@ -108,33 +107,34 @@ class XmippProtSplitvolume(ProtClassify3D):
         form.addParam('maxNeighbors', IntParam, label="Maximum number of neighbors", 
                       validators=[GE(0)], default=12,
                       help='Maximum number of comparisons to consider for each directional class. Use 0 to disable this limit')
-        group = form.addGroup('Weight interpolation percentiles', 
+        form.addParam('weightTransformFunction', EnumParam, label='Weight Transform Function',
+                      choices=['Staircase', 'Likelihood'], default=0,
+                      help='TODO')
+        form.addParam('weightTransformFunctionLocality', EnumParam, label='Transform locality',
+                      choices=['Global', 'Local', 'Combine'], default=0, 
+                      help='TODO')
+        group = form.addGroup('Weight transform percentiles', 
                 help='TODO')
-        group.addParam('transformWeightInterpolationMin', FloatParam, label='Minimum',
+        group.addParam('weightTransformPercentileMin', FloatParam, label='Minimum',
                        validators=[Range(0, 100)], default=10)
-        group.addParam('transformWeightInterpolationLower', FloatParam, label='Lower',
+        group.addParam('weightTransformPercentileLower', FloatParam, label='Lower',
                        validators=[Range(0, 100)], default=20)
-        group.addParam('transformWeightInterpolationUpper', FloatParam, label='Upper',
+        group.addParam('weightTransformPercentileUpper', FloatParam, label='Upper',
                        validators=[Range(0, 100)], default=80)
-        group.addParam('transformWeightInterpolationMax', FloatParam, label='Maximum',
+        group.addParam('weightTransformPercentileMax', FloatParam, label='Maximum',
                        validators=[Range(0, 100)], default=90)
         form.addParam('transformWeightsCosine', BooleanParam, label='Cosine distance', 
-                        default=True,
+                       default=True,
                        help='Apply the cosine distance to image pairs')
         
         form.addSection(label='Graph cut')
-        form.addParam('graphCutAlgorithm', EnumParam, label='Graph cut algorithm',
-                      choices=['Spectral', 'Kerningham Lin'], default=1)
-        form.addParam('graphCutMetric', EnumParam, label="Cut metric", 
-                      choices=['None', 'Graph cut', 'Ratio cut', 'Normalized cut', 'Quotient cut'], default=3,
-                      condition='graphCutAlgorithm==0',
-                      help='Objective function to minimize when cutting the graph in two pieces')
-        form.addParam('graphCutPadding', FloatParam, label='Padding (%)', 
-                      condition='graphCutAlgorithm==1', validators=[Range(0, 100)], default=10,
-                      help='Amount of extra vertices added to allow unbalanced partitions.')
         form.addParam('graphCutLevels', IntParam, label='Cut levels', 
                       validators=[GE(1)], default=2,
-                      help='Number of recursive partitions to perform. This will lead to 2^(N-1) classes')
+                      help='Number of recursive partitions to perform. This will lead to '
+                      'approximately 2^(N-1) classes')
+        form.addParam('graphCutPadding', FloatParam, label='Padding (%)', 
+                      validators=[Range(0, 100)], default=25, expertLevel=LEVEL_ADVANCED,
+                      help='Amount of extra vertices added to allow unbalanced partitions.')
 
         form.addParallelSection(threads=mp.cpu_count(), mpi=0)
     
@@ -148,7 +148,6 @@ class XmippProtSplitvolume(ProtClassify3D):
         self._insertFunctionStep('filterInputStep')
         self._insertFunctionStep('computeAngularDistancesStep')
         self._insertFunctionStep('computeImagePairsStep')
-        self._insertFunctionStep('computeDistancePonderationStep')
         self._insertFunctionStep('computeImageComparisonsStep')
         self._insertFunctionStep('computeWeightsStep')
         self._insertFunctionStep('partitionGraphStep')
@@ -225,31 +224,13 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Write the result
         self._writeImagePairs(pairs)
 
-    def computeDistancePonderationStep(self):
-        # Read input data
-        distances = self._readAngularDistances()
-        pairs = self._readImagePairs()
-
-        # Compute the ponderation based on the distances
-        indices = tuple(pairs.T)
-        ponderations = np.zeros_like(distances)
-        ponderations[indices] = self._calculateDistancePonderation(distances[indices])
-
-        # Write the result
-        self._writeDistancePonderation(ponderations)
-
     def computeImageComparisonsStep(self):
         # Read input data
         images = self._readSelectedImages()
         pairs = self._readImagePairs()
-        ponderations = self._readDistancePonderation()
-        indices = tuple(pairs.T)
 
         # Compute the comparisons
         comparisons, differences = self._computeComparisons(images, pairs)
-
-        # Apply the ponderation to the comparisons
-        #comparisons *= ponderations[indices] # TODO consider removing
 
         # Convert to matrix form
         comparisonMatrix = self._calculateComparisonMatrix(images, pairs, comparisons)
@@ -263,23 +244,18 @@ class XmippProtSplitvolume(ProtClassify3D):
         images = self._readSelectedImages()
         distances = self._readAngularDistances()
         pairs = self._readImagePairs()
-        ponderations = self._readDistancePonderation()
         comparisons = self._readImageComparisons()
-        min = self.transformWeightInterpolationMin.get()
-        lower = self.transformWeightInterpolationLower.get()
-        upper = self.transformWeightInterpolationUpper.get()
-        max = self.transformWeightInterpolationMax.get()
+        transformFunc = self._getWeightTransformFunc()
 
-        weights = self._calculateWeightsInterpolationStaircase(comparisons, min, lower, upper, max)
+        weights = transformFunc(comparisons)
 
         if self.transformWeightsCosine:
             weights = self._calculateWeightsCosine(weights)
 
         # Save output data
         self._writeWeights(weights)
-        self._writeWeightMetaData(images, pairs, distances, comparisons, ponderations, weights)
-
-
+        self._writeWeightMetaData(images, pairs, distances, comparisons, weights)
+        self._writeDegreeMetaData(images, weights)
 
     def partitionGraphStep(self):
         # Read the input data
@@ -287,6 +263,8 @@ class XmippProtSplitvolume(ProtClassify3D):
         adjacency = self._readWeights()
         directionIds = self._getDirectionIds(images)
         nLevels = self.graphCutLevels.get()
+        padding = self.graphCutPadding.get() / 100
+        MIN_SIZE = 32
 
         # Convert the adjacency to a sparse representation
         graph = sparse.csr_matrix(adjacency)
@@ -296,10 +274,17 @@ class XmippProtSplitvolume(ProtClassify3D):
         print(f'The unpartitioned graph has {nComponents} components')
 
         # Merge insignificant classes and do not consider them for partitioning
-        labels = self._discardSmallClasses(labels, 32)
+        labels = self._discardSmallClasses(labels, threshold=MIN_SIZE)
         
         # Partition the graph
-        labels = self._partitionGraphMultilevel(graph, labels, directionIds, nLevels, 32)
+        labels = self._partitionGraphMultilevel(
+            graph, 
+            labels, 
+            directionIds, 
+            nLevels=nLevels, 
+            padding=padding, 
+            minSize=MIN_SIZE
+        )
 
         # Write the result
         self._writePartitionLabels(labels)
@@ -362,10 +347,8 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def _getImageCompareFunc(self, shape):
         options = [
-            self.PowerImageComparator(),
-            self.CorrelationImageComparator(),
+            self.PearsonImageComparator(),
             self.WassersteinImageComparator(math.ceil(math.log2(max(shape))) + 1, 'sym5'),
-            self.EntropyImageComparator((16, )*2)
         ]
         selection = self.imageDistanceMetric.get()
         return options[selection]
@@ -385,49 +368,29 @@ class XmippProtSplitvolume(ProtClassify3D):
         return self.considerMirrors.get()
 
     def _getWeightInterpolationFunc(self):
-        lower = self.transformWeightInterpolationLower.get()
-        upper = self.transformWeightInterpolationUpper.get()
+        min = self.weightTransformPercentileMin.get()
+        lower = self.weightTransformPercentileLower.get()
+        upper = self.weightTransformPercentileUpper.get()
+        max = self.weightTransformPercentileMax.get()
 
         options = [
-            lambda x : x,
-            functools.partial(self._calculateWeightsInterpolationGlobal, lower=lower, upper=upper),
-            functools.partial(self._calculateWeightsInterpolationLocal, lower=lower, upper=upper),
-            functools.partial(self._calculateWeightsInterpolationStaircase, lower=lower, upper=upper),
+            functools.partial(self._calculateWeightsInterpolationStaircase, min=min, lower=lower, upper=upper, max=max),
+            self._calculateWeightInterpolationLogLikelihood,
         ]
-        selection = self.transformWeightsInterpolation.get()
-        return options[selection]
+        selection = options[self.weightTransformFunction.get()]
+        return selection
 
-    def _getSymmetrizeFunc(self):
-        options = [
-            np.maximum,
-            lambda x, y : np.where(np.abs(x) > np.abs(y), x, y),
-            np.minimum,
-            lambda x, y : np.where(np.abs(x) < np.abs(y), x, y),
-            lambda x, y : (x+y)/2
-        ]
-        selection = self.transformWeightSymmetrize.get()
-        return options[selection]
+    def _getWeightTransformFunc(self):
+        interpFunc = self._getWeightInterpolationFunc()
 
-    def _getGraphPartitionMetricFunc(self):
         options = [
-            None,
-            self._calculateGraphCutMetric,
-            self._calculateRatioCutMetric,
-            self._calculateNormalizedCutMetric,
-            self._calculateQuotientCutMetric
+            interpFunc,
+            functools.partial(self._calculateWeightsInterpolationLocal, interpFunc=interpFunc),
+            functools.partial(self._calculateWeightsInterpolationMixedLocal, interpFunc=interpFunc),
         ]
-        selection = self.graphCutMetric.get()
-        return options[selection]
+        selection = options[self.weightTransformFunctionLocality.get()]
 
-    def _getGraphCutFunc(self):
-        metric = self._getGraphPartitionMetricFunc()
-        padding = self.graphCutPadding.get() / 100
-        options = [
-            functools.partial(self._partitionGraphSpectral, metric=metric),
-            functools.partial(self._partitionGraphKernighanLin, padding=padding),
-        ]
-        selection = self.graphCutAlgorithm.get()
-        return options[selection]
+        return selection
 
     def _setSetOfImages(self, name, images):
         self._insertChild('_'+name, images)
@@ -547,13 +510,6 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _readImagePairs(self):
         return self._loadMatrix('pairs', dtype=int)
 
-    def _writeDistancePonderation(self, pairs):
-        assert(pairs.dtype==float)
-        self._storeMatrix('ponderation', pairs, fmt='%.8f')
-
-    def _readDistancePonderation(self):
-        return self._loadMatrix('ponderation', dtype=float)
-
     def _getComparisonDifferencesStackFileName(self):
         return self._getExtraPath('differences.mrcs')
 
@@ -576,7 +532,7 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _getWeightMetaDataFileName(self):
         return self._getExtraPath('weights.xmd')
 
-    def _writeWeightMetaData(self, images, pairs, distances, comparisons, ponderations, weights):
+    def _writeWeightMetaData(self, images, pairs, distances, comparisons, weights):
         md = emlib.MetaData()
         differencesStackFn = self._getComparisonDifferencesStackFileName()
 
@@ -587,7 +543,6 @@ class XmippProtSplitvolume(ProtClassify3D):
             img1 = images[idx1]
             distance = distances[idx0, idx1]
             comparison = comparisons[idx0, idx1]
-            ponderation = ponderations[idx0, idx1]
             weight = weights[idx0, idx1]
 
             # Create a row with both images and the comparison
@@ -598,7 +553,6 @@ class XmippProtSplitvolume(ProtClassify3D):
             row.setValue(emlib.MDL_IMAGE_RESIDUAL, locationToXmipp(*imgDiff.getLocation()))
             row.setValue(emlib.MDL_ANGLE_DIFF, distance)
             row.setValue(emlib.MDL_CORRELATION_IDX, comparison)
-            row.setValue(emlib.MDL_CORRELATION_WEIGHT, ponderation)
             row.setValue(emlib.MDL_WEIGHT, weight)
             row.writeToMd(md, objId)
 
@@ -612,6 +566,30 @@ class XmippProtSplitvolume(ProtClassify3D):
     
     def _readWeights(self):
         return self._loadMatrix('weights', dtype=float)
+
+    def _getDegreeMetaDataFileName(self):
+        return self._getExtraPath('degrees.xmd')
+
+    def _writeDegreeMetaData(self, images, weights):
+        md = emlib.MetaData()
+
+        # Calculte the degree of each vertex
+        degrees = np.sum(weights, axis=1)
+
+        for i, degree in enumerate(degrees):
+            # Get the data for the indices
+            img = images[i]
+
+            # Create a row for each image
+            objId = md.addObject()
+            row = emlib.metadata.Row()
+            row.setValue(emlib.MDL_IMAGE, locationToXmipp(*img.getLocation()))
+            row.setValue(emlib.MDL_SUM, degree)
+            row.writeToMd(md, objId)
+
+        # Write to file
+        path = self._getDegreeMetaDataFileName()
+        md.write(path)
 
     def _writePartitionLabels(self, labels):
         assert(labels.dtype==np.uint)
@@ -920,36 +898,6 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return result
 
-    def _calculateWeightsInterpolationGlobal(self, comparisons, lower=50, upper=80):
-        """ Given a matrix of comparisons among neighboring 
-            images, it computes the adjacency matrix globally
-            interpolating comparison values
-        """
-
-        [minVal, maxVal] = self._calculateWeightInterpolationThresholds(comparisons, [lower, upper])
-        weights = self._smoothStep(comparisons, xMin=minVal, xMax=maxVal, N=1)
-        
-        assert(np.all(weights >= 0))
-        assert(np.all(weights <= 1))
-        return weights
-
-    def _calculateWeightsInterpolationLocal(self, comparisons, lower=50, upper=80):
-        """ Given a matrix of comparisons among neighboring 
-            images, it computes the adjacency matrix locally
-            interpolating comparison values
-        """
-
-        # Perform a Hermite interpolation of the comparisons between the given percentiles
-        weights = np.zeros_like(comparisons)
-        for weightRow, compRow in zip(weights, comparisons):
-            # Calculate lower and upper percentiles for the non zero comparisons
-            [minVal, maxVal] = self._calculateWeightInterpolationThresholds(compRow, [lower, upper])
-            weightRow[:] = self._smoothStep(compRow, xMin=minVal, xMax=maxVal, N=1)
-
-        assert(np.all(weights >= 0))
-        assert(np.all(weights <= 1))
-        return weights
-    
     def _calculateWeightsInterpolationStaircase(self, comparisons, min, lower, upper, max):
         values = comparisons[np.nonzero(comparisons)]
         x00, x01, x10, x11 = np.percentile(values, [min, lower, upper, max])
@@ -962,6 +910,43 @@ class XmippProtSplitvolume(ProtClassify3D):
         result[step1] = +self._smoothStep(comparisons[step1], x10, x11)
 
         return result
+
+    def _calculateWeightInterpolationLogLikelihood(self, comparisons, mu0=0.3, mu1=0.7):
+        """ Calculate the weight according to Neyman-Pearson hypothesis test. 
+            Let H1 be the hypotheisis of two images being similar and H0 disimilar.
+            Assuming a normal distribution of the distance function:
+            C ~ N(mu0, sigma) if H0, N(mu1, sigma) otherwise
+            We can define the likelihood function
+            L(x) = f(x|H1) / f(x|H0)
+            And test for it being >= 1 which is equivalent of testing the possitiveness
+            of its logatithm:
+            T(x) = ln L(x) = ln f(x|H1) - ln f(x|H0)
+            which for a normal function is equivalent to a linear function defined as:
+            with:
+            T(x) = (mu1 - mu0) / sigma^2 * (x - (mu0 + mu1)/2)
+            As we care only about the relative values of T(x) we will ignore the gain
+            applied to it. 
+            We will estimate (mu0 + mu1) / 2 as the median of x
+        """
+        result = np.zeros_like(comparisons)
+        indices = np.nonzero(comparisons)
+
+        x = comparisons[indices]
+        y = x - np.mean(x)
+
+        result[indices] = y
+        return result
+
+    def _calculateWeightsInterpolationLocal(self, comparisons, interpFunc):
+        weights = np.zeros_like(comparisons)
+        for weightRow, compRow in zip(weights, comparisons):
+            weightRow[:] = interpFunc(compRow)
+        return weights
+    
+    def _calculateWeightsInterpolationMixedLocal(self, comparisons, interpFunc):
+        g = interpFunc(comparisons)
+        l = self._calculateWeightsInterpolationLocal(comparisons, interpFunc)
+        return (g+l)/2
 
     def _calculateWeightsCosine(self, comparisons):
         # Consider comparison with itself to be 1
@@ -1269,7 +1254,7 @@ class XmippProtSplitvolume(ProtClassify3D):
 
         return labels
 
-    def _partitionGraphMultilevel(self, graph, labels, directionIds, nLevels, minSize=16):
+    def _partitionGraphMultilevel(self, graph, labels, directionIds, nLevels, padding, minSize=16):
         # Initialize the result matrix
         result = np.zeros((nLevels, len(labels)), dtype=np.uint)
         result[0,:] = labels
@@ -1297,7 +1282,7 @@ class XmippProtSplitvolume(ProtClassify3D):
                     componentPartition = self._partitionGraphKernighanLin(
                         componentGraph, 
                         componentDirectionalLabels,
-                        0.25
+                        padding
                     )
 
                     # Compute the labels
@@ -1389,23 +1374,10 @@ class XmippProtSplitvolume(ProtClassify3D):
         def _alignImages(self, imgRef, img):
             return self.alignFunc(imgRef, img)
 
-    class PowerImageComparator:
-        def __call__(self, img0, img1):
-            # Compute the difference
-            difference = img0 - img1*(np.mean(img0)/np.mean(img1))
-            power = np.std(difference)
-
-            # Ensure that the result matrix is in [0, 1]
-            result = math.exp(-power)
-
-            assert(result >= 0)
-            assert(result <= 1)
-            return result, difference
-
-    class CorrelationImageComparator:
+    class PearsonImageComparator:
         def __call__(self, img0, img1):
             # Compute the correlation index
-            correlation = np.corrcoef(img0, img1)
+            correlation = np.corrcoef(img0.flat, img1.flat)
             difference = img0 - img1
 
             # Clip the result to [0, 1]
@@ -1466,59 +1438,6 @@ class XmippProtSplitvolume(ProtClassify3D):
 
             assert(len(weights) == self.nLevels)
             return weights
-
-    class EntropyImageComparator:
-        def __init__(self, nBins):
-            self.nBins = nBins
-
-        def __call__(self, img0, img1):
-            # Align the images and compute the difference
-            difference = img0 - img1*(np.mean(img0)/np.mean(img1))
-
-            # Square the difference image to obtain the absolute value
-            power = difference ** 2
-
-            # Calculate the spatial probability distribution
-            bins = self._computeBins(power)
-
-            # Calculate the Shannon entropy
-            result = self._computeNormalizedShannonEntropy(bins.flat)
-
-            # Modulate the result with the total energy
-            result *= math.exp(-np.mean(power))
-
-            assert(result >= 0)
-            assert(result <= 1)
-            return result, difference
-
-        def _computeBins(self, power):
-            # Resize the power image using the box filter.
-            # This will sum the values of all pixels 
-            bins = np.array(PIL.Image.fromarray(power).resize(self.nBins, PIL.Image.BOX))
-
-            # Normalize the values
-            bins /= np.sum(bins)
-
-            assert(np.all(bins >= 0))
-            assert(np.all(bins <= 1))
-            assert(np.isclose(np.sum(bins), 1))
-            return bins
-
-        def _computeNormalizedShannonEntropy(self, pdf):
-            entropy = -np.sum(pdf*np.log(pdf))
-
-            # The maximum entropy is obtained for a uniform distribution, this is,
-            # a probability distribution with p_i = 1/N. Therefore, the maximum 
-            # entropy value is -N*(1/N)*log(1/N)=-log2(1/N)=log2(N)
-            # Normalize the result to [0, 1]
-            maxEntropy = np.log(len(pdf))
-
-            # Normalize the entropy
-            entropy /= maxEntropy
-
-            assert(entropy <= 1)
-            assert(entropy >= 0)
-            return entropy
 
     class ClassesLoader:
         """ Helper class to produce classes

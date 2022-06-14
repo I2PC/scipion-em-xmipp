@@ -66,9 +66,6 @@ class XmippViewerSplitVolume(ProtocolViewer):
         form.addParam('displayDistanceImage', LabelParam, label='Angular distance matrix',
                         help='Shows an image where each pixel\'s colour corresponds to '
                         'the angular distance computed for each image pair')
-        form.addParam('displayPonderationImage', LabelParam, label='Distance ponderation matrix',
-                        help='Shows an image where each pixel\'s colour corresponds to '
-                        'the distance ponderation computed for each image pair')
         form.addParam('displayComparisonImage', LabelParam, label='Comparison matrix',
                         help='Shows an image where each pixel\'s colour corresponds to '
                         'the comparison computed for each image pair')
@@ -76,6 +73,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
                         help='Shows an image where each pixel\'s colour corresponds to '
                         'the weight of each graph edge')
         form.addParam('displayWeightTable', LabelParam, label='Weight table')
+        form.addParam('displayDegreeTable', LabelParam, label='Degree table')
 
         form.addSection(label='Networks')
         form.addParam('displayComparison3dNetwork', LabelParam, label='3D comparison network',
@@ -110,9 +108,9 @@ class XmippViewerSplitVolume(ProtocolViewer):
             'displayInputClassification': self._displayInputClassification,
             'displayDistanceImage': self._displayDistanceImage,
             'displayComparisonImage': self._displayComparisonImage,
-            'displayPonderationImage': self._displayPonderationImage,
             'displayWeightImage': self._displayWeightImage,
             'displayWeightTable': self._displayWeightTable,
+            'displayDegreeTable': self._displayDegreeTable,
             'displayComparison3dNetwork': self._displayComparison3dNetwork,
             'displayComparison3dNetworkDisjoint': self._displayComparison3dNetworkDisjoint,
             'displayWeight3dNetwork': self._displayWeight3dNetwork,
@@ -162,14 +160,6 @@ class XmippViewerSplitVolume(ProtocolViewer):
         ax.set_title('Angular distances')
         return [fig]
 
-    def _displayPonderationImage(self, e):
-        ponderations = self._readDistancePonderation()
-        
-        fig, ax = plt.subplots()
-        self._plotMatrix(fig, ax, ponderations, 'Multiplier')
-        ax.set_title('Ponderations')
-        return [fig]
-    
     def _displayComparisonImage(self, e):
         comparisons = self._readImageComparisons()
         
@@ -188,6 +178,10 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     def _displayWeightTable(self, e):
         path = self.protocol._getWeightMetaDataFileName()
+        return [ObjectView(self._project, None, path)]
+
+    def _displayDegreeTable(self, e):
+        path = self.protocol._getDegreeMetaDataFileName()
         return [ObjectView(self._project, None, path)]
 
     def _displayComparison3dNetwork(self, e):
@@ -334,9 +328,6 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     def _readAngularDistances(self):
         return self.protocol._readAngularDistances()
-
-    def _readDistancePonderation(self):
-        return self.protocol._readDistancePonderation()
 
     def _readImageComparisons(self):
         return self.protocol._readImageComparisons()
