@@ -73,7 +73,6 @@ class XmippViewerSplitVolume(ProtocolViewer):
                         help='Shows an image where each pixel\'s colour corresponds to '
                         'the weight of each graph edge')
         form.addParam('displayWeightTable', LabelParam, label='Weight table')
-        form.addParam('displayDegreeTable', LabelParam, label='Degree table')
 
         form.addSection(label='Networks')
         form.addParam('displayComparison3dNetwork', LabelParam, label='3D comparison network',
@@ -110,7 +109,6 @@ class XmippViewerSplitVolume(ProtocolViewer):
             'displayComparisonImage': self._displayComparisonImage,
             'displayWeightImage': self._displayWeightImage,
             'displayWeightTable': self._displayWeightTable,
-            'displayDegreeTable': self._displayDegreeTable,
             'displayComparison3dNetwork': self._displayComparison3dNetwork,
             'displayComparison3dNetworkDisjoint': self._displayComparison3dNetworkDisjoint,
             'displayWeight3dNetwork': self._displayWeight3dNetwork,
@@ -178,10 +176,6 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     def _displayWeightTable(self, e):
         path = self.protocol._getWeightMetaDataFileName()
-        return [ObjectView(self._project, None, path)]
-
-    def _displayDegreeTable(self, e):
-        path = self.protocol._getDegreeMetaDataFileName()
         return [ObjectView(self._project, None, path)]
 
     def _displayComparison3dNetwork(self, e):

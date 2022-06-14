@@ -255,7 +255,6 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Save output data
         self._writeWeights(weights)
         self._writeWeightMetaData(images, pairs, distances, comparisons, weights)
-        self._writeDegreeMetaData(images, weights)
 
     def partitionGraphStep(self):
         # Read the input data
@@ -566,30 +565,6 @@ class XmippProtSplitvolume(ProtClassify3D):
     
     def _readWeights(self):
         return self._loadMatrix('weights', dtype=float)
-
-    def _getDegreeMetaDataFileName(self):
-        return self._getExtraPath('degrees.xmd')
-
-    def _writeDegreeMetaData(self, images, weights):
-        md = emlib.MetaData()
-
-        # Calculte the degree of each vertex
-        degrees = np.sum(weights, axis=1)
-
-        for i, degree in enumerate(degrees):
-            # Get the data for the indices
-            img = images[i]
-
-            # Create a row for each image
-            objId = md.addObject()
-            row = emlib.metadata.Row()
-            row.setValue(emlib.MDL_IMAGE, locationToXmipp(*img.getLocation()))
-            row.setValue(emlib.MDL_SUM, degree)
-            row.writeToMd(md, objId)
-
-        # Write to file
-        path = self._getDegreeMetaDataFileName()
-        md.write(path)
 
     def _writePartitionLabels(self, labels):
         assert(labels.dtype==np.uint)
