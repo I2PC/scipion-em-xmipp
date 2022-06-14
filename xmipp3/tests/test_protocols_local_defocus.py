@@ -132,14 +132,6 @@ class TestXmippAnalyzeLocalDefocus(BaseTest):
         self.launchProtocol(protImportParticles)
         self.assertIsNotNone(protImportParticles.getFiles(), "There was a problem with the import of particles")
 
-        protImportVol = self.newProtocol(ProtImportVolumes,
-                                         objLabel='Volume',
-                                         filesPath=self.volFn,
-                                         samplingRate=1.237)
-        self.launchProtocol(protImportVol)
-        self.assertIsNotNone(protImportVol.getFiles(),
-                             "There was a problem with the import")
-
         protAnalyzeLocalDefocus = self.newProtocol(XmippProtAnalyzeLocalCTF,
                                                    inputMics=protImportMics.outputMicrographs,
                                                    inputSet=protImportParticles.outputParticles)
