@@ -185,7 +185,7 @@ class XmippProtCenterParticles(ProtClassify2D):
         outputParticles = self._createSetOfParticles()
         outputParticles.copyInfo(inputParticles)
 
-        self._fillParticles(outputParticles, inputParticles)
+        self._fillParticles(outputParticles)
         result = {'outputParticles': outputParticles}
         self._defineOutputs(**result)
         self._defineSourceRelation(self.inputClasses, outputParticles)
@@ -226,47 +226,13 @@ class XmippProtCenterParticles(ProtClassify2D):
                 newClass.setAlignment2D()
                 outputClasses.update(newClass)
 
-    def _fillParticles(self, outputParticles, inputParticles):
+    def _fillParticles(self, outputParticles):
         """ Create the SetOfParticles"""
         myParticles = md.MetaData(self._getExtraPath('final_images.xmd'))
         outputParticles.enableAppend()
-
-        #Calculating the scale that relates the coordinates with the actual
-        # position in the mic
-        scale = inputParticles.getSamplingRate() / \
-                self.inputMics.get().getSamplingRate()
-        #Dictionary with the name and id of the inpt mics
-        micDictname = {}
-        micDictId = {}
-        for mic in self.inputMics.get():
-            micKey = mic.getMicName()
-            micDictname[micKey] = mic.clone()
-            micKey2 = mic.getObjId()
-            micDictId[micKey2] = mic.clone()
-
         for row in md.iterRows(myParticles):
             #To create the new particle
             p = rowToParticle(row)
-
-            #To create the new coordinate
-            newCoord = Coordinate()
-            coord = p.getCoordinate()
-            if coord.getMicName() is not None:
-                micKey = coord.getMicName()
-                micDict = micDictname
-            else:
-                micKey = coord.getMicId()
-                micDict = micDictId
-            mic = micDict.get(micKey, None)
-            if mic is None:
-                print("Skipping particle, key %s not found" % micKey)
-            else:
-                newCoord.copyObjId(p)
-                x, y = coord.getPosition()
-                newCoord.setPosition(x * scale, y * scale)
-                newCoord.setMicrograph(mic)
-                p.setCoordinate(newCoord)
-            #Storing the new particle
             outputParticles.append(p)
 
     # --------------------------- INFO functions -------------------------------
@@ -283,5 +249,10 @@ class XmippProtCenterParticles(ProtClassify2D):
 
     def _validate(self):
         errors = []
+        try:
+            self.inputClasses.get().getImages().getAcquisition()
+        except AttributeError:
+            errors.append('InputClasses has not clases')
+
         return errors
 
