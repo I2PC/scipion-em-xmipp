@@ -208,6 +208,10 @@ def installDeepLearningToolkit(plugin, env):
                                                env=plugin.getEnviron(),
                                                stdout=subprocess.PIPE
                                                ).stdout.read().decode('utf-8').split(".")[0]
+            try:
+                int(nvidiaDriverVer)
+            except ValueError:
+                nvidiaDriverVer = None
             if int(nvidiaDriverVer) < 390:
                 preMsgs.append("Incompatible driver %s" % nvidiaDriverVer)
                 cudaMsgs.append("Your NVIDIA drivers are too old (<390). "
