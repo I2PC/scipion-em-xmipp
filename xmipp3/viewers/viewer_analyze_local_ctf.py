@@ -56,8 +56,8 @@ class XmippAnalyzeLocalCTFViewer(ProtocolViewer):
         form.addParam('displayR2', LabelParam, default=False, label='Display micrograph R2')
         form.addParam('displayLocalDefocus', IntParam, label='Display local defocus of micrograph:', allowsNull=True,
                       help="""Type the ID of the micrograph to see particle local defocus of the selected micrograph. 
-                      It is possible that not all the micrographs are available""")
-        #Help identifying the ID of the available micrographs. Or at least ad by default the first (default=1?
+                      It is possible that not all the micrographs are available.
+                      Please check the ID of the micrographs in the output set of micrographs of this protocol.""")
 
     def _getVisualizeDict(self):
         return {'displayR2': self._viewR2,
@@ -77,10 +77,8 @@ class XmippAnalyzeLocalCTFViewer(ProtocolViewer):
                 y = mdPoints.getColumnValues(emlib.MDL_YCOOR)
                 defocusA = mdPoints.getColumnValues(emlib.MDL_CTF_DEFOCUSA)
                 residuals = mdPoints.getColumnValues(emlib.MDL_CTF_DEFOCUS_RESIDUAL)
-
                 title = "Micrograph %d defocus" % self.displayLocalDefocus.get()
                 xplotter = XmippPlotter(windowTitle=title)
-                # Better a 2D and just plot the Avg - Adjusted. Or adjust the range of Defocus axis with the max and min value
                 a = xplotter.createSubPlot(title, 'x', 'y', projection='3d')
                 a.set_zlabel('Defocus')
                 a.scatter(x, y, defocusA, c='r', marker='o')

@@ -139,8 +139,6 @@ class TestXmippAnalyzeLocalDefocus(BaseTest):
         self.assertIsNotNone(protAnalyzeLocalDefocus.outputMicrographs.getFiles(),
                              "There was a problem with analysis of local CTF estimation")
         self.assertEqual(protAnalyzeLocalDefocus.outputMicrographs.getDim(), (9216, 9441, 1),
-                         "There was a problem with size of set of particles after consensus")
+                         "There was a problem with size of set of particles after analyze local defocus")
         self.assertEqual(protAnalyzeLocalDefocus.outputMicrographs.getFirstItem().getSamplingRate(), 1.237,
-                         "There was a problem with the sampling rate value of output consensus particles")
-        self.assertEqual(protAnalyzeLocalDefocus.outputMicrographs.getFirstItem().getAttribute(), 1, # add name of the attR2 and value
-                         "There was a problem with the sampling rate value of output consensus particles")
+                         "There was a problem with the sampling rate value of output analyze local defocus particles")
