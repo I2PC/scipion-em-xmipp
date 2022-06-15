@@ -65,5 +65,4 @@ from .viewer_metaprotocol_golden_highres import XmippMetaprotocolGoldenHighResVi
 from .viewer_deep_align import XmippDeepAlignViewer
 
 # TODO: Import from continuousflex the modules needed to create clusters (soft dependency)
-from .viewer_angular_alignment_sph import XmippAngularAlignmentSphViewer
 from .viewer_analyze_local_ctf import XmippAnalyzeLocalCTFViewer

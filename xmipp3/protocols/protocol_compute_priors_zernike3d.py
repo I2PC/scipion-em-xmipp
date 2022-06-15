@@ -39,9 +39,9 @@ from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfVolumes, Volume
 
 
-class XmippProtComputePriorsZernike3D(ProtAnalysis3D):
+class XmippProtComputeHeterogeneityPriorsZernike3D(ProtAnalysis3D):
     """ Compute Zernike3D priors and assign them to a SetOfVolumes """
-    _label = 'compute priors - Zernike3D'
+    _label = 'compute heterogeneity priors - Zernike3D'
     _lastUpdateVersion = VERSION_2_0
     OUTPUT_SUFFIX = '_%d_crop.mrc'
     ALIGNED_VOL = 'vol%dAligned.mrc'
