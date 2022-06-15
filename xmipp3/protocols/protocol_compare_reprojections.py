@@ -74,9 +74,6 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                       label='Evaluate residuals',
                       help='If this option is chosen, then the residual covariance matrix is calculated and '
                            'characterized. But this option takes time and disk space')
-        form.addParam('maskVol', PointerParam, pointerClass='VolumeMask', label='Volume mask', allowsNull=True,
-                      condition='doEvaluateResiduals', expertLevel=LEVEL_ADVANCED,
-                      help='3D mask for the input volume. This mask is not mandatory but advisable.')
         form.addParam('symmetryGroup', StringParam, default="c1", label='Symmetry group',
                       help='See http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry for a description of the symmetry'
                            ' groups format. If no symmetry is present, give c1')
@@ -84,19 +81,12 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
                       label='Angular sampling rate',
                       help='In degrees.'
                       ' This sampling defines how fine the projection gallery from the volume is explored.')
-        form.addParam('resol', FloatParam, label="Filter at resolution: ", default=3, allowsNull=True,
-                      expertLevel=LEVEL_ADVANCED,
+        form.addParam('resol', FloatParam, label="Filter at resolution: ", default=3, expertLevel=LEVEL_ADVANCED,
                       help='Resolution (A) at which subtraction will be performed, filtering the volume projections.'
                            'Value 0 implies no filtering.')
         form.addParam('sigma', FloatParam, label="Decay of the filter (sigma): ", default=3, condition='resol',
                       help='Decay of the filter (sigma parameter) to smooth the mask transition',
                       expertLevel=LEVEL_ADVANCED)
-        form.addParam('iter', IntParam, label="Number of iterations: ", default=5, expertLevel=LEVEL_ADVANCED,
-                      help='Number of iterations for the adjustment process of the images before the subtraction '
-                           'itself. Several iterations are recommended to improve the adjustment.')
-        form.addParam('rfactor', FloatParam, label="Relaxation factor (lambda): ",  expertLevel=LEVEL_ADVANCED,
-                      default=1, help='Relaxation factor for Fourier amplitude projector (POCS), it should be between '
-                                      '0 (no modification of the amplitudes of the volume 2) and 1 (no relaxation).')
         form.addParallelSection(threads=0, mpi=8)
     
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -272,44 +262,12 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
             return False
 
     def _computeResiduals(self, fnVol):
-        vol = self.inputVolume.get().clone()
-        involdim = vol.getDim()
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
         program = "xmipp_subtract_projection"
-        args = '-i %s --ref %s -o %s --iter %s --lambda %s --subAll' % \
-               (self.imgsFn, fnVol, self._getExtraPath("residuals"), self.iter.get(), self.rfactor.get())
-        args += ' --saveProj %s' % self._getExtraPath('')
-
-        if self.maskVol.get() is not None:
-            mskVol = self.maskVol.get().getFileName()
-        else:
-            fnDescr = self._getExtraPath("mask.descr")
-            fhDescr = open(fnDescr, 'w')
-            fhDescr.write("%d %d %d 0 \n sph + 1 0 0 0 %d" % (involdim[0], involdim[1], involdim[2], involdim[0] / 2))
-            fhDescr.close()
-            mskVol = self._getExtraPath("mask.mrc")
-            args_mask = "-i %s -o %s" % (fnDescr, mskVol)
-            self.runJob("xmipp_phantom_create", args_mask, numberOfMpi=1)
-            args_imageheader = "-i %s --sampling_rate %f" % (mskVol, vol.getSamplingRate())
-            self.runJob("xmipp_image_header", args_imageheader, numberOfMpi=1)
-        args += ' --maskVol %s' % mskVol
-
-        fnDescr2 = self._getExtraPath("mask.descr2")
-        fhDescr2 = open(fnDescr2, 'w')
-        fhDescr2.write("%d %d %d 0" % (involdim[0], involdim[1], involdim[2]))
-        fhDescr2.close()
-        mskKeep = self._getExtraPath("mask_keep.mrc")
-        args_mask_keep = "-i %s -o %s" % (fnDescr2, mskKeep)
-        self.runJob("xmipp_phantom_create", args_mask_keep, numberOfMpi=1)
-        args_imageheader2 = "-i %s --sampling_rate %f" % (mskKeep, vol.getSamplingRate())
-        self.runJob("xmipp_image_header", args_imageheader2, numberOfMpi=1)
-        args += ' --mask %s' % mskKeep
-
-        resol = self.resol.get()
-        if resol:
-            fc = vol.getSamplingRate() / resol
-            args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
+        args = '-i %s --ref %s -o %s --save %s --max_resolution %f --sigma %d' % \
+               (self.imgsFn, fnVol, self._getExtraPath("residuals"), self._getExtraPath(''), self.resol.get(),
+                self.sigma.get())
         self.runJob(program, args, numberOfMpi=1)
         mrcsresiduals = self._getExtraPath("residuals.mrcs")
         args2 = " -i %s -o %s" % (mrcsresiduals, self.fnResiduals)
