@@ -107,8 +107,9 @@ class XmippProtCenterParticles(ProtClassify2D):
         i = 0
         mdBlocks = md.getBlocksInMetaDataFile(inputMdName)
         resultMat = Transform()
-        self.particlesCentered = 0
-
+        listDisplacament = []
+        centerSummary = self._getPath("summary.txt")
+        centerSummary = open(centerSummary, "w")
         for block in mdBlocks:
             if block.startswith('class00'):
                 newMat = listTransform[i]
@@ -117,6 +118,7 @@ class XmippProtCenterParticles(ProtClassify2D):
                 mdNewClass = md.MetaData()
                 i += 1
                 j = 0
+                particlesCentered = 0
                 for rowIn in md.iterRows(mdClass):
                     #To create the transformation matrix (and its parameters)
                     #  for the realigned particles
@@ -141,11 +143,10 @@ class XmippProtCenterParticles(ProtClassify2D):
                     invResultMat = np.linalg.inv(resultMatrix)
                     centerPoint = np.dot(invResultMat,inPoint)
 
-                    if int(centerPoint[0]) < 1 and int(centerPoint[1]) < 1:
-                        self.particlesCentered += 1
-                        print(
-                            "class {}, particle: {}\n centeredX: {}"
-                            .format(i, j, int(centerPoint[0])))
+                    if int(centerPoint[0]) > 1 or int(centerPoint[1]) > 1:
+                        particlesCentered += 1
+                        listDisplacament.append([int(centerPoint[0]), int(centerPoint[0])])
+
                     rowOut.setValue(md.MDL_XCOOR, rowOut.getValue(
                         md.MDL_XCOOR)+int(centerPoint[0]))
                     rowOut.setValue(md.MDL_YCOOR, rowOut.getValue(
@@ -153,16 +154,25 @@ class XmippProtCenterParticles(ProtClassify2D):
 
                     rowOut.addToMd(mdNewClass)
                     j += 1
+
                 mdNewClass.write(block + "@" + self._getExtraPath(
                     'final_classes.xmd'), MD_APPEND)
                 mdImages.unionAll(mdNewClass)
-        print('centered: {}'.format(self.particlesCentered))
+
+                listModule = [(np.sqrt((x[0] * x[0] )+ (x[1] * x[1]))) for x in listDisplacament]
+                moduleDisp = round(sum(listModule) / len(listModule), 1)
+                centerSummary.write("Class {}. Particles centered: {} \t({}%) "
+                                    "\tAverage module displacement: {} \n".
+                                    format(i-1,
+                                    particlesCentered,
+                                    round((100 * particlesCentered/j), 1),
+                                    moduleDisp))
+        centerSummary.close()
         mdImages.write(self._getExtraPath('final_images.xmd'))
 
 
     def createOutputStep(self):
         inputParticles = self.inputClasses.get().getImages()
-
         outputClasses = self._createSetOfClasses2D(inputParticles)
         self._fillClasses(outputClasses)
         result = {'outputClasses': outputClasses}
@@ -251,7 +261,6 @@ class XmippProtCenterParticles(ProtClassify2D):
                 newCoord.copyObjId(p)
                 x, y = coord.getPosition()
                 newCoord.setPosition(x * scale, y * scale)
-                #print('Scale: {}'.format(scale))
                 newCoord.setMicrograph(mic)
                 p.setCoordinate(newCoord)
             #Storing the new particle
@@ -259,18 +268,20 @@ class XmippProtCenterParticles(ProtClassify2D):
 
     # --------------------------- INFO functions -------------------------------
     def _summary(self):
+        centerSummary = self._getPath("summary.txt")
         summary = []
         summary.append("Realignment of %s classes."
                        % self.inputClasses.get().getSize())
+        centerSummary = open(centerSummary, "r")
+        for line in centerSummary.readlines():
+            summary.append(line.rstrip())
+        centerSummary.close()
+
+
         # summary.append("%i particles centered" % self.particlesCentered)
         return summary
 
     def _validate(self):
         errors = []
-        try:
-            self.inputClasses.get().getImages().getAcquisition()
-        except AttributeError:
-            errors.append('InputClasses has not clases')
-
         return errors
 
