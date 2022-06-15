@@ -110,6 +110,9 @@ class XmippProtCenterParticles(ProtClassify2D):
         listDisplacament = []
         centerSummary = self._getPath("summary.txt")
         centerSummary = open(centerSummary, "w")
+        particlesCentered = 0
+        totalParticles = 0
+
         for block in mdBlocks:
             if block.startswith('class00'):
                 newMat = listTransform[i]
@@ -118,10 +121,10 @@ class XmippProtCenterParticles(ProtClassify2D):
                 mdNewClass = md.MetaData()
                 i += 1
                 j = 0
-                particlesCentered = 0
                 for rowIn in md.iterRows(mdClass):
                     #To create the transformation matrix (and its parameters)
                     #  for the realigned particles
+                    totalParticles += 1
                     if rowIn.getValue(md.MDL_ANGLE_PSI)!=0:
                         flag_psi=True
                     if rowIn.getValue(md.MDL_ANGLE_ROT)!=0:
@@ -145,7 +148,7 @@ class XmippProtCenterParticles(ProtClassify2D):
 
                     if int(centerPoint[0]) > 1 or int(centerPoint[1]) > 1:
                         particlesCentered += 1
-                        listDisplacament.append([int(centerPoint[0]), int(centerPoint[0])])
+                        listDisplacament.append([int(centerPoint[0]), int(centerPoint[1])])
 
                     rowOut.setValue(md.MDL_XCOOR, rowOut.getValue(
                         md.MDL_XCOOR)+int(centerPoint[0]))
@@ -159,14 +162,14 @@ class XmippProtCenterParticles(ProtClassify2D):
                     'final_classes.xmd'), MD_APPEND)
                 mdImages.unionAll(mdNewClass)
 
-                listModule = [(np.sqrt((x[0] * x[0] )+ (x[1] * x[1]))) for x in listDisplacament]
-                moduleDisp = round(sum(listModule) / len(listModule), 1)
-                centerSummary.write("Class {}. Particles centered: {} \t({}%) "
-                                    "\tAverage module displacement: {} \n".
-                                    format(i-1,
-                                    particlesCentered,
-                                    round((100 * particlesCentered/j), 1),
-                                    moduleDisp))
+        listModule = [(np.sqrt((x[0] * x[0]) + (x[1] * x[1]))) for x in listDisplacament]
+        moduleDisp = round(sum(listModule) / len(listModule), 1)
+        print(moduleDisp)
+        centerSummary.write("Particles centered: {} \t({}%) "
+                            "\nAverage module displacement: {}px\n".
+                            format(particlesCentered,
+                            round((100 * particlesCentered/totalParticles ), 1),
+                            moduleDisp))
         centerSummary.close()
         mdImages.write(self._getExtraPath('final_images.xmd'))
 
@@ -276,9 +279,6 @@ class XmippProtCenterParticles(ProtClassify2D):
         for line in centerSummary.readlines():
             summary.append(line.rstrip())
         centerSummary.close()
-
-
-        # summary.append("%i particles centered" % self.particlesCentered)
         return summary
 
     def _validate(self):
