@@ -149,6 +149,7 @@ class XmippProtAnalyzeLocalCTF(ProtAnalysis3D):
     def _summary(self):
         summary = []
         summary.append("Local defocus analyzed for %i particles" % self.inputSet.get().getSize())
+        #add info about defocus R2?
         return summary
     
     def _methods(self):
