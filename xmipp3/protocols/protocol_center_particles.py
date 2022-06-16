@@ -26,7 +26,7 @@
 # ******************************************************************************
 
 import numpy as np
-
+import os
 from pyworkflow import VERSION_2_0
 from pwem.constants import ALIGN_2D
 from pwem.objects import Class2D, Particle, Coordinate, Transform
@@ -237,14 +237,18 @@ class XmippProtCenterParticles(ProtClassify2D):
 
     # --------------------------- INFO functions -------------------------------
     def _summary(self):
-        centerSummary = self._getPath("summary.txt")
         summary = []
         summary.append("Realignment of %s classes."
                        % self.inputClasses.get().getSize())
-        centerSummary = open(centerSummary, "r")
-        for line in centerSummary.readlines():
-            summary.append(line.rstrip())
-        centerSummary.close()
+
+        fnSummary = self._getPath("summary.txt")
+        if not os.path.exists(fnSummary):
+            summary.append("No summary file yet.")
+        else:
+            centerSummary = open(fnSummary, "r")
+            for line in centerSummary.readlines():
+                summary.append(line.rstrip())
+            centerSummary.close()
         return summary
 
     def _validate(self):
