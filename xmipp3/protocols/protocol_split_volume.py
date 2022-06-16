@@ -145,7 +145,6 @@ class XmippProtSplitvolume(ProtClassify3D):
             self._threadPool = ThreadPoolExecutor(max_workers=int(self.numberOfThreads))
 
         self._insertFunctionStep('convertInputStep')
-        self._insertFunctionStep('filterInputStep')
         self._insertFunctionStep('computeAngularDistancesStep')
         self._insertFunctionStep('computeImagePairsStep')
         self._insertFunctionStep('computeImageComparisonsStep')
@@ -175,33 +174,9 @@ class XmippProtSplitvolume(ProtClassify3D):
         self._writeCompareMask(compareMask)
         self._defineSourceRelation(self.directionalClasses, self._getInputImages())
 
-    def filterInputStep(self):
-        # Read input data
-        images = self._readInputImages()
-        minClassesPerDirection = self.minClassesPerDirection.get()
-        bestDirectionsPercentage = self.keepBestDirections.get()
-
-        # Select the input images
-        selection = np.array(list(map(Particle.isEnabled, images)), dtype=bool)
-        selection = self._calculateDirectionSizeSelection(images, minClassesPerDirection, selection)
-        selection = self._calculateDirectionDisparitySelection(images, bestDirectionsPercentage, selection)
-
-        # Filter the images
-        selectedImages = images[selection]
-        discardedImages = images[~selection]
-
-        print(f'Using {len(selectedImages)} projections out of {len(images)} '\
-              f'({100*len(selectedImages)/len(images)}%)')
-        
-        # Save output data
-        self._writeSelectedImages(selectedImages)
-        self._writeDiscardedImages(discardedImages)
-        self._defineSourceRelation(self._getInputImages(), self._getSelectedImages())
-        self._defineSourceRelation(self._getInputImages(), self._getDiscardedImages())
-
     def computeAngularDistancesStep(self):
         # Read input data
-        images = self._readSelectedImages()
+        images = self._readInputImages()
         considerAntipodes = self._getConsiderMirrors()
 
         # Perform the computation
@@ -212,12 +187,16 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def computeImagePairsStep(self):
         # Read input data
+        images = self._readInputImages()
+        directionIds = self._getDirectionIds(images)
         distances = self._readAngularDistances()
         maxAngularDistance = self._getMaxAngularDistance(distances)
         maxNeighbors = self._getMaxNeighbors()
 
         # Compute the image pairs to be considered
-        pairs = self._calculateImagePairs(distances, maxAngularDistance, maxNeighbors)
+        pairs = set()
+        pairs.update(self._calculateSameDirectionPairs(directionIds))
+        pairs.update(self._calculateCloseImagePairs(distances, maxAngularDistance, maxNeighbors))
         print(f'Considering {len(pairs)} image pairs with an '
               f'angular distance of up to {np.degrees(maxAngularDistance)} deg')
 
@@ -226,7 +205,7 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def computeImageComparisonsStep(self):
         # Read input data
-        images = self._readSelectedImages()
+        images = self._readInputImages()
         pairs = self._readImagePairs()
 
         # Compute the comparisons
@@ -241,7 +220,7 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def computeWeightsStep(self):
         # Read input data
-        images = self._readSelectedImages()
+        images = self._readInputImages()
         distances = self._readAngularDistances()
         pairs = self._readImagePairs()
         comparisons = self._readImageComparisons()
@@ -253,12 +232,13 @@ class XmippProtSplitvolume(ProtClassify3D):
             weights = self._calculateWeightsCosine(weights)
 
         # Save output data
+        assert(np.array_equal(weights, weights.T))
         self._writeWeights(weights)
         self._writeWeightMetaData(images, pairs, distances, comparisons, weights)
 
     def partitionGraphStep(self):
         # Read the input data
-        images = self._readSelectedImages()
+        images = self._readInputImages()
         adjacency = self._readWeights()
         directionIds = self._getDirectionIds(images)
         nLevels = self.graphCutLevels.get()
@@ -290,7 +270,7 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def reconstructVolumesStep(self):
         # Read the input data
-        images = self._readSelectedImages()
+        images = self._readInputImages()
         labels = self._readPartitionLabels(-1)
 
         # Reconstruct a volume for each top-level partition
@@ -302,7 +282,7 @@ class XmippProtSplitvolume(ProtClassify3D):
 
     def createOutputStep(self):
         # Read input data
-        images = self._getSelectedImages()
+        images = self._getInputImages()
         labels = self._readPartitionLabels(-1)
 
         # Create the output elements
@@ -429,24 +409,6 @@ class XmippProtSplitvolume(ProtClassify3D):
     def _readInputImages(self):
         return self._readSetOfImages('inputImages')
 
-    def _writeSelectedImages(self, images):
-        self._writeSetOfImages('selectedImages', images)
-
-    def _getSelectedImages(self):
-        return self._getSetOfImages('selectedImages')
-    
-    def _readSelectedImages(self):
-        return self._readSetOfImages('selectedImages')
-
-    def _writeDiscardedImages(self, images):
-        self._writeSetOfImages('discardedImages', images)
-    
-    def _getDiscardedImages(self):
-        return self._getSetOfImages('discardedImages')
-    
-    def _readDiscardedImages(self):
-        return self._readSetOfImages('discardedImages')
-
     def _writeMatrix(self, path, x, fmt='%s'):
         # Determine the format
         np.savetxt(path, x, delimiter=',', fmt=fmt) # CSV
@@ -503,11 +465,11 @@ class XmippProtSplitvolume(ProtClassify3D):
         return self._loadMatrix('distances', dtype=float)
 
     def _writeImagePairs(self, pairs):
-        assert(pairs.dtype==int)
-        self._storeMatrix('pairs', pairs, fmt='%d')
+        self._storeMatrix('pairs', np.array(list(pairs), dtype=int), fmt='%d')
 
     def _readImagePairs(self):
-        return self._loadMatrix('pairs', dtype=int)
+        result = self._loadMatrix('pairs', dtype=int)
+        return set(map(tuple, result))
 
     def _getComparisonDifferencesStackFileName(self):
         return self._getExtraPath('differences.mrcs')
@@ -761,7 +723,16 @@ class XmippProtSplitvolume(ProtClassify3D):
         assert(np.all(np.diagonal(distances) == 0))
         return distances
 
-    def _calculateImagePairs(self, distances, maxDistance, maxNeighbors):
+    def _calculateSameDirectionPairs(self, directionIds):
+        pairs = set()
+
+        for directionId in np.unique(directionIds):
+            indices = np.nonzero(directionIds==directionId)[0]
+            pairs.update(itertools.permutations(indices, r=2))
+
+        return pairs
+    
+    def _calculateCloseImagePairs(self, distances, maxDistance, maxNeighbors):
         """ Computes the indices of a matrix where to compute
             the comparisons. In order to do so, it considers
             a distance threshold and a maximum number of comparisons
@@ -779,7 +750,11 @@ class XmippProtSplitvolume(ProtClassify3D):
         # Remove comparisons with itself
         np.fill_diagonal(pairs, False)
 
-        return np.argwhere(pairs)
+        # Make the matrix symmetric. Use the "or criteria"
+        pairs = np.logical_or(pairs, pairs.T)
+
+        assert(np.array_equal(pairs, pairs.T))
+        return set(map(tuple, np.argwhere(pairs)))
 
     def _computeComparisons(self, images, pairs):
         """ Computes the comparisons between image pairs
@@ -940,7 +915,7 @@ class XmippProtSplitvolume(ProtClassify3D):
         
         assert(np.array_equal(result, result.T))
         return result
-    
+
     def _calculateFiedlerVector(self, graph):
         """ Given a adjacency matrix, it computes the Fiedler vector, this is,
             the eigenvector with the second smallest eigenvalue of its laplacian

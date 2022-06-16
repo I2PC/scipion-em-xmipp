@@ -57,8 +57,6 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _defineParams(self, form):
         form.addSection(label='Input classes')
         form.addParam('displayInputImages', LabelParam, label='Input images')
-        form.addParam('displaySelectedImages', LabelParam, label='Selected images')
-        form.addParam('displayDiscardedImages', LabelParam, label='Discarded images')
         form.addParam('displayInputClassification', LabelParam, label='Input classification',
                         help='Shows 3D representation of the input classes')
 
@@ -102,8 +100,6 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _getVisualizeDict(self):
         return {
             'displayInputImages': self._displayInputImages,
-            'displaySelectedImages': self._displaySelectedImages,
-            'displayDiscardedImages': self._displayDiscardedImages,
             'displayInputClassification': self._displayInputClassification,
             'displayDistanceImage': self._displayDistanceImage,
             'displayComparisonImage': self._displayComparisonImage,
@@ -122,14 +118,6 @@ class XmippViewerSplitVolume(ProtocolViewer):
     def _displayInputImages(self, e):
         inputImages = self.protocol._getInputImages()
         return [ObjectView(self._project, inputImages.strId(), inputImages.getFileName())]
-
-    def _displaySelectedImages(self, e):
-        selectedImages = self.protocol._getSelectedImages()
-        return [ObjectView(self._project, selectedImages.strId(), selectedImages.getFileName())]
-
-    def _displayDiscardedImages(self, e):
-        discardedImages = self.protocol._getDiscardedImages()
-        return [ObjectView(self._project, discardedImages.strId(), discardedImages.getFileName())]
 
     def _displayInputClassification(self, e):
         images = self._readImages()
@@ -318,7 +306,7 @@ class XmippViewerSplitVolume(ProtocolViewer):
 
     # --------------------------- UTILS functions -----------------------------
     def _readImages(self):
-        return self.protocol._readSelectedImages()
+        return self.protocol._readInputImages()
 
     def _readAngularDistances(self):
         return self.protocol._readAngularDistances()
