@@ -240,11 +240,11 @@ class XmippProtCenterParticles(ProtClassify2D):
         summary.append("Realignment of %s classes."
                        % self.inputClasses.get().getSize())
 
-        fnSummary = self._getPath("summary.txt")
-        if not os.path.exists(fnSummary):
+        centerSummary = self._getPath("summary.txt")
+        if not os.path.exists(centerSummary):
             summary.append("No summary file yet.")
         else:
-            centerSummary = open(fnSummary, "r")
+            centerSummary = open(centerSummary, "r")
             for line in centerSummary.readlines():
                 summary.append(line.rstrip())
             centerSummary.close()
