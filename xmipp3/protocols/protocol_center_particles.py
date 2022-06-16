@@ -164,7 +164,6 @@ class XmippProtCenterParticles(ProtClassify2D):
 
         listModule = [(np.sqrt((x[0] * x[0]) + (x[1] * x[1]))) for x in listDisplacament]
         moduleDisp = round(sum(listModule) / len(listModule), 1)
-        print(moduleDisp)
         centerSummary.write("Particles centered: {} \t({}%) "
                             "\nAverage module displacement: {}px\n".
                             format(particlesCentered,
