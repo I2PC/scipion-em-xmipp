@@ -1651,7 +1651,38 @@ class TestXmippProjSubtraction(TestXmippBase):
                          (ERROR_DIM, "particles"))
         self.assertEqual(protSubtractProjNoiseCTFOver.outputParticles.getSize(), 1647, ERROR_SIZE_PART)
 
+class TestXmippAlignVolumeAndParticles(TestXmippBase):
 
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testXmippAlignVolumeAndParticles(self):
+
+        ERROR_SIZE_PART = "There was a problem with the size of output set of particles"
+        ERROR_DIM = "There was a problem with the dimensions of output "
+        ERROR_SR = "There was a problem with the sampling rate value of output "
+
+        # Create input data: phantom with two cylinders and its projections (particles)
+        # cyl +/- den 'x0 y0 z0' 'xradius yradius height rot tilt psi'
+        protCreatePhantom2items = self.newProtocol(XmippProtPhantom,
+                                               desc='80 80 80 0\ncyl + 1 0 0 0 5 5 10 0 0 0' +
+                                                    '\ncyl + 5 7 15 10 5 5 10 45 90 0',
+                                               sampling=1.0)
+        self.launchProtocol(protCreatePhantom2items)
+        self.assertIsNotNone(protCreatePhantom2items.getFiles(),
+                             "There was a problem with phantom with 2 items creation")
+        protCreateGallery = self.newProtocol(XmippProtCreateGallery,
+                                             inputVolume=protCreatePhantom2items.outputVolume,
+                                             rotStep=15.0,
+                                             tiltStep=90.0)
+        self.launchProtocol(protCreateGallery)
+        self.assertIsNotNone(protCreateGallery.getFiles(),
+                             "There was a problem with create gallery")
+
+        protSubtractProjOverNoMask = self.newProtocol(XmippProtSubtractProjection,
+                                                      particles=protCreateGalleryOver.outputReprojections,
+                                                      vol=protCreatePhantom1Over.outputVolume)
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         className = sys.argv[1]
