@@ -13,3 +13,4 @@ The latter is only for those who intended to develop the Xmipp plugin but **not 
 For **developers**, we strongly recommend to follow the guide on 
 [how to install xmipp-bundle](https://github.com/i2pc/xmipp#xmipp-as-a-standalone-bundle-for-developers) 
 in order to get a complet Xmipp's development ecosystem.
+Prueba
