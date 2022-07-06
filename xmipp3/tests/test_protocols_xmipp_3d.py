@@ -1662,27 +1662,49 @@ class TestXmippAlignVolumeAndParticles(TestXmippBase):
         ERROR_SIZE_PART = "There was a problem with the size of output set of particles"
         ERROR_DIM = "There was a problem with the dimensions of output "
         ERROR_SR = "There was a problem with the sampling rate value of output "
+        ERROR_TRANS = "There was a problem with the aligment of the particles "
 
         # Create input data: phantom with two cylinders and its projections (particles)
-        # cyl +/- den 'x0 y0 z0' 'xradius yradius height rot tilt psi'
-        protCreatePhantom2items = self.newProtocol(XmippProtPhantom,
-                                               desc='80 80 80 0\ncyl + 1 0 0 0 5 5 10 0 0 0' +
-                                                    '\ncyl + 5 7 15 10 5 5 10 45 90 0',
+        protCreatePhantom1item1 = self.newProtocol(XmippProtPhantom,
+                                               desc='80 80 80 0\ncyl + 1 0 0 0 5 5 10 0 0 0',
                                                sampling=1.0)
-        self.launchProtocol(protCreatePhantom2items)
-        self.assertIsNotNone(protCreatePhantom2items.getFiles(),
-                             "There was a problem with phantom with 2 items creation")
+        self.launchProtocol(protCreatePhantom1item1)
+        self.assertIsNotNone(protCreatePhantom1item1.getFiles(),
+                             "There was a problem with the first phantom creation")
+
+        protCreatePhantom1item2 = self.newProtocol(XmippProtPhantom,
+                                               desc='80 80 80 0\ncyl + 5 0 0 0 5 5 10 45 90 0',
+                                               sampling=1.0)
+        self.launchProtocol(protCreatePhantom1item2)
+        self.assertIsNotNone(protCreatePhantom1item2.getFiles(),
+                             "There was a problem with the second phantom creation")
+
         protCreateGallery = self.newProtocol(XmippProtCreateGallery,
-                                             inputVolume=protCreatePhantom2items.outputVolume,
+                                             inputVolume=protCreatePhantom1item2.outputVolume,
                                              rotStep=15.0,
                                              tiltStep=90.0)
         self.launchProtocol(protCreateGallery)
         self.assertIsNotNone(protCreateGallery.getFiles(),
                              "There was a problem with create gallery")
 
-        protSubtractProjOverNoMask = self.newProtocol(XmippProtSubtractProjection,
-                                                      particles=protCreateGalleryOver.outputReprojections,
-                                                      vol=protCreatePhantom1Over.outputVolume)
+        protAlignVolumeParticles = self.newProtocol(XmippProtAlignVolumeParticles,
+                                                    inputReference=protCreatePhantom1item1.outputVolume,
+                                                    inputVolume=protCreatePhantom1item2.outputVolume,
+                                                    inputParticles=protCreateGallery.outputReprojections)
+
+        self.launchProtocol(protAlignVolumeParticles)
+        self.assertIsNotNone(protAlignVolumeParticles.outputVolume,
+                             "There was a problem with the alignment of the volume")
+        self.assertIsNotNone(protAlignVolumeParticles.outputParticles,
+                             "There was a problem with the alignment of the particles")
+        self.assertEqual(protAlignVolumeParticles.outputParticles.getSamplingRate(), 1.0, (ERROR_SR, "particles"))
+        self.assertEqual(protAlignVolumeParticles.outputParticles.getFirstItem().getDim(), (80, 80, 1),
+                         (ERROR_DIM, "particles"))
+        self.assertEqual(protAlignVolumeParticles.outputParticles.getSize(), 181, ERROR_SIZE_PART)
+        self.assertEqual(protAlignVolumeParticles.outputParticles.getFirstItem().getTransform().getMatrix().all(),
+                         protCreateGallery.outputReprojections.getFirstItem().getTransform().getMatrix().all(),
+                         (ERROR_TRANS, "particles"))
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         className = sys.argv[1]
