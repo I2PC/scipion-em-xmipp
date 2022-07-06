@@ -1651,7 +1651,10 @@ class TestXmippAlignVolumeAndParticles(TestXmippBase):
         setupTestProject(cls)
 
     def testXmippAlignVolumeAndParticles(self):
-
+        finalMatrix = np.array([[-4.32981701e-17, 1.29893286e-16, -1.00000000e+00, -0.00000000e+00],
+                           [-7.07108780e-01, 7.07104782e-01, 1.22464680e-16, -0.00000000e+00],
+                           [ 7.07104782e-01, 7.07108780e-01, 6.12323400e-17, 0.00000000e+00],
+                           [ 0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
         # Create input data: phantom with two cylinders and its projections (particles)
         protCreatePhantom1item1 = self.newProtocol(XmippProtPhantom,
                                                desc='80 80 80 0\ncyl + 1 0 0 0 5 5 10 0 0 0',
@@ -1692,6 +1695,9 @@ class TestXmippAlignVolumeAndParticles(TestXmippBase):
         self.assertEqual(protAlignVolumeParticles.outputParticles.getFirstItem().getTransform().getMatrix().all(),
                          protCreateGallery.outputReprojections.getFirstItem().getTransform().getMatrix().all(),
                          (MSG_WRONG_ALIGNMENT, "particles"))
+        self.assertEqual(protAlignVolumeParticles.outputParticles.getFirstItem().getTransform().getMatrix().all(),
+                         finalMatrix.all(), (MSG_WRONG_ALIGNMENT, "particles"))
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
