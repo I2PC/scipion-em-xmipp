@@ -1381,7 +1381,6 @@ class TestXmippCorrectWiener2D(TestXmippBase):
         self.launchProtocol(protCorrect)
         self.assertIsNotNone(protCorrect.outputParticles, "There was a problem with Wiener Correction")
 
-
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         className = sys.argv[1]

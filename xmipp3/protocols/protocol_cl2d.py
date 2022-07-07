@@ -407,20 +407,20 @@ class XmippProtCL2D(ProtClassify2D):
     def _summary(self):
         self._defineFileNames()
         summary = []
-        summary.append("Input Particles: *%d*\nClassified into *%d* classes\n"
-                       % (self.inputParticles.get().getSize(),
-                          self.numberOfClasses.get()))
-        #summary.append('- Used a _clustering_ algorithm to subdivide the original dataset into the given number of classes')
+        if not hasattr(self, 'outputClasses'):
+            summary.append("Output classes not ready yet.")
+        else:
+            summary.append("Input Particles: *%d*\nClassified into *%d* classes\n"
+                           % (self.inputParticles.get().getSize(),
+                              self.numberOfClasses.get()))
+            # summary.append('- Used a _clustering_ algorithm to subdivide the original dataset into the given number of classes')
+        return summary
 
         levelFiles = self._getAllLevelMdFiles()
         if levelFiles:
-            self._summaryLevelFiles(summary, levelFiles, CLASSES)
+            self._summaryLevelFilfes(summary, levelFiles, CLASSES)
             self._summaryLevelFiles(summary, self._getAllLevelMdFiles(CLASSES_CORE), CLASSES_CORE)
             self._summaryLevelFiles(summary, self._getAllLevelMdFiles(CLASSES_STABLE_CORE), CLASSES_STABLE_CORE)
-        else:
-            summary.append("Output classes not ready yet.")
-
-        return summary
 
     def _methods(self):
         strline = ''
