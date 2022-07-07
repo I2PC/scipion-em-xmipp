@@ -1698,6 +1698,65 @@ class TestXmippAlignVolumeAndParticles(TestXmippBase):
         self.assertEqual(protAlignVolumeParticles.outputParticles.getFirstItem().getTransform().getMatrix().all(),
                          finalMatrix.all(), (MSG_WRONG_ALIGNMENT, "particles"))
 
+class TestXmippRotateVolume(TestXmippBase):
+    """This class check if the protocol rotate volume in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testXmippAlignVolumeAndParticles(self):
+        # Create input data: phantom with one cylinder
+        protCreatePhantomRotated = self.newProtocol(XmippProtPhantom,
+                                               desc='80 80 80 0\ncyl + 5 0 0 0 5 5 10 0 90 0',
+                                               sampling=1.0)
+        self.launchProtocol(protCreatePhantomRotated)
+        self.assertIsNotNone(protCreatePhantomRotated.getFiles(),
+                             "There was a problem with the rotated phantom creation")
+
+        # First type of rotation (Align with Z)
+        protRotateVolume = self.newProtocol(XmippProtRotateVolume,
+                                            vol=protCreatePhantomRotated.outputVolume,
+                                            rotType=0,
+                                            dirParam=0)
+        self.launchProtocol(protRotateVolume)
+        self.assertIsNotNone(protRotateVolume.getFiles(),
+                             "There was a problem with the rotation")
+
+        # Second type of rotation checked (rotate)
+        protRotateVolume2 = self.newProtocol(XmippProtRotateVolume,
+                                            vol=protCreatePhantomRotated.outputVolume,
+                                            rotType=1,
+                                            dirParam=1,
+                                            deg=90)
+        self.launchProtocol(protRotateVolume2)
+        self.assertIsNotNone(protRotateVolume2.getFiles(),
+                             "There was a problem with the rotation")
+
+        # Create the referenced cylinder (without rotation)
+        protCreatePhantomReference = self.newProtocol(XmippProtPhantom,
+                                                      desc='80 80 80 0\ncyl + 5 0 0 0 5 5 10 0 0 0',
+                                                      sampling=1.0)
+        self.launchProtocol(protCreatePhantomReference)
+        self.assertIsNotNone(protCreatePhantomReference.getFiles(),
+                             "There was a problem with the referenced phantom creation")
+        # First type of rotation checked (Align with Z)
+        self.assertEqual(protRotateVolume.rotType.get(), 0, "The phantom is not aligning with Z axis")
+        self.assertEqual(protRotateVolume.dirParam.get(), 0, "The phantom is rotating in the wrong axis")
+        self.assertEqual(protRotateVolume.outputVolume.getDim(), protCreatePhantomReference.outputVolume.getDim(),
+                         "The initially rotated phantom's dimension after the rotation has changed")
+        self.assertEqual(protRotateVolume.outputVolume.getSamplingRate(),
+                         protCreatePhantomReference.outputVolume.getSamplingRate(),
+                         "There was a problem with the sampling rate value of the rotated phantom")
+        # Second type of rotation checked (rotate)
+        self.assertEqual(protRotateVolume2.rotType.get(), 1, "The phantom is not rotating")
+        self.assertEqual(protRotateVolume2.dirParam.get(), 1, "The phantom is rotating in the wrong axis")
+        self.assertEqual(protRotateVolume2.deg.get(), 90, "The degree of rotation is wrong")
+        self.assertEqual(protRotateVolume2.outputVolume.getDim(), protCreatePhantomReference.outputVolume.getDim(),
+                         "The initially rotated phantom's dimension after the rotation has changed")
+        self.assertEqual(protRotateVolume2.outputVolume.getSamplingRate(),
+                         protCreatePhantomReference.outputVolume.getSamplingRate(),
+                         "There was a problem with the sampling rate value of the rotated phantom")
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

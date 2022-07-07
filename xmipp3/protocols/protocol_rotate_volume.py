@@ -81,7 +81,7 @@ class XmippProtRotateVolume(EMProtocol):
         outputVol.copyInfo(inputVol)
         outputVol.setLocation(self._getExtraPath('rotated_vol.mrc'))
         setMRCSamplingRate(outputVol.getFileName(), inputVol.getSamplingRate())
-        self._defineOutputs(outputParticles=outputVol)
+        self._defineOutputs(outputVolume=outputVol)
         self._defineSourceRelation(inputVol, outputVol)
 
     # --------------------------- INFO functions --------------------------------------------
