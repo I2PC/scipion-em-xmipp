@@ -1217,7 +1217,7 @@ class TestXmippCompareReprojections(TestXmippBase):
     
     def test_particles1(self):
         print("Run Compare Reprojections from classes")
-        prot = self.newProtocol(XmippProtCompareReprojections, 
+        prot = self.newProtocol(XmippProtCompareReprojections,
                                         symmetryGroup="d6", numberOfMpi=5)
         prot.inputSet.set(self.protClassify.outputClasses)
         prot.inputVolume.set(self.protImportVol.outputVolume)
@@ -1226,7 +1226,7 @@ class TestXmippCompareReprojections(TestXmippBase):
 
     def test_particles2(self):
         print("Run Compare Reprojections from averages")
-        prot = self.newProtocol(XmippProtCompareReprojections, 
+        prot = self.newProtocol(XmippProtCompareReprojections,
                                         symmetryGroup="d6", numberOfMpi=5)
         prot.inputSet.set(self.protImportAvgs.outputAverages)
         prot.inputVolume.set(self.protImportVol.outputVolume)
@@ -1235,7 +1235,7 @@ class TestXmippCompareReprojections(TestXmippBase):
 
     def test_particles3(self):
         print("Run Compare Reprojections from projections with angles")
-        prot = self.newProtocol(XmippProtCompareReprojections, 
+        prot = self.newProtocol(XmippProtCompareReprojections,
                                         symmetryGroup="d6", numberOfMpi=5)
         prot.inputSet.set(self.protProjMatch.outputParticles)
         prot.inputVolume.set(self.protImportVol.outputVolume)
@@ -1249,7 +1249,6 @@ class TestXmippCompareReprojections(TestXmippBase):
                                 symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True)
         prot.inputSet.set(self.protClassify.outputClasses)
         prot.inputVolume.set(self.protImportVol.outputVolume)
-        prot.maskVol.set(self.protCreateMask.outputMask)
         self.launchProtocol(prot)
         self.assertIsNotNone(prot.reprojections,
                              "There was a problem with Compare Reprojections from classes evaluating residuals")
@@ -1260,7 +1259,6 @@ class TestXmippCompareReprojections(TestXmippBase):
                                 symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True)
         prot.inputSet.set(self.protImportAvgs.outputAverages)
         prot.inputVolume.set(self.protImportVol.outputVolume)
-        prot.maskVol.set(self.protCreateMask.outputMask)
         self.launchProtocol(prot)
         self.assertIsNotNone(prot.reprojections,
                              "There was a problem with Compare Reprojections from averages evaluating residuals")
@@ -1271,7 +1269,6 @@ class TestXmippCompareReprojections(TestXmippBase):
                                 symmetryGroup="d6", numberOfMpi=5, doEvaluateResiduals=True)
         prot.inputSet.set(self.protProjMatch.outputParticles)
         prot.inputVolume.set(self.protImportVol.outputVolume)
-        prot.maskVol.set(self.protCreateMask.outputMask)
         self.launchProtocol(prot)
         self.assertIsNotNone(prot.reprojections, "There was a problem with Compare Reprojections from projections"
                                                  " with angles evaluating residuals")
@@ -1383,7 +1380,6 @@ class TestXmippCorrectWiener2D(TestXmippBase):
         protCorrect.inputParticles.set(prot1.outputParticles)
         self.launchProtocol(protCorrect)
         self.assertIsNotNone(protCorrect.outputParticles, "There was a problem with Wiener Correction")
-
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
