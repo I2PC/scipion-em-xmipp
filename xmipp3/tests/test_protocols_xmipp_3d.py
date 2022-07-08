@@ -50,11 +50,12 @@ from xmipp3.protocols.protocol_align_volume import (ALIGN_ALGORITHM_EXHAUSTIVE,
 
 MSG_WRONG_SAMPLING = "There was a problem with the sampling rate value of the output "
 MSG_WRONG_SIZE = "There was a problem with the size of the output "
-MSG_WRONG_DIM = "There was a problem with the dimensions of output "
+MSG_WRONG_DIM = "There was a problem with the dimensions of the output "
 MSG_WRONG_MASK = "There was a problem with create mask from volume"
 MSG_WRONG_ALIGNMENT = "There was a problem with the alignment of the output "
 MSG_WRONG_SHIFT = "There was a problem with output shift "
 MSG_WRONG_GALLERY = "There was a problem with the gallery creation"
+MSG_WRONG_ROTATION = "There was a problem with the rotation"
 
 
 
@@ -1699,7 +1700,7 @@ class TestXmippAlignVolumeAndParticles(TestXmippBase):
                          finalMatrix.all(), (MSG_WRONG_ALIGNMENT, "particles"))
 
 class TestXmippRotateVolume(TestXmippBase):
-    """This class check if the protocol rotate volume in Xmipp works properly."""
+    """This class checks if the protocol rotate volume in Xmipp works properly."""
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
@@ -1720,9 +1721,9 @@ class TestXmippRotateVolume(TestXmippBase):
                                             dirParam=0)
         self.launchProtocol(protRotateVolume)
         self.assertIsNotNone(protRotateVolume.getFiles(),
-                             "There was a problem with the rotation")
+                             MSG_WRONG_ROTATION)
 
-        # Second type of rotation checked (rotate)
+        # Second type of rotation (rotate)
         protRotateVolume2 = self.newProtocol(XmippProtRotateVolume,
                                             vol=protCreatePhantomRotated.outputVolume,
                                             rotType=1,
@@ -1730,7 +1731,7 @@ class TestXmippRotateVolume(TestXmippBase):
                                             deg=90)
         self.launchProtocol(protRotateVolume2)
         self.assertIsNotNone(protRotateVolume2.getFiles(),
-                             "There was a problem with the rotation")
+                             MSG_WRONG_ROTATION)
 
         # Create the referenced cylinder (without rotation)
         protCreatePhantomReference = self.newProtocol(XmippProtPhantom,
@@ -1740,22 +1741,22 @@ class TestXmippRotateVolume(TestXmippBase):
         self.assertIsNotNone(protCreatePhantomReference.getFiles(),
                              "There was a problem with the referenced phantom creation")
         # First type of rotation checked (Align with Z)
-        self.assertEqual(protRotateVolume.rotType.get(), 0, "The phantom is not aligning with Z axis")
+        self.assertEqual(protRotateVolume.rotType.get(), 0, "The phantom is not aligning with the Z axis")
         self.assertEqual(protRotateVolume.dirParam.get(), 0, "The phantom is rotating in the wrong axis")
         self.assertEqual(protRotateVolume.outputVolume.getDim(), protCreatePhantomReference.outputVolume.getDim(),
-                         "The initially rotated phantom's dimension after the rotation has changed")
+                         (MSG_WRONG_DIM, "phantom (initially rotated)"))
         self.assertEqual(protRotateVolume.outputVolume.getSamplingRate(),
                          protCreatePhantomReference.outputVolume.getSamplingRate(),
-                         "There was a problem with the sampling rate value of the rotated phantom")
+                         (MSG_WRONG_SAMPLING, "rotated phantom"))
         # Second type of rotation checked (rotate)
         self.assertEqual(protRotateVolume2.rotType.get(), 1, "The phantom is not rotating")
         self.assertEqual(protRotateVolume2.dirParam.get(), 1, "The phantom is rotating in the wrong axis")
         self.assertEqual(protRotateVolume2.deg.get(), 90, "The degree of rotation is wrong")
         self.assertEqual(protRotateVolume2.outputVolume.getDim(), protCreatePhantomReference.outputVolume.getDim(),
-                         "The initially rotated phantom's dimension after the rotation has changed")
+                         (MSG_WRONG_DIM, "phantom (initially rotated)"))
         self.assertEqual(protRotateVolume2.outputVolume.getSamplingRate(),
                          protCreatePhantomReference.outputVolume.getSamplingRate(),
-                         "There was a problem with the sampling rate value of the rotated phantom")
+                         (MSG_WRONG_SAMPLING, "rotated phantom"))
 
 
 if __name__ == "__main__":

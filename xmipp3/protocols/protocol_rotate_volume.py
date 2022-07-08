@@ -42,9 +42,9 @@ class XmippProtRotateVolume(EMProtocol):
         form.addSection(label='Input')
         form.addParam('vol', PointerParam, pointerClass='Volume', label="Volume ", help='Specify a volume.')
         form.addParam('rotType', EnumParam, choices=['Align with Z', 'rotate'], display=EnumParam.DISPLAY_HLIST,
-                      default=1, label='Align with Z axis: ', help='Align (x,y,z) with Z axis')
+                      default=1, label='Rotation mode: ', help='Align (x,y,z) with Z axis')
         form.addParam('dirParam', EnumParam, choices=['X', 'Y', 'Z'], default=1, display=EnumParam.DISPLAY_HLIST,
-                      label='Align with Z axis: ', help='Align (x,y,z) with Z axis')
+                      label='Axis: ', help='Align (x,y,z) with Z axis')
         form.addParam('deg', FloatParam, label='Degrees: ', default=90, condition='rotType == 1',
                       help='degrees of rotation in selected axis')
 
