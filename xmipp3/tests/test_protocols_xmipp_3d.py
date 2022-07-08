@@ -1734,6 +1734,8 @@ class TestXmippRotateVolume(TestXmippBase):
                              MSG_WRONG_ROTATION)
 
         # Create the referenced cylinder (without rotation)
+        # This new cylinder is the reference, meaning that it is created to check visually that
+        # the results of volume rotation protocols should look like this one
         protCreatePhantomReference = self.newProtocol(XmippProtPhantom,
                                                       desc='80 80 80 0\ncyl + 5 0 0 0 5 5 10 0 0 0',
                                                       sampling=1.0)
