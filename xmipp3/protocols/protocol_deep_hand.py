@@ -151,7 +151,8 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
                 summary.append('Volume was flipped as it was deemed to be left handed')
             else:
                 summary.append('Volume was not flipped as it was deemed to be right handed')
-
+        else:
+            summary.append("Output volume and handedness not ready yet.")
         return summary
 
     def _methods(self):

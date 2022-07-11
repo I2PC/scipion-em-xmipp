@@ -1775,14 +1775,17 @@ class TestXmippDeepHand(TestXmippBase):
         self.assertIsNotNone(protCreatePhantom.getFiles(),
                              "There was a problem with the phantom creation")
 
-
+        # Creation of the mask
         protDeepHand = self.newProtocol(XmippProtDeepHand,
                                             inputVolume=protCreatePhantom.outputVolume,
                                             threshold=5)
         self.launchProtocol(protDeepHand)
         self.assertIsNotNone(protDeepHand.getFiles(),
                              "There was a problem with the mask creation")
-        
+        self.assertEqual(protDeepHand.outputParticles.getSamplingRate(), 1.0,
+                         (MSG_WRONG_SAMPLING, "volume"))
+        self.assertEqual(protDeepHand.outputVolume.getDim(), protCreatePhantom.getDim(),
+                         MSG_WRONG_DIM, "volume")
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
