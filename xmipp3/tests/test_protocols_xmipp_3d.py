@@ -1784,13 +1784,17 @@ class TestXmippDeepHand(TestXmippBase):
         # Check if there is an output
         self.assertIsNotNone(protDeepHand.getFiles(), "There was a problem with the mask creation")
 
-        #Check if the sampling rate is right
+        # Check if the sampling rate is right
         self.assertEqual(protDeepHand.outputVol.getSamplingRate(), 1.0, (MSG_WRONG_SAMPLING, "volume"))
-        #Check if the input threshold is the same as the density of the volume
+        # Check if the input threshold is the same as the density of the volume
         self.assertEqual(protDeepHand.threshold.get(), 5, "There was a problem with the density value")
-        #Check if the mask has (threshold) has selected the hole volume
+        # Check if the thresholdAlpha and thresholdHand match the default values
+        self.assertEqual(protDeepHand.thresholdAlpha.get(), 0.7, "There was a problem with the thresholdAlpha value")
+        self.assertEqual(protDeepHand.thresholdHand.get(), 0.6, "There was a problem with the thresholdHand value")
+        # Check if the mask has (threshold) has selected the hole volume
         self.assertEqual(protDeepHand.outputVol.getDim(), protCreatePhantom.outputVolume.getDim(),
                          (MSG_WRONG_DIM, "volume"))
+        # Check if the hand value is right
         self.assertAlmostEquals(protDeepHand.outputHand.get(), 0.509047, 6,"There was a problem with the hand value")
 
 
