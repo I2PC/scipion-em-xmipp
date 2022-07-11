@@ -1782,9 +1782,9 @@ class TestXmippDeepHand(TestXmippBase):
         self.launchProtocol(protDeepHand)
         self.assertIsNotNone(protDeepHand.getFiles(),
                              "There was a problem with the mask creation")
-        self.assertEqual(protDeepHand.outputVolume.getSamplingRate(), 1.0,
+        self.assertEqual(protDeepHand.outputVol.getSamplingRate(), 1.0,
                          (MSG_WRONG_SAMPLING, "volume"))
-        self.assertEqual(protDeepHand.outputVolume.getDim(), protCreatePhantom.getDim(),
+        self.assertEqual(protDeepHand.outputVol.getDim(), protCreatePhantom.outputVolume.getDim(),
                          MSG_WRONG_DIM, "volume")
 
 if __name__ == "__main__":
