@@ -1791,8 +1791,8 @@ class TestXmippDeepHand(TestXmippBase):
         #Check if the mask has (threshold) has selected the hole volume
         self.assertEqual(protDeepHand.outputVol.getDim(), protCreatePhantom.outputVolume.getDim(),
                          (MSG_WRONG_DIM, "volume"))
-        self.assertTrue(protDeepHand.outputHand.get(), 0.509047, "There was a problem with the hand value")
-        
+        self.assertEquals(protDeepHand.outputHand.get(), 0.509047, "There was a problem with the hand value")
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
