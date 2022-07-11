@@ -1785,7 +1785,7 @@ class TestXmippDeepHand(TestXmippBase):
         self.assertEqual(protDeepHand.outputVol.getSamplingRate(), 1.0,
                          (MSG_WRONG_SAMPLING, "volume"))
         self.assertEqual(protDeepHand.outputVol.getDim(), protCreatePhantom.outputVolume.getDim(),
-                         MSG_WRONG_DIM, "volume")
+                         (MSG_WRONG_DIM, "volume"))
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
