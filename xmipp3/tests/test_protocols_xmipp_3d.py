@@ -1760,6 +1760,29 @@ class TestXmippRotateVolume(TestXmippBase):
                          protCreatePhantomReference.outputVolume.getSamplingRate(),
                          (MSG_WRONG_SAMPLING, "rotated phantom"))
 
+class TestXmippDeepHand(TestXmippBase):
+    """This class checks if the protocol deep hand in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testXmippAlignVolumeAndParticles(self):
+        # Create input data: phantom with one cylinder
+        protCreatePhantom = self.newProtocol(XmippProtPhantom,
+                                               desc='80 80 80 0\ncyl + 5 0 0 0 5 5 10 0 0 0',
+                                               sampling=1.0)
+        self.launchProtocol(protCreatePhantom)
+        self.assertIsNotNone(protCreatePhantom.getFiles(),
+                             "There was a problem with the phantom creation")
+
+
+        protDeepHand = self.newProtocol(XmippProtDeepHand,
+                                            inputVolume=protCreatePhantom.outputVolume,
+                                            threshold=5)
+        self.launchProtocol(protDeepHand)
+        self.assertIsNotNone(protDeepHand.getFiles(),
+                             "There was a problem with the mask creation")
+        
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
