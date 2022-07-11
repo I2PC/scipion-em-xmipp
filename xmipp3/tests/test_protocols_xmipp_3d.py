@@ -1797,7 +1797,7 @@ class TestXmippDeepHand(TestXmippBase):
         # Check if the hand value is right
         self.assertAlmostEquals(protDeepHand.outputHand.get(), 0.509047, 6,"There was a problem with the hand value")
         # Check if the flip is right
-        self.assertTrue(protDeepHand.outputHand.get()>protDeepHand.thresholdHand.get(), "The was a problem with the flip")
+        self.assertTrue(protDeepHand.outputHand.get()<protDeepHand.thresholdHand.get(), "The was a problem with the flip")
 
 
 if __name__ == "__main__":
