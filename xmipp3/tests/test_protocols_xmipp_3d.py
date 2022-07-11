@@ -1772,6 +1772,7 @@ class TestXmippDeepHand(TestXmippBase):
                                                desc='80 80 80 0\ncyl + 5 0 0 0 5 5 10 0 0 0',
                                                sampling=1.0)
         self.launchProtocol(protCreatePhantom)
+        # Check if there is an output
         self.assertIsNotNone(protCreatePhantom.getFiles(),
                              "There was a problem with the phantom creation")
 
@@ -1780,12 +1781,18 @@ class TestXmippDeepHand(TestXmippBase):
                                             inputVolume=protCreatePhantom.outputVolume,
                                             threshold=5)
         self.launchProtocol(protDeepHand)
-        self.assertIsNotNone(protDeepHand.getFiles(),
-                             "There was a problem with the mask creation")
-        self.assertEqual(protDeepHand.outputVol.getSamplingRate(), 1.0,
-                         (MSG_WRONG_SAMPLING, "volume"))
+        # Check if there is an output
+        self.assertIsNotNone(protDeepHand.getFiles(), "There was a problem with the mask creation")
+
+        #Check if the sampling rate is right
+        self.assertEqual(protDeepHand.outputVol.getSamplingRate(), 1.0, (MSG_WRONG_SAMPLING, "volume"))
+        #Check if the input threshold is the same as the density of the volume
+        self.assertEqual(protDeepHand.threshold.get(), 5, "There was a problem with the density value")
+        #Check if the mask has (threshold) has selected the hole volume
         self.assertEqual(protDeepHand.outputVol.getDim(), protCreatePhantom.outputVolume.getDim(),
                          (MSG_WRONG_DIM, "volume"))
+        self.assertTrue(protDeepHand.outputHand.get(), 0.509047, "There was a problem with the hand value")
+        
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
