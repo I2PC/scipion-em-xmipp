@@ -1790,7 +1790,7 @@ class TestXmippDeepHand(TestXmippBase):
         # Check if the sampling rate is right
         self.assertEqual(protDeepHand.outputVol.getSamplingRate(), 7.08, (MSG_WRONG_SAMPLING, "volume"))
         # Check if the input threshold is the same as the density of the volume
-        #self.assertEqual(protDeepHand.threshold.get(), 5, "There was a problem with the density value")
+        self.assertEqual(protDeepHand.threshold.get(), 0.05, "There was a problem with the density value")
         # Check if the thresholdAlpha and thresholdHand match the default values
         self.assertEqual(protDeepHand.thresholdAlpha.get(), 0.7, "There was a problem with the thresholdAlpha value")
         self.assertEqual(protDeepHand.thresholdHand.get(), 0.6, "There was a problem with the thresholdHand value")
