@@ -1782,7 +1782,7 @@ class TestXmippDeepHand(TestXmippBase):
         # Creation of the mask
         protDeepHand = self.newProtocol(XmippProtDeepHand,
                                             inputVolume=protImportVol.outputVolume,
-                                            threshold=0.1)
+                                            threshold=0.05)
         self.launchProtocol(protDeepHand)
         # Check if there is an output
         self.assertIsNotNone(protDeepHand.getFiles(), "There was a problem with the mask creation")
