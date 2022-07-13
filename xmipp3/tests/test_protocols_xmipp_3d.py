@@ -1760,6 +1760,40 @@ class TestXmippRotateVolume(TestXmippBase):
                          protCreatePhantomReference.outputVolume.getSamplingRate(),
                          (MSG_WRONG_SAMPLING, "rotated phantom"))
 
+class TestXmippScreenDeepLearning(TestXmippBase):
+    """This class checks if the protocol screen deep learning in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
+
+    def testXmippScreenDeepLearning(self):
+        print("Import Particles")
+        protImportParts = self.newProtocol(ProtImportParticles,
+                                           objLabel='Particles',
+                                           importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
+                                           sqliteFile=self.dataset.getFile('particles/BPV_particles.sqlite'),
+                                           magnification=50000,
+                                           samplingRate=7.08
+                                           )
+        self.launchProtocol(protImportParts)
+        self.assertIsNotNone(protImportParts.getFiles(), "There was a problem with the import of the particles")
+
+        print("Get a big subset of particles")
+        protSubset1 = self.newProtocol(ProtSubSet,
+                                      objLabel='200 Particles',
+                                      chooseAtRandom=True,
+                                      nElements=200)
+        protSubset1.inputFullSet.set(protImportParts.outputParticles)
+        self.launchProtocol(protSubset1)
+
+        print("Get a small subset of particles")
+        protSubset2 = self.newProtocol(ProtSubSet,
+                                      objLabel='20 Particles',
+                                      chooseAtRandom=True,
+                                      nElements=20)
+        protSubset2.inputFullSet.set(protImportParts.outputParticles)
+        self.launchProtocol(protSubset2)
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
