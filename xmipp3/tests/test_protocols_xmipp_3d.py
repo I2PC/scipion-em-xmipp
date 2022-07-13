@@ -1768,7 +1768,7 @@ class TestXmippDeepHand(TestXmippBase):
         cls.dataset = DataSet.getDataSet('xmipp_tutorial')
         cls.vol1 = cls.dataset.getFile('volumes/volume_1_iter_002.mrc')
 
-    def testXmippAlignVolumeAndParticles(self):
+    def testXmippDeepHand(self):
         # Import input data
         protImportVol = self.newProtocol(ProtImportVolumes,
                                          objLabel='Volume',
