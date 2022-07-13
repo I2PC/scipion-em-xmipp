@@ -1769,7 +1769,7 @@ class TestXmippDeepHand(TestXmippBase):
         cls.vol1 = cls.dataset.getFile('volumes/volume_1_iter_002.mrc')
 
     def testXmippAlignVolumeAndParticles(self):
-        # Create input data: phantom with one cylinder
+        # Import input data
         protImportVol = self.newProtocol(ProtImportVolumes,
                                          objLabel='Volume',
                                          filesPath=self.vol1,
@@ -1781,8 +1781,8 @@ class TestXmippDeepHand(TestXmippBase):
 
         # Creation of the mask
         protDeepHand = self.newProtocol(XmippProtDeepHand,
-                                            inputVolume=protImportVol.outputVolume,
-                                            threshold=0.05)
+                                        inputVolume=protImportVol.outputVolume,
+                                        threshold=0.05)
         self.launchProtocol(protDeepHand)
         # Check if there is an output
         self.assertIsNotNone(protDeepHand.getFiles(), "There was a problem with the mask creation")
@@ -1794,13 +1794,13 @@ class TestXmippDeepHand(TestXmippBase):
         # Check if the thresholdAlpha and thresholdHand match the default values
         self.assertEqual(protDeepHand.thresholdAlpha.get(), 0.7, "There was a problem with the thresholdAlpha value")
         self.assertEqual(protDeepHand.thresholdHand.get(), 0.6, "There was a problem with the thresholdHand value")
-        # Check if the mask has (threshold) has selected the hole volume
+        # Check if the mask (threshold) has selected the hole volume
         self.assertEqual(protDeepHand.outputVol.getDim(), protImportVol.outputVolume.getDim(),
                          (MSG_WRONG_DIM, "volume"))
         # Check if the hand value is right
-        #self.assertAlmostEquals(protDeepHand.outputHand.get(), 0.509047, 6,"There was a problem with the hand value")
+        self.assertAlmostEquals(protDeepHand.outputHand.get(), 0.426617, 6,"There was a problem with the hand value")
         # Check if the flip is right
-        #self.assertTrue(protDeepHand.outputHand.get()<protDeepHand.thresholdHand.get(), "There was a problem with the flip")
+        self.assertTrue(protDeepHand.outputHand.get()<protDeepHand.thresholdHand.get(), "There was a problem with the flip")
 
 
 if __name__ == "__main__":
