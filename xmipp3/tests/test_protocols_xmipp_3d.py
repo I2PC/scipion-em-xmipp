@@ -1813,6 +1813,7 @@ class TestXmippReconstructSignificant(TestXmippBase):
         self.assertIsNotNone(protReconstructSignificant2.outputVolume,
                              (MSG_WRONG_RECONSTRUCTION, " of the final volume"))
         # Reconstruct significant (default values) with a reference of a set of volumes
+        # WARNING: THIS OPTION SHOULD BE POSSIBLE ACCORDING TO DOCUMENTATION, BUT INSTEAD AN ERROR OCCURS
         protReconstructSignificant3 = self.newProtocol(XmippProtReconstructSignificant,
                                                        inputSet=protCreateGallery.outputReprojections,
                                                        thereisRefVolume=True,
