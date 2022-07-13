@@ -1794,7 +1794,7 @@ class TestXmippDeepHand(TestXmippBase):
         # Check if the thresholdAlpha and thresholdHand match the default values
         self.assertEqual(protDeepHand.thresholdAlpha.get(), 0.7, "There was a problem with the thresholdAlpha value")
         self.assertEqual(protDeepHand.thresholdHand.get(), 0.6, "There was a problem with the thresholdHand value")
-        # Check if the mask (threshold) has selected the hole volume
+        # Check if the dimension of the volume does not vary
         self.assertEqual(protDeepHand.outputVol.getDim(), protImportVol.outputVolume.getDim(),
                          (MSG_WRONG_DIM, "volume"))
         # Check if the hand value is right
