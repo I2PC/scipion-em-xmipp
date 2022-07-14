@@ -48,6 +48,12 @@ from xmipp3.protocols.protocol_align_volume import (ALIGN_ALGORITHM_EXHAUSTIVE,
                                                ALIGN_ALGORITHM_EXHAUSTIVE_LOCAL,
                                                ALIGN_ALGORITHM_LOCAL)
 
+# Global variables
+db_xmipp_tutorial = 'xmipp_tutorial'
+vol1_iter2 = 'volumes/volume_1_iter_002.mrc'
+vol2_iter2 = 'volumes/volume_2_iter_002.mrc'
+
+# Output error messages
 MSG_WRONG_SAMPLING = "There was a problem with the sampling rate value of the output "
 MSG_WRONG_SIZE = "There was a problem with the size of the output "
 MSG_WRONG_DIM = "There was a problem with the dimensions of the output "
@@ -58,14 +64,11 @@ MSG_WRONG_GALLERY = "There was a problem with the gallery creation"
 MSG_WRONG_ROTATION = "There was a problem with the rotation"
 
 
-
-
-
 class TestXmippBase(BaseTest):
     """ Some utility functions to import volumes that are used in several tests."""
 
     @classmethod
-    def setData(cls, dataProject='xmipp_tutorial'):
+    def setData(cls, dataProject=db_xmipp_tutorial):
         cls.dataset = DataSet.getDataSet(dataProject)
         cls.volumes = cls.dataset.getFile('volumes')
         cls.vol1 = cls.dataset.getFile('vol1')
@@ -717,7 +720,7 @@ class TestXmippOperateVolumes(TestXmippBase):
 
 class TestXmippProtAlignVolume(TestXmippBase):
     @classmethod
-    def setData(cls, dataProject='xmipp_tutorial'):
+    def setData(cls, dataProject=db_xmipp_tutorial):
         cls.dataset = DataSet.getDataSet(dataProject)
         cls.volumes = cls.dataset.getFile('volumes')
         cls.vol1 = cls.dataset.getFile('vol1')
@@ -996,7 +999,7 @@ class TestXmippRotationalSymmetry(TestXmippBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
-        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
+        cls.dataset = DataSet.getDataSet(db_xmipp_tutorial)
         cls.vol = cls.dataset.getFile('vol110')
 
     def test_rotsym(self):
@@ -1211,9 +1214,9 @@ class TestXmippVolSubtraction(TestXmippBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
-        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
-        cls.vol1 = cls.dataset.getFile('volumes/volume_1_iter_002.mrc')
-        cls.vol2 = cls.dataset.getFile('volumes/volume_2_iter_002.mrc')
+        cls.dataset = DataSet.getDataSet(db_xmipp_tutorial)
+        cls.vol1 = cls.dataset.getFile(vol1_iter2)
+        cls.vol2 = cls.dataset.getFile(vol2_iter2)
 
     def testXmippVolSub(self):
         print("Import Volume 1")
@@ -1368,8 +1371,8 @@ class TestXmippShiftParticlesAndVolume(TestXmippBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
-        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
-        cls.vol1 = cls.dataset.getFile('volumes/volume_1_iter_002.mrc')
+        cls.dataset = DataSet.getDataSet(db_xmipp_tutorial)
+        cls.vol1 = cls.dataset.getFile(vol1_iter2)
 
     def testXmippShiftParticlesAndVolume(self):
         protImportVol = self.newProtocol(ProtImportVolumes,
@@ -1765,8 +1768,8 @@ class TestXmippDeepHand(TestXmippBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
-        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
-        cls.vol1 = cls.dataset.getFile('volumes/volume_1_iter_002.mrc')
+        cls.dataset = DataSet.getDataSet(db_xmipp_tutorial)
+        cls.vol1 = cls.dataset.getFile(vol1_iter2)
 
     def testXmippDeepHand(self):
         # Import input data
