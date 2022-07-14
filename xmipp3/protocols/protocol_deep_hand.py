@@ -41,9 +41,9 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
 
     _label ="deep hand"
     _conda_env = "xmipp_deepHand"
-    ResizedVolFile = 'resizedVol.mrc'
-    MaskFile = 'mask.mrc'
-    FilteredVolFile = 'filteredVol.mrc'
+    vResizedVolFile = 'resizedVol.mrc'
+    vMaskFile = 'mask.mrc'
+    vFilteredVolFile = 'filteredVol.mrc'
 
     def __init__(self, *args, **kwargs):
         EMProtocol.__init__(self, *args, **kwargs)
@@ -69,7 +69,7 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
         self._insertFunctionStep('flipStep')
         self._insertFunctionStep('createOutputStep')
 
-    def preprocessStep(self, ResizedVolFile, MaskFile, FilteredVolFile):
+    def preprocessStep(self, vResizedVolFile, vMaskFile, vFilteredVolFile):
 
         # Get volume information
         volume = self.inputVolume.get()
@@ -77,9 +77,9 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
         T_s = volume.getSamplingRate()
 
         # Paths to new files created
-        self.resizedVolFile = self._getPath(ResizedVolFile)
-        self.maskFile = self._getPath(MaskFile)
-        self.filteredVolFile = self._getPath(FilteredVolFile)
+        self.resizedVolFile = self._getPath(vResizedVolFile)
+        self.maskFile = self._getPath(vMaskFile)
+        self.filteredVolFile = self._getPath(vFilteredVolFile)
 
         # Resize to 1A/px
         self.runJob("xmipp_image_resize", "-i %s -o %s --factor %f" %
@@ -95,7 +95,7 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
                     "--fourier low_pass %f --sampling 1"
                     % (self.resizedVolFile, self.filteredVolFile, 5.0))
 
-    def predictStep(self, MaskFile, FilteredVolFile):
+    def predictStep(self, vMaskFile, vFilteredVolFile):
 
         # Get saved models DTlK
         alpha_model= self.getModel('deepHand', '5A_SSE_experimental.pth')
@@ -105,8 +105,8 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
         args = "--alphaModel %s --handModel %s -o %s " \
                "--alphaThr %f --pathVf %s --pathVmask %s" % (
                 alpha_model, hand_model, self._getExtraPath(),
-                self.thresholdAlpha.get(), self._getPath(FilteredVolFile),
-                self._getPath(MaskFile))
+                self.thresholdAlpha.get(), self._getPath(vFilteredVolFile),
+                self._getPath(vMaskFile))
         self.runJob("xmipp_deep_hand", args, env=self.getCondaEnv())
 
         # Store hand value
@@ -123,7 +123,7 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
             self.runJob("xmipp_transform_mirror", "-i %s -o %s --flipX" \
                             % (fn_vol, pathFlipVol))
 
-    def createOutputStep(self, ResizedVolFile, MaskFile, FilteredVolFile):
+    def createOutputStep(self, vResizedVolFile, vMaskFile, vFilteredVolFile):
         self._defineOutputs(outputHand=self.hand)
 
         if self.hand.get() > self.thresholdHand.get():
@@ -138,9 +138,9 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
             self._defineOutputs(outputVol=self.inputVolume.get())
         self._defineSourceRelation(self.inputVolume, self.outputVol)
 
-        cleanPath(self._getPath(ResizedVolFile))
-        cleanPath(self._getPath(MaskFile))
-        cleanPath(self._getPath(FilteredVolFile))
+        cleanPath(self._getPath(vResizedVolFile))
+        cleanPath(self._getPath(vMaskFile))
+        cleanPath(self._getPath(vFilteredVolFile))
 
 # --------------------------- INFO functions -------------------------------
     def _summary(self):
