@@ -56,7 +56,7 @@ MSG_WRONG_ALIGNMENT = "There was a problem with the alignment of the output "
 MSG_WRONG_SHIFT = "There was a problem with output shift "
 MSG_WRONG_GALLERY = "There was a problem with the gallery creation"
 MSG_WRONG_ROTATION = "There was a problem with the rotation"
-
+MSG_WRONG_IMPORT = "There was a problem with the import of "
 
 
 
@@ -1768,32 +1768,44 @@ class TestXmippScreenDeepLearning(TestXmippBase):
         cls.dataset = DataSet.getDataSet('xmipp_tutorial')
 
     def testXmippScreenDeepLearning(self):
-        print("Import Particles")
-        protImportParts = self.newProtocol(ProtImportParticles,
-                                           objLabel='Particles',
-                                           importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
-                                           sqliteFile=self.dataset.getFile('particles/BPV_particles.sqlite'),
-                                           magnification=50000,
-                                           samplingRate=7.08
-                                           )
-        self.launchProtocol(protImportParts)
-        self.assertIsNotNone(protImportParts.getFiles(), "There was a problem with the import of the particles")
+        protImportParts1 = self.newProtocol(ProtImportParticles,
+                                            objLabel='Particles',
+                                            importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
+                                            sqliteFile=self.dataset.getFile('particles/BPV_particles.sqlite'),
+                                            magnification=50000,
+                                            samplingRate=7.08,
+                                            haveDataBeenPhaseFlipped=False)
+        self.launchProtocol(protImportParts1)
+        self.assertIsNotNone(protImportParts1.getFiles(), (MSG_WRONG_IMPORT, "the first set of particles"))
 
-        print("Get a big subset of particles")
-        protSubset1 = self.newProtocol(ProtSubSet,
-                                      objLabel='200 Particles',
-                                      chooseAtRandom=True,
-                                      nElements=200)
-        protSubset1.inputFullSet.set(protImportParts.outputParticles)
-        self.launchProtocol(protSubset1)
+        protImportParts2 = self.newProtocol(ProtImportParticles,
+                                            objLabel='Particles',
+                                            importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
+                                            sqliteFile=self.dataset.getFile('particles/BPV_particles_aligned.sqlite'),
+                                            magnification=50000,
+                                            samplingRate=7.08,
+                                            haveDataBeenPhaseFlipped=False)
+        self.launchProtocol(protImportParts2)
+        self.assertIsNotNone(protImportParts2.getFiles(), (MSG_WRONG_IMPORT, "the second set of particles"))
 
-        print("Get a small subset of particles")
-        protSubset2 = self.newProtocol(ProtSubSet,
-                                      objLabel='20 Particles',
-                                      chooseAtRandom=True,
-                                      nElements=20)
-        protSubset2.inputFullSet.set(protImportParts.outputParticles)
-        self.launchProtocol(protSubset2)
+        protImportParts3 = self.newProtocol(ProtImportParticles,
+                                            objLabel='Particles',
+                                            importFrom=ProtImportParticles.IMPORT_FROM_XMIPP3,
+                                            mdFile=self.dataset.getFile('particles/sphere_128.xmd'),
+                                            magnification=50000,
+                                            samplingRate=7.08,
+                                            haveDataBeenPhaseFlipped=False)
+        self.launchProtocol(protImportParts3)
+        self.assertIsNotNone(protImportParts3.getFiles(), (MSG_WRONG_IMPORT, "the third set of particles"))
+
+        protScreenDeepLearning = self.newProtocol(XmippProtScreenDeepLearning,
+                                                  inTrueSetOfParticles=protImportParts1.outputParticles,
+                                                  numberOfNegativeSets=1,
+                                                  negativeSet_1=protImportParts3.outputParticles,
+                                                  predictSetOfParticles=protImportParts2.outputParticles)
+        self.launchProtocol(protScreenDeepLearning)
+        self.assertIsNotNone(protScreenDeepLearning.getFiles(), "There was a problem with the output of the particles")
+        self.assertIsNotNone(protScreenDeepLearning.outputParticles, "There was a problem with the output of the particles")
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
