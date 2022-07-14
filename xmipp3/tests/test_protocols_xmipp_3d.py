@@ -1788,6 +1788,7 @@ class TestXmippScreenDeepLearning(TestXmippBase):
         self.launchProtocol(protImportParts2)
         self.assertIsNotNone(protImportParts2.getFiles(), (MSG_WRONG_IMPORT, "the second set of particles"))
 
+        '''
         protImportParts3 = self.newProtocol(ProtImportParticles,
                                             objLabel='Particles',
                                             importFrom=ProtImportParticles.IMPORT_FROM_XMIPP3,
@@ -1797,11 +1798,18 @@ class TestXmippScreenDeepLearning(TestXmippBase):
                                             haveDataBeenPhaseFlipped=False)
         self.launchProtocol(protImportParts3)
         self.assertIsNotNone(protImportParts3.getFiles(), (MSG_WRONG_IMPORT, "the third set of particles"))
+        '''
+        protAddNoise = self.newProtocol(XmippProtAddNoiseParticles,
+                                        input=protImportParts1.outputParticles,
+                                        gaussianStd=15.0)
+        self.launchProtocol(protAddNoise)
+        self.assertIsNotNone(protAddNoise.outputParticles,
+                             "There was a problem with add noise protocol")
 
         protScreenDeepLearning = self.newProtocol(XmippProtScreenDeepLearning,
                                                   inTrueSetOfParticles=protImportParts1.outputParticles,
                                                   numberOfNegativeSets=1,
-                                                  negativeSet_1=protImportParts3.outputParticles,
+                                                  negativeSet_1=protAddNoise.outputParticles,
                                                   predictSetOfParticles=protImportParts2.outputParticles)
         self.launchProtocol(protScreenDeepLearning)
         self.assertIsNotNone(protScreenDeepLearning.getFiles(), "There was a problem with the output of the particles")
