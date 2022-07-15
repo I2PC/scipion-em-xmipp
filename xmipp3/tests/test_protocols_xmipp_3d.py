@@ -1787,13 +1787,20 @@ class TestXmippPickNoise(TestXmippBase):
         cls.launchProtocol(cls.protImportMics)
         '''
         protImportCoords = self.newProtocol(ProtImportCoordinates,
-                                       inputMicrographs=protImportMics.outputMicrographs,
-                                       filesPath=self.coordFn,
-                                       boxSize=74)
-        #protImportCoords.inputMicrographs.set(protImportMics)
-        #protImportCoords.inputMicrographs.setExtended('outputMicrographs')
+                                            filesPath=self.coordFn,
+                                            #importFrom="xmipp",
+                                            inputMicrographs=protImportMics.outputMicrographs,
+                                            boxSize=110)
         self.launchProtocol(protImportCoords)
         self.assertIsNotNone(protImportCoords.outputCoordinates, "There was a problem with the creation of the coordinates")
+
+        protPickNoise = self.newProtocol(XmippProtPickNoise,
+                                         inputCoordinates=protImportCoords.outputCoordinates)
+        self.launchProtocol(protPickNoise)
+        self.assertIsNotNone(protPickNoise.getFiles(), "There was a problem with the pick noise protocol")
+        self.assertIsNotNone(protPickNoise.outputCoordinates, "There was a problem with the output of the coordinates")
+        # Check if the number of noisy particles is right
+        self.assertEquals(protPickNoise.outputCoordinates.getSize(), 143, (MSG_WRONG_SIZE, "noisy particles"))
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
