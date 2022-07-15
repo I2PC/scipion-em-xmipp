@@ -29,6 +29,7 @@ from pyworkflow.object import String
 from pyworkflow.protocol.params import IntParam, PointerParam, LEVEL_ADVANCED
 from pwem.protocols import ProtProcessParticles
 from pwem.objects import SetOfVolumes
+from pwem.objects import SetOfAverages
 
 from xmipp3.convert import (writeSetOfParticles, writeSetOfClasses2D,
                             xmippToLocation)
@@ -89,10 +90,10 @@ class XmippProtDenoiseParticles(ProtProcessParticles):
         imagesMd = self._getPath('images.xmd')
         writeSetOfParticles(self.inputParticles.get(), imagesMd)
         classesMd = self._getPath('classes.xmd')
-        if isinstance(self.inputClasses.get(), SetOfVolumes):
+        if isinstance(self.inputClasses.get(), SetOfAverages):
             writeSetOfClasses2D(self.inputClasses.get(), classesMd)
         else:
-            writeSetOfParticles(self.inputParticles.get(), classesMd)
+            writeSetOfClasses2D(self.inputClasses.get(), classesMd)
 
         fnRoot = self._getExtraPath('pca')
         fnRootDenoised = self._getExtraPath('imagesDenoised')

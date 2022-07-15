@@ -52,6 +52,7 @@ RESIZE_VOL = 'originalVolume.vol'
 OPERATE_VOL = 'operateVolume.vol'
 #CHIMERA_RESOLUTION_VOL = 'deepRes_resolution.vol'
 OUTPUT_RESOLUTION_FILE = 'resolutionMap'
+OUTPUT_ORIGINAL_SIZE =  'deepRes_resolution_originalSize.vol'
 OUTPUT_RESOLUTION_FILE_CHIMERA = 'chimera_resolution.vol'
 METADATA_MASK_FILE = 'metadataresolutions'
 FN_METADATA_HISTOGRAM = 'mdhist'
@@ -116,6 +117,7 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
                  OUTPUT_RESOLUTION_FILE_CHIMERA: self._getExtraPath('chimera_resolution.vol'),
 #                 OUTPUT_RESOLUTION_FILE_CHIMERA: self._getExtraPath(CHIMERA_RESOLUTION_VOL),                                 
                  OUTPUT_RESOLUTION_FILE: self._getExtraPath('deepRes_resolution.vol'),
+                 OUTPUT_ORIGINAL_SIZE: self._getExtraPath('deepRes_resolution_originalSize.vol'),
                  FN_METADATA_HISTOGRAM: self._getExtraPath('hist.xmd')
                  }
         self._updateFilenamesDict(myDict)
@@ -128,7 +130,7 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
         self._createFilenameTemplates() 
         self._insertFunctionStep('convertInputStep')
         self._insertFunctionStep('transformStep')          
-        self._insertFunctionStep('resizeStep')                        
+        self._insertFunctionStep('resizeInputStep')                        
         self._insertFunctionStep('resolutionStep')
         self._insertFunctionStep('createOutputStep')
         self._insertFunctionStep("createHistrogram")
@@ -166,7 +168,7 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
                   
             
             
-    def resizeStep(self):
+    def resizeInputStep(self):
 
         if self.range == self.LOW_RESOL:
             sampling_new = 1.0
@@ -281,10 +283,32 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
             sampling_new = 1.0
         else:
             sampling_new = 0.5
+            
+        #convert size of output volume
+        
+        samplingFactor = sampling_new/float(self.inputVolume.get().getSamplingRate())
+        fourierValue = sampling_new/(2*float(self.inputVolume.get().getSamplingRate()))
+             
+        if sampling_new > self.inputVolume.get().getSamplingRate():
+            paramsResizeVol = ' -i %s' % self._getFileName(OUTPUT_RESOLUTION_FILE)
+            paramsResizeVol += ' -o %s' % self._getFileName(OUTPUT_ORIGINAL_SIZE)        
+            paramsResizeVol += ' --factor %s' % samplingFactor
+            self.runJob('xmipp_image_resize', paramsResizeVol )             
+        else:   
+            paramsFilterVol = ' -i %s' % self._getFileName(OUTPUT_RESOLUTION_FILE)
+            paramsFilterVol += ' -o %s' % self._getFileName(OUTPUT_ORIGINAL_SIZE)
+            paramsFilterVol += ' --fourier low_pass %s' % fourierValue            
+            paramsResizeVol = ' -i %s' % self._getFileName(OUTPUT_ORIGINAL_SIZE)  
+            paramsResizeVol += ' -o %s' % self._getFileName(OUTPUT_ORIGINAL_SIZE)           
+            paramsResizeVol += ' --factor %s' % samplingFactor            
+            self.runJob('xmipp_transform_filter', paramsFilterVol )
+            self.runJob('xmipp_image_resize', paramsResizeVol )
+            
+            
         volume=Volume()
-        volume.setFileName(self._getFileName(OUTPUT_RESOLUTION_FILE))
+        volume.setFileName(self._getFileName(OUTPUT_ORIGINAL_SIZE))
 
-        volume.setSamplingRate(sampling_new)
+        volume.setSamplingRate(self.inputVolume.get().getSamplingRate())
         self._defineOutputs(resolution_Volume=volume)
         self._defineTransformRelation(self.inputVolume, volume)
             

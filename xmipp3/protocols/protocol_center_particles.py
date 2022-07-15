@@ -26,7 +26,7 @@
 # ******************************************************************************
 
 import numpy as np
-
+import os
 from pyworkflow import VERSION_2_0
 from pwem.constants import ALIGN_2D
 from pwem.objects import Class2D, Particle, Coordinate, Transform
@@ -85,7 +85,7 @@ class XmippProtCenterParticles(ProtClassify2D):
         centeredStack = md.MetaData(centeredStackName)
 
         listName = []
-        listTransform=[]
+        listTransform = []
         for rowStk in md.iterRows(centeredStack):
             listName.append(rowStk.getValue(md.MDL_IMAGE))
         for rowMd in md.iterRows(centeredMd):
@@ -104,19 +104,27 @@ class XmippProtCenterParticles(ProtClassify2D):
                            MD_APPEND)
 
         mdImages = md.MetaData()
-        i=0
+        i = 0
         mdBlocks = md.getBlocksInMetaDataFile(inputMdName)
         resultMat = Transform()
+        listDisplacament = []
+        centerSummary = self._getPath("summary.txt")
+        centerSummary = open(centerSummary, "w")
+        particlesCentered = 0
+        totalParticles = 0
+
         for block in mdBlocks:
             if block.startswith('class00'):
                 newMat = listTransform[i]
                 newMatrix = newMat.getMatrix()
                 mdClass = md.MetaData(block + "@" + inputMdName)
                 mdNewClass = md.MetaData()
-                i+=1
+                i += 1
+                j = 0
                 for rowIn in md.iterRows(mdClass):
                     #To create the transformation matrix (and its parameters)
                     #  for the realigned particles
+                    totalParticles += 1
                     if rowIn.getValue(md.MDL_ANGLE_PSI)!=0:
                         flag_psi=True
                     if rowIn.getValue(md.MDL_ANGLE_ROT)!=0:
@@ -138,20 +146,35 @@ class XmippProtCenterParticles(ProtClassify2D):
                     invResultMat = np.linalg.inv(resultMatrix)
                     centerPoint = np.dot(invResultMat,inPoint)
 
+                    if int(centerPoint[0]) > 1 or int(centerPoint[1]) > 1:
+                        particlesCentered += 1
+                        listDisplacament.append([int(centerPoint[0]), int(centerPoint[1])])
+
                     rowOut.setValue(md.MDL_XCOOR, rowOut.getValue(
                         md.MDL_XCOOR)+int(centerPoint[0]))
                     rowOut.setValue(md.MDL_YCOOR, rowOut.getValue(
                         md.MDL_YCOOR)+int(centerPoint[1]))
+
                     rowOut.addToMd(mdNewClass)
+                    j += 1
+
                 mdNewClass.write(block + "@" + self._getExtraPath(
                     'final_classes.xmd'), MD_APPEND)
                 mdImages.unionAll(mdNewClass)
+
+        listModule = [(np.sqrt((x[0] * x[0]) + (x[1] * x[1]))) for x in listDisplacament]
+        moduleDisp = round(sum(listModule) / len(listModule), 1)
+        centerSummary.write("Particles centered: {} \t({}%) "
+                            "\nAverage module displacement: {}px\n".
+                            format(particlesCentered,
+                            round((100 * particlesCentered/totalParticles ), 1),
+                            moduleDisp))
+        centerSummary.close()
         mdImages.write(self._getExtraPath('final_images.xmd'))
 
 
     def createOutputStep(self):
         inputParticles = self.inputClasses.get().getImages()
-
         outputClasses = self._createSetOfClasses2D(inputParticles)
         self._fillClasses(outputClasses)
         result = {'outputClasses': outputClasses}
@@ -160,6 +183,7 @@ class XmippProtCenterParticles(ProtClassify2D):
 
         outputParticles = self._createSetOfParticles()
         outputParticles.copyInfo(inputParticles)
+
         self._fillParticles(outputParticles)
         result = {'outputParticles': outputParticles}
         self._defineOutputs(**result)
@@ -202,7 +226,7 @@ class XmippProtCenterParticles(ProtClassify2D):
                 outputClasses.update(newClass)
 
     def _fillParticles(self, outputParticles):
-        """ Create the SetOfParticles and SetOfCoordinates"""
+        """ Create the SetOfParticles"""
         myParticles = md.MetaData(self._getExtraPath('final_images.xmd'))
         outputParticles.enableAppend()
         for row in md.iterRows(myParticles):
@@ -210,12 +234,20 @@ class XmippProtCenterParticles(ProtClassify2D):
             p = rowToParticle(row)
             outputParticles.append(p)
 
-
     # --------------------------- INFO functions -------------------------------
     def _summary(self):
         summary = []
         summary.append("Realignment of %s classes."
                        % self.inputClasses.get().getSize())
+
+        centerSummary = self._getPath("summary.txt")
+        if not os.path.exists(centerSummary):
+            summary.append("No summary file yet.")
+        else:
+            centerSummary = open(centerSummary, "r")
+            for line in centerSummary.readlines():
+                summary.append(line.rstrip())
+            centerSummary.close()
         return summary
 
     def _validate(self):

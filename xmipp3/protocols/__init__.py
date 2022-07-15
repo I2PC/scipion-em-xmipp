@@ -96,6 +96,7 @@ from .protocol_resolution_fso import XmippProtFSO
 from .protocol_resolution_monogenic_signal import XmippProtMonoRes
 from .protocol_resolution_deepres import XmippProtDeepRes
 from .protocol_postProcessing_deepPostProcessing import XmippProtDeepVolPostProc
+from .protocol_rotate_volume import XmippProtRotateVolume
 from .protocol_rotational_spectra import XmippProtRotSpectra
 from .protocol_rotational_symmetry import XmippProtRotationalSymmetry
 from .protocol_screen_particles import XmippProtScreenParticles
@@ -138,3 +139,4 @@ from .protocol_pdb_deform_zernike3d import XmippProtDeformPDBZernike3D
 from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtraction
 from .protocol_volume_consensus import XmippProtVolConsensus
 from .protocol_classes_2d_mapping import XmippProtCL2DMap
+from .protocol_deep_hand import XmippProtDeepHand

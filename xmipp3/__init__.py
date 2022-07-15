@@ -39,7 +39,7 @@ from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.22.04.0'
+_currentVersion = '3.22.07.0'
 
 
 class Plugin(pwem.Plugin):
@@ -207,6 +207,10 @@ def installDeepLearningToolkit(plugin, env):
                                                env=plugin.getEnviron(),
                                                stdout=subprocess.PIPE
                                                ).stdout.read().decode('utf-8').split(".")[0]
+            try:
+                int(nvidiaDriverVer)
+            except ValueError:
+                nvidiaDriverVer = None
             if int(nvidiaDriverVer) < 390:
                 preMsgs.append("Incompatible driver %s" % nvidiaDriverVer)
                 cudaMsgs.append("Your NVIDIA drivers are too old (<390). "

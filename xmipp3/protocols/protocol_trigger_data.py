@@ -2,6 +2,7 @@
 # *
 # * Authors:     Tomas Majtner (tmajtner@cnb.csic.es)
 # *              David Maluenda (dmaluenda@cnb.csic.es)
+# *              Daniel Marchán (da.marchan@cnb.csic.es)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -35,22 +36,23 @@ from pwem.protocols import EMProtocol
 from pyworkflow.object import Set
 from pyworkflow.protocol.params import BooleanParam, IntParam, PointerParam, GT
 
+SIGNAL_FILENAME = "STOP_STREAM.TXT"
 
 class XmippProtTriggerData(EMProtocol):
     """
     Waits until certain number of images is prepared and then
     send them to output.
     It can be done in 3 ways:
-        - If *Send all particles to output?*' is _No_:
-            Once the number of images is reached, a setOfImages is returned and
-            the protocols finished (ending the streaming from this point).
-        - If *Send all particles to output?*' is _Yes_ and:
-            - If *Split particles to multiple sets?* is _Yes_:
+        - If "Send all items to output?" is _No_:
+            Once the number of items is reached, a setOfImages is returned and
+            the protocol finishes (ending the streaming from this point).
+        - If "Send all items to output?" is _Yes_ and:
+            - If "Split items to multiple sets?" is _Yes_:
                 Multiple closed outputs will be returned as soon as
-                the number of images is reached.
-            - If *Split particles to multiple sets?* is _No_:
+                the number of items is reached.
+            - If "Split items to multiple sets?" is _No_:
                 Only one output is returned and it is growing up in batches of
-                a certain number of images (completely in streaming).
+                a certain number of items (completely in streaming).
     """
     _label = 'trigger data'
     _lastUpdateVersion = VERSION_2_0
@@ -63,6 +65,12 @@ class XmippProtTriggerData(EMProtocol):
         form.addParam('inputImages', PointerParam,
                       pointerClass='SetOfImages',
                       label='Input images', important=True)
+        form.addParam('triggerWait', BooleanParam, default=False,
+                      label='Wait for signal to stop the stream?',
+                      help='If NO is selected, normal functionality.\n'
+                           'If YES is selected it will wait for a signal to stop the stream.'
+                           '\n For this option, select send all items to output with a '
+                           'minimum size of 1')
         form.addParam('outputSize', IntParam, default=10000,
                       label='Minimum output size',
                       help='How many particles need to be on input to '
@@ -79,6 +87,16 @@ class XmippProtTriggerData(EMProtocol):
                            '"Output size" are returned.\n'
                            'If NO is selected, only one open and growing output '
                            'is returned')
+        form.addParam('triggerSignal', BooleanParam, default=False,
+                      label='Send signal to stop a stream?',
+                      help='If NO is selected, normal functionality.\n'
+                           'If YES is selected it will send a signal to a connected Trigger data protocol.'
+                           '\n For this option, select the option send all items to output.')
+        form.addParam('triggerProt', PointerParam,
+                      pointerClass=self.getClassName(),
+                      condition='triggerSignal', allowsNull=True,
+                      label='Trigger data protocol',
+                      help='Select the trigger data protocol that you will send a signal to stop the stream.')
         form.addParam('delay', IntParam, default=10, label="Delay (sec)",
                       validators=[GT(3, "must be larger than 3sec.")],
                       help="Delay in seconds before checking new output")
@@ -149,10 +167,23 @@ class XmippProtTriggerData(EMProtocol):
 
         if self.streamClosed:
             self.finished = True
-        elif not self.allImages.get():
+        elif not self.allImages.get() and not self.triggerSignal.get():
             self.finished = len(self.images) >= self.outputSize
         else:
             self.finished = False
+
+        # Send the signal to the connected protocol
+        if self.triggerSignal.get():
+            if len(self.images) >= self.outputSize:
+                print('Sending signal to stop the input trigger data protocol')
+                self.stopWait()
+
+        # Wait for trigger data signal
+        if self.triggerWait.get():
+            print('Waiting for signal to stop the stream')
+            if self.waitingHasFinished():
+                print('Stopped by received signal from a trigger data protocol')
+                self.finished = True
 
         outputStep = self._getFirstJoinStep()
         deps = []
@@ -320,3 +351,22 @@ class XmippProtTriggerData(EMProtocol):
 
     def getOututName(self):
         return 'output%s' % self.getImagesType()
+
+    def stopWait(self):
+        f = open(self._getStopConnectingFilename(), 'w')
+        f.close()
+
+    def _getStopConnectingFilename(self):
+        triggerProtocol = self.triggerProt.get()
+        if triggerProtocol is not None:
+            fileName = triggerProtocol._getExtraPath(SIGNAL_FILENAME)
+        else:
+            fileName = None
+
+        return fileName
+
+    def waitingHasFinished(self):
+        return os.path.exists(self._getStopWaitingFilename())
+
+    def _getStopWaitingFilename(self):
+        return self._getExtraPath(SIGNAL_FILENAME)
