@@ -1471,7 +1471,7 @@ class TestXmippScreenDeepLearning(TestXmippBase):
         self.assertIsNotNone(protScreenDeepLearning.getFiles(), (MSG_WRONG_PROTOCOL, "screen deep learning"))
         self.assertIsNotNone(protScreenDeepLearning.outputParticles, (MSG_WRONG_OUTPUT, "particles"))
         # Check the size of the output particles
-        self.asserEquals(protScreenDeepLearning.outputParticles.getSize(), 0, (MSG_WRONG_SIZE, "particles"))
+        self.assertEquals(protScreenDeepLearning.outputParticles.getSize(), 0, (MSG_WRONG_SIZE, "particles"))
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
