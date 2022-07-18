@@ -44,7 +44,7 @@ from xmipp3.protocols import XmippResizeHelper as xrh
 from xmipp3.protocols import OP_DOTPRODUCT, OP_MULTIPLY, OP_SQRT
 
 MSG_WRONG_SIZE = "There was a problem with the size of the output "
-MSG_WRONG_OUTPUT = "There was a problem with the output of the "
+MSG_WRONG_OUTPUT = "There was a problem with the output "
 MSG_WRONG_IMPORT = "There was a problem with the import of the "
 MSG_WRONG_PROTOCOL = "There was a problem with the protocol: "
 
