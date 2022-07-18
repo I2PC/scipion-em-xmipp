@@ -1796,7 +1796,7 @@ class TestXmippScreenDeepLearning(TestXmippBase):
 
         protScreenDeepLearning = self.newProtocol(XmippProtScreenDeepLearning,
                                                   USE_GPU=True,
-                                                  GPU_LIST=1,           # MODIFY IF NECESSARY
+                                                  GPU_LIST='1',           # MODIFY IF NECESSARY
                                                   inTrueSetOfParticles=protImportParts1.outputParticles,
                                                   numberOfNegativeSets=1,
                                                   negativeSet_1=protAddNoise.outputParticles,
