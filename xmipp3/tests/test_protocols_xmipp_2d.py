@@ -43,6 +43,10 @@ from xmipp3.protocols import XmippFilterHelper as xfh
 from xmipp3.protocols import XmippResizeHelper as xrh
 from xmipp3.protocols import OP_DOTPRODUCT, OP_MULTIPLY, OP_SQRT
 
+MSG_WRONG_SIZE = "There was a problem with the size of the output "
+MSG_WRONG_OUTPUT = "There was a problem with the output "
+MSG_WRONG_IMPORT = "There was a problem with the import of the "
+MSG_WRONG_PROTOCOL = "There was a problem with the protocol: "
 
 # Some utility functions to import particles that are used
 # in several tests.
@@ -1380,6 +1384,48 @@ class TestXmippCorrectWiener2D(TestXmippBase):
         protCorrect.inputParticles.set(prot1.outputParticles)
         self.launchProtocol(protCorrect)
         self.assertIsNotNone(protCorrect.outputParticles, "There was a problem with Wiener Correction")
+
+class TestXmippPickNoise(TestXmippBase):
+    """This class checks if the protocol pick noise in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
+        cls.micsFn = cls.dataset.getFile('micrographs/BPV_1386.mrc')
+        cls.coordFn = cls.dataset.getFile('pickingXmipp/pickedAll/BPV_1386.pos')
+
+    def testXmippPickNoise(self):
+        # Import micrographs
+        protImportMics = self.newProtocol(emprot.ProtImportMicrographs,
+                                          filesPath=self.micsFn,
+                                          samplingRate=1.237,
+                                          voltage=300)
+        self.launchProtocol(protImportMics)
+        self.assertIsNotNone(protImportMics.outputMicrographs, (MSG_WRONG_IMPORT, "micrographs"))
+        # Import coordinates
+        protImportCoords = self.newProtocol(emprot.ProtImportCoordinates,
+                                            filesPath=self.coordFn,
+                                            inputMicrographs=protImportMics.outputMicrographs,
+                                            boxSize=110)
+        self.launchProtocol(protImportCoords)
+        self.assertIsNotNone(protImportCoords.outputCoordinates, (MSG_WRONG_IMPORT, "coordinates"))
+        # Protocol Pick Noise (default values)
+        protPickNoise1 = self.newProtocol(XmippProtPickNoise,
+                                         inputCoordinates=protImportCoords.outputCoordinates)
+        self.launchProtocol(protPickNoise1)
+        self.assertIsNotNone(protPickNoise1.getFiles(), (MSG_WRONG_PROTOCOL, "pick noise"))
+        self.assertIsNotNone(protPickNoise1.outputCoordinates, (MSG_WRONG_OUTPUT, "coordinates"))
+        # Protocol Pick Noise (extract noise number)
+        protPickNoise2 = self.newProtocol(XmippProtPickNoise,
+                                         inputCoordinates=protImportCoords.outputCoordinates,
+                                         extractNoiseNumber=140)
+        self.launchProtocol(protPickNoise2)
+        self.assertIsNotNone(protPickNoise2.getFiles(), (MSG_WRONG_PROTOCOL, "pick noise"))
+        self.assertIsNotNone(protPickNoise2.outputCoordinates, (MSG_WRONG_OUTPUT, "coordinates"))
+        # Check if the number of noisy particles is right
+        self.assertEquals(protPickNoise1.outputCoordinates.getSize(), 143, (MSG_WRONG_SIZE, "noisy particles"))
+        self.assertEquals(protPickNoise2.outputCoordinates.getSize(), 140, (MSG_WRONG_SIZE, "noisy particles"))
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
