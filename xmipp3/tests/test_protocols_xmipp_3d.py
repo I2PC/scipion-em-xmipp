@@ -27,7 +27,7 @@
 
 from pwem.protocols import (ProtImportVolumes, ProtImportMask,
                             ProtImportParticles, ProtImportAverages,
-                            ProtImportPdb, ProtSubSet, ProtImportMicrographs, ProtImportCoordinates)
+                            ProtImportPdb, ProtSubSet)
 
 try:
     from itertools import izip
@@ -1760,47 +1760,6 @@ class TestXmippRotateVolume(TestXmippBase):
                          protCreatePhantomReference.outputVolume.getSamplingRate(),
                          (MSG_WRONG_SAMPLING, "rotated phantom"))
 
-class TestXmippPickNoise(TestXmippBase):
-    """This class checks if the protocol rotate volume in Xmipp works properly."""
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
-        cls.micsFn = cls.dataset.getFile('micrographs/BPV_1386.mrc')
-        cls.coordFn = cls.dataset.getFile('pickingXmipp/pickedAll/BPV_1386.pos')
-
-    def testXmippPickNoise(self):
-        protImportMics = self.newProtocol(ProtImportMicrographs,
-                                          filesPath=self.micsFn,
-                                          samplingRate=1.237,
-                                          voltage=300)
-        self.launchProtocol(protImportMics)
-        self.assertIsNotNone(protImportMics.outputMicrographs, "There was a problem with the import of micrographs")
-        '''
-        cls.protImportMics = cls.newProtocol(ProtImportMicrographs,
-                                         samplingRateMode=0,
-                                         filesPath=micsFn,
-                                         samplingRate=3.54,
-                                         magnification=5000,
-                                         voltage=300,
-                                         sphericalAberration=2.7)
-        cls.launchProtocol(cls.protImportMics)
-        '''
-        protImportCoords = self.newProtocol(ProtImportCoordinates,
-                                            filesPath=self.coordFn,
-                                            #importFrom="xmipp",
-                                            inputMicrographs=protImportMics.outputMicrographs,
-                                            boxSize=110)
-        self.launchProtocol(protImportCoords)
-        self.assertIsNotNone(protImportCoords.outputCoordinates, "There was a problem with the creation of the coordinates")
-
-        protPickNoise = self.newProtocol(XmippProtPickNoise,
-                                         inputCoordinates=protImportCoords.outputCoordinates)
-        self.launchProtocol(protPickNoise)
-        self.assertIsNotNone(protPickNoise.getFiles(), "There was a problem with the pick noise protocol")
-        self.assertIsNotNone(protPickNoise.outputCoordinates, "There was a problem with the output of the coordinates")
-        # Check if the number of noisy particles is right
-        self.assertEquals(protPickNoise.outputCoordinates.getSize(), 143, (MSG_WRONG_SIZE, "noisy particles"))
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
