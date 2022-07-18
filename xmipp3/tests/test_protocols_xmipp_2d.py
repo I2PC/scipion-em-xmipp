@@ -1434,7 +1434,7 @@ class TestXmippScreenDeepLearning(TestXmippBase):
         cls.dataset = DataSet.getDataSet('xmipp_tutorial')
 
     def testXmippScreenDeepLearning(self):
-        protImportParts1 = self.newProtocol(ProtImportParticles,
+        protImportParts1 = self.newProtocol(emprot.ProtImportParticles,
                                             objLabel='First Set of Particles',
                                             importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
                                             sqliteFile=self.dataset.getFile('particles/BPV_particles.sqlite'),
@@ -1454,7 +1454,7 @@ class TestXmippScreenDeepLearning(TestXmippBase):
         self.launchProtocol(protImportParts2)
         self.assertIsNotNone(protImportParts2.getFiles(), (MSG_WRONG_IMPORT, "the second set of particles"))
 
-        protAddNoise = self.newProtocol(emprot.XmippProtAddNoiseParticles,
+        protAddNoise = self.newProtocol(XmippProtAddNoiseParticles,
                                         input=protImportParts1.outputParticles,
                                         gaussianStd=15.0)
         self.launchProtocol(protAddNoise)
