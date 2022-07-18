@@ -1463,8 +1463,6 @@ class TestXmippScreenDeepLearning(TestXmippBase):
         self.assertIsNotNone(protAddNoise.outputParticles, (MSG_WRONG_PROTOCOL, "add noise"))
 
         protScreenDeepLearning = self.newProtocol(XmippProtScreenDeepLearning,
-                                                  useGpu=True,
-                                                  gpuList='1',           # MODIFY IF NECESSARY
                                                   inTrueSetOfParticles=protImportParts1.outputParticles,
                                                   numberOfNegativeSets=1,
                                                   negativeSet_1=protAddNoise.outputParticles,
