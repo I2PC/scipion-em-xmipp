@@ -48,6 +48,7 @@ MSG_WRONG_OUTPUT = "There was a problem with the output "
 MSG_WRONG_IMPORT = "There was a problem with the import of the "
 MSG_WRONG_PROTOCOL = "There was a problem with the protocol: "
 MSG_WRONG_DIM = "There was a problem with the dimensions of the output "
+MSG_WRONG_SAMPLING = "There was a problem with the sampling rate value of the output "
 
 # Some utility functions to import particles that are used
 # in several tests.
