@@ -1444,7 +1444,7 @@ class TestXmippScreenDeepLearning(TestXmippBase):
         self.launchProtocol(protImportParts1)
         self.assertIsNotNone(protImportParts1.getFiles(), (MSG_WRONG_IMPORT, "the first set of particles"))
 
-        protImportParts2 = self.newProtocol(ProtImportParticles,
+        protImportParts2 = self.newProtocol(emprot.ProtImportParticles,
                                             objLabel='Second Set of Particles',
                                             importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
                                             sqliteFile=self.dataset.getFile('particles/BPV_particles_aligned.sqlite'),
@@ -1454,7 +1454,7 @@ class TestXmippScreenDeepLearning(TestXmippBase):
         self.launchProtocol(protImportParts2)
         self.assertIsNotNone(protImportParts2.getFiles(), (MSG_WRONG_IMPORT, "the second set of particles"))
 
-        protAddNoise = self.newProtocol(XmippProtAddNoiseParticles,
+        protAddNoise = self.newProtocol(emprot.XmippProtAddNoiseParticles,
                                         input=protImportParts1.outputParticles,
                                         gaussianStd=15.0)
         self.launchProtocol(protAddNoise)
