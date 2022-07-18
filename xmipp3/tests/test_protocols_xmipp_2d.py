@@ -1476,8 +1476,8 @@ class TestXmippScreenDeepLearning(TestXmippBase):
         # Check the dimensions of the first particle
         self.assertEquals(protScreenDeepLearning.outputParticles.getFirstItem().getDim(), (140, 140, 1), (MSG_WRONG_DIM, "particles"))
         # Check the sampling rate of the first particle
-        self.assertEqual(protScreenDeepLearning.outputParticles.getFirts().getSamplingRate(), 7.08, (MSG_WRONG_SAMPLING, "particles"))
-        
+        self.assertEqual(protScreenDeepLearning.outputParticles.getFirstItem().getSamplingRate(), 7.08, (MSG_WRONG_SAMPLING, "particles"))
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         className = sys.argv[1]
