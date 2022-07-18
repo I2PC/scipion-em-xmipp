@@ -1426,6 +1426,52 @@ class TestXmippPickNoise(TestXmippBase):
         self.assertEquals(protPickNoise1.outputCoordinates.getSize(), 143, (MSG_WRONG_SIZE, "noisy particles"))
         self.assertEquals(protPickNoise2.outputCoordinates.getSize(), 140, (MSG_WRONG_SIZE, "noisy particles"))
 
+class TestXmippScreenDeepLearning(TestXmippBase):
+    """This class checks if the protocol screen deep learning in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
+
+    def testXmippScreenDeepLearning(self):
+        protImportParts1 = self.newProtocol(ProtImportParticles,
+                                            objLabel='First Set of Particles',
+                                            importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
+                                            sqliteFile=self.dataset.getFile('particles/BPV_particles.sqlite'),
+                                            magnification=50000,
+                                            samplingRate=7.08,
+                                            haveDataBeenPhaseFlipped=False)
+        self.launchProtocol(protImportParts1)
+        self.assertIsNotNone(protImportParts1.getFiles(), (MSG_WRONG_IMPORT, "the first set of particles"))
+
+        protImportParts2 = self.newProtocol(ProtImportParticles,
+                                            objLabel='Second Set of Particles',
+                                            importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
+                                            sqliteFile=self.dataset.getFile('particles/BPV_particles_aligned.sqlite'),
+                                            magnification=50000,
+                                            samplingRate=7.08,
+                                            haveDataBeenPhaseFlipped=False)
+        self.launchProtocol(protImportParts2)
+        self.assertIsNotNone(protImportParts2.getFiles(), (MSG_WRONG_IMPORT, "the second set of particles"))
+
+        protAddNoise = self.newProtocol(XmippProtAddNoiseParticles,
+                                        input=protImportParts1.outputParticles,
+                                        gaussianStd=15.0)
+        self.launchProtocol(protAddNoise)
+        self.assertIsNotNone(protAddNoise.outputParticles, (MSG_WRONG_PROTOCOL, "add noise"))
+
+        protScreenDeepLearning = self.newProtocol(XmippProtScreenDeepLearning,
+                                                  useGpu=True,
+                                                  gpuList='1',           # MODIFY IF NECESSARY
+                                                  inTrueSetOfParticles=protImportParts1.outputParticles,
+                                                  numberOfNegativeSets=1,
+                                                  negativeSet_1=protAddNoise.outputParticles,
+                                                  predictSetOfParticles=protImportParts2.outputParticles)
+        self.launchProtocol(protScreenDeepLearning)
+        self.assertIsNotNone(protScreenDeepLearning.getFiles(), (MSG_WRONG_PROTOCOL, "screen deep learning"))
+        self.assertIsNotNone(protScreenDeepLearning.outputParticles, (MSG_WRONG_OUTPUT, "particles"))
+        # Check the size of the output particles
+        self.asserEquals(protScreenDeepLearning.outputParticles.getSize(), 0, (MSG_WRONG_SIZE, "particles"))
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

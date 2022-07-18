@@ -1760,51 +1760,6 @@ class TestXmippRotateVolume(TestXmippBase):
                          protCreatePhantomReference.outputVolume.getSamplingRate(),
                          (MSG_WRONG_SAMPLING, "rotated phantom"))
 
-class TestXmippScreenDeepLearning(TestXmippBase):
-    """This class checks if the protocol screen deep learning in Xmipp works properly."""
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
-
-    def testXmippScreenDeepLearning(self):
-        protImportParts1 = self.newProtocol(ProtImportParticles,
-                                            objLabel='First Set of Particles',
-                                            importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
-                                            sqliteFile=self.dataset.getFile('particles/BPV_particles.sqlite'),
-                                            magnification=50000,
-                                            samplingRate=7.08,
-                                            haveDataBeenPhaseFlipped=False)
-        self.launchProtocol(protImportParts1)
-        self.assertIsNotNone(protImportParts1.getFiles(), (MSG_WRONG_IMPORT, "the first set of particles"))
-
-        protImportParts2 = self.newProtocol(ProtImportParticles,
-                                            objLabel='Second Set of Particles',
-                                            importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
-                                            sqliteFile=self.dataset.getFile('particles/BPV_particles_aligned.sqlite'),
-                                            magnification=50000,
-                                            samplingRate=7.08,
-                                            haveDataBeenPhaseFlipped=False)
-        self.launchProtocol(protImportParts2)
-        self.assertIsNotNone(protImportParts2.getFiles(), (MSG_WRONG_IMPORT, "the second set of particles"))
-
-        protAddNoise = self.newProtocol(XmippProtAddNoiseParticles,
-                                        input=protImportParts1.outputParticles,
-                                        gaussianStd=15.0)
-        self.launchProtocol(protAddNoise)
-        self.assertIsNotNone(protAddNoise.outputParticles, "There was a problem with add noise protocol")
-
-        protScreenDeepLearning = self.newProtocol(XmippProtScreenDeepLearning,
-                                                  useGpu=True,
-                                                  gpuList='1',           # MODIFY IF NECESSARY
-                                                  inTrueSetOfParticles=protImportParts1.outputParticles,
-                                                  numberOfNegativeSets=1,
-                                                  negativeSet_1=protAddNoise.outputParticles,
-                                                  predictSetOfParticles=protImportParts2.outputParticles)
-        self.launchProtocol(protScreenDeepLearning)
-        self.assertIsNotNone(protScreenDeepLearning.getFiles(), "There was a problem with the screen deep learning protocol")
-        self.assertIsNotNone(protScreenDeepLearning.outputParticles, "There was a problem with the output of the particles")
-
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         className = sys.argv[1]
