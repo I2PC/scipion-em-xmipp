@@ -1415,7 +1415,7 @@ class TestXmippPickNoise(TestXmippBase):
         self.launchProtocol(protPickNoise1)
         self.assertIsNotNone(protPickNoise1.getFiles(), (MSG_WRONG_PROTOCOL, "pick noise"))
         self.assertIsNotNone(protPickNoise1.outputCoordinates, (MSG_WRONG_OUTPUT, "coordinates"))
-        # Protocol Pick Noise (default values)
+        # Protocol Pick Noise (extract noise number)
         protPickNoise2 = self.newProtocol(XmippProtPickNoise,
                                          inputCoordinates=protImportCoords.outputCoordinates,
                                          extractNoiseNumber=140)
