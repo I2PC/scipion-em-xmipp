@@ -47,6 +47,7 @@ MSG_WRONG_SIZE = "There was a problem with the size of the output "
 MSG_WRONG_OUTPUT = "There was a problem with the output "
 MSG_WRONG_IMPORT = "There was a problem with the import of the "
 MSG_WRONG_PROTOCOL = "There was a problem with the protocol: "
+MSG_WRONG_DIM = "There was a problem with the dimensions of the output "
 
 # Some utility functions to import particles that are used
 # in several tests.
@@ -1471,8 +1472,12 @@ class TestXmippScreenDeepLearning(TestXmippBase):
         self.assertIsNotNone(protScreenDeepLearning.getFiles(), (MSG_WRONG_PROTOCOL, "screen deep learning"))
         self.assertIsNotNone(protScreenDeepLearning.outputParticles, (MSG_WRONG_OUTPUT, "particles"))
         # Check the size of the output particles
-        self.assertEquals(protScreenDeepLearning.outputParticles.getSize(), 0, (MSG_WRONG_SIZE, "particles"))
-
+        self.assertEquals(protScreenDeepLearning.outputParticles.getSize(), 373, (MSG_WRONG_SIZE, "particles"))
+        # Check the dimensions of the first particle
+        self.assertEquals(protScreenDeepLearning.outputParticles.getFirstItem().getDim(), (140, 140, 1), (MSG_WRONG_DIM, "particles"))
+        # Check the sampling rate of the first particle
+        self.assertEqual(protScreenDeepLearning.outputParticles.getFirts().getSamplingRate(), 7.08, (MSG_WRONG_SAMPLING, "particles"))
+        
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         className = sys.argv[1]
