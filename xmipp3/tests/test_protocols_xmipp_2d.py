@@ -1436,7 +1436,7 @@ class TestXmippScreenDeepLearning(TestXmippBase):
     def testXmippScreenDeepLearning(self):
         protImportParts1 = self.newProtocol(emprot.ProtImportParticles,
                                             objLabel='First Set of Particles',
-                                            importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
+                                            importFrom=emprot.ProtImportParticles.IMPORT_FROM_SCIPION,
                                             sqliteFile=self.dataset.getFile('particles/BPV_particles.sqlite'),
                                             magnification=50000,
                                             samplingRate=7.08,
@@ -1446,7 +1446,7 @@ class TestXmippScreenDeepLearning(TestXmippBase):
 
         protImportParts2 = self.newProtocol(emprot.ProtImportParticles,
                                             objLabel='Second Set of Particles',
-                                            importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
+                                            importFrom=emprot.ProtImportParticles.IMPORT_FROM_SCIPION,
                                             sqliteFile=self.dataset.getFile('particles/BPV_particles_aligned.sqlite'),
                                             magnification=50000,
                                             samplingRate=7.08,
