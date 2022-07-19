@@ -1770,16 +1770,14 @@ class TestXmippDeepHand(TestXmippBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
-        cls.dataset = DataSet.getDataSet(db_xmipp_tutorial)
-        cls.vol1 = cls.dataset.getFile(vol1_iter2)
-        cls.dataset2 = DataSet.getDataSet(db_general)
-        cls.vol2 = cls.dataset2.getFile(helix)
+        cls.dataset = DataSet.getDataSet(db_general)
+        cls.vol1 = cls.dataset.getFile(helix)
 
     def testXmippDeepHand(self):
         # Import input data
         protImportVol = self.newProtocol(ProtImportVolumes,
                                          objLabel='Volume',
-                                         filesPath=self.vol2,
+                                         filesPath=self.vol1,
                                          samplingRate=7.08)
         self.launchProtocol(protImportVol)
         # Check if there is an output

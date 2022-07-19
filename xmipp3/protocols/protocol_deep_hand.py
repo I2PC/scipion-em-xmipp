@@ -25,10 +25,10 @@
 # **************************************************************************
 
 from pwem.protocols import EMProtocol
-from pwem.emlib.image import ImageHandler
+#from pwem.emlib.image import ImageHandler
 from pwem.objects import Volume
 
-from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam
+from pyworkflow.protocol.params import PointerParam, FloatParam #, IntParam
 from pyworkflow.object import Float
 from pyworkflow.utils.path import cleanPath
 
