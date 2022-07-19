@@ -167,6 +167,6 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
            errors.append("Alpha threshold must be between 0.0 and 1.0")
         if self.thresholdHand.get() > 1.0 or self.thresholdHand.get() < 0.0:
            errors.append("Hand threshold must be between 0.0 and 1.0")
-        errors.append(self.validateDLtoolkit(model="deepHand"))
+        #errors.append(self.validateDLtoolkit(model="deepHand"))
 
         return errors
