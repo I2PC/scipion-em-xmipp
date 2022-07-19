@@ -31,7 +31,7 @@ from pyworkflow import VERSION_3_0
 import pyworkflow.utils as pwutils
 from pyworkflow.object import Set
 from pyworkflow.protocol import STEPS_PARALLEL
-from pyworkflow.protocol.params import (PointerParam, IntParam, LEVEL_ADVANCED)
+from pyworkflow.protocol.params import (PointerParam, IntParam, FloatParam, LEVEL_ADVANCED)
 from pyworkflow.utils.properties import Message
 import pyworkflow.protocol.constants as cons
 from datetime import datetime
@@ -39,6 +39,7 @@ from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfMovies
 from pwem.protocols import EMProtocol, ProtProcessMovies
 from xmipp3.convert import getScipionObj
+import statistics as stat
 
 stats_template = {
     'mean': 0,
@@ -52,7 +53,7 @@ stats_template = {
     'per97.5': 0
              }
 
-WINDOW = 2
+THRESHOLD = 0.05
 
 
 class XmippProtMoviePoissonCount(ProtProcessMovies):
@@ -63,8 +64,7 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
     stats = {}
     estimatedIds = []
     meanDoseList = []
-    meanDifferences = []
-    meanDerivatives = []
+    medianDifferences = []
     last_multiple = 0
     meanGlobal = 0
 
@@ -90,10 +90,18 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
                            'frame will be used.')
         form.addParam('movieStep', IntParam, default=5,
                       label="Movie step", expertLevel=LEVEL_ADVANCED,
-                      help='By default, every movie (movieStep=1) is used to '
+                      help='By default, every 5 movie (movieStep=5) is used to '
                            'compute the movie poisson count. If you set '
                            'this parameter to 2, 3, ..., then only every 2nd, '
                            '3rd, ... movie will be used.')
+        form.addParam('window', IntParam, default=50,
+                      label="Window step", expertLevel=LEVEL_ADVANCED,
+                      help='By default, every 50 movies (window=50) is used to '
+                           'compute the proportion of incorrect dose analysis.')
+        form.addParam('threshold', FloatParam, default=0.05,
+                      label="Threshold differences", expertLevel=LEVEL_ADVANCED,
+                      help='By default, every 50 movies (window=50) is used to '
+                           'compute the proportion of incorrect dose analysis.')
 
         # It should be in parallel (>2) in order to be able of attaching
         #  new movies to the output while estimating residual gain
@@ -102,9 +110,8 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
     # -------------------------- STEPS functions ------------------------------
     def createOutputStep(self):
         # here you would create the plot and then save
-        # print(self.meanDoseList)
-        # plotDoseAnalysis(self.meanDoseList, self.movieStep.get(), self.meanGlobal)
-        # plotDoseAnalysisDiff(self.meanDifferences)
+        plotDoseAnalysis(self.meanDoseList, self.movieStep.get(), self.medianGlobal)
+        plotDoseAnalysisDiff(self.medianDifferences, np.median(self.medianDifferences))
         pass
 
     def _insertAllSteps(self):
@@ -288,6 +295,7 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
             return
 
         moviesSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite')
+        index = round(self.window.get() / self.movieStep.get())
 
         for movie in newDone:
             movie.setFramesRange(self.framesRange)
@@ -311,36 +319,45 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
                 self.meanDoseList.append(mean)
 
             moviesSet.append(movie)
-            multiple = len(self.meanDoseList) / WINDOW
-
-            # if len(self.meanDoseList) % WINDOW == 0 and self.last_multiple < multiple:
-            #     meanWindow = np.mean(self.meanDoseList[-WINDOW:])
-            #     print(self.meanDoseList[-WINDOW:])
-            #     meanGlobal = np.mean(self.meanDoseList)
-            #     meanDifference = abs(self.meanDoseList[-WINDOW] - self.meanDoseList[-1]) / meanGlobal #OR meanWindow?
-            #     self.meanDifferences.append(meanDifference)
-            #     print('Multiple: {}  MeanWindow: {}    MeanGlobal: {}    MeanDifference: {}'.format(
-            #         multiple, meanWindow, meanGlobal, meanDifference))
-            #
-            #     self.last_multiple = multiple
+            multiple = len(self.meanDoseList)
 
             if self.last_multiple < multiple and len(self.meanDoseList) >= 2:
-                meanWindow = np.mean(self.meanDoseList[-2:])
-                print(self.meanDoseList[-2:])
-                self.meanGlobal = np.mean(self.meanDoseList)
-                #meanDifference = abs(self.meanDoseList[-2] - self.meanDoseList[-1]) / meanGlobal  # OR meanWindow?
-                meanDifference = (self.meanDoseList[-1] - self.meanGlobal)/ self.meanGlobal # quitar absoluto
-                self.meanDifferences.append(meanDifference)
-                self.meanDerivatives.append((self.meanDoseList[-1] - self.meanDoseList[-2])/self.meanGlobal)
+                self.medianGlobal = np.median(self.meanDoseList)
+                medianDifference = (self.meanDoseList[-1] - self.medianGlobal)/self.medianGlobal
+                self.medianDifferences.append(medianDifference)
 
-                print('Multiple: {}  MeanWindow: {}    MeanGlobal: {}    MeanDifference: {}'.format(
-                    multiple, meanWindow, self.meanGlobal, meanDifference))
+                if len(self.medianDifferences) >= 2:
+                    self.stdDiffGlobal = stat.stdev(self.medianDifferences)
 
-                plotDoseAnalysis(self.meanDoseList, self.movieStep.get(), self.meanGlobal)
-                plotDoseAnalysisDiff(self.meanDifferences)
-                plotDoseAnalysisDerivatives(self.meanDerivatives)
+                # plotDoseAnalysis(self.meanDoseList, self.movieStep.get(), self.medianGlobal)  #Guardar plots
+                # plotDoseAnalysisDiff(self.medianDifferences, np.median(self.medianDifferences))
+
+
+                if (len(self.meanDoseList)*self.movieStep.get()) % self.window.get() == 0:
+                    print(len(self.meanDoseList)*self.movieStep.get())
+                    windowDiffList = self.medianDifferences[-index:]
+                    # proportion = len([diff for diff in windowDiffList if abs(diff)
+                    #                   > (2 * self.stdDiffGlobal) + np.median(self.medianDifferences)])/self.window.get()
+                    proportion = len([diff for diff in windowDiffList if abs(diff)
+                                      > self.threshold.get()]) / self.window.get()
+
+
+                    if proportion > THRESHOLD:
+                        print('HERE WE SHOULD WRITE A FILE IN THE EXTRA DIRECTORY TO NOTICE THAT THERE IS A PROBLEM')
+
+                    self.info('Stdev global: {}'.format(self.stdDiffGlobal))
+                    self.info('Proportion that surpass threshold: {}'.format(proportion))
+                    self.info(windowDiffList)
+
+
+
+                self.info('MovieID :   {} LenMeansList: {}   MedianGlobal: {}   MedianDifference: {}'.format(movieId,
+                                                                                                    multiple,
+                                                                                                      self.medianGlobal,
+                                                                                                      medianDifference))
 
                 self.last_multiple = multiple
+
 
         self._updateOutputSet('outputMovies', moviesSet, streamMode)
 
@@ -420,20 +437,19 @@ def computeStats(mean_frames):
              }
     return stats
 
-def plotDoseAnalysis(doseValues, movieStep, meanGlobal):
+def plotDoseAnalysis(doseValues, movieStep, medianGlobal):
     x = np.arange(start=1, stop=len(doseValues)*movieStep, step=movieStep)
     plt.scatter(x, doseValues)
-    plt.axhline(y=meanGlobal, color='r', linestyle='-')
+    plt.axhline(y=medianGlobal, color='r', linestyle='-')
     plt.xlabel("Movies ID")
     plt.ylabel("Dose")
     plt.title('Dose vs time')
     plt.show()
 
-def plotDoseAnalysisDiff(meanDifferences):
-    x = np.arange(start=1, stop=len(meanDifferences)+1, step=1)
-    print(x)
-    print(meanDifferences)
-    plt.scatter(x, meanDifferences)
+def plotDoseAnalysisDiff(medianDifferences, medianDiff):
+    x = np.arange(start=1, stop=len(medianDifferences)+1, step=1)
+    plt.scatter(x, medianDifferences)
+    plt.axhline(y=medianDiff, color='r', linestyle='-')
     plt.xlabel("Differences")
     plt.ylabel("Dose differences")
     plt.title('Dose differences with respect to the global mean vs time')
