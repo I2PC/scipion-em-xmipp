@@ -1787,7 +1787,7 @@ class TestXmippDeepHand(TestXmippBase):
         # Creation of the mask
         protDeepHand = self.newProtocol(XmippProtDeepHand,
                                         inputVolume=protImportVol.outputVolume,
-                                        threshold=0.0)
+                                        threshold=0.05)
         self.launchProtocol(protDeepHand)
         # Check if there is an output
         self.assertIsNotNone(protDeepHand.getFiles(), "There was a problem with the mask creation")
@@ -1795,7 +1795,7 @@ class TestXmippDeepHand(TestXmippBase):
         # Check if the sampling rate is right
         self.assertEqual(protDeepHand.outputVol.getSamplingRate(), 7.08, (MSG_WRONG_SAMPLING, "volume"))
         # Check if the input threshold is the same as the density of the volume
-        self.assertEqual(protDeepHand.threshold.get(), 0.0, "There was a problem with the density value")
+        self.assertEqual(protDeepHand.threshold.get(), 0.05, "There was a problem with the density value")
         # Check if the thresholdAlpha and thresholdHand match the default values
         self.assertEqual(protDeepHand.thresholdAlpha.get(), 0.7, "There was a problem with the thresholdAlpha value")
         self.assertEqual(protDeepHand.thresholdHand.get(), 0.6, "There was a problem with the thresholdHand value")
