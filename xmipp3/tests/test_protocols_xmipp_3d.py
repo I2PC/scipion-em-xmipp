@@ -56,7 +56,7 @@ MSG_WRONG_ALIGNMENT = "There was a problem with the alignment of the output "
 MSG_WRONG_SHIFT = "There was a problem with output shift "
 MSG_WRONG_GALLERY = "There was a problem with the gallery creation"
 MSG_WRONG_ROTATION = "There was a problem with the rotation"
-
+MSG_WRONG_IMPORT = "There was a problem with the import of "
 
 
 
@@ -1759,7 +1759,6 @@ class TestXmippRotateVolume(TestXmippBase):
         self.assertEqual(protRotateVolume2.outputVolume.getSamplingRate(),
                          protCreatePhantomReference.outputVolume.getSamplingRate(),
                          (MSG_WRONG_SAMPLING, "rotated phantom"))
-
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
