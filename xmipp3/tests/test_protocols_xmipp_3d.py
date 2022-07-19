@@ -50,8 +50,10 @@ from xmipp3.protocols.protocol_align_volume import (ALIGN_ALGORITHM_EXHAUSTIVE,
 
 # Global variables
 db_xmipp_tutorial = 'xmipp_tutorial'
+db_general = 'general'
 vol1_iter2 = 'volumes/volume_1_iter_002.mrc'
 vol2_iter2 = 'volumes/volume_2_iter_002.mrc'
+helix = 'volumes/helix_59_4__6_7.vol'
 
 # Output error messages
 MSG_WRONG_SAMPLING = "There was a problem with the sampling rate value of the output "
@@ -1770,12 +1772,14 @@ class TestXmippDeepHand(TestXmippBase):
         setupTestProject(cls)
         cls.dataset = DataSet.getDataSet(db_xmipp_tutorial)
         cls.vol1 = cls.dataset.getFile(vol1_iter2)
+        cls.dataset2 = DataSet.getDataSet(db_general)
+        cls.vol2 = cls.dataset2.getFile(helix)
 
     def testXmippDeepHand(self):
         # Import input data
         protImportVol = self.newProtocol(ProtImportVolumes,
                                          objLabel='Volume',
-                                         filesPath=self.vol1,
+                                         filesPath=self.vol2,
                                          samplingRate=7.08)
         self.launchProtocol(protImportVol)
         # Check if there is an output
