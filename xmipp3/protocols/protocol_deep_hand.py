@@ -41,9 +41,6 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
 
     _label ="deep hand"
     _conda_env = "xmipp_deepHand"
-    vResizedVolFile = 'resizedVol.mrc'
-    vMaskFile = 'mask.mrc'
-    vFilteredVolFile = 'filteredVol.mrc'
 
     def __init__(self, *args, **kwargs):
         EMProtocol.__init__(self, *args, **kwargs)
