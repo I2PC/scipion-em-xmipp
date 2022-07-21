@@ -68,11 +68,9 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
     last_multiple = 0
     meanGlobal = 0
 
-
     def __init__(self, **args):
         EMProtocol.__init__(self, **args)
         self.stepsExecutionMode = STEPS_PARALLEL
-
 
     # -------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -80,7 +78,7 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
 
         form.addParam('inputMovies', PointerParam, pointerClass='SetOfMovies',
                       label=Message.LABEL_INPUT_MOVS,
-                      help='Select one or several movies. A gain image will '
+                      help='Select one or several movies. A dose analysis '
                            'be calculated for each one of them.')
         form.addParam('frameStep', IntParam, default=5,
                       label="Frame step", expertLevel=LEVEL_ADVANCED,
@@ -100,8 +98,8 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
                            'compute the proportion of incorrect dose analysis.')
         form.addParam('threshold', FloatParam, default=0.05,
                       label="Threshold differences", expertLevel=LEVEL_ADVANCED,
-                      help='By default, every 50 movies (window=50) is used to '
-                           'compute the proportion of incorrect dose analysis.')
+                      help='By default, a difference of 5% against the median dose is used to '
+                           'assume that a movie has an incorrect dose.')
 
         # It should be in parallel (>2) in order to be able of attaching
         #  new movies to the output while estimating residual gain
@@ -109,9 +107,6 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
 
     # -------------------------- STEPS functions ------------------------------
     def createOutputStep(self):
-        # here you would create the plot and then save
-        plotDoseAnalysis(self.meanDoseList, self.movieStep.get(), self.medianGlobal)
-        plotDoseAnalysisDiff(self.medianDifferences, np.median(self.medianDifferences))
         pass
 
     def _insertAllSteps(self):
@@ -164,10 +159,10 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
     def _processMovie(self, movie):
         movieId = movie.getObjId()
         if not self.doPoissonCountProcess(movieId):
-            self.info('Movie ID {} not processed'.format(movieId))
+            self.info('Movie ID {} NOT PROCESSED'.format(movieId))
             return
 
-        self.info('Movie ID {} processed'.format(movieId))
+        self.info('Movie ID {} PROCESSED'.format(movieId))
         self.estimatedIds.append(movieId)
         stats = self.estimatePoissonCount(movie)
         self.stats[movieId] = stats
@@ -270,7 +265,6 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
             return
-
         # Load previously done items (from text file)
         doneList = self._readDoneList()
         # Check for newly done items
@@ -278,7 +272,7 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
                    if int(m.getObjId()) not in doneList and self._isMovieDone(m)]
 
         allDone = len(doneList) + len(newDone)
-        # We have finished when there is not more input movies
+        # We have finished when there is no more input movies
         # (stream closed) and the number of processed movies is
         # equal to the number of inputs
         self.finished = self.streamClosed and \
@@ -329,38 +323,32 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
                 if len(self.medianDifferences) >= 2:
                     self.stdDiffGlobal = stat.stdev(self.medianDifferences)
 
-                # plotDoseAnalysis(self.meanDoseList, self.movieStep.get(), self.medianGlobal)  #Guardar plots
-                # plotDoseAnalysisDiff(self.medianDifferences, np.median(self.medianDifferences))
-
+                plotDoseAnalysis(self._getExtraPath('dose_analysis_plot.png'),
+                                 self.meanDoseList, self.movieStep.get(), self.medianGlobal)
+                plotDoseAnalysisDiff(self._getExtraPath('dose_analysis_diff_plot.png'),
+                                     self.medianDifferences, self.movieStep.get(), np.median(self.medianDifferences))
 
                 if (len(self.meanDoseList)*self.movieStep.get()) % self.window.get() == 0:
-                    print(len(self.meanDoseList)*self.movieStep.get())
                     windowDiffList = self.medianDifferences[-index:]
-                    # proportion = len([diff for diff in windowDiffList if abs(diff)
-                    #                   > (2 * self.stdDiffGlobal) + np.median(self.medianDifferences)])/self.window.get()
                     proportion = len([diff for diff in windowDiffList if abs(diff)
-                                      > self.threshold.get()]) / self.window.get()
-
+                                      > self.threshold.get()]) / len(windowDiffList)
 
                     if proportion > THRESHOLD:
-                        print('HERE WE SHOULD WRITE A FILE IN THE EXTRA DIRECTORY TO NOTICE THAT THERE IS A PROBLEM')
+                        with open(self._getExtraPath('WARNING.TXT'), 'x') as f:
+                            self.info('Proportion of wrong dose in a window surpass the threshold: {} > {}'
+                                      .format(proportion, THRESHOLD))
+                            f.write('Proportion of wrong dose in a window surpass the threshold: {} > {}'
+                                    .format(proportion, THRESHOLD))
 
                     self.info('Stdev global: {}'.format(self.stdDiffGlobal))
-                    self.info('Proportion that surpass threshold: {}'.format(proportion))
-                    self.info(windowDiffList)
+                    self.info('Proportion of wrong dose in a window: {}'.format(proportion))
 
-
-
-                self.info('MovieID :   {} LenMeansList: {}   MedianGlobal: {}   MedianDifference: {}'.format(movieId,
-                                                                                                    multiple,
-                                                                                                      self.medianGlobal,
-                                                                                                      medianDifference))
-
+                self.info('MovieID :   {}    LenMeansList: {}   MedianGlobal: {}   MedianDifference: {}'
+                          .format(movieId, len(self.meanDoseList)*self.movieStep.get()
+                                  , self.medianGlobal, medianDifference))
                 self.last_multiple = multiple
 
-
         self._updateOutputSet('outputMovies', moviesSet, streamMode)
-
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
@@ -437,28 +425,22 @@ def computeStats(mean_frames):
              }
     return stats
 
-def plotDoseAnalysis(doseValues, movieStep, medianGlobal):
+def plotDoseAnalysis(filename, doseValues, movieStep, medianGlobal):
     x = np.arange(start=1, stop=len(doseValues)*movieStep, step=movieStep)
+    plt.figure()
     plt.scatter(x, doseValues)
     plt.axhline(y=medianGlobal, color='r', linestyle='-')
     plt.xlabel("Movies ID")
     plt.ylabel("Dose")
     plt.title('Dose vs time')
-    plt.show()
+    plt.savefig(filename)
 
-def plotDoseAnalysisDiff(medianDifferences, medianDiff):
-    x = np.arange(start=1, stop=len(medianDifferences)+1, step=1)
+def plotDoseAnalysisDiff(filename, medianDifferences, movieStep, medianDiff):
+    x = np.arange(start=movieStep+1, stop=len(medianDifferences)*movieStep+2, step=movieStep)
+    plt.figure()
     plt.scatter(x, medianDifferences)
     plt.axhline(y=medianDiff, color='r', linestyle='-')
-    plt.xlabel("Differences")
+    plt.xlabel("Movies ID")
     plt.ylabel("Dose differences")
     plt.title('Dose differences with respect to the global mean vs time')
-    plt.show()
-
-def plotDoseAnalysisDerivatives(meanDerivatives):
-    x = np.arange(start=1, stop=len(meanDerivatives)+1, step=1)
-    plt.scatter(x, meanDerivatives)
-    plt.xlabel("Differences")
-    plt.ylabel("Dose mean derivative")
-    plt.title('Dose tendency (last 2 diff) normalized by global mean vs time')
-    plt.show()
+    plt.savefig(filename)
