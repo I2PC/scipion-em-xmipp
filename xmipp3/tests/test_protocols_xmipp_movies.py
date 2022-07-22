@@ -915,3 +915,61 @@ class TestMaxShift(BaseTest):
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True,
                                      hasDw=True, results=[True, True])
 
+
+class TestMoviePoissonCount(BaseTest):
+    # # FIX ME WITH MRC IT DOES NOT WORK
+
+
+    @classmethod
+    def setData(cls):
+        cls.ds = DataSet.getDataSet('movies')
+
+    @classmethod
+    def runImportMovies(cls, pattern, **kwargs):
+        """ Run an Import movies protocol. """
+        # We have two options: passe the SamplingRate or
+        # the ScannedPixelSize + microscope magnification
+        params = {'samplingRate': 1.14,
+                  'voltage': 300,
+                  'sphericalAberration': 2.7,
+                  'magnification': 50000,
+                  'scannedPixelSize': None,
+                  'filesPattern': pattern,
+                  'dosePerFrame': 123
+                  }
+        if 'samplingRate' not in kwargs:
+            del params['samplingRate']
+            params['samplingRateMode'] = 0
+        else:
+            params['samplingRateMode'] = 1
+
+        params.update(kwargs)
+
+        protImport = cls.newProtocol(ProtImportMovies, **params)
+        cls.launchProtocol(protImport)
+        return protImport
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.setData()
+        fn = 'Falcon_2012_06_12-*0_movie.mrcs'
+        cls.protImport = cls.runImportMovies(cls.ds.getFile(fn))
+
+
+    # ------- the Tests ---------------------------------------
+    def testPoissonCount(self):
+        """ This must discard the second movie for a Frame shift.
+        """
+        label = 'poissonCount window step 5'
+        protPoisson = self.newProtocol(XmippProtMoviePoissonCount,
+                                    objLabel=label,
+                                    movieStep=1
+                                    #estimateGain=True,
+                                    #estimateResidualGain=True,
+                                    #estimateOrientation=False,
+                                    #normalizeGain=False
+                                       )
+        protPoisson.inputMovies.set(self.protImport.outputMovies)
+        self.launchProtocol(protPoisson)
+

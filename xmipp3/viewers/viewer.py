@@ -51,7 +51,6 @@ from xmipp3.protocols import XmippProtAssignmentTiltPair
 from xmipp3.protocols import XmippProtMovieGain
 from xmipp3.protocols import XmippProtDeepDenoising
 from xmipp3.protocols import XmippProtParticleBoxsize
-from xmipp3.protocols import XmippProtMoviePoissonCount
 from .plotter import XmippPlotter
 
 
@@ -78,8 +77,7 @@ class XmippViewer(DataViewer):
                 XmippProtAngularGraphConsistency,
                 XmippProtMovieGain,
                 XmippProtDeepDenoising,
-                XmippProtParticleBoxsize,
-                XmippProtMoviePoissonCount
+                XmippProtParticleBoxsize
                 ]
 
     def __createTemporaryCtfs(self, obj, setOfMics):
@@ -344,16 +342,6 @@ class XmippViewer(DataViewer):
 
         elif issubclass(cls, XmippProtExtractParticlesPairs):
             self._visualize(obj.outputParticlesTiltPair)
-
-        elif issubclass(cls, XmippProtMoviePoissonCount):
-            fn = obj.outputMovies.getFileName()
-            labels = 'id _filename _samplingRate _acquisition._dosePerFrame _acquisition._doseInitial' \
-                     ' _MEAN_DOSE_PER_FRAME _STD_DOSE_PER_FRAME'
-
-            self._views.append(ObjectView(self._project, obj.outputMovies.strId(), fn,
-                                          viewParams={ORDER: labels,
-                                                      VISIBLE: labels,
-                                                      MODE: MODE_MD}))
 
         else:
             # Use default visualization defined in base class

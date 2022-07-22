@@ -28,13 +28,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from pyworkflow import VERSION_3_0
-import pyworkflow.utils as pwutils
 from pyworkflow.object import Set
 from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow.protocol.params import (PointerParam, IntParam, FloatParam, LEVEL_ADVANCED)
 from pyworkflow.utils.properties import Message
 import pyworkflow.protocol.constants as cons
-from datetime import datetime
 from pwem.emlib.image import ImageHandler
 from pwem.objects import SetOfMovies
 from pwem.protocols import EMProtocol, ProtProcessMovies
@@ -58,6 +56,9 @@ THRESHOLD = 0.05
 
 class XmippProtMoviePoissonCount(ProtProcessMovies):
     """ Protocol for the dose analysis """
+    ## FIX ME WITH MRC IT DOES NOT WORK
+
+
     _label = 'movie poisson count'
     _lastUpdateVersion = VERSION_3_0
 
@@ -109,52 +110,32 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
     def createOutputStep(self):
         pass
 
-    def _insertAllSteps(self):
-        self.initializeParams()
-        movieSteps = self._insertNewMoviesSteps(self.moviesDict)
-        self._insertFunctionStep('createOutputStep',
-                                 prerequisites=movieSteps, wait=True)
 
-    def initializeParams(self):
-        self.insertedDict = {}
-        self.framesRange = self.inputMovies.get().getFramesRange()
-        self.samplingRate = self.inputMovies.get().getSamplingRate()
-        self.moviesFn = self.inputMovies.get().getFileName()
+    def _insertAllSteps(self):
         # Build the list of all processMovieStep ids by
         # inserting each of the steps for each movie
-        self.moviesDict = self._loadInputList()
-        self.streamClosed = self.inputMovies.get().isStreamClosed()
-        pwutils.makePath(self._getExtraPath('DONE'))
+        self.insertedDict = {}
+        self.samplingRate = self.inputMovies.get().getSamplingRate()
+        # Initial steps
+        self.initializeParams()
 
-    def _insertNewMoviesSteps(self, inputMovies):
-        """ Insert steps to process new movies (from streaming)
-        Params:
-            insertedDict: contains already processed movies
-            inputMovies: input movies set to be check
-        """
-        deps = []
-        for movie in inputMovies.values():
-            if movie.getObjId() not in self.insertedDict:
-                stepId = self._insertMovieStep(movie)
-                deps.append(stepId)
-                self.insertedDict[movie.getObjId()] = stepId
+        # Gain and Dark conversion step
+        self.convertCIStep = []
+        convertStepId = self._insertFunctionStep('_convertInputStep',
+                                                 prerequisites=[])
+        self.convertCIStep.append(convertStepId)
 
-        return deps
+        # Conversion step is part of processMovieStep because of streaming.
+        movieSteps = self._insertNewMoviesSteps(self.insertedDict,
+                                                self.inputMovies.get())
+        finalSteps = self._insertFinalSteps(movieSteps)
+        self._insertFunctionStep('createOutputStep',
+                                 prerequisites=finalSteps, wait=True)
 
-    def _insertMovieStep(self, movie):
-        """ Insert the processMovieStep for a given movie. """
-        # Note1: At this point is safe to pass the movie, since this
-        # is not executed in parallel, here we get the params
-        # to pass to the actual step that is gone to be executed later on
-        # Note2: We are serializing the Movie as a dict that can be passed
-        # as parameter for a functionStep
-        movieDict = movie.getObjDict(includeBasic=True)
-        movieStepId = self._insertFunctionStep('processMovieStep',
-                                               movieDict,
-                                               movie.hasAlignment(),
-                                               prerequisites=[])
 
-        return movieStepId
+    def initializeParams(self):
+        self.framesRange = self.inputMovies.get().getFramesRange()
+
 
     def _processMovie(self, movie):
         movieId = movie.getObjId()
@@ -181,6 +162,7 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
 
         fhSummary.close()
         fnMonitorSummary.close()
+
 
     def estimatePoissonCount(self, movie):
         movieImages = ImageHandler().read(movie.getLocation())
@@ -220,47 +202,6 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
 
         return outputSet
 
-    def _loadInputList(self):
-        """ Load the input set of movies and create a list. """
-        moviesFile = self.inputMovies.get().getFileName()
-        self.debug("Loading input db: %s" % moviesFile)
-        movieSet = SetOfMovies(filename=moviesFile)
-        movieSet.loadAllProperties()
-        newMovies = {movie.getObjId(): movie.clone() for movie in movieSet if movie.getObjId() not in self.insertedDict}
-        self.streamClosed = movieSet.isStreamClosed()
-        movieSet.close()
-        self.debug("Closed db.")
-
-        return newMovies
-
-    def _checkNewInput(self):
-        # Check if there are new movies to process from the input set
-        localFile = self.inputMovies.get().getFileName()
-        now = datetime.now()
-        self.lastCheck = getattr(self, 'lastCheck', now)
-        mTime = datetime.fromtimestamp(os.path.getmtime(localFile))
-        self.debug('Last check: %s, modification: %s'
-                   % (pwutils.prettyTime(self.lastCheck),
-                      pwutils.prettyTime(mTime)))
-        # If the input movies.sqlite have not changed since our last check,
-        # it does not make sense to check for new input data
-        if self.lastCheck > mTime and hasattr(self, 'moviesDict'):
-            return None
-
-        self.lastCheck = now
-        # Open input movies.sqlite and close it as soon as possible
-        newMovies = self._loadInputList()
-        self.moviesDict.update(newMovies)
-        outputStep = self._getFirstJoinStep()
-
-        if newMovies:
-            fDeps = self._insertNewMoviesSteps(newMovies)
-
-            if outputStep is not None:
-                outputStep.addPrerequisites(*fDeps)
-
-            self.updateSteps()
-
 
     def _checkNewOutput(self):
         if getattr(self, 'finished', False):
@@ -268,15 +209,21 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
         # Load previously done items (from text file)
         doneList = self._readDoneList()
         # Check for newly done items
-        newDone = [m.clone() for m in self.moviesDict.values()
-                   if int(m.getObjId()) not in doneList and self._isMovieDone(m)]
+        newDone = [m for m in self.listOfMovies
+                   if m.getObjId() not in doneList and self._isMovieDone(m)]
 
+        # Update the file with the newly done movies
+        # or exit from the function if no new done movies
+        self.debug('_checkNewOutput: ')
+        self.debug('   listOfMovies: %s, doneList: %s, newDone: %s'
+                   % (len(self.listOfMovies), len(doneList), len(newDone)))
+
+        firstTime = len(doneList) == 0
         allDone = len(doneList) + len(newDone)
         # We have finished when there is no more input movies
         # (stream closed) and the number of processed movies is
         # equal to the number of inputs
-        self.finished = self.streamClosed and \
-                        allDone == len(self.moviesDict)
+        self.finished = self.streamClosed and allDone == len(self.listOfMovies)
         streamMode = Set.STREAM_CLOSED if self.finished \
                      else Set.STREAM_OPEN
 
@@ -288,12 +235,19 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
             # so we exit from the function here
             return
 
+        self.debug('   finished: %s ' % self.finished)
+        self.debug('        self.streamClosed (%s) AND' % self.streamClosed)
+        self.debug('        allDone (%s) == len(self.listOfMovies (%s)'
+                   % (allDone, len(self.listOfMovies)))
+        self.debug('   streamMode: %s' % streamMode)
+
         moviesSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite')
         index = round(self.window.get() / self.movieStep.get())
 
         for movie in newDone:
-            movie.setFramesRange(self.framesRange)
-            movieId = movie.getObjId()
+            newMovie = movie.clone()
+            newMovie.setFramesRange(self.framesRange)
+            movieId = newMovie.getObjId()
             if not self.doPoissonCountProcess(movieId):
                 stats = stats_template
             else:
@@ -304,15 +258,15 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
             min = stats['min']
             max = stats['max']
 
-            setAttribute(movie, '_MEAN_DOSE_PER_FRAME', mean)
-            setAttribute(movie, '_STD_DOSE_PER_FRAME', std)
-            setAttribute(movie, '_MIN_DOSE_PER_FRAME', min)
-            setAttribute(movie, '_MAX_DOSE_PER_FRAME', max)
+            setAttribute(newMovie, '_MEAN_DOSE_PER_FRAME', mean)
+            setAttribute(newMovie, '_STD_DOSE_PER_FRAME', std)
+            setAttribute(newMovie, '_MIN_DOSE_PER_FRAME', min)
+            setAttribute(newMovie, '_MAX_DOSE_PER_FRAME', max)
 
             if self.doPoissonCountProcess(movieId):
                 self.meanDoseList.append(mean)
 
-            moviesSet.append(movie)
+            moviesSet.append(newMovie)
             multiple = len(self.meanDoseList)
 
             if self.last_multiple < multiple and len(self.meanDoseList) >= 2:
@@ -323,9 +277,9 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
                 if len(self.medianDifferences) >= 2:
                     self.stdDiffGlobal = stat.stdev(self.medianDifferences)
 
-                plotDoseAnalysis(self._getExtraPath('dose_analysis_plot.png'),
+                plotDoseAnalysis(self.getDosePlot(),
                                  self.meanDoseList, self.movieStep.get(), self.medianGlobal)
-                plotDoseAnalysisDiff(self._getExtraPath('dose_analysis_diff_plot.png'),
+                plotDoseAnalysisDiff(self.getDoseDiffPlot(),
                                      self.medianDifferences, self.movieStep.get(), np.median(self.medianDifferences))
 
                 if (len(self.meanDoseList)*self.movieStep.get()) % self.window.get() == 0:
@@ -349,6 +303,7 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
                 self.last_multiple = multiple
 
         self._updateOutputSet('outputMovies', moviesSet, streamMode)
+
         if self.finished:  # Unlock createOutputStep if finished all jobs
             outputStep = self._getFirstJoinStep()
             if outputStep and outputStep.isWaiting():
@@ -377,6 +332,12 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
     # ------------------------- UTILS functions --------------------------------
     def doPoissonCountProcess(self, movieId):
         return (movieId - 1) % self.movieStep.get() == 0
+
+    def getDosePlot(self):
+        return self._getExtraPath('dose_analysis_plot.png')
+
+    def getDoseDiffPlot(self):
+        return self._getExtraPath('dose_analysis_diff_plot.png')
 
     # --------------------------- INFO functions -------------------------------
     def _validate(self):
@@ -426,21 +387,23 @@ def computeStats(mean_frames):
     return stats
 
 def plotDoseAnalysis(filename, doseValues, movieStep, medianGlobal):
-    x = np.arange(start=1, stop=len(doseValues)*movieStep, step=movieStep)
+    x = np.arange(start=1, stop=len(doseValues)*movieStep+1, step=movieStep)
     plt.figure()
     plt.scatter(x, doseValues)
-    plt.axhline(y=medianGlobal, color='r', linestyle='-')
+    plt.axhline(y=medianGlobal, color='r', linestyle='-', label='Median dose')
     plt.xlabel("Movies ID")
     plt.ylabel("Dose")
     plt.title('Dose vs time')
+    plt.legend()
     plt.savefig(filename)
 
 def plotDoseAnalysisDiff(filename, medianDifferences, movieStep, medianDiff):
     x = np.arange(start=movieStep+1, stop=len(medianDifferences)*movieStep+2, step=movieStep)
     plt.figure()
     plt.scatter(x, medianDifferences)
-    plt.axhline(y=medianDiff, color='r', linestyle='-')
+    plt.axhline(y=medianDiff, color='r', linestyle='-',  label='Median dose difference')
     plt.xlabel("Movies ID")
     plt.ylabel("Dose differences")
     plt.title('Dose differences with respect to the global mean vs time')
+    plt.legend()
     plt.savefig(filename)
