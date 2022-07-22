@@ -76,10 +76,12 @@ class XmippProtComputeHeterogeneityPriorsZernike3D(ProtAnalysis3D):
                       help='Mask determining where to compute the deformation field in the '
                            'reference volume. The tightest the mask, the higher the '
                            'performance boost')
-        form.addParam('targetResolution', params.FloatParam, label="Target resolution",
-                      default=8.0,
-                      help="In Angstroms, the images and the volume are rescaled so that this resolution is at "
-                           "2/3 of the Fourier spectrum.")
+        form.addParam('boxSize', params.IntParam, default=128,
+                      label='Downsample particles to this box size', expertLevel=params.LEVEL_ADVANCED,
+                      help='In general, downsampling the volumes will increase performance without compromising '
+                           'the estimation the deformation field for each particle. Note that output particles will '
+                           'have the original box size, and Zernike3D coefficients will be modified to work with the '
+                           'original size volumes')
         form.addParam('Rmax', params.IntParam, default=0,
                       label='Sphere radius',
                       experLevel=params.LEVEL_ADVANCED,
@@ -150,10 +152,11 @@ class XmippProtComputeHeterogeneityPriorsZernike3D(ProtAnalysis3D):
             maskFn = mask.getFileName()
             fnOut = self._getExtraPath("mask_reference.mrc")
             Xdim = mask.getDim()[0]
-            Ts = mask.getSamplingRate()
-            newTs = self.targetResolution.get() * 1.0 / 3.0
-            newTs = max(maxSr, newTs)
-            newXdim = Xdim * Ts / newTs
+            # Ts = mask.getSamplingRate()
+            # newTs = self.targetResolution.get() * 1.0 / 3.0
+            # newTs = max(maxSr, newTs)
+            # newXdim = Xdim * Ts / newTs
+            newXdim = self.boxSize.get()
 
             ih = ImageHandler()
             volFn = maskFn if getExt(maskFn) == '.vol' else maskFn + ':mrc'
@@ -169,11 +172,12 @@ class XmippProtComputeHeterogeneityPriorsZernike3D(ProtAnalysis3D):
     def convertStep(self, volFn, volDim, volSr, minDim, maxSr, nVoli):
         Xdim = volDim
         Ts = volSr
-        newTs = self.targetResolution.get() * 1.0 / 3.0
-        newTs = max(maxSr, newTs)
-        newXdim = Xdim * Ts / newTs
-        newRmax = self.Rmax.get() * Ts / newTs
-        self.newRmax = min(newRmax, self.Rmax.get())
+        # newTs = self.targetResolution.get() * 1.0 / 3.0
+        # newTs = max(maxSr, newTs)
+        # newXdim = Xdim * Ts / newTs
+        newXdim = self.boxSize.get()
+        correctionFactor = newXdim / Xdim
+        self.newRmax = self.Rmax.get() * correctionFactor
         fnOut = os.path.splitext(volFn)[0]
         fnOut = self._getExtraPath(os.path.basename(fnOut + self.OUTPUT_SUFFIX % nVoli))
 
@@ -253,7 +257,7 @@ class XmippProtComputeHeterogeneityPriorsZernike3D(ProtAnalysis3D):
         nVolj = 2
         for _ in volList[1:]:
             zernikeVol = Volume()
-            zernikeVol.setFileName(self._getExtraPath('vol%dDeformedTo%d.mrc' % (1, nVolj)))
+            zernikeVol.setFileName(reference.getFileName())
             zernikeVol.setSamplingRate(sr)
 
             # Read Zernike coefficient
