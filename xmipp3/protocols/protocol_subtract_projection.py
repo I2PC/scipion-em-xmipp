@@ -55,6 +55,11 @@ class XmippProtSubtractProjection(EMProtocol):
                       help='Maximum resolution (in A) of the data ')
         form.addParam('mean', BooleanParam, label="Use same adjustment for all particles?: ", default=True,
                       expertLevel=LEVEL_ADVANCED, help='Compute mean beta0 and use it as for all the particles')
+        form.addParam('nonNegative', BooleanParam, label="Ignore particles with negative beta0 or R2?: ", default=True,
+                      expertLevel=LEVEL_ADVANCED,
+                      help='Particles with negative beta0 or R2 will not appear in the output set as they are '
+                           'considered bad particles. Moreover, negative betas will not contribute to mean beta if '
+                           '"mean" option is selected')
         form.addParam('limit_freq', BooleanParam, label="Limit frequency?: ", default=False, expertLevel=LEVEL_ADVANCED,
                       help='Limit frequency in the adjustment process to the frequency correspondent to the resolution'
                            ' indicated in "Maximum resolution" field above')
@@ -88,6 +93,8 @@ class XmippProtSubtractProjection(EMProtocol):
             args += ' --mask %s' % mask.getFileName()
         if self.mean.get():
             args += ' --mean'
+        if self.nonNegative.get():
+            args += ' --nonNegative'
         self.runJob("xmipp_subtract_projection", args)
 
     def createOutputStep(self):
