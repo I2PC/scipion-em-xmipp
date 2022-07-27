@@ -48,6 +48,14 @@ from xmipp3.protocols.protocol_align_volume import (ALIGN_ALGORITHM_EXHAUSTIVE,
                                                ALIGN_ALGORITHM_EXHAUSTIVE_LOCAL,
                                                ALIGN_ALGORITHM_LOCAL)
 
+# Global variables
+db_xmipp_tutorial = 'xmipp_tutorial'
+db_general = 'general'
+vol1_iter2 = 'volumes/volume_1_iter_002.mrc'
+vol2_iter2 = 'volumes/volume_2_iter_002.mrc'
+helix = 'volumes/helix_59_4__6_7.vol'
+
+# Output error messages
 MSG_WRONG_SAMPLING = "There was a problem with the sampling rate value of the output "
 MSG_WRONG_SIZE = "There was a problem with the size of the output "
 MSG_WRONG_DIM = "There was a problem with the dimensions of the output "
@@ -56,16 +64,13 @@ MSG_WRONG_ALIGNMENT = "There was a problem with the alignment of the output "
 MSG_WRONG_SHIFT = "There was a problem with output shift "
 MSG_WRONG_GALLERY = "There was a problem with the gallery creation"
 MSG_WRONG_ROTATION = "There was a problem with the rotation"
-
-
-
-
+MSG_WRONG_IMPORT = "There was a problem with the import of "
 
 class TestXmippBase(BaseTest):
     """ Some utility functions to import volumes that are used in several tests."""
 
     @classmethod
-    def setData(cls, dataProject='xmipp_tutorial'):
+    def setData(cls, dataProject=db_xmipp_tutorial):
         cls.dataset = DataSet.getDataSet(dataProject)
         cls.volumes = cls.dataset.getFile('volumes')
         cls.vol1 = cls.dataset.getFile('vol1')
@@ -717,7 +722,7 @@ class TestXmippOperateVolumes(TestXmippBase):
 
 class TestXmippProtAlignVolume(TestXmippBase):
     @classmethod
-    def setData(cls, dataProject='xmipp_tutorial'):
+    def setData(cls, dataProject=db_xmipp_tutorial):
         cls.dataset = DataSet.getDataSet(dataProject)
         cls.volumes = cls.dataset.getFile('volumes')
         cls.vol1 = cls.dataset.getFile('vol1')
@@ -996,7 +1001,7 @@ class TestXmippRotationalSymmetry(TestXmippBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
-        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
+        cls.dataset = DataSet.getDataSet(db_xmipp_tutorial)
         cls.vol = cls.dataset.getFile('vol110')
 
     def test_rotsym(self):
@@ -1211,9 +1216,9 @@ class TestXmippVolSubtraction(TestXmippBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
-        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
-        cls.vol1 = cls.dataset.getFile('volumes/volume_1_iter_002.mrc')
-        cls.vol2 = cls.dataset.getFile('volumes/volume_2_iter_002.mrc')
+        cls.dataset = DataSet.getDataSet(db_xmipp_tutorial)
+        cls.vol1 = cls.dataset.getFile(vol1_iter2)
+        cls.vol2 = cls.dataset.getFile(vol2_iter2)
 
     def testXmippVolSub(self):
         print("Import Volume 1")
@@ -1368,8 +1373,8 @@ class TestXmippShiftParticlesAndVolume(TestXmippBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
-        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
-        cls.vol1 = cls.dataset.getFile('volumes/volume_1_iter_002.mrc')
+        cls.dataset = DataSet.getDataSet(db_xmipp_tutorial)
+        cls.vol1 = cls.dataset.getFile(vol1_iter2)
 
     def testXmippShiftParticlesAndVolume(self):
         protImportVol = self.newProtocol(ProtImportVolumes,
@@ -1760,6 +1765,47 @@ class TestXmippRotateVolume(TestXmippBase):
                          protCreatePhantomReference.outputVolume.getSamplingRate(),
                          (MSG_WRONG_SAMPLING, "rotated phantom"))
 
+class TestXmippDeepHand(TestXmippBase):
+    """This class checks if the protocol deep hand in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet(db_general)
+        cls.vol1 = cls.dataset.getFile(helix)
+
+    def testXmippDeepHand(self):
+        # Import input data
+        protImportVol = self.newProtocol(ProtImportVolumes,
+                                         objLabel='Volume',
+                                         filesPath=self.vol1,
+                                         samplingRate=7.08)
+        self.launchProtocol(protImportVol)
+        # Check if there is an output
+        self.assertIsNotNone(protImportVol.getFiles(),
+                             "There was a problem with the volume import")
+
+        # Creation of the mask
+        protDeepHand = self.newProtocol(XmippProtDeepHand,
+                                        inputVolume=protImportVol.outputVolume,
+                                        threshold=0.05)
+        self.launchProtocol(protDeepHand)
+        # Check if there is an output
+        self.assertIsNotNone(protDeepHand.getFiles(), "There was a problem with the mask creation")
+
+        # Check if the sampling rate is right
+        self.assertEqual(protDeepHand.outputVol.getSamplingRate(), 7.08, (MSG_WRONG_SAMPLING, "volume"))
+        # Check if the input threshold is the same as the density of the volume
+        self.assertEqual(protDeepHand.threshold.get(), 0.05, "There was a problem with the density value")
+        # Check if the thresholdAlpha and thresholdHand match the default values
+        self.assertEqual(protDeepHand.thresholdAlpha.get(), 0.7, "There was a problem with the thresholdAlpha value")
+        self.assertEqual(protDeepHand.thresholdHand.get(), 0.6, "There was a problem with the thresholdHand value")
+        # Check if the dimension of the volume does not vary
+        self.assertEqual(protDeepHand.outputVol.getDim(), protImportVol.outputVolume.getDim(),
+                         (MSG_WRONG_DIM, "volume"))
+        # Check if the hand value is right
+        self.assertAlmostEquals(protDeepHand.outputHand.get(), 0.380511, 6,"There was a problem with the hand value")
+        # Check if the flip is right
+        self.assertTrue(protDeepHand.outputHand.get()<protDeepHand.thresholdHand.get(), "There was a problem with the flip")
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

@@ -43,6 +43,12 @@ from xmipp3.protocols import XmippFilterHelper as xfh
 from xmipp3.protocols import XmippResizeHelper as xrh
 from xmipp3.protocols import OP_DOTPRODUCT, OP_MULTIPLY, OP_SQRT
 
+MSG_WRONG_SIZE = "There was a problem with the size of the output "
+MSG_WRONG_OUTPUT = "There was a problem with the output "
+MSG_WRONG_IMPORT = "There was a problem with the import of the "
+MSG_WRONG_PROTOCOL = "There was a problem with the protocol: "
+MSG_WRONG_DIM = "There was a problem with the dimensions of the output "
+MSG_WRONG_SAMPLING = "There was a problem with the sampling rate value of the output "
 
 # Some utility functions to import particles that are used
 # in several tests.
@@ -1380,6 +1386,96 @@ class TestXmippCorrectWiener2D(TestXmippBase):
         protCorrect.inputParticles.set(prot1.outputParticles)
         self.launchProtocol(protCorrect)
         self.assertIsNotNone(protCorrect.outputParticles, "There was a problem with Wiener Correction")
+
+class TestXmippPickNoise(TestXmippBase):
+    """This class checks if the protocol pick noise in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
+        cls.micsFn = cls.dataset.getFile('micrographs/BPV_1386.mrc')
+        cls.coordFn = cls.dataset.getFile('pickingXmipp/pickedAll/BPV_1386.pos')
+
+    def testXmippPickNoise(self):
+        # Import micrographs
+        protImportMics = self.newProtocol(emprot.ProtImportMicrographs,
+                                          filesPath=self.micsFn,
+                                          samplingRate=1.237,
+                                          voltage=300)
+        self.launchProtocol(protImportMics)
+        self.assertIsNotNone(protImportMics.outputMicrographs, (MSG_WRONG_IMPORT, "micrographs"))
+        # Import coordinates
+        protImportCoords = self.newProtocol(emprot.ProtImportCoordinates,
+                                            filesPath=self.coordFn,
+                                            inputMicrographs=protImportMics.outputMicrographs,
+                                            boxSize=110)
+        self.launchProtocol(protImportCoords)
+        self.assertIsNotNone(protImportCoords.outputCoordinates, (MSG_WRONG_IMPORT, "coordinates"))
+        # Protocol Pick Noise (default values)
+        protPickNoise1 = self.newProtocol(XmippProtPickNoise,
+                                         inputCoordinates=protImportCoords.outputCoordinates)
+        self.launchProtocol(protPickNoise1)
+        self.assertIsNotNone(protPickNoise1.getFiles(), (MSG_WRONG_PROTOCOL, "pick noise"))
+        self.assertIsNotNone(protPickNoise1.outputCoordinates, (MSG_WRONG_OUTPUT, "coordinates"))
+        # Protocol Pick Noise (extract noise number)
+        protPickNoise2 = self.newProtocol(XmippProtPickNoise,
+                                         inputCoordinates=protImportCoords.outputCoordinates,
+                                         extractNoiseNumber=140)
+        self.launchProtocol(protPickNoise2)
+        self.assertIsNotNone(protPickNoise2.getFiles(), (MSG_WRONG_PROTOCOL, "pick noise"))
+        self.assertIsNotNone(protPickNoise2.outputCoordinates, (MSG_WRONG_OUTPUT, "coordinates"))
+        # Check if the number of noisy particles is right
+        self.assertEquals(protPickNoise1.outputCoordinates.getSize(), 143, (MSG_WRONG_SIZE, "noisy particles"))
+        self.assertEquals(protPickNoise2.outputCoordinates.getSize(), 140, (MSG_WRONG_SIZE, "noisy particles"))
+
+class TestXmippScreenDeepLearning(TestXmippBase):
+    """This class checks if the protocol screen deep learning in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
+
+    def testXmippScreenDeepLearning(self):
+        protImportParts1 = self.newProtocol(emprot.ProtImportParticles,
+                                            objLabel='First Set of Particles',
+                                            importFrom=emprot.ProtImportParticles.IMPORT_FROM_SCIPION,
+                                            sqliteFile=self.dataset.getFile('particles/BPV_particles.sqlite'),
+                                            magnification=50000,
+                                            samplingRate=7.08,
+                                            haveDataBeenPhaseFlipped=False)
+        self.launchProtocol(protImportParts1)
+        self.assertIsNotNone(protImportParts1.getFiles(), (MSG_WRONG_IMPORT, "the first set of particles"))
+
+        protImportParts2 = self.newProtocol(emprot.ProtImportParticles,
+                                            objLabel='Second Set of Particles',
+                                            importFrom=emprot.ProtImportParticles.IMPORT_FROM_SCIPION,
+                                            sqliteFile=self.dataset.getFile('particles/BPV_particles_aligned.sqlite'),
+                                            magnification=50000,
+                                            samplingRate=7.08,
+                                            haveDataBeenPhaseFlipped=False)
+        self.launchProtocol(protImportParts2)
+        self.assertIsNotNone(protImportParts2.getFiles(), (MSG_WRONG_IMPORT, "the second set of particles"))
+
+        protAddNoise = self.newProtocol(XmippProtAddNoiseParticles,
+                                        input=protImportParts1.outputParticles,
+                                        gaussianStd=15.0)
+        self.launchProtocol(protAddNoise)
+        self.assertIsNotNone(protAddNoise.outputParticles, (MSG_WRONG_PROTOCOL, "add noise"))
+
+        protScreenDeepLearning = self.newProtocol(XmippProtScreenDeepLearning,
+                                                  inTrueSetOfParticles=protImportParts1.outputParticles,
+                                                  numberOfNegativeSets=1,
+                                                  negativeSet_1=protAddNoise.outputParticles,
+                                                  predictSetOfParticles=protImportParts2.outputParticles)
+        self.launchProtocol(protScreenDeepLearning)
+        self.assertIsNotNone(protScreenDeepLearning.getFiles(), (MSG_WRONG_PROTOCOL, "screen deep learning"))
+        self.assertIsNotNone(protScreenDeepLearning.outputParticles, (MSG_WRONG_OUTPUT, "particles"))
+        # Check the size of the output particles
+        self.assertEquals(protScreenDeepLearning.outputParticles.getSize(), 373, (MSG_WRONG_SIZE, "particles"))
+        # Check the dimensions of the first particle
+        self.assertEquals(protScreenDeepLearning.outputParticles.getFirstItem().getDim(), (140, 140, 1), (MSG_WRONG_DIM, "particles"))
+        # Check the sampling rate of the first particle
+        self.assertEqual(protScreenDeepLearning.outputParticles.getFirstItem().getSamplingRate(), 7.08, (MSG_WRONG_SAMPLING, "particles"))
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
