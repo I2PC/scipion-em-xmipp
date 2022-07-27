@@ -51,9 +51,13 @@ from xmipp3.protocols.protocol_align_volume import (ALIGN_ALGORITHM_EXHAUSTIVE,
 # Global variables
 db_xmipp_tutorial = 'xmipp_tutorial'
 db_general = 'general'
+db_model_building_tutorial = 'model_building_tutorial'
+vol_coot1 = 'volumes/coot1.mrc'
 vol1_iter2 = 'volumes/volume_1_iter_002.mrc'
 vol2_iter2 = 'volumes/volume_2_iter_002.mrc'
 helix = 'volumes/helix_59_4__6_7.vol'
+pdb_coot1 = 'PDBx_mmCIF/coot1.pdb'
+
 
 # Output error messages
 MSG_WRONG_SAMPLING = "There was a problem with the sampling rate value of the output "
@@ -1806,6 +1810,22 @@ class TestXmippDeepHand(TestXmippBase):
         self.assertAlmostEquals(protDeepHand.outputHand.get(), 0.380511, 6,"There was a problem with the hand value")
         # Check if the flip is right
         self.assertTrue(protDeepHand.outputHand.get()<protDeepHand.thresholdHand.get(), "There was a problem with the flip")
+
+class TestXmippResolutionBfactor(TestXmippBase):
+    """This class checks if the protocol resolution b factor in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet(db_model_building_tutorial)
+        cls.vol1 = cls.dataset.getFile(vol_coot1)
+
+    def testXmippResolutionBfactor(self):
+        # Import input volume
+        protImportVol = self.newProtocol(ProtImportVolumes,
+                                         objLabel='Volume',
+                                         filesPath=self.vol1,
+                                         samplingRate=7.08)
+        self.launchProtocol(protImportVol)
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
