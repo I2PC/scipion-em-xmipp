@@ -1821,12 +1821,24 @@ class TestXmippResolutionBfactor(TestXmippBase):
 
     def testXmippResolutionBfactor(self):
         # Import input volume
+        print("Import input volume")
         protImportVol = self.newProtocol(ProtImportVolumes,
                                          objLabel='Volume',
                                          filesPath=self.vol1,
-                                         samplingRate=7.08)
+                                         samplingRate=4)
         self.launchProtocol(protImportVol)
+        # Check if there is an output volume
+        self.assertIsNotNone(protImportVol.getFiles(),
+                             "There was a problem with the volume import")
 
+        # Create a mask from the volume
+        print("Create a mask from the volume")
+        protCreateMask = self.newProtocol(XmippProtCreateMask3D,
+                                          inputVolume=protImportVol.outputVolume,
+                                          threshold=0.09)
+        # Check if there is an output 3D mask
+        self.assertIsNotNone(protCreateMask.getFiles(),
+                             "There was a problem with the 3D mask")
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         className = sys.argv[1]
