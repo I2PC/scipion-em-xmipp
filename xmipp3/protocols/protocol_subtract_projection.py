@@ -53,6 +53,8 @@ class XmippProtSubtractProjection(EMProtocol):
                       help='Length (in A) to add for each side to the final result mask. -1 means no mask.')
         form.addParam('resol', FloatParam, label="Maximum resolution: ", default=3,  expertLevel=LEVEL_ADVANCED,
                       help='Maximum resolution (in A) of the data ')
+        form.addParam('mean', BooleanParam, label="Use same adjustment for all particles?: ", default=True,
+                      expertLevel=LEVEL_ADVANCED, help='Compute mean beta0 and use it as for all the particles')
         form.addParam('limit_freq', BooleanParam, label="Limit frequency?: ", default=False, expertLevel=LEVEL_ADVANCED,
                       help='Limit frequency in the adjustment process to the frequency correspondent to the resolution'
                            ' indicated in "Maximum resolution" field above')
@@ -77,14 +79,15 @@ class XmippProtSubtractProjection(EMProtocol):
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
         args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --fmask_width %f --padding %f ' \
-               '--sigma %d --limit_freq %d' % \
+               '--sigma %d --limit_freq %d --save %s' % \
                (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles"),
                 vol.getSamplingRate(), self.resol.get(), self.mwidth.get(), self.pad.get(), self.sigma.get(),
-                int(self.limit_freq.get()))
+                int(self.limit_freq.get()), self._getExtraPath())
         mask = self.mask.get()
         if mask is not None:
             args += ' --mask %s' % mask.getFileName()
-        args += ' --save %s' % self._getExtraPath()
+        if self.mean.get():
+            args += ' --mean'
         self.runJob("xmipp_subtract_projection", args)
 
     def createOutputStep(self):
