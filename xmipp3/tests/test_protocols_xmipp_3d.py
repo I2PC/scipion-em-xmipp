@@ -69,6 +69,8 @@ MSG_WRONG_SHIFT = "There was a problem with output shift "
 MSG_WRONG_GALLERY = "There was a problem with the gallery creation"
 MSG_WRONG_ROTATION = "There was a problem with the rotation"
 MSG_WRONG_IMPORT = "There was a problem with the import of "
+MSG_WRONG_PROTOCOL = "There was a problem with the protocol: "
+MSG_WRONG_MAP = "There was a problem with the map creation"
 
 class TestXmippBase(BaseTest):
     """ Some utility functions to import volumes that are used in several tests."""
@@ -1830,7 +1832,7 @@ class TestXmippResolutionBfactor(TestXmippBase):
         self.launchProtocol(protImportVol)
         # Check if there is an output volume
         self.assertIsNotNone(protImportVol.getFiles(),
-                             "There was a problem with the volume import")
+                             (MSG_WRONG_IMPORT, "volume"))
 
         # Create a mask from the volume
         print("Create a mask from the volume")
@@ -1840,7 +1842,7 @@ class TestXmippResolutionBfactor(TestXmippBase):
         self.launchProtocol(protCreateMask)
         # Check if there is an output 3D mask
         self.assertIsNotNone(protCreateMask.getFiles(),
-                             "There was a problem with the 3D mask")
+                             MSG_WRONG_MASK)
 
         # Create a map
         print("Create a map")
@@ -1851,7 +1853,7 @@ class TestXmippResolutionBfactor(TestXmippBase):
         self.launchProtocol(protCreateMap)
         # Check if there is an output map
         self.assertIsNotNone(protCreateMap.getFiles(),
-                             "There was a problem with the map")
+                             MSG_WRONG_MAP)
 
         # Import atomic structure
         print("Import atomic structure")
@@ -1862,8 +1864,18 @@ class TestXmippResolutionBfactor(TestXmippBase):
         self.launchProtocol(protImportPdb)
         # Check if there is an output atomic structure
         self.assertIsNotNone(protImportPdb.getFiles(),
-                             "There was a problem with the atomic structure")
+                             (MSG_WRONG_IMPORT, "atomic structure"))
 
+        # Protocol local resolution/local bfactor
+        print("Protocol local resolution/local bfactor")
+        protbfactorResolution = self.newProtocol(XmippProtbfactorResolution,
+                                                 pdbfile=protImportPdb.outputPdb,
+                                                 localResolutionMap=protCreateMap.resolution_Volume,
+                                                 fscResolution=8.35)
+        self.launchProtocol(protbfactorResolution)
+        # Check if there is an output atomic structure
+        self.assertIsNotNone(protbfactorResolution.getFiles(),
+                             (MSG_WRONG_PROTOCOL, "local resolution/local bfactor"))
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
