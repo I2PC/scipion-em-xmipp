@@ -1818,6 +1818,7 @@ class TestXmippResolutionBfactor(TestXmippBase):
         setupTestProject(cls)
         cls.dataset = DataSet.getDataSet(db_model_building_tutorial)
         cls.vol1 = cls.dataset.getFile(vol_coot1)
+        cls.pdb = cls.dataset.getFile(pdb_coot1)
 
     def testXmippResolutionBfactor(self):
         # Import input volume
@@ -1851,6 +1852,19 @@ class TestXmippResolutionBfactor(TestXmippBase):
         # Check if there is an output map
         self.assertIsNotNone(protCreateMap.getFiles(),
                              "There was a problem with the map")
+
+        # Import atomic structure
+        print("Import atomic structure")
+        protImportPdb = self.newProtocol(ProtImportPdb,
+                                         inputPdbData=ProtImportPdb.IMPORT_FROM_FILES,
+                                         pdbFile=self.pdb,
+                                         inputVolume=protImportVol.outputVolume)
+        self.launchProtocol(protImportPdb)
+        # Check if there is an output atomic structure
+        self.assertIsNotNone(protImportPdb.getFiles(),
+                             "There was a problem with the atomic structure")
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         className = sys.argv[1]
