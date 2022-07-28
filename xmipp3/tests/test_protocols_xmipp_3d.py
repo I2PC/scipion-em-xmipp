@@ -1836,9 +1836,21 @@ class TestXmippResolutionBfactor(TestXmippBase):
         protCreateMask = self.newProtocol(XmippProtCreateMask3D,
                                           inputVolume=protImportVol.outputVolume,
                                           threshold=0.09)
+        self.launchProtocol(protCreateMask)
         # Check if there is an output 3D mask
         self.assertIsNotNone(protCreateMask.getFiles(),
                              "There was a problem with the 3D mask")
+
+        # Create a map
+        print("Create a map")
+        protCreateMap = self.newProtocol(XmippProtMonoRes,
+                                         fullMap=protImportVol.outputVolume,
+                                         mask=protCreateMask.outputMask,
+                                         maxRes=10)
+        self.launchProtocol(protCreateMap)
+        # Check if there is an output map
+        self.assertIsNotNone(protCreateMap.getFiles(),
+                             "There was a problem with the map")
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         className = sys.argv[1]
