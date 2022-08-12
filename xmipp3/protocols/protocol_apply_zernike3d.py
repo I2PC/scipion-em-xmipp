@@ -93,6 +93,7 @@ class XmippApplyZernike3D(ProtAnalysis3D):
         Rmax = volume.Rmax
         refMap = volume.refMap
         refMask = volume.refMask
+        z_clnm = volume._xmipp_sphCoefficients
 
         if self.applyPDB.get():
             outFile = pwutils.removeBaseExt(self.inputPDB.get().getFileName()) + '_deformed.pdb'
@@ -102,6 +103,7 @@ class XmippApplyZernike3D(ProtAnalysis3D):
             pdb.Rmax = Float(volume.getSamplingRate() * Rmax.get())
             pdb.refMap = refMap
             pdb.refMask = refMask
+            pdb._xmipp_sphCoefficients = z_clnm
             self._defineOutputs(deformedStructure=pdb)
             self._defineSourceRelation(self.inputPDB, pdb)
             self._defineSourceRelation(volume, pdb)
@@ -114,6 +116,7 @@ class XmippApplyZernike3D(ProtAnalysis3D):
             vol.Rmax = Rmax
             vol.refMap = refMap
             vol.refMask = refMask
+            vol._xmipp_sphCoefficients = z_clnm
             self._defineOutputs(deformedVolume=vol)
             self._defineSourceRelation(volume, vol)
 
