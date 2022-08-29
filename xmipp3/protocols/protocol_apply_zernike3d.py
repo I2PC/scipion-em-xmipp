@@ -81,7 +81,7 @@ class XmippApplyZernike3D(ProtAnalysis3D):
             if volume.refMask:
                 mask_file = volume.refMask.get()
                 if pwutils.getExt(mask_file) == ".mrc":
-                    volume_file += ":mrc"
+                    mask_file += ":mrc"
                 params += " --mask %s" % mask_file
             self.runJob("xmipp_volume_apply_coefficient_zernike3d", params)
 
