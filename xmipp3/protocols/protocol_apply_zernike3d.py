@@ -53,6 +53,10 @@ class XmippApplyZernike3D(ProtAnalysis3D):
                       pointerClass='AtomStruct', allowsNull=True, condition="applyPDB==True",
                       help='Atomic structure to apply the deformation fields defined by the '
                            'Zernike3D coefficients associated to the input volume')
+        form.addParam('moveBoxOrigin', params.BooleanParam, default=False, condition="applyPDB==True",
+                      label="Move structure to box origin?",
+                      help="If PDB has been aligned inside Scipion, set to False. Otherwise, this option will "
+                           "correctly place the PDB in the origin of the volume.")
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
@@ -66,9 +70,14 @@ class XmippApplyZernike3D(ProtAnalysis3D):
         self.writeZernikeFile(z_clnm_file)
 
         if self.applyPDB.get():
+            boxSize = self.volume.get().getXDim()
+            samplingRate = self.volume.get().getSamplingRate()
             outFile = pwutils.removeBaseExt(self.inputPDB.get().getFileName()) + '_deformed.pdb'
-            params = ' --pdb %s --clnm %s -o %s' % \
-                     (self.inputPDB.get().getFileName(), z_clnm_file, self._getExtraPath(outFile))
+            params = ' --pdb %s --clnm %s -o %s --sr %f' % \
+                     (self.inputPDB.get().getFileName(), z_clnm_file, self._getExtraPath(outFile),
+                      samplingRate)
+            if self.moveBoxOrigin.get():
+                params += " --boxsize %d" % boxSize
             self.runJob("xmipp_pdb_sph_deform", params)
         else:
             outFile = self._getExtraPath("deformed_volume.mrc")
