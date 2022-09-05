@@ -27,7 +27,8 @@
 
 
 from pwem.protocols import ProtAnalysis3D
-from pwem.objects import AtomStruct, Volume, SetOfVolumes
+from pwem.objects import AtomStruct, SetOfAtomStructs
+from pwem.objects import Volume, SetOfVolumes
 
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
