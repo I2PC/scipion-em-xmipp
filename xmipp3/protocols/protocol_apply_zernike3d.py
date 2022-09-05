@@ -27,7 +27,7 @@
 
 
 from pwem.protocols import ProtAnalysis3D
-from pwem.objects import AtomStruct, Volume
+from pwem.objects import AtomStruct, Volume, SetOfVolumes
 
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
@@ -41,18 +41,19 @@ class XmippApplyZernike3D(ProtAnalysis3D):
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('volume', params.PointerParam, label="Zernike3D volume",
-                      important=True, pointerClass="Volume",
-                      help='Volume with a Zernike3D coefficients assign. For better results, '
-                           'the volume and the PDB should be aligned')
+        form.addParam('volume', params.PointerParam, label="Zernike3D volume(s)",
+                      important=True, pointerClass="SetOfVolumes,Volume",
+                      help='Volume(s) with Zernike3D coefficients assigned.')
         form.addParam('applyPDB', params.BooleanParam, label="Apply to structure?",
                       default=False,
-                      help="If True, you will be able to provide an atomic structure to deformed "
-                           "based on the Zernike3D coefficients associated to the input volume")
+                      help="If True, you will be able to provide an atomic structure to be deformed "
+                           "based on the Zernike3D coefficients associated to the input volume(s). "
+                           "If False, the coefficients will be applied to the volume(s) directly.")
         form.addParam('inputPDB', params.PointerParam, label="Input PDB",
                       pointerClass='AtomStruct', allowsNull=True, condition="applyPDB==True",
                       help='Atomic structure to apply the deformation fields defined by the '
-                           'Zernike3D coefficients associated to the input volume')
+                           'Zernike3D coefficients associated to the input volume(s). '
+                           'For better results, the volume(s) and structure should be aligned')
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
@@ -61,29 +62,34 @@ class XmippApplyZernike3D(ProtAnalysis3D):
 
     # --------------------------- STEPS functions ------------------------------
     def deformStep(self):
-        # Write coefficient to file
-        z_clnm_file = self._getExtraPath("z_clnm.txt")
-        self.writeZernikeFile(z_clnm_file)
-
-        if self.applyPDB.get():
-            outFile = pwutils.removeBaseExt(self.inputPDB.get().getFileName()) + '_deformed.pdb'
-            params = ' --pdb %s --clnm %s -o %s' % \
-                     (self.inputPDB.get().getFileName(), z_clnm_file, self._getExtraPath(outFile))
-            self.runJob("xmipp_pdb_sph_deform", params)
+        if isinstance(volume, Volume):
+            self.volumes = [self.volume.get()]
         else:
-            outFile = self._getExtraPath("deformed_volume.mrc")
-            volume = self.volume.get()
-            volume_file = volume.getFileName()
-            if pwutils.getExt(volume_file) == ".mrc":
-                volume_file += ":mrc"
-            params = "-i %s  --step 1 --blobr 2 -o %s --clnm %s" % \
-                     (volume_file, outFile, z_clnm_file)
-            if volume.refMask:
-                mask_file = volume.refMask.get()
-                if pwutils.getExt(mask_file) == ".mrc":
+            self.volumes = self.volume.get()
+
+        for i, volume in enumerate(self.volumes):
+            # Write coefficients to file
+            z_clnm_file = self._getExtraPath("z_clnm_{0}.txt".format(i))
+            self.writeZernikeFile(z_clnm_file)
+
+            if self.applyPDB.get():
+                outFile = pwutils.removeBaseExt(self.inputPDB.get().getFileName()) + '_deformed_{0}.pdb'.format(i)
+                params = ' --pdb %s --clnm %s -o %s' % \
+                         (self.inputPDB.get().getFileName(), z_clnm_file, self._getExtraPath(outFile))
+                self.runJob("xmipp_pdb_sph_deform", params)
+            else:
+                outFile = self._getExtraPath("deformed_volume.mrc")
+                volume_file = volume.getFileName()
+                if pwutils.getExt(volume_file) == ".mrc":
                     volume_file += ":mrc"
-                params += " --mask %s" % mask_file
-            self.runJob("xmipp_volume_apply_coefficient_zernike3d", params)
+                params = "-i %s  --step 1 --blobr 2 -o %s --clnm %s" % \
+                         (volume_file, outFile, z_clnm_file)
+                if volume.refMask:
+                    mask_file = volume.refMask.get()
+                    if pwutils.getExt(mask_file) == ".mrc":
+                        volume_file += ":mrc"
+                    params += " --mask %s" % mask_file
+                self.runJob("xmipp_volume_apply_coefficient_zernike3d", params)
 
     def createOutputStep(self):
         volume = self.volume.get()
