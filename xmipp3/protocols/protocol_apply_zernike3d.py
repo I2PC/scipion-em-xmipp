@@ -52,8 +52,12 @@ class XmippApplyZernike3D(ProtAnalysis3D):
         form.addParam('inputPDB', params.PointerParam, label="Input PDB",
                       pointerClass='AtomStruct', allowsNull=True, condition="applyPDB==True",
                       help='Atomic structure to apply the deformation fields defined by the '
-                           'Zernike3D coefficients associated to the input volume(s). '
+                           'Zernike3D coefficients associated to the input volume. '
                            'For better results, the volume(s) and structure should be aligned')
+        form.addParam('moveBoxOrigin', params.BooleanParam, default=False, condition="applyPDB==True",
+                      label="Move structure to box origin?",
+                      help="If PDB has been aligned inside Scipion, set to False. Otherwise, this option will "
+                           "correctly place the PDB in the origin of the volume.")
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
@@ -73,9 +77,14 @@ class XmippApplyZernike3D(ProtAnalysis3D):
             self.writeZernikeFile(z_clnm_file)
 
             if self.applyPDB.get():
+                boxSize = self.volume.get().getXDim()
+                samplingRate = self.volume.get().getSamplingRate()
                 outFile = pwutils.removeBaseExt(self.inputPDB.get().getFileName()) + '_deformed_{0}.pdb'.format(i)
-                params = ' --pdb %s --clnm %s -o %s' % \
-                         (self.inputPDB.get().getFileName(), z_clnm_file, self._getExtraPath(outFile))
+                params = ' --pdb %s --clnm %s -o %s --sr %f' % \
+                         (self.inputPDB.get().getFileName(), z_clnm_file, self._getExtraPath(outFile),
+                          samplingRate)
+                if self.moveBoxOrigin.get():
+                    params += " --boxsize %d" % boxSize
                 self.runJob("xmipp_pdb_sph_deform", params)
             else:
                 outFile = self._getExtraPath("deformed_volume.mrc")
@@ -99,6 +108,7 @@ class XmippApplyZernike3D(ProtAnalysis3D):
         Rmax = volume.Rmax
         refMap = volume.refMap
         refMask = volume.refMask
+        z_clnm = volume._xmipp_sphCoefficients
 
         if self.applyPDB.get():
             outFile = pwutils.removeBaseExt(self.inputPDB.get().getFileName()) + '_deformed.pdb'
@@ -108,6 +118,7 @@ class XmippApplyZernike3D(ProtAnalysis3D):
             pdb.Rmax = Float(volume.getSamplingRate() * Rmax.get())
             pdb.refMap = refMap
             pdb.refMask = refMask
+            pdb._xmipp_sphCoefficients = z_clnm
             self._defineOutputs(deformedStructure=pdb)
             self._defineSourceRelation(self.inputPDB, pdb)
             self._defineSourceRelation(volume, pdb)
@@ -120,6 +131,7 @@ class XmippApplyZernike3D(ProtAnalysis3D):
             vol.Rmax = Rmax
             vol.refMap = refMap
             vol.refMask = refMask
+            vol._xmipp_sphCoefficients = z_clnm
             self._defineOutputs(deformedVolume=vol)
             self._defineSourceRelation(volume, vol)
 
