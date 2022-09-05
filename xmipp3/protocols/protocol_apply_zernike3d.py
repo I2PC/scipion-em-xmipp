@@ -66,7 +66,7 @@ class XmippApplyZernike3D(ProtAnalysis3D):
 
     # --------------------------- STEPS functions ------------------------------
     def deformStep(self):
-        if isinstance(volume, Volume):
+        if isinstance(self.volume.get(), Volume):
             self.volumes = [self.volume.get()]
         else:
             self.volumes = self.volume.get()
