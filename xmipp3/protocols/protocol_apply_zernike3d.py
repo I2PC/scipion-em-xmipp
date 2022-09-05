@@ -126,7 +126,7 @@ class XmippApplyZernike3D(ProtAnalysis3D):
                 pdb.refMap = refMap
                 pdb.refMask = refMask
                 pdb._xmipp_sphCoefficients = z_clnm
-                self._defineOutputs(deformedStructure=pdb)
+                self._defineOutputs(deformed=pdb)
                 self._defineSourceRelation(self.inputPDB, pdb)
                 self._defineSourceRelation(volume, pdb)
             else:
@@ -139,7 +139,7 @@ class XmippApplyZernike3D(ProtAnalysis3D):
                 vol.refMap = refMap
                 vol.refMask = refMask
                 vol._xmipp_sphCoefficients = z_clnm
-                self._defineOutputs(deformedVolume=vol)
+                self._defineOutputs(deformed=vol)
                 self._defineSourceRelation(volume, vol)
         else:
             if self.applyPDB.get():
@@ -183,11 +183,11 @@ class XmippApplyZernike3D(ProtAnalysis3D):
                     self._defineSourceRelation(volume, vol)
 
             if self.applyPDB.get():
-                self._defineOutputs(deformedStructures=pdbs)
+                self._defineOutputs(deformed=pdbs)
                 self._defineSourceRelation(self.inputPDB, pdbs)
                 self._defineSourceRelation(volumes, pdbs)
             else:
-                self._defineOutputs(deformedVolumes=vols)
+                self._defineOutputs(deformed=vols)
                 self._defineSourceRelation(volumes, vols)
 
     # --------------------------- UTILS functions ------------------------------
