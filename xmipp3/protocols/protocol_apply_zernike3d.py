@@ -71,15 +71,20 @@ class XmippApplyZernike3D(ProtAnalysis3D):
         else:
             self.volumes = self.volume.get()
 
+        num_vols = len(self.volumes)
+        len_num_vols = len(str(num_vols))
+
         for i, volume in enumerate(self.volumes):
+            i_pad = str(i).zfill(len_num_vols)
+
             # Write coefficients to file
-            z_clnm_file = self._getExtraPath("z_clnm_{0}.txt".format(i))
+            z_clnm_file = self._getExtraPath("z_clnm_{0}.txt".format(i_pad))
             self.writeZernikeFile(z_clnm_file)
 
             if self.applyPDB.get():
                 boxSize = self.volume.get().getXDim()
                 samplingRate = self.volume.get().getSamplingRate()
-                outFile = pwutils.removeBaseExt(self.inputPDB.get().getFileName()) + '_deformed_{0}.pdb'.format(i)
+                outFile = pwutils.removeBaseExt(self.inputPDB.get().getFileName()) + '_deformed_{0}.pdb'.format(i_pad)
                 params = ' --pdb %s --clnm %s -o %s --sr %f' % \
                          (self.inputPDB.get().getFileName(), z_clnm_file, self._getExtraPath(outFile),
                           samplingRate)
@@ -101,39 +106,88 @@ class XmippApplyZernike3D(ProtAnalysis3D):
                 self.runJob("xmipp_volume_apply_coefficient_zernike3d", params)
 
     def createOutputStep(self):
-        volume = self.volume.get()
+        if isinstance(self.volumes, list):
+            volume = self.volume.get()
 
-        L1 = volume.L1
-        L2 = volume.L2
-        Rmax = volume.Rmax
-        refMap = volume.refMap
-        refMask = volume.refMask
-        z_clnm = volume._xmipp_sphCoefficients
+            L1 = volume.L1
+            L2 = volume.L2
+            Rmax = volume.Rmax
+            refMap = volume.refMap
+            refMask = volume.refMask
+            z_clnm = volume._xmipp_sphCoefficients
 
-        if self.applyPDB.get():
-            outFile = pwutils.removeBaseExt(self.inputPDB.get().getFileName()) + '_deformed.pdb'
-            pdb = AtomStruct(self._getExtraPath(outFile))
-            pdb.L1 = L1
-            pdb.L2 = L2
-            pdb.Rmax = Float(volume.getSamplingRate() * Rmax.get())
-            pdb.refMap = refMap
-            pdb.refMask = refMask
-            pdb._xmipp_sphCoefficients = z_clnm
-            self._defineOutputs(deformedStructure=pdb)
-            self._defineSourceRelation(self.inputPDB, pdb)
-            self._defineSourceRelation(volume, pdb)
+            if self.applyPDB.get():
+                outFile = pwutils.removeBaseExt(self.inputPDB.get().getFileName()) + '_deformed.pdb'
+                pdb = AtomStruct(self._getExtraPath(outFile))
+                pdb.L1 = L1
+                pdb.L2 = L2
+                pdb.Rmax = Float(volume.getSamplingRate() * Rmax.get())
+                pdb.refMap = refMap
+                pdb.refMask = refMask
+                pdb._xmipp_sphCoefficients = z_clnm
+                self._defineOutputs(deformedStructure=pdb)
+                self._defineSourceRelation(self.inputPDB, pdb)
+                self._defineSourceRelation(volume, pdb)
+            else:
+                vol = Volume()
+                vol.setSamplingRate(volume.getSamplingRate())
+                vol.setFileName(self._getExtraPath("deformed_volume.mrc"))
+                vol.L1 = L1
+                vol.L2 = L2
+                vol.Rmax = Rmax
+                vol.refMap = refMap
+                vol.refMask = refMask
+                vol._xmipp_sphCoefficients = z_clnm
+                self._defineOutputs(deformedVolume=vol)
+                self._defineSourceRelation(volume, vol)
         else:
-            vol = Volume()
-            vol.setSamplingRate(volume.getSamplingRate())
-            vol.setFileName(self._getExtraPath("deformed_volume.mrc"))
-            vol.L1 = L1
-            vol.L2 = L2
-            vol.Rmax = Rmax
-            vol.refMap = refMap
-            vol.refMask = refMask
-            vol._xmipp_sphCoefficients = z_clnm
-            self._defineOutputs(deformedVolume=vol)
-            self._defineSourceRelation(volume, vol)
+            if self.applyPDB.get():
+                pdbs = SetOfAtomStructs().create(self._getPath())
+            else:
+                vols = self._createSetOfVolumes()
+
+            for i, volume in enumerate(self.volumes):
+                i_pad = str(i).zfill(len_num_vols)
+
+                L1 = volume.L1
+                L2 = volume.L2
+                Rmax = volume.Rmax
+                refMap = volume.refMap
+                refMask = volume.refMask
+                z_clnm = volume._xmipp_sphCoefficients
+
+                if self.applyPDB.get():
+                    outFile = pwutils.removeBaseExt(self.inputPDB.get().getFileName()) + '_deformed_{0}.pdb'.format(i_pad)
+                    pdb = AtomStruct(self._getExtraPath(outFile))
+                    pdb.L1 = L1
+                    pdb.L2 = L2
+                    pdb.Rmax = Float(volume.getSamplingRate() * Rmax.get())
+                    pdb.refMap = refMap
+                    pdb.refMask = refMask
+                    pdb._xmipp_sphCoefficients = z_clnm
+
+                    self._defineSourceRelation(self.inputPDB, pdb)
+                    self._defineSourceRelation(volume, pdb)
+                    pdbs.append(pdb)
+                else:
+                    vol = Volume()
+                    vol.setSamplingRate(volume.getSamplingRate())
+                    vol.setFileName(self._getExtraPath("deformed_volume_{0}.mrc".format(i_pad)))
+                    vol.L1 = L1
+                    vol.L2 = L2
+                    vol.Rmax = Rmax
+                    vol.refMap = refMap
+                    vol.refMask = refMask
+                    vol._xmipp_sphCoefficients = z_clnm
+                    self._defineSourceRelation(volume, vol)
+
+            if self.applyPDB.get():
+                self._defineOutputs(deformedStructures=pdbs)
+                self._defineSourceRelation(self.inputPDB, pdbs)
+                self._defineSourceRelation(volumes, pdbs)
+            else:
+                self._defineOutputs(deformedVolumes=vols)
+                self._defineSourceRelation(volumes, vols)
 
     # --------------------------- UTILS functions ------------------------------
     def writeZernikeFile(self, file):
