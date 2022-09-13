@@ -60,6 +60,9 @@ class XmippProtSubtractProjection(EMProtocol):
                       help='Particles with negative beta0 or R2 will not appear in the output set as they are '
                            'considered bad particles. Moreover, negative betas will not contribute to mean beta if '
                            '"mean" option is selected')
+        form.addParam('noFinalMask', BooleanParam, label="Do not mask final result: ", default=True,
+                      expertLevel=LEVEL_ADVANCED, help='If yes, do not mask the final result. If no, mask result with a'
+                                                       ' dilated version of the mask of the region to keep')
         form.addParam('limit_freq', BooleanParam, label="Limit frequency?: ", default=False, expertLevel=LEVEL_ADVANCED,
                       help='Limit frequency in the adjustment process to the frequency correspondent to the resolution'
                            ' indicated in "Maximum resolution" field above')
@@ -95,6 +98,8 @@ class XmippProtSubtractProjection(EMProtocol):
             args += ' --mean'
         if self.nonNegative.get():
             args += ' --nonNegative'
+        if self.noFinalMask.get():
+            args += ' --noFinalMask'
         self.runJob("xmipp_subtract_projection", args)
 
     def createOutputStep(self):
