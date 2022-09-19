@@ -35,6 +35,7 @@ from .protocol_preprocess.protocol_add_noise import (XmippProtAddNoiseVolumes,
                                                      XmippProtAddNoiseParticles)
 from .protocol_apply_alignment import XmippProtApplyAlignment
 from .protocol_apply_transformation_matrix import XmippProtApplyTransformationMatrix
+from .protocol_boost_particles import XmippProtBoostParticles
 from .protocol_break_symmetry import XmippProtAngBreakSymmetry
 from .protocol_cl2d_align import XmippProtCL2DAlign
 from .protocol_cl2d import XmippProtCL2D
