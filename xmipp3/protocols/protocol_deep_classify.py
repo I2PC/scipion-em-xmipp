@@ -28,22 +28,27 @@
 import numpy as np
 import random
 
-from pyworkflow import VERSION_2_0
+from pyworkflow import VERSION_3_0
+from pwem import emlib
 from pwem.constants import ALIGN_2D
 from pwem.objects import Class2D, Particle, Coordinate, Transform
 from pwem.protocols import ProtClassify2D
 import pwem.emlib.metadata as md
 import pyworkflow.protocol.params as params
+import pickle
+import xmipp3
+
 
 from pwem.emlib import MD_APPEND
 from xmipp3.convert import (rowToAlignment, alignmentToRow,
                             rowToParticle, writeSetOfClasses2D, xmippToLocation)
 
 
-class XmippProtDeepClassify(ProtClassify2D):
+class XmippProtDeepClassify(ProtClassify2D, xmipp3.XmippProtocol):
     """ Realignment of un-centered particles. """
     _label = 'deep classify'
-    _lastUpdateVersion = VERSION_2_0
+    _lastUpdateVersion = VERSION_3_0
+    _conda_env = 'xmipp_DLTK_v0.3'
 
     # --------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
@@ -54,8 +59,11 @@ class XmippProtDeepClassify(ProtClassify2D):
                       label="Input Classes",
                       help='Set of classes to be realing')
 
+        form.addParam('inputSet', params.PointerParam, label="Input images to predict",
+                      pointerClass='SetOfParticles')
+
         form.addParallelSection(threads=0, mpi=0)
-    # --------------------------- INSERT steps functions -----------------------
+    # --------------------------- INSERT steps functions ----------------------
     def _insertAllSteps(self):
         self._insertFunctionStep('readImageStep')
         self._insertFunctionStep('createOutputStep')
@@ -67,51 +75,93 @@ class XmippProtDeepClassify(ProtClassify2D):
         inputMdName = self._getExtraPath('inputClasses.xmd')
         writeSetOfClasses2D(self.inputClasses.get(), inputMdName,
                             writeParticles=True)
-        
+
+        setImage = self.inputSet.get()
+
+        dim = int(self.inputClasses.get().getDimensions()[0])
+        print("dimensiones = ", dim)
+
         cl = []
-        listImage = []
+        cl2 = []
+        listCount = []
         
         for row in md.iterRows(inputMdName):
         
-            classImage = row.getValue(md.MDL_IMAGE)
+            classFile = row.getValue(md.MDL_IMAGE)
             classCount = row.getValue(md.MDL_CLASS_COUNT)
             refNum = row.getValue(md.MDL_REF)
+
+            classImage = emlib.Image(classFile).getData()
+            # normalization
+            classImage = (classImage - np.mean(classImage)) / np.std(classImage)
+
+            #classImage_array = np.array(classImage)
+
             print(classImage)
+
             print(classCount)
             
-            
-            cl.append(classImage) 
+            listCount.append(classCount)
+            cl.append(classImage)
+            cl2.append(classFile)
+        np.save(self._getTmpPath('clases_array.npy'), cl)
 
         print(refNum)
-        print(cl[0].split("@")[0])
-  
+        print(listCount)
+
+        #save list of image for class
+        countFile = '%s' %self._getTmpPath('countList')
+        with open(countFile, "wb") as fp:
+            pickle.dump(listCount, fp)
+
         count=0
         mdBlocks = md.getBlocksInMetaDataFile(inputMdName)
-        
+
+        listImage = []
         for block in mdBlocks:
                     
-            listImage.append([]) 
+            # listImage.append([])
+
                        
-            if block.startswith('class' + cl[count].split("@")[0]):
+            if block.startswith('class' + cl2[count].split("@")[0]):
                 
                 mdClass = md.MetaData(block + "@" + inputMdName)
                 
                 for rowIn in md.iterRows(mdClass):
                     image = rowIn.getValue(md.MDL_IMAGE)
-                    listImage[count].append(image)
+
+                    image_array = emlib.Image(image).getData()
+                    # normalization
+                    image_array = (image_array - np.mean(image_array)) / np.std(image_array)
+
+                    listImage.append(image_array)
 
                 count+=1
- 
-        # print(listImage[4])
+
+        # listImageF = np.array([elem for singleList in listImage for elem in singleList])
+        #listImageF = np.array(listImage)
+
+        np.save(self._getTmpPath('images_array.npy'), listImage)
+
         
         #select class-image pair randomly
 
-        n = np.random.randint(0,refNum-1)
-        print("random class = ",n)
-        clTest = cl[n]
-        imTest = np.random.choice(listImage[n])
-        print(clTest, imTest)
-        
+        # n = np.random.randint(0,refNum-1)
+        # print("random class = ",n)
+        # clTest = cl[n]
+        # imTest = np.random.choice(listImage[n])
+        # print(clTest, imTest)
+
+        # training mode
+        #args = "%s" %self._getTmpPath('images_array.npy')
+        args = "%s  %s  %s  %d %d" %(self._getTmpPath('clases_array.npy'),  self._getTmpPath('images_array.npy') ,self._getTmpPath('countList'), refNum, dim)
+        self.runJob("xmipp_deep_classify", args, env=self.getCondaEnv())
+
+        # predict mode
+        #args = "%s" %self._getTmpPath('images_array.npy')
+        model_save = self._getTmpPath('model_train.h5')
+        args = "%s  %d %s" %(self._getTmpPath('images_predict_array.npy'), dim, model_save)
+        self.runJob("xmipp_deep_classify_predict", args, env=self.getCondaEnv())
         
 
 
@@ -176,6 +226,10 @@ class XmippProtDeepClassify(ProtClassify2D):
                 newClass.setAlignment2D()
                 outputClasses.update(newClass)
 
+
+
+
+
     def _fillParticles(self, outputParticles):
         """ Create the SetOfParticles and SetOfCoordinates"""
         myParticles = md.MetaData(self._getExtraPath('final_images.xmd'))
@@ -193,12 +247,12 @@ class XmippProtDeepClassify(ProtClassify2D):
                        % self.inputClasses.get().getSize())
         return summary
 
-    def _validate(self):
-        errors = []
-        try:
-            self.inputClasses.get().getImages().getAcquisition()
-        except AttributeError:
-            errors.append('InputClasses has not clases')
-
-        return errors
+    # def _validate(self):
+    #     errors = []
+    #     try:
+    #         self.inputClasses.get().getImages().getAcquisition()
+    #     except AttributeError:
+    #         errors.append('InputClasses has not clases')
+    #
+    #     return errors
 
