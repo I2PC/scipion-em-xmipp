@@ -57,7 +57,7 @@ class XmippProtLocalCTF(ProtAnalysis3D):
         form.addParam('inputVolume', PointerParam, label="Volume to compare images to",
                       pointerClass='Volume',
                       help='Volume to be used for class comparison')
-        form.addParam('maxDefocusChange', FloatParam, label="Maximum defocus change (A)", default=10000,
+        form.addParam('maxDefocusChange', FloatParam, label="Maximum defocus change (A)", default=500,
                       expertLevel=LEVEL_ADVANCED)
         form.addParam('maxGrayScaleChange', FloatParam, label="Maximum gray scale change", default=1,
                       expertLevel=LEVEL_ADVANCED, help="The reprojection is modified as a*P+b, a is restricted to the "

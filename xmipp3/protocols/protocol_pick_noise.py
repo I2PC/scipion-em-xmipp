@@ -141,6 +141,8 @@ class XmippProtPickNoise(ProtParticlePicking, XmippProtocol):
         summary = []
         if hasattr(self, 'outputCoordinates'):
             summary.append('%d noisy particles were picked'%self.outputCoordinates.getSize())
+        else:
+            summary.append("The output set of noisy particles has not finished yet")
         return summary
 
 

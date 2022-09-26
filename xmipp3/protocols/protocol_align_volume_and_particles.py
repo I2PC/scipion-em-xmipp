@@ -235,7 +235,7 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
     
     def _summary(self):
         summary = []
-        summary.append("Alignment method: %s" % self.getEnumText('alignmentAlgorithm'))
+        summary.append("Alignment method: %s" % self.getEnumText('alignmentMode'))
         return summary
     
     def _methods(self):

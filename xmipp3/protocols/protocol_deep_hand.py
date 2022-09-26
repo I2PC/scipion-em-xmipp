@@ -25,10 +25,9 @@
 # **************************************************************************
 
 from pwem.protocols import EMProtocol
-from pwem.emlib.image import ImageHandler
 from pwem.objects import Volume
 
-from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam
+from pyworkflow.protocol.params import PointerParam, FloatParam
 from pyworkflow.object import Float
 from pyworkflow.utils.path import cleanPath
 
@@ -45,9 +44,11 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
     def __init__(self, *args, **kwargs):
         EMProtocol.__init__(self, *args, **kwargs)
         XmippProtocol.__init__(self)
+        self.vResizedVolFile = 'resizedVol.mrc'
+        self.vMaskFile = 'mask.mrc'
+        self.vFilteredVolFile = 'filteredVol.mrc'
 
     def _defineParams(self, form):
-
         form.addSection('Input')
         form.addParam('inputVolume', PointerParam, pointerClass="Volume",
                       label='Input Volume', allowsNull=False,
@@ -67,16 +68,15 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
         self._insertFunctionStep('createOutputStep')
 
     def preprocessStep(self):
-
         # Get volume information
         volume = self.inputVolume.get()
         fn_vol = getImageLocation(volume)
         T_s = volume.getSamplingRate()
 
         # Paths to new files created
-        self.resizedVolFile = self._getPath('resizedVol.mrc')
-        self.maskFile = self._getPath('mask.mrc')
-        self.filteredVolFile = self._getPath('filteredVol.mrc')
+        self.resizedVolFile = self._getPath(self.vResizedVolFile)
+        self.maskFile = self._getPath(self.vMaskFile)
+        self.filteredVolFile = self._getPath(self.vFilteredVolFile)
 
         # Resize to 1A/px
         self.runJob("xmipp_image_resize", "-i %s -o %s --factor %f" %
@@ -102,8 +102,8 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
         args = "--alphaModel %s --handModel %s -o %s " \
                "--alphaThr %f --pathVf %s --pathVmask %s" % (
                 alpha_model, hand_model, self._getExtraPath(),
-                self.thresholdAlpha.get(), self._getPath('filteredVol.mrc'),
-                self._getPath('mask.mrc'))
+                self.thresholdAlpha.get(), self._getPath(self.vFilteredVolFile),
+                self._getPath(self.vMaskFile))
         self.runJob("xmipp_deep_hand", args, env=self.getCondaEnv())
 
         # Store hand value
@@ -135,9 +135,9 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
             self._defineOutputs(outputVol=self.inputVolume.get())
         self._defineSourceRelation(self.inputVolume, self.outputVol)
 
-        cleanPath(self._getPath('resizedVol.mrc'))
-        cleanPath(self._getPath('mask.mrc'))
-        cleanPath(self._getPath('filteredVol.mrc'))
+        cleanPath(self._getPath(self.vResizedVolFile))
+        cleanPath(self._getPath(self.vMaskFile))
+        cleanPath(self._getPath(self.vFilteredVolFile))
 
 # --------------------------- INFO functions -------------------------------
     def _summary(self):
@@ -151,7 +151,8 @@ class XmippProtDeepHand(EMProtocol, XmippProtocol):
                 summary.append('Volume was flipped as it was deemed to be left handed')
             else:
                 summary.append('Volume was not flipped as it was deemed to be right handed')
-
+        else:
+            summary.append("Output volume and handedness not ready yet.")
         return summary
 
     def _methods(self):

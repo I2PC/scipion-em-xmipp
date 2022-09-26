@@ -26,7 +26,7 @@
 import pyworkflow.protocol.params as params
 
 import pwem.emlib.metadata as md
-from pwem.objects import Particle
+from pwem.objects import Particle, SetOfAverages, SetOfClasses2D
 from pwem.protocols import ProtAlign2D
 from pwem import ALIGN_NONE, ALIGN_2D
 
@@ -47,9 +47,10 @@ class XmippProtCL2DAlign(ProtAlign2D):
                            'averaging subsets of the input images.')
         form.addParam('referenceImage', params.PointerParam,
                       condition='useReferenceImage',
-                      pointerClass='Particle', allowsNull=True,
+                      pointerClass='Particle, SetOfAverages, SetOfClasses2D', allowsNull=True,
                       label="Reference image",
-                      help='Image that will serve as class reference')
+                      help='Image that will serve as class reference. If the input is a set, then the first image '
+                           'will be used as reference.')
         form.addParam('maximumShift', params.IntParam, default=10,
                       label='Maximum shift (px):')
         form.addParam('numberOfIterations', params.IntParam, default=10,
@@ -76,7 +77,12 @@ class XmippProtCL2DAlign(ProtAlign2D):
                 '--maxShift %(maxshift)d')
         
         if self.useReferenceImage:
-            args += " --ref0 " + getImageLocation(self.referenceImage.get())
+            if isinstance(self.referenceImage.get(),Particle):
+                args += " --ref0 " + getImageLocation(self.referenceImage.get())
+            elif isinstance(self.referenceImage.get(), SetOfClasses2D):
+                args += " --ref0 " + getImageLocation(self.referenceImage.get().getFirstItem().getRepresentative())
+            else:
+                args += " --ref0 " + getImageLocation(self.referenceImage.get().getFirstItem())
         else:
             args += " --nref0 1"
         self._insertRunJobStep("xmipp_classify_CL2D", args % self._params)
@@ -121,7 +127,10 @@ class XmippProtCL2DAlign(ProtAlign2D):
         if self.useReferenceImage:
             if self.referenceImage.hasValue():
                 refImage = self.referenceImage.get()
-                [x1, y1, z1] = refImage.getDim()
+                if isinstance(refImage,Particle):
+                    [x1, y1, z1] = refImage.getDim()
+                else:
+                    [x1, y1, z1] = refImage.getFirstItem().getDim()
                 [x2, y2, z2] = self.inputParticles.get().getDim()
                 if x1 != x2 or y1 != y2 or z1 != z2:
                     errors.append('The input images and the reference image '
