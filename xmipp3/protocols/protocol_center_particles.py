@@ -120,7 +120,6 @@ class XmippProtCenterParticles(ProtClassify2D):
                 mdClass = md.MetaData(block + "@" + inputMdName)
                 mdNewClass = md.MetaData()
                 i += 1
-                j = 0
                 for rowIn in md.iterRows(mdClass):
                     #To create the transformation matrix (and its parameters)
                     #  for the realigned particles
@@ -156,7 +155,6 @@ class XmippProtCenterParticles(ProtClassify2D):
                         md.MDL_YCOOR)+int(centerPoint[1]))
 
                     rowOut.addToMd(mdNewClass)
-                    j += 1
 
                 mdNewClass.write(block + "@" + self._getExtraPath(
                     'final_classes.xmd'), MD_APPEND)
@@ -252,10 +250,10 @@ class XmippProtCenterParticles(ProtClassify2D):
 
     def _validate(self):
         errors = []
-        # try:
-        #     self.inputClasses.get().getImages()
-        # except AttributeError:
-        #     errors.append('Try and catch InputClasses has no particles.')
+        try:
+            self.inputClasses.get().getImages()
+        except AttributeError:
+            errors.append('Try and catch InputClasses has no particles.')
 
         return errors
 
