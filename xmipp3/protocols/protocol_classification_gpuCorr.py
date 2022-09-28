@@ -201,9 +201,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
 
 
     def createOutputStep(self):
-
-        inputParticles = self.inputParticles.get()
-        classes2DSet = self._createSetOfClasses2D(inputParticles)
+        classes2DSet = self._createSetOfClasses2D(self.inputParticles)
         self._fillClassesFromLevel(classes2DSet)
         result = {'outputClasses': classes2DSet}
         self._defineOutputs(**result)
