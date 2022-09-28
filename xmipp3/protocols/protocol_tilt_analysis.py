@@ -1,4 +1,4 @@
- #**************************************************************************
+# **************************************************************************
 # *
 # * Authors:     Carlos Oscar S. Sorzano (coss@cnb.csic.es)
 # *              Daniel Marchán Torres (da.marchan@cnb.csic.es)
@@ -47,14 +47,12 @@ from xmipp3.convert import getScipionObj
 from matplotlib import pyplot as plt
 
 
-
 class XmippProtTiltAnalysis(ProtMicrographs):
     """ Estimate the tilt of a micrograph, by analyzing the PSD correlations of different segments of the image.
     """
     _label = 'tilt analysis'
     _lastUpdateVersion = VERSION_3_0
     stats = {}
-
 
     def __init__(self, **args):
         ProtMicrographs.__init__(self, **args)
@@ -71,28 +69,27 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
         form.addParam('window_size', IntParam, label='Window size',
                       default=1024, expertLevel=LEVEL_ADVANCED, validators=[GE(256, 'Error must be greater than 256')],
-                      help='''By default, the micrograph will be divided into windows of dimensions 512x512, 
-                            the PSD and its correlations will be computed in every segment.''')
+                      help='''By default, the micrograph will be divided into windows of dimensions 512x512, the PSD '''
+                           '''its correlations will be computed in every segment.''')
 
         form.addParam('objective_resolution', FloatParam, label='Objective resolution',
                       default=3, expertLevel=LEVEL_ADVANCED, validators=[GT(0, 'Error must be Positive')],
-                      help='''By default, micrographs PSD will be cropped into a central windows of dimensions
-                            (xdim*(sampling rate/objective resolution)) 
-                            x (ydim*(sampling rate/objective resolution)).''')
+                      help='''By default, micrographs PSD will be cropped into a central windows of dimensions (xdim*'''
+                           '''(sampling rate/objective resolution)) x (ydim*(sampling rate/objective resolution)).''')
 
         form.addParam('meanCorr_threshold', FloatParam, label='Mean correlation threshold',
                       default=0.5, expertLevel=LEVEL_ADVANCED, validators=[Range(0, 1)],
-                      help='''By default, micrographs will be divided into an output set and a discarded set based
-                            on the mean and std threshold''')
+                      help='''By default, micrographs will be divided into an output set and a discarded set based'''
+                           ''' on the mean and std threshold''')
 
         form.addParam('stdCorr_threshold', FloatParam, label='STD correlation threshold',
                       default=0.1, expertLevel=LEVEL_ADVANCED, validators=[GT(0, 'Error must be greater than 0')],
-                      help='''By default, micrographs will be divided into an output set and a discarded set based
-                                    on the mean and std threshold''')
+                      help='''By default, micrographs will be divided into an output set and a discarded set based'''
+                           ''' on the mean and std threshold.''')
 
         form.addHidden('saveIntermediateResults', BooleanParam, default=False, label="Save intermediate results",
-                        help='''Save the micrograph segments, the PSD of those segments
-                           and the correlation statistics of those segments''')
+                       help='''Save the micrograph segments, the PSD of those segments'''
+                            ''' and the correlation statistics of those segments.''')
 
         form.addParallelSection(threads=4, mpi=1)
 
@@ -113,7 +110,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         self._insertFunctionStep('createOutputStep',
                                  prerequisites=finalSteps, wait=waitCondition)
 
-
     def initializeStep(self):
         self.insertedDict = OrderedDict()
         self.samplingRate = self.inputMicrographs.get().getSamplingRate()
@@ -123,15 +119,12 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         self.micsDict = {mic.getObjId(): mic.clone() for mic in self._loadInputList(self.micsFn).iterItems()}
         pwutils.makePath(self._getExtraPath('DONE'))
 
-
     def createOutputStep(self):
         self._closeOutputSet()
-
 
     def _loadInputList(self, micsFn):
         """ Load the input set of mics and create a list. """
         self.debug("Loading input db: %s" % micsFn)
-        #Here some how we need to filter by timestamp
         micSet = SetOfMicrographs(filename=micsFn)
         micSet.loadAllProperties()
         self.streamClosed = micSet.isStreamClosed()
@@ -139,13 +132,11 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         self.debug("Closed db.")
         return micSet
 
-
     def _stepsCheck(self):
         # Input micrograph set can be loaded or None when checked for new inputs
         # If None, we load it
         self._checkNewInput()
         self._checkNewOutput()
-
 
     def _getFirstJoinStepName(self):
         # This function will be used for streaming, to check which is
@@ -154,13 +145,11 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         # (e.g., in Xmipp 'sortPSDStep')
         return 'createOutputStep'
 
-
     def _getFirstJoinStep(self):
         for s in self._steps:
             if s.funcName == self._getFirstJoinStepName():
                 return s
         return None
-
 
     def _checkNewInput(self):
         # Check if there are new micrographs to process from the input set
@@ -198,7 +187,8 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         # Load previously done items (from text file)
         doneList = self._readDoneList()
         # Check for newly done items
-        newDone = [m.clone() for m in self.micsDict.values() if int(m.getObjId()) not in doneList and self._isMicDone(m)]
+        newDone = [m.clone() for m in self.micsDict.values() if
+                   int(m.getObjId()) not in doneList and self._isMicDone(m)]
         allDone = len(doneList) + len(newDone)
         # We have finished when there is not more input movies
         # (stream closed) and the number of processed movies is
@@ -217,12 +207,12 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         micsAccepted = []
         micsDiscarded = []
         for mic in newDone:
-            id = mic.getObjId()
-            corr_mean = Float(self.stats[id]['mean'])
-            corr_std = Float(self.stats[id]['std'])
-            corr_min = Float(self.stats[id]['min'])
-            corr_max = Float(self.stats[id]['max'])
-            psdImage = Image(location=self.getPSDs(self._getExtraPath(), id))
+            micId = mic.getObjId()
+            corr_mean = Float(self.stats[micId]['mean'])
+            corr_std = Float(self.stats[micId]['std'])
+            corr_min = Float(self.stats[micId]['min'])
+            corr_max = Float(self.stats[micId]['max'])
+            psdImage = Image(location=self.getPSDs(self._getExtraPath(), micId))
             new_Mic = mic.clone()
             setAttribute(new_Mic, '_tilt_mean_corr', corr_mean)
             setAttribute(new_Mic, '_tilt_std_corr', corr_std)
@@ -252,7 +242,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(cons.STATUS_NEW)
 
-
     def _closeOutputSet(self):
         if self.hasAttribute('outputMicrographs'):
             self.outputMicrographs.close()
@@ -277,7 +266,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
         return deps
 
-
     def _insertMicrographStep(self, micrograph):
         """ Insert the processMicStep for a given movie. """
         # Note1: At this point is safe to pass the micrograph, since this
@@ -288,7 +276,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         micDict = micrograph.getObjDict(includeBasic=True)
         micStepId = self._insertFunctionStep('processMicrographStep', micDict, prerequisites=[])
         return micStepId
-
 
     def processMicrographStep(self, micDict):
         micrograph = Micrograph()
@@ -327,7 +314,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         # Mark this movie as finished
         open(micDoneFn, 'w').close()
 
-
     def _processMicrograph(self, micrograph):
         micrographId = micrograph.getObjId()
         correlations = self.calculateTiltCorrelationStep(micrograph)
@@ -337,24 +323,19 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         stats = computeStats(correlations)
         self.stats[micrographId] = stats
 
-        fnSummary = self._getPath("summary.txt")
         fnMonitorSummary = self._getPath("summaryForMonitor.txt")
 
-        if not os.path.exists(fnSummary):
-            fhSummary = open(fnSummary, "w")
+        if not os.path.exists(fnMonitorSummary):
             fnMonitorSummary = open(fnMonitorSummary, "w")
         else:
-            fhSummary = open(fnSummary, "a")
             fnMonitorSummary = open(fnMonitorSummary, "a")
 
-        fhSummary.write("micrograph_%06d: mean=%f std=%f [min=%f,max=%f] \n" %
-                        (micrographId, stats['mean'], stats['std'], stats['min'], stats['max']))
-        fhSummary.close()
+        self.info("\nmicrograph_%06d: mean=%f std=%f [min=%f,max=%f] \n" %
+                  (micrographId, stats['mean'], stats['std'], stats['min'], stats['max']))
 
         fnMonitorSummary.write("micrograph_%06d: mean=%f std=%f [min=%f,max=%f] \n" %
-                              (micrographId, stats['mean'], stats['std'], stats['min'], stats['max']))
+                               (micrographId, stats['mean'], stats['std'], stats['min'], stats['max']))
         fnMonitorSummary.close()
-
 
     def calculateTiltCorrelationStep(self, mic):
         psds = []
@@ -372,15 +353,15 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         window_image = ImageHandler().createImage()
         rotatedWind_psd = ImageHandler().createImage()
         output_image = ImageHandler().createImage()
-        output_array = np.zeros((subWindStep*2, subWindStep*2))
+        output_array = np.zeros((subWindStep * 2, subWindStep * 2))
         ih = ImageHandler()
 
         for i in range(0, 3, 2):
             for j in range(0, 3, 2):
-                window = micImage.window2D(x_steps[i], y_steps[j], x_steps[i+1], y_steps[j+1])
+                window = micImage.window2D(x_steps[i], y_steps[j], x_steps[i + 1], y_steps[j + 1])
                 x_dim, y_dim, z, n = window.getDimensions()
                 # NORMALIZED
-                mean, dev, min, max = window.computeStats()
+                mean, dev, minCorr, maxCorr = window.computeStats()
                 winMatrix = (window.getData() - mean) / dev
                 window_image.setData(winMatrix)
                 # Compute PSD
@@ -425,17 +406,15 @@ class XmippProtTiltAnalysis(ProtMicrographs):
                 subRotatedWind_psd_filt = ih.read(filename_subwindRotatedPSD_filt)
                 autocorrelation = subWind_psd_filt.correlation(subRotatedWind_psd_filt)
                 # Paint the output array
-                output_array[y_steps_psd[j]:y_steps_psd[j]+subWindStep, x_steps_psd[i]:x_steps_psd[i]+subWindStep] = subWind_psd_filt.getData()
+                output_array[y_steps_psd[j]:y_steps_psd[j] + subWindStep, x_steps_psd[i]:x_steps_psd[i] + subWindStep] = \
+                    subWind_psd_filt.getData()
                 # Append
                 autocorrelations.append(autocorrelation)
                 psds.append(subWind_psd_filt)
 
         output_image.setData(output_array)
         filename = "psd_outputs" + str(mic.getObjId()) + '.jpeg'
-        # output_image.write(self._getExtraPath(filename)) NOT WORKING IMAGE_HANDLER
-        # Solution
-        plt.set_cmap("Greys")
-        plt.imsave(self._getExtraPath(filename), output_array)
+        output_image.write(self._getExtraPath(filename))
 
         correlation_pairs = list(combinations(psds, 2))
         for m1, m2 in correlation_pairs:
@@ -444,7 +423,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
         correlations.extend(autocorrelations)
         return correlations
-
 
     def _loadOutputSet(self, SetClass, baseName):
         """
@@ -470,7 +448,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
 
         return outputSet
 
-
     def _updateOutputSet(self, outputName, outputSet, state=Set.STREAM_OPEN):
         outputSet.setStreamState(state)
         if self.hasAttribute(outputName):
@@ -486,7 +463,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
             self._store(outputSet)
         # Close set databaset to avoid locking it
         outputSet.close()
-
 
     # ------------------------- UTILS functions --------------------------------
     def _correctFormat(self, micName, micFn, micFolderTmp):
@@ -577,7 +553,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
         filename = 'psd_outputs' + str(ID) + '.jpeg'
         return os.path.join(micFolder, filename)
 
-
     # --------------------------- INFO functions -------------------------------
     def _summary(self):
         fnSummary = self._getPath("summary.txt")
@@ -627,13 +602,13 @@ def window_coordinates2D(x, y, wind_step):
 
     if wind_step < x and wind_step < y:
         x_coor.append(x0)
-        x_coor.append(x0+wind_step-1)
-        x_coor.append(xF-wind_step)
+        x_coor.append(x0 + wind_step - 1)
+        x_coor.append(xF - wind_step)
         x_coor.append(xF)
 
         y_coor.append(y0)
-        y_coor.append(y0+wind_step-1)
-        y_coor.append(yF-wind_step)
+        y_coor.append(y0 + wind_step - 1)
+        y_coor.append(yF - wind_step)
         y_coor.append(yF)
 
         return x_coor, y_coor
@@ -641,19 +616,20 @@ def window_coordinates2D(x, y, wind_step):
         print("Dimensions not correct")
         return 0, 0
 
+
 def computeStats(correlations):
     p = np.percentile(correlations, [25, 50, 75, 97.5])
     mean = np.mean(correlations)
     std = np.std(correlations)
     var = np.var(correlations)
-    max = np.max(correlations)
-    min = np.min(correlations)
+    maxCorr = np.max(correlations)
+    minCorr = np.min(correlations)
 
     stats = {'mean': mean,
              'std': std,
              'var': var,
-             'max': max,
-             'min': min,
+             'max': maxCorr,
+             'min': minCorr,
              'per25': p[0],
              'per50': p[1],
              'per75': p[2],
@@ -666,5 +642,3 @@ def setAttribute(obj, label, value):
     if value is None:
         return
     setattr(obj, label, getScipionObj(value))
-
-

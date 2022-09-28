@@ -1214,7 +1214,6 @@ class TestXmippProtTiltAnalysis(TestXmippBase):
         protTilt.inputMicrographs.set(self.protImport.outputMicrographs)
         self.proj.launchProtocol(protTilt, wait=True)
         # check that output micrographs have double sampling rate than input micrographs
-        print(len(protTilt.outputMicrographs))
         self.assertEquals(len(protTilt.outputMicrographs), 20, "Incorrect number of accepted micrographs")
         self.assertTrue(protTilt.isFinished(), "Tilt analysis failed")
 
@@ -1226,7 +1225,6 @@ class TestXmippProtTiltAnalysis(TestXmippBase):
         protTilt2.inputMicrographs.set(self.protImport.outputMicrographs)
         self.proj.launchProtocol(protTilt2, wait=True)
         # check that output micrographs have double sampling rate than input micrographs
-        print(len(protTilt2.outputMicrographs))
         self.assertEquals(len(protTilt2.outputMicrographs), 17, "Incorrect number of accepted micrographs")
         self.assertEquals(len(protTilt2.discardedMicrographs), 3, "Incorrect number of discarded micrographs")
         self.assertTrue(protTilt2.isFinished(), "Tilt analysis failed")
