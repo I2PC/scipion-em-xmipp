@@ -138,5 +138,4 @@ from .protocol_apply_zernike3d import XmippApplyZernike3D
 from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtraction
 from .protocol_volume_consensus import XmippProtVolConsensus
 from .protocol_classes_2d_mapping import XmippProtCL2DMap
-# from .protocol_reconstruct_zart import XmippProtReconstructZART
 from .protocol_deep_hand import XmippProtDeepHand
