@@ -51,7 +51,7 @@ class XmippProtCenterParticles(ProtClassify2D):
                       pointerClass='SetOfClasses2D',
                       important=True,
                       label="Input Classes",
-                      help='Set of classes to be realing')
+                      help='Set of classes to be read')
         form.addParam('inputMics', params.PointerParam,
                       pointerClass='SetOfMicrographs',
                       important=True,
@@ -175,7 +175,7 @@ class XmippProtCenterParticles(ProtClassify2D):
 
     def createOutputStep(self):
         inputParticles = self.inputClasses.get().getImages()
-        outputClasses = self._createSetOfClasses2D(inputParticles)
+        outputClasses = self._createSetOfClasses2D(self.inputClasses.get().getImagesPointer())
         self._fillClasses(outputClasses)
         result = {'outputClasses': outputClasses}
         self._defineOutputs(**result)
@@ -252,10 +252,10 @@ class XmippProtCenterParticles(ProtClassify2D):
 
     def _validate(self):
         errors = []
-        try:
-            self.inputClasses.get().getImages().getAcquisition()
-        except AttributeError:
-            errors.append('InputClasses has not clases')
+        # try:
+        #     self.inputClasses.get().getImages()
+        # except AttributeError:
+        #     errors.append('Try and catch InputClasses has no particles.')
 
         return errors
 
