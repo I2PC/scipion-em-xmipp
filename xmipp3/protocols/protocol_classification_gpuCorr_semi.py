@@ -340,13 +340,11 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
         firstTime = True
 
         if outputClasses is None:
-            # outputClasses=self._createSetOfClasses2D(self.inputParticles.get())
             outputClasses = self._createSetOfClasses2D(self.inputParticles)
         else:
             firstTime = False
             outputClasses = SetOfClasses2D(filename=outputClasses.getFileName())
             outputClasses.setStreamState(streamMode)
-            # outputClasses.setImages(self.inputParticles.get())
             outputClasses.setImages(self.inputParticles)
 
         self._fillClassesFromMd(outFnDone, outputClasses, firstTime, streamMode)
