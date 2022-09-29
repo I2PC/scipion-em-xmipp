@@ -48,11 +48,11 @@ class XmippApplyZernike3D(ProtAnalysis3D):
                       help='Volume(s) with Zernike3D coefficients assigned.')
         form.addParam('inputVolumeMask', params.PointerParam, label="Input volume mask", pointerClass='VolumeMask',
                       condition="volume and not hasattr(volume,'refMask')")
-        form.addParam('l1', params.IntParam, default=3,
+        form.addParam('l1', params.IntParam,
                       label='Zernike Degree',
                       condition="volume and not hasattr(volume,'L1')",
                       help='Degree Zernike Polynomials of the deformation=1,2,3,...')
-        form.addParam('l2', params.IntParam, default=2,
+        form.addParam('l2', params.IntParam,
                       label='Harmonical Degree',
                       condition="volume and not hasattr(volume,'L2')",
                       help='Degree Spherical Harmonics of the deformation=1,2,3,...')
