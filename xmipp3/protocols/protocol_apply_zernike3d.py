@@ -91,7 +91,8 @@ class XmippApplyZernike3D(ProtAnalysis3D):
 
             # Write coefficients to file
             z_clnm_file = self._getExtraPath("z_clnm_{0}.txt".format(i_pad))
-            self.writeZernikeFile(z_clnm_file)
+            z_clnm = volume._xmipp_sphCoefficients.get()
+            self.writeZernikeFile(z_clnm, z_clnm_file)
 
             if self.applyPDB.get():
                 boxSize = self.volume.get().getXDim()
@@ -202,7 +203,7 @@ class XmippApplyZernike3D(ProtAnalysis3D):
                 self._defineSourceRelation(self.volume, vols)
 
     # --------------------------- UTILS functions ------------------------------
-    def writeZernikeFile(self, file):
+    def writeZernikeFile(self, z_clnm, file):
         volume = self.volume.get()
         L1 = volume.L1.get() if hasattr(volume.get(), 'L1') \
              else self.L1.get()
@@ -210,7 +211,6 @@ class XmippApplyZernike3D(ProtAnalysis3D):
              else self.L2.get()
         Rmax = int(0.5 * volume.getXDim())
         Rmax = volume.getSamplingRate() * Rmax if self.applyPDB.get() else Rmax
-        z_clnm = volume._xmipp_sphCoefficients.get()
         with open(file, 'w') as fid:
             fid.write(' '.join(map(str, [L1, L2, Rmax])) + "\n")
             fid.write(z_clnm.replace(",", " ") + "\n")
