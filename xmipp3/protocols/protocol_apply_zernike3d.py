@@ -50,13 +50,11 @@ class XmippApplyZernike3D(ProtAnalysis3D):
                       condition="volume and not hasattr(volume,'refMask')")
         form.addParam('l1', params.IntParam, default=3,
                       label='Zernike Degree',
-                      expertLevel=params.LEVEL_ADVANCED,
                       condition="volume and not hasattr(volume,'L1')",
                       help='Degree Zernike Polynomials of the deformation=1,2,3,...')
         form.addParam('l2', params.IntParam, default=2,
                       label='Harmonical Degree',
                       condition="volume and not hasattr(volume,'L2')",
-                      expertLevel=params.LEVEL_ADVANCED,
                       help='Degree Spherical Harmonics of the deformation=1,2,3,...')
         form.addParam('applyPDB', params.BooleanParam, label="Apply to structure?",
                       default=False,
