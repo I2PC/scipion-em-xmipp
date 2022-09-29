@@ -124,7 +124,7 @@ class XmippApplyZernike3D(ProtAnalysis3D):
                                      else Integer(self.L1.get())
         L2 = self.volume.get().L2 if hasattr(self.volume.get(), 'L2') \
             else Integer(self.L2.get())
-        Rmax = int(0.5 * self.volume.get().getXDim())
+        Rmax = Float(int(0.5 * self.volume.get().getXDim()))
         if isinstance(self.volumes, list):
             volume = self.volume.get()
 
