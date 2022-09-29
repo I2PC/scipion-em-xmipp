@@ -207,8 +207,10 @@ class XmippApplyZernike3D(ProtAnalysis3D):
     # --------------------------- UTILS functions ------------------------------
     def writeZernikeFile(self, file):
         volume = self.volume.get()
-        L1 = volume.L1.get()
-        L2 = volume.L2.get()
+        L1 = volume.L1.get() if hasattr(volume.get(), 'L1') \
+             else self.L1.get()
+        L2 = volume.L2.get() if hasattr(volume.get(), 'L2') \
+             else self.L2.get()
         Rmax = volume.getSamplingRate() * volume.Rmax.get() if self.applyPDB.get() else volume.Rmax.get()
         z_clnm = volume._xmipp_sphCoefficients.get()
         with open(file, 'w') as fid:
