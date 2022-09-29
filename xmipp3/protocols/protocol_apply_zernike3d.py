@@ -33,7 +33,7 @@ from pwem.objects import Volume, SetOfVolumes
 
 import pyworkflow.protocol.params as params
 import pyworkflow.utils as pwutils
-from pyworkflow.object import Float
+from pyworkflow.object import Float, Integer
 
 
 class XmippApplyZernike3D(ProtAnalysis3D):
@@ -86,10 +86,10 @@ class XmippApplyZernike3D(ProtAnalysis3D):
             self.volumes = self.volume.get()
 
         num_vols = len(self.volumes)
-        len_num_vols = len(str(num_vols))
+        self.len_num_vols = len(str(num_vols))
 
         for i, volume in enumerate(self.volumes):
-            i_pad = str(i).zfill(len_num_vols)
+            i_pad = str(i).zfill(self.len_num_vols)
 
             # Write coefficients to file
             z_clnm_file = self._getExtraPath("z_clnm_{0}.txt".format(i_pad))
@@ -121,11 +121,13 @@ class XmippApplyZernike3D(ProtAnalysis3D):
                 self.runJob("xmipp_volume_apply_coefficient_zernike3d", params)
 
     def createOutputStep(self):
+        L1 = self.volume.get().L1 if hasattr(self.volume.get(), 'L1') \
+                                     else Integer(self.L1.get())
+        L2 = self.volume.get().L2 if hasattr(self.volume.get(), 'L2') \
+            else Integer(self.L2.get())
         if isinstance(self.volumes, list):
             volume = self.volume.get()
 
-            L1 = volume.L1
-            L2 = volume.L2
             Rmax = volume.Rmax
             refMap = volume.refMap
             refMask = volume.refMask
@@ -162,10 +164,8 @@ class XmippApplyZernike3D(ProtAnalysis3D):
                 vols = self._createSetOfVolumes()
 
             for i, volume in enumerate(self.volumes):
-                i_pad = str(i).zfill(len_num_vols)
+                i_pad = str(i).zfill(self.len_num_vols)
 
-                L1 = volume.L1
-                L2 = volume.L2
                 Rmax = volume.Rmax
                 refMap = volume.refMap
                 refMask = volume.refMask
@@ -199,10 +199,10 @@ class XmippApplyZernike3D(ProtAnalysis3D):
             if self.applyPDB.get():
                 self._defineOutputs(deformed=pdbs)
                 self._defineSourceRelation(self.inputPDB, pdbs)
-                self._defineSourceRelation(volumes, pdbs)
+                self._defineSourceRelation(self.volume, pdbs)
             else:
                 self._defineOutputs(deformed=vols)
-                self._defineSourceRelation(volumes, vols)
+                self._defineSourceRelation(self.volume, vols)
 
     # --------------------------- UTILS functions ------------------------------
     def writeZernikeFile(self, file):
