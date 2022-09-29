@@ -45,6 +45,18 @@ class XmippApplyZernike3D(ProtAnalysis3D):
         form.addParam('volume', params.PointerParam, label="Zernike3D volume(s)",
                       important=True, pointerClass="SetOfVolumes,Volume",
                       help='Volume(s) with Zernike3D coefficients assigned.')
+        form.addParam('inputVolumeMask', params.PointerParam, label="Input volume mask", pointerClass='VolumeMask',
+                      condition="volume and not hasattr(volume,'refMask')")
+        form.addParam('l1', params.IntParam, default=3,
+                      label='Zernike Degree',
+                      expertLevel=params.LEVEL_ADVANCED,
+                      condition="volume and not hasattr(volume,'L1')",
+                      help='Degree Zernike Polynomials of the deformation=1,2,3,...')
+        form.addParam('l2', params.IntParam, default=2,
+                      label='Harmonical Degree',
+                      condition="volume and not hasattr(volume,'L2')",
+                      expertLevel=params.LEVEL_ADVANCED,
+                      help='Degree Spherical Harmonics of the deformation=1,2,3,...')
         form.addParam('applyPDB', params.BooleanParam, label="Apply to structure?",
                       default=False,
                       help="If True, you will be able to provide an atomic structure to be deformed "
@@ -100,7 +112,8 @@ class XmippApplyZernike3D(ProtAnalysis3D):
                 params = "-i %s  --step 1 --blobr 2 -o %s --clnm %s" % \
                          (volume_file, outFile, z_clnm_file)
                 if volume.refMask:
-                    mask_file = volume.refMask.get()
+                    mask_file = volume.refMask.get() if hasattr(volume, 'refMask') \
+                                else self.inputVolumeMask.get()
                     if pwutils.getExt(mask_file) == ".mrc":
                         volume_file += ":mrc"
                     params += " --mask %s" % mask_file
