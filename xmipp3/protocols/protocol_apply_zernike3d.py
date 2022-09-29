@@ -123,10 +123,10 @@ class XmippApplyZernike3D(ProtAnalysis3D):
                                      else Integer(self.L1.get())
         L2 = self.volume.get().L2 if hasattr(self.volume.get(), 'L2') \
             else Integer(self.L2.get())
+        Rmax = int(0.5 * self.volume.get().getXDim())
         if isinstance(self.volumes, list):
             volume = self.volume.get()
 
-            Rmax = volume.Rmax
             refMap = volume.refMap
             refMask = volume.refMask
             z_clnm = volume._xmipp_sphCoefficients
@@ -164,7 +164,6 @@ class XmippApplyZernike3D(ProtAnalysis3D):
             for i, volume in enumerate(self.volumes):
                 i_pad = str(i).zfill(self.len_num_vols)
 
-                Rmax = volume.Rmax
                 refMap = volume.refMap
                 refMask = volume.refMask
                 z_clnm = volume._xmipp_sphCoefficients
@@ -209,7 +208,8 @@ class XmippApplyZernike3D(ProtAnalysis3D):
              else self.L1.get()
         L2 = volume.L2.get() if hasattr(volume.get(), 'L2') \
              else self.L2.get()
-        Rmax = volume.getSamplingRate() * volume.Rmax.get() if self.applyPDB.get() else volume.Rmax.get()
+        Rmax = int(0.5 * volume.getXDim())
+        Rmax = volume.getSamplingRate() * Rmax if self.applyPDB.get() else Rmax
         z_clnm = volume._xmipp_sphCoefficients.get()
         with open(file, 'w') as fid:
             fid.write(' '.join(map(str, [L1, L2, Rmax])) + "\n")
