@@ -105,7 +105,7 @@ class XmippApplyZernike3D(ProtAnalysis3D):
                     params += " --boxsize %d" % boxSize
                 self.runJob("xmipp_pdb_sph_deform", params)
             else:
-                outFile = self._getExtraPath("deformed_volume.mrc")
+                outFile = self._getExtraPath("deformed_volume_{0}.mrc".format(i_pad))
                 volume_file = volume.getFileName()
                 if pwutils.getExt(volume_file) == ".mrc":
                     volume_file += ":mrc"
@@ -161,6 +161,7 @@ class XmippApplyZernike3D(ProtAnalysis3D):
                 pdbs = SetOfAtomStructs().create(self._getPath())
             else:
                 vols = self._createSetOfVolumes()
+                vols.setSamplingRate(self.volumes.getSamplingRate())
 
             for i, volume in enumerate(self.volumes):
                 i_pad = str(i).zfill(self.len_num_vols)
@@ -190,6 +191,8 @@ class XmippApplyZernike3D(ProtAnalysis3D):
                     vol.refMap = refMap
                     vol.refMask = refMask
                     vol._xmipp_sphCoefficients = z_clnm
+
+                    vols.append(vol)
 
             if self.applyPDB.get():
                 self._defineOutputs(deformed=pdbs)
