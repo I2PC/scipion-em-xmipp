@@ -1873,9 +1873,7 @@ class TestXmippResolutionBfactor(TestXmippBase):
                                                  localResolutionMap=protCreateMap.resolution_Volume,
                                                  fscResolution=8.35)
         self.launchProtocol(protbfactorResolution)
-        # Check if there is an output atomic structure
-        #self.assertIsNotNone(protbfactorResolution.getFiles(),
-        #                     (MSG_WRONG_PROTOCOL, "local resolution/local bfactor"))
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
