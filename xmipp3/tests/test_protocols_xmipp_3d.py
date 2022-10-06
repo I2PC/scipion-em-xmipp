@@ -51,9 +51,13 @@ from xmipp3.protocols.protocol_align_volume import (ALIGN_ALGORITHM_EXHAUSTIVE,
 # Global variables
 db_xmipp_tutorial = 'xmipp_tutorial'
 db_general = 'general'
+db_model_building_tutorial = 'model_building_tutorial'
+vol_coot1 = 'volumes/coot1.mrc'
 vol1_iter2 = 'volumes/volume_1_iter_002.mrc'
 vol2_iter2 = 'volumes/volume_2_iter_002.mrc'
 helix = 'volumes/helix_59_4__6_7.vol'
+pdb_coot1 = 'PDBx_mmCIF/coot1.pdb'
+
 
 # Output error messages
 MSG_WRONG_SAMPLING = "There was a problem with the sampling rate value of the output "
@@ -65,6 +69,8 @@ MSG_WRONG_SHIFT = "There was a problem with output shift "
 MSG_WRONG_GALLERY = "There was a problem with the gallery creation"
 MSG_WRONG_ROTATION = "There was a problem with the rotation"
 MSG_WRONG_IMPORT = "There was a problem with the import of "
+MSG_WRONG_PROTOCOL = "There was a problem with the protocol: "
+MSG_WRONG_MAP = "There was a problem with the map creation"
 
 class TestXmippBase(BaseTest):
     """ Some utility functions to import volumes that are used in several tests."""
@@ -1806,6 +1812,68 @@ class TestXmippDeepHand(TestXmippBase):
         self.assertAlmostEquals(protDeepHand.outputHand.get(), 0.380511, 6,"There was a problem with the hand value")
         # Check if the flip is right
         self.assertTrue(protDeepHand.outputHand.get()<protDeepHand.thresholdHand.get(), "There was a problem with the flip")
+
+class TestXmippResolutionBfactor(TestXmippBase):
+    """This class checks if the protocol resolution b factor in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet(db_model_building_tutorial)
+        cls.vol1 = cls.dataset.getFile(vol_coot1)
+        cls.pdb = cls.dataset.getFile(pdb_coot1)
+
+    def testXmippResolutionBfactor(self):
+        # Import input volume
+        print("Import input volume")
+        protImportVol = self.newProtocol(ProtImportVolumes,
+                                         objLabel='Volume',
+                                         filesPath=self.vol1,
+                                         samplingRate=4)
+        self.launchProtocol(protImportVol)
+        # Check if there is an output volume
+        self.assertIsNotNone(protImportVol.getFiles(),
+                             (MSG_WRONG_IMPORT, "volume"))
+
+        # Create a mask from the volume
+        print("Create a mask from the volume")
+        protCreateMask = self.newProtocol(XmippProtCreateMask3D,
+                                          inputVolume=protImportVol.outputVolume,
+                                          threshold=0.09)
+        self.launchProtocol(protCreateMask)
+        # Check if there is an output 3D mask
+        self.assertIsNotNone(protCreateMask.getFiles(),
+                             MSG_WRONG_MASK)
+
+        # Create a map
+        print("Create a map")
+        protCreateMap = self.newProtocol(XmippProtMonoRes,
+                                         fullMap=protImportVol.outputVolume,
+                                         mask=protCreateMask.outputMask,
+                                         maxRes=10)
+        self.launchProtocol(protCreateMap)
+        # Check if there is an output map
+        self.assertIsNotNone(protCreateMap.getFiles(),
+                             MSG_WRONG_MAP)
+
+        # Import atomic structure
+        print("Import atomic structure")
+        protImportPdb = self.newProtocol(ProtImportPdb,
+                                         inputPdbData=ProtImportPdb.IMPORT_FROM_FILES,
+                                         pdbFile=self.pdb,
+                                         inputVolume=protImportVol.outputVolume)
+        self.launchProtocol(protImportPdb)
+        # Check if there is an output atomic structure
+        self.assertIsNotNone(protImportPdb.getFiles(),
+                             (MSG_WRONG_IMPORT, "atomic structure"))
+
+        # Protocol local resolution/local bfactor
+        print("Protocol local resolution/local bfactor")
+        protbfactorResolution = self.newProtocol(XmippProtbfactorResolution,
+                                                 pdbfile=protImportPdb.outputPdb,
+                                                 localResolutionMap=protCreateMap.resolution_Volume,
+                                                 fscResolution=8.35)
+        self.launchProtocol(protbfactorResolution)
+
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
