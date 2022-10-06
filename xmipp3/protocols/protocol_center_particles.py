@@ -120,6 +120,7 @@ class XmippProtCenterParticles(ProtClassify2D):
                 mdClass = md.MetaData(block + "@" + inputMdName)
                 mdNewClass = md.MetaData()
                 i += 1
+                flag_psi = True
                 for rowIn in md.iterRows(mdClass):
                     #To create the transformation matrix (and its parameters)
                     #  for the realigned particles
