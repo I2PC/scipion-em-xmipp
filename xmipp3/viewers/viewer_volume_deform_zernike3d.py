@@ -24,8 +24,7 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
-
+from pyworkflow.object import Set
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
 from pwem.viewers import ChimeraView
 import pyworkflow.protocol.params as params
@@ -45,14 +44,14 @@ class XmippVolumeDeformZernike3DViewer(ProtocolViewer):
     VOL_HIDE = "vol #%d hide\n"
     VIEW = "view\n"
 
-    if isinstance(self.protocol, XmippApplyZernike3D):
-        self.only_apply = True
-        self.deformed = self.protocol.deformed.get()
-        self.have_set = isinstance(self.deformed, Set)
-    else:
-        self.have_set = False
-
     def _defineParams(self, form):
+        if isinstance(self.protocol, XmippApplyZernike3D):
+            self.only_apply = True
+            self.deformed = self.protocol.deformed.get()
+            self.have_set = isinstance(self.deformed, Set)
+        else:
+            self.have_set = False
+
         form.addSection(label='Show deformation')
         form.addParam('idChoice', params.EnumParam,
                       condition='self.have_set==True',
