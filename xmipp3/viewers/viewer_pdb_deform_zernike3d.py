@@ -30,6 +30,8 @@ import pyworkflow.viewer as pwviewer
 import pwem.viewers.views as vi
 import pyworkflow.protocol.params as params
 from pwem.viewers import ChimeraView
+from pyworkflow.object import Set
+
 from xmipp3.protocols.protocol_apply_zernike3d import XmippApplyZernike3D
 
 
@@ -40,10 +42,10 @@ class XmippPDBDeformViewer(pwviewer.ProtocolViewer):
     _environments = [pwviewer.DESKTOP_TKINTER, pwviewer.WEB_DJANGO]
     OPEN_FILE = "open %s\n"
 
-    self.deformed = self.protocol.deformed.get()
-    self.have_set = isinstance(self.deformed, Set)
-
     def _defineParams(self, form):
+        self.deformed = self.protocol.deformed.get()
+        self.have_set = isinstance(self.deformed, Set)
+
         form.addSection(label='Show deformation')
         form.addParam('pdbIdChoice', params.EnumParam,
                       condition='self.have_set==True',
