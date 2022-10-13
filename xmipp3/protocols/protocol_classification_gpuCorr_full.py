@@ -753,10 +753,8 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
 
 
     def _createFinalClasses(self):
-
-        inputs = self.inputParticles.get()
         # Here the defineOutputs function will call the write() method
-        outputSet = self._createSetOfClasses2D(inputs)
+        outputSet = self._createSetOfClasses2D(self.inputParticles)
         self._fillClasses(outputSet)
         self._defineOutputs(**{'outputClasses': outputSet})
         self._defineSourceRelation(self.inputParticles, outputSet)
