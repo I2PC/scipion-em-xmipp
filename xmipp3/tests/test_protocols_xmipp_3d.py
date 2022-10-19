@@ -1526,7 +1526,7 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.assertEqual(protSubtractProj.outputParticles.getSize(), 181, (MSG_WRONG_SIZE, "particles"))
         protSubtractProjMask = self.newProtocol(XmippProtSubtractProjection,
                                                 particles=protCreateGallery.outputReprojections,
-                                                vol=protCreatePhantom1item.outputVolume,
+                                                vol=protCreatePhantom2items.outputVolume,
                                                 mask=protCreateMaskKeep.outputMask)
         self.launchProtocol(protSubtractProjMask)
         self.assertIsNotNone(protSubtractProjMask.outputParticles,
@@ -1615,7 +1615,7 @@ class TestXmippProjSubtraction(TestXmippBase):
         # Perform subtraction of overlapping particles with and without mask, noise and CTF
         protSubtractProjOver = self.newProtocol(XmippProtSubtractProjection,
                                                 particles=protCreateGalleryOver.outputReprojections,
-                                                vol=protCreatePhantom1Over.outputVolume,
+                                                vol=protCreatePhantom2Over.outputVolume,
                                                 mask=protCreateMaskKeepOver.outputMask)
         self.launchProtocol(protSubtractProjOver)
         self.assertIsNotNone(protSubtractProjOver.outputParticles,
