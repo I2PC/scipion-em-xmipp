@@ -406,27 +406,7 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
                         newClass.setStreamState(streamMode)
                         outputClasses.append(newClass)
 
-                    #Fill the output set with the previous particles
-                    # of the classes
-                    for cls in cls2d:
-                        repId = cls.getObjId()
-                        newClass = outputClasses[repId]
-                        for img in cls:
-                            # if not self.flag_relion \
-                            #         and img.hasAttribute('_rlnGroupName'):
-                            #     self.flag_relion=True
-                            newClass.append(img)
-                            #We store the last id just in case we found any
-                            # problem with repeated ids that requires to
-                            # change them, this must not happen
-                            #if img.getObjId()>self.lastId:
-                            #    self.lastId = img.getObjId()
-
-                    outputClasses.update(newClass)
-
             for imgRow in md.iterRows(mdImages, sortByLabel=md.MDL_REF):
-                #Just in case of having repeated ids, this must not happen
-                #self.lastId+=1
                 imgClassId = imgRow.getValue(md.MDL_REF)
                 imgId = imgRow.getValue(md.MDL_ITEM_ID)
 
@@ -440,8 +420,6 @@ class XmippProtStrGpuCrrSimple(ProtAlign2D):
 
                 part = inputSet[imgId]
                 self._updateParticle(part, imgRow)
-                # Just in case of having repeated ids, this must not happen
-                #part.setObjId(self.lastId)
                 newClass.append(part)
 
             # this is to update the last class into the set.
