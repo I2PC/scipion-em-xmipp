@@ -96,7 +96,9 @@ class XmippProtSubtractProjection(EMProtocol):
         inputSet = self.particles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
-        readSetOfParticles(self._getExtraPath("output_particles.xmd"), outputSet, extraLabels=[emlib.MDL_SUBTRACTION_R2])
+        readSetOfParticles(self._getExtraPath("output_particles.xmd"), outputSet,
+                           extraLabels=[emlib.MDL_SUBTRACTION_R2, emlib.MDL_SUBTRACTION_BETA0,
+                                        emlib.MDL_SUBTRACTION_BETA1])
         self._defineOutputs(outputParticles=outputSet)
         self._defineSourceRelation(inputSet, outputSet)
 
