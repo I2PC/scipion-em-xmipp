@@ -94,7 +94,7 @@ class XmippProtTriggerData(EMProtocol):
                            '\n For this option, select the option send all items to output.')
         form.addParam('triggerProt', PointerParam,
                       pointerClass=self.getClassName(),
-                      condition='triggerSignal', allowsNull=True,
+                      condition='triggerSignal',
                       label='Trigger data protocol',
                       help='Select the trigger data protocol that you will send a signal to stop the stream.')
         form.addParam('delay', IntParam, default=10, label="Delay (sec)",
@@ -307,7 +307,10 @@ class XmippProtTriggerData(EMProtocol):
         return summary
 
     def _validate(self):
-        pass
+        errors = []
+        if self.triggerSignal.get():
+            if not isinstance(self.triggerProt.get(), XmippProtTriggerData):
+                errors.append("There is not a Trigger protocol connected to send a stop signal.")
 
     # --------------------------- UTILS functions -----------------------------
     def _getFirstJoinStepName(self):
