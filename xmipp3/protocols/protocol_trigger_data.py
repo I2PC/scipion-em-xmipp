@@ -173,10 +173,9 @@ class XmippProtTriggerData(EMProtocol):
             self.finished = False
 
         # Send the signal to the connected protocol
-        if self.triggerSignal.get():
-            if len(self.images) >= self.outputSize:
-                print('Sending signal to stop the input trigger data protocol')
-                self.stopWait()
+        if self.triggerSignal.get() and len(self.images) >= self.outputSize:
+            print('Sending signal to stop the input trigger data protocol')
+            self.stopWait()
 
         # Wait for trigger data signal
         if self.triggerWait.get():
