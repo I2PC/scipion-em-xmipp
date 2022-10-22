@@ -53,7 +53,9 @@ from .protocol_ctf_micrographs import XmippProtCTFMicrographs
 from .protocol_ctf_correct_wiener2d import XmippProtCTFCorrectWiener2D
 from .protocol_consensus_classes3D import XmippProtConsensusClasses3D
 from .protocol_denoise_particles import XmippProtDenoiseParticles
-from .protocol_deep_micrograph_screen import  XmippProtDeepMicrographScreen
+#from .protocol_deep_align import XmippProtDeepAlign
+from .protocol_deep_center import XmippProtDeepCenter
+from .protocol_deep_micrograph_screen import XmippProtDeepMicrographScreen
 from .protocol_eliminate_empty_images import (XmippProtEliminateEmptyParticles,
                                               XmippProtEliminateEmptyClasses)
 from .protocol_enrich import XmippProtEnrich

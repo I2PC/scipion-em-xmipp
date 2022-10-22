@@ -472,6 +472,7 @@ _noiseCoord   '0'
                                 emlib.MDL_XSIZE)
         maxPsi = 180
         maxShift = round(newXdim / 10)
+        idx = 1
         for row in iterRows(mdIn):
             fnImg = row.getValue(emlib.MDL_IMAGE)
             myRow = row

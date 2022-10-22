@@ -725,17 +725,29 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                 fnImagesi=join(fnDir,"images%02d.xmd"%i)
                 self.runJob('xmipp_metadata_utilities','-i %s --operate random_subset %d'%\
                             (fnImagesi,self.NimgsSGD),numberOfMpi=1)
-        
         if getShiftsFrom!="":
             fnPreviousAngles=join(getShiftsFrom,"angles.xmd")
             TsPrevious=self.readInfoField(getShiftsFrom,"sampling",emlib.MDL_SAMPLINGRATE)
-            fnAux=join(fnDir,"aux.xmd")
+            fnIntersection = join(fnDir, "intersection.xmd")
+            fnDiff = join(fnDir, "difference.xmd")
+            fnIntersection2 = join(fnDir, "intersection2.xmd")
+            fnDiff2 = join(fnDir, "difference2.xmd")
             for i in range(1,3):
                 fnImagesi=join(fnDir,"images%02d.xmd"%i)
                 self.runJob('xmipp_metadata_utilities','-i %s --set join %s particleId particleId -o %s'%\
-                            (fnImagesi,fnPreviousAngles,fnAux),numberOfMpi=1)
-                self.adaptShifts(fnAux, TsPrevious, fnImagesi, TsCurrent)
-            cleanPath(fnAux)
+                            (fnImagesi,fnPreviousAngles,fnIntersection),numberOfMpi=1)
+                self.adaptShifts(fnIntersection, TsPrevious, fnIntersection2, TsCurrent)
+
+                self.runJob("xmipp_metadata_utilities", "-i %s --set subtraction %s particleId -o %s" % \
+                            (fnImagesi, fnPreviousAngles, fnDiff), numberOfMpi=1)
+                self.adaptShifts(fnDiff, self.TsOrig, fnDiff2, TsCurrent)
+
+                self.runJob("xmipp_metadata_utilities", "-i %s --set union %s -o %s" % \
+                            (fnIntersection2, fnDiff2, fnImagesi), numberOfMpi=1)
+            cleanPath(fnIntersection2)
+            cleanPath(fnIntersection)
+            cleanPath(fnDiff2)
+            cleanPath(fnDiff)
 
         self.writeInfoField(fnDir,"count",emlib.MDL_COUNT,int(1))
 
@@ -995,12 +1007,13 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
         K=TsSource/TsDest
         copyFile(fnSource,fnDest)
         row=getFirstRow(fnDest)
-        if row.containsLabel(emlib.MDL_SHIFT_X):
-            self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "shiftX=%f*shiftX"'%(fnDest,K),numberOfMpi=1)
-            self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "shiftY=%f*shiftY"'%(fnDest,K),numberOfMpi=1)
-        if row.containsLabel(emlib.MDL_CONTINUOUS_X):
-            self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "continuousX=%f*continuousX"'%(fnDest,K),numberOfMpi=1)
-            self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "continuousY=%f*continuousY"'%(fnDest,K),numberOfMpi=1)
+        if row is not None:
+            if row.containsLabel(emlib.MDL_SHIFT_X):
+                self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "shiftX=%f*shiftX"'%(fnDest,K),numberOfMpi=1)
+                self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "shiftY=%f*shiftY"'%(fnDest,K),numberOfMpi=1)
+            if row.containsLabel(emlib.MDL_CONTINUOUS_X):
+                self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "continuousX=%f*continuousX"'%(fnDest,K),numberOfMpi=1)
+                self.runJob('xmipp_metadata_utilities','-i %s --operate modify_values "continuousY=%f*continuousY"'%(fnDest,K),numberOfMpi=1)
 
     def localAssignment(self,iteration):
         fnDirPrevious=self._getExtraPath("Iter%03d"%(iteration-1))
@@ -1061,12 +1074,8 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     else:
                         self.adaptShifts(fnGlobalAssignment,TsGlobal,fnLocalAssignment,TsCurrent)
                 else:
-                    TsPrevious=self.readInfoField(fnDirPrevious,"sampling",emlib.MDL_SAMPLINGRATE)
-                    fnAux=join(fnDirLocal,"aux.xmd")
-                    self.runJob("xmipp_metadata_utilities","-i %s --set intersection %s particleId particleId -o %s"%\
-                                (join(fnDirPrevious,"angles.xmd"),fnLocalImages,fnAux),numberOfMpi=1)
-                    self.adaptShifts(fnAux,TsPrevious,fnLocalAssignment,TsCurrent)
-                    cleanPath(fnAux)
+                    copyFile(fnLocalImages, fnLocalAssignment)
+
                 self.runJob("xmipp_metadata_utilities","-i %s --operate drop_column image"%fnLocalAssignment,numberOfMpi=1)
                 self.runJob("xmipp_metadata_utilities",'-i %s --operate keep_column "particleId image" -o %s'%(fnLocalImages,fnLocalImagesIdx),numberOfMpi=1)
                 self.runJob("xmipp_metadata_utilities",'-i %s --operate remove_duplicates particleId'%(fnLocalImagesIdx),numberOfMpi=1)
@@ -1164,6 +1173,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
                     self.runJob("xmipp_metadata_utilities","-i %s --operate drop_column weightSSNR"%fnAngles,numberOfMpi=1)
                 self.runJob("xmipp_metadata_utilities","-i %s --set join %s particleId"%\
                             (fnAngles,self._getExtraPath("ssnrWeights.xmd")),numberOfMpi=1)
+
             if iteration>1 and self.alignmentMethod!=self.STOCHASTIC_ALIGNMENT:
                 fnDirPrevious=self._getExtraPath("Iter%03d"%(iteration-1))
                 if self.splitMethod == self.SPLIT_FIXED:
@@ -1196,7 +1206,7 @@ class XmippProtReconstructHighRes(ProtRefine3D, HelicalFinder):
             #    fnCovariance=join(fnDirLocal,"covariance%02d.stk"%i)
             #    self.runJob("xmipp_image_residuals","-i %s -o %s --normalizeDivergence"%(fnAngles,fnCovariance),numberOfMpi=1)
             #    moveFile(join(fnDirLocal,"covariance%02d.xmd"%i),fnAngles)
-            
+
             mdAngles=emlib.MetaData(fnAngles)
             weightCCmin=float(self.weightCCmin.get())
             for objId in mdAngles:
