@@ -69,6 +69,7 @@ class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
                       pointerClass='SetOfParticles',
                       pointerCondition='hasAlignmentProj',
                       help='The set of particles previously aligned to be used as training set')
+        form.addParam('Xdim', IntParam, label="Size of the images for training", default=128)
         form.addParam('numEpochs', IntParam,
                       label="Number of epochs for training",
                       default=25, expertLevel=LEVEL_ADVANCED,
@@ -102,7 +103,7 @@ class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
                     (self.trainImgsFn,
                         self._getExtraPath('trainingResized.stk'),
                         self._getExtraPath('trainingResized.xmd'),
-                        128), numberOfMpi=self.numberOfThreads.get()*self.numberOfMpi.get())
+                        self.Xdim), numberOfMpi=self.numberOfThreads.get()*self.numberOfMpi.get())
 
     def train(self, gpuId):
         args = "%s %s Shift 5 %d %d %s" % (
