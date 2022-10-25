@@ -43,7 +43,7 @@ class XmippProtSubtractProjection(EMProtocol):
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('particles', PointerParam, pointerClass='SetOfParticles', label="Particles: ",
+        form.addParam('inputParticles', PointerParam, pointerClass='SetOfParticles', label="Particles: ",
                       help='Specify a SetOfParticles')
         form.addParam('vol', PointerParam, pointerClass='Volume', label="Reference volume ", help='Specify a volume.')
         form.addParam('mask', PointerParam, pointerClass='VolumeMask', label='Mask for region to keep', allowsNull=True,
@@ -51,6 +51,9 @@ class XmippProtSubtractProjection(EMProtocol):
                            'If no mask is given, the subtraction is performed in whole images.')
         form.addParam('mwidth', FloatParam, label="Extra width in final mask: ", default=40, expertLevel=LEVEL_ADVANCED,
                       help='Length (in A) to add for each side to the final mask. -1 means no mask.')
+        form.addParam('cirmaskrad', FloatParam, label="Circular mask radius: ", default=-1, expertLevel=LEVEL_ADVANCED,
+                      help='Radius of the circular mask to avoid edge artifacts. '
+                           'If -1 it is half the X dimension of the input particles')
         form.addParam('resol', FloatParam, label="Maximum resolution: ", default=3,  expertLevel=LEVEL_ADVANCED,
                       help='Maximum resolution (in A) of the data ')
         form.addParam('nonNegative', BooleanParam, label="Ignore particles with negative beta0 or R2?: ", default=True,
@@ -73,7 +76,7 @@ class XmippProtSubtractProjection(EMProtocol):
 
     # --------------------------- STEPS functions --------------------------------------------
     def convertStep(self):
-        writeSetOfParticles(self.particles.get(), self._getExtraPath(self.INPUT_PARTICLES))
+        writeSetOfParticles(self.inputParticles.get(), self._getExtraPath(self.INPUT_PARTICLES))
 
     def subtractionStep(self):
         vol = self.vol.get().clone()
@@ -81,10 +84,10 @@ class XmippProtSubtractProjection(EMProtocol):
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
         args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --fmask_width %f --padding %f ' \
-               '--sigma %d --limit_freq %d --subtract --save %s' % \
+               '--sigma %d --limit_freq %d --cirmaskrad %d --subtract --save %s' % \
                (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles"),
                 vol.getSamplingRate(), self.resol.get(), self.mwidth.get(), self.pad.get(), self.sigma.get(),
-                int(self.limit_freq.get()), self._getExtraPath())
+                int(self.limit_freq.get()), self.cirmaskrad.get(), self._getExtraPath())
         mask = self.mask.get()
         if mask is not None:
             args += ' --mask %s' % mask.getFileName()
@@ -93,7 +96,7 @@ class XmippProtSubtractProjection(EMProtocol):
         self.runJob("xmipp_subtract_projection", args)
 
     def createOutputStep(self):
-        inputSet = self.particles.get()
+        inputSet = self.inputParticles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
         readSetOfParticles(self._getExtraPath("output_particles.xmd"), outputSet,
@@ -105,7 +108,7 @@ class XmippProtSubtractProjection(EMProtocol):
     # --------------------------- INFO functions --------------------------------------------
     def _validate(self):
         errors = []
-        part = self.particles.get().getFirstItem()
+        part = self.inputParticles.get().getFirstItem()
         vol = self.vol.get()
         mask = self.mask.get()
         if part.getDim()[0] != vol.getDim()[0]:
@@ -123,7 +126,7 @@ class XmippProtSubtractProjection(EMProtocol):
 
     def _summary(self):
         summary = ["Volume: %s\nSet of particles: %s\nMask: %s" %
-                   (self.vol.get().getFileName(), self.particles.get(), self.mask.get().getFileName())]
+                   (self.vol.get().getFileName(), self.inputParticles.get(), self.mask.get().getFileName())]
         return summary
 
     def _methods(self):
