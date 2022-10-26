@@ -55,6 +55,7 @@ from .protocol_consensus_classes3D import XmippProtConsensusClasses3D
 from .protocol_denoise_particles import XmippProtDenoiseParticles
 #from .protocol_deep_align import XmippProtDeepAlign
 from .protocol_deep_center import XmippProtDeepCenter
+from .protocol_deep_center_predict import XmippProtDeepCenterPredict
 from .protocol_deep_micrograph_screen import XmippProtDeepMicrographScreen
 from .protocol_eliminate_empty_images import (XmippProtEliminateEmptyParticles,
                                               XmippProtEliminateEmptyClasses)
