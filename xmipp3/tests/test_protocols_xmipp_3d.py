@@ -1656,6 +1656,48 @@ class TestXmippProjSubtraction(TestXmippBase):
                          (MSG_WRONG_DIM, "particles"))
         self.assertEqual(protSubtractProjNoiseCTFOver.outputParticles.getSize(), 1647, (MSG_WRONG_SIZE, "particles"))
 
+
+class TestXmippBoostParticles(TestXmippBase):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testXmippProjSub(self):
+        # Create input data: phantom with two spheres and its projections (particles), phantom with one sphere
+        # (reference volume)
+        protCreatePhantom2items = self.newProtocol(XmippProtPhantom,
+                                               desc='80 80 80 0\nsph + 1 15 15 0 10\nsph + 5 -15 -15 0 10',
+                                               sampling=1.0)
+        self.launchProtocol(protCreatePhantom2items)
+        self.assertIsNotNone(protCreatePhantom2items.getFiles(),
+                             "There was a problem with phantom with 2 items creation")
+        protCreateGallery = self.newProtocol(XmippProtCreateGallery,
+                                             inputVolume=protCreatePhantom2items.outputVolume,
+                                             rotStep=15.0,
+                                             tiltStep=90.0)
+        self.launchProtocol(protCreateGallery)
+        self.assertIsNotNone(protCreateGallery.getFiles(),
+                             MSG_WRONG_GALLERY)
+        protCreatePhantom1item = self.newProtocol(XmippProtPhantom,
+                                                  desc='80 80 80 0\nsph + 1 -15 -15 0 10',
+                                                  sampling=1.0)
+        self.launchProtocol(protCreatePhantom1item)
+        self.assertIsNotNone(protCreatePhantom1item.getFiles(),
+                             "There was a problem with phantom with 1 item creation")
+        # Boost particles with reference volume
+        protBoostPart = self.newProtocol(XmippProtBoostParticles,
+                                         inputParticles=protCreateGallery.outputReprojections,
+                                         vol=protCreatePhantom1item.outputVolume)
+        self.launchProtocol(protBoostPart)
+        self.assertIsNotNone(protBoostPart.outputParticles,
+                             "There was a problem with projection subtraction")
+        self.assertEqual(protBoostPart.outputParticles.getSamplingRate(), 1.0, (MSG_WRONG_SAMPLING, "particles"))
+        self.assertEqual(protBoostPart.outputParticles.getFirstItem().getDim(), (80, 80, 1),
+                         (MSG_WRONG_DIM, "particles"))
+        self.assertEqual(protBoostPart.outputParticles.getSize(), 181, (MSG_WRONG_SIZE, "particles"))
+
+
 class TestXmippAlignVolumeAndParticles(TestXmippBase):
 
     @classmethod
