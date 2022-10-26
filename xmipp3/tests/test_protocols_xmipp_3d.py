@@ -1667,7 +1667,7 @@ class TestXmippProjSubtractionAndBoostParticles(TestXmippBase):
         self.assertEqual(protBoostPart.outputParticles.getFirstItem().getDim(), (80, 80, 1),
                          (MSG_WRONG_DIM, "particles"))
         self.assertEqual(protBoostPart.outputParticles.getSize(), 181, (MSG_WRONG_SIZE, "particles"))
-        
+
 
 class TestXmippAlignVolumeAndParticles(TestXmippBase):
 

@@ -40,7 +40,7 @@ class XmippProtSubtractProjectionBase(EMProtocol):
 
     # --------------------------- DEFINE param functions --------------------------------------------
     @classmethod
-    def _defineParams(self, form):
+    def _defineParams(cls, form):
         form.addSection(label='Input')
         form.addParam('inputParticles', PointerParam, pointerClass='SetOfParticles', label="Particles: ",
                       help='Specify a SetOfParticles')
