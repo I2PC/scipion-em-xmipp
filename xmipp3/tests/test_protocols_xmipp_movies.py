@@ -34,6 +34,7 @@ from pwem.protocols import ProtImportMovies, ProtImportCoordinates
 import pyworkflow.utils as pwutils
 from contextlib import redirect_stdout
 
+
 # Some utility functions to import movies that are used in several tests.
 class TestXmippBase(BaseTest):
     @classmethod
@@ -41,19 +42,19 @@ class TestXmippBase(BaseTest):
         cls.dataset = DataSet.getDataSet('movies')
         cls.movie1 = cls.dataset.getFile('qbeta/qbeta.mrc')
         cls.movie2 = cls.dataset.getFile('cct/cct_1.em')
-    
+
     @classmethod
     def runImportMovie(cls, pattern, samplingRate, voltage, scannedPixelSize,
                        magnification, sphericalAberration, dosePerFrame=None):
         """ Run an Import micrograph protocol. """
 
         kwargs = {
-                 'filesPath': pattern,
-                 'magnification': magnification,
-                 'voltage': voltage,
-                 'sphericalAberration': sphericalAberration,
-                 'dosePerFrame' : dosePerFrame
-                  }
+            'filesPath': pattern,
+            'magnification': magnification,
+            'voltage': voltage,
+            'sphericalAberration': sphericalAberration,
+            'dosePerFrame': dosePerFrame
+        }
 
         # We have two options: pass the SamplingRate or
         # the ScannedPixelSize + microscope magnification
@@ -77,14 +78,14 @@ class TestXmippBase(BaseTest):
                             'outputMovies is None.' % pattern)
 
         return cls.protImport
-    
+
     @classmethod
     def runImportMovie1(cls, pattern):
         """ Run an Import movie protocol. """
         return cls.runImportMovie(pattern, samplingRate=1.14, voltage=300,
                                   sphericalAberration=2.26, dosePerFrame=1.5,
                                   scannedPixelSize=None, magnification=50000)
-    
+
     @classmethod
     def runImportMovie2(cls, pattern):
         """ Run an Import movie protocol. """
@@ -104,7 +105,7 @@ class TestOFAlignment(TestXmippBase):
         TestXmippBase.setData()
         cls.protImport1 = cls.runImportMovie1(cls.movie1)
         cls.protImport2 = cls.runImportMovie2(cls.movie2)
-    
+
     def runOFProtocol(self, movies, label="Default", saveMic=True,
                       saveMovie=False, useAlign=False):
         protOF = XmippProtOFAlignment(doSaveAveMic=saveMic,
@@ -114,40 +115,40 @@ class TestOFAlignment(TestXmippBase):
         protOF.inputMovies.set(movies)
         self.launchProtocol(protOF)
         return protOF
-    
+
     def testAlignOF1(self):
         protOF1 = self.runOFProtocol(self.protImport1.outputMovies,
                                      label="Movie MRC")
         self.assertIsNotNone(protOF1.outputMicrographs,
                              "SetOfMicrographs has not been created.")
-    
+
     def testAlignOF2(self):
         protOF2 = self.runOFProtocol(self.protImport2.outputMovies,
                                      label="Movie EM")
         self.assertIsNotNone(protOF2.outputMicrographs,
                              "SetOfMicrographs has not been created.")
-    
+
     def testAlignOFSaveMovieAndMic(self):
         protOF3 = self.runOFProtocol(self.protImport1.outputMovies,
                                      label="Save Movie", saveMovie=True)
         self.assertIsNotNone(protOF3.outputMovies,
                              "SetOfMovies has not been created.")
-    
+
     def testAlignOFSaveMovieNoMic(self):
         protOF4 = self.runOFProtocol(self.protImport1.outputMovies,
                                      label="Save Movie", saveMic=False,
                                      saveMovie=True)
         self.assertIsNotNone(protOF4.outputMovies,
                              "SetOfMovies has not been created.")
-    
+
     def testAlignOFWAlignment(self):
         prot = XmippProtMovieCorr(doSaveAveMic=False)
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
-        
+
         protOF5 = self.runOFProtocol(prot.outputMovies,
                                      label="Movie w Alignment",
-                                     saveMic=False, 
+                                     saveMic=False,
                                      saveMovie=True)
         self.assertIsNotNone(protOF5.outputMovies,
                              "SetOfMovies has not been created.")
@@ -155,6 +156,7 @@ class TestOFAlignment(TestXmippBase):
 
 class TestOFAlignment2(TestXmippBase):
     """This class check if the optical flow protocol in Xmipp works properly."""
+
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
@@ -168,7 +170,7 @@ class TestOFAlignment2(TestXmippBase):
                 'sphericalAberration': 2.,
                 'voltage': 300,
                 'samplingRate': 3.54,
-                'dosePerFrame' : 2.0,
+                'dosePerFrame': 2.0,
                 }
 
     def _checkOutput(self, prot, args, moviesId=[], size=None, dim=None):
@@ -184,7 +186,7 @@ class TestOFAlignment2(TestXmippBase):
             a = m.getAcquisition()
             self.assertAlmostEqual(a.getVoltage(), args['voltage'])
 
-            if dim is not None: # Check if dimensions are the expected ones
+            if dim is not None:  # Check if dimensions are the expected ones
                 x, y, n = m.getDim()
                 self.assertEqual(dim, (x, y, n))
 
@@ -282,40 +284,40 @@ class TestCorrelationAlignment(BaseTest):
                          msgRoi % (goldRoi, roi, type(goldRoi), type(roi)))
 
     def test_qbeta_cpu(self):
-        prot = self.newProtocol(XmippProtMovieCorr,doPSD=True, useGpu=False, doLocalAlignment=False)
+        prot = self.newProtocol(XmippProtMovieCorr, doPSD=True, useGpu=False, doLocalAlignment=False)
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
 
         self._checkMicrographs(prot)
         self._checkAlignment(prot.outputMovies[1],
-                             (1,7), [0, 0, 0, 0])
+                             (1, 7), [0, 0, 0, 0])
 
     def test_qbeta(self):
-        prot = self.newProtocol(XmippProtMovieCorr,doPSD=True)
+        prot = self.newProtocol(XmippProtMovieCorr, doPSD=True)
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
 
         self._checkMicrographs(prot)
         self._checkAlignment(prot.outputMovies[1],
-                             (1,7), [0, 0, 0, 0])
+                             (1, 7), [0, 0, 0, 0])
 
     def test_qbeta_patches(self):
-        prot = self.newProtocol(XmippProtMovieCorr,doPSD=True, patchX=7, patchY=7)
+        prot = self.newProtocol(XmippProtMovieCorr, doPSD=True, patchX=7, patchY=7)
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
 
         self._checkMicrographs(prot)
         self._checkAlignment(prot.outputMovies[1],
-                             (1,7), [0, 0, 0, 0])
+                             (1, 7), [0, 0, 0, 0])
 
     def test_qbeta_corrDownscale(self):
-        prot = self.newProtocol(XmippProtMovieCorr,doPSD=True, corrDownscale=3)
+        prot = self.newProtocol(XmippProtMovieCorr, doPSD=True, corrDownscale=3)
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
 
         self._checkMicrographs(prot)
         self._checkAlignment(prot.outputMovies[1],
-                             (1,7), [0, 0, 0, 0])
+                             (1, 7), [0, 0, 0, 0])
 
     def test_cct(self):
         prot = self.newProtocol(XmippProtMovieCorr,
@@ -326,7 +328,7 @@ class TestCorrelationAlignment(BaseTest):
 
         self._checkMicrographs(prot)
         self._checkAlignment(prot.outputMovies[1],
-                             (1,7), [0, 0, 0, 0])
+                             (1, 7), [0, 0, 0, 0])
 
     def test_controlPoints(self):
         prot = self.newProtocol(XmippProtMovieCorr,
@@ -354,7 +356,7 @@ class TestCorrelationAlignment(BaseTest):
 
         self._checkMicrographs(prot)
         self._checkAlignment(prot.outputMovies[1],
-                             (3,5), [10, 10, 0, 0])
+                             (3, 5), [10, 10, 0, 0])
 
 
 class TestAverageMovie(BaseTest):
@@ -394,7 +396,7 @@ class TestAverageMovie(BaseTest):
                                               magnification=50000)
         cls.protImport2 = cls.runImportMovies(cls.ds.getFile('cct/cct_1.em'),
                                               magnification=61000)
-    
+
     def _checkMicrographs(self, protocol, goldDimensions):
         self.assertIsNotNone(getattr(protocol, 'outputMicrographs', None),
                              "Output SetOfMicrographs were not created.")
@@ -414,7 +416,7 @@ class TestAverageMovie(BaseTest):
         msgRoi = "Alignment ROI must be %s (%s) and it is %s (%s)"
         self.assertEqual(goldRoi, roi,
                          msgRoi % (goldRoi, roi, type(goldRoi), type(roi)))
-    
+
     def test_qbeta(self):
         prot = self.newProtocol(XmippProtMovieCorr,
                                 alignFrame0=3, alignFrameN=5,
@@ -422,26 +424,26 @@ class TestAverageMovie(BaseTest):
                                 doSaveAveMic=False)
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
-        
+
         self._checkAlignment(prot.outputMovies[1],
-                             (3,5), [10, 10, 0, 0])
-        
+                             (3, 5), [10, 10, 0, 0])
+
         protAverage = self.newProtocol(XmippProtMovieAverage,
                                        sumFrame0=3, sumFrameN=5,
                                        cropRegion=1)
         protAverage.inputMovies.set(prot.outputMovies)
         protAverage.setObjLabel('average w alignment info')
         self.launchProtocol(protAverage)
-        
-        self._checkMicrographs(protAverage, (4086,4086))
+
+        self._checkMicrographs(protAverage, (4086, 4086))
         protAverage2 = self.newProtocol(XmippProtMovieAverage,
                                         sumFrame0=3, sumFrameN=5,
-                                       cropRegion=2)
+                                        cropRegion=2)
         protAverage2.inputMovies.set(prot.outputMovies)
         protAverage2.setObjLabel('average w alignment')
         self.launchProtocol(protAverage2)
 
-        self._checkMicrographs(protAverage2, (4096,4096))
+        self._checkMicrographs(protAverage2, (4096, 4096))
 
     def test_cct(self):
         protAverage = self.newProtocol(XmippProtMovieAverage,
@@ -453,7 +455,7 @@ class TestAverageMovie(BaseTest):
         protAverage.setObjLabel('average imported movies')
         self.launchProtocol(protAverage)
 
-        self._checkMicrographs(protAverage, (1500,1500))
+        self._checkMicrographs(protAverage, (1500, 1500))
 
     def test_cct2(self):
         protAverage = self.newProtocol(XmippProtMovieAverage,
@@ -463,7 +465,7 @@ class TestAverageMovie(BaseTest):
         protAverage.setObjLabel('average imported movies')
         self.launchProtocol(protAverage)
 
-        self._checkMicrographs(protAverage, (4096,4096))
+        self._checkMicrographs(protAverage, (4096, 4096))
 
 
 class TestEstimateGain(BaseTest):
@@ -483,9 +485,9 @@ class TestEstimateGain(BaseTest):
         n = int(max(zdim, ndim) / 2)  # also half of the frames
         print("Scaling movie: %s -> %s" % (inputFn, outputFn))
         pwutils.cleanPath(outputFn)
-        for i in range(1, n+1):
+        for i in range(1, n + 1):
             frameImg.read((i, inputFn))
-            frameImg.scale(int(xdim/2), int(ydim/2))
+            frameImg.scale(int(xdim / 2), int(ydim / 2))
             frameImg.write((i, outputFn))
 
         args = cls.getArgs(outputFn)
@@ -518,7 +520,7 @@ class TestExtractMovieParticles(BaseTest):
     @classmethod
     def setData(cls):
         cls.ds = DataSet.getDataSet('movies')
-    
+
     @classmethod
     def runImportMovies(cls, pattern, **kwargs):
         """ Run an Import micrograph protocol. """
@@ -536,13 +538,13 @@ class TestExtractMovieParticles(BaseTest):
             params['samplingRateMode'] = 0
         else:
             params['samplingRateMode'] = 1
-        
+
         params.update(kwargs)
-        
+
         protImport = cls.newProtocol(ProtImportMovies, **params)
         cls.launchProtocol(protImport)
         return protImport
-    
+
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
@@ -551,7 +553,7 @@ class TestExtractMovieParticles(BaseTest):
                                               magnification=50000)
         cls.protImport2 = cls.runImportMovies(cls.ds.getFile('cct/cct_1.em'),
                                               magnification=61000)
-    
+
     # def _checkMicrographs(self, protocol, goldDimensions):
     #     self.assertIsNotNone(getattr(protocol, 'outputMicrographs', None),
     #                          "Output SetOfMicrographs were not created.")
@@ -568,44 +570,44 @@ class TestExtractMovieParticles(BaseTest):
         msgRange = "Alignment range must be %s %s and it is %s (%s)"
         self.assertEqual(goldRange, range,
                          msgRange % (
-                         goldRange, range, type(goldRange), type(range)))
+                             goldRange, range, type(goldRange), type(range)))
         roi = alignment.getRoi()
         msgRoi = "Alignment ROI must be %s (%s) and it is %s (%s)"
         self.assertEqual(goldRoi, roi,
                          msgRoi % (goldRoi, roi, type(goldRoi), type(roi)))
-    
+
     def test_qbeta(self):
         movAliProt = self.newProtocol(XmippProtMovieCorr,
-                                alignFrame0=2, alignFrameN=6,
-                                doSaveAveMic=True)
+                                      alignFrame0=2, alignFrameN=6,
+                                      doSaveAveMic=True)
         movAliProt.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(movAliProt)
-        
+
         self._checkAlignment(movAliProt.outputMovies[1],
                              (2, 6), [0, 0, 0, 0])
-        
+
         importPick = self.newProtocol(ProtImportCoordinates,
-                                 importFrom=ProtImportCoordinates.IMPORT_FROM_XMIPP,
-                                 filesPath=self.ds.getFile('qbeta/'),
-                                 filesPattern='*.pos', boxSize=320,
-                                 invertX=False,
-                                 invertY=False
-                                 )
+                                      importFrom=ProtImportCoordinates.IMPORT_FROM_XMIPP,
+                                      filesPath=self.ds.getFile('qbeta/'),
+                                      filesPattern='*.pos', boxSize=320,
+                                      invertX=False,
+                                      invertY=False
+                                      )
         importPick.inputMicrographs.set(movAliProt.outputMicrographs)
         importPick.setObjLabel('import coords from xmipp ')
         self.launchProtocol(importPick)
 
         protExtract = self.newProtocol(XmippProtExtractMovieParticles,
-                                       boxSize=320,frame0=2,frameN=6,
+                                       boxSize=320, frame0=2, frameN=6,
                                        applyAlignment=True, doInvert=True)
         protExtract.inputMovies.set(movAliProt.outputMovies)
         protExtract.inputCoordinates.set(importPick.outputCoordinates)
         protExtract.setObjLabel('extract with alignment')
         self.launchProtocol(protExtract)
-        
+
         self.assertIsNotNone(getattr(protExtract, 'outputParticles', None),
                              "Output SetOfMovieParticles were not created.")
-        
+
         size = protExtract.outputParticles.getSize()
         self.assertEqual(size, 135, 'Number of particles must be 135 and its '
                                     '%d' % size)
@@ -749,7 +751,7 @@ class TestMaxShift(BaseTest):
                                              "Bad filtering in %s test%s."
                                      % (outputName, label, DWstr))
                 self.assertIsNotNone(output[itemId], "%s (accepted) were not "
-                                            "created. Bad filtering in %s test%s."
+                                                     "created. Bad filtering in %s test%s."
                                      % (outputName, label, DWstr))
                 self.assertEqual(output[itemId].getDim(), inputDim,
                                  "The size of the movies/mics has changed "
@@ -775,7 +777,7 @@ class TestMaxShift(BaseTest):
             if hasMic:
                 outMics = getattr(protocol, 'outputMicrographsDiscarded', None)
                 self.assertIsNone(outMics, "outputMicrographsDiscarded were "
-                                   "created. Bad filtering in %s test." % label)
+                                           "created. Bad filtering in %s test." % label)
         elif not any(results):
             #  Checking if only the discarded set is crated and
             #    its items have the good size and sampling rate
@@ -795,12 +797,12 @@ class TestMaxShift(BaseTest):
                                   "Bad filtering")
         else:
             # Check if the passed and rejected movies corresponds to the goods.
-            assertOutput('outputMovies', ids=[results.index(True)+1])
-            assertOutput('outputMoviesDiscarded', ids=[results.index(False)+1])
+            assertOutput('outputMovies', ids=[results.index(True) + 1])
+            assertOutput('outputMoviesDiscarded', ids=[results.index(False) + 1])
             if hasMic:
-                assertOutput('outputMicrographs', ids=[results.index(True)+1])
-                assertOutput('outputMicrographsDiscarded', ids=[results.index(False)+1])
-    
+                assertOutput('outputMicrographs', ids=[results.index(True) + 1])
+                assertOutput('outputMicrographsDiscarded', ids=[results.index(False) + 1])
+
     def doFilter(self, inputMovies, rejType, label, mxFm=0.23, mxMo=0.30):
         """ Template for the movieMaxShift protocol.
             Default thresholds here should discard one movie and let pass the other
@@ -827,7 +829,7 @@ class TestMaxShift(BaseTest):
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label)
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True, results=[False, True])
 
-    def testFilterMovie(self): 
+    def testFilterMovie(self):
         """ This must discard the second movie for a Global shift.
         """
         label = 'maxShift by Movie'
@@ -839,7 +841,7 @@ class TestMaxShift(BaseTest):
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label)
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True, results=[False, True])
 
-    def testFilterAnd(self): 
+    def testFilterAnd(self):
         """ This must discard the second movie for AND.
         """
         label = 'maxShift AND'
@@ -863,7 +865,7 @@ class TestMaxShift(BaseTest):
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label)
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True, results=[False, True])
 
-    def testFilterOrMovie(self): 
+    def testFilterOrMovie(self):
         """ This must discard the second movie for OR (Movie).
         """
         label = 'maxShift OR (by movie)'
@@ -875,7 +877,7 @@ class TestMaxShift(BaseTest):
         protDoMic = self.doFilter(self.alignedMovMics, rejType, label)
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True, results=[False, True])
 
-    def testFilterOrBoth(self): 
+    def testFilterOrBoth(self):
         """ This must discard the second movie for OR (both).
         """
         label = 'maxShift OR (by both)'
@@ -914,4 +916,75 @@ class TestMaxShift(BaseTest):
         protDoMic = self.doFilter(self.alignedMovDwMics, rejType, label)
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True,
                                      hasDw=True, results=[True, True])
+
+
+class TestSplitFrames(BaseTest):
+    @classmethod
+    def setData(cls):
+        cls.ds = DataSet.getDataSet('movies')
+
+    @classmethod
+    def runImportMovies(cls, pattern, **kwargs):
+        """ Run an Import micrograph protocol. """
+        # We have two options: passe the SamplingRate or
+        # the ScannedPixelSize + microscope magnification
+        params = {'samplingRate': 1.14,
+                  'voltage': 300,
+                  'sphericalAberration': 2.7,
+                  'magnification': 50000,
+                  'scannedPixelSize': None,
+                  'filesPattern': pattern
+                  }
+        if 'samplingRate' not in kwargs:
+            del params['samplingRate']
+            params['samplingRateMode'] = 0
+        else:
+            params['samplingRateMode'] = 1
+
+        params.update(kwargs)
+
+        protImport = cls.newProtocol(ProtImportMovies, **params)
+        cls.launchProtocol(protImport)
+        return protImport
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.setData()
+        cls.protImport = cls.runImportMovies(cls.ds.getFile('qbeta/qbeta.mrc'),
+                                             magnification=50000)
+
+    def _checkOutput(self, protocol):
+        self.assertIsNotNone(getattr(protocol, 'oddMovie', None),
+                             "Output oddMovie set was not created.")
+
+        self.assertIsNotNone(getattr(protocol, 'evenMovie', None),
+                             "Output evenMovie set was not created.")
+
+        mov = self.protImport.outputMovies
+        x, y, _ = mov.getDim()
+        dims = (x, y)
+
+        xe, ye, ze = protocol.evenMovie.getDim()
+        outputDimEven = (xe, ye)
+        xo, yo, zo = protocol.oddMovie.getDim()
+        outputDimOdd = (xo, yo)
+
+        msgError = "The dimensions must be %s and it is %s"
+        self.assertEqual(outputDimEven, dims, msgError % (dims, outputDimEven))
+        self.assertEqual(outputDimOdd, dims, msgError % (dims, outputDimOdd))
+        self.assertEqual(ze, 4, msgError % (4, ze))
+        self.assertEqual(zo, 3, msgError % (3, zo))
+
+    def test_split_frames_sumFalse(self):
+        protSplitFramesSumFalse = self.newProtocol(XmippProtSplitFrames,
+                                                   inputMovies=self.protImport.outputMovies,
+                                                   sumFrames=False)
+
+        protSplitFramesSumFalse.inputMovies.set(self.protImport.outputMovies)
+        protSplitFramesSumFalse.setObjLabel('xmipp3 - split frames sum false')
+
+        self.launchProtocol(protSplitFramesSumFalse)
+        self._checkOutput(protSplitFramesSumFalse)
+
 
