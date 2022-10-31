@@ -106,22 +106,22 @@ class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
                         self.Xdim), numberOfMpi=self.numberOfThreads.get()*self.numberOfMpi.get())
 
     def train(self, gpuId):
-        args = "%s %s Shift 5 %d %d %s" % (
-                self._getExtraPath("trainingResized.xmd"), self._getExtraPath("modelShift.h5"), self.numEpochs,
-                self.batchSize.get(), gpuId)
-        self.runJob("xmipp_deep_center", args, numberOfMpi=1, env=self.getCondaEnv())
+        # args = "%s %s Shift 5 %d %d %s" % (
+        #         self._getExtraPath("trainingResized.xmd"), self._getExtraPath("modelShift.h5"), self.numEpochs,
+        #         self.batchSize.get(), gpuId)
+        # self.runJob("xmipp_deep_center", args, numberOfMpi=1, env=self.getCondaEnv())
 
-        args = "%s %s Psi 120 %d %d %s" % (
+        args = "%s %s Psi 0.5 %d %d %s" % (
             self._getExtraPath("trainingResized.xmd"), self._getExtraPath("modelPsi.h5"), self.numEpochs,
             self.batchSize.get(), gpuId)
         self.runJob("xmipp_deep_center", args, numberOfMpi=1, env=self.getCondaEnv())
 
-        args = "%s %s Rot 0 %d %d %s" % (
+        args = "%s %s Rot 0.5 %d %d %s" % (
             self._getExtraPath("trainingResized.xmd"), self._getExtraPath("modelRot.h5"), self.numEpochs,
             self.batchSize.get(), gpuId)
         self.runJob("xmipp_deep_center", args, numberOfMpi=1, env=self.getCondaEnv())
 
-        args = "%s %s Tilt 0 %d %d %s" % (
+        args = "%s %s Tilt 0.5 %d %d %s" % (
             self._getExtraPath("trainingResized.xmd"), self._getExtraPath("modelTilt.h5"), self.numEpochs,
             self.batchSize.get(), gpuId)
         self.runJob("xmipp_deep_center", args, numberOfMpi=1, env=self.getCondaEnv())
