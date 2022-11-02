@@ -418,7 +418,7 @@ class XmippProtPreprocessVolumes(XmippProcessVolumes):
         form.addParam('doSymmetrize', BooleanParam, default=False,
                       label="Symmetrize", 
                       help='Symmetrize the input model.')
-        form.addParam('symmetryGroup', TextParam, default='i1',
+        form.addParam('symmetryGroup', StringParam, default='i1',
                       label="Symmetry group", condition='doSymmetrize',
                       help='See [[http://xmipp.cnb.csic.es/twiki/bin/view/Xmipp/Symmetry][Symmetry]] '
                       'for a description of the symmetry groups format.'

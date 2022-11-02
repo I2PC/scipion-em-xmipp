@@ -29,7 +29,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
-from pyworkflow.protocol.params import LabelParam
+from pyworkflow.protocol.params import LabelParam, FloatParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER
 
 from pwem import emlib
@@ -53,19 +53,34 @@ class XmippBfactorResolutionViewer(ProtocolViewer):
     def _defineParams(self, form):
         form.addSection(label='Visualization')
 
-        line = form.addLine("Color scale options:",
+        groupColorScaleOptions = form.addGroup('Color scale options and representation')
+
+        line = groupColorScaleOptions.addLine("Range normalized bfactor:",
                             help="Options to define the color scale limits and color set")
 
-        line.addParam('highest', FloatParam, default=self.maxNormRes,
+        line.addParam('highestBF', FloatParam, allowsNull =True,
                       label="Highest",
                       help="Highest value for the scale")
 
-        line.addParam('lowest', FloatParam, default=self.minNormRes,
+        line.addParam('lowestBF', FloatParam, allowsNull =True,
                       label="Lowest",
                       help="lowest value of the scale.")
 
-        line.addParam('doShowColorBands', LabelParam,
+        line2 = groupColorScaleOptions.addLine("Range normalized local resolution:",
+                                              help="Options to define the color scale limits and color set")
+
+        line2.addParam('highestLR', FloatParam, allowsNull =True,
+                      label="Highest",
+                      help="Highest value for the scale")
+
+        line2.addParam('lowestLR', FloatParam, allowsNull =True,
+                      label="Lowest",
+                      help="lowest value of the scale.")
+
+        groupColorScaleOptions.addParam('doShowColorBands', LabelParam,
                       label="Show bfactor-local resolution comparison")
+
+
 
     def _getVisualizeDict(self):
         return {'doShowColorBands': self._showColorBands,
@@ -89,18 +104,26 @@ class XmippBfactorResolutionViewer(ProtocolViewer):
         lr = np.array(lr)
         bf = np.array(bf)
         r = np.array(r)
+
+        lowBF = self.lowestBF if self.lowestBF.get() else bf[0]
+        highBF = self.highestBF if self.highestBF.get() else bf[-1]
+        lowLR = self.lowestLR if self.lowestLR.get() else lr[0]
+        highLR = self.highestLR if self.highestLR.get() else lr[-1]
+
+        plt.figure()
         plt.subplot(211)
         #The magic numbers of 0 and 40 define the size of the vertical bands, they provide good visualization aspect
-        plt.imshow(lr.reshape(1, len(lr)), cmap=plt.cm.viridis, extent=[r[0], r[-1], 0, 40])
+        plt.imshow(lr.reshape(1, len(lr)), vmin=lowLR, vmax=highLR, cmap=plt.cm.viridis, extent=[np.amin(r), np.amax(r), 0, 80])
+
         plt.xlabel('Residue')
         plt.title('Normalized Local Resolution')
         plt.colorbar()
 
         plt.subplot(212)
-        plt.imshow(bf.reshape(1, len(bf)), cmap=plt.cm.viridis, extent=[r[0], r[-1], 0, 40])
+
+        plt.imshow(bf.reshape(1, len(bf)), vmin=lowBF, vmax=highBF, cmap=plt.cm.viridis, extent=[np.amin(r), np.amax(r), 0, 80])
         plt.xlabel('Residue')
         plt.title('B-factor')
         plt.colorbar()
 
         plt.show()
-

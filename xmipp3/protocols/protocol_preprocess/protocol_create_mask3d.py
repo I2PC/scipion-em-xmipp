@@ -287,10 +287,12 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
         volMask.setFileName(self.maskFile)
         
         if self.source==SOURCE_VOLUME:
-            volMask.setSamplingRate(self.inputVolume.get().getSamplingRate())
+            Ts = self.inputVolume.get().getSamplingRate()
         else:
-            volMask.setSamplingRate(self.samplingRate.get())
-        
+            Ts = self.samplingRate.get()
+        volMask.setSamplingRate(Ts)
+        self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(self.maskFile,Ts))
+
         self._defineOutputs(outputMask=volMask)
         
         if self.source==SOURCE_VOLUME:

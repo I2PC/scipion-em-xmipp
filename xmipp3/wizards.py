@@ -528,8 +528,9 @@ class XmippGaussianVolumesWizard(GaussianVolumesWizard):
 class ColorScaleWizard(ColorScaleWizardBase):
         _targets = ColorScaleWizardBase.defineTargets(XmippMonoResViewer, XmippResDeepResViewer, XmippProtFSOViewer)
 
+
 class XmippSelectPointinVolWizard(EmWizard):
-    _targets = [(XmippProtShiftParticles, ['x', 'y', 'z'])]
+    _targets = [(XmippProtShiftParticles, ['xin', 'yin', 'zin'])]
 
     def show(self, form):
         protocol = form.protocol
@@ -539,8 +540,7 @@ class XmippSelectPointinVolWizard(EmWizard):
             return
         plt = MaskVolumeWizard(volume.getFileName())
         plt.initializePlot()
-        form.setVar('x', int(plt.origin[2]))
-        form.setVar('y', int(plt.origin[1]))
-        form.setVar('z', int(plt.origin[0]))
+        form.setVar('xin', int(plt.origin[2]))
+        form.setVar('yin', int(plt.origin[1]))
+        form.setVar('zin', int(plt.origin[0]))
         del plt
-

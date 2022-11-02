@@ -30,6 +30,7 @@ from .protocol_preprocess import *
 
 from .protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from .protocol_align_volume import XmippProtAlignVolume, XmippProtAlignVolumeForWeb
+from .protocol_angular_graph_consistency import XmippProtAngularGraphConsistency
 from .protocol_preprocess.protocol_add_noise import (XmippProtAddNoiseVolumes,
                                                      XmippProtAddNoiseParticles)
 from .protocol_apply_alignment import XmippProtApplyAlignment
@@ -45,6 +46,7 @@ from .protocol_ctf_defocus_group import XmippProtCTFDefocusGroup
 from .protocol_compare_reprojections import XmippProtCompareReprojections
 from .protocol_compare_angles import XmippProtCompareAngles
 from .protocol_convert_pdb import XmippProtConvertPdb
+from .protocol_core_analysis import XmippProtCoreAnalysis
 from .protocol_create_gallery import XmippProtCreateGallery
 from .protocol_ctf_consensus import XmippProtCTFConsensus
 from .protocol_ctf_micrographs import XmippProtCTFMicrographs
@@ -77,6 +79,7 @@ from .protocol_pick_noise import XmippProtPickNoise
 from .protocol_particle_boxsize import XmippProtParticleBoxsize
 from .protocol_particle_pick import XmippProtParticlePicking
 from .protocol_particle_pick_pairs import XmippProtParticlePickingPairs
+from .protocol_phantom_create import XmippProtPhantom
 from .protocol_preprocess_micrographs import XmippProtPreprocessMicrographs
 from .protocol_projmatch import XmippProtProjMatch
 from .protocol_random_conical_tilt import XmippProtRCT
@@ -93,15 +96,18 @@ from .protocol_resolution_fso import XmippProtFSO
 from .protocol_resolution_monogenic_signal import XmippProtMonoRes
 from .protocol_resolution_deepres import XmippProtDeepRes
 from .protocol_postProcessing_deepPostProcessing import XmippProtDeepVolPostProc
+from .protocol_rotate_volume import XmippProtRotateVolume
 from .protocol_rotational_spectra import XmippProtRotSpectra
 from .protocol_rotational_symmetry import XmippProtRotationalSymmetry
 from .protocol_screen_particles import XmippProtScreenParticles
 from .protocol_screen_deepConsensus import XmippProtScreenDeepConsensus, XmippProtDeepConsSubSet
 from .protocol_screen_deeplearning import XmippProtScreenDeepLearning
 from .protocol_shift_particles import XmippProtShiftParticles
+from .protocol_shift_volume import XmippProtShiftVolume
 from .protocol_simulate_ctf import XmippProtSimulateCTF
 from .protocol_solid_angles import XmippProtSolidAngles
 from .protocol_split_volume import XmippProtSplitvolume
+from .protocol_subtract_projection import XmippProtSubtractProjection
 from .protocol_trigger_data import XmippProtTriggerData
 from .protocol_validate_nontilt import XmippProtValidateNonTilt
 from .protocol_validate_overfitting import XmippProtValidateOverfitting
@@ -132,3 +138,5 @@ from .protocol_structure_map import XmippProtStructureMap
 from .protocol_pdb_deform_zernike3d import XmippProtDeformPDBZernike3D
 from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtraction
 from .protocol_volume_consensus import XmippProtVolConsensus
+from .protocol_classes_2d_mapping import XmippProtCL2DMap
+from .protocol_deep_hand import XmippProtDeepHand
