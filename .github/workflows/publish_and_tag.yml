@@ -40,6 +40,6 @@ jobs:
         twine upload dist/* -c "${{ secrets.PYPI_COMMENT }}"
     - name: Get version and tag
       run: |
-        export PACKAGE_VERSION=$(python -c "import $FOLDER_WITH_VERSION; print('v'+$FOLDER_WITH_VERSION.__version__);")
+        export PACKAGE_VERSION=$(python -c "import $FOLDER_WITH_VERSION; print('v'+$FOLDER_WITH_VERSION.__version__);"| tail -n 1)
         git tag $PACKAGE_VERSION
         git push origin $PACKAGE_VERSION
