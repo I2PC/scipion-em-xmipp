@@ -121,15 +121,14 @@ class XmippProtMonoRes(ProtAnalysis3D):
 
         group = form.addGroup('Extra parameters')
         line = group.addLine('Resolution Range (Å)',
-                             help="If the user knows the range of resolutions or"
-                                  " only a range of frequencies needs to be analysed."
-                                  "If Low is empty MonoRes will try to estimate the range. "
-                                  "it should be better if a range is provided")
+                             help="The range of resolutions to be analysed."
+                                  "The local resolution will be estimated from low to high in "
+                                  "steps given by the step box (advanced parameter)")
 
         group.addParam('significance', FloatParam, default=0.95,
                        expertLevel=LEVEL_ADVANCED,
                        label="Significance",
-                       help='Relution is computed using hypothesis tests, '
+                       help='Resolution is computed using hypothesis tests, '
                             'this value determines the significance of that test')
 
         self.maskthreshold = DeprecatedParam('maskThreshold', self)

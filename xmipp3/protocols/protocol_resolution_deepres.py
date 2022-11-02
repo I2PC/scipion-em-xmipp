@@ -87,14 +87,14 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
                             " First core index is 0, second 1 and so on.")               
 
         form.addParam('inputVolume', PointerParam, pointerClass='Volume',
-                      label="Input Volume", 
+                      label="Input Volume", important=True, 
                       help='Select a volume for determining its '
                       'local resolution.')
 
         form.addParam('Mask', PointerParam, pointerClass='VolumeMask', 
-                      allowsNull=True,
+                      important=True,
                       label="Mask", 
-                      help='The mask determines which points are specimen'
+                      help='Binary mask. The mask determines which points are specimen'
                       ' and which are not')
         
         form.addParam('range', EnumParam, choices=[u'2.5Å - 13.0Å', u'1.5Å - 6.0Å'],
@@ -363,5 +363,5 @@ class XmippProtDeepRes(ProtAnalysis3D, xmipp3.XmippProtocol):
         return error
     
     def _citations(self):
-        return ['Ramirez-Aportela-2019']
+        return ['Ramirez-Aportela et al., IUCrJ, 2019']
 
