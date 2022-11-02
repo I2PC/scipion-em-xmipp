@@ -1,3 +1,4 @@
+scipion-em
 scikit-learn==0.22.1
 scipy<=1.8.1
 joblib
