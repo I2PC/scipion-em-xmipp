@@ -39,8 +39,9 @@ from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.22.07.1'
-__version__ = _currentVersion  # This will allow scipion to detect the plugin version and print it in the log.
+_currentBinVersion = '3.22.07.0'
+# This will allow scipion to detect the plugin version and print it in the log.
+__version__ = _currentBinVersion + ".1"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
 
 
 class Plugin(pwem.Plugin):
@@ -118,7 +119,7 @@ class Plugin(pwem.Plugin):
         xmippDeps = []  # Deps should be at requirements.txt (old: scons, joblib, scikit_learn)
 
         # Installation vars for commands formating
-        verToken = getXmippPath('v%s' % _currentVersion)
+        verToken = getXmippPath('v%s' % _currentBinVersion)
         confToken = getXmippPath("xmipp.conf")
         installVars = {'installedToken': "installation_finished",
                        'bindingsToken': "bindings_linked",
@@ -132,7 +133,7 @@ class Plugin(pwem.Plugin):
                        'libsDst': Config.getLibFolder(),
                        'confToken': confToken,
                        'strPlaceHolder': '%s',  # to be replaced in the future
-                       'currVersion': _currentVersion
+                       'currVersion': _currentBinVersion
                        }
 
         ## Installation commands (removing bindingsToken)
@@ -177,12 +178,12 @@ class Plugin(pwem.Plugin):
                            deps=xmippDeps, default=False)
 
         avoidConfig = os.environ.get('XMIPP_NOCONFIG', 'False') == 'True'
-        alreadyCompiled = os.path.isfile(getXmippPath('v'+_currentVersion))  # compilation token (see the xmipp script)
+        alreadyCompiled = os.path.isfile(getXmippPath('v' + _currentBinVersion))  # compilation token (see the xmipp script)
         configSrc = ('./xmipp check_config' if avoidConfig
                      else './xmipp config noAsk && ./xmipp check_config')
-        env.addPackage('xmippSrc', version=_currentVersion,
+        env.addPackage('xmippSrc', version=_currentBinVersion,
                        # adding 'v' before version to fix a package target (post-link)
-                       tar='xmippSrc-v'+_currentVersion+'.tgz',
+                       tar='xmippSrc-v' + _currentBinVersion + '.tgz',
                        commands=[(installCmd.format(**installVars, cwd='.',
                                                     configCmd=configSrc,
                                                     compileCmd='./xmipp compileAndInstall'),
