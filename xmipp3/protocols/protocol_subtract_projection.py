@@ -114,7 +114,7 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
         args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --fmask_width %f --padding %f ' \
-               '--sigma %d --limit_freq %d --cirmaskrad %d --subtract --save %s' % \
+               '--sigma %d --limit_freq %d --cirmaskrad %d --save %s' % \
                (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles"),
                 vol.getSamplingRate(), self.resol.get(), self.mwidth.get(), self.pad.get(), self.sigma.get(),
                 int(self.limit_freq.get()), self.cirmaskrad.get(), self._getExtraPath())
