@@ -265,9 +265,9 @@ class XmippProtCompareReprojections(ProtAnalysis3D, ProjMatcher):
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
         program = "xmipp_subtract_projection"
-        args = '-i %s --ref %s -o %s --max_resolution %f --sigma %d --save %s' % \
-               (self.imgsFn, fnVol, self._getExtraPath("residuals"), self.resol.get(),
-                self.sigma.get(), self._getExtraPath())
+        args = '-i %s --ref %s -o %s --save %s --max_resolution %f --sigma %d' % \
+               (self.imgsFn, fnVol, self._getExtraPath("residuals"), self._getExtraPath(''), self.resol.get(),
+                self.sigma.get())
         self.runJob(program, args, numberOfMpi=1)
         mrcsresiduals = self._getExtraPath("residuals.mrcs")
         args2 = " -i %s -o %s" % (mrcsresiduals, self.fnResiduals)
