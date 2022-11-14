@@ -94,7 +94,7 @@ class XmippProtTriggerData(EMProtocol):
                            '\n For this option, select the option send all items to output.')
         form.addParam('triggerProt', PointerParam,
                       pointerClass=self.getClassName(),
-                      condition='triggerSignal', allowsNull=True,
+                      condition='triggerSignal',
                       label='Trigger data protocol',
                       help='Select the trigger data protocol that you will send a signal to stop the stream.')
         form.addParam('delay', IntParam, default=10, label="Delay (sec)",
@@ -173,16 +173,15 @@ class XmippProtTriggerData(EMProtocol):
             self.finished = False
 
         # Send the signal to the connected protocol
-        if self.triggerSignal.get():
-            if len(self.images) >= self.outputSize:
-                print('Sending signal to stop the input trigger data protocol')
-                self.stopWait()
+        if self.triggerSignal.get() and len(self.images) >= self.outputSize:
+            self.info('Sending signal to stop the input trigger data protocol')
+            self.stopWait()
 
         # Wait for trigger data signal
         if self.triggerWait.get():
-            print('Waiting for signal to stop the stream')
+            self.info('Waiting for signal to stop the stream')
             if self.waitingHasFinished():
-                print('Stopped by received signal from a trigger data protocol')
+                self.info('Stopped by received signal from a trigger data protocol')
                 self.finished = True
 
         outputStep = self._getFirstJoinStep()
@@ -307,7 +306,10 @@ class XmippProtTriggerData(EMProtocol):
         return summary
 
     def _validate(self):
-        pass
+        errors = []
+        if self.triggerSignal.get():
+            if not isinstance(self.triggerProt.get(), XmippProtTriggerData):
+                errors.append("There is not a Trigger protocol connected to send a stop signal.")
 
     # --------------------------- UTILS functions -----------------------------
     def _getFirstJoinStepName(self):
