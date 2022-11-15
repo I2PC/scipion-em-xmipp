@@ -39,9 +39,9 @@ from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentBinVersion = '3.22.07.0'
+_currentBinVersion = '3.22.11.0'
 # This will allow scipion to detect the plugin version and print it in the log.
-__version__ = _currentBinVersion[2:] + ".1"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
+__version__ = _currentBinVersion[2:] + ".0"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
 
 
 class Plugin(pwem.Plugin):
