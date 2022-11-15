@@ -240,8 +240,11 @@ class XmippMetaProtDiscreteGraphHeterogeneity(EMProtocol):
                 newHighres.inputVolumes.set(previousProtVol)
                 newHighres.inputVolumes.setExtended(volumeName) 
                 
-                project.scheduleProtocol(newHighres, self._runPrerequisites)                               
-                self._finishedProt(newHighres)
+                project.scheduleProtocol(newHighres, self._runPrerequisites)
+                # Next schedule will be after this one
+                self._runPrerequisites.append(newHighres.getObjId())
+                self.childs.append(newHighres)                               
+                # self._finishedProt(newHighres)
         
                 # angular graph validation
                 print('angular graph validation - iter',iter,'class',classVar)
@@ -262,8 +265,11 @@ class XmippMetaProtDiscreteGraphHeterogeneity(EMProtocol):
                 validationProt.inputVolume.set(previousProtVol)
                 validationProt.inputVolume.setExtended(volumeName) 
                 
-                project.scheduleProtocol(validationProt, self._runPrerequisites) 
-                self._finishedProt(validationProt)
+                project.scheduleProtocol(validationProt, self._runPrerequisites)
+                # Next schedule will be after this one
+                self._runPrerequisites.append(validationProt.getObjId())
+                self.childs.append(validationProt)     
+                # self._finishedProt(validationProt)
                 
                 # angular assignment from newHigresProt
                 print('angular assignment from Highres - iter',iter,'class',classVar)
@@ -281,8 +287,11 @@ class XmippMetaProtDiscreteGraphHeterogeneity(EMProtocol):
                 angAssignProt.inputAlignment.set(newHighres)
                 angAssignProt.inputAlignment.setExtended('outputParticles')
                 
-                project.scheduleProtocol(angAssignProt, self._runPrerequisites) 
-                self._finishedProt(angAssignProt)
+                project.scheduleProtocol(angAssignProt, self._runPrerequisites)
+                # Next schedule will be after this one
+                self._runPrerequisites.append(angAssignProt.getObjId())
+                self.childs.append(angAssignProt)    
+                # self._finishedProt(angAssignProt)
                             
                 # reconstruction of new volume for reference using only correctly assigned particles
                 print('Highres reconstruction No-Alignment - iter',iter,'class',classVar)
@@ -307,10 +316,13 @@ class XmippMetaProtDiscreteGraphHeterogeneity(EMProtocol):
                 highresNoAlignProt.inputVolumes.set(previousProtVol)
                 highresNoAlignProt.inputVolumes.setExtended(volumeName) # is important this name to match
                 
-                project.scheduleProtocol(highresNoAlignProt, self._runPrerequisites) 
-                self._finishedProt(highresNoAlignProt)
-                    
-                
+                project.scheduleProtocol(highresNoAlignProt, self._runPrerequisites)
+                # Next schedule will be after this one
+                self._runPrerequisites.append(angAssignProt.getObjId())
+                self.childs.append(angAssignProt)     
+                self._finishedProt(highresNoAlignProt)                
+                #clear prerequisites after 1st iter
+                self._runPrerequisites.clear()
         
         
 #         for iter in range(1, numIter):
