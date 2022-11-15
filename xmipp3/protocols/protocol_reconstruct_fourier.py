@@ -178,6 +178,10 @@ class XmippProtReconstructFourier(ProtReconstruct3D):
                 self.runJob('xmipp_reconstruct_fourier', params)
             else:
                 self.runJob('xmipp_reconstruct_fourier_accel', params)
+
+        self.runJob("xmipp_image_header", "-i %s --sampling_rate %f"%\
+                    (self._getFileName('output_volume'), self.inputParticles.get().getSamplingRate()),
+                    numberOfMpi=1)
             
     def createOutputStep(self):
         imgSet = self.inputParticles.get()

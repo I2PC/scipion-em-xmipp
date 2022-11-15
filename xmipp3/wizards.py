@@ -43,7 +43,8 @@ from .protocols import (
     XmippProtHelicalParameters, XmippProtConsensusPicking, XmippProtMonoRes,
     XmippProtRotSpectra, XmippProtReconstructHighRes, XmippProtExtractUnit,
     XmippProtReconstructHeterogeneous, XmippMetaProtDiscreteHeterogeneityScheduler,
-    XmippProtShiftParticles, XmippProtVolumeDeformZernike3D, XmippProtStructureMapZernike3D)
+    XmippProtShiftParticles, XmippProtVolumeDeformZernike3D, XmippProtStructureMapZernike3D,
+    XmippProtSubtractProjection, XmippProtBoostParticles)
 
 
 #===============================================================================
@@ -196,7 +197,9 @@ class XmippParticleMaskRadiusWizard(ParticleMaskRadiusWizard):
                 (XmippProtPreprocessParticles, ['backRadius']),
                 (XmippProtReconstructHighRes, ['particleRadius']),
                 (XmippProtReconstructHeterogeneous, ['particleRadius']),
-                (XmippMetaProtDiscreteHeterogeneityScheduler, ['particleRadius'])]
+                (XmippMetaProtDiscreteHeterogeneityScheduler, ['particleRadius']),
+                (XmippProtSubtractProjection, ['cirmaskrad']),
+                (XmippProtBoostParticles, ['cirmaskrad'])]
 
     def _getParameters(self, protocol):
 

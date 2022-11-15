@@ -108,6 +108,8 @@ from .protocol_simulate_ctf import XmippProtSimulateCTF
 from .protocol_solid_angles import XmippProtSolidAngles
 from .protocol_split_volume import XmippProtSplitvolume
 from .protocol_subtract_projection import XmippProtSubtractProjection
+from .protocol_subtract_projection import XmippProtBoostParticles
+from .protocol_tilt_analysis import XmippProtTiltAnalysis
 from .protocol_trigger_data import XmippProtTriggerData
 from .protocol_validate_nontilt import XmippProtValidateNonTilt
 from .protocol_validate_overfitting import XmippProtValidateOverfitting
@@ -123,7 +125,6 @@ from .protocol_reconstruct_heterogeneous import XmippProtReconstructHeterogeneou
 from .protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
 from .protocol_metaprotocol_create_output import XmippMetaProtCreateOutput
 from .protocol_metaprotocol_discrete_heterogeneity_scheduler import XmippMetaProtDiscreteHeterogeneityScheduler # keep this after XmippMetaProtCreateSubset and XmippMetaProtCreateOutput
-from .protocol_angular_alignment_zernike3d import XmippProtAngularAlignmentZernike3D
 from .protocol_volume_deform_zernike3d import XmippProtVolumeDeformZernike3D
 from .protocol_structure_map_zernike3d import XmippProtStructureMapZernike3D
 from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
@@ -135,7 +136,7 @@ from .protocol_metaprotocol_golden_highres import XmippMetaProtGoldenHighRes
 # from .protocol_apply_deformation_zernike3d import XmippProtApplyZernike3D
 # from .protocol_kmeans_clustering import XmippProtKmeansSPH
 from .protocol_structure_map import XmippProtStructureMap
-from .protocol_pdb_deform_zernike3d import XmippProtDeformPDBZernike3D
+from .protocol_apply_zernike3d import XmippApplyZernike3D
 from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtraction
 from .protocol_volume_consensus import XmippProtVolConsensus
 from .protocol_classes_2d_mapping import XmippProtCL2DMap
