@@ -28,6 +28,7 @@ from glob import glob
 import math
 from os.path import join, isfile, exists
 from shutil import copyfile, copy
+import numpy as np
 import os
 
 from pyworkflow.protocol.params import (PointerParam, FloatParam,
@@ -156,8 +157,8 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
             ccGraphPrevList = mdParticles.getColumnValues(emlib.MDL_GRAPH_CC_PREVIOUS)
             ccAsigDirRefList = mdParticles.getColumnValues(emlib.MDL_ASSIGNED_DIR_REF_CC)
             angDistPrevList = mdParticles.getColumnValues(emlib.MDL_GRAPH_DISTANCE2MAX_PREVIOUS)
-            
-            # threshold            
+
+            # threshold                                  
             th_ccGraph = self.otsu(ccGraphPrevList)
             th_ccAsigDir = self.otsu(ccAsigDirRefList)
             th_angDist = self.otsu(angDistPrevList)
@@ -540,14 +541,17 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
     
     def otsu(self, ccList):
         # from golden-highres
-        import numpy as np
-
         ccNumber = len(ccList)
         meanWeight = 1.0 / ccNumber
-        his, bins = np.histogram(ccList, int((max(ccList)-min(ccList))/0.01))
+        d = 0.01
+        r = int((max(ccList)-min(ccList))/d)
+        if r == 0:
+            d = 0.001
+            r = int((max(ccList)-min(ccList))/d)
+        his, bins = np.histogram(ccList, r)
         finalThres = -1
         finalVal = -1
-        ccArange = np.arange(min(ccList),max(ccList),0.01)
+        ccArange = np.arange(min(ccList),max(ccList),d)
         if len(ccArange)==(len(his)+1):
             ccArange=ccArange[:-1]
         for t, j in enumerate(bins[1:-1]):
