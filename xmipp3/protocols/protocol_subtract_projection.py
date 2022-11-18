@@ -96,7 +96,7 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
         form.addParam('mask', PointerParam, pointerClass='VolumeMask', label='Mask for region to keep', allowsNull=True,
                       help='Specify a 3D mask for the region of the input volume that you want to keep. '
                            'If no mask is given, the subtraction is performed in whole images.')
-        form.addParam('mwidth', FloatParam, label="Extra width in final mask: ", default=40, expertLevel=LEVEL_ADVANCED,
+        form.addParam('mwidth', FloatParam, label="Extra width in final mask: ", default=-1, expertLevel=LEVEL_ADVANCED,
                       help='Length (in A) to add for each side to the final mask. -1 means no mask.')
 
     # --------------------------- INSERT steps functions --------------------------------------------
