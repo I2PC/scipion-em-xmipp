@@ -42,7 +42,7 @@ class XmippProtSubtractProjectionBase(EMProtocol):
     @classmethod
     def _defineParams(cls, form):
         form.addSection(label='Input')
-        form.addParam('inputParticles', PointerParam, pointerClass='SetOfParticles', label="Particles: ",
+        form.addParam('inputParticles', PointerParam, pointerClass='SetOfParticles', label="Particles ",
                       help='Specify a SetOfParticles')
         form.addParam('vol', PointerParam, pointerClass='Volume', label="Reference volume ",
                       help='Specify a volume.')
@@ -93,11 +93,12 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         XmippProtSubtractProjectionBase._defineParams(form)
-        form.addParam('mask', PointerParam, pointerClass='VolumeMask', label='Mask for region to keep', allowsNull=True,
-                      help='Specify a 3D mask for the region of the input volume that you want to keep. '
-                           'If no mask is given, the subtraction is performed in whole images.')
-        form.addParam('subtract', EnumParam, default=0, choices=["No", "Yes"],
-                      label="The mask contains the part to SUBTRACT?")
+        form.addParam('mask', PointerParam, pointerClass='VolumeMask', label='Mask ', allowsNull=True,
+                      help='Specify a 3D mask for the region of the input volume that you want to keep or subtract, '
+                           'avoiding masks with 1s in background. If no mask is given, the subtraction is performed in'
+                           ' whole images.')
+        form.addParam('subtract', EnumParam, default=0, choices=["Keep", "Subtract"], display=EnumParam.DISPLAY_HLIST,
+                      label="Mask contains the part to ")
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertSubSteps(self):
         self._insertFunctionStep('convertStep')
@@ -122,6 +123,8 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
             args += ' --mask %s' % mask.getFileName()
         if self.nonNegative.get():
             args += ' --nonNegative'
+        if self.subtract.get():
+            args += ' --subtract'
         self.runJob("xmipp_subtract_projection", args)
 
     # --------------------------- INFO functions --------------------------------------------
