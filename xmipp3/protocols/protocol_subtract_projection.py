@@ -27,7 +27,7 @@
 # **************************************************************************
 
 from os.path import basename
-from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, FloatParam
+from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam, FloatParam, EnumParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pwem import emlib
 from pwem.protocols import EMProtocol
@@ -96,9 +96,8 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
         form.addParam('mask', PointerParam, pointerClass='VolumeMask', label='Mask for region to keep', allowsNull=True,
                       help='Specify a 3D mask for the region of the input volume that you want to keep. '
                            'If no mask is given, the subtraction is performed in whole images.')
-        form.addParam('mwidth', FloatParam, label="Extra width in final mask: ", default=-1, expertLevel=LEVEL_ADVANCED,
-                      help='Length (in A) to add for each side to the final mask. -1 means no mask.')
-
+        form.addParam('subtract', EnumParam, default=0, choices=["No", "Yes"],
+                      label="The mask contains the part to SUBTRACT?")
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertSubSteps(self):
         self._insertFunctionStep('convertStep')
@@ -113,10 +112,10 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
         fnVol = vol.getFileName()
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
-        args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --fmask_width %f --padding %f ' \
+        args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --padding %f ' \
                '--sigma %d --limit_freq %d --cirmaskrad %d --save %s' % \
                (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles"),
-                vol.getSamplingRate(), self.resol.get(), self.mwidth.get(), self.pad.get(), self.sigma.get(),
+                vol.getSamplingRate(), self.resol.get(), self.pad.get(), self.sigma.get(),
                 int(self.limit_freq.get()), self.cirmaskrad.get(), self._getExtraPath())
         mask = self.mask.get()
         if mask is not None:
