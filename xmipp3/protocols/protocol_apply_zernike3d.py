@@ -26,6 +26,7 @@
 # *
 # **************************************************************************
 
+import numpy as np
 
 from pwem.protocols import ProtAnalysis3D
 from pwem.objects import AtomStruct, SetOfAtomStructs
@@ -92,6 +93,13 @@ class XmippApplyZernike3D(ProtAnalysis3D):
             # Write coefficients to file
             z_clnm_file = self._getExtraPath("z_clnm_{0}.txt".format(i_pad))
             z_clnm = volume._xmipp_sphCoefficients.get()
+
+            if self.applyPDB.get():
+                z_clnm = np.fromstring(z_clnm, sep=",")
+                z_clnm *= self.volume.get().getSamplingRate()
+                z_clnm = np.char.mod('%f', z_clnm)
+                z_clnm = ",".join(z_clnm)
+
             self.writeZernikeFile(z_clnm, z_clnm_file)
 
             if self.applyPDB.get():
