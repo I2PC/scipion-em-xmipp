@@ -87,7 +87,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
                       expertLevel=const.LEVEL_ADVANCED, 
                       label="Center PDB",
                       help='Center PDB with the center of mass')
-        form.addParam('outPbd', params.BooleanParam, default=False, 
+        form.addParam('outPdb', params.BooleanParam, default=False, 
                       expertLevel=const.LEVEL_ADVANCED, 
                       label="Store centered PDB",
                       help='Set to \'Yes\' if you want to save centered PDB. '
@@ -125,7 +125,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
         
         if self.centerPdb:
             args += ' --centerPDB'
-            if self.outPbd:
+            if self.outPdb:
                 args += ' --oPDB'
 
         if self.vol:
