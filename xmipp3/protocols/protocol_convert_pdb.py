@@ -125,7 +125,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
         
         if self.centerPdb:
             args += ' --centerPDB'
-            if self.outPbd:
+            if self.outPdb:
                 args += ' --oPDB'
 
         if self.vol:
