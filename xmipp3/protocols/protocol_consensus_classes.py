@@ -60,7 +60,8 @@ class XmippProtConsensusClasses(EMProtocol):
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
-        self._insertFunctionStep('intersectStep', prerequisites=[])
+        self._insertFunctionStep('intersectStep')
+        self._insertFunctionStep('ensembleClustersStep')
 
     def intersectStep(self):
         classifications = self._getInputClassifications()
@@ -80,6 +81,9 @@ class XmippProtConsensusClasses(EMProtocol):
 
         # Stablish source output relationships
         self._defineSourceRelation(self.inputClassifications, outputClasses)
+
+    def ensembleClustersStep(self):
+        intersections = self._convertClassification(self.outputClasses_intersections)
 
     def createOutputStep(self):
         pass
@@ -106,16 +110,22 @@ class XmippProtConsensusClasses(EMProtocol):
     def _getInputItems(self, i=0):
         return self.inputClassifications[i].get().getImages()
     
-    def _convertInputClassifications(self, classifications):
-        """ Returns the list of lists of sets that stores the set of ids of each class"""
+    def _getOutputIntersections(self):
+        return self._convertInputClassifications(self.output)
+    
+    def _convertClassification(self, classification):
         def classToCluster(cls):
             ids = cls.getIdSet()
             rep = cls.getRepresentative().clone() if cls.hasRepresentative() else None
             return XmippProtConsensusClasses.Cluster(ids, rep)
 
-        f = lambda classification : list(map(classToCluster, classification.get()))
-        result = list(map(f, classifications))
-        return result
+        return list(map(classToCluster, classification))
+    
+    def _convertInputClassification(self, classification):
+        return self._convertClassification(classification.get())
+    
+    def _convertInputClassifications(self, classifications):
+        return list(map(self._convertInputClassification, classifications))
     
     def _calculateClassificationIntersections(self, classifications):
         # Start with the first classification
