@@ -48,8 +48,7 @@ from .viewer_validate_overfitting import XmippValidateOverfittingViewer
 from .viewer_volume_strain import XmippVolumeStrainViewer
 from .viewer_reconstruct_highres import XmippReconstructHighResViewer
 from .viewer_solid_angles import SolidAnglesViewer
-from .viewer_consensus_classes3D import XmippConsensusClasses3DViewer
-from .viewer_classes3D import XmippClasses3DViewer
+from .viewer_consensus_classes import XmippConsensusClassesViewer
 from .viewer_extract_asymmetric_unit import viewerXmippProtExtractUnit
 from .viewer_deepEMHancer import viewerXmippProtDeepVolPostProc
 from .viewer_local_sharpening import viewerXmippProtLocSharp

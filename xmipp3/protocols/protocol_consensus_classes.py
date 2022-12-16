@@ -28,24 +28,23 @@
 
 from typing import Set
 import collections
-import itertools
 
 from pwem.protocols import EMProtocol
-from pwem.objects import SetOfClasses, SetOfClasses3D
+from pwem.objects import SetOfClasses
 
-from pyworkflow.protocol.params import Form, MultiPointerParam, EnumParam, IntParam
+from pyworkflow.protocol.params import Form, MultiPointerParam
 from pyworkflow.constants import BETA
 
 from xmipp3.convert import setXmippAttribute
 
 
-class XmippProtConsensusClasses3D(EMProtocol):
-    """ Compare several SetOfClasses3D or SetOfClassesSubTomograms.
+class XmippProtConsensusClasses(EMProtocol):
+    """ Compare several SetOfClasses.
         Return the consensus clustering based on a objective function
         that uses the similarity between clusters intersections and
         the entropy of the clustering formed.
     """
-    _label = 'consensus clustering 3D'
+    _label = 'consensus classes'
     _devStatus = BETA
 
     def __init__(self, *args, **kwargs):
@@ -54,7 +53,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
     def _defineParams(self, form: Form):
         # Input data
         form.addSection(label='Input')
-        form.addParam('inputClassifications', MultiPointerParam, pointerClass='SetOfClasses3D,SetOfClassesSubTomograms', 
+        form.addParam('inputClassifications', MultiPointerParam, pointerClass='SetOfClasses', 
                       label="Input classes", important=True,
                       help='Select several sets of classes where to evaluate the '
                            'intersections.')
@@ -112,7 +111,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         def classToCluster(cls):
             ids = cls.getIdSet()
             rep = cls.getRepresentative().clone() if cls.hasRepresentative() else None
-            return XmippProtConsensusClasses3D.Cluster(ids, rep)
+            return XmippProtConsensusClasses.Cluster(ids, rep)
 
         f = lambda classification : list(map(classToCluster, classification.get()))
         result = list(map(f, classifications))
@@ -153,7 +152,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
         result.setImages(classification.getImages())
     
         # Fill the output
-        loader = XmippProtConsensusClasses3D.ClassesLoader(
+        loader = XmippProtConsensusClasses.ClassesLoader(
             clustering, 
             #randomConsensusSizes,
             #randomConsensusRelativeSizes
@@ -181,7 +180,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
             return self.getIds() == other.getIds()
 
         def intersection(self, *others):
-            return self._combine(set.intersection, min, XmippProtConsensusClasses3D.Cluster.getSourceSize, *others)
+            return self._combine(set.intersection, min, XmippProtConsensusClasses.Cluster.getSourceSize, *others)
 
         def union(self, *others):
             return self._combine(set.union, max, len, *others)
@@ -202,7 +201,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
             allItems = (self, ) + others
             
             # Perform the requested operation among the id sets
-            allIds = map(XmippProtConsensusClasses3D.Cluster.getIds, allItems)
+            allIds = map(XmippProtConsensusClasses.Cluster.getIds, allItems)
             ids = operation(*allIds)
 
             # Select the class with the appropriate criteria
@@ -210,7 +209,7 @@ class XmippProtConsensusClasses3D(EMProtocol):
             representative = selection.getRepresentative()
             sourceSize = selection.getSourceSize()
 
-            return XmippProtConsensusClasses3D.Cluster(ids, representative, sourceSize)
+            return XmippProtConsensusClasses.Cluster(ids, representative, sourceSize)
     
     
     

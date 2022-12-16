@@ -33,14 +33,14 @@ from pyworkflow.viewer import (ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO)
 
 from pwem.viewers.showj import *
 
-from xmipp3.protocols.protocol_consensus_classes3D import XmippProtConsensusClasses3D
+from xmipp3.protocols.protocol_consensus_classes import XmippProtConsensusClasses
 
 
-class XmippConsensusClasses3DViewer(ProtocolViewer):
+class XmippConsensusClassesViewer(ProtocolViewer):
     """ Visualization of results from the consensus classes 3D protocol
     """
-    _label = 'viewer consensus classes 3D'
-    _targets = [XmippProtConsensusClasses3D]
+    _label = 'viewer consensus classes'
+    _targets = [XmippProtConsensusClasses]
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
 
     def __init__(self, **kwargs):
