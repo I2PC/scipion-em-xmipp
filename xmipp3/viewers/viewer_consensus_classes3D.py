@@ -26,22 +26,14 @@
 # **************************************************************************
 
 """
-This module implement the wrappers aroung Xmipp CL2D protocol
+This module implement the wrappers around
 visualization program.
 """
 from pyworkflow.viewer import (ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO)
-from pyworkflow.protocol.params import StringParam, LabelParam, IntParam
-from pyworkflow.protocol.params import GE, GT, LE, LT
 
-from pwem.viewers import TableView, ObjectView
 from pwem.viewers.showj import *
 
 from xmipp3.protocols.protocol_consensus_classes3D import XmippProtConsensusClasses3D
-
-from scipy.cluster import hierarchy
-
-import matplotlib.pyplot as plt
-import numpy as np
 
 
 class XmippConsensusClasses3DViewer(ProtocolViewer):

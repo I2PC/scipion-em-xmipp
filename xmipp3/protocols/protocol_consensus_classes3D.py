@@ -26,28 +26,13 @@
 # *
 # **************************************************************************
 
-from unittest import result
-from pwem import emlib
 from pwem.protocols import EMProtocol
-from pwem.objects import Volume
 
-from pyworkflow.protocol.params import MultiPointerParam, EnumParam, IntParam
-from pyworkflow.protocol.params import Range, GE, GT, LE, LT
-from pyworkflow.object import Float
+from pyworkflow.protocol.params import Form, MultiPointerParam, EnumParam, IntParam
 from pyworkflow.constants import BETA
-from pyworkflow.protocol.constants import STEPS_PARALLEL
-from pyworkflow.utils.path import makePath
 
 from xmipp3.convert import setXmippAttribute
 
-import math
-import csv
-import collections
-import itertools
-import os.path
-import numpy as np
-import multiprocessing as mp
-from multiprocessing.pool import ThreadPool
 
 class XmippProtConsensusClasses3D(EMProtocol):
     """ Compare several SetOfClasses3D.
@@ -61,10 +46,10 @@ class XmippProtConsensusClasses3D(EMProtocol):
     def __init__(self, *args, **kwargs):
         EMProtocol.__init__(self, *args, **kwargs)
         
-    def _defineParams(self, form):
+    def _defineParams(self, form: Form):
         # Input data
         form.addSection(label='Input')
-        form.addParam('inputClassifications', MultiPointerParam, pointerClass='SetOfClasses3D', label="Input classes", 
+        form.addParam('inputClassifications', MultiPointerParam, pointerClass='SetOfClasses3D', label="Input classes", #TODO add SetOfClassesSubTomograms
                       important=True,
                       help='Select several sets of classes where to evaluate the '
                            'intersections.')
