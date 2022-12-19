@@ -301,7 +301,7 @@ class XmippProtConsensusClasses(EMProtocol):
         # Create an empty set with the same images as the input classification
         result = self._EMProtocol__createSet( # HACK
             type(classification), 
-            'classes%s.sqlite', name
+            'classes_%s.sqlite', name
         ) 
         result.setImages(classification.getImages())
     
