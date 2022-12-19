@@ -211,9 +211,10 @@ class XmippProtConsensusClasses(EMProtocol):
         similarities = self._calculateClusterCosineSimilarityMatrix(allClassifications, intersections)
 
         # For each possible pair of intersections compute the cost of merging them
-        obValues = {}
-        for pair in itertools.combinations(range(len(intersections)), r=2):
-            obValues[pair] = objectiveFunc(intersections, pair, similarities[pair])
+        obValues = dict(map(
+            lambda pair : (pair, objectiveFunc(intersections, pair, similarities[pair])),
+            itertools.combinations(range(len(intersections)), r=2)
+        ))
 
         # Select the minimum cost pair and merge them
         mergePair, mergeObValue = min(obValues.items(), key=lambda pair : pair[1])
@@ -231,8 +232,6 @@ class XmippProtConsensusClasses(EMProtocol):
         # Obtain a list with all source classes
         allClassifications = list(itertools.chain(*classifications))
         
-        # Calculate similarity matrix
-
         # Iteratively merge intersections
         while len(allIntersections[-1]) > 1:
             mergedIntersections, obValue = self._mergeCheapestIntersectionPair(allClassifications, allIntersections[-1], objectiveFunc)
