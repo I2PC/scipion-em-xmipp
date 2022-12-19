@@ -39,8 +39,7 @@ from pyworkflow.constants import BETA
 from xmipp3.convert import setXmippAttribute
 
 import numpy as np
-import sklearn.metrics
-
+import scipy.stats
 
 class XmippProtConsensusClasses(EMProtocol):
     """ Compare several SetOfClasses.
@@ -91,11 +90,24 @@ class XmippProtConsensusClasses(EMProtocol):
         intersections = self._convertClassification(self.outputClasses_intersections)
         
         # Merge all intersections
-        merged = self._mergeIntersections(
+        merged, obValues = self._mergeIntersections(
             classifications,
             intersections, 
             self._mergeObjectiveFunctionEntropy
         )
+        
+        for i, partition in enumerate(reversed(merged)):
+            name = 'merged' + str(i + 1)
+            classes = self._createOutputClasses(
+                self.inputClassifications[0].get(),
+                partition,
+                name,
+                #itertools.repeat(consensusSizes),
+                #itertools.repeat(consensusRelativeSizes)
+            )
+            self._insertChild(name, classes)
+        
+        
 
     def createOutputStep(self):
         pass
@@ -202,8 +214,8 @@ class XmippProtConsensusClasses(EMProtocol):
     
     def _mergeObjectiveFunctionEntropy(self, intersections, pair, similarity):
         h = self._calculateClusterEntropy(intersections)
-        hi = self._calculateClusterEntropy(self._mergeIntersectionPair(intersections, pair))
-        return (h - hi) / similarity
+        hMerged = self._calculateClusterEntropy(self._mergeIntersectionPair(intersections, pair))
+        return (h - hMerged) / similarity
         
     def _mergeCheapestIntersectionPair(self, allClassifications, intersections, objectiveFunc):
         """ Merges the most similar pair of intersections """
@@ -241,6 +253,43 @@ class XmippProtConsensusClasses(EMProtocol):
         assert(len(allIntersections) == len(allObValues))
         return allIntersections, allObValues
     
+    def _calculateProfileLogLikelihood(self, d, q):
+        """ Profile log likelihood for given parameters """
+        # Partition the function in q
+        d1 = d[:q]
+        d2 = d[q:]
+        
+        # Compute the average and mean of each partition
+        mu1 = np.mean(d1)
+        mu2 = np.mean(d2)
+        sigma1 = np.std(d1)
+        sigma2 = np.std(d2)
+        sigma = (len(d1)*sigma1 + len(d2)*sigma2) / (len(d1) + len(d2)) # Weighted average
+        
+        # Compute the log likelihood
+        log_f_q = np.log(scipy.stats.norm.pdf(d1, mu1, sigma))
+        log_f_p = np.log(scipy.stats.norm.pdf(d2, mu2, sigma))
+        l_q = np.sum(log_f_q) + np.sum(log_f_p)
+        
+        return l_q
+    
+    def _calculateFullProfileLogLikelihood(self, obValues):
+        """ Calculate profile log likelihood for each partition
+            of the data """
+        result = []
+
+        for i in range(1, len(obValues)):
+            result.append(self._calculateProfileLogLikelihood(obValues, i))
+        
+        return np.array(result)
+    
+    def _findElbowPll(self, obValues):
+        """ Find the elbow according to the full profile likelihood
+        """
+        # Get profile log likelihood for log of objective values
+        # Remove last obValue as it is zero and log(0) is undefined
+        pll = self._calculateFullProfileLogLikelihood(np.log(obValues[:-1]))
+        return np.argmax(pll)
     
     def _createOutputClasses(self, 
                              classification: SetOfClasses,
