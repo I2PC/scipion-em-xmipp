@@ -190,50 +190,6 @@ class XmippProtConsensusClasses(EMProtocol):
 
         return result
     
-    def _calculateRandomClassification(self, classificationsSizes, nIds=None):
-        result = []
-        
-        for classificationSizes in classificationsSizes:
-            # Determine the size of the classification if necessary
-            if nIds is None:
-                nIds = sum(classificationSizes)
-
-            # Shuffle a [0, nParticles) iota 
-            indices = np.argsort(np.random.uniform(size=nIds))
-
-            # Slice the ids in partitions of sizes contained in 
-            # classification sizes
-            classification = []
-            start = 0
-            for size in classificationSizes:
-                # Select the particles for this class
-                end = start + size
-                ids = indices[start:end]
-            
-                classification.append(XmippProtConsensusClasses.Cluster(set(ids)))
-            
-                start = end # Prepare for next iteration
-            assert(start == nIds)
-
-            # Add the random classification to the result
-            result.append(classification)
-        
-        return result
-    
-    def _calculateRandomClassificationConsensus(self, classificationsSizes, nIds=None):
-        """ Obtains the intersections of a consensus
-            of a random classifications of sizes defined in classificationsSizes of
-            nIds elements. classificationsSizes is a list of lists, where de sum of each
-            row must equal nIds """
-
-        # Create random partitions of same size
-        randomClassification = self._calculateRandomClassification(
-            classificationsSizes, nIds
-        )
-
-        # Compute the repeated classifications
-        return self._calculateClassificationIntersections(randomClassification)
-    
     def _calculateClassificationLengths(self, classifications):
         """ Returns a list of lists that stores the lengths of each classification """
         return list(map(lambda classification : list(map(len, classification)), classifications))
