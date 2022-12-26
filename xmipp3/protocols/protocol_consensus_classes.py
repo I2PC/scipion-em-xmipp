@@ -63,8 +63,25 @@ class XmippProtConsensusClasses(EMProtocol):
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
+        self._insertFunctionStep('randomConsensusStep')
         self._insertFunctionStep('intersectStep')
         self._insertFunctionStep('mergeStep')
+
+    def randomConsensusStep(self):
+        classifications = self._getInputClassifications()
+        #numRand = self.randomClassificationCount.get()
+        nRep = 100 # TODO
+
+        # Compute the random consensus
+        consensusSizes, consensusRelativeSizes = self._calculateReferenceClassification(
+            classifications, nRep
+        )
+
+        # Sort the sizes so that percentile calculation is easy
+        consensusSizes.sort()
+        consensusRelativeSizes.sort()
+        
+        # TODO save
 
     def intersectStep(self):
         classifications = self._getInputClassifications()
@@ -80,7 +97,7 @@ class XmippProtConsensusClasses(EMProtocol):
             #itertools.repeat(consensusSizes),
             #itertools.repeat(consensusRelativeSizes)
         )
-        self._defineOutputs(**{'outputClasses_intersections': outputClasses})
+        self._defineOutputs(**{'outputClasses': outputClasses})
 
         # Stablish source output relationships
         self._defineSourceRelation(self.inputClassifications, outputClasses)
@@ -125,6 +142,8 @@ class XmippProtConsensusClasses(EMProtocol):
         return errors
     
     # --------------------------- UTILS functions ------------------------------
+        
+    
     def _getInputClassifications(self):
         if not hasattr(self, '_classifications'):
             self._classifications = self._convertInputClassifications(self.inputClassifications)
@@ -171,6 +190,91 @@ class XmippProtConsensusClasses(EMProtocol):
 
         return result
     
+    def _calculateRandomClassification(self, classificationsSizes, nIds=None):
+        result = []
+        
+        for classificationSizes in classificationsSizes:
+            # Determine the size of the classification if necessary
+            if nIds is None:
+                nIds = sum(classificationSizes)
+
+            # Shuffle a [0, nParticles) iota 
+            indices = np.argsort(np.random.uniform(size=nIds))
+
+            # Slice the ids in partitions of sizes contained in 
+            # classification sizes
+            classification = []
+            start = 0
+            for size in classificationSizes:
+                # Select the particles for this class
+                end = start + size
+                ids = indices[start:end]
+            
+                classification.append(XmippProtConsensusClasses.Cluster(set(ids)))
+            
+                start = end # Prepare for next iteration
+            assert(start == nIds)
+
+            # Add the random classification to the result
+            result.append(classification)
+        
+        return result
+    
+    def _calculateRandomClassificationConsensus(self, classificationsSizes, nIds=None):
+        """ Obtains the intersections of a consensus
+            of a random classifications of sizes defined in classificationsSizes of
+            nIds elements. classificationsSizes is a list of lists, where de sum of each
+            row must equal nIds """
+
+        # Create random partitions of same size
+        randomClassification = self._calculateRandomClassification(
+            classificationsSizes, nIds
+        )
+
+        # Compute the repeated classifications
+        return self._calculateClassificationIntersections(randomClassification)
+    
+    def _calculateClassificationLengths(self, classifications):
+        """ Returns a list of lists that stores the lengths of each classification """
+        return list(map(lambda classification : list(map(len, classification)), classifications))
+    
+    def _calculateReferenceConsensus(self, classifications, nRep):
+        """ Create random partitions of same size to compare the quality
+         of the consensus classes """
+        classificationsSizes = self._calculateClassificationLengths(classifications)
+        nIds = sum(classificationsSizes[0])
+
+        # Repeatedly obtain a consensus of a random classification of same size
+        consensus = list(map(
+            self._calculateRandomClassificationConsensus, 
+            itertools.repeat(classificationsSizes, nRep),
+            itertools.repeat(nIds, nRep)
+        ))
+
+        # Concatenate all consensuses
+        consensus = list(itertools.chain(*consensus))
+
+        # Obtain the consensus sizes
+        consensusSizes = np.array(list(map(len, consensus)))
+        consensusSizeRatios = np.array(list(map(XmippProtConsensusClasses.Cluster.getRelativeSize, consensus)))
+        return consensusSizes, consensusSizeRatios
+    
+    def _calculateRandomClassificationSizes(self, probabilities, nItems):
+        sizes = []
+        relativeSizes = []
+        
+        # Obtain all possible combinations of probabilities
+        for combination in itertools.product(*probabilities):
+            probability = np.prod(combination)
+            size = nItems * probability
+            relativeSize = combination / np.min(combination)
+            
+            sizes.append(size)
+            relativeSizes.append(relativeSize)
+            
+        assert(np.isclose(np.sum(sizes), nItems))
+        return sizes, relativeSizes
+        
     def _calculateClusterSimilarity(self, x, y):
         xIds = x.getIds()
         yIds = y.getIds()
@@ -193,11 +297,8 @@ class XmippProtConsensusClasses(EMProtocol):
         return np.dot(similarityMatrix.T, similarityMatrix)
         
     def _calculateClusterEntropy(self, intersections):
-        p = np.array(list(map(len, intersections)), dtype=float)
-        p /= np.sum(p)
-        entropy = -np.sum(p*np.log2(p))
-        assert(entropy >= 0) # Entropy cannot be negative
-        return entropy
+        sizes = np.array(list(map(len, intersections)), dtype=float)
+        return scipy.stats.entropy(sizes) # Sized do not need to be normalized
         
     def _mergeIntersectionPair(self, intersections, indices):
         """ Return a list of subsets where the intersections[indices] have been merged """
@@ -213,9 +314,9 @@ class XmippProtConsensusClasses(EMProtocol):
         return result
     
     def _mergeObjectiveFunctionEntropy(self, intersections, pair, similarity):
-        h = self._calculateClusterEntropy(intersections)
-        hMerged = self._calculateClusterEntropy(self._mergeIntersectionPair(intersections, pair))
-        return (h - hMerged) / similarity
+        entropy = self._calculateClusterEntropy(intersections)
+        nextEntropy = self._calculateClusterEntropy(self._mergeIntersectionPair(intersections, pair))
+        return (entropy - nextEntropy) / similarity
         
     def _mergeCheapestIntersectionPair(self, allClassifications, intersections, objectiveFunc):
         """ Merges the most similar pair of intersections """
@@ -288,7 +389,7 @@ class XmippProtConsensusClasses(EMProtocol):
         """
         # Get profile log likelihood for log of objective values
         # Remove last obValue as it is zero and log(0) is undefined
-        pll = self._calculateFullProfileLogLikelihood(np.log(obValues[:-1]))
+        pll = self._calculateFullProfileLogLikelihood(np.log(obValues[:-1])) # TODO determine if this log should be here
         return np.argmax(pll)
     
     def _createOutputClasses(self, 
