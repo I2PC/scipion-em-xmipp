@@ -499,7 +499,11 @@ class XmippProtMovieGain(ProtProcessMovies):
 
         ext = pwutils.getExt(self.inputMovies.get().getFirstItem().getFileName()).lower()
         if ext in ['.tif', '.tiff'] and tifFlipped:
-            finalGainFn = xmutils.flipYImage(finalGainFn, outDir = self._getExtraPath())
+            flipGainPath = self.getFlippedOrientedGainPath()
+            if not os.path.exists(flipGainPath):
+                finalGainFn = xmutils.flipYImage(finalGainFn, outFn=flipGainPath, outDir=self._getExtraPath())
+            else:
+                finalGainFn = flipGainPath
 
         return finalGainFn
 
