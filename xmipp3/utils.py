@@ -102,6 +102,8 @@ def flipYImage(inFn, outFn=None, outDir=None):
             outFn = inFn.replace('_flipped', '')
     if outDir != None:
         outFn = outDir + '/' + basename(outFn)
+    if os.path.isfile(outFn):
+        return outFn 
     gainImg = readImage(inFn)
     imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
 
