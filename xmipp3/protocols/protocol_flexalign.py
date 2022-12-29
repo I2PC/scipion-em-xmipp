@@ -48,20 +48,10 @@ from xmipp3.base import isXmippCudaPresent
 import xmipp3.utils as xmutils
 
 
-class XmippProtMovieCorr(ProtAlignMovies):
+class XmippProtFlexAlign(ProtAlignMovies):
     """
     Wrapper protocol to Xmipp Movie Alignment by cross-correlation
     """
-    OUTSIDE_WRAP = 0
-    OUTSIDE_AVG = 1
-    OUTSIDE_VALUE = 2
-
-    INTERP_LINEAR = 0
-    INTERP_CUBIC = 1
-
-    # Map to xmipp interpolation values in command line
-    INTERP_MAP = {INTERP_LINEAR: 1, INTERP_CUBIC: 3}
-
     NO_ROTATION = 0
     NO_FLIP = 0
 
@@ -77,13 +67,6 @@ class XmippProtMovieCorr(ProtAlignMovies):
     def _defineAlignmentParams(self, form):
         ProtAlignMovies._defineAlignmentParams(self, form)
 
-        form.addParam('splineOrder', params.EnumParam, condition="doSaveAveMic or doSaveMovie",
-                      default=self.INTERP_CUBIC, choices=['linear', 'cubic'],
-                      expertLevel=cons.LEVEL_ADVANCED,
-                      label='Interpolation',
-                      help="linear (faster but lower quality), "
-                           "cubic (slower but more accurate).")
-
         form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
                        label="Use GPU for execution",
                        help="This protocol has both CPU and GPU implementation.\
@@ -95,34 +78,19 @@ class XmippProtMovieCorr(ProtAlignMovies):
                        help="Add a list of GPU devices that can be used")
 
         form.addParam('maxResForCorrelation', params.FloatParam, default=30,
-                       label='Maximal resolution (A)',
-                       help="Maximal resolution in A that will be preserved during correlation.")
+                       label='Maximum resolution (A)',
+                       help="Maximum resolution in A that will be preserved during correlation.")
 
         form.addParam('doComputePSD', params.BooleanParam, default=True,
-                      label="Compute PSD (before/after)?",
-                      help="If Yes, the protocol will compute for each movie "
-                           "the PSD of the average micrograph (without CC "
-                           "alignement) and after that, to compare each PSDs")
+                      label="Compute PSD?",
+                      help="If Yes, the protocol will compute PSD for each movie "
+                           "before and after the alignment")
 
-        form.addParam('maxShift', params.IntParam, default=30,
+        form.addParam('maxShift', params.IntParam, default=50,
                       expertLevel=cons.LEVEL_ADVANCED,
-                      label="Maximum shift (pixels)",
-                      help='Maximum allowed distance (in pixels) that each '
+                      label="Maximum shift (A)",
+                      help='Maximum allowed distance (in A) that each '
                            'frame can be shifted with respect to the next.')
-
-        form.addParam('outsideMode', params.EnumParam,
-                      choices=['Wrapping','Average','Value'],
-                      default=self.OUTSIDE_WRAP,
-                      expertLevel=cons.LEVEL_ADVANCED,
-                      label="How to fill borders",
-                      help='How to fill the borders when shifting the frames')
-
-        # this must stay together with the outside mode
-        form.addParam('outsideValue', params.FloatParam, default=0.0,
-                       expertLevel=cons.LEVEL_ADVANCED,
-                       condition="outsideMode==2",
-                       label='Fill value',
-                       help="Fixed value for filling borders")
 
         #Local alignment params
         group = form.addGroup('Local alignment')
@@ -144,17 +112,22 @@ class XmippProtMovieCorr(ProtAlignMovies):
         line.addParam('controlPointY', params.IntParam, default=6, label='Y')
         line.addParam('controlPointT', params.IntParam, default=5, label='t')
 
+        group.addParam('autoPatches', params.BooleanParam, default=True,
+                      label="Auto patches",
+                      expertLevel=cons.LEVEL_ADVANCED,
+                      condition='doLocalAlignment',
+                      help="If on, protocol will automatically determine necessary number of patches.")
+        line = group.addLine('Number of patches',
+                    expertLevel=cons.LEVEL_ADVANCED,
+                    help='Number of patches used for local alignment.',
+                    condition='not autoPatches')
+        line.addParam('patchesX', params.IntParam, default=7, label='X')
+        line.addParam('patchesY', params.IntParam, default=7, label='Y')
+
         group.addParam('minLocalRes', params.FloatParam, default=500,
                        expertLevel=cons.LEVEL_ADVANCED,
                        label='Min size of the patch (A)',
                        help="How many A should contain each patch?")
-
-        group.addParam('skipAutotuning', params.BooleanParam, default=False,
-                       expertLevel=cons.LEVEL_ADVANCED,
-                       label='Skip autotuning',
-                       help="We try to faster settings of for the FFT library. This takes some time, "
-                            "but consecutive executions will be faster and use less memory."
-                            "Set to True (autotuning will be turned off) if you process just few movies")
 
         group.addParam('groupNFrames', params.IntParam, default=3,
                     expertLevel=cons.LEVEL_ADVANCED,
@@ -189,40 +162,6 @@ class XmippProtMovieCorr(ProtAlignMovies):
             print(yellowStr("We cannot process %s" % movie.getFileName()))
             print(ex)
 
-    def getOutsideModeArg(self):
-        if self.outsideMode == self.OUTSIDE_WRAP:
-            return ' --outside wrap'
-        if self.outsideMode == self.OUTSIDE_AVG:
-            return ' --outside avg'
-        if self.outsideMode == self.OUTSIDE_VALUE:
-            return ' --outside value %f' % self.outsideValue
-        return ''
-
-    def getCropCornerArg(self, x, y):
-        # Assume that if you provide one cropDim, you provide all
-        offsetX = self.cropOffsetX.get()
-        offsetY = self.cropOffsetY.get()
-        cropDimX = self.cropDimX.get()
-        cropDimY = self.cropDimY.get()
-
-        if 0 == offsetX and 0 == offsetY and 0 == cropDimX and 0 == cropDimY:
-            return '' # user does not want to crop at all
-
-        args = ' --cropULCorner %d %d' % (offsetX, offsetY)
-
-        if cropDimX <= 0:
-            dimX = x - 1
-        else:
-            dimX = offsetX + cropDimX - 1
-
-        if cropDimY <= 0:
-            dimY = y - 1
-        else:
-            dimY = offsetY + cropDimY - 1
-
-        args += ' --cropDRCorner %d %d' % (dimX, dimY)
-        return args
-
     def getUserAngle(self):
       anglesDic = {0:0, 1:90, 2:180, 3:270}
       return anglesDic[self.gainRot.get()]
@@ -235,10 +174,8 @@ class XmippProtMovieCorr(ProtAlignMovies):
 
     def getGPUArgs(self):
         args = ' --device %(GPU)s'
-        if self.doLocalAlignment.get():
-            args += ' --processLocalShifts '
-        if self.skipAutotuning.get():
-            args += " --skipAutotuning"
+        if not self.doLocalAlignment.get():
+            args += ' --skipLocalAlignment '
         args += ' --storage "%s"' % self._getExtraPath("fftBenchmark.txt")
         args += ' --controlPoints %d %d %d' % (self.controlPointX, self.controlPointY, self.controlPointT)
         args += ' --patchesAvg %d' % self.groupNFrames
@@ -258,16 +195,13 @@ class XmippProtMovieCorr(ProtAlignMovies):
         args += ' -o "%s"' % self._getShiftsFile(movie)
         args += ' --sampling %f' % movie.getSamplingRate()
         args += ' --maxResForCorrelation %f' % self.maxResForCorrelation
-        args += ' --Bspline %d' % self.INTERP_MAP[self.splineOrder.get()]
 
         if self.binFactor > 1:
             args += ' --bin %f' % self.binFactor
 
-        args += self.getCropCornerArg(x, y)
-        args += self.getOutsideModeArg()
         args += ' --frameRange %d %d' % (0, aN-a0)
         args += ' --frameRangeSum %d %d' % (s0-a0, sN-a0)
-        args += ' --max_shift %d' % self.maxShift
+        args += ' --maxShift %d' % self.maxShift
 
         if self.doSaveAveMic or self.doComputePSD:
             fnAvg = self._getExtraPath(self._getOutputMicName(movie))
@@ -299,6 +233,9 @@ class XmippProtMovieCorr(ProtAlignMovies):
         if self.autoControlPoints.get():
             self._setControlPoints()
 
+        if not self.autoPatches.get():
+            args += ' --patches %d %d ' % (self.patchesX, self.patchesY)
+
         if self.minLocalRes.get():
             args += ' --minLocalRes %f' % self.minLocalRes
 
@@ -325,6 +262,9 @@ class XmippProtMovieCorr(ProtAlignMovies):
         ext = pwutils.getExt(gainFn)
         baseName = os.path.basename(gainFn).replace(ext, '_transformed' + ext)
         outFn = os.path.abspath(self._getExtraPath(baseName))
+
+      if os.path.isfile(outFn):
+        return outFn 
 
       gainImg = xmutils.readImage(gainFn)
       imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
@@ -468,6 +408,13 @@ class XmippProtMovieCorr(ProtAlignMovies):
             errors.append("You have to use at least 3 control points in Y dim")
         if (self.controlPointT < 3):
             errors.append("You have to use at least 3 control points in T dim")
+
+        if (0 != self.cropOffsetX.get() or 0 != self.cropOffsetY.get() 
+            or 0 != self.cropDimX.get() or 0 != self.cropDimY.get()):
+            errors.append("Movie crop is not supported")
+
+        if (self.binFactor.get() < 1):
+            errors.append("Bin factor must be >= 1")
 
         return errors
 
