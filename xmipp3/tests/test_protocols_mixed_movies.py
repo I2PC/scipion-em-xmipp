@@ -30,7 +30,7 @@ from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtImportMovies
 
-from xmipp3.protocols import (XmippProtMovieCorr, XmippProtOFAlignment,
+from xmipp3.protocols import (XmippProtFlexAlign, XmippProtOFAlignment,
                               XmippProtMovieAverage)
 
 
@@ -101,7 +101,7 @@ class TestMixedMovies(BaseTest):
     def test_CorrelationOpticalFlow(self):
         protMovieImport = self._importMovies()
 
-        mc1 = self.newProtocol(XmippProtMovieCorr,
+        mc1 = self.newProtocol(XmippProtFlexAlign,
                                objLabel='CC (no-write)',
                                alignFrame0=2, alignFrameN=10,
                                useAlignToSum=True,
@@ -116,7 +116,7 @@ class TestMixedMovies(BaseTest):
         # Shifts should be different from zero
         self.assertNotAlmostEqual(0, self._sumShifts(mc1.outputMovies))
 
-        mc2 = self.newProtocol(XmippProtMovieCorr,
+        mc2 = self.newProtocol(XmippProtFlexAlign,
                                objLabel='CC (write)',
                                alignFrame0=2, alignFrameN=10,
                                useAlignToSum=True,
