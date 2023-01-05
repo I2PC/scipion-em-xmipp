@@ -174,8 +174,6 @@ class XmippProtFlexAlign(ProtAlignMovies):
 
     def getGPUArgs(self):
         args = ' --device %(GPU)s'
-        if not self.doLocalAlignment.get():
-            args += ' --skipLocalAlignment '
         args += ' --storage "%s"' % self._getExtraPath("fftBenchmark.txt")
         args += ' --controlPoints %d %d %d' % (self.controlPointX, self.controlPointY, self.controlPointT)
         args += ' --patchesAvg %d' % self.groupNFrames
@@ -238,6 +236,9 @@ class XmippProtFlexAlign(ProtAlignMovies):
 
         if self.minLocalRes.get():
             args += ' --minLocalRes %f' % self.minLocalRes
+
+        if not self.doLocalAlignment.get():
+            args += ' --skipLocalAlignment '
 
         if self.useGpu.get():
             args += self.getGPUArgs()

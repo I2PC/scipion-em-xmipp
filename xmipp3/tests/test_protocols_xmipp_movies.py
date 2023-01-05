@@ -141,7 +141,7 @@ class TestOFAlignment(TestXmippBase):
                              "SetOfMovies has not been created.")
     
     def testAlignOFWAlignment(self):
-        prot = XmippProtMovieCorr(doSaveAveMic=False)
+        prot = XmippProtFlexAlign(doSaveAveMic=False)
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
         
@@ -203,11 +203,10 @@ class TestOFAlignment2(TestXmippBase):
     def test_OpticalFlow(self):
         protMovieImport = self._importMovies()
 
-        mc1 = self.newProtocol(XmippProtMovieCorr,
+        mc1 = self.newProtocol(XmippProtFlexAlign,
                                objLabel='CC (no-write)',
                                alignFrame0=2, alignFrameN=10,
                                useAlignToSum=True,
-                               splineOrder=XmippProtMovieCorr.INTERP_CUBIC,
                                numberOfThreads=1)
         mc1.inputMovies.set(protMovieImport.outputMovies)
         self.launchProtocol(mc1)
@@ -282,7 +281,7 @@ class TestCorrelationAlignment(BaseTest):
                          msgRoi % (goldRoi, roi, type(goldRoi), type(roi)))
 
     def test_qbeta_cpu(self):
-        prot = self.newProtocol(XmippProtMovieCorr,doPSD=True, useGpu=False, doLocalAlignment=False)
+        prot = self.newProtocol(XmippProtFlexAlign,doPSD=True, useGpu=False, doLocalAlignment=False)
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
 
@@ -291,7 +290,7 @@ class TestCorrelationAlignment(BaseTest):
                              (1,7), [0, 0, 0, 0])
 
     def test_qbeta(self):
-        prot = self.newProtocol(XmippProtMovieCorr,doPSD=True)
+        prot = self.newProtocol(XmippProtFlexAlign,doPSD=True)
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
 
@@ -300,7 +299,7 @@ class TestCorrelationAlignment(BaseTest):
                              (1,7), [0, 0, 0, 0])
 
     def test_qbeta_patches(self):
-        prot = self.newProtocol(XmippProtMovieCorr,doPSD=True, patchX=7, patchY=7)
+        prot = self.newProtocol(XmippProtFlexAlign,doPSD=True, patchX=7, patchY=7)
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
 
@@ -309,7 +308,7 @@ class TestCorrelationAlignment(BaseTest):
                              (1,7), [0, 0, 0, 0])
 
     def test_qbeta_corrDownscale(self):
-        prot = self.newProtocol(XmippProtMovieCorr,doPSD=True, corrDownscale=3)
+        prot = self.newProtocol(XmippProtFlexAlign,doPSD=True, corrDownscale=3)
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
 
@@ -318,7 +317,7 @@ class TestCorrelationAlignment(BaseTest):
                              (1,7), [0, 0, 0, 0])
 
     def test_cct(self):
-        prot = self.newProtocol(XmippProtMovieCorr,
+        prot = self.newProtocol(XmippProtFlexAlign,
                                 doSaveMovie=True,
                                 doPSD=True)
         prot.inputMovies.set(self.protImport2.outputMovies)
@@ -329,7 +328,7 @@ class TestCorrelationAlignment(BaseTest):
                              (1,7), [0, 0, 0, 0])
 
     def test_controlPoints(self):
-        prot = self.newProtocol(XmippProtMovieCorr,
+        prot = self.newProtocol(XmippProtFlexAlign,
                                 doSaveMovie=False,
                                 doPSD=False,
                                 autoControlPoints=False,
@@ -344,17 +343,16 @@ class TestCorrelationAlignment(BaseTest):
                 self.launchProtocol(prot)
 
     def test_qbeta_SkipCrop(self):
-        prot = self.newProtocol(XmippProtMovieCorr,
+        prot = self.newProtocol(XmippProtFlexAlign,
                                 alignFrame0=3, alignFrameN=5,
                                 sumFrame0=3, sumFrameN=5,
                                 cropOffsetX=10, cropOffsetY=10,
                                 doPSD=True)
         prot.inputMovies.set(self.protImport1.outputMovies)
-        self.launchProtocol(prot)
-
-        self._checkMicrographs(prot)
-        self._checkAlignment(prot.outputMovies[1],
-                             (3,5), [10, 10, 0, 0])
+        with self.assertRaises(Exception,
+                               msg=("Protocol should fail because crop is not supported")):
+            with redirect_stdout(None):
+                self.launchProtocol(prot)
 
 
 class TestAverageMovie(BaseTest):
@@ -414,56 +412,7 @@ class TestAverageMovie(BaseTest):
         msgRoi = "Alignment ROI must be %s (%s) and it is %s (%s)"
         self.assertEqual(goldRoi, roi,
                          msgRoi % (goldRoi, roi, type(goldRoi), type(roi)))
-    
-    def test_qbeta(self):
-        prot = self.newProtocol(XmippProtMovieCorr,
-                                alignFrame0=3, alignFrameN=5,
-                                cropOffsetX=10, cropOffsetY=10,
-                                doSaveAveMic=False)
-        prot.inputMovies.set(self.protImport1.outputMovies)
-        self.launchProtocol(prot)
-        
-        self._checkAlignment(prot.outputMovies[1],
-                             (3,5), [10, 10, 0, 0])
-        
-        protAverage = self.newProtocol(XmippProtMovieAverage,
-                                       sumFrame0=3, sumFrameN=5,
-                                       cropRegion=1)
-        protAverage.inputMovies.set(prot.outputMovies)
-        protAverage.setObjLabel('average w alignment info')
-        self.launchProtocol(protAverage)
-        
-        self._checkMicrographs(protAverage, (4086,4086))
-        protAverage2 = self.newProtocol(XmippProtMovieAverage,
-                                        sumFrame0=3, sumFrameN=5,
-                                       cropRegion=2)
-        protAverage2.inputMovies.set(prot.outputMovies)
-        protAverage2.setObjLabel('average w alignment')
-        self.launchProtocol(protAverage2)
 
-        self._checkMicrographs(protAverage2, (4096,4096))
-
-    def test_cct(self):
-        protAverage = self.newProtocol(XmippProtMovieAverage,
-                                       cropRegion=2,
-                                       sumFrame0=1, sumFrameN=7,
-                                       cropOffsetX=10, cropOffsetY=10,
-                                       cropDimX=1500, cropDimY=1500)
-        protAverage.inputMovies.set(self.protImport2.outputMovies)
-        protAverage.setObjLabel('average imported movies')
-        self.launchProtocol(protAverage)
-
-        self._checkMicrographs(protAverage, (1500,1500))
-
-    def test_cct2(self):
-        protAverage = self.newProtocol(XmippProtMovieAverage,
-                                       cropRegion=1,
-                                       sumFrame0=1, sumFrameN=7)
-        protAverage.inputMovies.set(self.protImport2.outputMovies)
-        protAverage.setObjLabel('average imported movies')
-        self.launchProtocol(protAverage)
-
-        self._checkMicrographs(protAverage, (4096,4096))
 
 
 class TestEstimateGain(BaseTest):
@@ -575,7 +524,7 @@ class TestExtractMovieParticles(BaseTest):
                          msgRoi % (goldRoi, roi, type(goldRoi), type(roi)))
     
     def test_qbeta(self):
-        movAliProt = self.newProtocol(XmippProtMovieCorr,
+        movAliProt = self.newProtocol(XmippProtFlexAlign,
                                 alignFrame0=2, alignFrameN=6,
                                 doSaveAveMic=True)
         movAliProt.inputMovies.set(self.protImport1.outputMovies)
@@ -611,7 +560,7 @@ class TestExtractMovieParticles(BaseTest):
                                     '%d' % size)
 
     def test_cct(self):
-        movAliProt = self.newProtocol(XmippProtMovieCorr,
+        movAliProt = self.newProtocol(XmippProtFlexAlign,
                                       alignFrame0=2, alignFrameN=6,
                                       doSaveAveMic=True)
         movAliProt.inputMovies.set(self.protImport2.outputMovies)
@@ -679,9 +628,8 @@ class TestMaxShift(BaseTest):
 
     @classmethod
     def runAlignMovies(cls):  # do NOT save averaged mics
-        protAlign = cls.newProtocol(XmippProtMovieCorr,
+        protAlign = cls.newProtocol(XmippProtFlexAlign,
                                     alignFrame0=1, alignFrameN=0,
-                                    cropOffsetX=10, cropOffsetY=16,
                                     doLocalAlignment=False, useGpu=False,
                                     objLabel='Movie alignment (NO save mic)',
                                     doSaveAveMic=False)
@@ -691,10 +639,9 @@ class TestMaxShift(BaseTest):
 
     @classmethod
     def runAlignMovMics(cls):  # do SAVE averaged mics and dose weighted mics
-        protAlign = cls.newProtocol(XmippProtMovieCorr,
+        protAlign = cls.newProtocol(XmippProtFlexAlign,
                                     alignFrame0=1, alignFrameN=0,
-                                    cropOffsetX=10, cropOffsetY=16,
-                                    doLocalAlignment=False, useGpu=False,
+                                    doLocalAlignment=False, useGpu=True,
                                     objLabel='Movie alignment (SAVE mic)',
                                     doSaveAveMic=True,
                                     binFactor=2)
@@ -737,7 +684,7 @@ class TestMaxShift(BaseTest):
                     inputDim = (1950, 1950, 1)
                 else:
                     # The corr. align. prot. crops the micrographs and is binned
-                    inputDim = (970, 967, 1)
+                    inputDim = (975, 975, 1)
                     targetSamplingRate *= 2
             else:
                 inputDim = protocol.inputMovies.get().getDim()
@@ -815,6 +762,8 @@ class TestMaxShift(BaseTest):
         return protMaxShift
 
     # ------- the Tests ---------------------------------------
+    # Note: the shift in these movies is very small. Especially in combination with binning,
+    # we're getting to the limit of shift we can detect
     def testFilterFrame(self):
         """ This must discard the second movie for a Frame shift.
         """
@@ -824,7 +773,7 @@ class TestMaxShift(BaseTest):
         protNoMic = self.doFilter(self.alignedMovies, rejType, label)
         self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label)
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True, results=[False, True])
 
     def testFilterMovie(self): 
@@ -836,7 +785,7 @@ class TestMaxShift(BaseTest):
         protNoMic = self.doFilter(self.alignedMovies, rejType, label)
         self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label)
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 0.16) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True, results=[False, True])
 
     def testFilterAnd(self): 
@@ -845,10 +794,10 @@ class TestMaxShift(BaseTest):
         label = 'maxShift AND'
         rejType = XmippProtMovieMaxShift.REJ_AND
 
-        protNoMic = self.doFilter(self.alignedMovies, rejType, label)
+        protNoMic = self.doFilter(self.alignedMovies, rejType, label) 
         self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label)
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 0.16) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True, results=[False, True])
 
     def testFilterOrFrame(self):
@@ -860,7 +809,7 @@ class TestMaxShift(BaseTest):
         protNoMic = self.doFilter(self.alignedMovies, rejType, label, mxMo=1)
         self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label)
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 1.0) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True, results=[False, True])
 
     def testFilterOrMovie(self): 
@@ -872,7 +821,7 @@ class TestMaxShift(BaseTest):
         protNoMic = self.doFilter(self.alignedMovies, rejType, label, mxFm=1)
         self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label)
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 1.0, 0.16) # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True, results=[False, True])
 
     def testFilterOrBoth(self): 
@@ -884,7 +833,7 @@ class TestMaxShift(BaseTest):
         protNoMic = self.doFilter(self.alignedMovies, rejType, label)
         self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label)
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 0.16) # roughly half the precision of the non-binned version)
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True, results=[False, True])
 
     def testFilterRejectBoth(self):

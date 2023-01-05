@@ -30,8 +30,7 @@ from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pwem.emlib.image import ImageHandler
 from pwem.protocols import ProtImportMovies
 
-from xmipp3.protocols import (XmippProtMovieCorr, XmippProtOFAlignment,
-                              XmippProtMovieAverage)
+from xmipp3.protocols import (XmippProtFlexAlign, XmippProtOFAlignment)
 
 
 class TestMixedMovies(BaseTest):
@@ -99,9 +98,10 @@ class TestMixedMovies(BaseTest):
         return sum([abs(x) for x in xx]) + sum([abs(y) for y in yy])
 
     def test_CorrelationOpticalFlow(self):
+        from xmipp3 import Plugin
         protMovieImport = self._importMovies()
 
-        mc1 = self.newProtocol(XmippProtMovieCorr,
+        mc1 = self.newProtocol(XmippProtFlexAlign,
                                objLabel='CC (no-write)',
                                alignFrame0=2, alignFrameN=10,
                                useAlignToSum=True,
@@ -116,7 +116,7 @@ class TestMixedMovies(BaseTest):
         # Shifts should be different from zero
         self.assertNotAlmostEqual(0, self._sumShifts(mc1.outputMovies))
 
-        mc2 = self.newProtocol(XmippProtMovieCorr,
+        mc2 = self.newProtocol(XmippProtFlexAlign,
                                objLabel='CC (write)',
                                alignFrame0=2, alignFrameN=10,
                                useAlignToSum=True,
@@ -131,30 +131,20 @@ class TestMixedMovies(BaseTest):
         # All shifts should be zero, since we have written the move and the
         # shifts have been already applied
         self.assertAlmostEqual(0, self._sumShifts(mc2.outputMovies))
-
-        avg1 = self.newProtocol(XmippProtMovieAverage,
-                                objLabel='AVG (1)',
-                                sumFrame0=2, sumFrameN=10,
-                                splineOrder=XmippProtMovieAverage.INTERP_CUBIC,
-                                numberOfThreads=4)
-        avg1.inputMovies.set(mc1.outputMovies)
-        self.launchProtocol(avg1)
-
-        avg2 = self.newProtocol(XmippProtMovieAverage,
-                                objLabel='AVG (2)',
-                                sumFrame0=2, sumFrameN=10,
-                                splineOrder=XmippProtMovieAverage.INTERP_CUBIC,
-                                numberOfThreads=4,
-                                useAlignment=False) # do not apply the shift again
-
-        avg2.inputMovies.set(mc2.outputMovies)
-        self.launchProtocol(avg2)
-
-        # manual diff statistics:
-        # diff.mrc min=-29.781006 max= 32.581543 avg= -0.000295 stddev=  5.285861
-        # diff.mrc min=-20.981201 max= 19.826904 avg= -0.000339 stddev=  3.548868
-        # diff.mrc min=-28.539307 max= 28.265381 avg=  0.000119 stddev=  4.690267
-        self._compareMovies(avg1.outputMicrographs, avg2.outputMicrographs, 32.59)
+        
+        # test that global alignment has been properly stored
+        for movie in mc2.outputMovies:
+            args = '-i {} --save_image_stats'.format(movie.getFileName())
+            Plugin.runXmippProgram("xmipp_image_statistics", args) # merge frames
+            root = movie.getBaseName().split('_movie.mrcs')[0]
+            mic = [x.getFileName() for x in mc1.outputMicrographs] # when I tried to get mic directly, I was getting wrong name for some strange reason
+            mic = [x for x in mic if root in x][0]
+            ih = ImageHandler()
+            img1 = ih.createImage()
+            img1.read('average.xmp')
+            img2 = ih.createImage()
+            img2.read(mic)
+            self.assertTrue(img1.equal(img2, 1.0))
 
         of1 = self.newProtocol(XmippProtOFAlignment,
                                objLabel='OF (1)',
