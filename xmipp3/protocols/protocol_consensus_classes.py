@@ -63,41 +63,26 @@ class XmippProtConsensusClasses(EMProtocol):
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
-        self._insertFunctionStep('randomConsensusStep')
-        self._insertFunctionStep('intersectStep')
-        self._insertFunctionStep('mergeStep')
+        self._insertFunctionStep('randomConsensusStep', self.inputClassifications)
+        self._insertFunctionStep('intersectStep', self.inputClassifications)
+        self._insertFunctionStep('mergeStep', self.inputClassifications)
 
-    def randomConsensusStep(self):
-        classifications = self._getInputClassifications()
-        #numRand = self.randomClassificationCount.get()
-        nRep = 100 # TODO
-
-        # Compute the random consensus
-        consensusSizes, consensusRelativeSizes = self._calculateReferenceClassification(
-            classifications, nRep
-        )
-
-        # Sort the sizes so that percentile calculation is easy
-        consensusSizes.sort()
-        consensusRelativeSizes.sort()
-        
-        # TODO save
-
-    def intersectStep(self):
-        classifications = self._getInputClassifications()
-
+    def randomConsensusStep(self, classifications):
+        pass
+    
+    def intersectStep(self, classifications):
         # Compute the intersection among all classes
-        intersections = self._calculateClassificationIntersections(classifications)
+        intersections = self._calculateIntersections(classifications)
 
         # Create the output classes and define them
         outputClasses = self._createOutputClasses(
-            self.inputClassifications[0].get(),
+            classifications[0].get(),
             intersections,
             'intersections',
             #itertools.repeat(consensusSizes),
             #itertools.repeat(consensusRelativeSizes)
         )
-        self._defineOutputs(**{'outputClasses': outputClasses})
+        self._defineOutputs(outputClasses=outputClasses)
 
         # Stablish source output relationships
         self._defineSourceRelation(self.inputClassifications, outputClasses)
@@ -142,35 +127,22 @@ class XmippProtConsensusClasses(EMProtocol):
         return errors
     
     # --------------------------- UTILS functions ------------------------------
+    def _calculateRandomConsensusProbabilities(self, classProbabilities):
+        consensusProbabilities = []
+        consensusNormalizedProbabilities = []
         
-    
-    def _getInputClassifications(self):
-        if not hasattr(self, '_classifications'):
-            self._classifications = self._convertInputClassifications(self.inputClassifications)
-        
-        return self._classifications
-    
-    def _getInputItems(self, i=0):
-        return self.inputClassifications[i].get().getImages()
-    
-    def _getOutputIntersections(self):
-        return self._convertInputClassifications(self.output)
-    
-    def _convertClassification(self, classification):
-        def classToCluster(cls):
-            ids = cls.getIdSet()
-            rep = cls.getRepresentative().clone() if cls.hasRepresentative() else None
-            return XmippProtConsensusClasses.Cluster(ids, rep)
+        # Consider all combinations
+        for probabilities in itertools.product(*classProbabilities):
+            probability = np.prod(probabilities)
+            normalizedProbability = probability / np.min(probabilities)
 
-        return list(map(classToCluster, classification))
+            consensusProbabilities.append(probability)
+            consensusNormalizedProbabilities.append(normalizedProbability)
     
-    def _convertInputClassification(self, classification):
-        return self._convertClassification(classification.get())
+        assert(np.isclose(np.sum(consensusProbabilities), 1.0))
+        return consensusProbabilities, consensusNormalizedProbabilities
     
-    def _convertInputClassifications(self, classifications):
-        return list(map(self._convertInputClassification, classifications))
-    
-    def _calculateClassificationIntersections(self, classifications):
+    def _calculateIntersections(self, classifications):
         # Start with the first classification
         result = classifications[0]
 
@@ -194,43 +166,6 @@ class XmippProtConsensusClasses(EMProtocol):
         """ Returns a list of lists that stores the lengths of each classification """
         return list(map(lambda classification : list(map(len, classification)), classifications))
     
-    def _calculateReferenceConsensus(self, classifications, nRep):
-        """ Create random partitions of same size to compare the quality
-         of the consensus classes """
-        classificationsSizes = self._calculateClassificationLengths(classifications)
-        nIds = sum(classificationsSizes[0])
-
-        # Repeatedly obtain a consensus of a random classification of same size
-        consensus = list(map(
-            self._calculateRandomClassificationConsensus, 
-            itertools.repeat(classificationsSizes, nRep),
-            itertools.repeat(nIds, nRep)
-        ))
-
-        # Concatenate all consensuses
-        consensus = list(itertools.chain(*consensus))
-
-        # Obtain the consensus sizes
-        consensusSizes = np.array(list(map(len, consensus)))
-        consensusSizeRatios = np.array(list(map(XmippProtConsensusClasses.Cluster.getRelativeSize, consensus)))
-        return consensusSizes, consensusSizeRatios
-    
-    def _calculateRandomClassificationSizes(self, probabilities, nItems):
-        sizes = []
-        relativeSizes = []
-        
-        # Obtain all possible combinations of probabilities
-        for combination in itertools.product(*probabilities):
-            probability = np.prod(combination)
-            size = nItems * probability
-            relativeSize = combination / np.min(combination)
-            
-            sizes.append(size)
-            relativeSizes.append(relativeSize)
-            
-        assert(np.isclose(np.sum(sizes), nItems))
-        return sizes, relativeSizes
-        
     def _calculateClusterSimilarity(self, x, y):
         xIds = x.getIds()
         yIds = y.getIds()
@@ -348,7 +283,7 @@ class XmippProtConsensusClasses(EMProtocol):
         pll = self._calculateFullProfileLogLikelihood(np.log(obValues[:-1])) # TODO determine if this log should be here
         return np.argmax(pll)
     
-    def _createOutputClasses(self, 
+    def _createClasses(self, 
                              classification: SetOfClasses,
                              clustering, 
                              name ):
@@ -373,6 +308,45 @@ class XmippProtConsensusClasses(EMProtocol):
         return result
     
     # ---------------------------- I/O functions -------------------------------
+    
+    # -------------------------- Convert functions -----------------------------
+    def _convertClassification(self, classification):
+        def classToCluster(cls):
+            ids = cls.getIdSet()
+            rep = cls.getRepresentative().clone() if cls.hasRepresentative() else None
+            return XmippProtConsensusClasses.Cluster(ids, rep)
+
+        return list(map(classToCluster, classification))
+    
+    def _convertInputClassification(self, classification):
+        return self._convertClassification(classification.get())
+    
+    def _convertInputClassifications(self, classifications):
+        return list(map(self._convertInputClassification, classifications))
+    
+    def _convertToSetOfClasses( self, 
+                                classification: SetOfClasses,
+                                clustering, 
+                                name,
+                                randomConsensusSizes=None, 
+                                randomConsensusRelativeSizes=None ):
+
+        # Create an empty set with the same images as the input classification
+        result = self._EMProtocol__createSet( # HACK
+            type(classification), 
+            'classes_%s.sqlite', name
+        ) 
+        result.setImages(classification.getImages())
+    
+        # Fill the output
+        loader = XmippProtConsensusClasses.ClassesLoader(
+            clustering, 
+            #randomConsensusSizes,
+            #randomConsensusRelativeSizes
+        )
+        loader.fillClasses(result)
+
+        return result
 
     # --------------------------- HELPER classes -------------------------------
     class Cluster:
