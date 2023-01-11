@@ -67,6 +67,10 @@ class XmippProtFlexAlign(ProtAlignMovies):
     def _defineAlignmentParams(self, form):
         ProtAlignMovies._defineAlignmentParams(self, form)
 
+        # FlexAlign does not support cropping
+        form._paramsDict['Alignment']._paramList.remove('Crop_offsets__px_')
+        form._paramsDict['Alignment']._paramList.remove('Crop_dimensions__px_')
+
         form.addHidden(params.USE_GPU, params.BooleanParam, default=True,
                        label="Use GPU for execution",
                        help="This protocol has both CPU and GPU implementation.\
@@ -153,6 +157,8 @@ class XmippProtFlexAlign(ProtAlignMovies):
                            "For tiff movies, gain is automatically upside-down flipped")
 
         form.addParallelSection(threads=1, mpi=1)
+
+        
 
     #--------------------------- STEPS functions -------------------------------
     def _processMovie(self, movie):
@@ -409,10 +415,6 @@ class XmippProtFlexAlign(ProtAlignMovies):
             errors.append("You have to use at least 3 control points in Y dim")
         if (self.controlPointT < 3):
             errors.append("You have to use at least 3 control points in T dim")
-
-        if (0 != self.cropOffsetX.get() or 0 != self.cropOffsetY.get() 
-            or 0 != self.cropDimX.get() or 0 != self.cropDimY.get()):
-            errors.append("Movie crop is not supported")
 
         if (self.binFactor.get() < 1):
             errors.append("Bin factor must be >= 1")
