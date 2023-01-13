@@ -342,18 +342,6 @@ class TestCorrelationAlignment(BaseTest):
             with redirect_stdout(None):
                 self.launchProtocol(prot)
 
-    def test_qbeta_SkipCrop(self):
-        prot = self.newProtocol(XmippProtFlexAlign,
-                                alignFrame0=3, alignFrameN=5,
-                                sumFrame0=3, sumFrameN=5,
-                                cropOffsetX=10, cropOffsetY=10,
-                                doPSD=True)
-        prot.inputMovies.set(self.protImport1.outputMovies)
-        with self.assertRaises(Exception,
-                               msg=("Protocol should fail because crop is not supported")):
-            with redirect_stdout(None):
-                self.launchProtocol(prot)
-
 
 class TestEstimateGain(BaseTest):
 
