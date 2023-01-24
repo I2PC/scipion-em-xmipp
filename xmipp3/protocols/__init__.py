@@ -65,8 +65,7 @@ from .protocol_helical_parameters import XmippProtHelicalParameters
 from .protocol_kerdensom import XmippProtKerdensom
 from .protocol_ml2d import XmippProtML2D
 from .protocol_movie_gain import XmippProtMovieGain
-from .protocol_movie_average import XmippProtMovieAverage
-from .protocol_movie_correlation import XmippProtMovieCorr
+from .protocol_flexalign import XmippProtFlexAlign
 from .protocol_movie_opticalflow import XmippProtOFAlignment, ProtMovieAlignment
 from .protocol_movie_max_shift import XmippProtMovieMaxShift
 from .protocol_movie_split_frames import XmippProtSplitFrames
@@ -108,6 +107,7 @@ from .protocol_simulate_ctf import XmippProtSimulateCTF
 from .protocol_solid_angles import XmippProtSolidAngles
 from .protocol_split_volume import XmippProtSplitvolume
 from .protocol_subtract_projection import XmippProtSubtractProjection
+from .protocol_subtract_projection import XmippProtBoostParticles
 from .protocol_tilt_analysis import XmippProtTiltAnalysis
 from .protocol_trigger_data import XmippProtTriggerData
 from .protocol_validate_nontilt import XmippProtValidateNonTilt

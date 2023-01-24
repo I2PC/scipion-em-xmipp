@@ -1,4 +1,5 @@
 scikit-learn==1.1.1
+scipion-em
 scipy<=1.8.1
 joblib
 peppercorn

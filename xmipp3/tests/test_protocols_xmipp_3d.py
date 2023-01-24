@@ -1478,7 +1478,7 @@ class TestXmippShiftParticlesAndVolume(TestXmippBase):
         self.assertEqual(protShiftVolPad.shiftZ.get(), 5.0, (MSG_WRONG_SHIFT, "z"))
 
 
-class TestXmippProjSubtraction(TestXmippBase):
+class TestXmippProjSubtractionAndBoostParticles(TestXmippBase):
 
     @classmethod
     def setUpClass(cls):
@@ -1515,7 +1515,7 @@ class TestXmippProjSubtraction(TestXmippBase):
 
         # Subtraction of particles - reference volume with and without mask
         protSubtractProj = self.newProtocol(XmippProtSubtractProjection,
-                                            particles=protCreateGallery.outputReprojections,
+                                            inputParticles=protCreateGallery.outputReprojections,
                                             vol=protCreatePhantom1item.outputVolume)
         self.launchProtocol(protSubtractProj)
         self.assertIsNotNone(protSubtractProj.outputParticles,
@@ -1525,8 +1525,8 @@ class TestXmippProjSubtraction(TestXmippBase):
                          (MSG_WRONG_DIM, "particles"))
         self.assertEqual(protSubtractProj.outputParticles.getSize(), 181, (MSG_WRONG_SIZE, "particles"))
         protSubtractProjMask = self.newProtocol(XmippProtSubtractProjection,
-                                                particles=protCreateGallery.outputReprojections,
-                                                vol=protCreatePhantom1item.outputVolume,
+                                                inputParticles=protCreateGallery.outputReprojections,
+                                                vol=protCreatePhantom2items.outputVolume,
                                                 mask=protCreateMaskKeep.outputMask)
         self.launchProtocol(protSubtractProjMask)
         self.assertIsNotNone(protSubtractProjMask.outputParticles,
@@ -1543,7 +1543,7 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.assertIsNotNone(protSimulateCTF.outputParticles,
                              "There was a problem with CTF simulation")
         protSubtractProjCTF = self.newProtocol(XmippProtSubtractProjection,
-                                               particles=protSimulateCTF.outputParticles,
+                                               inputParticles=protSimulateCTF.outputParticles,
                                                vol=protCreatePhantom1item.outputVolume)
         self.launchProtocol(protSubtractProjCTF)
         self.assertIsNotNone(protSubtractProjCTF.outputParticles,
@@ -1559,7 +1559,7 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.assertIsNotNone(protAddNoise.outputParticles,
                              "There was a problem with add noise protocol")
         protSubtractProjNoise = self.newProtocol(XmippProtSubtractProjection,
-                                                 particles=protAddNoise.outputParticles,
+                                                 inputParticles=protAddNoise.outputParticles,
                                                  vol=protCreatePhantom1item.outputVolume)
         self.launchProtocol(protSubtractProjNoise)
         self.assertIsNotNone(protSubtractProjNoise.outputParticles,
@@ -1575,7 +1575,7 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.assertIsNotNone(protAddNoiseCTF.outputParticles,
                              "There was a problem with add noise to ctf particles protocol")
         protSubtractProjNoiseCTF = self.newProtocol(XmippProtSubtractProjection,
-                                                    particles=protAddNoiseCTF.outputParticles,
+                                                    inputParticles=protAddNoiseCTF.outputParticles,
                                                     vol=protCreatePhantom1item.outputVolume)
         self.launchProtocol(protSubtractProjNoiseCTF)
         self.assertIsNotNone(protSubtractProjNoiseCTF.outputParticles,
@@ -1614,8 +1614,8 @@ class TestXmippProjSubtraction(TestXmippBase):
 
         # Perform subtraction of overlapping particles with and without mask, noise and CTF
         protSubtractProjOver = self.newProtocol(XmippProtSubtractProjection,
-                                                particles=protCreateGalleryOver.outputReprojections,
-                                                vol=protCreatePhantom1Over.outputVolume,
+                                                inputParticles=protCreateGalleryOver.outputReprojections,
+                                                vol=protCreatePhantom2Over.outputVolume,
                                                 mask=protCreateMaskKeepOver.outputMask)
         self.launchProtocol(protSubtractProjOver)
         self.assertIsNotNone(protSubtractProjOver.outputParticles,
@@ -1625,7 +1625,7 @@ class TestXmippProjSubtraction(TestXmippBase):
                          (MSG_WRONG_DIM, "particles"))
         self.assertEqual(protSubtractProjOver.outputParticles.getSize(), 1647, (MSG_WRONG_SIZE, "particles"))
         protSubtractProjOverNoMask = self.newProtocol(XmippProtSubtractProjection,
-                                                      particles=protCreateGalleryOver.outputReprojections,
+                                                      inputParticles=protCreateGalleryOver.outputReprojections,
                                                       vol=protCreatePhantom1Over.outputVolume)
         self.launchProtocol(protSubtractProjOverNoMask)
         self.assertIsNotNone(protSubtractProjOverNoMask.outputParticles,
@@ -1646,7 +1646,7 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.assertIsNotNone(protAddNoiseCTFOver.outputParticles,
                              "There was a problem with add noise to ctf overlap particles protocol")
         protSubtractProjNoiseCTFOver = self.newProtocol(XmippProtSubtractProjection,
-                                                        particles=protAddNoiseCTFOver.outputParticles,
+                                                        inputParticles=protAddNoiseCTFOver.outputParticles,
                                                         vol=protCreatePhantom1Over.outputVolume)
         self.launchProtocol(protSubtractProjNoiseCTFOver)
         self.assertIsNotNone(protSubtractProjNoiseCTFOver.outputParticles,
@@ -1655,6 +1655,19 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.assertEqual(protSubtractProjNoiseCTFOver.outputParticles.getFirstItem().getDim(), (80, 80, 1),
                          (MSG_WRONG_DIM, "particles"))
         self.assertEqual(protSubtractProjNoiseCTFOver.outputParticles.getSize(), 1647, (MSG_WRONG_SIZE, "particles"))
+
+        # Boost particles with reference volume
+        protBoostPart = self.newProtocol(XmippProtBoostParticles,
+                                         inputParticles=protCreateGallery.outputReprojections,
+                                         vol=protCreatePhantom1item.outputVolume)
+        self.launchProtocol(protBoostPart)
+        self.assertIsNotNone(protBoostPart.outputParticles,
+                             "There was a problem with projection subtraction")
+        self.assertEqual(protBoostPart.outputParticles.getSamplingRate(), 1.0, (MSG_WRONG_SAMPLING, "particles"))
+        self.assertEqual(protBoostPart.outputParticles.getFirstItem().getDim(), (80, 80, 1),
+                         (MSG_WRONG_DIM, "particles"))
+        self.assertEqual(protBoostPart.outputParticles.getSize(), 181, (MSG_WRONG_SIZE, "particles"))
+
 
 class TestXmippAlignVolumeAndParticles(TestXmippBase):
 
