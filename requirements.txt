@@ -1,6 +1,6 @@
-scikit-learn==1.1.1
+scikit-learn==1.2.1
 scipion-em
-scipy<=1.8.1
+scipy<=1.10.0
 joblib
 peppercorn
 plotter
