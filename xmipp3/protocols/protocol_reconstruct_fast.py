@@ -25,7 +25,8 @@ from pwem.objects import Volume, Transform, SetOfVolumes
 
 from pyworkflow.protocol.params import (Form, PointerParam, 
                                         FloatParam, IntParam,
-                                        StringParam, BooleanParam )
+                                        StringParam, BooleanParam,
+                                        LEVEL_ADVANCED, USE_GPU, GPU_LIST )
 from pyworkflow.utils.path import (cleanPath, makePath, copyFile, moveFile,
                                    createLink, cleanPattern)
 
@@ -41,6 +42,16 @@ class XmippProtReconstructFast(ProtRefine3D, xmipp3.XmippProtocol):
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form: Form):
+        form.addHidden(USE_GPU, BooleanParam, default=True,
+                       label="Use GPU for execution",
+                       help="This protocol has both CPU and GPU implementation.\
+                       Select the one you want to use.")
+
+        form.addHidden(GPU_LIST, StringParam, default='0',
+                       expertLevel=LEVEL_ADVANCED,
+                       label="Choose GPU IDs",
+                       help="Add a list of GPU devices that can be used")
+        
         form.addSection(label='Input')
 
         form.addParam('inputParticles', PointerParam, label="Particles", important=True,
@@ -60,14 +71,26 @@ class XmippProtReconstructFast(ProtRefine3D, xmipp3.XmippProtocol):
 
         form.addParallelSection(threads=1, mpi=8)
     
+    #--------------------------- INFO functions --------------------------------------------
+
+    
+    #--------------------------- INSERT steps functions --------------------------------------------    
     def _insertAllSteps(self):
-        self._insertFunctionStep('convertInputStep')
-        self._insertFunctionStep('correctCtfStep')
-        self._insertFunctionStep('projectVolumeStep')
-        self._insertFunctionStep('trainDatabaseStep')
-        self._insertFunctionStep('alignStep')
-        self._insertFunctionStep('createOutputStep')
+        convertInputStepId = self._insertFunctionStep('convertInputStep', prerequisites=[])
+        correctCtfStepId = self._insertFunctionStep('correctCtfStep', prerequisites=[convertInputStepId])
+        projectVolumeStepId = self._insertFunctionStep('projectVolumeStep', prerequisites=[convertInputStepId])
+        trainDatabaseStepId = self._insertFunctionStep('trainDatabaseStep', prerequisites=[projectVolumeStepId])
+        alignStepId = self._insertFunctionStep('alignStep', prerequisites=[correctCtfStepId, trainDatabaseStepId])
+        reconstructIds = self._insertReconstructSteps(prerequisites=[alignStepId])
+        createOutputStepId = self._insertFunctionStep('createOutputStep', prerequisites=reconstructIds)
  
+    def _insertReconstructSteps(self, prerequisites):
+        splitStepId = self._insertFunctionStep('splitStep', prerequisites=prerequisites)
+        reconstructStepId1 = self._insertFunctionStep('reconstructStep', i=1, prerequisites=[splitStepId])
+        reconstructStepId2 = self._insertFunctionStep('reconstructStep', i=2, prerequisites=[splitStepId])
+        return [reconstructStepId1, reconstructStepId2]
+ 
+    #--------------------------- STEPS functions --------------------------------------------
     def convertInputStep(self):
         writeSetOfParticles(self.inputParticles.get(), 
                             self._getInputParticleMdFilename())
@@ -90,7 +113,7 @@ class XmippProtReconstructFast(ProtRefine3D, xmipp3.XmippProtocol):
             self.runJob('xmipp_ctf_correct_wiener2d', args)
         
         else:
-            #  Wiener filtering is not requied, link the input md
+            #  Wiener filtering is not required, link the input md
             createLink(
                 self._getInputParticleMdFilename(),
                 self._getWienerParticleMdFilename()
@@ -118,25 +141,51 @@ class XmippProtReconstructFast(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--method', 'fourier']
         args += ['--size', expectedSize]
         args += ['--training', trainingSize]
+        if self.useGpu:
+            args += ['--gpu', 0] # TODO select
         
         self.runJob('xmipp_train_database', args, numberOfMpi=1, env=self.getCondaEnv())
     
     def alignStep(self):
+        nRotations = round(360 / self.angularSampling)
+        nShift = self.shiftCount
+        
         args = []
         args += ['-i', self._getWienerParticleMdFilename()]
         args += ['-o', self._getAlignmentMdFilename()]
+        args += ['--index', self._getTrainingIndexFilename()]
         #args += ['--weights', self._getWeightsFilename()]
         args += ['--max_shift', self._getMaxShift()]
+        args += ['--rotations', nRotations]
+        args += ['--shifts', nShift]
         args += ['--max_frequency', self._getDigitalFrequencyLimit()]
         args += ['--method', 'fourier']
-        args += ['--size', expectedSize]
-        args += ['--training', trainingSize]
+        args += ['--dropna']
+        if self.useGpu:
+            args += ['--gpu', 0] # TODO select
         
         self.runJob('xmipp_query_database', args, numberOfMpi=1, env=self.getCondaEnv())
+    
+    def splitStep(self):
+        args = []
+        args += ['-i', self._getAlignmentMdFilename()]
+        args += ['-n', 2]
+        
+        self.runJob('xmipp_metadata_split', args, numberOfMpi=1)
+    
+    def reconstructStep(self, i: int):
+        args []
+        args += ['-i', self._getAlignmentHalfMdFilename(i)]
+        args += ['-o', self._getHalfVolumeFilename(i)]
+        args += ['--sym', self.symmetryGroup.get()]
+        args += ['--weight']
+    
+        self.runJob("xmipp_reconstruct_fourier_accel", args)
     
     def createOutputStep(self):
         pass
     
+    #--------------------------- UTILS functions --------------------------------------------        
     def _getDigitalFrequencyLimit(self):
         return self.inputParticles.get().getSamplingRate() / float(self.resolutionLimit)
     
@@ -169,3 +218,9 @@ class XmippProtReconstructFast(ProtRefine3D, xmipp3.XmippProtocol):
     
     def _getAlignmentMdFilename(self):
         return self._getExtraPath('aligned.xmd')
+    
+    def _getAlignmentHalfMdFilename(self, i: int):
+        return self._getExtraPath('aligned%06d.xmd' % i)
+
+    def _getHalfVolumeFilename(self, i: int):
+        return self._getExtraPath('volume%01d.mrc' % i)
