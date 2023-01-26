@@ -68,7 +68,9 @@ class XmippProtTriggerData(EMProtocol):
         form.addParam('triggerWait', BooleanParam, default=False,
                       label='Wait for signal to stop the stream?',
                       help='If NO is selected, normal functionality.\n'
-                           'If YES is selected it will wait for a signal to stop the stream.')
+                           'If YES is selected it will wait for a signal to stop the stream.'
+                           '\n For this option, select send all items to output with a '
+                           'minimum size of 1')
         form.addParam('outputSize', IntParam, default=10000,
                       label='Minimum output size',
                       help='How many particles need to be on input to '
@@ -88,11 +90,11 @@ class XmippProtTriggerData(EMProtocol):
         form.addParam('triggerSignal', BooleanParam, default=False,
                       label='Send signal to stop a stream?',
                       help='If NO is selected, normal functionality.\n'
-                           'If YES is selected it will send a signal to a connected'
-                           ' Trigger data protocol.')
+                           'If YES is selected it will send a signal to a connected Trigger data protocol.'
+                           '\n For this option, select the option send all items to output.')
         form.addParam('triggerProt', PointerParam,
                       pointerClass=self.getClassName(),
-                      condition='triggerSignal', allowsNull=True,
+                      condition='triggerSignal',
                       label='Trigger data protocol',
                       help='Select the trigger data protocol that you will send a signal to stop the stream.')
         form.addParam('delay', IntParam, default=10, label="Delay (sec)",
@@ -165,15 +167,21 @@ class XmippProtTriggerData(EMProtocol):
 
         if self.streamClosed:
             self.finished = True
-        elif not self.allImages.get():
+        elif not self.allImages.get() and not self.triggerSignal.get():
             self.finished = len(self.images) >= self.outputSize
         else:
             self.finished = False
 
+        # Send the signal to the connected protocol
+        if self.triggerSignal.get() and len(self.images) >= self.outputSize:
+            self.info('Sending signal to stop the input trigger data protocol')
+            self.stopWait()
+
+        # Wait for trigger data signal
         if self.triggerWait.get():
-            print('Waiting for signal to stop the stream')
+            self.info('Waiting for signal to stop the stream')
             if self.waitingHasFinished():
-                print('Stopped by received signal from a trigger data protocol')
+                self.info('Stopped by received signal from a trigger data protocol')
                 self.finished = True
 
         outputStep = self._getFirstJoinStep()
@@ -182,10 +190,6 @@ class XmippProtTriggerData(EMProtocol):
             self._fillingOutput()  # To do the last filling
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(cons.STATUS_NEW)
-                # Send the signal to the connected protocol
-                if self.triggerSignal.get():
-                    print('Sending signal to stop the input trigger data protocol')
-                    self.stopWait()
         else:
             delayId = self._insertFunctionStep('delayStep', prerequisites=[])
             deps.append(delayId)
@@ -302,7 +306,10 @@ class XmippProtTriggerData(EMProtocol):
         return summary
 
     def _validate(self):
-        pass
+        errors = []
+        if self.triggerSignal.get():
+            if not isinstance(self.triggerProt.get(), XmippProtTriggerData):
+                errors.append("There is not a Trigger protocol connected to send a stop signal.")
 
     # --------------------------- UTILS functions -----------------------------
     def _getFirstJoinStepName(self):

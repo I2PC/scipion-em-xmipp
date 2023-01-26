@@ -32,6 +32,7 @@ import os
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import LabelParam, LEVEL_ADVANCED
 from pyworkflow.protocol.params import EnumParam, StringParam
+import pyworkflow.utils as pwutils
 
 from xmipp3.protocols.protocol_cl2d import XmippProtCL2D
 from pwem.viewers import DataView, ClassesView
@@ -125,7 +126,7 @@ class XmippCL2DViewer(ProtocolViewer):
                 viewFinalClasses = True
             levList = [self.protocol._lastLevel()]
         else:
-            levList = self._getListFromRangeString(self.showSeveralLevels.get())
+            levList = pwutils.getListFromRangeString(self.showSeveralLevels.get())
 
         for level in levList:
             if viewFinalClasses:
@@ -154,7 +155,7 @@ class XmippCL2DViewer(ProtocolViewer):
                                             sub='')
             views.append(self._viewInfo(fn))
         else:
-            levList = self._getListFromRangeString(self.showSeveralLevels.get())
+            levList = pwutils.getListFromRangeString(self.showSeveralLevels.get())
             if len(levList) > 0:
                 for level in levList:
                     if level <= self.protocol._lastLevel():

@@ -208,7 +208,7 @@ class XmippProtMovieGain(ProtProcessMovies):
         if not self.doGainProcess(movieId):
             return
         inputGain = self.getInputGain()
-          
+
         if self.estimateGain.get() and not movieId in self.estimatedIds:
                 self.estimatedIds.append(movieId)
                 self.estimateGainFun(movie)
@@ -336,7 +336,7 @@ class XmippProtMovieGain(ProtProcessMovies):
                     estGainsSet = self._loadOutputSet(SetOfImages, self.estimatedDatabase)
                 if self.estimateResidualGain.get():
                     resGainsSet = self._loadOutputSet(SetOfImages, self.residualDatabase)
-                  
+
                 for movie in newDone:
                     movieId = movie.getObjId()
                     if not self.doGainProcess(movieId):
@@ -461,7 +461,7 @@ class XmippProtMovieGain(ProtProcessMovies):
 
     def getInputGain(self):
         return self.inputMovies.get().getGain()
-    
+
     def getEstimatedGainPath(self, movieId):
         return self._getExtraPath("movie_%06d_gain.xmp" % movieId)
 

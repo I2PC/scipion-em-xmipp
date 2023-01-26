@@ -105,7 +105,7 @@ class XmippProcessParticles(ProtProcessParticles):
     def _defineFilenames(self):
         self.inputFn = self._getTmpPath('input_particles.xmd')
         self.outputMd = self._getExtraPath('output_images.xmd')
-        self.outputStk = self._getExtraPath('output_images.stk')
+        self.outputStk = self._getExtraPath('output_images.mrcs')
 
 
 class XmippProcessVolumes(ProtPreprocessVolumes):

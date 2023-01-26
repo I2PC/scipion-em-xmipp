@@ -28,6 +28,7 @@
 # **************************************************************************
 
 import pyworkflow.protocol.constants as const
+from pwem.convert.headers import setMRCSamplingRate
 from pyworkflow.protocol.params import (BooleanParam, EnumParam, FloatParam,
                                         IntParam)
 from pwem.objects import Volume
@@ -70,6 +71,7 @@ class XmippResizeHelper:
                       'between interpolation and Fourier cropping.')
         form.addParam('resizeSamplingRate', FloatParam, default=1.0,
                       condition='doResize and resizeOption==%d' % cls.RESIZE_SAMPLINGRATE,
+                      allowsPointers=True,
                       label='Resize sampling rate (Å/px)',
                       help='Set the new output sampling rate.')
         form.addParam('doFourier', BooleanParam, default=False,
@@ -78,14 +80,17 @@ class XmippResizeHelper:
                       help='If you set to *True*, the final dimensions must be lower than the original ones.')
         form.addParam('resizeDim', IntParam, default=0,
                       condition='doResize and resizeOption==%d' % cls.RESIZE_DIMENSIONS,
+                      allowsPointers=True,
                       label='New image size (px)',
                       help='Size in pixels of the particle images <x> <y=x> <z=x>.')
         form.addParam('resizeFactor', FloatParam, default=0.5,
                       condition='doResize and resizeOption==%d' % cls.RESIZE_FACTOR,
+                      allowsPointers=True,
                       label='Resize factor',
                       help='New size is the old one x resize factor.')
         form.addParam('resizeLevel', IntParam, default=0,
                       condition='doResize and resizeOption==%d' % cls.RESIZE_PYRAMID,
+                      allowsPointers=True,
                       label='Pyramid level',
                       help='Use positive value to expand and negative to reduce.')
         form.addParam('hugeFile', BooleanParam, default=False, expertLevel=const.LEVEL_ADVANCED,
@@ -108,12 +113,14 @@ class XmippResizeHelper:
                       '_crop_: choose how many pixels to crop from each border.\n')
         form.addParam('cropSize', IntParam, default=0,
                       condition='doWindow and windowOperation == %d' % cls.WINDOW_OP_CROP,
+                      allowsPointers=True,
                       label='Crop size (px)',
                       help='Amount of pixels cropped from each border.\n'
                            'e.g: if you set 10 pixels, the dimensions of the\n'
                            'object (SetOfParticles, Volume or SetOfVolumes) will be\n'
                            'reduced in 20 pixels (2 borders * 10 pixels)')
         form.addParam('windowSize', IntParam, default=0,
+                      allowsPointers=True,
                       condition='doWindow and windowOperation == %d' % cls.WINDOW_OP_WINDOW,
                       label='Window size (px)',
                       help='Size in pixels of the output object. It will be '
@@ -267,6 +274,7 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
         
         if self.doResize:
             output.setSamplingRate(self.samplingRate)
+            setMRCSamplingRate(self.outputStk, self.samplingRate)
             
     def _updateItem(self, item, row):
         """ Update also the sampling rate and 
@@ -392,31 +400,32 @@ class XmippProtCropResizeVolumes(XmippProcessVolumes):
         XmippResizeHelper.windowStep(self, self._ioArgs(isFirstStep)+args)
         
     def _preprocessOutput(self, volumes):
-        # We use the preprocess only whne input is a set
+        # We use the preprocess only when input is a set
         # we do not use postprocess to setup correctly
         # the samplingRate before each volume is added
         if not self._isSingleInput():
             if self.doResize:
                 volumes.setSamplingRate(self.samplingRate)
 
-    def _postprocessOutput(self, volumes):
+    def _postprocessOutput(self, volume:Volume):
         # We use the postprocess only when input is a volume
         if self._isSingleInput():
             if self.doResize:
-                volumes.setSamplingRate(self.samplingRate)
+                volume.setSamplingRate(self.samplingRate)
                 # we have a new sampling so origin need to be adjusted
                 iSampling = self.inputVolumes.get().getSamplingRate()
                 oSampling = self.samplingRate
                 xdim_i, ydim_i, zdim_i = self.inputVolumes.get().getDim()
-                xdim_o, ydim_o, zdim_o = volumes.getDim()
+                xdim_o, ydim_o, zdim_o = volume.getDim()
 
                 xOrig, yOrig , zOrig = \
                     self.inputVolumes.get().getShiftsFromOrigin()
                 xOrig += (xdim_i*iSampling-xdim_o*oSampling)/2.
                 yOrig += (ydim_i*iSampling-ydim_o*oSampling)/2.
                 zOrig += (zdim_i*iSampling-zdim_o*oSampling)/2.
-                volumes.setShiftsInOrigin(xOrig, yOrig, zOrig)
-                volumes.setSamplingRate(oSampling)
+                volume.setShiftsInOrigin(xOrig, yOrig, zOrig)
+                volume.setSamplingRate(oSampling)
+                setMRCSamplingRate(volume.getFileName(), oSampling)
 
     #--------------------------- INFO functions ----------------------------------------------------
     def _summary(self):

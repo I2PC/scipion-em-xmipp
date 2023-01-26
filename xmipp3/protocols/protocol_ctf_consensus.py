@@ -189,7 +189,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                            'If *No*, only the primary metadata (plus consensus '
                            'scores) will be in the resulting CTF.')
 
-        form.addParallelSection(threads=4, mpi=1)
+        form.addParallelSection(threads=1, mpi=1)
 
 # --------------------------- INSERT steps functions -------------------------
     def _insertAllSteps(self):

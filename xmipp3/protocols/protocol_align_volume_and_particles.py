@@ -231,11 +231,13 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
     
     def _validate(self):
         errors = []
+        if self.inputParticles.get().hasAlignment() is False:
+            errors.append("Input particles need to be aligned (they should have transformation matrix)")
         return errors
     
     def _summary(self):
         summary = []
-        summary.append("Alignment method: %s" % self.getEnumText('alignmentAlgorithm'))
+        summary.append("Alignment method: %s" % self.getEnumText('alignmentMode'))
         return summary
     
     def _methods(self):
