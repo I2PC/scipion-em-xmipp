@@ -124,7 +124,7 @@ class XmippProtReconstructFast(ProtRefine3D, xmipp3.XmippProtocol):
     
     def trainDatabaseStep(self):
         expectedSize = int(2e6) # TODO determine form gallery
-        trainingSize = int(4e6) # TODO idem
+        trainingSize = int(2e6) # TODO idem
 
         args = []
         args += ['-i', self._getGalleryMdFilename()]
