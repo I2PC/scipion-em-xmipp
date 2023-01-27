@@ -283,6 +283,7 @@ class XmippProtReconstructFast(ProtRefine3D, xmipp3.XmippProtocol):
         
         # Fill
         readSetOfParticles(self._getAlignmentMdFilename(), particleSet)
+        particleSet.setSamplingRate(self._getSamplingRate())
         
         # Define the output
         self._defineOutputs(outputParticles=particleSet)
