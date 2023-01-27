@@ -21,8 +21,8 @@
 # ***************************************************************************/
 
 from pwem.protocols import ProtRefine3D
-from pwem.objects import Volume, Transform, SetOfVolumes
-from pwem import Config
+from pwem.objects import Volume, FSC
+from pwem import emlib
 
 from pyworkflow.protocol.params import (Form, PointerParam, 
                                         FloatParam, IntParam,
@@ -32,7 +32,7 @@ from pyworkflow.utils.path import (cleanPath, makePath, copyFile, moveFile,
                                    createLink, cleanPattern)
 
 import xmipp3
-from xmipp3.convert import writeSetOfParticles
+from xmipp3.convert import writeSetOfParticles, readSetOfParticles
 
 class XmippProtReconstructFast(ProtRefine3D, xmipp3.XmippProtocol):
     _label = 'fast reconstruct'
@@ -106,6 +106,8 @@ class XmippProtReconstructFast(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--save_metadata_stack', self._getWienerParticleMdFilename()]
         args += ['--keep_input_columns']
         args += ['--sampling_rate', self._getSamplingRate()]
+        args += ['--pad', '2']
+        args += ['--wc', '-1.0']
         if (particles.isPhaseFlipped()):
             args +=  ['--phase_flipped']
 
@@ -156,7 +158,7 @@ class XmippProtReconstructFast(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--shifts', nShift]
         args += ['--max_frequency', self._getDigitalFrequencyLimit()]
         args += ['--method', 'fourier']
-        #args += ['--dropna']
+        args += ['--dropna']
         args += ['--batch', batchSize]
         if self.useGpu:
             args += ['--gpu', 0] # TODO select
@@ -183,7 +185,7 @@ class XmippProtReconstructFast(ProtRefine3D, xmipp3.XmippProtocol):
         
     def computeFscStep(self):
         args = []
-        args += ['-r', self._getHalfVolumeFilename(1)]
+        args += ['--ref', self._getHalfVolumeFilename(1)]
         args += ['-i', self._getHalfVolumeFilename(2)]
         args += ['-o', self._getFscFilename()]
         args += ['--sampling_rate', self._getSamplingRate()]
@@ -192,26 +194,21 @@ class XmippProtReconstructFast(ProtRefine3D, xmipp3.XmippProtocol):
     
     def averageVolumeStep(self):
         args = []
-        args += ['-i', self._getAlignmentHalfMdFilename(1)]
-        args += ['--plus', self._getAlignmentHalfMdFilename(2)]
+        args += ['-i', self._getHalfVolumeFilename(1)]
+        args += ['--plus', self._getHalfVolumeFilename(2)]
         args += ['-o', self._getAverageVolumeFilename()]
         self.runJob('xmipp_image_operate', args, numberOfMpi=1)
 
         args = []
         args += ['-i', self._getAverageVolumeFilename()]
-        args += ['--mult 0.5']
+        args += ['--mult', '0.5']
         self.runJob('xmipp_image_operate', args, numberOfMpi=1)
     
     def createOutputStep(self):
-        volume=Volume()
-        volume.setFileName(self._getAverageVolumeFilename())
-        volume.setSamplingRate(self._getSamplingRate())
-        volume.setHalfMaps([
-            self._getHalfVolumeFilename(1),
-            self._getHalfVolumeFilename(2)
-        ])
-        self._defineOutputs(outputVolume=volume)
-        self._defineSourceRelation(self.inputParticles.get(), volume)
+        self._createOutputParticleSet()
+        self._createOutputVolume()
+        self._createOutputFsc()
+        
     
     #--------------------------- UTILS functions --------------------------------------------        
     def _getDigitalFrequencyLimit(self):
@@ -261,3 +258,51 @@ class XmippProtReconstructFast(ProtRefine3D, xmipp3.XmippProtocol):
     
     def _getFscFilename(self):
         return self._getExtraPath('fsc.xmd')
+    
+    def _createOutputVolume(self):
+        volume=Volume()
+        
+        # Fill
+        volume.setFileName(self._getAverageVolumeFilename())
+        volume.setSamplingRate(self._getSamplingRate())
+        volume.setHalfMaps([
+            self._getHalfVolumeFilename(1),
+            self._getHalfVolumeFilename(2)
+        ])
+        
+        # Define the output
+        self._defineOutputs(outputVolume=volume)
+        self._defineSourceRelation(self.inputParticles.get(), volume)
+        
+        return volume
+    
+    def _createOutputParticleSet(self):
+        particleSet = self._createSetOfParticles()
+        
+        # TODO replace wiener corrected images
+        
+        # Fill
+        readSetOfParticles(self._getAlignmentMdFilename(), particleSet)
+        
+        # Define the output
+        self._defineOutputs(outputParticles=particleSet)
+        self._defineSourceRelation(self.inputParticles.get(), particleSet)
+        
+        return particleSet
+    
+    def _createOutputFsc(self):
+        fsc = FSC()
+        
+        # Load from metadata
+        fsc.loadFromMd(
+            self._getFscFilename(),
+            emlib.MDL_RESOLUTION_FREQ,
+            emlib.MDL_RESOLUTION_FRC
+        )
+        
+        # Define the output
+        self._defineOutputs(outputFSC=fsc)
+        self._defineSourceRelation(self.inputParticles.get(), fsc)
+        
+        return fsc
+        
