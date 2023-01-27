@@ -31,6 +31,8 @@ from pyworkflow.object import Float
 from pyworkflow.utils import getExt
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
                                         LEVEL_ADVANCED)
+
+from pyworkflow import BETA, UPDATED, NEW, PROD
 from pwem.objects import Volume
 from pwem.protocols import ProtAnalysis3D
 
@@ -46,6 +48,7 @@ class XmippProtFSO(ProtAnalysis3D):
     """
     _label = 'resolution fso'
     _lastUpdateVersion = VERSION_2_0
+    _devStatus = NEW
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
