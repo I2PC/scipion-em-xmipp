@@ -244,6 +244,7 @@ class XmippProtDeepVolPostProc(ProtAnalysis3D, xmipp3.XmippProtocol):
         else: #self.NORMALIZATION_MASK
           params+= " --checkpoint  %s "%self.getModel("deepEMhancer", "production_checkpoints/deepEMhancer_masked.hd5")
 
+        os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
         self.runJob("xmipp_deep_volume_postprocessing", params, numberOfMpi=1)
 
                                                         

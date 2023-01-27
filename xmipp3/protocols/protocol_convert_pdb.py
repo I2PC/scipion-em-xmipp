@@ -87,6 +87,11 @@ class XmippProtConvertPdb(ProtInitialVolume):
                       expertLevel=const.LEVEL_ADVANCED, 
                       label="Center PDB",
                       help='Center PDB with the center of mass')
+        form.addParam('outPdb', params.BooleanParam, default=False, 
+                      expertLevel=const.LEVEL_ADVANCED, 
+                      label="Store centered PDB",
+                      help='Set to \'Yes\' if you want to save centered PDB. '
+                           'It will be stored in the output directory of this protocol')
     
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -120,6 +125,8 @@ class XmippProtConvertPdb(ProtInitialVolume):
         
         if self.centerPdb:
             args += ' --centerPDB'
+            if self.outPdb:
+                args += ' --oPDB'
 
         if self.vol:
             vol = self.volObj.get()
@@ -134,10 +141,10 @@ class XmippProtConvertPdb(ProtInitialVolume):
         if self.setSize:
             args += ' --size'
 
-        if self.size_x.hasValue():
+        if self.size_x.hasValue() and self.setSize:
             args += ' %d' % self.size_x.get()
 
-        if self.size_y.hasValue() and self.size_z.hasValue():
+        if self.size_y.hasValue() and self.size_z.hasValue() and self.setSize:
             args += ' %d %d' % (self.size_y.get(), self.size_z.get())
 
         self.info("Input file: " + pdbFn)

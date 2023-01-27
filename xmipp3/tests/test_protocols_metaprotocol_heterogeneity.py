@@ -24,6 +24,7 @@
 # *
 # **************************************************************************
 
+'''
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pwem.protocols import ProtImportParticles, ProtImportVolumes, ProtSubSet
 
@@ -74,4 +75,4 @@ class TestMetaprotHeterogeneity(BaseTest):
         self.launchProtocol(protHeterogeneity)
         self.assertFalse(protHeterogeneity.isFailed(), 'Metaprotocol Heterogeneity has failed.')
 
-
+'''

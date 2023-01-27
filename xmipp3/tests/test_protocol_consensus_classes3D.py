@@ -31,13 +31,13 @@ import random
 from pyworkflow.tests import BaseTest, setupTestProject, DataSet
 from pyworkflow.utils import greenStr
 from pwem.objects import Class3D
+from pwem.protocols import ProtClassify3D
 from pwem.protocols import ProtImportParticles
 
 from xmipp3.protocols import XmippProtConsensusClasses3D
 
 
 class TestConsensusClasses3D(BaseTest):
-
     @classmethod
     def setUpClass(cls):
         """Prepare the data that we will use later on."""
@@ -49,26 +49,19 @@ class TestConsensusClasses3D(BaseTest):
         cls.xmippDataTest = DataSet.getDataSet('xmipp_tutorial')
 
 
-        def _importClasses(label, numClasses, randomSeed, numPart=None):
+        def _createClasses(label, particles, numClasses, randomSeed, numPart=None):
             """ We import a set of classes with an alterate import particles
                 because there is not a import classes protocol
             """
-            pImpClasses = cls.proj.newProtocol(ProtImportParticles,
-                               filesPath=cls.xmippDataTest.getFile('particles'),
-                               samplingRate=3.5)
-
-            pImpClasses.setObjLabel('Import %s' % label)
-
-            # we launch the protocol to obtain the particles
+            # Create a dummy class with the particles
+            pImpClasses = cls.proj.newProtocol(ProtClassify3D)
+            pImpClasses.setObjLabel(label)
             cls.proj.launchProtocol(pImpClasses, wait=True)
 
-            # fake importing classes handmade
-            partSet = pImpClasses.outputParticles
+            setOfClasses = pImpClasses._createSetOfClasses3D(particles)
 
-            setOfClasses = pImpClasses._createSetOfClasses3D(partSet)
-
-            numOfPart = partSet.getSize() if numPart is None else numPart
-            partIds = list(partSet.getIdSet())
+            numOfPart = particles.getSize() if numPart is None else numPart
+            partIds = list(particles.getIdSet())
             m = int(numOfPart/numClasses)
             
             # random shuffle with a certain seed to get always the same classes
@@ -78,8 +71,8 @@ class TestConsensusClasses3D(BaseTest):
                 currIds = partIds[clInx*m:(clInx+1)*m]
 
                 newClass = Class3D()
-                newClass.copyInfo(partSet)
-                newClass.setAcquisition(partSet.getAcquisition())
+                newClass.copyInfo(particles)
+                newClass.setAcquisition(particles.getAcquisition())
                 # newClass.setRepresentative(clRep.getRepresentative())
 
                 setOfClasses.append(newClass)
@@ -87,7 +80,7 @@ class TestConsensusClasses3D(BaseTest):
                 enabledClass = setOfClasses[newClass.getObjId()]
                 enabledClass.enableAppend()
                 for itemId in currIds:
-                    item = partSet[itemId]
+                    item = particles[itemId]
                     enabledClass.append(item)
 
                 setOfClasses.update(enabledClass)
@@ -100,12 +93,23 @@ class TestConsensusClasses3D(BaseTest):
 
             return pImpClasses.outputClasses
 
-        cls.set1 = _importClasses('3 Classes I', 3, 65)
-        cls.set2 = _importClasses('3 Classes II', 3, 123)
-        cls.set3 = _importClasses('3 Classes III', 3, 256)
-        cls.set4 = _importClasses('3 Classes IV (not all part)', 3, 568, 70)
-        cls.set5 = _importClasses('5 Classes I', 5, 745)
-        cls.set6 = _importClasses('5 Classes II', 5, 1025)
+        # Import particles
+        pImpParticles = cls.proj.newProtocol(ProtImportParticles,
+                            filesPath=cls.xmippDataTest.getFile('particles'),
+                            samplingRate=3.5)
+        pImpParticles.setObjLabel('Import particles')
+
+        # Launch the protocol to obtain the particles
+        cls.proj.launchProtocol(pImpParticles, wait=True)
+
+        # fake importing classes handmade
+        particles = pImpParticles.outputParticles
+
+        cls.set1 = _createClasses('3 Classes I', particles, 3, 65)
+        cls.set2 = _createClasses('3 Classes II', particles, 3, 123)
+        cls.set3 = _createClasses('3 Classes III', particles, 3, 256)
+        cls.set4 = _createClasses('5 Classes I', particles, 5, 745)
+        cls.set5 = _createClasses('5 Classes II', particles, 5, 1025)
 
 
     def checkIntersections(self, setOfIntersections, classId, partIds):
@@ -133,16 +137,16 @@ class TestConsensusClasses3D(BaseTest):
 
         # preparing and launching the protocol
         pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
-                                           inputMultiClasses=[self.set1, 
-                                                              self.set2, 
-                                                              self.set3])
+                                           inputClassifications=[self.set1, 
+                                                                 self.set2, 
+                                                                 self.set3])
         self.proj.launchProtocol(pConsClass, wait=True)
-        setOfIntersections = pConsClass.outputClasses
+        setOfIntersections = pConsClass.outputClasses_initial
 
         # some general assertions
         self.assertIsNotNone(setOfIntersections,
                              "There was some problem with the output")
-        self.assertEqual(setOfIntersections.getSize(), 27,
+        self.assertEqual(setOfIntersections.getSize(), 26,
                          "The number of the outputClasses is wrong")
         self.checkPopulation(setOfIntersections, 75)
 
@@ -152,18 +156,18 @@ class TestConsensusClasses3D(BaseTest):
 
         # preparing and launching the protocol
         pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
-                                           inputMultiClasses=[self.set1, 
-                                                              self.set2, 
-                                                              self.set4])
+                                           inputClassifications=[self.set1, 
+                                                                 self.set2, 
+                                                                 self.set4])
         self.proj.launchProtocol(pConsClass, wait=True)
-        setOfIntersections = pConsClass.outputClasses
+        setOfIntersections = pConsClass.outputClasses_initial
 
         # some general assertions
         self.assertIsNotNone(setOfIntersections,
                              "There was some problem with the output")
-        self.assertEqual(setOfIntersections.getSize(), 27,
+        self.assertEqual(setOfIntersections.getSize(), 38,
                          "The number of the outputClasses is wrong")
-        self.checkPopulation(setOfIntersections, 69)
+        self.checkPopulation(setOfIntersections, 75)
 
 
     def testConsensus3(self):
@@ -171,18 +175,18 @@ class TestConsensusClasses3D(BaseTest):
 
         # preparing and launching the protocol
         pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
-                                           inputMultiClasses=[self.set4, 
-                                                              self.set2, 
-                                                              self.set1])
+                                           inputClassifications=[self.set4, 
+                                                                 self.set2, 
+                                                                 self.set1])
         self.proj.launchProtocol(pConsClass, wait=True)
-        setOfIntersections = pConsClass.outputClasses
+        setOfIntersections = pConsClass.outputClasses_initial
 
         # some general assertions
         self.assertIsNotNone(setOfIntersections,
                              "There was some problem with the output")
-        self.assertEqual(setOfIntersections.getSize(), 27,
+        self.assertEqual(setOfIntersections.getSize(), 38,
                          "The number of the outputClasses is wrong")
-        self.checkPopulation(setOfIntersections, 69)
+        self.checkPopulation(setOfIntersections, 75)
 
 
     def testConsensus4(self):
@@ -190,54 +194,52 @@ class TestConsensusClasses3D(BaseTest):
 
         # preparing and launching the protocol
         pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
-                                           inputMultiClasses=[self.set5, 
-                                                              self.set2, 
-                                                              self.set1])
+                                           inputClassifications=[self.set5, 
+                                                                 self.set2, 
+                                                                 self.set1])
         self.proj.launchProtocol(pConsClass, wait=True)
-        setOfIntersections = pConsClass.outputClasses
+        setOfIntersections = pConsClass.outputClasses_initial
 
         # some general assertions
         self.assertIsNotNone(setOfIntersections,
                              "There was some problem with the output")
-        self.assertEqual(setOfIntersections.getSize(), 45,
+        self.assertEqual(setOfIntersections.getSize(), 36,
                          "The number of the outputClasses is wrong")
         self.checkPopulation(setOfIntersections, 75)
-
-
-    def testConsensus5(self):
-        print("\n", greenStr(" Test Consensus with two sets".center(75, '-')))
-
-        # preparing and launching the protocol
-        pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
-                                           inputMultiClasses=[self.set5, 
-                                                              self.set6])
-        self.proj.launchProtocol(pConsClass, wait=True)
-        setOfIntersections = pConsClass.outputClasses
-
-        # some general assertions
-        self.assertIsNotNone(setOfIntersections,
-                             "There was some problem with the output")
-        self.assertEqual(setOfIntersections.getSize(), 25,
-                         "The number of the outputClasses is wrong")
-        self.checkPopulation(setOfIntersections, 75)
-
 
     def testConsensus6(self):
         print("\n", greenStr(" Test Consensus with four sets".center(75, '-')))
 
         # preparing and launching the protocol
         pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
-                                           inputMultiClasses=[self.set1,
-                                                              self.set2,
-                                                              self.set5, 
-                                                              self.set6])
+                                           inputClassifications=[self.set1,
+                                                                 self.set2,
+                                                                 self.set3,
+                                                                 self.set5 ])
         self.proj.launchProtocol(pConsClass, wait=True)
-        setOfIntersections = pConsClass.outputClasses
+        setOfIntersections = pConsClass.outputClasses_initial
 
         # some general assertions
         self.assertIsNotNone(setOfIntersections,
                              "There was some problem with the output")
-        self.assertEqual(setOfIntersections.getSize(), 225,
+        self.assertEqual(setOfIntersections.getSize(), 61,
                          "The number of the outputClasses is wrong")
         self.checkPopulation(setOfIntersections, 75)
 
+    def testConsensus7(self):
+        print("\n", greenStr("Test Consensus with four sets and a random reference classification".center(75, '-')))
+
+        # preparing and launching the protocol
+        pConsClass = self.proj.newProtocol(XmippProtConsensusClasses3D,
+                                           inputClassifications=[self.set1,
+                                                                 self.set2,
+                                                                 self.set3,
+                                                                 self.set5 ],
+                                           randomClassificationCount=1000 )
+        self.proj.launchProtocol(pConsClass, wait=True)
+        setOfIntersections = pConsClass.outputClasses_initial
+
+        # Ensure that the intersection size has been written
+        for cls in setOfIntersections:
+            self.assertIsNotNone(cls._xmipp_classIntersectionSizePValue)
+            self.assertIsNotNone(cls._xmipp_classIntersectionRelativeSizePValue)

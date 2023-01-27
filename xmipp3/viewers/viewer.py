@@ -46,11 +46,14 @@ from xmipp3.protocols import XmippProtScreenParticles
 from xmipp3.protocols import XmippProtCTFMicrographs
 from xmipp3.protocols import XmippProtValidateNonTilt
 from xmipp3.protocols import XmippProtMultiRefAlignability
+from xmipp3.protocols import XmippProtAngularGraphConsistency
 from xmipp3.protocols import XmippProtAssignmentTiltPair
 from xmipp3.protocols import XmippProtMovieGain
 from xmipp3.protocols import XmippProtDeepDenoising
 from xmipp3.protocols import XmippProtParticleBoxsize
 from .plotter import XmippPlotter
+from xmipp3.protocols import XmippProtTiltAnalysis
+from pwem.viewers.viewers_data import MicrographsView
 
 
 class XmippViewer(DataViewer):
@@ -73,9 +76,11 @@ class XmippViewer(DataViewer):
                 XmippProtValidateNonTilt,
                 XmippProtAssignmentTiltPair,
                 XmippProtMultiRefAlignability,
+                XmippProtAngularGraphConsistency,
                 XmippProtMovieGain,
                 XmippProtDeepDenoising,
-                XmippProtParticleBoxsize
+                XmippProtParticleBoxsize,
+                XmippProtTiltAnalysis
                 ]
 
     def __createTemporaryCtfs(self, obj, setOfMics):
@@ -123,6 +128,9 @@ class XmippViewer(DataViewer):
         #                                   fn, obj.strId(),
         #                                   viewParams={OBJCMDS: objCommands},
         #                                   **kwargs))
+
+
+
 
         elif (issubclass(cls, XmippProtExtractParticles) or
               issubclass(cls, XmippProtScreenParticles)):
@@ -195,6 +203,38 @@ class XmippViewer(DataViewer):
                                                                      '_representative._filename',
                                                            'labels': '_size',
                                                            'sortby': 'id'})
+
+        elif issubclass(cls, XmippProtTiltAnalysis):
+            if obj.hasAttribute('discardedMicrographs'):
+                fn = obj.discardedMicrographs.getFileName()
+                labels = ('id enabled psdCorr._filename _filename _tilt_mean_corr _tilt_std_corr '
+                          '_tilt_max_corr _tilt_min_corr _tilt_psds_image._filename ')
+                labelRender = (' psdCorr._filename _tilt_psds_image._filename')
+
+                self._views.append(ObjectView(self._project, obj.strId(), fn,
+                                              viewParams={ORDER: labels,
+                                                          VISIBLE: labels,
+                                                          RENDER: labelRender,
+                                                          ZOOM: 25,
+                                                          MODE: MODE_MD}))
+
+            if obj.hasAttribute('outputMicrographs'):
+                fn = obj.outputMicrographs.getFileName()
+                labels = ('id enabled psdCorr._filename _filename _tilt_mean_corr _tilt_std_corr '
+                          '_tilt_max_corr _tilt_min_corr _tilt_psds_image._filename ')
+                labelRender = (' psdCorr._filename _tilt_psds_image._filename')
+
+                self._views.append(ObjectView(self._project, obj.strId(), fn,
+                                                   viewParams={ORDER: labels,
+                                                   VISIBLE: labels,
+                                                   RENDER: labelRender,
+                                                   ZOOM: 25,
+                                                   MODE: MODE_MD}))
+
+            if not(obj.hasAttribute('discardedMicrographs')) and not(obj.hasAttribute('outputMicrographs')):
+                self._views.append(self.infoMessage("Output micrographs has "
+                                                    "not been produced yet."))
+
 
         elif issubclass(cls, XmippProtCompareReprojections):
                 fn = obj.reprojections.getFileName()
@@ -324,6 +364,19 @@ class XmippViewer(DataViewer):
                                emlib.MDL_SCORE_BY_ALIGNABILITY_ACCURACY,
                                marker='.', markersize=.55, color='red', linestyle='')
             self._views.append(plotter)
+    
+        elif issubclass(cls, XmippProtAngularGraphConsistency):
+            fn = obj.outputParticles.getFileName()
+            labels = ('id enabled _index _filename _xmipp_assignedDirRefCC '
+                      '_xmipp_maxCCprevious _xmipp_graphCCPrevious _xmipp_distance2MaxGraphPrevious '
+                      '_xmipp_maxCC _xmipp_graphCC _xmipp_distance2MaxGraph')
+            labelRender = "_filename"
+            self._views.append(ObjectView(self._project, obj.outputParticles.strId(), fn,
+                                          viewParams={ORDER: labels,
+                                                      VISIBLE: labels,
+                                                      SORT_BY: '_xmipp_assignedDirRefCC desc',
+                                                      RENDER: labelRender,
+                                                      MODE: MODE_MD}))
 
         elif issubclass(cls, XmippProtExtractParticlesPairs):
             self._visualize(obj.outputParticlesTiltPair)
@@ -333,6 +386,7 @@ class XmippViewer(DataViewer):
             DataViewer._visualize(self, obj, **kwargs)
 
         return self._views
+            
 
     def getCTFViews(self, ctfSet):
         # This could be used by any CTF viewer to show CTF plus, phaseShift plot

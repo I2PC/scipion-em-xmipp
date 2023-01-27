@@ -124,7 +124,7 @@ class TestDeepVolPostProcessing(TestDeepVolPostProcessingBase):
                                         useHalfMapsInsteadVol=True,
                                         halfMapsAttached=False,
                                         inputHalf1=self.protImportHalf1.outputVolume,
-                                        inputHalf2=self.protImportHalf1.outputVolume,
+                                        inputHalf2=self.protImportHalf2.outputVolume,
                                         normalization= XmippProtDeepVolPostProc.NORMALIZATION_AUTO
                                    )
         self.launchProtocol(deepPostProc)

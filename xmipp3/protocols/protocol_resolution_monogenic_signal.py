@@ -29,14 +29,13 @@ import numpy as np
 
 from pyworkflow import VERSION_1_1
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
-                                        LEVEL_ADVANCED, EnumParam)
+                                        LEVEL_ADVANCED, EnumParam, DeprecatedParam)
 from pwem.protocols import ProtAnalysis3D
 from pyworkflow.object import Float
 from pwem.emlib.image import ImageHandler
 from pyworkflow.utils import getExt
 from pwem.objects import Volume
 import pwem.emlib.metadata as md
-from ..utils import DeprecatedParam
 
 MONORES_METHOD_URL = 'http://github.com/I2PC/scipion/wiki/XmippProtMonoRes'
 OUTPUT_RESOLUTION_FILE = 'monoresResolutionMap.mrc'
@@ -122,15 +121,14 @@ class XmippProtMonoRes(ProtAnalysis3D):
 
         group = form.addGroup('Extra parameters')
         line = group.addLine('Resolution Range (Å)',
-                             help="If the user knows the range of resolutions or"
-                                  " only a range of frequencies needs to be analysed."
-                                  "If Low is empty MonoRes will try to estimate the range. "
-                                  "it should be better if a range is provided")
+                             help="The range of resolutions to be analysed."
+                                  "The local resolution will be estimated from low to high in "
+                                  "steps given by the step box (advanced parameter)")
 
         group.addParam('significance', FloatParam, default=0.95,
                        expertLevel=LEVEL_ADVANCED,
                        label="Significance",
-                       help='Relution is computed using hypothesis tests, '
+                       help='Resolution is computed using hypothesis tests, '
                             'this value determines the significance of that test')
 
         self.maskthreshold = DeprecatedParam('maskThreshold', self)
