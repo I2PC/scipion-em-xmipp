@@ -350,7 +350,7 @@ def _containsAll(row, labels):
     are present in the row.
     """
     values = labels.values() if isinstance(labels, dict) else labels
-    return all(row.containsLabel(l) for l in values)
+    return all(row.hasColumn(l) for l in values)
 
 
 def _containsAny(row, labels):
@@ -358,7 +358,7 @@ def _containsAny(row, labels):
     are present in the row.
     """
     values = labels.values() if isinstance(labels, dict) else labels
-    return any(row.containsLabel(l) for l in values)
+    return any(row.hasColumn(l) for l in values)
 
 
 def _rowToObjectFunc(obj):
@@ -1026,8 +1026,6 @@ def setOfImagesToMd(imgSet, mdIn, imgToFunc, **kwargs):
         rowFunc: this function can be used to setup the row before
             adding to metadata.
     """
-    import time
-    time.sleep(10)
     if 'alignType' not in kwargs:
         kwargs['alignType'] = imgSet.getAlignment()
 
@@ -1372,27 +1370,27 @@ def rowToAlignment(alignmentRow, alignType):
         alignment = Transform()
         angles = np.zeros(3)
         shifts = np.zeros(3)
-        flip = alignmentRow.getValue(emlib.MDL_FLIP)
+        flip = alignmentRow.get(md1.MDL_FLIP)
 
-        shifts[0] = alignmentRow.getValue(emlib.MDL_SHIFT_X, 0.)
-        shifts[1] = alignmentRow.getValue(emlib.MDL_SHIFT_Y, 0.)
+        shifts[0] = alignmentRow.get(md1.MDL_SHIFT_X, 0.)
+        shifts[1] = alignmentRow.get(md1.MDL_SHIFT_Y, 0.)
         if not is2D:
-            angles[0] = alignmentRow.getValue(emlib.MDL_ANGLE_ROT, 0.)
-            angles[1] = alignmentRow.getValue(emlib.MDL_ANGLE_TILT, 0.)
-            shifts[2] = alignmentRow.getValue(emlib.MDL_SHIFT_Z, 0.)
-            angles[2] = alignmentRow.getValue(emlib.MDL_ANGLE_PSI, 0.)
+            angles[0] = alignmentRow.get(md1.MDL_ANGLE_ROT, 0.)
+            angles[1] = alignmentRow.get(md1.MDL_ANGLE_TILT, 0.)
+            shifts[2] = alignmentRow.get(md1.MDL_SHIFT_Z, 0.)
+            angles[2] = alignmentRow.get(md1.MDL_ANGLE_PSI, 0.)
             if flip:
                 angles[1] = angles[1]+180  # tilt + 180
                 angles[2] = - angles[2]    # - psi, COSS: this is mirroring X
                 shifts[0] = -shifts[0]     # -x
         else:
-            psi = alignmentRow.getValue(emlib.MDL_ANGLE_PSI, 0.)
-            rot = alignmentRow.getValue(emlib.MDL_ANGLE_ROT, 0.)
+            psi = alignmentRow.get(md1.MDL_ANGLE_PSI, 0.)
+            rot = alignmentRow.get(md1.MDL_ANGLE_ROT, 0.)
             if rot != 0. and psi != 0:
                 print("HORROR rot and psi are different from zero in 2D case")
             angles[0] = \
-                alignmentRow.getValue(emlib.MDL_ANGLE_PSI, 0.)\
-                + alignmentRow.getValue(emlib.MDL_ANGLE_ROT, 0.)
+                alignmentRow.get(md1.MDL_ANGLE_PSI, 0.)\
+                + alignmentRow.get(md1.MDL_ANGLE_ROT, 0.)
 
         matrix = matrixFromGeometry(shifts, angles, inverseTransform)
 

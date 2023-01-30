@@ -23,11 +23,11 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
+import emtable
 from pwem.constants import ALIGN_NONE
 from pwem.protocols import ProtProcessParticles, ProtPreprocessVolumes
 from pwem.objects import Volume
-import pwem.emlib.metadata as md
+from xmipp3.constants import MetadaData as md
 
 from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
                             writeSetOfVolumes, getImageLocation)
@@ -69,7 +69,7 @@ class XmippProcessParticles(ProtProcessParticles):
         """
         # By default update the item location (index, filename)
         # with the new binary data location (after preprocessing)
-        newFn = row.getValue(md.MDL_IMAGE)
+        newFn = row.get(md.MDL_IMAGE)
         newLoc = xmippToLocation(newFn)
         item.setLocation(newLoc)
             
@@ -91,10 +91,12 @@ class XmippProcessParticles(ProtProcessParticles):
         outputSet.copyInfo(inputSet)
 
         self._preprocessOutput(outputSet)
-        
-        outputSet.copyItems(inputSet, 
+        mdFileName = '%s@%s' % ('Particles', self.inputFn)
+        table = emtable.Table(fileName=self.inputFn)
+
+        outputSet.copyItems(inputSet,
                             updateItemCallback=self._updateItem,
-                            itemDataIterator=md.iterRows(self.outputMd, sortByLabel=md.MDL_ITEM_ID))
+                            itemDataIterator=table.iterRows(mdFileName))
         self._postprocessOutput(outputSet)
         
         outputKey = className.replace('SetOf', 'output')

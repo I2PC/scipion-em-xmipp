@@ -28,13 +28,15 @@
 This module contains utils functions for Xmipp protocols
 """
 
-from os.path import join, basename
+from os.path import  basename
 import numpy as np
 import math
+import emtable
 from pyworkflow import Config
 import pyworkflow.utils as pwutils
 from pwem import emlib
-from pyworkflow.object import Object
+import pwem.emlib.metadata as md
+from .constants import MetadaData as md1
 
 
 def validateXmippGpuBins():
@@ -314,4 +316,37 @@ class PathData(Data):
 
     def removeLastPoint(self):
         del self._points[-1]
+
+
+class SetEmtableMdIterator(md.SetMdIterator):
+
+    def __init__(self, md, sortByLabel=None,
+                 keyLabel=md1.MDL_ITEM_ID,
+                 updateItemCallback=None,
+                 skipDisabled=False):
+        if updateItemCallback is None:
+            raise Exception('Set an updateItemCallback')
+
+        self.iterMd = emtable.Table.iterRows(fileName=md, key=sortByLabel)
+        self.keyLabel = keyLabel
+        self.updateItemCallback = updateItemCallback
+        self.skipDisabled = skipDisabled
+        self.__nextRow()
+
+    def __nextRow(self):
+        try:
+            self.lastRow = next(self.iterMd)
+        except StopIteration:
+            self.lastRow = None
+
+    def getEnable(self, row):
+        if row.hasColumn(md1.MDL_ENABLED):
+            enabled = self.getValue(row, md1.MDL_ENABLED)
+        else:
+            enabled = 1
+        return enabled
+
+    def getValue(self, row, label):
+        return row.get(label)
+
 

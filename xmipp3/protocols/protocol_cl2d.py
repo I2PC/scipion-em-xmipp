@@ -27,12 +27,14 @@
 from os.path import join, dirname, exists
 from glob import glob
 
-
+import emtable
 import pyworkflow.protocol.params as param
 import pyworkflow.protocol.constants as const
 from pyworkflow.utils.path import cleanPath, makePath
-
 import pwem.emlib.metadata as md
+
+from ..utils import SetEmtableMdIterator
+from ..constants import MetadaData as md1
 from pwem.protocols import ProtClassify2D
 from pwem.objects import SetOfClasses2D
 from pwem.constants import ALIGN_NONE, ALIGN_2D
@@ -476,7 +478,7 @@ class XmippProtCL2D(ProtClassify2D):
         createItemMatrix(item, row, align=ALIGN_2D)
 
     def _updateParticle(self, item, row):
-        item.setClassId(row.getValue(md.MDL_REF))
+        item.setClassId(row.get(md1.MDL_REF))
         item.setTransform(rowToAlignment(row, ALIGN_2D))
 
     def _updateClass(self, item):
@@ -494,14 +496,15 @@ class XmippProtCL2D(ProtClassify2D):
         from the metadata file.
         """
         self._classesInfo = {}  # store classes info, indexed by class id
+        mdFileName = filename.split('@')
+        table = emtable.Table(fileName=mdFileName[1])
 
-        mdClasses = md.MetaData(filename)
-
-        for classNumber, row in enumerate(md.iterRows(mdClasses)):
-            index, fn = xmippToLocation(row.getValue(md.MDL_IMAGE))
+        for classNumber, row in enumerate(table.iterRows(fileName=mdFileName[1],
+                                                         tableName=mdFileName[0])):
+            index, fn = xmippToLocation(row.get(md1.MDL_IMAGE))
             # Store info indexed by id, we need to store the row.clone() since
             # the same reference is used for iteration
-            self._classesInfo[classNumber + 1] = (index, fn, row.clone())
+            self._classesInfo[classNumber + 1] = (index, fn, row)
 
     def _fillClassesFromLevel(self, clsSet, level, subset):
         """ Create the SetOfClasses2D from a given iteration. """
@@ -513,10 +516,11 @@ class XmippProtCL2D(ProtClassify2D):
                 xmpMd = self._getLevelMdImages(level, subset)
         else:
             xmpMd = self._getLevelMdImages(level, subset)
-            
-        iterator = md.SetMdIterator(xmpMd, sortByLabel=md.MDL_ITEM_ID,
-                                    updateItemCallback=self._updateParticle,
-                                    skipDisabled=True)
+
+        xmpMd = 'noname@' + xmpMd
+        iterator = SetEmtableMdIterator(xmpMd, sortByLabel=md1.MDL_ITEM_ID,
+                                        updateItemCallback=self._updateParticle,
+                                        skipDisabled=True)
         
         # itemDataIterator is not neccesary because, the class SetMdIterator
         # contain all the information about the metadata
