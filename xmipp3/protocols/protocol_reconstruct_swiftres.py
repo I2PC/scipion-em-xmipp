@@ -277,6 +277,38 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob('xmipp_transform_filter', args, numberOfMpi=1)
     
     def createOutputStep(self):
+        lastIteration = 0 # TODO
+
+        # Keep only the image and id from the input particle set
+        args = []
+        args += ['-i', self._getInputParticleMdFilename()]
+        args += ['-o', self._getOutputParticlesMdFilename()]
+        args += ['--operate', 'keep_column', 'itemId image']
+        self.runJob('xmipp_metadata_utilities', args, numberOfMpi=1)
+        
+        # Add the rest from the last alignment
+        args = []
+        args += ['-i', self._getOutputParticlesMdFilename()]
+        args += ['-o', self._getOutputParticlesMdFilename()]
+        args += ['--set', 'join', self._getAlignmentMdFilename(lastIteration), 'itemId']
+        self.runJob('xmipp_metadata_utilities', args, numberOfMpi=1)
+        
+        # Link last iteration
+        for i in range(1, 2):
+            createLink(
+                self._getHalfVolumeFilename(lastIteration, i), 
+                self._getOutputHalfVolumeFilename(i)
+            )
+        createLink(
+            self._getFilteredVolumeFilename(lastIteration), 
+            self._getOutputVolumeFilename()
+        )
+        createLink(
+            self._getFscFilename(lastIteration), 
+            self._getOutputFscFilename()
+        )
+        
+        # Create output objects
         self._createOutputParticleSet()
         self._createOutputVolume()
         self._createOutputFsc()
@@ -343,6 +375,17 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getFilteredVolumeFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'volume_filtered.mrc')
     
+    def _getOutputParticlesMdFilename(self):
+        return self._getExtraPath('output_particles.xmd')
+    
+    def _getOutputVolumeFilename(self):
+        return self._getExtraPath('output_volume.mrc')
+
+    def _getOutputHalfVolumeFilename(self, half: int):
+        return self._getExtraPath('output_volume_half%01d.mrc' % half)
+    
+    def _getOutputFscFilename(self):
+        return self._getExtraPath('output_fsc.xmd')
     
     def _computeResolution(self, mdFsc, Ts, threshold):
         resolution = 2 * Ts
@@ -360,12 +403,11 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         volume=Volume()
         
         # Fill
-        lastIteration = 0 # TODO
-        volume.setFileName(self._getAverageVolumeFilename(lastIteration))
+        volume.setFileName(self._getOutputVolumeFilename())
         volume.setSamplingRate(self._getSamplingRate())
         volume.setHalfMaps([
-            self._getHalfVolumeFilename(lastIteration, 1),
-            self._getHalfVolumeFilename(lastIteration, 2)
+            self._getOutputHalfVolumeFilename(1),
+            self._getOutputHalfVolumeFilename(2),
         ])
         
         # Define the output
@@ -377,11 +419,11 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _createOutputParticleSet(self):
         particleSet = self._createSetOfParticles()
         
-        # TODO replace wiener corrected images
-        
         # Fill
-        lastIteration = 0 # TODO
-        readSetOfParticles(self._getAlignmentMdFilename(lastIteration), particleSet)
+        readSetOfParticles(
+            self._getOutputParticlesMdFilename(), 
+            particleSet, 
+        )
         particleSet.setSamplingRate(self._getSamplingRate())
         
         # Define the output
@@ -394,9 +436,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         fsc = FSC()
         
         # Load from metadata
-        lastIteration = 0 # TODO
         fsc.loadFromMd(
-            self._getFscFilename(lastIteration),
+            self._getOutputFscFilename(),
             emlib.MDL_RESOLUTION_FREQ,
             emlib.MDL_RESOLUTION_FRC
         )
@@ -406,4 +447,4 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self._defineSourceRelation(self.inputParticles.get(), fsc)
         
         return fsc
-        
+    
