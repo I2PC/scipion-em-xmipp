@@ -181,7 +181,46 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--sym', self.symmetryGroup.get()]
         args += ['--weight']
     
-        self.runJob("xmipp_reconstruct_fourier_accel", args)
+        # Determine the execution parameters
+        numberOfMpi = self.numberOfMpi.get()
+        if self.useGpu.get():
+            reconstructProgram = 'xmipp_cuda_reconstruct_fourier'
+
+            gpuList = self.getGpuList()
+            if self.numberOfMpi.get() > 1:
+                numberOfGpus = len(gpuList)
+                numberOfMpi = numberOfGpus + 1
+                args += ['-gpusPerNode', numberOfGpus]
+                args += ['-threadsPerGPU', max(self.numberOfThreads.get(), 4)]
+            else:
+                args += ['--device', ','.join(gpuList)]
+                
+            """
+            count=0
+            GpuListCuda=''
+            if self.useQueueForSteps() or self.useQueue():
+                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                GpuList = GpuList.split(",")
+                for elem in GpuList:
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    count+=1
+            else:
+                GpuListAux = ''
+                for elem in self.getGpuList():
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListAux = GpuListAux+str(elem)+','
+                    count+=1
+                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+            """
+                
+            args += ['--thr', self.numberOfThreads.get()]
+        
+        else:
+            reconstructProgram = 'xmipp_reconstruct_fourier_accel'
+        
+        # Run
+        self.runJob(reconstructProgram, args, numberOfMpi=numberOfMpi)
+        
         
     def computeFscStep(self):
         args = []
