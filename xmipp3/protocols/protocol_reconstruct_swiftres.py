@@ -34,8 +34,8 @@ from pyworkflow.utils.path import (cleanPath, makePath, copyFile, moveFile,
 import xmipp3
 from xmipp3.convert import writeSetOfParticles, readSetOfParticles
 
-class XmippProtReconstructFast(ProtRefine3D, xmipp3.XmippProtocol):
-    _label = 'fast reconstruct'
+class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
+    _label = 'swiftres'
     _conda_env = 'xmipp_torch'
         
     def __init__(self, **kwargs):
