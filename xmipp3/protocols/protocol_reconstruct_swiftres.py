@@ -78,19 +78,37 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _insertAllSteps(self):
         convertInputStepId = self._insertFunctionStep('convertInputStep', prerequisites=[])
         correctCtfStepId = self._insertFunctionStep('correctCtfStep', prerequisites=[convertInputStepId])
-        projectVolumeStepId = self._insertFunctionStep('projectVolumeStep', prerequisites=[convertInputStepId])
-        trainDatabaseStepId = self._insertFunctionStep('trainDatabaseStep', prerequisites=[projectVolumeStepId])
-        alignStepId = self._insertFunctionStep('alignStep', prerequisites=[correctCtfStepId, trainDatabaseStepId])
-        reconstructId = self._insertReconstructSteps(prerequisites=[alignStepId])
-        createOutputStepId = self._insertFunctionStep('createOutputStep', prerequisites=reconstructId)
+        
+        lastIds = [correctCtfStepId]
+        for i in range(1): # TODO
+            lastIds = self._insertIterationSteps(i, prerequisites=lastIds)
+        
+        self._insertFunctionStep('createOutputStep', prerequisites=lastIds)
  
-    def _insertReconstructSteps(self, prerequisites):
-        splitStepId = self._insertFunctionStep('splitStep', prerequisites=prerequisites)
-        reconstructStepId1 = self._insertFunctionStep('reconstructStep', 1, prerequisites=[splitStepId])
-        reconstructStepId2 = self._insertFunctionStep('reconstructStep', 2, prerequisites=[splitStepId])
-        computeFscStepId = self._insertFunctionStep('computeFscStep', prerequisites=[reconstructStepId1, reconstructStepId2])
-        averageVolumeStepId = self._insertFunctionStep('averageVolumeStep', prerequisites=[reconstructStepId1, reconstructStepId2])
+    def _insertIterationSteps(self, iteration: int, prerequisites):
+        setupIterationStepId = self._insertFunctionStep('setupIterationStep', iteration, prerequisites=prerequisites)
+        alignIds = self._insertAlignmentSteps(iteration, prerequisites=[setupIterationStepId])
+        reconstructIds = self._insertReconstructSteps(iteration, prerequisites=alignIds)
+        postProcessIds = self._insertPostProcessSteps(iteration, prerequisites=reconstructIds)
+        return postProcessIds
+        
+    def _insertAlignmentSteps(self, iteration: int, prerequisites):
+        projectVolumeStepId = self._insertFunctionStep('projectVolumeStep', iteration, prerequisites=prerequisites)
+        trainDatabaseStepId = self._insertFunctionStep('trainDatabaseStep', iteration, prerequisites=[projectVolumeStepId])
+        alignStepId = self._insertFunctionStep('alignStep', iteration, prerequisites=[trainDatabaseStepId])
+        return [alignStepId]
+ 
+    def _insertReconstructSteps(self, iteration: int, prerequisites):
+        splitStepId = self._insertFunctionStep('splitStep', iteration, prerequisites=prerequisites)
+        reconstructStepId1 = self._insertFunctionStep('reconstructStep', iteration, 1, prerequisites=[splitStepId])
+        reconstructStepId2 = self._insertFunctionStep('reconstructStep', iteration, 2, prerequisites=[splitStepId])
+        computeFscStepId = self._insertFunctionStep('computeFscStep', iteration, prerequisites=[reconstructStepId1, reconstructStepId2])
+        averageVolumeStepId = self._insertFunctionStep('averageVolumeStep', iteration, prerequisites=[reconstructStepId1, reconstructStepId2])
         return [computeFscStepId, averageVolumeStepId]
+    
+    def _insertPostProcessSteps(self, iteration: int, prerequisites):
+        filterVolumeStepId = self._insertFunctionStep('filterVolumeStep', iteration, prerequisites=prerequisites)
+        return [filterVolumeStepId]
     
     #--------------------------- STEPS functions --------------------------------------------
     def convertInputStep(self):
@@ -113,23 +131,26 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
 
         self.runJob('xmipp_ctf_correct_wiener2d', args)
     
-    def projectVolumeStep(self):
+    def setupIterationStep(self, iteration: int):
+        makePath(self._getIterationPath(iteration))
+    
+    def projectVolumeStep(self, iteration: int):
         args = []
-        args += ['-i', self._getInputVolumeFilename()]
-        args += ['-o', self._getGalleryStackFilename()]
+        args += ['-i', self._getIterationInputVolumeFilename(iteration)]
+        args += ['-o', self._getGalleryStackFilename(iteration)]
         args += ['--sampling_rate', self.angularSampling]
         args += ['--sym', self.symmetryGroup]
         
         self.runJob('xmipp_angular_project_library', args)
     
-    def trainDatabaseStep(self):
+    def trainDatabaseStep(self, iteration: int):
         expectedSize = int(2e6) # TODO determine form gallery
         trainingSize = int(2e6) # TODO idem
 
         args = []
-        args += ['-i', self._getGalleryMdFilename()]
-        args += ['-o', self._getTrainingIndexFilename()]
-        #args += ['--weights', self._getWeightsFilename()]
+        args += ['-i', self._getGalleryMdFilename(iteration)]
+        args += ['-o', self._getTrainingIndexFilename(iteration)]
+        #args += ['--weights', self._getWeightsFilename(iteration)]
         args += ['--max_shift', self._getMaxShift()]
         args += ['--max_frequency', self._getDigitalFrequencyLimit()]
         args += ['--method', 'fourier']
@@ -142,17 +163,17 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
         self.runJob('xmipp_train_database', args, numberOfMpi=1, env=env)
     
-    def alignStep(self):
+    def alignStep(self, iteration: int):
         batchSize = 1024
         nRotations = round(360 / float(self.angularSampling))
         nShift = self.shiftCount
         
         args = []
         args += ['-i', self._getWienerParticleMdFilename()]
-        args += ['-o', self._getAlignmentMdFilename()]
-        args += ['-r', self._getGalleryMdFilename()]
-        args += ['--index', self._getTrainingIndexFilename()]
-        #args += ['--weights', self._getWeightsFilename()]
+        args += ['-o', self._getAlignmentMdFilename(iteration)]
+        args += ['-r', self._getGalleryMdFilename(iteration)]
+        args += ['--index', self._getTrainingIndexFilename(iteration)]
+        #args += ['--weights', self._getWeightsFilename(iteration)]
         args += ['--max_shift', self._getMaxShift()]
         args += ['--rotations', nRotations]
         args += ['--shifts', nShift]
@@ -167,17 +188,17 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
         self.runJob('xmipp_query_database', args, numberOfMpi=1, env=env)
     
-    def splitStep(self):
+    def splitStep(self, iteration: int):
         args = []
-        args += ['-i', self._getAlignmentMdFilename()]
+        args += ['-i', self._getAlignmentMdFilename(iteration)]
         args += ['-n', 2]
         
         self.runJob('xmipp_metadata_split', args, numberOfMpi=1)
     
-    def reconstructStep(self, i: int):
+    def reconstructStep(self, iteration: int, half: int):
         args = []
-        args += ['-i', self._getAlignmentHalfMdFilename(i)]
-        args += ['-o', self._getHalfVolumeFilename(i)]
+        args += ['-i', self._getAlignmentHalfMdFilename(iteration, half)]
+        args += ['-o', self._getHalfVolumeFilename(iteration, half)]
         args += ['--sym', self.symmetryGroup.get()]
         args += ['--weight']
     
@@ -222,26 +243,38 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob(reconstructProgram, args, numberOfMpi=numberOfMpi)
         
         
-    def computeFscStep(self):
+    def computeFscStep(self, iteration: int):
         args = []
-        args += ['--ref', self._getHalfVolumeFilename(1)]
-        args += ['-i', self._getHalfVolumeFilename(2)]
-        args += ['-o', self._getFscFilename()]
+        args += ['--ref', self._getHalfVolumeFilename(iteration, 1)]
+        args += ['-i', self._getHalfVolumeFilename(iteration, 2)]
+        args += ['-o', self._getFscFilename(iteration)]
         args += ['--sampling_rate', self._getSamplingRate()]
         
         self.runJob('xmipp_resolution_fsc', args, numberOfMpi=1)
     
-    def averageVolumeStep(self):
+    def averageVolumeStep(self, iteration: int):
         args = []
-        args += ['-i', self._getHalfVolumeFilename(1)]
-        args += ['--plus', self._getHalfVolumeFilename(2)]
-        args += ['-o', self._getAverageVolumeFilename()]
+        args += ['-i', self._getHalfVolumeFilename(iteration, 1)]
+        args += ['--plus', self._getHalfVolumeFilename(iteration, 2)]
+        args += ['-o', self._getAverageVolumeFilename(iteration)]
         self.runJob('xmipp_image_operate', args, numberOfMpi=1)
 
         args = []
-        args += ['-i', self._getAverageVolumeFilename()]
+        args += ['-i', self._getAverageVolumeFilename(iteration)]
         args += ['--mult', '0.5']
         self.runJob('xmipp_image_operate', args, numberOfMpi=1)
+    
+    def filterVolumeStep(self, iteration: int):
+        mdFsc = emlib.MetaData(self._getFscFilename(iteration))
+        resolution = self._computeResolution(mdFsc, self._getSamplingRate(), 0.5)
+
+        args = []
+        args += ['-i', self._getAverageVolumeFilename(iteration)]
+        args += ['-o', self._getFilteredVolumeFilename(iteration)]
+        args += ['--fourier', 'low_pass', resolution]
+        args += ['--sampling', self._getSamplingRate()]
+
+        self.runJob('xmipp_transform_filter', args, numberOfMpi=1)
     
     def createOutputStep(self):
         self._createOutputParticleSet()
@@ -259,6 +292,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getSamplingRate(self):
         return self.inputParticles.get().getSamplingRate()
     
+    def _getIterationPath(self, iteration: int, *paths):
+        return self._getExtraPath('iteration_%04d' % iteration, *paths)
+    
     def _getInputParticleMdFilename(self):
         return self._getExtraPath('input_particles.xmd')
     
@@ -271,42 +307,65 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getInputVolumeFilename(self):
         return self.inputVolume.get().getFileName()
     
-    def _getGalleryMdFilename(self):
-        return self._getExtraPath('gallery.doc')
+    def _getIterationInputVolumeFilename(self, iteration: int):
+        if iteration == 0:
+            return self._getInputVolumeFilename()
+        else:
+            return self._getAverageVolumeFilename(iteration-1)
     
-    def _getGalleryStackFilename(self):
-        return self._getExtraPath('gallery.mrcs')
+    def _getGalleryMdFilename(self, iteration: int):
+        return self._getIterationPath(iteration, 'gallery.doc')
     
-    def _getWeightsFilename(self):
-        return self._getExtraPath('weights.mrc')
+    def _getGalleryStackFilename(self, iteration: int):
+        return self._getIterationPath(iteration, 'gallery.mrcs')
     
-    def _getTrainingIndexFilename(self):
-        return self._getExtraPath('database.idx')
+    def _getWeightsFilename(self, iteration: int):
+        return self._getIterationPath(iteration, 'weights.mrc')
     
-    def _getAlignmentMdFilename(self):
-        return self._getExtraPath('aligned.xmd')
+    def _getTrainingIndexFilename(self, iteration: int):
+        return self._getIterationPath(iteration, 'database.idx')
     
-    def _getAlignmentHalfMdFilename(self, i: int):
-        return self._getExtraPath('aligned%06d.xmd' % i)
+    def _getAlignmentMdFilename(self, iteration: int):
+        return self._getIterationPath(iteration, 'aligned.xmd')
+    
+    def _getAlignmentHalfMdFilename(self, iteration: int, half: int):
+        return self._getIterationPath(iteration, 'aligned%06d.xmd' % half)
 
-    def _getHalfVolumeFilename(self, i: int):
-        return self._getExtraPath('volume%01d.mrc' % i)
+    def _getHalfVolumeFilename(self, iteration: int, half: int):
+        return self._getIterationPath(iteration, 'volume_half%01d.mrc' % half)
     
-    def _getAverageVolumeFilename(self):
-        return self._getExtraPath('average_volume.mrc')
+    def _getAverageVolumeFilename(self, iteration: int):
+        return self._getIterationPath(iteration, 'volume_avg.mrc')
     
-    def _getFscFilename(self):
-        return self._getExtraPath('fsc.xmd')
+    def _getFscFilename(self, iteration: int):
+        return self._getIterationPath(iteration, 'fsc.xmd')
+    
+    def _getFilteredVolumeFilename(self, iteration: int):
+        return self._getIterationPath(iteration, 'volume_filtered.mrc')
+    
+    
+    def _computeResolution(self, mdFsc, Ts, threshold):
+        resolution = 2 * Ts
+
+        # Iterate until the FSC is under the threshold
+        for objId in mdFsc:
+            fsc = mdFsc.getValue(emlib.MDL_RESOLUTION_FRC, objId)
+            if fsc < threshold:
+                resolution = mdFsc.getValue(emlib.MDL_RESOLUTION_FREQREAL, objId)
+                break
+            
+        return resolution
     
     def _createOutputVolume(self):
         volume=Volume()
         
         # Fill
-        volume.setFileName(self._getAverageVolumeFilename())
+        lastIteration = 0 # TODO
+        volume.setFileName(self._getAverageVolumeFilename(lastIteration))
         volume.setSamplingRate(self._getSamplingRate())
         volume.setHalfMaps([
-            self._getHalfVolumeFilename(1),
-            self._getHalfVolumeFilename(2)
+            self._getHalfVolumeFilename(lastIteration, 1),
+            self._getHalfVolumeFilename(lastIteration, 2)
         ])
         
         # Define the output
@@ -321,7 +380,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         # TODO replace wiener corrected images
         
         # Fill
-        readSetOfParticles(self._getAlignmentMdFilename(), particleSet)
+        lastIteration = 0 # TODO
+        readSetOfParticles(self._getAlignmentMdFilename(lastIteration), particleSet)
         particleSet.setSamplingRate(self._getSamplingRate())
         
         # Define the output
@@ -334,8 +394,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         fsc = FSC()
         
         # Load from metadata
+        lastIteration = 0 # TODO
         fsc.loadFromMd(
-            self._getFscFilename(),
+            self._getFscFilename(lastIteration),
             emlib.MDL_RESOLUTION_FREQ,
             emlib.MDL_RESOLUTION_FRC
         )
