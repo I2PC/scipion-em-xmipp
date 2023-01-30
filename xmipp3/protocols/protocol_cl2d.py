@@ -512,13 +512,15 @@ class XmippProtCL2D(ProtClassify2D):
         
         if subset == '' and level == "last":
             xmpMd = self._getFileName('output_particles')
+            sortLabel = None
             if not exists(xmpMd):
                 xmpMd = self._getLevelMdImages(level, subset)
         else:
             xmpMd = self._getLevelMdImages(level, subset)
+            sortLabel=md1.MDL_ITEM_ID
 
         xmpMd = 'noname@' + xmpMd
-        iterator = SetEmtableMdIterator(xmpMd, sortByLabel=md1.MDL_ITEM_ID,
+        iterator = SetEmtableMdIterator(xmpMd, sortByLabel=sortLabel,
                                         updateItemCallback=self._updateParticle,
                                         skipDisabled=True)
         
