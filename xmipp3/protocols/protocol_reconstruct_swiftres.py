@@ -54,7 +54,6 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                        help="Add a list of GPU devices that can be used")
         
         form.addSection(label='Input')
-
         form.addParam('inputParticles', PointerParam, label="Particles", important=True,
                       pointerClass='SetOfParticles')
         form.addParam('inputVolume', PointerParam, label="Initial volumes", important=True,
@@ -64,10 +63,17 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                       help='If no symmetry is present, give c1')
         
         form.addSection(label='Refinement')
-        form.addParam('resolutionLimit', FloatParam, label="Resolution limit (A)", default=10.0)
+        form.addParam('numberOfIterations', IntParam, label='Number of iterations', default=3)
+        form.addParam('initialResolution', FloatParam, label="Initial resolution (A)", default=10.0)
+        form.addParam('nextResolutionCriterion', FloatParam, label="FSC criterion", default=0.5, expertLevel=LEVEL_ADVANCED,
+                      help='The resolution of the reconstruction is defined as the inverse of the frequency at which '\
+                      'the FSC drops below this value. Typical values are 0.143 and 0.5' )
         form.addParam('angularSampling', FloatParam, label="Angular sampling (º)", default=5.0)
         form.addParam('shiftCount', IntParam, label="Shifts", default=9)
         form.addParam('maxShift', FloatParam, label="Maximum shift (%)", default=10.0)
+
+        form.addSection(label='Compute')
+        form.addParam('databaseItemCount', IntParam, label='Database item count', default=int(2e6))
 
         form.addParallelSection(threads=1, mpi=8)
     
@@ -80,7 +86,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         correctCtfStepId = self._insertFunctionStep('correctCtfStep', prerequisites=[convertInputStepId])
         
         lastIds = [correctCtfStepId]
-        for i in range(1): # TODO
+        for i in range(int(self.numberOfIterations)):
             lastIds = self._insertIterationSteps(i, prerequisites=lastIds)
         
         self._insertFunctionStep('createOutputStep', prerequisites=lastIds)
@@ -107,8 +113,11 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         return [computeFscStepId, averageVolumeStepId]
     
     def _insertPostProcessSteps(self, iteration: int, prerequisites):
+        """
         filterVolumeStepId = self._insertFunctionStep('filterVolumeStep', iteration, prerequisites=prerequisites)
         return [filterVolumeStepId]
+        """
+        return prerequisites
     
     #--------------------------- STEPS functions --------------------------------------------
     def convertInputStep(self):
@@ -144,15 +153,15 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob('xmipp_angular_project_library', args)
     
     def trainDatabaseStep(self, iteration: int):
-        expectedSize = int(2e6) # TODO determine form gallery
-        trainingSize = int(2e6) # TODO idem
+        expectedSize = int(self.databaseItemCount)
+        trainingSize = expectedSize
 
         args = []
         args += ['-i', self._getGalleryMdFilename(iteration)]
         args += ['-o', self._getTrainingIndexFilename(iteration)]
         #args += ['--weights', self._getWeightsFilename(iteration)]
         args += ['--max_shift', self._getMaxShift()]
-        args += ['--max_frequency', self._getDigitalFrequencyLimit()]
+        args += ['--max_frequency', self._getIterationDigitalFrequencyLimit(iteration)]
         args += ['--method', 'fourier']
         args += ['--size', expectedSize]
         args += ['--training', trainingSize]
@@ -177,7 +186,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--max_shift', self._getMaxShift()]
         args += ['--rotations', nRotations]
         args += ['--shifts', nShift]
-        args += ['--max_frequency', self._getDigitalFrequencyLimit()]
+        args += ['--max_frequency', self._getIterationDigitalFrequencyLimit(iteration)]
         args += ['--method', 'fourier']
         args += ['--dropna']
         args += ['--batch', batchSize]
@@ -277,7 +286,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob('xmipp_transform_filter', args, numberOfMpi=1)
     
     def createOutputStep(self):
-        lastIteration = 0 # TODO
+        lastIteration = int(self.numberOfIterations) - 1
 
         # Keep only the image and id from the input particle set
         args = []
@@ -300,7 +309,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                 self._getOutputHalfVolumeFilename(i)
             )
         createLink(
-            self._getFilteredVolumeFilename(lastIteration), 
+            self._getAverageVolumeFilename(lastIteration), # TODO replace with post-processed volume
             self._getOutputVolumeFilename()
         )
         createLink(
@@ -315,14 +324,23 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
     
     #--------------------------- UTILS functions --------------------------------------------        
-    def _getDigitalFrequencyLimit(self):
-        return self.inputParticles.get().getSamplingRate() / float(self.resolutionLimit)
-    
-    def _getMaxShift(self):
+    def _getMaxShift(self) -> float:
         return float(self.maxShift) / 100.0
     
-    def _getSamplingRate(self):
-        return self.inputParticles.get().getSamplingRate()
+    def _getSamplingRate(self) -> float:
+        return float(self.inputParticles.get().getSamplingRate())
+    
+    def _getIterationResolutionLimit(self, iteration: int) -> float:
+        if iteration > 0:
+            mdFsc = emlib.MetaData(self._getFscFilename(iteration-1))
+            sampling = self._getSamplingRate()
+            threshold = float(self.nextResolutionCriterion)
+            return self._computeResolution(mdFsc, sampling, threshold)
+        else:
+            return float(self.initialResolution)
+    
+    def _getIterationDigitalFrequencyLimit(self, iteration: int) -> float:
+        return self._getSamplingRate() / self._getIterationResolutionLimit(iteration)
     
     def _getIterationPath(self, iteration: int, *paths):
         return self._getExtraPath('iteration_%04d' % iteration, *paths)
@@ -340,10 +358,10 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         return self.inputVolume.get().getFileName()
     
     def _getIterationInputVolumeFilename(self, iteration: int):
-        if iteration == 0:
-            return self._getInputVolumeFilename()
+        if iteration > 0:
+            return self._getAverageVolumeFilename(iteration-1) # TODO replace with post processed volume
         else:
-            return self._getAverageVolumeFilename(iteration-1)
+            return self._getInputVolumeFilename()
     
     def _getGalleryMdFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'gallery.doc')
