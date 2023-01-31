@@ -73,7 +73,10 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('maxShift', FloatParam, label="Maximum shift (%)", default=10.0)
 
         form.addSection(label='Compute')
-        form.addParam('databaseItemCount', IntParam, label='Database item count', default=int(2e6))
+        form.addParam('databaseRecipe', StringParam, label='Database recipe', 
+                      default='OPQ48_192,IVF32768,PQ48' )
+        form.addParam('databaseTrainingSetSize', IntParam, label='Database training set size', 
+                      default=int(2e6) )
 
         form.addParallelSection(threads=1, mpi=8)
     
@@ -153,18 +156,19 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob('xmipp_angular_project_library', args)
     
     def trainDatabaseStep(self, iteration: int):
-        expectedSize = int(self.databaseItemCount)
-        trainingSize = expectedSize
+        trainingSize = int(self.databaseTrainingSetSize)
+        recipe = self.databaseRecipe
 
         args = []
         args += ['-i', self._getGalleryMdFilename(iteration)]
         args += ['-o', self._getTrainingIndexFilename(iteration)]
+        args += ['--recipe', recipe]
         #args += ['--weights', self._getWeightsFilename(iteration)]
         args += ['--max_shift', self._getMaxShift()]
         args += ['--max_frequency', self._getIterationDigitalFrequencyLimit(iteration)]
         args += ['--method', 'fourier']
-        args += ['--size', expectedSize]
         args += ['--training', trainingSize]
+        args += ['--scratch', self._getTrainingScratchFilename()]
         if self.useGpu:
             args += ['--gpu', 0] # TODO select
         
@@ -303,7 +307,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob('xmipp_metadata_utilities', args, numberOfMpi=1)
         
         # Link last iteration
-        for i in range(1, 2):
+        for i in range(1, 3):
             createLink(
                 self._getHalfVolumeFilename(lastIteration, i), 
                 self._getOutputHalfVolumeFilename(i)
@@ -404,6 +408,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     def _getOutputFscFilename(self):
         return self._getExtraPath('output_fsc.xmd')
+    
+    def _getTrainingScratchFilename(self):
+        return self._getTmpPath('scratch.bin')
     
     def _computeResolution(self, mdFsc, Ts, threshold):
         resolution = 2 * Ts
