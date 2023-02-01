@@ -206,8 +206,14 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
 
     def compareAnglesStep(self, iteration: int):
         args = []
+        args += ['-i', self._getInputParticleMdFilename()]
+        args += ['-o', self._getInputIntersectionMdFilename(iteration)]
+        args += ['--set', 'intersection', self._getAlignmentMdFilename(iteration), 'itemId']
+        self._runMdUtils(args)
+        
+        args = []
         args += ['--ang1', self._getAlignmentMdFilename(iteration)]
-        args += ['--ang2', self._getInputParticleMdFilename()]
+        args += ['--ang2', self._getInputIntersectionMdFilename(iteration)]
         args += ['--oroot', self._getAngleDiffOutputRoot(iteration)]
         args += ['--sym', self.symmetryGroup]
         self.runJob('xmipp_angular_distance', args, numberOfMpi=1)
@@ -422,6 +428,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     def _getAlignmentMdFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'aligned.xmd')
+    
+    def _getInputIntersectionMdFilename(self, iteration: int):
+        return self._getIterationPath(iteration, 'input_intersection.xmd')
     
     def _getAngleDiffOutputRoot(self, iteration: int, suffix=''):
         return self._getIterationPath(iteration, 'angles'+suffix)
