@@ -105,7 +105,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         projectVolumeStepId = self._insertFunctionStep('projectVolumeStep', iteration, prerequisites=prerequisites)
         trainDatabaseStepId = self._insertFunctionStep('trainDatabaseStep', iteration, prerequisites=[projectVolumeStepId])
         alignStepId = self._insertFunctionStep('alignStep', iteration, prerequisites=[trainDatabaseStepId])
-        return [alignStepId]
+        compareReprojectionStepId = self._insertFunctionStep('compareReprojectionStep', iteration, prerequisites=[alignStepId])
+        return [compareReprojectionStepId]
  
     def _insertReconstructSteps(self, iteration: int, prerequisites):
         splitStepId = self._insertFunctionStep('splitStep', iteration, prerequisites=prerequisites)
@@ -201,6 +202,19 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
         self.runJob('xmipp_query_database', args, numberOfMpi=1, env=env)
     
+    def compareReprojectionStep(self, iteration: int):
+        args = []
+        args += ['-i', self._getAlignmentMdFilename(iteration)]
+        args += ['--ref', self._getIterationInputVolumeFilename(iteration)]
+        args += ['--ignoreCTF'] # As we're using wiener corrected images
+        args += ['--doNotWriteStack'] # Do not undo shifts
+        self.runJob('xmipp_angular_continuous_assign2', args, numberOfMpi=self.numberOfMpi.get())
+    
+        args = []
+        args += ['-i', self._getAlignmentMdFilename(iteration)]
+        args += ['--operate', 'rename_column', 'weightContinuous2 weight']
+        self._runMdUtils(args)
+    
     def splitStep(self, iteration: int):
         args = []
         args += ['-i', self._getAlignmentMdFilename(iteration)]
@@ -294,17 +308,16 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
 
         # Keep only the image and id from the input particle set
         args = []
-        args += ['-i', self._getInputParticleMdFilename()]
+        args += ['-i', self._getAlignmentMdFilename(lastIteration)]
         args += ['-o', self._getOutputParticlesMdFilename()]
-        args += ['--operate', 'keep_column', 'itemId image']
-        self.runJob('xmipp_metadata_utilities', args, numberOfMpi=1)
+        args += ['--operate', 'rename_column', 'image image1']
+        self._runMdUtils(args)
         
         # Add the rest from the last alignment
         args = []
         args += ['-i', self._getOutputParticlesMdFilename()]
-        args += ['-o', self._getOutputParticlesMdFilename()]
-        args += ['--set', 'join', self._getAlignmentMdFilename(lastIteration), 'itemId']
-        self.runJob('xmipp_metadata_utilities', args, numberOfMpi=1)
+        args += ['--set', 'join', self._getInputParticleMdFilename(), 'itemId']
+        self._runMdUtils(args)
         
         # Link last iteration
         for i in range(1, 3):
@@ -444,10 +457,22 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _createOutputParticleSet(self):
         particleSet = self._createSetOfParticles()
         
+        """
+        EXTRA_LABELS = [
+            emlib.MDL_COST,
+            emlib.MDL_WEIGHT,
+            emlib.MDL_CORRELATION_IDX,
+            emlib.MDL_CORRELATION_MASK,
+            emlib.MDL_CORRELATION_WEIGHT,
+            emlib.MDL_IMED
+        ]
+        """
+        
         # Fill
         readSetOfParticles(
             self._getOutputParticlesMdFilename(), 
-            particleSet, 
+            particleSet 
+            #extraLabels=EXTRA_LABELS
         )
         particleSet.setSamplingRate(self._getSamplingRate())
         
@@ -472,4 +497,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self._defineSourceRelation(self.inputParticles.get(), fsc)
         
         return fsc
+    
+    def _runMdUtils(self, args):
+        self.runJob('xmipp_metadata_utilities', args, numberOfMpi=1)
+        
     
