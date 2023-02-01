@@ -105,11 +105,13 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         projectVolumeStepId = self._insertFunctionStep('projectVolumeStep', iteration, prerequisites=prerequisites)
         trainDatabaseStepId = self._insertFunctionStep('trainDatabaseStep', iteration, prerequisites=[projectVolumeStepId])
         alignStepId = self._insertFunctionStep('alignStep', iteration, prerequisites=[trainDatabaseStepId])
-        compareReprojectionStepId = self._insertFunctionStep('compareReprojectionStep', iteration, prerequisites=[alignStepId])
+        compareAnglesStepId = self._insertFunctionStep('compareAnglesStep', iteration, prerequisites=[alignStepId])
+        compareReprojectionStepId = self._insertFunctionStep('compareReprojectionStep', iteration, prerequisites=[compareAnglesStepId])
         return [compareReprojectionStepId]
  
     def _insertReconstructSteps(self, iteration: int, prerequisites):
-        splitStepId = self._insertFunctionStep('splitStep', iteration, prerequisites=prerequisites)
+        computeWeightsStepId = self._insertFunctionStep('computeWeightsStep', iteration, prerequisites=prerequisites)
+        splitStepId = self._insertFunctionStep('splitStep', iteration, prerequisites=[computeWeightsStepId])
         reconstructStepId1 = self._insertFunctionStep('reconstructStep', iteration, 1, prerequisites=[splitStepId])
         reconstructStepId2 = self._insertFunctionStep('reconstructStep', iteration, 2, prerequisites=[splitStepId])
         computeFscStepId = self._insertFunctionStep('computeFscStep', iteration, prerequisites=[reconstructStepId1, reconstructStepId2])
@@ -201,6 +203,19 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
         self.runJob('xmipp_query_database', args, numberOfMpi=1, env=env)
+
+    def compareAnglesStep(self, iteration: int):
+        args = []
+        args += ['--ang1', self._getAlignmentMdFilename(iteration)]
+        args += ['--ang2', self._getInputParticleMdFilename()]
+        args += ['--oroot', self._getAngleDiffOutputRoot(iteration)]
+        args += ['--sym', self.symmetryGroup]
+        self.runJob('xmipp_angular_distance', args, numberOfMpi=1)
+        
+        args = []
+        args += ['-i', self._getAlignmentMdFilename(iteration)]
+        args += ['--set', 'join', self._getAngleDiffMdFilename(iteration)]
+        self._runMdUtils(args)
     
     def compareReprojectionStep(self, iteration: int):
         args = []
@@ -210,11 +225,24 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--doNotWriteStack'] # Do not undo shifts
         self.runJob('xmipp_angular_continuous_assign2', args, numberOfMpi=self.numberOfMpi.get())
     
+    def computeWeightsStep(self, iteration: int):
+        """
+        args = []
+        args += ['-i', self._getAlignmentMdFilename(iteration)]
+        args += ['--fill', 'weight', 'constant', '0.0']
+        self._runMdUtils(args)
+        
+        args = []
+        args += ['-i', self._getAlignmentMdFilename(iteration)]
+        args += ['--operate', 'modify_values', 'weight=corrIdx*corrWeight*corrMask']
+        self._runMdUtils(args)
+        """
+        
         args = []
         args += ['-i', self._getAlignmentMdFilename(iteration)]
         args += ['--operate', 'rename_column', 'weightContinuous2 weight']
         self._runMdUtils(args)
-    
+
     def splitStep(self, iteration: int):
         args = []
         args += ['-i', self._getAlignmentMdFilename(iteration)]
@@ -395,6 +423,12 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getAlignmentMdFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'aligned.xmd')
     
+    def _getAngleDiffOutputRoot(self, iteration: int, suffix=''):
+        return self._getIterationPath(iteration, 'angles'+suffix)
+
+    def _getAngleDiffMdFilename(self, iteration: int):
+        return self._getAngleDiffOutputRoot(iteration, '.xmd')
+
     def _getAlignmentHalfMdFilename(self, iteration: int, half: int):
         return self._getIterationPath(iteration, 'aligned%06d.xmd' % half)
 
