@@ -95,27 +95,46 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('createOutputStep', prerequisites=lastIds)
  
     def _insertIterationSteps(self, iteration: int, prerequisites):
+        
         setupIterationStepId = self._insertFunctionStep('setupIterationStep', iteration, prerequisites=prerequisites)
-        alignIds = self._insertAlignmentSteps(iteration, prerequisites=[setupIterationStepId])
-        reconstructIds = self._insertReconstructSteps(iteration, prerequisites=alignIds)
-        postProcessIds = self._insertPostProcessSteps(iteration, prerequisites=reconstructIds)
-        return postProcessIds
+        projectIds = self._insertProjectSteps(iteration, prerequisites=[setupIterationStepId])
+        alignIds = self._insertAlignmentSteps(iteration, prerequisites=projectIds)
+        
+        ids = []
+        for cls in range(self._getClassCount()):
+            reconstructIds = self._insertReconstructSteps(iteration, cls, prerequisites=alignIds)
+            postProcessIds = self._insertPostProcessSteps(iteration, cls, prerequisites=reconstructIds)
+            ids += postProcessIds
+            
+        return ids
+        
+    def _insertProjectSteps(self, iteration: int, prerequisites):
+        # Project all volumes
+        projectStepIds = []
+        for cls in range(self._getClassCount()):
+            projectStepIds.append(self._insertFunctionStep('projectVolumeStep', iteration, cls, prerequisites=prerequisites))
+        
+        # Merge galleries
+        mergeGalleriesStepId = self._insertFunctionStep('mergeGalleriesStep', iteration, prerequisites=projectStepIds)
+        
+        return [mergeGalleriesStepId]
         
     def _insertAlignmentSteps(self, iteration: int, prerequisites):
-        projectVolumeStepId = self._insertFunctionStep('projectVolumeStep', iteration, prerequisites=prerequisites)
-        trainDatabaseStepId = self._insertFunctionStep('trainDatabaseStep', iteration, prerequisites=[projectVolumeStepId])
+        trainDatabaseStepId = self._insertFunctionStep('trainDatabaseStep', iteration, prerequisites=prerequisites)
         alignStepId = self._insertFunctionStep('alignStep', iteration, prerequisites=[trainDatabaseStepId])
-        compareAnglesStepId = self._insertFunctionStep('compareAnglesStep', iteration, prerequisites=[alignStepId])
-        compareReprojectionStepId = self._insertFunctionStep('compareReprojectionStep', iteration, prerequisites=[compareAnglesStepId])
-        return [compareReprojectionStepId]
+        
+        return [alignStepId]
  
-    def _insertReconstructSteps(self, iteration: int, prerequisites):
-        computeWeightsStepId = self._insertFunctionStep('computeWeightsStep', iteration, prerequisites=prerequisites)
-        splitStepId = self._insertFunctionStep('splitStep', iteration, prerequisites=[computeWeightsStepId])
-        reconstructStepId1 = self._insertFunctionStep('reconstructStep', iteration, 1, prerequisites=[splitStepId])
-        reconstructStepId2 = self._insertFunctionStep('reconstructStep', iteration, 2, prerequisites=[splitStepId])
-        computeFscStepId = self._insertFunctionStep('computeFscStep', iteration, prerequisites=[reconstructStepId1, reconstructStepId2])
-        averageVolumeStepId = self._insertFunctionStep('averageVolumeStep', iteration, prerequisites=[reconstructStepId1, reconstructStepId2])
+    def _insertReconstructSteps(self, iteration: int, prerequisites, cls: int):
+        selectAlignmentStepId = self._insertFunctionStep('selectAlignmentStep', iteration, cls, prerequisites=prerequisites)
+        compareAnglesStepId = self._insertFunctionStep('compareAnglesStep', iteration, cls, prerequisites=[selectAlignmentStepId])
+        compareReprojectionStepId = self._insertFunctionStep('compareReprojectionStep', iteration, cls, prerequisites=[compareAnglesStepId])
+        computeWeightsStepId = self._insertFunctionStep('computeWeightsStep', iteration, cls, prerequisites=[compareReprojectionStepId])
+        splitStepId = self._insertFunctionStep('splitStep', iteration, cls, prerequisites=[computeWeightsStepId])
+        reconstructStepId1 = self._insertFunctionStep('reconstructStep', iteration, cls, 1, prerequisites=[splitStepId])
+        reconstructStepId2 = self._insertFunctionStep('reconstructStep', iteration, cls, 2, prerequisites=[splitStepId])
+        computeFscStepId = self._insertFunctionStep('computeFscStep', iteration, cls, prerequisites=[reconstructStepId1, reconstructStepId2])
+        averageVolumeStepId = self._insertFunctionStep('averageVolumeStep', iteration, cls, prerequisites=[reconstructStepId1, reconstructStepId2])
         return [computeFscStepId, averageVolumeStepId]
     
     def _insertPostProcessSteps(self, iteration: int, prerequisites):
@@ -148,15 +167,43 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     def setupIterationStep(self, iteration: int):
         makePath(self._getIterationPath(iteration))
+        
+        for cls in range(self._getClassCount()):
+            makePath(self._getClassPath(iteration, cls))
     
-    def projectVolumeStep(self, iteration: int):
+    def projectVolumeStep(self, iteration: int, cls: int):
         args = []
-        args += ['-i', self._getIterationInputVolumeFilename(iteration)]
-        args += ['-o', self._getGalleryStackFilename(iteration)]
+        args += ['-i', self._getIterationInputVolumeFilename(iteration, cls)]
+        args += ['-o', self._getClassGalleryStackFilename(iteration, cls)]
         args += ['--sampling_rate', self.angularSampling]
         args += ['--sym', self.symmetryGroup]
         
         self.runJob('xmipp_angular_project_library', args)
+    
+        args = []
+        args += ['-i', self._getClassGalleryMdFilename(iteration, cls)]
+        args += ['--fill', 'classId', 'constant', cls]
+        self._runMdUtils(args)
+    
+    def mergeGalleriesStep(self, iteration):
+        # Copy the first gallery
+        copyFile(
+            self._getClassGalleryMdFilename(iteration, 0), 
+            self._getGalleryMdFilename(iteration)
+        )
+        
+        # Merge subsequent galleries
+        for cls in range(1, self._getClassCount()):
+            args = []
+            args += ['-i', self._getGalleryMdFilename(iteration)]
+            args += ['--set', 'union', self._getClassGalleryMdFilename(iteration, cls)]
+            self._runMdUtils(args)
+
+        # Reindex
+        args = []
+        args += ['-i', self._getGalleryMdFilename(iteration)]
+        args += ['--fill', 'lineal', 1, 1]
+        self._runMdUtils(args)
     
     def trainDatabaseStep(self, iteration: int):
         trainingSize = int(self.databaseTrainingSetSize)
@@ -204,34 +251,41 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
         self.runJob('xmipp_query_database', args, numberOfMpi=1, env=env)
 
-    def compareAnglesStep(self, iteration: int):
+    def selectAlignmentStep(self, iteration: int, cls: int):
+        args = []
+        args += ['-i', self._getAlignmentMdFilename(iteration)]
+        args += ['-o', self._getClassAlignmentMdFilename(iteration, cls)]
+        args += ['--query', 'select', 'classId==%d' % cls]
+        self._runMdUtils(args)
+
+    def compareAnglesStep(self, iteration: int, cls):
         args = []
         args += ['-i', self._getInputParticleMdFilename()]
-        args += ['-o', self._getInputIntersectionMdFilename(iteration)]
-        args += ['--set', 'intersection', self._getAlignmentMdFilename(iteration), 'itemId']
+        args += ['-o', self._getInputIntersectionMdFilename(iteration, cls)]
+        args += ['--set', 'intersection', self._getClassAlignmentMdFilename(iteration, cls), 'itemId']
         self._runMdUtils(args)
         
         args = []
-        args += ['--ang1', self._getAlignmentMdFilename(iteration)]
-        args += ['--ang2', self._getInputIntersectionMdFilename(iteration)]
-        args += ['--oroot', self._getAngleDiffOutputRoot(iteration)]
+        args += ['--ang1', self._getClassAlignmentMdFilename(iteration, cls)]
+        args += ['--ang2', self._getInputIntersectionMdFilename(iteration, cls)]
+        args += ['--oroot', self._getAngleDiffOutputRoot(iteration, cls)]
         args += ['--sym', self.symmetryGroup]
         self.runJob('xmipp_angular_distance', args, numberOfMpi=1)
         
         args = []
-        args += ['-i', self._getAlignmentMdFilename(iteration)]
-        args += ['--set', 'join', self._getAngleDiffMdFilename(iteration)]
+        args += ['-i', self._getClassAlignmentMdFilename(iteration, cls)]
+        args += ['--set', 'join', self._getAngleDiffMdFilename(iteration, cls)]
         self._runMdUtils(args)
     
-    def compareReprojectionStep(self, iteration: int):
+    def compareReprojectionStep(self, iteration: int, cls: int):
         args = []
-        args += ['-i', self._getAlignmentMdFilename(iteration)]
-        args += ['--ref', self._getIterationInputVolumeFilename(iteration)]
+        args += ['-i', self._getClassAlignmentMdFilename(iteration, cls)]
+        args += ['--ref', self._getIterationInputVolumeFilename(iteration, cls)]
         args += ['--ignoreCTF'] # As we're using wiener corrected images
         args += ['--doNotWriteStack'] # Do not undo shifts
         self.runJob('xmipp_angular_continuous_assign2', args, numberOfMpi=self.numberOfMpi.get())
     
-    def computeWeightsStep(self, iteration: int):
+    def computeWeightsStep(self, iteration: int, cls: int):
         """
         args = []
         args += ['-i', self._getAlignmentMdFilename(iteration)]
@@ -245,21 +299,21 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         """
         
         args = []
-        args += ['-i', self._getAlignmentMdFilename(iteration)]
+        args += ['-i', self._getClassAlignmentMdFilename(iteration, cls)]
         args += ['--operate', 'rename_column', 'weightContinuous2 weight']
         self._runMdUtils(args)
 
-    def splitStep(self, iteration: int):
+    def splitStep(self, iteration: int, cls: int):
         args = []
-        args += ['-i', self._getAlignmentMdFilename(iteration)]
+        args += ['-i', self._getClassAlignmentMdFilename(iteration, cls)]
         args += ['-n', 2]
         
         self.runJob('xmipp_metadata_split', args, numberOfMpi=1)
     
-    def reconstructStep(self, iteration: int, half: int):
+    def reconstructStep(self, iteration: int, cls: int, half: int):
         args = []
-        args += ['-i', self._getAlignmentHalfMdFilename(iteration, half)]
-        args += ['-o', self._getHalfVolumeFilename(iteration, half)]
+        args += ['-i', self._getClassAlignmentHalfMdFilename(iteration, cls, half)]
+        args += ['-o', self._getHalfVolumeFilename(iteration, cls, half)]
         args += ['--sym', self.symmetryGroup.get()]
         args += ['--weight']
     
@@ -304,20 +358,20 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob(reconstructProgram, args, numberOfMpi=numberOfMpi)
         
         
-    def computeFscStep(self, iteration: int):
+    def computeFscStep(self, iteration: int, cls: int):
         args = []
-        args += ['--ref', self._getHalfVolumeFilename(iteration, 1)]
-        args += ['-i', self._getHalfVolumeFilename(iteration, 2)]
-        args += ['-o', self._getFscFilename(iteration)]
+        args += ['--ref', self._getHalfVolumeFilename(iteration, cls, 1)]
+        args += ['-i', self._getHalfVolumeFilename(iteration, cls, 2)]
+        args += ['-o', self._getFscFilename(iteration, cls)]
         args += ['--sampling_rate', self._getSamplingRate()]
         
         self.runJob('xmipp_resolution_fsc', args, numberOfMpi=1)
     
-    def averageVolumeStep(self, iteration: int):
+    def averageVolumeStep(self, iteration: int, cls: int):
         args = []
-        args += ['-i', self._getHalfVolumeFilename(iteration, 1)]
-        args += ['--plus', self._getHalfVolumeFilename(iteration, 2)]
-        args += ['-o', self._getAverageVolumeFilename(iteration)]
+        args += ['-i', self._getHalfVolumeFilename(iteration, cls, 1)]
+        args += ['--plus', self._getHalfVolumeFilename(iteration, cls, 2)]
+        args += ['-o', self._getAverageVolumeFilename(iteration, cls)]
         self.runJob('xmipp_image_operate', args, numberOfMpi=1)
 
         args = []
@@ -325,13 +379,13 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--mult', '0.5']
         self.runJob('xmipp_image_operate', args, numberOfMpi=1)
     
-    def filterVolumeStep(self, iteration: int):
-        mdFsc = emlib.MetaData(self._getFscFilename(iteration))
+    def filterVolumeStep(self, iteration: int, cls: int):
+        mdFsc = emlib.MetaData(self._getFscFilename(iteration, cls))
         resolution = self._computeResolution(mdFsc, self._getSamplingRate(), 0.5)
 
         args = []
-        args += ['-i', self._getAverageVolumeFilename(iteration)]
-        args += ['-o', self._getFilteredVolumeFilename(iteration)]
+        args += ['-i', self._getAverageVolumeFilename(iteration, cls)]
+        args += ['-o', self._getFilteredVolumeFilename(iteration, cls)]
         args += ['--fourier', 'low_pass', resolution]
         args += ['--sampling', self._getSamplingRate()]
 
@@ -354,19 +408,21 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self._runMdUtils(args)
         
         # Link last iteration
-        for i in range(1, 3):
+        for cls in range(self._getClassCount()):
+            for i in range(1, 3):
+                createLink(
+                    self._getHalfVolumeFilename(lastIteration, cls, i), 
+                    self._getOutputHalfVolumeFilename(cls, i)
+                )
+                
             createLink(
-                self._getHalfVolumeFilename(lastIteration, i), 
-                self._getOutputHalfVolumeFilename(i)
+                self._getAverageVolumeFilename(cls, lastIteration), # TODO replace with post-processed volume
+                self._getOutputVolumeFilename(cls)
             )
-        createLink(
-            self._getAverageVolumeFilename(lastIteration), # TODO replace with post-processed volume
-            self._getOutputVolumeFilename()
-        )
-        createLink(
-            self._getFscFilename(lastIteration), 
-            self._getOutputFscFilename()
-        )
+            createLink(
+                self._getFscFilename(cls, lastIteration), 
+                self._getOutputFscFilename(cls)
+            )
         
         # Create output objects
         self._createOutputParticleSet()
@@ -375,6 +431,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
     
     #--------------------------- UTILS functions --------------------------------------------        
+    def _getClassCount(self) -> int:
+        return 1
+    
     def _getMaxShift(self) -> float:
         return float(self.maxShift) / 100.0
     
@@ -396,6 +455,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getIterationPath(self, iteration: int, *paths):
         return self._getExtraPath('iteration_%04d' % iteration, *paths)
     
+    def _getClassPath(self, iteration: int, cls: int, *paths):
+        return self._getIterationPath(iteration, 'class_%06d' % cls, *paths)
+    
     def _getInputParticleMdFilename(self):
         return self._getExtraPath('input_particles.xmd')
     
@@ -405,20 +467,23 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getWienerParticleStackFilename(self):
         return self._getExtraPath('input_particles_wiener.mrcs')
     
-    def _getInputVolumeFilename(self):
-        return self.inputVolume.get().getFileName()
+    def _getInputVolumeFilename(self, cls: int):
+        return self.inputVolume.get().getFileName() # TODO consider class
     
-    def _getIterationInputVolumeFilename(self, iteration: int):
+    def _getIterationInputVolumeFilename(self, iteration: int, cls: int):
         if iteration > 0:
-            return self._getAverageVolumeFilename(iteration-1) # TODO replace with post processed volume
+            return self._getAverageVolumeFilename(iteration-1, cls) # TODO replace with post processed volume
         else:
-            return self._getInputVolumeFilename()
+            return self._getInputVolumeFilename(cls)
+    
+    def _getClassGalleryMdFilename(self, iteration: int, cls: int):
+        return self._getClassPath(iteration, cls, 'gallery.doc')
+    
+    def _getClassGalleryStackFilename(self, iteration: int, cls: int):
+        return self._getClassPath(iteration, cls, 'gallery.mrcs')
     
     def _getGalleryMdFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'gallery.doc')
-    
-    def _getGalleryStackFilename(self, iteration: int):
-        return self._getIterationPath(iteration, 'gallery.mrcs')
     
     def _getWeightsFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'weights.mrc')
@@ -429,41 +494,44 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getAlignmentMdFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'aligned.xmd')
     
-    def _getInputIntersectionMdFilename(self, iteration: int):
-        return self._getIterationPath(iteration, 'input_intersection.xmd')
+    def _getInputIntersectionMdFilename(self, iteration: int, cls: int):
+        return self._getClassPath(iteration, cls, 'input_intersection.xmd')
     
-    def _getAngleDiffOutputRoot(self, iteration: int, suffix=''):
-        return self._getIterationPath(iteration, 'angles'+suffix)
+    def _getAngleDiffOutputRoot(self, iteration: int, cls: int, suffix=''):
+        return self._getClassPath(iteration, cls, 'angles'+suffix)
 
-    def _getAngleDiffMdFilename(self, iteration: int):
-        return self._getAngleDiffOutputRoot(iteration, '.xmd')
+    def _getAngleDiffMdFilename(self, iteration: int, cls: int):
+        return self._getAngleDiffOutputRoot(iteration, cls, '.xmd')
 
-    def _getAlignmentHalfMdFilename(self, iteration: int, half: int):
-        return self._getIterationPath(iteration, 'aligned%06d.xmd' % half)
+    def _getClassAlignmentMdFilename(self, iteration: int, cls: int):
+        return self._getClassPath(iteration, cls, 'aligned.xmd')
 
-    def _getHalfVolumeFilename(self, iteration: int, half: int):
-        return self._getIterationPath(iteration, 'volume_half%01d.mrc' % half)
+    def _getClassAlignmentHalfMdFilename(self, iteration: int, cls: int, half: int):
+        return self._getClassPath(iteration, cls, 'aligned%06d.xmd' % half)
+
+    def _getHalfVolumeFilename(self, iteration: int, cls: int, half: int):
+        return self._getClassPath(iteration, cls, 'volume_half%01d.mrc' % half)
     
-    def _getAverageVolumeFilename(self, iteration: int):
-        return self._getIterationPath(iteration, 'volume_avg.mrc')
+    def _getAverageVolumeFilename(self, iteration: int, cls: int):
+        return self._getClassPath(iteration, cls, 'volume_avg.mrc')
     
-    def _getFscFilename(self, iteration: int):
-        return self._getIterationPath(iteration, 'fsc.xmd')
+    def _getFscFilename(self, iteration: int, cls: int):
+        return self._getClassPath(iteration, cls, 'fsc.xmd')
     
-    def _getFilteredVolumeFilename(self, iteration: int):
-        return self._getIterationPath(iteration, 'volume_filtered.mrc')
+    def _getFilteredVolumeFilename(self, iteration: int, cls: int):
+        return self._getClassPath(iteration, cls, 'volume_filtered.mrc')
     
     def _getOutputParticlesMdFilename(self):
         return self._getExtraPath('output_particles.xmd')
     
-    def _getOutputVolumeFilename(self):
-        return self._getExtraPath('output_volume.mrc')
+    def _getOutputVolumeFilename(self, cls: int):
+        return self._getExtraPath('output_volume%06d.mrc' % cls)
 
-    def _getOutputHalfVolumeFilename(self, half: int):
-        return self._getExtraPath('output_volume_half%01d.mrc' % half)
+    def _getOutputHalfVolumeFilename(self, cls: int, half: int):
+        return self._getExtraPath('output_volume%06d_half%01d.mrc' % (cls, half))
     
-    def _getOutputFscFilename(self):
-        return self._getExtraPath('output_fsc.xmd')
+    def _getOutputFscFilename(self, cls: int):
+        return self._getExtraPath('output_fsc%06d.xmd' % cls)
     
     def _getTrainingScratchFilename(self):
         return self._getTmpPath('scratch.bin')
@@ -484,11 +552,12 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         volume=Volume()
         
         # Fill
-        volume.setFileName(self._getOutputVolumeFilename())
+        cls = 0 # TODO adapt for multiple volumes
+        volume.setFileName(self._getOutputVolumeFilename(cls))
         volume.setSamplingRate(self._getSamplingRate())
         volume.setHalfMaps([
-            self._getOutputHalfVolumeFilename(1),
-            self._getOutputHalfVolumeFilename(2),
+            self._getOutputHalfVolumeFilename(cls, 1),
+            self._getOutputHalfVolumeFilename(cls, 2),
         ])
         
         # Define the output
@@ -498,6 +567,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         return volume
     
     def _createOutputParticleSet(self):
+        # TODO adapt for classes 3D
         particleSet = self._createSetOfParticles()
         
         """
@@ -529,8 +599,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         fsc = FSC()
         
         # Load from metadata
+        cls = 0 # TODO adapt for multiple FSCs
         fsc.loadFromMd(
-            self._getOutputFscFilename(),
+            self._getOutputFscFilename(cls),
             emlib.MDL_RESOLUTION_FREQ,
             emlib.MDL_RESOLUTION_FRC
         )
