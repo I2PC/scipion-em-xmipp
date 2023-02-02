@@ -484,7 +484,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         return self._getClassPath(iteration, cls, 'gallery.mrcs')
     
     def _getGalleryMdFilename(self, iteration: int):
-        return self._getIterationPath(iteration, 'gallery.doc')
+        return self._getIterationPath(iteration, 'gallery.xmd')
     
     def _getWeightsFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'weights.mrc')
