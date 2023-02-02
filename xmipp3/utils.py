@@ -28,7 +28,7 @@
 This module contains utils functions for Xmipp protocols
 """
 
-from os.path import join, basename
+from os.path import join, basename, isfile
 import numpy as np
 import math
 from pyworkflow import Config
@@ -102,7 +102,7 @@ def flipYImage(inFn, outFn=None, outDir=None):
             outFn = inFn.replace('_flipped', '')
     if outDir != None:
         outFn = outDir + '/' + basename(outFn)
-    if os.path.isfile(outFn):
+    if isfile(outFn):
         return outFn 
     gainImg = readImage(inFn)
     imag_array = np.asarray(gainImg.getData(), dtype=np.float64)
