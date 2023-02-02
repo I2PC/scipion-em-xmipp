@@ -21,12 +21,13 @@
 # ***************************************************************************/
 
 from pwem.protocols import ProtRefine3D
-from pwem.objects import Volume, FSC
+from pwem.objects import Volume, FSC, SetOfVolumes, Class3D
 from pwem import emlib
 
 from pyworkflow.protocol.params import (Form, PointerParam, 
                                         FloatParam, IntParam,
                                         StringParam, BooleanParam,
+                                        MultiPointerParam,
                                         LEVEL_ADVANCED, USE_GPU, GPU_LIST )
 from pyworkflow.utils.path import (cleanPath, makePath, copyFile, moveFile,
                                    createLink, cleanPattern)
@@ -56,7 +57,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         form.addSection(label='Input')
         form.addParam('inputParticles', PointerParam, label="Particles", important=True,
                       pointerClass='SetOfParticles')
-        form.addParam('inputVolume', PointerParam, label="Initial volumes", important=True,
+        form.addParam('inputVolumes', MultiPointerParam, label="Initial volumes", important=True,
                       pointerClass='Volume')
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group',
@@ -182,7 +183,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
         args = []
         args += ['-i', self._getClassGalleryMdFilename(iteration, cls)]
-        args += ['--fill', 'ref3d', 'constant', cls]
+        args += ['--fill', 'ref3d', 'constant', cls+1]
         self._runMdUtils(args)
     
     def mergeGalleriesStep(self, iteration):
@@ -202,7 +203,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         # Reindex
         args = []
         args += ['-i', self._getGalleryMdFilename(iteration)]
-        args += ['--fill', 'ref', 'lineal', 0, 1]
+        args += ['--fill', 'ref', 'lineal', 1, 1]
         self._runMdUtils(args)
     
     def trainDatabaseStep(self, iteration: int):
@@ -255,7 +256,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args = []
         args += ['-i', self._getAlignmentMdFilename(iteration)]
         args += ['-o', self._getClassAlignmentMdFilename(iteration, cls)]
-        args += ['--query', 'select', 'ref3d==%d' % cls]
+        args += ['--query', 'select', 'ref3d==%d' % (cls+1)]
         self._runMdUtils(args)
 
     def compareAnglesStep(self, iteration: int, cls):
@@ -425,14 +426,14 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             )
         
         # Create output objects
-        self._createOutputParticleSet()
-        self._createOutputVolume()
-        self._createOutputFsc()
+        volumes = self._createOutputVolumes()
+        self._createOutputClasses3D(volumes)
+        self._createOutputFscs()
         
     
     #--------------------------- UTILS functions --------------------------------------------        
     def _getClassCount(self) -> int:
-        return 1 # TODO replace
+        return len(self.inputVolumes)
     
     def _getMaxShift(self) -> float:
         return float(self.maxShift) / 100.0
@@ -468,7 +469,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         return self._getExtraPath('input_particles_wiener.mrcs')
     
     def _getInputVolumeFilename(self, cls: int):
-        return self.inputVolume.get().getFileName() # TODO consider class
+        return self.inputVolumes[cls].get().getFileName()
     
     def _getIterationInputVolumeFilename(self, iteration: int, cls: int):
         if iteration > 0:
@@ -548,69 +549,86 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             
         return resolution
     
-    def _createOutputVolume(self):
-        volume=Volume()
-        
-        # Fill
-        cls = 0 # TODO adapt for multiple volumes
-        volume.setFileName(self._getOutputVolumeFilename(cls))
-        volume.setSamplingRate(self._getSamplingRate())
-        volume.setHalfMaps([
-            self._getOutputHalfVolumeFilename(cls, 1),
-            self._getOutputHalfVolumeFilename(cls, 2),
-        ])
-        
-        # Define the output
-        self._defineOutputs(outputVolume=volume)
-        self._defineSourceRelation(self.inputParticles.get(), volume)
-        
-        return volume
-    
-    def _createOutputParticleSet(self):
-        # TODO adapt for classes 3D
-        particleSet = self._createSetOfParticles()
-        
-        """
+    def _createOutputClasses3D(self, volumes: SetOfVolumes):
+        particles = self._createSetOfParticles()
+
         EXTRA_LABELS = [
-            emlib.MDL_COST,
-            emlib.MDL_WEIGHT,
-            emlib.MDL_CORRELATION_IDX,
-            emlib.MDL_CORRELATION_MASK,
-            emlib.MDL_CORRELATION_WEIGHT,
-            emlib.MDL_IMED
+            #emlib.MDL_COST,
+            #emlib.MDL_WEIGHT,
+            #emlib.MDL_CORRELATION_IDX,
+            #emlib.MDL_CORRELATION_MASK,
+            #emlib.MDL_CORRELATION_WEIGHT,
+            #emlib.MDL_IMED
         ]
-        """
         
         # Fill
         readSetOfParticles(
             self._getOutputParticlesMdFilename(), 
-            particleSet 
-            #extraLabels=EXTRA_LABELS
+            particles,
+            extraLabels=EXTRA_LABELS
         )
-        particleSet.setSamplingRate(self._getSamplingRate())
+        particles.setSamplingRate(self._getSamplingRate())
+        self._insertChild('outputParticles', particles)
+        
+        def updateClass(cls: Class3D):
+            clsId = cls.getObjId()
+            representative = volumes[clsId]
+            cls.setRepresentative(representative)
+            
+        classes3d = self._createSetOfClasses3D(particles)
+        classes3d.classifyItems(updateClassCallback=updateClass)
         
         # Define the output
-        self._defineOutputs(outputParticles=particleSet)
-        self._defineSourceRelation(self.inputParticles.get(), particleSet)
+        self._defineOutputs(outputClasses=classes3d)
+        self._defineSourceRelation(self.inputParticles, classes3d)
+        self._defineSourceRelation(self.inputVolumes, classes3d)
         
-        return particleSet
+        return classes3d
     
-    def _createOutputFsc(self):
-        fsc = FSC()
+    def _createOutputVolumes(self):
+        volumes = self._createSetOfVolumes()
+        volumes.setSamplingRate(self._getSamplingRate())
         
-        # Load from metadata
-        cls = 0 # TODO adapt for multiple FSCs
-        fsc.loadFromMd(
-            self._getOutputFscFilename(cls),
-            emlib.MDL_RESOLUTION_FREQ,
-            emlib.MDL_RESOLUTION_FRC
-        )
+        for cls in range(self._getClassCount()):
+            volume=Volume(objId=cls+1)
+            
+            # Fill
+            volume.setFileName(self._getOutputVolumeFilename(cls))
+            volume.setHalfMaps([
+                self._getOutputHalfVolumeFilename(cls, 1),
+                self._getOutputHalfVolumeFilename(cls, 2),
+            ])
+            
+            volumes.append(volume)
         
         # Define the output
-        self._defineOutputs(outputFSC=fsc)
-        self._defineSourceRelation(self.inputParticles.get(), fsc)
+        self._defineOutputs(outputVolumes=volumes)
+        self._defineSourceRelation(self.inputParticles, volumes)
+        self._defineSourceRelation(self.inputVolumes, volumes)
         
-        return fsc
+        return volumes
+    
+    def _createOutputFscs(self):
+        fscs = self._createSetOfFSCs()
+        
+        for cls in range(self._getClassCount()):
+            fsc = FSC(objId=cls+1)
+            
+            # Load from metadata
+            fsc.loadFromMd(
+                self._getOutputFscFilename(cls),
+                emlib.MDL_RESOLUTION_FREQ,
+                emlib.MDL_RESOLUTION_FRC
+            )
+            
+            fscs.append(fsc)
+        
+        # Define the output
+        self._defineOutputs(outputFSC=fscs)
+        self._defineSourceRelation(self.inputParticles, fscs)
+        self._defineSourceRelation(self.inputVolumes, fscs)
+        
+        return fscs
     
     def _runMdUtils(self, args):
         self.runJob('xmipp_metadata_utilities', args, numberOfMpi=1)
