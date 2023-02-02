@@ -417,11 +417,11 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                 )
                 
             createLink(
-                self._getAverageVolumeFilename(cls, lastIteration), # TODO replace with post-processed volume
+                self._getAverageVolumeFilename(lastIteration, cls), # TODO replace with post-processed volume
                 self._getOutputVolumeFilename(cls)
             )
             createLink(
-                self._getFscFilename(cls, lastIteration), 
+                self._getFscFilename(lastIteration, cls), 
                 self._getOutputFscFilename(cls)
             )
         
