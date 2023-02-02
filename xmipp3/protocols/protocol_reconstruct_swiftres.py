@@ -125,7 +125,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
         return [alignStepId]
  
-    def _insertReconstructSteps(self, iteration: int, prerequisites, cls: int):
+    def _insertReconstructSteps(self, iteration: int, cls: int, prerequisites):
         selectAlignmentStepId = self._insertFunctionStep('selectAlignmentStep', iteration, cls, prerequisites=prerequisites)
         compareAnglesStepId = self._insertFunctionStep('compareAnglesStep', iteration, cls, prerequisites=[selectAlignmentStepId])
         compareReprojectionStepId = self._insertFunctionStep('compareReprojectionStep', iteration, cls, prerequisites=[compareAnglesStepId])
@@ -137,7 +137,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         averageVolumeStepId = self._insertFunctionStep('averageVolumeStep', iteration, cls, prerequisites=[reconstructStepId1, reconstructStepId2])
         return [computeFscStepId, averageVolumeStepId]
     
-    def _insertPostProcessSteps(self, iteration: int, prerequisites):
+    def _insertPostProcessSteps(self, iteration: int, cls: int, prerequisites):
         """
         filterVolumeStepId = self._insertFunctionStep('filterVolumeStep', iteration, prerequisites=prerequisites)
         return [filterVolumeStepId]
@@ -182,7 +182,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
         args = []
         args += ['-i', self._getClassGalleryMdFilename(iteration, cls)]
-        args += ['--fill', 'classId', 'constant', cls]
+        args += ['--fill', 'ref3d', 'constant', cls]
         self._runMdUtils(args)
     
     def mergeGalleriesStep(self, iteration):
@@ -202,7 +202,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         # Reindex
         args = []
         args += ['-i', self._getGalleryMdFilename(iteration)]
-        args += ['--fill', 'lineal', 1, 1]
+        args += ['--fill', 'ref', 'lineal', 0, 1]
         self._runMdUtils(args)
     
     def trainDatabaseStep(self, iteration: int):
@@ -255,7 +255,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args = []
         args += ['-i', self._getAlignmentMdFilename(iteration)]
         args += ['-o', self._getClassAlignmentMdFilename(iteration, cls)]
-        args += ['--query', 'select', 'classId==%d' % cls]
+        args += ['--query', 'select', 'ref3d==%d' % cls]
         self._runMdUtils(args)
 
     def compareAnglesStep(self, iteration: int, cls):
@@ -375,7 +375,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob('xmipp_image_operate', args, numberOfMpi=1)
 
         args = []
-        args += ['-i', self._getAverageVolumeFilename(iteration)]
+        args += ['-i', self._getAverageVolumeFilename(iteration, cls)]
         args += ['--mult', '0.5']
         self.runJob('xmipp_image_operate', args, numberOfMpi=1)
     
@@ -432,7 +432,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     #--------------------------- UTILS functions --------------------------------------------        
     def _getClassCount(self) -> int:
-        return 1
+        return 1 # TODO replace
     
     def _getMaxShift(self) -> float:
         return float(self.maxShift) / 100.0
