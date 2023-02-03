@@ -72,6 +72,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('angularSampling', FloatParam, label="Angular sampling (º)", default=5.0)
         form.addParam('shiftCount', IntParam, label="Shifts", default=9)
         form.addParam('maxShift', FloatParam, label="Maximum shift (%)", default=10.0)
+        form.addParam('reconstructPercentage', FloatParam, label='Reconstruct percentage (%)', default=50)
 
         form.addSection(label='Compute')
         form.addParam('databaseRecipe', StringParam, label='Database recipe', 
@@ -131,6 +132,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         compareAnglesStepId = self._insertFunctionStep('compareAnglesStep', iteration, cls, prerequisites=[selectAlignmentStepId])
         compareReprojectionStepId = self._insertFunctionStep('compareReprojectionStep', iteration, cls, prerequisites=[compareAnglesStepId])
         computeWeightsStepId = self._insertFunctionStep('computeWeightsStep', iteration, cls, prerequisites=[compareReprojectionStepId])
+        #filterByWeightsStepId = self._insertFunctionStep('filterByWeightsStep', iteration, cls, prerequisites=[computeWeightsStepId])
         splitStepId = self._insertFunctionStep('splitStep', iteration, cls, prerequisites=[computeWeightsStepId])
         reconstructStepId1 = self._insertFunctionStep('reconstructStep', iteration, cls, 1, prerequisites=[splitStepId])
         reconstructStepId2 = self._insertFunctionStep('reconstructStep', iteration, cls, 2, prerequisites=[splitStepId])
@@ -139,11 +141,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         return [computeFscStepId, averageVolumeStepId]
     
     def _insertPostProcessSteps(self, iteration: int, cls: int, prerequisites):
-        """
-        filterVolumeStepId = self._insertFunctionStep('filterVolumeStep', iteration, prerequisites=prerequisites)
+        filterVolumeStepId = self._insertFunctionStep('filterVolumeStep', iteration, cls, prerequisites=prerequisites)
         return [filterVolumeStepId]
-        """
-        return prerequisites
     
     #--------------------------- STEPS functions --------------------------------------------
     def convertInputStep(self):
@@ -287,21 +286,27 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob('xmipp_angular_continuous_assign2', args, numberOfMpi=self.numberOfMpi.get())
     
     def computeWeightsStep(self, iteration: int, cls: int):
-        """
         args = []
-        args += ['-i', self._getAlignmentMdFilename(iteration)]
+        args += ['-i', self._getClassAlignmentMdFilename(iteration, cls)]
         args += ['--fill', 'weight', 'constant', '0.0']
         self._runMdUtils(args)
         
         args = []
-        args += ['-i', self._getAlignmentMdFilename(iteration)]
+        args += ['-i', self._getClassAlignmentMdFilename(iteration, cls)]
         args += ['--operate', 'modify_values', 'weight=corrIdx*corrWeight*corrMask']
         self._runMdUtils(args)
-        """
-        
+
+    def filterByWeightsStep(self, iteration: int, cls: int):
         args = []
         args += ['-i', self._getClassAlignmentMdFilename(iteration, cls)]
-        args += ['--operate', 'rename_column', 'weightContinuous2 weight']
+        args += ['-o', self._getFilteredClassAlignmentMdFilename(iteration, cls)]
+        args += ['--operate', 'percentile', 'weight', 'weight']
+        self._runMdUtils(args)
+
+        args = []
+        args += ['-i', self._getFilteredClassAlignmentMdFilename(iteration, cls)]
+        args += ['-o', self._getFilteredClassAlignmentMdFilename(iteration, cls)]
+        args += ['--query', 'select', 'weight>=%f' % self._getReconstructPercentile()]
         self._runMdUtils(args)
 
     def splitStep(self, iteration: int, cls: int):
@@ -316,7 +321,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['-i', self._getClassAlignmentHalfMdFilename(iteration, cls, half)]
         args += ['-o', self._getHalfVolumeFilename(iteration, cls, half)]
         args += ['--sym', self.symmetryGroup.get()]
-        args += ['--weight']
+        args += ['--weight'] # TODO determine if used
     
         # Determine the execution parameters
         numberOfMpi = self.numberOfMpi.get()
@@ -357,7 +362,6 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
         # Run
         self.runJob(reconstructProgram, args, numberOfMpi=numberOfMpi)
-        
         
     def computeFscStep(self, iteration: int, cls: int):
         args = []
@@ -417,7 +421,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                 )
                 
             createLink(
-                self._getAverageVolumeFilename(lastIteration, cls), # TODO replace with post-processed volume
+                self._getFilteredVolumeFilename(lastIteration, cls),
                 self._getOutputVolumeFilename(cls)
             )
             createLink(
@@ -437,6 +441,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     def _getMaxShift(self) -> float:
         return float(self.maxShift) / 100.0
+    
+    def _getReconstructPercentile(self) -> float:
+        return 1.0 - (float(self.reconstructPercentage) / 100.0)
     
     def _getSamplingRate(self) -> float:
         return float(self.inputParticles.get().getSamplingRate())
@@ -473,7 +480,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     def _getIterationInputVolumeFilename(self, iteration: int, cls: int):
         if iteration > 0:
-            return self._getAverageVolumeFilename(iteration-1, cls) # TODO replace with post processed volume
+            return self._getFilteredVolumeFilename(iteration-1, cls)
         else:
             return self._getInputVolumeFilename(cls)
     
@@ -507,6 +514,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getClassAlignmentMdFilename(self, iteration: int, cls: int):
         return self._getClassPath(iteration, cls, 'aligned.xmd')
 
+    def _getFilteredClassAlignmentMdFilename(self, iteration: int, cls: int):
+        return self._getClassPath(iteration, cls, 'well_aligned.xmd')
+    
     def _getClassAlignmentHalfMdFilename(self, iteration: int, cls: int, half: int):
         return self._getClassPath(iteration, cls, 'aligned%06d.xmd' % half)
 
