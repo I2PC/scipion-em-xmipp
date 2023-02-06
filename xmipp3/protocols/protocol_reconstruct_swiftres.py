@@ -56,29 +56,39 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
         form.addSection(label='Input')
         form.addParam('inputParticles', PointerParam, label="Particles", important=True,
-                      pointerClass='SetOfParticles')
+                      pointerClass='SetOfParticles',
+                      help='Input particle set')
         form.addParam('inputVolumes', MultiPointerParam, label="Initial volumes", important=True,
-                      pointerClass='Volume')
+                      pointerClass='Volume',
+                      help='Provide a volume for each class of interest')
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group',
                       help='If no symmetry is present, give c1')
         
         form.addSection(label='Refinement')
         form.addParam('numberOfIterations', IntParam, label='Number of iterations', default=3)
-        form.addParam('initialResolution', FloatParam, label="Initial resolution (A)", default=10.0)
+        form.addParam('initialResolution', FloatParam, label="Initial resolution (A)", default=10.0,
+                      help='Resolution limit at the first iteration of the refinement')
         form.addParam('nextResolutionCriterion', FloatParam, label="FSC criterion", default=0.5, expertLevel=LEVEL_ADVANCED,
                       help='The resolution of the reconstruction is defined as the inverse of the frequency at which '\
                       'the FSC drops below this value. Typical values are 0.143 and 0.5' )
-        form.addParam('angularSampling', FloatParam, label="Angular sampling (º)", default=5.0)
-        form.addParam('shiftCount', IntParam, label="Shifts", default=9)
-        form.addParam('maxShift', FloatParam, label="Maximum shift (%)", default=10.0)
-        form.addParam('reconstructPercentage', FloatParam, label='Reconstruct percentage (%)', default=50)
+        form.addParam('angularSampling', FloatParam, label="Angular sampling (º)", default=5.0,
+                      help='Angular sampling in the first iteration')
+        form.addParam('shiftCount', IntParam, label="Shifts", default=9,
+                      help='Number of shifts considered in each axis')
+        form.addParam('maxShift', FloatParam, label="Maximum shift (%)", default=10.0,
+                      help='Maximum shift of the particle in terms of its size')
+        form.addParam('reconstructPercentage', FloatParam, label='Reconstruct percentage (%)', default=50,
+                      help='Percentage of best particles used for reconstruction')
 
         form.addSection(label='Compute')
         form.addParam('databaseRecipe', StringParam, label='Database recipe', 
-                      default='OPQ48_192,IVF32768,PQ48' )
+                      default='OPQ48_192,IVF32768,PQ48', expertLevel=LEVEL_ADVANCED,
+                      help='FAISS database structure. Please refer to '
+                      'https://github.com/facebookresearch/faiss/wiki/The-index-factory')
         form.addParam('databaseTrainingSetSize', IntParam, label='Database training set size', 
-                      default=int(2e6) )
+                      default=int(2e6),
+                      help='Number of data-augmented particles to used when training the database')
 
         form.addParallelSection(threads=1, mpi=8)
     
