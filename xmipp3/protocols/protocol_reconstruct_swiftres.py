@@ -89,6 +89,10 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('databaseTrainingSetSize', IntParam, label='Database training set size', 
                       default=int(2e6),
                       help='Number of data-augmented particles to used when training the database')
+        form.addParam('databaseMaximumSize', IntParam, label='Database size limit', 
+                      default=int(2e6),
+                      help='Maximum number of elements that can be stored in the database '
+                      'before performing an alignment and flush')
 
         form.addParallelSection(threads=1, mpi=8)
     
@@ -254,6 +258,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--method', 'fourier']
         args += ['--dropna']
         args += ['--batch', batchSize]
+        args += ['--max_size', self.databaseMaximumSize]
         if self.useGpu:
             args += ['--gpu', 0] # TODO select
         
@@ -267,14 +272,14 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['-o', self._getClassAlignmentMdFilename(iteration, cls)]
         args += ['--query', 'select', 'ref3d==%d' % (cls+1)]
         self._runMdUtils(args)
-
-    def compareAnglesStep(self, iteration: int, cls):
+        
         args = []
         args += ['-i', self._getInputParticleMdFilename()]
         args += ['-o', self._getInputIntersectionMdFilename(iteration, cls)]
         args += ['--set', 'intersection', self._getClassAlignmentMdFilename(iteration, cls), 'itemId']
         self._runMdUtils(args)
-        
+
+    def compareAnglesStep(self, iteration: int, cls):
         args = []
         args += ['--ang1', self._getClassAlignmentMdFilename(iteration, cls)]
         args += ['--ang2', self._getInputIntersectionMdFilename(iteration, cls)]
@@ -409,14 +414,14 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def createOutputStep(self):
         lastIteration = int(self.numberOfIterations) - 1
 
-        # Keep only the image and id from the input particle set
+        # Rename the wiener filtered image column
         args = []
         args += ['-i', self._getAlignmentMdFilename(lastIteration)]
         args += ['-o', self._getOutputParticlesMdFilename()]
         args += ['--operate', 'rename_column', 'image image1']
         self._runMdUtils(args)
         
-        # Add the rest from the last alignment
+        # Add the input image column
         args = []
         args += ['-i', self._getOutputParticlesMdFilename()]
         args += ['--set', 'join', self._getInputParticleMdFilename(), 'itemId']
