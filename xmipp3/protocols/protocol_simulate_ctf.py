@@ -62,9 +62,11 @@ class XmippProtSimulateCTF(Prot2D):
                       label="Fraction inelastic scattering",
                       help="Between 0 and 1")
         form.addParam('Defocus0', params.FloatParam, default=5000,
-                      label="Lower defocus (A)")
+                      label="Lower defocus (A)",
+                      help="Negative value is overfocus")
         form.addParam('DefocusF', params.FloatParam, default=25000,
-                      label="Upper defocus (A)")
+                      label="Upper defocus (A)",
+                      help="Negative value is overfocus")
 
     # --------------------------- INSERT steps functions ------------------------
     def _insertAllSteps(self):
