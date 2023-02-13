@@ -121,8 +121,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             postProcessIds = self._insertPostProcessSteps(iteration, cls, prerequisites=reconstructIds)
             ids += postProcessIds
         
-        mergeAlignmentsId = self._insertFunctionStep('mergeAlignmentsStep', iteration, prerequisites=ids)
-        return [mergeAlignmentsId]
+        return ids
         
     def _insertProjectSteps(self, iteration: int, prerequisites):
         # Project all volumes
@@ -196,12 +195,13 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             self._runMdUtils(args)
             
             args = []
-            args += ['-i', self._getCenteredAlignmentMdFilename(iteration-1)]
+            args += ['-i', self._getAlignmentMdFilename(iteration-1)]
             args += ['-o', self._getIterationInputParticleMdFilename(iteration)]
             args += ['--set', 'union', self._getIterationInputParticleMdFilename(iteration), 'itemId']
             self._runMdUtils(args)
             
         else:
+            # For the first iteration, simply use the input particles.
             createLink(
                 self._getWienerParticleMdFilename(),
                 self._getIterationInputParticleMdFilename(iteration)
@@ -218,26 +218,6 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args = []
         args += ['-i', self._getClassGalleryMdFilename(iteration, cls)]
         args += ['--fill', 'ref3d', 'constant', cls+1]
-        self._runMdUtils(args)
-    
-    def mergeGalleriesStep(self, iteration):
-        # Copy the first gallery
-        copyFile(
-            self._getClassGalleryMdFilename(iteration, 0), 
-            self._getGalleryMdFilename(iteration)
-        )
-        
-        # Merge subsequent galleries
-        for cls in range(1, self._getClassCount()):
-            args = []
-            args += ['-i', self._getGalleryMdFilename(iteration)]
-            args += ['--set', 'union', self._getClassGalleryMdFilename(iteration, cls)]
-            self._runMdUtils(args)
-
-        # Reindex
-        args = []
-        args += ['-i', self._getGalleryMdFilename(iteration)]
-        args += ['--fill', 'ref', 'lineal', 1, 1]
         self._runMdUtils(args)
     
     def trainDatabaseStep(self, iteration: int):
@@ -283,32 +263,12 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         #args += ['--max_size', self.databaseMaximumSize] # TODO uncomment when added
         if self.useGpu:
             args += ['--gpu', 0] # TODO select
+        if iteration > 0:
+            pass # TODO add centering
         
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
         self.runJob('xmipp_query_database', args, numberOfMpi=1, env=env)
-        
-        # Accumulate shifts in the input set
-        if iteration > 0:
-            args = []
-            args += ['-i', self._getAlignmentMdFilename(iteration)]
-            args += ['--operate', 'modify_values', 'shiftX=shiftX+shiftX2;shiftY=shiftY+shiftY2']
-            self._runMdUtils(args)
-            
-            args = []
-            args += ['-i', self._getAlignmentMdFilename(iteration)]
-            args += ['--operate', 'modify_values', 'imageOriginal=ifnull(imageOriginal, image)']
-            self._runMdUtils(args)
-            
-            args = []
-            args += ['-i', self._getAlignmentMdFilename(iteration)]
-            args += ['--operate', 'drop_column', 'image shiftX2 shiftY2']
-            self._runMdUtils(args)
-            
-            args = []
-            args += ['-i', self._getAlignmentMdFilename(iteration)]
-            args += ['--operate', 'rename_column', 'imageOriginal image']
-            self._runMdUtils(args)
 
     def selectAlignmentStep(self, iteration: int, cls: int):
         args = []
@@ -318,7 +278,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self._runMdUtils(args)
         
         args = []
-        args += ['-i', self._getIterationInputParticleMdFilename(iteration)] # TODO use the unshifted ones
+        args += ['-i', self._getIterationInputParticleMdFilename(iteration)]
         args += ['-o', self._getInputIntersectionMdFilename(iteration, cls)]
         args += ['--set', 'intersection', self._getReconstructionMdFilename(iteration, cls), 'itemId']
         self._runMdUtils(args)
@@ -337,23 +297,12 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         #self._runMdUtils(args)
     
     def compareReprojectionStep(self, iteration: int, cls: int):
-        # Save shifts for future use
-        args = []
-        args += ['-i', self._getReconstructionMdFilename(iteration, cls)]
-        args += ['--fill', 'shiftX2 shiftY2', 'constant', 0.0]
-        self._runMdUtils(args)
-
-        args = []
-        args += ['-i', self._getReconstructionMdFilename(iteration, cls)]
-        args += ['--operate', 'modify_values', 'shiftX2=shiftX;shiftY2=shiftY']
-        self._runMdUtils(args)
-        
         args = []
         args += ['-i', self._getReconstructionMdFilename(iteration, cls)]
         args += ['-o', self._getReconstructionStackFilename(iteration, cls)]
         args += ['--ref', self._getIterationInputVolumeFilename(iteration, cls)]
         args += ['--ignoreCTF'] # As we're using wiener corrected images
-        #args += ['--doNotWriteStack'] # Do not undo shifts
+        args += ['--doNotWriteStack'] # Do not undo shifts
         self.runJob('xmipp_angular_continuous_assign2', args, numberOfMpi=self.numberOfMpi.get())
     
     def computeWeightsStep(self, iteration: int, cls: int):
@@ -594,9 +543,6 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getAlignmentMdFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'aligned.xmd')
     
-    def _getCenteredAlignmentMdFilename(self, iteration: int):
-        return self._getIterationPath(iteration, 'aligned_centered.xmd')
-    
     def _getInputIntersectionMdFilename(self, iteration: int, cls: int):
         return self._getClassPath(iteration, cls, 'input_intersection.xmd')
     
@@ -609,9 +555,6 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getReconstructionMdFilename(self, iteration: int, cls: int):
         return self._getClassPath(iteration, cls, 'aligned.xmd')
     
-    def _getReconstructionStackFilename(self, iteration: int, cls: int):
-        return self._getClassPath(iteration, cls, 'aligned.mrcs')
-
     def _getFilteredReconstructionMdFilename(self, iteration: int, cls: int):
         return self._getClassPath(iteration, cls, 'well_aligned.xmd')
     
