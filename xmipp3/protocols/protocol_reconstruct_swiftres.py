@@ -68,7 +68,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         form.addSection(label='Global refinement')
         form.addParam('numberOfIterations', IntParam, label='Number of iterations', default=3)
         form.addParam('initialResolution', FloatParam, label="Initial resolution (A)", default=10.0,
-                      help='Resolution limit at the first iteration of the refinement')
+                      help='Image comparison resolution limit at the first iteration of the refinement')
+        form.addParam('maximumResolution', FloatParam, label="Maximum resolution (A)", default=8.0,
+                      help='Image comparison resolution limit of the refinement')
         form.addParam('nextResolutionCriterion', FloatParam, label="FSC criterion", default=0.5, expertLevel=LEVEL_ADVANCED,
                       help='The resolution of the reconstruction is defined as the inverse of the frequency at which '\
                       'the FSC drops below this value. Typical values are 0.143 and 0.5' )
@@ -191,7 +193,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             args = []
             args += ['-i', self._getWienerParticleMdFilename()]
             args += ['-o', self._getIterationInputParticleMdFilename(iteration)]
-            args += ['--set', 'join', self._getCenteredAlignmentMdFilename(iteration-1), 'itemId']
+            args += ['--set', 'join', self._getAlignmentMdFilename(iteration-1), 'itemId']
             self._runMdUtils(args)
             
             args = []
@@ -260,11 +262,11 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--method', 'fourier']
         args += ['--dropna']
         args += ['--batch', batchSize]
-        #args += ['--max_size', self.databaseMaximumSize] # TODO uncomment when added
+        args += ['--max_size', self.databaseMaximumSize]
         if self.useGpu:
             args += ['--gpu', 0] # TODO select
         if iteration > 0:
-            pass # TODO add centering
+            args += ['--local_shift', '--local_psi']
         
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
@@ -299,7 +301,6 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def compareReprojectionStep(self, iteration: int, cls: int):
         args = []
         args += ['-i', self._getReconstructionMdFilename(iteration, cls)]
-        args += ['-o', self._getReconstructionStackFilename(iteration, cls)]
         args += ['--ref', self._getIterationInputVolumeFilename(iteration, cls)]
         args += ['--ignoreCTF'] # As we're using wiener corrected images
         args += ['--doNotWriteStack'] # Do not undo shifts
@@ -308,7 +309,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def computeWeightsStep(self, iteration: int, cls: int):
         args = []
         args += ['-i', self._getReconstructionMdFilename(iteration, cls)]
-        args += ['--fill', 'weight', 'constant', '0.0']
+        args += ['--fill', 'weight', 'constant', 0.0]
         self._runMdUtils(args)
         
         args = []
@@ -485,15 +486,17 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getIterationResolutionLimit(self, iteration: int) -> float:
         if iteration > 0:
             res = 0.0
+            threshold = float(self.nextResolutionCriterion)
             for cls in range(self._getClassCount()):
                 mdFsc = emlib.MetaData(self._getFscFilename(iteration-1, cls))
                 sampling = self._getSamplingRate()
-                threshold = float(self.nextResolutionCriterion)
                 res += self._computeResolution(mdFsc, sampling, threshold)
             
-            return res / self._getClassCount()
+            res /= self._getClassCount()
         else:
-            return float(self.initialResolution)
+            res = float(self.initialResolution)
+
+        return max(res, float(self.maximumResolution))
     
     def _getIterationDigitalFrequencyLimit(self, iteration: int) -> float:
         return self._getSamplingRate() / self._getIterationResolutionLimit(iteration)
