@@ -68,3 +68,4 @@ from .viewer_deep_align import XmippDeepAlignViewer
 
 # TODO: Import from continuousflex the modules needed to create clusters (soft dependency)
 from .viewer_analyze_local_ctf import XmippAnalyzeLocalCTFViewer
+from .viewer_subtract_projection import XmippSubtractProjectionViewer
