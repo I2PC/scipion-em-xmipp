@@ -35,6 +35,8 @@ from pyworkflow.utils.path import (cleanPath, makePath, copyFile, moveFile,
 import xmipp3
 from xmipp3.convert import writeSetOfParticles, readSetOfParticles
 
+import math
+
 class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     _label = 'swiftres'
     _conda_env = 'xmipp_torch'
@@ -78,7 +80,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                       help='Angular sampling in the first iteration')
         form.addParam('shiftCount', IntParam, label="Shifts", default=9,
                       help='Number of shifts considered in each axis')
-        form.addParam('maxShift', FloatParam, label="Maximum shift (%)", default=10.0,
+        form.addParam('initialMaxShift', FloatParam, label="Maximum shift (%)", default=10.0,
                       help='Maximum shift of the particle in terms of its size')
         form.addParam('reconstructPercentage', FloatParam, label='Reconstruct percentage (%)', default=50,
                       help='Percentage of best particles used for reconstruction')
@@ -95,6 +97,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                       default=int(2e6),
                       help='Maximum number of elements that can be stored in the database '
                       'before performing an alignment and flush')
+        form.addParam('batchSize', IntParam, label='Batch size', 
+                      default=1024,
+                      help='Batch size used when processing')
 
         form.addParallelSection(threads=1, mpi=8)
     
@@ -202,19 +207,51 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             args += ['--set', 'union', self._getIterationInputParticleMdFilename(iteration), 'itemId']
             self._runMdUtils(args)
             
+            resolutionLimit = self._computeIterationResolution(iteration-1)
+            
         else:
             # For the first iteration, simply use the input particles.
             createLink(
                 self._getWienerParticleMdFilename(),
                 self._getIterationInputParticleMdFilename(iteration)
             )
-    
+            
+            resolutionLimit = float(self.initialResolution)
+        
+        maxFrequency = self._getSamplingRate() / resolutionLimit
+        maxShift = self._getIterationMaxShift(iteration)
+        shiftStep = self._computeShiftStep(maxFrequency)
+        angleStep = self._computeAngleStep(maxFrequency, 160) #TODO
+        
+        # Write to metadata
+        md = emlib.MetaData()
+        id = md.addObject()
+        md.setValue(emlib.MDL_RESOLUTION_FREQ, resolutionLimit, id)
+        md.setValue(emlib.MDL_RESOLUTION_FREQREAL, maxFrequency, id)
+        md.setValue(emlib.MDL_SHIFT_DIFF2, maxShift, id)
+        md.setValue(emlib.MDL_SHIFT_DIFF, shiftStep, id)
+        md.setValue(emlib.MDL_ANGLE_DIFF, angleStep, id)
+        md.write(self._getIterationParametersFilename(iteration))
+        
+        
     def projectVolumeStep(self, iteration: int, cls: int):
+        md = emlib.MetaData(self._getIterationParametersFilename(iteration))
+        angleStep = md.getValue(emlib.MDL_ANGLE_DIFF, 1)
+        perturb = math.sin(math.radians(angleStep)) / 4
+
         args = []
         args += ['-i', self._getIterationInputVolumeFilename(iteration, cls)]
         args += ['-o', self._getClassGalleryStackFilename(iteration, cls)]
-        args += ['--sampling_rate', self.angularSampling]
+        args += ['--sampling_rate', angleStep]
+        args += ['--perturb', perturb]
         args += ['--sym', self.symmetryGroup]
+        
+        if False: # TODO
+        #if iteration > 0:
+            args += ['--compute_neighbors']
+            args += ['--angular_distance', -1]    
+            args += ['--experimental_images', self._getIterationInputParticleMdFilename(iteration)]
+
         self.runJob('xmipp_angular_project_library', args)
     
         args = []
@@ -226,15 +263,20 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         trainingSize = int(self.databaseTrainingSetSize)
         recipe = self.databaseRecipe
 
+        md = emlib.MetaData(self._getIterationParametersFilename(iteration))
+        maxFrequency = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, 1)
+        maxShift = md.getValue(emlib.MDL_SHIFT_DIFF2, 1)
+
         args = []
         args += ['-i', self._getGalleryMdFilename(iteration)]
         args += ['-o', self._getTrainingIndexFilename(iteration)]
         args += ['--recipe', recipe]
         #args += ['--weights', self._getWeightsFilename(iteration)]
-        args += ['--max_shift', self._getMaxShift()]
-        args += ['--max_frequency', self._getIterationDigitalFrequencyLimit(iteration)]
+        args += ['--max_shift', maxShift]
+        args += ['--max_frequency', maxFrequency]
         args += ['--method', 'fourier']
         args += ['--training', trainingSize]
+        args += ['--batch', self.batchSize]
         args += ['--scratch', self._getTrainingScratchFilename()]
         if self.useGpu:
             args += ['--gpu', 0] # TODO select
@@ -244,9 +286,11 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob('xmipp_train_database', args, numberOfMpi=1, env=env)
     
     def alignStep(self, iteration: int):
-        batchSize = 1024
-        nRotations = round(360 / float(self.angularSampling))
-        nShift = self.shiftCount
+        md = emlib.MetaData(self._getIterationParametersFilename(iteration))
+        maxFrequency = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, 1)
+        maxShift = md.getValue(emlib.MDL_SHIFT_DIFF2, 1)
+        nShift = round((2*maxShift) / md.getValue(emlib.MDL_SHIFT_DIFF, 1)) + 1
+        nRotations = round(360 / md.getValue(emlib.MDL_ANGLE_DIFF, 1))
 
         # Perform the alignment
         args = []
@@ -255,13 +299,13 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['-r', self._getGalleryMdFilename(iteration)]
         args += ['--index', self._getTrainingIndexFilename(iteration)]
         #args += ['--weights', self._getWeightsFilename(iteration)]
-        args += ['--max_shift', self._getMaxShift()]
+        args += ['--max_shift', maxShift]
         args += ['--rotations', nRotations]
         args += ['--shifts', nShift]
-        args += ['--max_frequency', self._getIterationDigitalFrequencyLimit(iteration)]
+        args += ['--max_frequency', maxFrequency]
         args += ['--method', 'fourier']
         args += ['--dropna']
-        args += ['--batch', batchSize]
+        args += ['--batch', self.batchSize]
         args += ['--max_size', self.databaseMaximumSize]
         if self.useGpu:
             args += ['--gpu', 0] # TODO select
@@ -474,33 +518,13 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getClassCount(self) -> int:
         return len(self.inputVolumes)
     
-    def _getMaxShift(self) -> float:
-        return float(self.maxShift) / 100.0
-    
     def _getReconstructPercentile(self) -> float:
         return 1.0 - (float(self.reconstructPercentage) / 100.0)
     
     def _getSamplingRate(self) -> float:
         return float(self.inputParticles.get().getSamplingRate())
     
-    def _getIterationResolutionLimit(self, iteration: int) -> float:
-        if iteration > 0:
-            res = 0.0
-            threshold = float(self.nextResolutionCriterion)
-            for cls in range(self._getClassCount()):
-                mdFsc = emlib.MetaData(self._getFscFilename(iteration-1, cls))
-                sampling = self._getSamplingRate()
-                res += self._computeResolution(mdFsc, sampling, threshold)
-            
-            res /= self._getClassCount()
-        else:
-            res = float(self.initialResolution)
 
-        return max(res, float(self.maximumResolution))
-    
-    def _getIterationDigitalFrequencyLimit(self, iteration: int) -> float:
-        return self._getSamplingRate() / self._getIterationResolutionLimit(iteration)
-    
     def _getIterationPath(self, iteration: int, *paths):
         return self._getExtraPath('iteration_%04d' % iteration, *paths)
     
@@ -518,6 +542,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     def _getInputVolumeFilename(self, cls: int):
         return self.inputVolumes[cls].get().getFileName()
+    
+    def _getIterationParametersFilename(self, iteration: int):
+        return self._getIterationPath(iteration, 'params.xmd')
     
     def _getIterationInputVolumeFilename(self, iteration: int, cls: int):
         if iteration > 0:
@@ -602,6 +629,39 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                 break
             
         return resolution
+    
+    def _computeIterationResolution(self, iteration: int) -> float:
+        res = 0.0
+        threshold = float(self.nextResolutionCriterion)
+        for cls in range(self._getClassCount()):
+            mdFsc = emlib.MetaData(self._getFscFilename(iteration, cls))
+            sampling = self._getSamplingRate()
+            res += self._computeResolution(mdFsc, sampling, threshold)
+        
+        res /= self._getClassCount()
+
+        return max(res, float(self.maximumResolution))
+    
+    def _computeAngleStep(self, maxFrequency: float, size: int) -> float:
+        # At the alignment resolution limit, determine the 
+        # angle between to neighboring Fourier coefficients
+        c = maxFrequency*size  # Cos: radius
+        s = 1.0 # Sin: 1 coefficient
+        angle = math.atan2(s, c)
+        
+        # The angular error is at most half of the sampling
+        # Therefore use the double angular sampling
+        angle *= 2
+        
+        return math.degrees(angle)
+    
+    def _computeShiftStep(self, digital_freq: float, eps: float = 0.5) -> float:
+        # Assuming that in Nyquist (0.5) we are able to
+        # detect a shift of eps pixels
+        return (0.5 / digital_freq) * eps
+    
+    def _getIterationMaxShift(self, iteration: int) -> float:
+        return float(self.initialMaxShift) / math.pow(math.e, iteration)
     
     def _createOutputClasses3D(self, volumes: SetOfVolumes):
         particles = self._createSetOfParticles()
