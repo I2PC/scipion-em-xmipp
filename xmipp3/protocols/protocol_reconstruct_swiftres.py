@@ -465,14 +465,14 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         # Copy the first alignment
         copyFile(
             self._getReconstructionMdFilename(iteration, 0), 
-            self._getCenteredAlignmentMdFilename(iteration)
+            self._getAlignmentMdFilename(iteration)
         )
         
         # Merge subsequent alignments
         for cls in range(1, self._getClassCount()):
             args = []
-            args += ['-i', self._getCenteredAlignmentMdFilename()]
-            args += ['--set', 'union', self._getReconstructionMdFilename(iteration, cls)]
+            args += ['-i', self._getAlignmentMdFilename()]
+            args += ['--set', 'union', self._getReconstructionMdFilename(iteration, cls)] #TODO consider using union_all
             self._runMdUtils(args)
 
     def createOutputStep(self):
