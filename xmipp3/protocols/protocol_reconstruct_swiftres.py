@@ -219,6 +219,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             resolutionLimit = float(self.initialResolution)
         
         maxFrequency = self._getSamplingRate() / resolutionLimit
+        maxPsi = self._getIterationMaxPsi(iteration)
         maxShift = self._getIterationMaxShift(iteration)
         shiftStep = self._computeShiftStep(maxFrequency)
         angleStep = self._computeAngleStep(maxFrequency, 160) #TODO
@@ -228,7 +229,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         id = md.addObject()
         md.setValue(emlib.MDL_RESOLUTION_FREQ, resolutionLimit, id)
         md.setValue(emlib.MDL_RESOLUTION_FREQREAL, maxFrequency, id)
-        md.setValue(emlib.MDL_SHIFT_DIFF2, maxShift, id)
+        md.setValue(emlib.MDL_ANGLE_PSI, maxPsi, id)
+        md.setValue(emlib.MDL_SHIFT_X, maxShift, id)
+        md.setValue(emlib.MDL_SHIFT_Y, maxShift, id)
         md.setValue(emlib.MDL_SHIFT_DIFF, shiftStep, id)
         md.setValue(emlib.MDL_ANGLE_DIFF, angleStep, id)
         md.write(self._getIterationParametersFilename(iteration))
@@ -265,7 +268,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
 
         md = emlib.MetaData(self._getIterationParametersFilename(iteration))
         maxFrequency = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, 1)
-        maxShift = md.getValue(emlib.MDL_SHIFT_DIFF2, 1)
+        maxPsi = md.getValue(emlib.MDL_ANGLE_PSI, 1)
+        maxShift = md.getValue(emlib.MDL_SHIFT_X, 1)
 
         args = []
         args += ['-i', self._getGalleryMdFilename(iteration)]
@@ -288,7 +292,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def alignStep(self, iteration: int):
         md = emlib.MetaData(self._getIterationParametersFilename(iteration))
         maxFrequency = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, 1)
-        maxShift = md.getValue(emlib.MDL_SHIFT_DIFF2, 1)
+        maxPsi = md.getValue(emlib.MDL_ANGLE_PSI, 1)
+        maxShift = md.getValue(emlib.MDL_SHIFT_X, 1)
         nShift = round((2*maxShift) / md.getValue(emlib.MDL_SHIFT_DIFF, 1)) + 1
         nRotations = round(360 / md.getValue(emlib.MDL_ANGLE_DIFF, 1))
 
@@ -660,6 +665,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         # detect a shift of eps pixels
         return (0.5 / digital_freq) * eps
     
+    def _getIterationMaxPsi(self, iteration: int) -> float:
+        return 180.0 / math.pow(math.e, iteration)
+
     def _getIterationMaxShift(self, iteration: int) -> float:
         return float(self.initialMaxShift) / math.pow(math.e, iteration)
     
