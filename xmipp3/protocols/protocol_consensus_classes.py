@@ -26,12 +26,12 @@
 # *
 # **************************************************************************
 
-from typing import Set
+from typing import Iterable, Sequence, Optional, List, Set
 import collections
 import itertools
 
 from pwem.protocols import EMProtocol
-from pwem.objects import SetOfClasses
+from pwem.objects import Pointer, Object, SetOfClasses, SetOfImages
 
 from pyworkflow.protocol.params import Form, MultiPointerParam
 from pyworkflow.constants import BETA
@@ -40,6 +40,8 @@ from xmipp3.convert import setXmippAttribute
 
 import numpy as np
 import scipy.stats
+import scipy.cluster
+import scipy.spatial
 
 class XmippProtConsensusClasses(EMProtocol):
     """ Compare several SetOfClasses.
@@ -63,86 +65,121 @@ class XmippProtConsensusClasses(EMProtocol):
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
-        self._insertFunctionStep('randomConsensusStep', self.inputClassifications)
-        self._insertFunctionStep('intersectStep', self.inputClassifications)
-        self._insertFunctionStep('mergeStep', self.inputClassifications)
+        self._insertFunctionStep('referenceIntersectionStep')
+        self._insertFunctionStep('intersectStep')
+        self._insertFunctionStep('mergeStep')
+        #self._insertFunctionStep('createOutputStep')
 
-    def randomConsensusStep(self, classifications):
-        pass
-    
-    def intersectStep(self, classifications):
-        # Compute the intersection among all classes
-        intersections = self._calculateIntersections(classifications)
-
-        # Create the output classes and define them
-        outputClasses = self._createOutputClasses(
-            classifications[0].get(),
-            intersections,
-            'intersections',
-            #itertools.repeat(consensusSizes),
-            #itertools.repeat(consensusRelativeSizes)
+    def referenceIntersectionStep(self):
+        sizes = self._getInputClassificationSizes()
+        nImages = sizes[0].sum()
+        sourceProbabilities = self._calculateIntersectionSourceProbabilities(sizes)
+        intersectionProbabilities = self._calculateIntersectionProbabilities(sourceProbabilities)
+        normIntersectionProbabilities = self._calculateNormalizedIntersectionProbabilities(
+            sourceProbabilities, 
+            intersectionProbabilities
         )
-        self._defineOutputs(outputClasses=outputClasses)
+        intersectionSizes = intersectionProbabilities * nImages
+        normalizedIntersectionSizes = normIntersectionProbabilities # No need to multiply
 
-        # Stablish source output relationships
+        # Write
+        np.save(self._getReferenceIntersectionSizeFilename(), intersectionSizes)
+        np.save(self._getReferenceIntersectionNormalizedSizeFilename(), normalizedIntersectionSizes)
+
+    def intersectStep(self):
+        classifications = self._getInputClassifications()
+        classes = self._getInputClassificationIds()
+        intersections = self._calculateIntersections(classes)
+        
+        
+        outputClasses = self._createSetOfClasses(
+            classifications,
+            intersections,
+            self._getMergedIntersectionSuffix(len(intersections))
+        )
+        
+        self._defineOutputs(outputClasses=outputClasses)
         self._defineSourceRelation(self.inputClassifications, outputClasses)
 
     def mergeStep(self):
         classifications = self._getInputClassifications()
-        intersections = self._convertClassification(self.outputClasses_intersections)
+        classes = self._getInputClassificationIds()
+        allClasses = list(itertools.chain(*classes))
+        intersections = self._getOutputIntersectionIds()
         
-        # Merge all intersections
-        merged, obValues = self._mergeIntersections(
-            classifications,
-            intersections, 
-            self._mergeObjectiveFunctionEntropy
-        )
-        
-        for i, partition in enumerate(reversed(merged)):
-            name = 'merged' + str(i + 1)
-            classes = self._createOutputClasses(
-                self.inputClassifications[0].get(),
-                partition,
-                name,
-                #itertools.repeat(consensusSizes),
-                #itertools.repeat(consensusRelativeSizes)
-            )
-            self._insertChild(name, classes)
-        
-        
+        similarity = self._calculateClusterSimilarityMatrix(intersections, allClasses)
+        linkage = self._calculateLinkageMatrix(similarity)
+        merging = self._calculateMergedIntersections(intersections, linkage)
 
-    def createOutputStep(self):
-        pass
-    
+        # Create outputs
+        np.save(self._getLinkageMatrixFilename(), linkage)
+
+        for merged in merging[1:]: # Skip the first one as it is empty
+            self._createSetOfClasses(
+                classifications,
+                merged,
+                self._getMergedIntersectionSuffix(len(merged))
+            )
+            
     # --------------------------- INFO functions -------------------------------
     def _validate(self):
         errors = []
 
         # Ensure that all classifications are made of the same images
-        items = self._getInputItems(0)
+        items = self._getInputImages(0)
         for i in range(1, len(self.inputClassifications)):
-            if self._getInputItems(i) != items:
-                errors.append(f'Classification {i} has been done with different items')
+            if self._getInputImages(i) != items:
+                errors.append(f'Classification {i} has been done with different images')
 
         return errors
     
     # --------------------------- UTILS functions ------------------------------
-    def _calculateRandomConsensusProbabilities(self, classProbabilities):
-        consensusProbabilities = []
-        consensusNormalizedProbabilities = []
-        
-        # Consider all combinations
-        for probabilities in itertools.product(*classProbabilities):
-            probability = np.prod(probabilities)
-            normalizedProbability = probability / np.min(probabilities)
+    def _getInputClassificationCount(self) -> int:
+        return len(self.inputClassifications)
+    
+    def _getInputClassification(self, classification: int) -> SetOfClasses:
+        return self.inputClassifications[classification].get()
 
-            consensusProbabilities.append(probability)
-            consensusNormalizedProbabilities.append(normalizedProbability)
+    def _getInputClassifications(self) -> Sequence[SetOfClasses]:
+        return list(map(Pointer.get, self.inputClassifications))
+
+    def _getInputClassificationIds(self) -> Sequence[Sequence[Set[int]]]:
+        def convertClassification(classification: Pointer):
+            return list(map(SetOfImages.getIdSet, classification.get()))
+            
+        return list(map(convertClassification, self.inputClassifications))
+
+    def _getInputClassificationSizes(self) -> Sequence[np.ndarray]:
+        def convertClassification(classification: Pointer):
+            return np.array(list(map(len, classification.get())))
+            
+        return list(map(convertClassification, self.inputClassifications))
+
+    def _getInputImages(self, classification: int = 0) -> SetOfImages:
+        return self._getInputClassification(classification).getImages()
+ 
+    def _getOutputIntersectionIds(self):
+        return list(map(SetOfImages.getIdSet, self.outputClasses))
+ 
+    def _getReferenceIntersectionSizeFilename(self) -> str:
+        return self._getExtraPath('reference_sizes.npy')
     
-        assert(np.isclose(np.sum(consensusProbabilities), 1.0))
-        return consensusProbabilities, consensusNormalizedProbabilities
+    def _getReferenceIntersectionNormalizedSizeFilename(self) -> str:
+        return self._getExtraPath('reference_norm_sizes.npy')
     
-    def _calculateIntersections(self, classifications):
+    def _getLinkageMatrixFilename(self) -> str:
+        return self._getExtraPath('linkage.npy')
+
+    def _getMergedIntersectionSuffix(self, numel: int) -> str:
+        return 'merged_%06d' % numel
+ 
+    def _getOutputSqliteFilename(suffix: str) -> str:
+        return 'classes_%s.sqlite' % suffix
+ 
+ 
+    
+    def _calculateIntersections(self, 
+                                classifications: Iterable[Sequence[Set[int]]]):
         # Start with the first classification
         result = classifications[0]
 
@@ -154,23 +191,48 @@ class XmippProtConsensusClasses(EMProtocol):
             for cls0 in result:
                 for cls1 in classification:
                     intersection = cls0.intersection(cls1)
-                    if intersection:
+                    if len(intersection) > 0:
                         intersections.append(intersection)
 
             # Use the new intersection for the next step
             result = intersections
 
         return result
+
+    def _calculateIntersectionSourceProbabilities(self, 
+                                                  classSizes: Iterable[np.ndarray]) -> np.ndarray:
+        
+        def calculateProbability(sizes: np.ndarray) -> np.ndarray:
+            return sizes / np.sum(sizes)
+        
+        probabilities = map(calculateProbability, classSizes)
+        
+        # Consider all combinations
+        prod = list(itertools.product(*probabilities))
+        return np.array(prod)
     
-    def _calculateClassificationLengths(self, classifications):
-        """ Returns a list of lists that stores the lengths of each classification """
-        return list(map(lambda classification : list(map(len, classification)), classifications))
+    def _calculateIntersectionProbabilities(self, 
+                                            sourceProbabilities: np.ndarray) -> np.ndarray:
+        return np.product(sourceProbabilities, axis=1)
+
+    def _calculateNormalizedIntersectionProbabilities(self, 
+                                                      sourceProbabilities: np.ndarray,
+                                                      probabilities: Optional[np.ndarray] = None ) -> np.ndarray:
+        if probabilities is None:
+            probabilities = self._calculateIntersectionProbabilities(sourceProbabilities)
+            
+        norm = np.min(sourceProbabilities, axis=1)
+        return probabilities / norm
     
-    def _calculateClusterSimilarity(self, x, y):
-        xIds = x.getIds()
-        yIds = y.getIds()
-        nCommon = len(xIds & yIds)
-        nTotal = min(len(xIds), len(yIds))
+    def _calculateClassificationLengths(self, classifications: Iterable[SetOfClasses]) -> Sequence[np.ndarray]:
+        def getLengths(classification: SetOfClasses) -> np.ndarray:
+            return np.ndarray(list(map(len, classification)))
+        
+        return list(map(getLengths, classifications))
+    
+    def _calculateClusterSimilarity(self, x: Set[int], y: Set[int]):
+        nCommon = len(x & y)
+        nTotal = len(x | y)
         return nCommon / nTotal
     
     def _calculateClusterSimilarityMatrix(self, a, b):
@@ -182,279 +244,96 @@ class XmippProtConsensusClasses(EMProtocol):
 
         return result
     
-    def _calculateClusterCosineSimilarityMatrix(self, allClassifications, intersections):
-        similarityMatrix = self._calculateClusterSimilarityMatrix(allClassifications, intersections)
-        similarityMatrix /= np.linalg.norm(similarityMatrix, axis=0)
-        return np.dot(similarityMatrix.T, similarityMatrix)
-        
-    def _calculateClusterEntropy(self, intersections):
-        sizes = np.array(list(map(len, intersections)), dtype=float)
-        return scipy.stats.entropy(sizes) # Sized do not need to be normalized
-        
-    def _mergeIntersectionPair(self, intersections, indices):
-        """ Return a list of subsets where the intersections[indices] have been merged """
-        # Divide the input intersections into the ones referred by indices and not
-        selection = [intersections[i] for i in indices]  # intersection[indices]
-        result = [intersections[i] for i in range(len(intersections)) if i not in indices]  # intersections - selection
-
-        # Merge all the selected clusters into the same one
-        merged = XmippProtConsensusClasses.Cluster.union(*selection)
-        
-        # Add the merged items to the result
-        result.append(merged)
-        return result
-    
-    def _mergeObjectiveFunctionEntropy(self, intersections, pair, similarity):
-        entropy = self._calculateClusterEntropy(intersections)
-        nextEntropy = self._calculateClusterEntropy(self._mergeIntersectionPair(intersections, pair))
-        return (entropy - nextEntropy) / similarity
-        
-    def _mergeCheapestIntersectionPair(self, allClassifications, intersections, objectiveFunc):
-        """ Merges the most similar pair of intersections """
-        # Calculate distance matrix
-        similarities = self._calculateClusterCosineSimilarityMatrix(allClassifications, intersections)
-
-        # For each possible pair of intersections compute the cost of merging them
-        obValues = dict(map(
-            lambda pair : (pair, objectiveFunc(intersections, pair, similarities[pair])),
-            itertools.combinations(range(len(intersections)), r=2)
-        ))
-
-        # Select the minimum cost pair and merge them
-        mergePair, mergeObValue = min(obValues.items(), key=lambda pair : pair[1])
-        mergedIntersections = self._mergeIntersectionPair(intersections, mergePair)
-
-        return mergedIntersections, mergeObValue
-
-    def _mergeIntersections(self, classifications, intersections, objectiveFunc):
-        """Iteratively merge intersection pairs where the 
-        objective function is the least """
-        # Results
-        allIntersections = [intersections]
-        allObValues = [0.0]
-
-        # Obtain a list with all source classes
-        allClassifications = list(itertools.chain(*classifications))
-        
-        # Iteratively merge intersections
-        while len(allIntersections[-1]) > 1:
-            mergedIntersections, obValue = self._mergeCheapestIntersectionPair(allClassifications, allIntersections[-1], objectiveFunc)
-            allIntersections.append(mergedIntersections)
-            allObValues.append(obValue)
-
-        assert(len(allIntersections) == len(allObValues))
-        return allIntersections, allObValues
-    
-    def _calculateProfileLogLikelihood(self, d, q):
-        """ Profile log likelihood for given parameters """
-        # Partition the function in q
-        d1 = d[:q]
-        d2 = d[q:]
-        
-        # Compute the average and mean of each partition
-        mu1 = np.mean(d1)
-        mu2 = np.mean(d2)
-        sigma1 = np.std(d1)
-        sigma2 = np.std(d2)
-        sigma = (len(d1)*sigma1 + len(d2)*sigma2) / (len(d1) + len(d2)) # Weighted average
-        
-        # Compute the log likelihood
-        log_f_q = np.log(scipy.stats.norm.pdf(d1, mu1, sigma))
-        log_f_p = np.log(scipy.stats.norm.pdf(d2, mu2, sigma))
-        l_q = np.sum(log_f_q) + np.sum(log_f_p)
-        
-        return l_q
-    
-    def _calculateFullProfileLogLikelihood(self, obValues):
-        """ Calculate profile log likelihood for each partition
-            of the data """
-        result = []
-
-        for i in range(1, len(obValues)):
-            result.append(self._calculateProfileLogLikelihood(obValues, i))
-        
-        return np.array(result)
-    
-    def _findElbowPll(self, obValues):
-        """ Find the elbow according to the full profile likelihood
-        """
-        # Get profile log likelihood for log of objective values
-        # Remove last obValue as it is zero and log(0) is undefined
-        pll = self._calculateFullProfileLogLikelihood(np.log(obValues[:-1])) # TODO determine if this log should be here
-        return np.argmax(pll)
-    
-    def _createClasses(self, 
-                             classification: SetOfClasses,
-                             clustering, 
-                             name ):
-                             #randomConsensusSizes=None, 
-                             #randomConsensusRelativeSizes=None ):
-
-        # Create an empty set with the same images as the input classification
-        result = self._EMProtocol__createSet( # HACK
-            type(classification), 
-            'classes_%s.sqlite', name
-        ) 
-        result.setImages(classification.getImages())
-    
-        # Fill the output
-        loader = XmippProtConsensusClasses.ClassesLoader(
-            clustering, 
-            #randomConsensusSizes,
-            #randomConsensusRelativeSizes
+    def _calculateLinkageMatrix(self, points: np.ndarray) -> np.ndarray:
+        return scipy.cluster.hierarchy.linkage(
+            points,
+            method='single',
+            metric='cosine'
         )
-        loader.fillClasses(result)
 
-        return result
+    def _calculateMergedIntersections(self, 
+                                      intersections: List[Set[int]],
+                                      linkage: np.ndarray ):
+        merged = [intersections]
+        clusters = intersections.copy()
+        
+        for idx0, idx1, _, _ in linkage:
+            # Construct a new cluster joining two of the clusters
+            cluster0: Set[int] = clusters[int(idx0)]
+            cluster1: Set[int] = clusters[int(idx1)]
+            clusterMerged = cluster0.union(cluster1)
+            clusters.append(clusterMerged)
+
+            # Copy the previous row except for the
+            # merged sets. Add the new merged set
+            assert(cluster0 in merged[-1])
+            assert(cluster1 in merged[-1])
+            mergedNew = [clusterMerged]
+            for cluster in merged[-1]:
+                if cluster not in (cluster0, cluster1):
+                    mergedNew.append(cluster)
+            
+            merged.append(mergedNew)
+            
+        return merged
     
-    # ---------------------------- I/O functions -------------------------------
+    def _calculateClusterRepresentativeClass(self,
+                                             cluster: Set[int],
+                                             classifications: Iterable[SetOfClasses]):
+        
+        allClasses = itertools.chain(*classifications)
+            
+        def computeSimilarity(cls: SetOfImages) -> float:
+            objIds = cls.getIdSet()
+            return self._calculateClusterSimilarity(cluster, objIds)
+            
+        return max(allClasses, key=computeSimilarity)
     
     # -------------------------- Convert functions -----------------------------
-    def _convertClassification(self, classification):
-        def classToCluster(cls):
-            ids = cls.getIdSet()
-            rep = cls.getRepresentative().clone() if cls.hasRepresentative() else None
-            return XmippProtConsensusClasses.Cluster(ids, rep)
-
-        return list(map(classToCluster, classification))
-    
-    def _convertInputClassification(self, classification):
-        return self._convertClassification(classification.get())
-    
-    def _convertInputClassifications(self, classifications):
-        return list(map(self._convertInputClassification, classifications))
-    
-    def _convertToSetOfClasses( self, 
-                                classification: SetOfClasses,
-                                clustering, 
-                                name,
-                                randomConsensusSizes=None, 
-                                randomConsensusRelativeSizes=None ):
+    def _createSetOfClasses(self, 
+                            classifications: Sequence[SetOfClasses],
+                            clustering: Sequence[Set[int]], 
+                            suffix: str,
+                            referenceSizes=None, 
+                            referenceNormalizedSizes=None ):
 
         # Create an empty set with the same images as the input classification
-        result = self._EMProtocol__createSet( # HACK
-            type(classification), 
-            'classes_%s.sqlite', name
+        result: SetOfClasses = self._EMProtocol__createSet( # HACK
+            type(classifications[0]), 
+            self._getOutputSqliteFilename(suffix)
         ) 
-        result.setImages(classification.getImages())
+        result.setImages(classifications[0].getImages())
     
         # Fill the output
-        loader = XmippProtConsensusClasses.ClassesLoader(
-            clustering, 
-            #randomConsensusSizes,
-            #randomConsensusRelativeSizes
-        )
-        loader.fillClasses(result)
-
-        return result
-
-    # --------------------------- HELPER classes -------------------------------
-    class Cluster:
-        """ Keeps track of the information related to successive class intersections.
-            It is instantiated with a single class and allows to perform intersections
-            and unions with it"""
-        def __init__(self, ids: Set[int], representative=None, sourceSize=None):
-            self._ids = ids
-            self._representative = representative
-            self._sourceSize = sourceSize if sourceSize is not None else len(self._ids)  # The size of the representative class
-
-        def __len__(self):
-            return len(self.getIds())
-
-        def __eq__(self, other):
-            return self.getIds() == other.getIds()
-
-        def intersection(self, *others):
-            return self._combine(set.intersection, min, XmippProtConsensusClasses.Cluster.getSourceSize, *others)
-
-        def union(self, *others):
-            return self._combine(set.union, max, len, *others)
-
-        def getIds(self):
-            return self._ids
-
-        def getRepresentative(self):
-            return self._representative
-
-        def getSourceSize(self):
-            return self._sourceSize
-
-        def getRelativeSize(self):
-            return len(self) / self.getSourceSize()
-
-        def _combine(self, operation, selector, selectionCriteria, *others):
-            allItems = (self, ) + others
+        def updateItem(item: Object, _):
+            objId: int = item.getObjId()
             
-            # Perform the requested operation among the id sets
-            allIds = map(XmippProtConsensusClasses.Cluster.getIds, allItems)
-            ids = operation(*allIds)
-
-            # Select the class with the appropriate criteria
-            selection = selector(allItems, key=selectionCriteria)
-            representative = selection.getRepresentative()
-            sourceSize = selection.getSourceSize()
-
-            return XmippProtConsensusClasses.Cluster(ids, representative, sourceSize)
-    
-    
-    
-    class ClassesLoader:
-        """ Helper class to produce classes
-        """
-        def __init__(self, clustering):
-            self._clustering = clustering
-            self._classification = self._createClassification(clustering)
-
-        def fillClasses(self, clsSet):
-            clsSet.classifyItems(updateItemCallback=self._updateItem,
-                                updateClassCallback=self._updateClass,
-                                itemDataIterator=iter(self._classification.items()),
-                                doClone=False)
-
-        def _updateItem(self, item, row):
-            itemId, classId = row
-            assert(item.getObjId() == itemId)
+            classId = 0
+            for cls, objIds in enumerate(clustering):
+                if objId in objIds:
+                    classId = cls + 1
+                    break # Found!
+                
             item.setClassId(classId)
-
-        def _updateClass(self, item):
-            classId = item.getObjId()
-            classIdx = classId-1
-
-            # Set the representative
-            item.setRepresentative(self._clustering[classIdx].getRepresentative())
-
-            # Set the size p-value
-            #if self.randomConsensusSizes is not None:
-            #    size = len(self.clustering[classIdx])
-            #    percentile = self._findPercentile(self.randomConsensusSizes, size)
-            #    pValue = 1 - percentile
-            #    setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
+        
+        def updateClass(item: SetOfImages):
+            classId: int = item.getObjId()
+            classIdx = classId - 1
+            cluster = clustering[classIdx]
+            representativeClass = self._calculateClusterRepresentativeClass(
+                cluster,
+                classifications
+            )
+            size = len(clustering[classIdx])
+            normalizedSize = size / len(representativeClass)
             
-            # Set the relative size p-value
-            #if self.randomConsensusRelativeSizes is not None:
-            #    size = self.clustering[classIdx].getRelativeSize()
-            #    percentile = self._findPercentile(self.randomConsensusRelativeSizes, size)
-            #    pValue = 1 - percentile
-            #    setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE, Float(pValue))
+            item.setRepresentative(representativeClass.getRepresentative())
+            #TODO set size percentiles
 
-        def _createClassification(self, clustering):
-            # Fill the classification data (particle-class mapping)
-            result = {}
-            for cls, data in enumerate(clustering):
-                for id in data.getIds():
-                    result[id] = cls + 1 
-
-            return collections.OrderedDict(sorted(result.items())) 
-
-        #def _findPercentile(self, data, value):
-        #    """ Given an array of values (data), finds the corresponding percentile of the value.
-        #        Percentile is returned in range [0, 1] """
-        #    assert(np.array_equal(sorted(data), data))  # In order to iterate it in ascending order
-
-            # Count the number of elements that are smaller than the given value
-        #    i = 0
-        #    while i < len(data) and data[i] < value:
-        #        i += 1
-
-            # Convert it into a percentage
-        #    return float(i) / float(len(data))
+        result.classifyItems(
+            updateItemCallback=updateItem,
+            updateClassCallback=updateClass,
+            doClone=True
+        )
+    
+        return result
