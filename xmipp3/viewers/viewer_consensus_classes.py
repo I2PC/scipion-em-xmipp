@@ -30,11 +30,15 @@ This module implement the wrappers around
 visualization program.
 """
 from pyworkflow.viewer import (ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO)
+from pyworkflow.protocol.params import LabelParam
 
 from pwem.viewers.showj import *
 
 from xmipp3.protocols.protocol_consensus_classes import XmippProtConsensusClasses
 
+import numpy as np
+import matplotlib.pyplot as plt
+import scipy.cluster
 
 class XmippConsensusClassesViewer(ProtocolViewer):
     """ Visualization of results from the consensus classes 3D protocol
@@ -47,10 +51,43 @@ class XmippConsensusClassesViewer(ProtocolViewer):
         ProtocolViewer.__init__(self, **kwargs)
 
     def _defineParams(self, form):
-        pass
+        form.addSection(label='Graphs')
+        form.addParam('visualizeDendrogram', LabelParam,
+                       label='Dendrogram' )
+        form.addParam('visualizeCostFunction', LabelParam,
+                       label='Cost function' )
+
 
     def _getVisualizeDict(self):
-        pass
+        return {
+            'visualizeDendrogram': self._visualizeDendrogram,
+            'visualizeCostFunction': self._visualizeCostFunction
+        }
     
     # --------------------------- UTILS functions ------------------------------
-
+    def _getLinkageMatrix(self) -> np.ndarray:
+        return np.load(self.protocol._getLinkageMatrixFilename())
+    
+    def _visualizeDendrogram(self, param=None):
+        linkage = self._getLinkageMatrix()
+        labels = np.arange(1, len(linkage)+2)
+        
+        fig, ax = plt.subplots()
+        scipy.cluster.hierarchy.dendrogram(linkage, ax=ax, labels=labels)
+        ax.set_ylabel('cost')
+        ax.set_xlabel('classId')
+        
+        return [fig]
+        
+    def _visualizeCostFunction(self, param=None):
+        linkage = self._getLinkageMatrix()
+        y = linkage[:,2]
+        x = np.arange(len(y), 0, -1)
+        
+        fig, ax = plt.subplots()
+        ax.plot(x, y)
+        ax.set_ylabel('cost')
+        ax.set_xlabel('class count')
+        
+        return [fig]
+        

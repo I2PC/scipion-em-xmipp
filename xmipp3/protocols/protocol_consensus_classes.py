@@ -27,7 +27,6 @@
 # **************************************************************************
 
 from typing import Iterable, Sequence, Optional, List, Set
-import collections
 import itertools
 
 from pwem.protocols import EMProtocol
