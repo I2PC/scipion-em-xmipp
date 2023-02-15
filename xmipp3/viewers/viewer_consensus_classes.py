@@ -30,9 +30,12 @@ This module implement the wrappers around
 visualization program.
 """
 from pyworkflow.viewer import (ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO)
-from pyworkflow.protocol.params import LabelParam
+from pyworkflow.protocol.params import LabelParam, IntParam
+from pyworkflow.protocol.params import GE
 
 from pwem.viewers.showj import *
+from pwem.viewers import TableView, ObjectView
+from pwem.objects import SetOfClasses
 
 from xmipp3.protocols.protocol_consensus_classes import XmippProtConsensusClasses
 
@@ -51,6 +54,11 @@ class XmippConsensusClassesViewer(ProtocolViewer):
         ProtocolViewer.__init__(self, **kwargs)
 
     def _defineParams(self, form):
+        form.addSection(label='Classes')
+        form.addParam('visualizeClasses', IntParam,
+                      validators=[GE(1)], default=1,
+                      label='Classes' )
+
         form.addSection(label='Graphs')
         form.addParam('visualizeDendrogram', LabelParam,
                        label='Dendrogram' )
@@ -60,6 +68,7 @@ class XmippConsensusClassesViewer(ProtocolViewer):
 
     def _getVisualizeDict(self):
         return {
+            'visualizeClasses': self._visualizeClasses,
             'visualizeDendrogram': self._visualizeDendrogram,
             'visualizeCostFunction': self._visualizeCostFunction
         }
@@ -68,6 +77,18 @@ class XmippConsensusClassesViewer(ProtocolViewer):
     def _getLinkageMatrix(self) -> np.ndarray:
         return np.load(self.protocol._getLinkageMatrixFilename())
     
+    def _getMergedIntersections(self, size) -> SetOfClasses:
+        t = type(self.protocol._getInputClassification(0))
+        print(t)
+        suffix = self.protocol._getMergedIntersectionSuffix(size)
+        filename =  self.protocol._getOutputSqliteFilename(suffix)
+        return t(filename=filename)
+    
+    def _visualizeClasses(self, param=None):
+        count = self.visualizeClasses.get()
+        classes = self._getMergedIntersections(count)
+        return self._showSetOfClasses3D(classes)
+        
     def _visualizeDendrogram(self, param=None):
         linkage = self._getLinkageMatrix()
         labels = np.arange(1, len(linkage)+2)
@@ -90,4 +111,15 @@ class XmippConsensusClassesViewer(ProtocolViewer):
         ax.set_xlabel('class count')
         
         return [fig]
+    
+    def _showSetOfClasses3D(self, classes):
+        labels = 'enabled id _size _representative._filename'
+        #labels = 'enabled id _size _representative._filename _xmipp_classIntersectionSizePValue _xmipp_classIntersectionRelativeSizePValue'
+        labelRender = '_representative._filename'
+        return [ObjectView( self._project, classes.strId(), classes.getFileName(),
+                            viewParams={ORDER: labels,
+                                        VISIBLE: labels,
+                                        RENDER: labelRender,
+                                        SORT_BY: '_size desc',
+                                        MODE: MODE_MD})]
         

@@ -114,12 +114,13 @@ class XmippProtConsensusClasses(EMProtocol):
         np.save(self._getLinkageMatrixFilename(), linkage)
 
         for merged in merging[1:]: # Skip the first one as it is empty
-            self._createSetOfClasses(
+            outputClasses = self._createSetOfClasses(
                 classifications,
                 merged,
                 self._getMergedIntersectionSuffix(len(merged))
             )
-            
+
+            outputClasses.write()
     # --------------------------- INFO functions -------------------------------
     def _validate(self):
         errors = []
@@ -172,8 +173,11 @@ class XmippProtConsensusClasses(EMProtocol):
     def _getMergedIntersectionSuffix(self, numel: int) -> str:
         return 'merged_%06d' % numel
  
-    def _getOutputSqliteFilename(suffix: str) -> str:
-        return 'classes_%s.sqlite' % suffix
+    def _getOutputSqliteTemplate(self) -> str:
+        return 'classes_%s.sqlite'
+
+    def _getOutputSqliteFilename(self, suffix: str = '') -> str:
+        return self._getPath(self._getOutputSqliteTemplate() % suffix)
  
  
     
@@ -299,7 +303,8 @@ class XmippProtConsensusClasses(EMProtocol):
         # Create an empty set with the same images as the input classification
         result: SetOfClasses = self._EMProtocol__createSet( # HACK
             type(classifications[0]), 
-            self._getOutputSqliteFilename(suffix)
+            self._getOutputSqliteTemplate(),
+            suffix
         ) 
         result.setImages(classifications[0].getImages())
     
