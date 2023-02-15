@@ -31,9 +31,11 @@ import itertools
 
 from pwem.protocols import EMProtocol
 from pwem.objects import Pointer, Object, SetOfClasses, SetOfImages
+from pwem import emlib
 
 from pyworkflow.protocol.params import Form, MultiPointerParam
 from pyworkflow.constants import BETA
+from pyworkflow.object import Float
 
 from xmipp3.convert import setXmippAttribute
 
@@ -78,8 +80,8 @@ class XmippProtConsensusClasses(EMProtocol):
             sourceProbabilities, 
             intersectionProbabilities
         )
-        intersectionSizes = intersectionProbabilities * nImages
-        normalizedIntersectionSizes = normIntersectionProbabilities # No need to multiply
+        intersectionSizes = np.sort(intersectionProbabilities * nImages)
+        normalizedIntersectionSizes = np.sort(normIntersectionProbabilities) # No need to multiply
 
         # Write
         np.save(self._getReferenceIntersectionSizeFilename(), intersectionSizes)
@@ -90,11 +92,14 @@ class XmippProtConsensusClasses(EMProtocol):
         classes = self._getInputClassificationIds()
         intersections = self._calculateIntersections(classes)
         
-        
+        referenceSizes = np.load(self._getReferenceIntersectionSizeFilename())
+        referenceRelativeSizes = np.load(self._getReferenceIntersectionNormalizedSizeFilename())
         outputClasses = self._createSetOfClasses(
             classifications,
             intersections,
-            self._getMergedIntersectionSuffix(len(intersections))
+            self._getMergedIntersectionSuffix(len(intersections)),
+            referenceSizes,
+            referenceRelativeSizes
         )
         
         self._defineOutputs(outputClasses=outputClasses)
@@ -113,11 +118,15 @@ class XmippProtConsensusClasses(EMProtocol):
         # Create outputs
         np.save(self._getLinkageMatrixFilename(), linkage)
 
+        referenceSizes = np.load(self._getReferenceIntersectionSizeFilename())
+        referenceRelativeSizes = np.load(self._getReferenceIntersectionNormalizedSizeFilename())
         for merged in merging[1:]: # Skip the first one as it is empty
             outputClasses = self._createSetOfClasses(
                 classifications,
                 merged,
-                self._getMergedIntersectionSuffix(len(merged))
+                self._getMergedIntersectionSuffix(len(merged)),
+                referenceSizes,
+                referenceRelativeSizes
             )
 
             outputClasses.write()
@@ -280,6 +289,19 @@ class XmippProtConsensusClasses(EMProtocol):
             
         return merged
     
+    def _calculatePercentile(self, data: np.ndarray, value: float):
+            """ Given an array of values (data), finds the corresponding percentile of the value.
+                Percentile is returned in range [0, 1] """
+            assert(np.array_equal(sorted(data), data))  # In order to iterate it in ascending order
+
+            # Count the number of elements that are smaller than the given value
+            i = 0
+            while i < len(data) and data[i] < value:
+                i += 1
+
+            # Convert it into a percentage
+            return float(i) / float(len(data))
+    
     def _calculateClusterRepresentativeClass(self,
                                              cluster: Set[int],
                                              classifications: Iterable[SetOfClasses]):
@@ -298,7 +320,7 @@ class XmippProtConsensusClasses(EMProtocol):
                             clustering: Sequence[Set[int]], 
                             suffix: str,
                             referenceSizes=None, 
-                            referenceNormalizedSizes=None ):
+                            referenceRelativeSizes=None ):
 
         # Create an empty set with the same images as the input classification
         result: SetOfClasses = self._EMProtocol__createSet( # HACK
@@ -329,10 +351,19 @@ class XmippProtConsensusClasses(EMProtocol):
                 classifications
             )
             size = len(clustering[classIdx])
-            normalizedSize = size / len(representativeClass)
+            relativeSize = size / len(representativeClass)
             
             item.setRepresentative(representativeClass.getRepresentative())
-            #TODO set size percentiles
+            
+            if referenceSizes is not None:
+                sizePercentile = self._calculatePercentile(referenceSizes, size)
+                pValue = 1 - sizePercentile
+                setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
+                
+            if referenceRelativeSizes is not None:
+                relativeSizePercentile = self._calculatePercentile(referenceRelativeSizes, relativeSize)
+                pValue = 1 - relativeSizePercentile
+                setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE, Float(pValue))
 
         result.classifyItems(
             updateItemCallback=updateItem,

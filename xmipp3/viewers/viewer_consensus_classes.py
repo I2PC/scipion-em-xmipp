@@ -113,8 +113,7 @@ class XmippConsensusClassesViewer(ProtocolViewer):
         return [fig]
     
     def _showSetOfClasses3D(self, classes):
-        labels = 'enabled id _size _representative._filename'
-        #labels = 'enabled id _size _representative._filename _xmipp_classIntersectionSizePValue _xmipp_classIntersectionRelativeSizePValue'
+        labels = 'enabled id _size _representative._filename _xmipp_classIntersectionSizePValue _xmipp_classIntersectionRelativeSizePValue'
         labelRender = '_representative._filename'
         return [ObjectView( self._project, classes.strId(), classes.getFileName(),
                             viewParams={ORDER: labels,
