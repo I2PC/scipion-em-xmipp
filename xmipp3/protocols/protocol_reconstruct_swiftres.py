@@ -35,6 +35,7 @@ from pyworkflow.utils.path import (cleanPath, makePath, copyFile, moveFile,
 import xmipp3
 from xmipp3.convert import writeSetOfParticles, readSetOfParticles
 
+from typing import Iterable
 import math
 
 class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
@@ -76,13 +77,10 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                       help='Image comparison resolution limit at the first iteration of the refinement')
         form.addParam('maximumResolution', FloatParam, label="Maximum resolution (A)", default=8.0,
                       help='Image comparison resolution limit of the refinement')
-        form.addParam('nextResolutionCriterion', FloatParam, label="FSC criterion", default=0.5, expertLevel=LEVEL_ADVANCED,
+        form.addParam('nextResolutionCriterion', FloatParam, label="FSC criterion", default=0.5, 
+                      expertLevel=LEVEL_ADVANCED,
                       help='The resolution of the reconstruction is defined as the inverse of the frequency at which '\
                       'the FSC drops below this value. Typical values are 0.143 and 0.5' )
-        form.addParam('angularSampling', FloatParam, label="Angular sampling (º)", default=5.0,
-                      help='Angular sampling in the first iteration')
-        form.addParam('shiftCount', IntParam, label="Shifts", default=9,
-                      help='Number of shifts considered in each axis')
         form.addParam('initialMaxShift', FloatParam, label='Maximum shift (%)', default=10.0,
                       help='Maximum shift of the particle in terms of its size')
         form.addParam('reconstructPercentage', FloatParam, label='Reconstruct percentage (%)', default=50,
@@ -275,7 +273,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         for cls in range(1, self._getClassCount()):
             args = []
             args += ['-i', self._getGalleryMdFilename(iteration)]
-            args += ['--set', 'union', self._getClassGalleryMdFilename(iteration, cls)]
+            args += ['--set', 'union_all', self._getClassGalleryMdFilename(iteration, cls)]
             self._runMdUtils(args)
 
         # Reindex
@@ -299,6 +297,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--recipe', recipe]
         #args += ['--weights', self._getWeightsFilename(iteration)]
         args += ['--max_shift', maxShift]
+        args += ['--max_psi', maxPsi]
         args += ['--max_frequency', maxFrequency]
         args += ['--method', 'fourier']
         args += ['--training', trainingSize]
@@ -327,6 +326,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--index', self._getTrainingIndexFilename(iteration)]
         #args += ['--weights', self._getWeightsFilename(iteration)]
         args += ['--max_shift', maxShift]
+        args += ['--max_psi', maxPsi]
         args += ['--rotations', nRotations]
         args += ['--shifts', nShift]
         args += ['--max_frequency', maxFrequency]
@@ -360,13 +360,13 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args = []
         args += ['--ang1', self._getReconstructionMdFilename(iteration, cls)]
         args += ['--ang2', self._getInputIntersectionMdFilename(iteration, cls)]
-        args += ['--oroot', self._getAngleDiffOutputRoot(iteration, cls)]
+        args += ['--oroot', self._getReconstructionAngleDiffOutputRoot(iteration, cls)]
         args += ['--sym', self.symmetryGroup]
         self.runJob('xmipp_angular_distance', args, numberOfMpi=1)
         
         #args = []
         #args += ['-i', self._getReconstructionMdFilename(iteration, cls)]
-        #args += ['--set', 'join', self._getAngleDiffMdFilename(iteration, cls), 'itemId']
+        #args += ['--set', 'join', self._getReconstructionAngleDiffMdFilename(iteration, cls), 'itemId']
         #self._runMdUtils(args)
     
     def compareReprojectionStep(self, iteration: int, cls: int):
@@ -498,8 +498,22 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         # Merge subsequent alignments
         for cls in range(1, self._getClassCount()):
             args = []
-            args += ['-i', self._getAlignmentMdFilename()]
+            args += ['-i', self._getAlignmentMdFilename(iteration)]
             args += ['--set', 'union', self._getReconstructionMdFilename(iteration, cls)] #TODO consider using union_all
+            self._runMdUtils(args)
+    
+    def mergeAnglesStep(self, iteration: int):
+        # Copy the first alignment
+        copyFile(
+            self._getReconstructionAngleDiffMdFilename(iteration, 0), 
+            self._getAngleDiffMdFilename(iteration)
+        )
+        
+        # Merge subsequent alignments
+        for cls in range(1, self._getClassCount()):
+            args = []
+            args += ['-i', self._getAngleDiffMdFilename(iteration)]
+            args += ['--set', 'union', self._getReconstructionAngleDiffMdFilename(iteration, cls)] #TODO consider using union_all
             self._runMdUtils(args)
 
     def createOutputStep(self):
@@ -603,11 +617,14 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getInputIntersectionMdFilename(self, iteration: int, cls: int):
         return self._getClassPath(iteration, cls, 'input_intersection.xmd')
     
-    def _getAngleDiffOutputRoot(self, iteration: int, cls: int, suffix=''):
+    def _getReconstructionAngleDiffOutputRoot(self, iteration: int, cls: int, suffix=''):
         return self._getClassPath(iteration, cls, 'angles'+suffix)
 
-    def _getAngleDiffMdFilename(self, iteration: int, cls: int):
-        return self._getAngleDiffOutputRoot(iteration, cls, '.xmd')
+    def _getReconstructionAngleDiffMdFilename(self, iteration: int, cls: int):
+        return self._getReconstructionAngleDiffOutputRoot(iteration, cls, '.xmd')
+
+    def _getAngleDiffMdFilename(self, iteration: int):
+        return self._getIterationPath(iteration, 'angles.xmd')
 
     def _getReconstructionMdFilename(self, iteration: int, cls: int):
         return self._getClassPath(iteration, cls, 'aligned.xmd')
@@ -773,6 +790,19 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self._defineSourceRelation(self.inputVolumes, fscs)
         
         return fscs
+    
+    def _mergeMetadata(self, src: Iterable[str], dst: str):
+        it = iter(src)
+        
+        # Copy the first alignment
+        copyFile(next(it), dst)
+        
+        # Merge subsequent alignments
+        for s in it:
+            args = []
+            args += ['-i', dst]
+            args += ['--set', 'union_all', s] 
+            self._runMdUtils(args)
     
     def _runMdUtils(self, args):
         self.runJob('xmipp_metadata_utilities', args, numberOfMpi=1)
