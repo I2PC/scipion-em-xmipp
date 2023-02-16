@@ -140,18 +140,18 @@ class XmippProtConsensusClasses(EMProtocol):
         }
 
     # --------------------------- INFO functions -------------------------------
+    """
     def _validate(self):
         errors = []
 
         # Ensure that all classifications are made of the same images
-        """
         items = self._getInputImages(0)
         for i in range(1, len(self.inputClassifications)):
             if self._getInputImages(i) != items:
                 errors.append(f'Classification {i} has been done with different images')
-        """
 
         return errors
+    """
     
     # --------------------------- UTILS functions ------------------------------
     def _getInputClassificationCount(self) -> int:
