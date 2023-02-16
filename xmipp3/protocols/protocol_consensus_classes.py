@@ -319,9 +319,8 @@ class XmippProtConsensusClasses(ProtClassify3D):
         
         allClasses = itertools.chain(*classifications)
             
-        def computeSimilarity(cls: SetOfImages) -> float:
-            objIds = cls.getIdSet()
-            return self._calculateClusterSimilarity(cluster, objIds)
+        def computeSimilarity(items: SetOfImages) -> float:
+            return self._calculateClusterSimilarity(cluster, items.getIdSet())
             
         return max(allClasses, key=computeSimilarity)
     
