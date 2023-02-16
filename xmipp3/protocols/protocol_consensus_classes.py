@@ -69,7 +69,7 @@ class XmippProtConsensusClasses(EMProtocol):
         self._insertFunctionStep('referenceIntersectionStep')
         self._insertFunctionStep('intersectStep')
         self._insertFunctionStep('mergeStep')
-        #self._insertFunctionStep('createOutputStep')
+        self._insertFunctionStep('findElbowsStep')
 
     def referenceIntersectionStep(self):
         sizes = self._getInputClassificationSizes()
@@ -130,6 +130,15 @@ class XmippProtConsensusClasses(EMProtocol):
             )
 
             outputClasses.write()
+
+    def findElbowsStep(self):
+        linkage = np.load(self._getLinkageMatrixFilename())
+        cost = linkage[:,3]
+        
+        elbows = {
+            'profile_likelihood': self._calculateElbowProfileLikelihood(cost)
+        }
+
     # --------------------------- INFO functions -------------------------------
     def _validate(self):
         errors = []
@@ -313,6 +322,40 @@ class XmippProtConsensusClasses(EMProtocol):
             return self._calculateClusterSimilarity(cluster, objIds)
             
         return max(allClasses, key=computeSimilarity)
+    
+    def _calculateProfileLogLikelihood(self, d, q):
+        """ Profile log likelihood for given parameters """
+        # Partition the function in q
+        d1 = d[:q]
+        d2 = d[q:]
+        
+        # Compute the average and mean of each partition
+        mu1 = np.mean(d1)
+        mu2 = np.mean(d2)
+        sigma1 = np.std(d1)
+        sigma2 = np.std(d2)
+        sigma = (len(d1)*sigma1 + len(d2)*sigma2) / (len(d1) + len(d2)) # Weighted average
+        
+        # Compute the log likelihood
+        logLikelihoods1 = np.log(scipy.stats.norm.pdf(d1, mu1, sigma))
+        logLikelihoods2 = np.log(scipy.stats.norm.pdf(d2, mu2, sigma))
+        logLikelihood = np.sum(logLikelihoods1) + np.sum(logLikelihoods2)
+        
+        return logLikelihood
+    
+    def _calculateProfileLogLikelihoods(self, cost):
+        """ Calculate profile log likelihood for each partition
+            of the data """
+        result = np.empty(len(cost) - 1)
+
+        for i in range(len(result)):
+            result[i] = self._calculateProfileLogLikelihood(cost, i+1)
+        
+        return np.array(result)
+    
+    def _calculateElbowProfileLikelihood(self, cost):
+        f = self._calculateProfileLogLikelihoods(cost)
+        return len(f) - np.argmax(f) + 1
     
     # -------------------------- Convert functions -----------------------------
     def _createSetOfClasses(self, 
