@@ -57,13 +57,16 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                        help="Add a list of GPU devices that can be used")
         
         form.addSection(label='Input')
-        form.addParam('inputParticles', PointerParam, label="Particles", important=True,
+        form.addParam('inputParticles', PointerParam, label='Particles', important=True,
                       pointerClass='SetOfParticles',
                       help='Input particle set')
-        form.addParam('inputVolumes', MultiPointerParam, label="Initial volumes", important=True,
-                      pointerClass='Volume',
+        form.addParam('considerInputAlignment', BooleanParam, label='Consider previous alignment',
+                      default=True,
+                      help='Consider the alignment of input particles')
+        form.addParam('inputVolumes', MultiPointerParam, label='Initial volumes', important=True,
+                      pointerClass='Volume', minNumObjects=1,
                       help='Provide a volume for each class of interest')
-        form.addParam('symmetryGroup', StringParam, default="c1",
+        form.addParam('symmetryGroup', StringParam, default='c1',
                       label='Symmetry group',
                       help='If no symmetry is present, give c1')
         
@@ -80,7 +83,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                       help='Angular sampling in the first iteration')
         form.addParam('shiftCount', IntParam, label="Shifts", default=9,
                       help='Number of shifts considered in each axis')
-        form.addParam('initialMaxShift', FloatParam, label="Maximum shift (%)", default=10.0,
+        form.addParam('initialMaxShift', FloatParam, label='Maximum shift (%)', default=10.0,
                       help='Maximum shift of the particle in terms of its size')
         form.addParam('reconstructPercentage', FloatParam, label='Reconstruct percentage (%)', default=50,
                       help='Percentage of best particles used for reconstruction')
@@ -249,8 +252,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--perturb', perturb]
         args += ['--sym', self.symmetryGroup]
         
-        if False: # TODO
-        #if iteration > 0:
+        if False: # TODO speak with coss
             args += ['--compute_neighbors']
             args += ['--angular_distance', -1]    
             args += ['--experimental_images', self._getIterationInputParticleMdFilename(iteration)]
@@ -260,6 +262,26 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args = []
         args += ['-i', self._getClassGalleryMdFilename(iteration, cls)]
         args += ['--fill', 'ref3d', 'constant', cls+1]
+        self._runMdUtils(args)
+    
+    def mergeGalleriesStep(self, iteration):
+        # Copy the first gallery
+        copyFile(
+            self._getClassGalleryMdFilename(iteration, 0), 
+            self._getGalleryMdFilename(iteration)
+        )
+        
+        # Merge subsequent galleries
+        for cls in range(1, self._getClassCount()):
+            args = []
+            args += ['-i', self._getGalleryMdFilename(iteration)]
+            args += ['--set', 'union', self._getClassGalleryMdFilename(iteration, cls)]
+            self._runMdUtils(args)
+
+        # Reindex
+        args = []
+        args += ['-i', self._getGalleryMdFilename(iteration)]
+        args += ['--fill', 'ref', 'lineal', 1, 1]
         self._runMdUtils(args)
     
     def trainDatabaseStep(self, iteration: int):
@@ -754,5 +776,3 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     def _runMdUtils(self, args):
         self.runJob('xmipp_metadata_utilities', args, numberOfMpi=1)
-        
-    
