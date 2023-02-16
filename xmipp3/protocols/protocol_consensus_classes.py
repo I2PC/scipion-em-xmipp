@@ -29,7 +29,7 @@
 from typing import Iterable, Sequence, Optional, List, Set
 import itertools
 
-from pwem.protocols import EMProtocol
+from pwem.protocols import ProtClassify3D
 from pwem.objects import Pointer, Object, SetOfClasses, SetOfImages
 from pwem import emlib
 
@@ -44,7 +44,7 @@ import scipy.stats
 import scipy.cluster
 import scipy.spatial
 
-class XmippProtConsensusClasses(EMProtocol):
+class XmippProtConsensusClasses(ProtClassify3D):
     """ Compare several SetOfClasses.
         Return the consensus clustering based on a objective function
         that uses the similarity between clusters intersections and
@@ -54,7 +54,7 @@ class XmippProtConsensusClasses(EMProtocol):
     _devStatus = BETA
 
     def __init__(self, *args, **kwargs):
-        EMProtocol.__init__(self, *args, **kwargs)
+        ProtClassify3D.__init__(self, *args, **kwargs)
         
     def _defineParams(self, form: Form):
         # Input data
