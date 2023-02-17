@@ -317,12 +317,37 @@ class XmippProtConsensusClasses(ProtClassify3D):
                                              cluster: Set[int],
                                              classifications: Iterable[SetOfClasses]):
         
-        allClasses = itertools.chain(*classifications)
-            
         def computeSimilarity(items: SetOfImages) -> float:
             return self._calculateClusterSimilarity(cluster, items.getIdSet())
-            
-        return max(allClasses, key=computeSimilarity)
+
+        def iterClasses():
+            return itertools.chain(*classifications)
+         
+        """ 
+        #allClasses = itertools.chain(*classifications)
+        #return max(allClasses, key=computeSimilarity)
+        
+        best = None
+        for classification in classifications:
+            for cls in classification:
+                sim = computeSimilarity(cls)
+                
+                print(len(cls))  
+                if (best is None) or (best[1] < sim):
+                    best = (cls.clone(), sim)
+                
+        return best[0]
+        """
+        
+        similarities = np.array(list(map(computeSimilarity, iterClasses())))
+        index = np.argmax(similarities)
+
+        # FIXME avoid iterating twice
+        it = iterClasses()
+        for _ in range(index):
+            next(it)
+        
+        return next(it)
     
     def _calculateProfileLogLikelihood(self, d, q):
         """ Profile log likelihood for given parameters """
@@ -397,7 +422,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
             size = len(clustering[classIdx])
             relativeSize = size / len(representativeClass)
             
-            item.setRepresentative(representativeClass.getRepresentative())
+            item.setRepresentative(representativeClass.getRepresentative().clone())
             
             if referenceSizes is not None:
                 sizePercentile = self._calculatePercentile(referenceSizes, size)
