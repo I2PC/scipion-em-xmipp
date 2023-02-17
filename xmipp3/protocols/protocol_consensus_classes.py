@@ -40,6 +40,7 @@ from pyworkflow.object import Float
 
 from xmipp3.convert import setXmippAttribute
 
+import json
 import numpy as np
 import scipy.stats
 import scipy.cluster
@@ -83,7 +84,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
         self._insertFunctionStep('referenceIntersectionStep')
         self._insertFunctionStep('intersectStep')
         self._insertFunctionStep('mergeStep')
-        #self._insertFunctionStep('findElbowsStep')
+        self._insertFunctionStep('findElbowsStep')
 
     def referenceIntersectionStep(self):
         sizes = self._getInputClassificationSizes()
@@ -156,6 +157,9 @@ class XmippProtConsensusClasses(ProtClassify3D):
         elbows = {
             'profile_likelihood': self._calculateElbowProfileLikelihood(cost)
         }
+        
+        with open(self._getElbowsFilename(), 'w') as f:
+            f.write(json.dumps(elbows))
 
     # --------------------------- INFO functions -------------------------------
     """
@@ -210,6 +214,9 @@ class XmippProtConsensusClasses(ProtClassify3D):
 
     def _getLinkageMatrixFilename(self) -> str:
         return self._getExtraPath('linkage.npy')
+
+    def _getElbowsFilename(self) -> str:
+        return self._getExtraPath('elbows.json')
 
     def _getMergedIntersectionSuffix(self, numel: int) -> str:
         return 'merged_%06d' % numel
@@ -379,7 +386,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
     
     def _calculateElbowProfileLikelihood(self, cost):
         f = self._calculateProfileLogLikelihoods(cost)
-        return len(f) - np.argmax(f) + 1
+        return len(f) - int(np.argmax(f)) + 1
     
     # -------------------------- Convert functions -----------------------------
     def _createSetOfClasses(self, 
