@@ -30,7 +30,7 @@ This module implement the wrappers around
 visualization program.
 """
 from pyworkflow.viewer import (ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO)
-from pyworkflow.protocol.params import LabelParam, IntParam
+from pyworkflow.protocol.params import Form, Line, LabelParam, IntParam
 from pyworkflow.protocol.params import GE
 
 from pwem.viewers.showj import *
@@ -41,6 +41,7 @@ from xmipp3.protocols.protocol_consensus_classes import XmippProtConsensusClasse
 
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy.spatial
 import scipy.cluster
 
 class XmippConsensusClassesViewer(ProtocolViewer):
@@ -53,7 +54,7 @@ class XmippConsensusClassesViewer(ProtocolViewer):
     def __init__(self, **kwargs):
         ProtocolViewer.__init__(self, **kwargs)
 
-    def _defineParams(self, form):
+    def _defineParams(self, form: Form):
         form.addSection(label='Classes')
         form.addParam('visualizeClasses', IntParam,
                       validators=[GE(1)], default=1,
@@ -64,18 +65,26 @@ class XmippConsensusClassesViewer(ProtocolViewer):
                        label='Dendrogram' )
         form.addParam('visualizeCostFunction', LabelParam,
                        label='Cost function' )
+        form.addParam('visualizeIntersectionDistanceMatrix', LabelParam, label='Intersection Distance Matrix')
 
 
     def _getVisualizeDict(self):
         return {
             'visualizeClasses': self._visualizeClasses,
             'visualizeDendrogram': self._visualizeDendrogram,
-            'visualizeCostFunction': self._visualizeCostFunction
+            'visualizeCostFunction': self._visualizeCostFunction,
+            'visualizeIntersectionDistanceMatrix': self._visualizeIntersectionDistanceMatrix
         }
     
     # --------------------------- UTILS functions ------------------------------
     def _getLinkageMatrix(self) -> np.ndarray:
         return np.load(self.protocol._getLinkageMatrixFilename())
+    
+    def _getIntersectionDistances(self) -> np.ndarray:
+        return np.load(self.protocol._getIntersectionDistancesFilename())
+    
+    def _getIntersectionDistanceMatrix(self) -> np.ndarray:
+        return scipy.spatial.distance.squareform(self._getIntersectionDistances(), 'tomatrix')
     
     def _getMergedIntersections(self, size) -> SetOfClasses:
         t = type(self.protocol._getInputClassification(0))
@@ -97,6 +106,7 @@ class XmippConsensusClassesViewer(ProtocolViewer):
         scipy.cluster.hierarchy.dendrogram(linkage, ax=ax, labels=labels)
         ax.set_ylabel('cost')
         ax.set_xlabel('classId')
+        ax.set_title('Dendrogram')
         
         return [fig]
         
@@ -109,8 +119,19 @@ class XmippConsensusClassesViewer(ProtocolViewer):
         ax.plot(x, y)
         ax.set_ylabel('cost')
         ax.set_xlabel('class count')
+        ax.set_title('Cost function')
         
         return [fig]
+    
+    def _visualizeIntersectionDistanceMatrix(self, param=None):
+        matrix = self._getIntersectionDistanceMatrix()
+        
+        fig, ax = plt.subplots()
+        ax.imshow(matrix)
+        ax.set_title('Intersection distances')
+        
+        return [fig]
+    
     
     def _showSetOfClasses3D(self, classes):
         labels = 'enabled id _size _representative._filename _xmipp_classIntersectionSizePValue _xmipp_classIntersectionRelativeSizePValue'

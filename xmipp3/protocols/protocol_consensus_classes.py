@@ -33,7 +33,8 @@ from pwem.protocols import ProtClassify3D
 from pwem.objects import Pointer, Object, SetOfClasses, SetOfImages
 from pwem import emlib
 
-from pyworkflow.protocol.params import Form, MultiPointerParam
+from pyworkflow.protocol.params import Form, MultiPointerParam, EnumParam
+from pyworkflow.protocol import LEVEL_ADVANCED
 from pyworkflow.constants import BETA
 from pyworkflow.object import Float
 
@@ -43,6 +44,10 @@ import numpy as np
 import scipy.stats
 import scipy.cluster
 import scipy.spatial
+from scipy.spatial.distance import _METRICS_NAMES
+from scipy.cluster.hierarchy import _LINKAGE_METHODS
+
+_LINKAGE_METHODS_NAMES = list(_LINKAGE_METHODS.keys())
 
 class XmippProtConsensusClasses(ProtClassify3D):
     """ Compare several SetOfClasses.
@@ -63,6 +68,15 @@ class XmippProtConsensusClasses(ProtClassify3D):
                       label="Input classes", important=True,
                       help='Select several sets of classes where to evaluate the '
                            'intersections.')
+        
+        form.addSection(label='Clustering', expertLevel=LEVEL_ADVANCED)
+        form.addParam('distanceMetric', EnumParam, label='Metric',
+                      choices=_METRICS_NAMES, default=5,
+                      help='Distance metric used when comparing clusters')
+        form.addParam('linkageMethod', EnumParam, label='Method',
+                      choices=_LINKAGE_METHODS_NAMES, default=0,
+                      help='Linkage method used when clustering intersections')
+        
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
@@ -111,11 +125,15 @@ class XmippProtConsensusClasses(ProtClassify3D):
         allClasses = list(itertools.chain(*classes))
         intersections = self._getOutputIntersectionIds()
         
+        metric = _METRICS_NAMES[int(self.distanceMetric)]
+        method = _LINKAGE_METHODS_NAMES[int(self.linkageMethod)]
         similarity = self._calculateClusterSimilarityMatrix(intersections, allClasses)
-        linkage = self._calculateLinkageMatrix(similarity)
+        distances = scipy.spatial.distance.pdist(similarity, metric=metric) 
+        linkage = scipy.cluster.hierarchy.linkage(distances, method=method)
         merging = self._calculateMergedIntersections(intersections, linkage)
 
         # Create outputs
+        np.save(self._getIntersectionDistancesFilename(), distances)
         np.save(self._getLinkageMatrixFilename(), linkage)
 
         referenceSizes = np.load(self._getReferenceIntersectionSizeFilename())
@@ -187,6 +205,9 @@ class XmippProtConsensusClasses(ProtClassify3D):
     def _getReferenceIntersectionNormalizedSizeFilename(self) -> str:
         return self._getExtraPath('reference_norm_sizes.npy')
     
+    def _getIntersectionDistancesFilename(self) -> str:
+        return self._getExtraPath('intersenction_distances.npy')
+
     def _getLinkageMatrixFilename(self) -> str:
         return self._getExtraPath('linkage.npy')
 
@@ -267,13 +288,6 @@ class XmippProtConsensusClasses(ProtClassify3D):
 
         return result
     
-    def _calculateLinkageMatrix(self, points: np.ndarray) -> np.ndarray:
-        return scipy.cluster.hierarchy.linkage(
-            points,
-            method='single',
-            metric='cosine'
-        )
-
     def _calculateMergedIntersections(self, 
                                       intersections: List[Set[int]],
                                       linkage: np.ndarray ):
@@ -323,22 +337,6 @@ class XmippProtConsensusClasses(ProtClassify3D):
         def iterClasses():
             return itertools.chain(*classifications)
          
-        """ 
-        #allClasses = itertools.chain(*classifications)
-        #return max(allClasses, key=computeSimilarity)
-        
-        best = None
-        for classification in classifications:
-            for cls in classification:
-                sim = computeSimilarity(cls)
-                
-                print(len(cls))  
-                if (best is None) or (best[1] < sim):
-                    best = (cls.clone(), sim)
-                
-        return best[0]
-        """
-        
         similarities = np.array(list(map(computeSimilarity, iterClasses())))
         index = np.argmax(similarities)
 
