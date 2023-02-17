@@ -263,18 +263,10 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self._runMdUtils(args)
     
     def mergeGalleriesStep(self, iteration):
-        # Copy the first gallery
-        copyFile(
-            self._getClassGalleryMdFilename(iteration, 0), 
+        self._mergeMetadata(
+            map(lambda cls : self._getClassGalleryMdFilename(iteration, cls), range(self._getClassCount())),
             self._getGalleryMdFilename(iteration)
         )
-        
-        # Merge subsequent galleries
-        for cls in range(1, self._getClassCount()):
-            args = []
-            args += ['-i', self._getGalleryMdFilename(iteration)]
-            args += ['--set', 'union_all', self._getClassGalleryMdFilename(iteration, cls)]
-            self._runMdUtils(args)
 
         # Reindex
         args = []
@@ -489,32 +481,16 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob('xmipp_transform_filter', args, numberOfMpi=1)
     
     def mergeAlignmentsStep(self, iteration: int):
-        # Copy the first alignment
-        copyFile(
-            self._getReconstructionMdFilename(iteration, 0), 
+        self._mergeMetadata(
+            map(lambda cls : self._getReconstructionMdFilename(iteration, cls), range(self._getClassCount())),
             self._getAlignmentMdFilename(iteration)
         )
-        
-        # Merge subsequent alignments
-        for cls in range(1, self._getClassCount()):
-            args = []
-            args += ['-i', self._getAlignmentMdFilename(iteration)]
-            args += ['--set', 'union', self._getReconstructionMdFilename(iteration, cls)] #TODO consider using union_all
-            self._runMdUtils(args)
     
     def mergeAnglesStep(self, iteration: int):
-        # Copy the first alignment
-        copyFile(
-            self._getReconstructionAngleDiffMdFilename(iteration, 0), 
+        self._mergeMetadata(
+            map(lambda cls : self._getReconstructionAngleDiffMdFilename(iteration, cls), range(self._getClassCount())),
             self._getAngleDiffMdFilename(iteration)
         )
-        
-        # Merge subsequent alignments
-        for cls in range(1, self._getClassCount()):
-            args = []
-            args += ['-i', self._getAngleDiffMdFilename(iteration)]
-            args += ['--set', 'union', self._getReconstructionAngleDiffMdFilename(iteration, cls)] #TODO consider using union_all
-            self._runMdUtils(args)
 
     def createOutputStep(self):
         lastIteration = int(self.numberOfIterations) - 1
