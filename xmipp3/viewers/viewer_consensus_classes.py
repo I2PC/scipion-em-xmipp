@@ -105,10 +105,20 @@ class XmippConsensusClassesViewer(ProtocolViewer):
         
     def _visualizeDendrogram(self, param=None):
         linkage = self._getLinkageMatrix()
+        elbows = self._getElbows()
         labels = np.arange(1, len(linkage)+2)
+        y = linkage[:,2]
         
         fig, ax = plt.subplots()
         scipy.cluster.hierarchy.dendrogram(linkage, ax=ax, labels=labels)
+        
+        # Plot the elbows
+        for key, value in elbows.items():
+            index = len(y) - value
+            label = key + ': ' + str(value)
+            ax.axhline((y[index] + y[index+1])/2, label=label)
+        
+        ax.legend()
         ax.set_ylabel('cost')
         ax.set_xlabel('classId')
         ax.set_title('Dendrogram')
