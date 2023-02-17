@@ -39,6 +39,7 @@ from pwem.objects import SetOfClasses
 
 from xmipp3.protocols.protocol_consensus_classes import XmippProtConsensusClasses
 
+import json
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.spatial
@@ -86,6 +87,10 @@ class XmippConsensusClassesViewer(ProtocolViewer):
     def _getIntersectionDistanceMatrix(self) -> np.ndarray:
         return scipy.spatial.distance.squareform(self._getIntersectionDistances(), 'tomatrix')
     
+    def _getElbows(self):
+        with open(self.protocol._getElbowsFilename()) as f:
+            return json.load(f)
+    
     def _getMergedIntersections(self, size) -> SetOfClasses:
         t = type(self.protocol._getInputClassification(0))
         print(t)
@@ -112,11 +117,20 @@ class XmippConsensusClassesViewer(ProtocolViewer):
         
     def _visualizeCostFunction(self, param=None):
         linkage = self._getLinkageMatrix()
+        elbows = self._getElbows()
         y = linkage[:,2]
         x = np.arange(len(y), 0, -1)
         
         fig, ax = plt.subplots()
         ax.plot(x, y)
+        
+        # Plot the elbows
+        for key, value in elbows.items():
+            index = len(x) - value
+            label = key + ': ' + str(value)
+            ax.scatter([x[index]], [y[index]], label=label)
+        
+        ax.legend()
         ax.set_ylabel('cost')
         ax.set_xlabel('class count')
         ax.set_title('Cost function')
