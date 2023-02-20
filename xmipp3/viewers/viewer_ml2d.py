@@ -33,6 +33,7 @@ import os
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import LabelParam
 from pyworkflow.protocol.params import EnumParam, StringParam
+import pyworkflow.utils as pwutils
 from pwem.viewers import ClassesView
 from xmipp3.protocols.protocol_ml2d import XmippProtML2D
 
@@ -106,7 +107,7 @@ class XmippML2DViewer(ProtocolViewer):
                 viewFinalClasses = True
             iterations = [self.protocol._lastIteration()]
         else:
-            iterations = self._getListFromRangeString(self.iterSelection.get())
+            iterations = pwutils.getListFromRangeString(self.iterSelection.get())
         
         views = []
         

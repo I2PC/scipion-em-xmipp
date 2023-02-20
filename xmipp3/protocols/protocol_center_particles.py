@@ -51,7 +51,7 @@ class XmippProtCenterParticles(ProtClassify2D):
                       pointerClass='SetOfClasses2D',
                       important=True,
                       label="Input Classes",
-                      help='Set of classes to be realing')
+                      help='Set of classes to be read')
         form.addParam('inputMics', params.PointerParam,
                       pointerClass='SetOfMicrographs',
                       important=True,
@@ -120,7 +120,7 @@ class XmippProtCenterParticles(ProtClassify2D):
                 mdClass = md.MetaData(block + "@" + inputMdName)
                 mdNewClass = md.MetaData()
                 i += 1
-                j = 0
+                flag_psi = True
                 for rowIn in md.iterRows(mdClass):
                     #To create the transformation matrix (and its parameters)
                     #  for the realigned particles
@@ -156,7 +156,6 @@ class XmippProtCenterParticles(ProtClassify2D):
                         md.MDL_YCOOR)+int(centerPoint[1]))
 
                     rowOut.addToMd(mdNewClass)
-                    j += 1
 
                 mdNewClass.write(block + "@" + self._getExtraPath(
                     'final_classes.xmd'), MD_APPEND)
@@ -175,7 +174,7 @@ class XmippProtCenterParticles(ProtClassify2D):
 
     def createOutputStep(self):
         inputParticles = self.inputClasses.get().getImages()
-        outputClasses = self._createSetOfClasses2D(inputParticles)
+        outputClasses = self._createSetOfClasses2D(self.inputClasses.get().getImagesPointer())
         self._fillClasses(outputClasses)
         result = {'outputClasses': outputClasses}
         self._defineOutputs(**result)
@@ -253,9 +252,9 @@ class XmippProtCenterParticles(ProtClassify2D):
     def _validate(self):
         errors = []
         try:
-            self.inputClasses.get().getImages().getAcquisition()
+            self.inputClasses.get().getImages()
         except AttributeError:
-            errors.append('InputClasses has not clases')
+            errors.append('Try and catch InputClasses has no particles.')
 
         return errors
 

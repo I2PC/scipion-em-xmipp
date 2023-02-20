@@ -28,6 +28,7 @@
 # **************************************************************************
 
 import pyworkflow.protocol.constants as const
+from pwem.convert.headers import setMRCSamplingRate
 from pyworkflow.protocol.params import (BooleanParam, EnumParam, FloatParam,
                                         IntParam)
 from pwem.objects import Volume
@@ -273,6 +274,7 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
         
         if self.doResize:
             output.setSamplingRate(self.samplingRate)
+            setMRCSamplingRate(self.outputStk, self.samplingRate)
             
     def _updateItem(self, item, row):
         """ Update also the sampling rate and 
@@ -398,31 +400,32 @@ class XmippProtCropResizeVolumes(XmippProcessVolumes):
         XmippResizeHelper.windowStep(self, self._ioArgs(isFirstStep)+args)
         
     def _preprocessOutput(self, volumes):
-        # We use the preprocess only whne input is a set
+        # We use the preprocess only when input is a set
         # we do not use postprocess to setup correctly
         # the samplingRate before each volume is added
         if not self._isSingleInput():
             if self.doResize:
                 volumes.setSamplingRate(self.samplingRate)
 
-    def _postprocessOutput(self, volumes):
+    def _postprocessOutput(self, volume:Volume):
         # We use the postprocess only when input is a volume
         if self._isSingleInput():
             if self.doResize:
-                volumes.setSamplingRate(self.samplingRate)
+                volume.setSamplingRate(self.samplingRate)
                 # we have a new sampling so origin need to be adjusted
                 iSampling = self.inputVolumes.get().getSamplingRate()
                 oSampling = self.samplingRate
                 xdim_i, ydim_i, zdim_i = self.inputVolumes.get().getDim()
-                xdim_o, ydim_o, zdim_o = volumes.getDim()
+                xdim_o, ydim_o, zdim_o = volume.getDim()
 
                 xOrig, yOrig , zOrig = \
                     self.inputVolumes.get().getShiftsFromOrigin()
                 xOrig += (xdim_i*iSampling-xdim_o*oSampling)/2.
                 yOrig += (ydim_i*iSampling-ydim_o*oSampling)/2.
                 zOrig += (zdim_i*iSampling-zdim_o*oSampling)/2.
-                volumes.setShiftsInOrigin(xOrig, yOrig, zOrig)
-                volumes.setSamplingRate(oSampling)
+                volume.setShiftsInOrigin(xOrig, yOrig, zOrig)
+                volume.setSamplingRate(oSampling)
+                setMRCSamplingRate(volume.getFileName(), oSampling)
 
     #--------------------------- INFO functions ----------------------------------------------------
     def _summary(self):

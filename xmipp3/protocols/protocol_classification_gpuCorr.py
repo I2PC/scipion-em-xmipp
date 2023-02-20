@@ -201,9 +201,7 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
 
 
     def createOutputStep(self):
-
-        inputParticles = self.inputParticles.get()
-        classes2DSet = self._createSetOfClasses2D(inputParticles)
+        classes2DSet = self._createSetOfClasses2D(self.inputParticles)
         self._fillClassesFromLevel(classes2DSet)
         result = {'outputClasses': classes2DSet}
         self._defineOutputs(**result)
@@ -786,8 +784,6 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                                   'have different sizes' % (x2, y2, x1, y1))
             else:
                 errors.append("Please, enter the reference images")
-        if not isXmippCudaPresent("xmipp_cuda_correlation"):
-            errors.append("I cannot find the Xmipp GPU programs in the path")
 
         return errors
 

@@ -26,7 +26,7 @@ from pwem.tests.workflows import TestWorkflow
 from pyworkflow.tests import setupTestProject, DataSet
 from continuousflex.protocols import (FlexProtNMA, FlexProtSynthesizeSubtomo, FlexProtSynthesizeImages, NMA_CUTOFF_ABS,
                                       FlexProtAlignmentNMA, FlexProtSubtomogramAveraging)
-from continuousflex.protocols.protocol_subtomogrmas_synthesize import MODE_RELATION_3CLUSTERS
+from continuousflex.protocols.protocol_subtomograms_synthesize import MODE_RELATION_3CLUSTERS
 
 
 class TestContinuousFlexBasics(TestWorkflow):
