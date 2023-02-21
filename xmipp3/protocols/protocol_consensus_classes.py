@@ -40,6 +40,7 @@ from pyworkflow.object import Float
 
 from xmipp3.convert import setXmippAttribute
 
+import os
 import json
 import numpy as np
 import scipy.stats
@@ -121,7 +122,6 @@ class XmippProtConsensusClasses(ProtClassify3D):
         self._defineSourceRelation(self.inputClassifications, outputClasses)
 
     def mergeStep(self):
-        classifications = self._getInputClassifications()
         classes = self._getInputClassificationIds()
         allClasses = list(itertools.chain(*classes))
         intersections = self._getOutputIntersectionIds()
@@ -131,24 +131,10 @@ class XmippProtConsensusClasses(ProtClassify3D):
         similarity = self._calculateClusterSimilarityMatrix(intersections, allClasses)
         distances = scipy.spatial.distance.pdist(similarity, metric=metric) 
         linkage = scipy.cluster.hierarchy.linkage(distances, method=method)
-        merging = self._calculateMergedIntersections(intersections, linkage)
 
         # Create outputs
         np.save(self._getIntersectionDistancesFilename(), distances)
         np.save(self._getLinkageMatrixFilename(), linkage)
-
-        referenceSizes = np.load(self._getReferenceIntersectionSizeFilename())
-        referenceRelativeSizes = np.load(self._getReferenceIntersectionNormalizedSizeFilename())
-        for merged in merging[1:]: # Skip the first one as it is empty
-            outputClasses = self._createSetOfClasses(
-                classifications,
-                merged,
-                self._getMergedIntersectionSuffix(len(merged)),
-                referenceSizes,
-                referenceRelativeSizes
-            )
-
-            outputClasses.write()
 
     def findElbowsStep(self):
         linkage = np.load(self._getLinkageMatrixFilename())
@@ -199,6 +185,9 @@ class XmippProtConsensusClasses(ProtClassify3D):
 
     def _getInputImages(self, classification: int = 0) -> SetOfImages:
         return self._getInputClassification(classification).getImages()
+ 
+    def _getSetOfClassesSubtype(self) -> type:
+        return type(self._getInputClassification(0))
  
     def _getOutputIntersectionIds(self):
         return list(map(SetOfImages.getIdSet, self.outputClasses))
@@ -297,7 +286,8 @@ class XmippProtConsensusClasses(ProtClassify3D):
     
     def _calculateMergedIntersections(self, 
                                       intersections: List[Set[int]],
-                                      linkage: np.ndarray ):
+                                      linkage: np.ndarray,
+                                      stop: int = 1):
         merged = [intersections]
         clusters = intersections.copy()
         
@@ -318,6 +308,10 @@ class XmippProtConsensusClasses(ProtClassify3D):
                     mergedNew.append(cluster)
             
             merged.append(mergedNew)
+
+            # Stop
+            if len(mergedNew) <= stop:
+                break
             
         return merged
     
@@ -388,6 +382,36 @@ class XmippProtConsensusClasses(ProtClassify3D):
         f = self._calculateProfileLogLikelihoods(cost)
         return len(f) - int(np.argmax(f)) + 1
     
+    def _obtainMergedIntersections(self, n: int) -> SetOfClasses:
+        suffix = self._getMergedIntersectionSuffix(n)
+        filename = self._getOutputSqliteFilename(suffix)
+    
+        if os.path.exists(filename):
+            SetOfClassesSubtype = self._getSetOfClassesSubtype()
+            return SetOfClassesSubtype(filename=filename)
+            
+        else:
+            # Load from input
+            classifications = self._getInputClassifications()
+            intersections = self._getOutputIntersectionIds()
+            linkage = np.load(self._getLinkageMatrixFilename())
+            referenceSizes = np.load(self._getReferenceIntersectionSizeFilename())
+            referenceRelativeSizes = np.load(self._getReferenceIntersectionNormalizedSizeFilename())
+            
+            # Merge and create the set of classes
+            merging = self._calculateMergedIntersections(intersections, linkage, stop=n)
+            merged = merging[-1]
+            outputClasses = self._createSetOfClasses(
+                classifications=classifications,
+                clustering=merged,
+                suffix=suffix,
+                referenceSizes=referenceSizes,
+                referenceRelativeSizes=referenceRelativeSizes
+            )
+
+            outputClasses.write()
+            return outputClasses
+        
     # -------------------------- Convert functions -----------------------------
     def _createSetOfClasses(self, 
                             classifications: Sequence[SetOfClasses],
@@ -398,7 +422,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
 
         # Create an empty set with the same images as the input classification
         result: SetOfClasses = self._EMProtocol__createSet( # HACK
-            type(classifications[0]), 
+            self._getSetOfClassesSubtype(), 
             self._getOutputSqliteTemplate(),
             suffix
         ) 

@@ -92,11 +92,7 @@ class XmippConsensusClassesViewer(ProtocolViewer):
             return json.load(f)
     
     def _getMergedIntersections(self, size) -> SetOfClasses:
-        t = type(self.protocol._getInputClassification(0))
-        print(t)
-        suffix = self.protocol._getMergedIntersectionSuffix(size)
-        filename =  self.protocol._getOutputSqliteFilename(suffix)
-        return t(filename=filename)
+        return self.protocol._obtainMergedIntersections(size)
     
     def _visualizeClasses(self, param=None):
         count = self.visualizeClasses.get()
