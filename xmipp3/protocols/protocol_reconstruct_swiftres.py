@@ -303,10 +303,12 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     def alignStep(self, iteration: int):
         md = emlib.MetaData(self._getIterationParametersFilename(iteration))
+        imageSize = 160 # TODO determine
         maxFrequency = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, 1)
         maxPsi = md.getValue(emlib.MDL_ANGLE_PSI, 1)
         maxShift = md.getValue(emlib.MDL_SHIFT_X, 1) / 100
-        nShift = round((2*maxShift) / md.getValue(emlib.MDL_SHIFT_DIFF, 1)) + 1
+        maxShiftPx = imageSize * maxShift
+        nShift = round((2*maxShiftPx) / md.getValue(emlib.MDL_SHIFT_DIFF, 1)) + 1
         nRotations = round(360 / md.getValue(emlib.MDL_ANGLE_DIFF, 1))
 
         # Perform the alignment
