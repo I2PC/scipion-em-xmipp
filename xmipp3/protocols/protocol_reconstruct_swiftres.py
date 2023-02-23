@@ -95,7 +95,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                       default=int(2e6),
                       help='Number of data-augmented particles to used when training the database')
         form.addParam('databaseMaximumSize', IntParam, label='Database size limit', 
-                      default=int(2e6),
+                      default=int(10e6),
                       help='Maximum number of elements that can be stored in the database '
                       'before performing an alignment and flush')
         form.addParam('batchSize', IntParam, label='Batch size', 
@@ -237,7 +237,6 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         md.setValue(emlib.MDL_ANGLE_DIFF, angleStep, id)
         md.write(self._getIterationParametersFilename(iteration))
         
-        
     def projectVolumeStep(self, iteration: int, cls: int):
         md = emlib.MetaData(self._getIterationParametersFilename(iteration))
         angleStep = md.getValue(emlib.MDL_ANGLE_DIFF, 1)
@@ -281,7 +280,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         md = emlib.MetaData(self._getIterationParametersFilename(iteration))
         maxFrequency = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, 1)
         maxPsi = md.getValue(emlib.MDL_ANGLE_PSI, 1)
-        maxShift = md.getValue(emlib.MDL_SHIFT_X, 1)
+        maxShift = md.getValue(emlib.MDL_SHIFT_X, 1) / 100
 
         args = []
         args += ['-i', self._getGalleryMdFilename(iteration)]
@@ -296,7 +295,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--batch', self.batchSize]
         args += ['--scratch', self._getTrainingScratchFilename()]
         if self.useGpu:
-            args += ['--gpu', 0] # TODO select
+            args += ['--device', 'cuda:0'] # TODO select
         
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
@@ -306,7 +305,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         md = emlib.MetaData(self._getIterationParametersFilename(iteration))
         maxFrequency = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, 1)
         maxPsi = md.getValue(emlib.MDL_ANGLE_PSI, 1)
-        maxShift = md.getValue(emlib.MDL_SHIFT_X, 1)
+        maxShift = md.getValue(emlib.MDL_SHIFT_X, 1) / 100
         nShift = round((2*maxShift) / md.getValue(emlib.MDL_SHIFT_DIFF, 1)) + 1
         nRotations = round(360 / md.getValue(emlib.MDL_ANGLE_DIFF, 1))
 
@@ -327,8 +326,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--batch', self.batchSize]
         args += ['--max_size', self.databaseMaximumSize]
         if self.useGpu:
-            args += ['--gpu', 0] # TODO select
-        if iteration > 0:
+            args += ['--device', 'cuda:0'] # TODO select
+        if iteration > 0 or self.considerInputAlignment:
             args += ['--local_shift', '--local_psi']
         
         env = self.getCondaEnv()
