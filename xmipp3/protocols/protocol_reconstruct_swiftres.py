@@ -81,7 +81,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                       expertLevel=LEVEL_ADVANCED,
                       help='The resolution of the reconstruction is defined as the inverse of the frequency at which '\
                       'the FSC drops below this value. Typical values are 0.143 and 0.5' )
-        form.addParam('initialMaxShift', FloatParam, label='Maximum shift (%)', default=10.0,
+        form.addParam('initialMaxShift', FloatParam, label='Maximum shift (px)', default=16.0,
                       help='Maximum shift of the particle in terms of its size')
         form.addParam('reconstructPercentage', FloatParam, label='Reconstruct percentage (%)', default=50,
                       help='Percentage of best particles used for reconstruction')
@@ -278,9 +278,11 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         recipe = self.databaseRecipe
 
         md = emlib.MetaData(self._getIterationParametersFilename(iteration))
+        imageSize = 160 # TODO determine
         maxFrequency = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, 1)
         maxPsi = md.getValue(emlib.MDL_ANGLE_PSI, 1)
-        maxShift = md.getValue(emlib.MDL_SHIFT_X, 1) / 100
+        maxShiftPx = md.getValue(emlib.MDL_SHIFT_X, 1)
+        maxShift = maxShiftPx / imageSize
 
         args = []
         args += ['-i', self._getGalleryMdFilename(iteration)]
@@ -306,8 +308,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         imageSize = 160 # TODO determine
         maxFrequency = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, 1)
         maxPsi = md.getValue(emlib.MDL_ANGLE_PSI, 1)
-        maxShift = md.getValue(emlib.MDL_SHIFT_X, 1) / 100
-        maxShiftPx = imageSize * maxShift
+        maxShiftPx = md.getValue(emlib.MDL_SHIFT_X, 1)
+        maxShift = maxShiftPx / imageSize
         nShift = round((2*maxShiftPx) / md.getValue(emlib.MDL_SHIFT_DIFF, 1)) + 1
         nRotations = round(360 / md.getValue(emlib.MDL_ANGLE_DIFF, 1))
 
