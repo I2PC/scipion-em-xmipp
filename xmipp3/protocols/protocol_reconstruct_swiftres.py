@@ -223,8 +223,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             resolutionLimit = float(self.initialResolution)
         
         maxFrequency = self._getSamplingRate() / resolutionLimit
-        #maxPsi = self._getIterationMaxPsi(iteration)
-        maxPsi = 180.0
+        maxPsi = self._getIterationMaxPsi(iteration)
         maxShift = self._getIterationMaxShift(iteration)
         shiftStep = self._computeShiftStep(maxFrequency)
         angleStep = self._computeAngleStep(maxFrequency, 160) #TODO
@@ -336,8 +335,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         if self.useGpu:
             args += ['--device', 'cuda:0'] # TODO select
         if iteration > 0 or self.considerInputAlignment:
-            #args += ['--local_shift', '--local_psi']
-            args += ['--local_shift']
+            args += ['--local_shift', '--local_psi']
         
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
@@ -693,9 +691,11 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     def _getIterationMaxPsi(self, iteration: int) -> float:
         return float(self.initialMaxPsi) / math.pow(2.0, iteration)
+        #return float(self.initialMaxPsi)
 
     def _getIterationMaxShift(self, iteration: int) -> float:
         return float(self.initialMaxShift) / math.pow(2.0, iteration)
+        #return float(self.initialMaxShift)
     
     def _createOutputClasses3D(self, volumes: SetOfVolumes):
         particles = self._createSetOfParticles()
