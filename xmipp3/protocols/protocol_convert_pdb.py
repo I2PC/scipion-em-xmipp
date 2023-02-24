@@ -28,9 +28,11 @@
 # *
 # **************************************************************************
 
+import os
+
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as const
-from pyworkflow.utils import replaceBaseExt, removeExt, getExt
+from pyworkflow.utils import replaceBaseExt, removeExt, getExt, createLink
 
 from pwem.convert import cifToPdb, downloadPdb, headers
 from pwem.objects import Volume, Transform
@@ -119,9 +121,16 @@ class XmippProtConvertPdb(ProtInitialVolume):
             cifToPdb(pdbFn, pdbFn2)
             pdbFn = pdbFn2
 
+        if " " in pdbFn:
+            pdbFn_extra = self._getExtraPath(os.path.basename(pdbFn.replace(" ", "_")))
+        else:
+            pdbFn_extra = self._getExtraPath(os.path.basename(pdbFn))
+
+        createLink(pdbFn, pdbFn_extra)
+
         samplingR = self.sampling.get()
 
-        args = '-i %s --sampling %f -o %s' % (pdbFn, samplingR, outFile)
+        args = '-i %s --sampling %f -o %s' % (pdbFn_extra, samplingR, outFile)
         
         if self.centerPdb:
             args += ' --centerPDB'
@@ -206,4 +215,4 @@ class XmippProtConvertPdb(ProtInitialVolume):
             return self.pdbFile.get()
     
     def _getVolName(self):
-        return self._getExtraPath(replaceBaseExt(self._getPdbFileName(), "vol"))
+        return self._getExtraPath(replaceBaseExt(self._getPdbFileName().replace(" ", "_"), "vol"))
