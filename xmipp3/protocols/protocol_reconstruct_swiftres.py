@@ -81,8 +81,11 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                       expertLevel=LEVEL_ADVANCED,
                       help='The resolution of the reconstruction is defined as the inverse of the frequency at which '\
                       'the FSC drops below this value. Typical values are 0.143 and 0.5' )
+        form.addParam('initialMaxPsi', FloatParam, label='Maximum psi (deg)', default=180.0,
+                      expertLevel=LEVEL_ADVANCED,
+                      help='Maximum psi parameter of the particles')
         form.addParam('initialMaxShift', FloatParam, label='Maximum shift (px)', default=16.0,
-                      help='Maximum shift of the particle in terms of its size')
+                      help='Maximum shift of the particle in pixels')
         form.addParam('reconstructPercentage', FloatParam, label='Reconstruct percentage (%)', default=50,
                       help='Percentage of best particles used for reconstruction')
 
@@ -113,7 +116,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         correctCtfStepId = self._insertFunctionStep('correctCtfStep', prerequisites=[convertInputStepId])
         
         lastIds = [correctCtfStepId]
-        for i in range(int(self.numberOfIterations)):
+        for i in range(self._getIterationCount()):
             lastIds = self._insertIterationSteps(i, prerequisites=lastIds)
         
         self._insertFunctionStep('createOutputStep', prerequisites=lastIds)
@@ -220,7 +223,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             resolutionLimit = float(self.initialResolution)
         
         maxFrequency = self._getSamplingRate() / resolutionLimit
-        maxPsi = self._getIterationMaxPsi(iteration)
+        #maxPsi = self._getIterationMaxPsi(iteration)
+        maxPsi = 180.0
         maxShift = self._getIterationMaxShift(iteration)
         shiftStep = self._computeShiftStep(maxFrequency)
         angleStep = self._computeAngleStep(maxFrequency, 160) #TODO
@@ -332,7 +336,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         if self.useGpu:
             args += ['--device', 'cuda:0'] # TODO select
         if iteration > 0 or self.considerInputAlignment:
-            args += ['--local_shift', '--local_psi']
+            #args += ['--local_shift', '--local_psi']
+            args += ['--local_shift']
         
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
@@ -496,7 +501,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         )
 
     def createOutputStep(self):
-        lastIteration = int(self.numberOfIterations) - 1
+        lastIteration = self._getIterationCount() - 1
 
         # Rename the wiener filtered image column
         args = []
@@ -535,6 +540,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
     
     #--------------------------- UTILS functions --------------------------------------------        
+    def _getIterationCount(self) -> int:
+        return int(self.numberOfIterations)
+        
     def _getClassCount(self) -> int:
         return len(self.inputVolumes)
     
@@ -684,10 +692,10 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         return (0.5 / digital_freq) * eps
     
     def _getIterationMaxPsi(self, iteration: int) -> float:
-        return 180.0 / math.pow(math.e, iteration)
+        return float(self.initialMaxPsi) / math.pow(2.0, iteration)
 
     def _getIterationMaxShift(self, iteration: int) -> float:
-        return float(self.initialMaxShift) / math.pow(math.e, iteration)
+        return float(self.initialMaxShift) / math.pow(2.0, iteration)
     
     def _createOutputClasses3D(self, volumes: SetOfVolumes):
         particles = self._createSetOfParticles()

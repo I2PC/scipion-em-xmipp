@@ -47,6 +47,7 @@ from .viewer_split_volume import XmippViewerSplitVolume
 from .viewer_validate_overfitting import XmippValidateOverfittingViewer
 from .viewer_volume_strain import XmippVolumeStrainViewer
 from .viewer_reconstruct_highres import XmippReconstructHighResViewer
+from .viewer_reconstruct_swiftres import XmippReconstructSwiftresViewer
 from .viewer_solid_angles import SolidAnglesViewer
 from .viewer_consensus_classes3D import XmippConsensusClasses3DViewer
 from .viewer_classes3D import XmippClasses3DViewer
