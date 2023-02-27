@@ -46,10 +46,6 @@ import numpy as np
 import scipy.stats
 import scipy.cluster
 import scipy.spatial
-from scipy.spatial.distance import _METRICS_NAMES
-from scipy.cluster.hierarchy import _LINKAGE_METHODS
-
-_LINKAGE_METHODS_NAMES = list(_LINKAGE_METHODS.keys())
 
 class XmippProtConsensusClasses(ProtClassify3D):
     """ Compare several SetOfClasses.
@@ -59,6 +55,13 @@ class XmippProtConsensusClasses(ProtClassify3D):
     """
     _label = 'consensus classes'
     _devStatus = BETA
+
+    METRICS = [
+        'cosine',
+        'euclidean',
+        'cityblock',
+        'correlation',
+    ]
 
     def __init__(self, *args, **kwargs):
         ProtClassify3D.__init__(self, *args, **kwargs)
@@ -73,11 +76,8 @@ class XmippProtConsensusClasses(ProtClassify3D):
         
         form.addSection(label='Clustering', expertLevel=LEVEL_ADVANCED)
         form.addParam('distanceMetric', EnumParam, label='Metric',
-                      choices=_METRICS_NAMES, default=5,
+                      choices=self.METRICS, default=0,
                       help='Distance metric used when comparing clusters')
-        form.addParam('linkageMethod', EnumParam, label='Method',
-                      choices=_LINKAGE_METHODS_NAMES, default=0,
-                      help='Linkage method used when clustering intersections')
         
 
     # --------------------------- INSERT steps functions -----------------------
@@ -126,14 +126,11 @@ class XmippProtConsensusClasses(ProtClassify3D):
         allClasses = list(itertools.chain(*classes))
         intersections = self._getOutputIntersectionIds()
         
-        metric = _METRICS_NAMES[int(self.distanceMetric)]
-        method = _LINKAGE_METHODS_NAMES[int(self.linkageMethod)]
-        similarity = self._calculateClusterSimilarityMatrix(intersections, allClasses)
-        distances = scipy.spatial.distance.pdist(similarity, metric=metric) 
-        linkage = scipy.cluster.hierarchy.linkage(distances, method=method)
+        metric = self.METRICS[int(self.distanceMetric)]
+        linkage = self._calculateLinkage(intersections, allClasses, metric)
 
         # Create outputs
-        np.save(self._getIntersectionDistancesFilename(), distances)
+        #np.save(self._getIntersectionDistancesFilename(), distances)
         np.save(self._getLinkageMatrixFilename(), linkage)
 
     def findElbowsStep(self):
@@ -275,15 +272,55 @@ class XmippProtConsensusClasses(ProtClassify3D):
         nTotal = len(x | y)
         return nCommon / nTotal
     
-    def _calculateClusterSimilarityMatrix(self, a, b):
-        result = np.empty((len(a), len(b)))
+    def _calculateClusterSimilarityVector(self, x, classes):
+        result = np.empty(len(classes))
         
-        for i, x in enumerate(a):
-            for j, y in enumerate(b):
-                result[i,j] = self._calculateClusterSimilarity(x, y)
+        for i, y in enumerate(classes):
+            result[i] = self._calculateClusterSimilarity(x, y)
 
         return result
     
+    def _calculateLinkage(self,
+                          intersections: List[Set[int]],
+                          classes: List[Set[int]],
+                          metric: str ) -> np.ndarray:
+        
+        linkage = np.zeros((len(intersections)-1, 4))
+        
+        # Initialize the working data structures
+        similarities = list(map(lambda x : self._calculateClusterSimilarityVector(x, classes), intersections))
+        clusters = list(enumerate(intersections))
+        
+        for id, row in enumerate(linkage, start=len(intersections)):
+            # Determine the indices to be merged
+            # TODO optimize to not use squareform
+            distances = scipy.spatial.distance.pdist(similarities, metric=metric) 
+            distance_matrix = scipy.spatial.distance.squareform(distances, 'tomatrix')
+            np.fill_diagonal(distance_matrix, np.inf)
+            idx0, idx1 = np.unravel_index(np.argmin(distance_matrix), distance_matrix.shape)
+            
+            # Be careful to pop from the back first
+            idx0, idx1 = max(idx0, idx1), min(idx0, idx1)
+            
+            # Merge clusters
+            row[0], cluster0 = clusters.pop(idx0)
+            row[1], cluster1 = clusters.pop(idx1)
+            row[2] = distance_matrix[idx0, idx1]
+            # TODO row[3] is not written
+            merged = cluster0.union(cluster1)
+            clusters.append((id, merged))
+            
+            # Add the new similarity
+            similarities.pop(idx0)
+            similarities.pop(idx1)
+            similarities.append(self._calculateClusterSimilarityVector(merged, classes))
+        
+            assert(len(similarities) == len(clusters))
+        
+        assert(len(similarities) == 1)
+        assert(len(clusters) == 1)
+        return linkage 
+            
     def _calculateMergedIntersections(self, 
                                       intersections: List[Set[int]],
                                       linkage: np.ndarray,

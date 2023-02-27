@@ -66,7 +66,6 @@ class XmippConsensusClassesViewer(ProtocolViewer):
                        label='Dendrogram' )
         form.addParam('visualizeCostFunction', LabelParam,
                        label='Cost function' )
-        form.addParam('visualizeIntersectionDistanceMatrix', LabelParam, label='Intersection Distance Matrix')
 
 
     def _getVisualizeDict(self):
@@ -74,7 +73,6 @@ class XmippConsensusClassesViewer(ProtocolViewer):
             'visualizeClasses': self._visualizeClasses,
             'visualizeDendrogram': self._visualizeDendrogram,
             'visualizeCostFunction': self._visualizeCostFunction,
-            'visualizeIntersectionDistanceMatrix': self._visualizeIntersectionDistanceMatrix
         }
     
     # --------------------------- UTILS functions ------------------------------
@@ -142,16 +140,6 @@ class XmippConsensusClassesViewer(ProtocolViewer):
         ax.set_title('Cost function')
         
         return [fig]
-    
-    def _visualizeIntersectionDistanceMatrix(self, param=None):
-        matrix = self._getIntersectionDistanceMatrix()
-        
-        fig, ax = plt.subplots()
-        ax.imshow(matrix)
-        ax.set_title('Intersection distances')
-        
-        return [fig]
-    
     
     def _showSetOfClasses3D(self, classes):
         labels = 'enabled id _size _representative._filename _xmipp_classIntersectionSizePValue _xmipp_classIntersectionRelativeSizePValue'
