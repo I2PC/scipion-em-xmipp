@@ -33,6 +33,7 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pwem.protocols import ProtAlignVolume
 from pwem.emlib.image import ImageHandler
 from pwem.objects import Transform, Volume, SetOfParticles
+from pyworkflow.utils import weakImport
 
 from pyworkflow.utils.path import cleanPath
 
@@ -43,6 +44,11 @@ ALIGN_MASK_BINARY_FILE = 1
 
 ALIGN_GLOBAL = 0
 ALIGN_LOCAL = 1
+
+pointerClasses = [SetOfParticles]
+with weakImport("tomo"):
+    from tomo.objects import SetOfSubTomograms
+    pointerClasses.append(SetOfSubTomograms)
 
 class AlignVolPartOutputs(enum.Enum):
     Volume = Volume
@@ -76,7 +82,7 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
         form.addParam('inputVolume', params.PointerParam, pointerClass='Volume',
                       label="Input volume", important=True, 
                       help='Select one volume to be aligned against the reference volume.')
-        form.addParam('inputParticles', params.PointerParam, pointerClass='SetOfParticles, SetOfSubTomograms',
+        form.addParam('inputParticles', params.PointerParam, pointerClass=pointerClasses,
                       label="Input particles", important=True, 
                       help='Select one set of particles to be aligned against '
                            'the reference set of particles using the transformation '
