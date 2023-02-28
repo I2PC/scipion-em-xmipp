@@ -232,6 +232,8 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
     
     def _validate(self):
         errors = []
+        if self.inputParticles.get().hasAlignment() is False:
+            errors.append("Input particles need to be aligned (they should have transformation matrix)")
         return errors
     
     def _summary(self):

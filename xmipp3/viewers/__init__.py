@@ -32,7 +32,7 @@ from .viewer_ctf_consensus import XmippCTFConsensusViewer
 from .viewer_deep_consensus import XmippDeepConsensusViewer
 from .viewer_deep_micrograph_cleaner import XmippDeepMicrographViewer
 from .viewer_ml2d import XmippML2DViewer
-from .viewer_mltomo import XmippMLTomoViewer
+#from .viewer_mltomo import XmippMLTomoViewer
 from .viewer_movie_alignment import XmippMovieAlignViewer, XmippMovieMaxShiftViewer
 from .viewer_normalize_strain import XmippNormalizeStrainViewer
 from .viewer_resolution3d import XmippResolution3DViewer
@@ -64,7 +64,7 @@ from .viewer_volume_deform_zernike3d import XmippVolumeDeformZernike3DViewer
 from .viewer_structure_map import XmippProtStructureMapViewer
 from .viewer_pdb_deform_zernike3d import XmippPDBDeformViewer
 from .viewer_metaprotocol_golden_highres import XmippMetaprotocolGoldenHighResViewer
-from .viewer_deep_align import XmippDeepAlignViewer
 
 # TODO: Import from continuousflex the modules needed to create clusters (soft dependency)
 from .viewer_analyze_local_ctf import XmippAnalyzeLocalCTFViewer
+from .viewer_subtract_projection import XmippSubtractProjectionViewer
