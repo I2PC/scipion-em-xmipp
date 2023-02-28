@@ -144,6 +144,12 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
 
         return np.array(values)
     
+    def _computeFscTickLabels(self, ticks: np.ndarray) -> np.ndarray:
+        samplingRate = self._getSamplingRate()
+        print(ticks)
+        labels = list(map('1/{0:.2f}'.format, samplingRate/ticks))
+        return labels
+
     def _computeClassMigrations(self, srcMd: emlib.MetaData, dstMd: emlib.MetaData) -> dict:
         result = {}
 
@@ -220,6 +226,7 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         ax.set_title('Class FSC')
         ax.set_xlabel('Resolution (1/A)')
         ax.set_ylabel('FSC')
+        ax.set_xticklabels(self._computeFscTickLabels(ax.get_xticks()))
         ax.legend()
                
         return [fig]
@@ -237,6 +244,7 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         ax.set_title('Class FSC')
         ax.set_xlabel('Resolution (1/A)')
         ax.set_ylabel('FSC')
+        ax.set_xticklabels(self._computeFscTickLabels(ax.get_xticks()))
         ax.legend()
                
         return [fig]
