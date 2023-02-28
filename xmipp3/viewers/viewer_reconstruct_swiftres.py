@@ -146,7 +146,6 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
     
     def _computeFscTickLabels(self, ticks: np.ndarray) -> np.ndarray:
         samplingRate = self._getSamplingRate()
-        print(ticks)
         labels = list(map('1/{0:.2f}'.format, samplingRate/ticks))
         return labels
 
