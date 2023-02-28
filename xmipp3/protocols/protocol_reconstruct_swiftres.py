@@ -124,7 +124,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _insertIterationSteps(self, iteration: int, prerequisites):
         setupIterationStepId = self._insertFunctionStep('setupIterationStep', iteration, prerequisites=prerequisites)
         projectIds = self._insertProjectSteps(iteration, prerequisites=[setupIterationStepId])
-        alignIds = self._insertAlignmentSteps(iteration, prerequisites=projectIds)
+        alignIds = self._insertGlobalAlignmentSteps(iteration, prerequisites=projectIds)
         
         ids = []
         for cls in range(self._getClassCount()):
@@ -145,7 +145,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
         return [mergeGalleriesStepId]
         
-    def _insertAlignmentSteps(self, iteration: int, prerequisites):
+    def _insertGlobalAlignmentSteps(self, iteration: int, prerequisites):
         trainDatabaseStepId = self._insertFunctionStep('trainDatabaseStep', iteration, prerequisites=prerequisites)
         alignStepId = self._insertFunctionStep('alignStep', iteration, prerequisites=[trainDatabaseStepId])
         
@@ -211,7 +211,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             args += ['--set', 'union', self._getIterationInputParticleMdFilename(iteration), 'itemId']
             self._runMdUtils(args)
             
-            resolutionLimit = self._computeIterationResolution(iteration-1)
+            resolution = self._computeIterationResolution(iteration-1)
             
         else:
             # For the first iteration, simply use the input particles.
@@ -220,18 +220,20 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                 self._getIterationInputParticleMdFilename(iteration)
             )
             
-            resolutionLimit = float(self.initialResolution)
+            resolution = float(self.initialResolution)
         
-        maxFrequency = self._getSamplingRate() / resolutionLimit
+        frequency = self._getSamplingRate() / resolution
         maxPsi = self._getIterationMaxPsi(iteration)
         maxShift = self._getIterationMaxShift(iteration)
-        shiftStep = self._computeShiftStep(maxFrequency)
-        angleStep = self._computeAngleStep(maxFrequency, 160) #TODO
+        shiftStep = self._computeShiftStep(frequency)
+        angleStep = self._computeAngleStep(frequency, 160) #TODO
+        maxResolution = max(resolution, float(self.maximumResolution))
+        maxFrequency = self._getSamplingRate() / maxResolution
         
         # Write to metadata
         md = emlib.MetaData()
         id = md.addObject()
-        md.setValue(emlib.MDL_RESOLUTION_FREQ, resolutionLimit, id)
+        md.setValue(emlib.MDL_RESOLUTION_FREQ, maxResolution, id)
         md.setValue(emlib.MDL_RESOLUTION_FREQREAL, maxFrequency, id)
         md.setValue(emlib.MDL_ANGLE_PSI, maxPsi, id)
         md.setValue(emlib.MDL_SHIFT_X, maxShift, id)
@@ -670,7 +672,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
         res /= self._getClassCount()
 
-        return max(res, float(self.maximumResolution))
+        return res
     
     def _computeAngleStep(self, maxFrequency: float, size: int) -> float:
         # At the alignment resolution limit, determine the 
