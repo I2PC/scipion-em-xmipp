@@ -334,7 +334,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--max_size', self.databaseMaximumSize]
         if self.useGpu:
             args += ['--device', 'cuda:0'] # TODO select
-        if iteration > 0 or self.considerInputAlignment:
+        #if iteration > 0 or self.considerInputAlignment:
+        if False:
             args += ['--local_shift', '--local_psi']
         
         env = self.getCondaEnv()
@@ -690,12 +691,12 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         return (0.5 / digital_freq) * eps
     
     def _getIterationMaxPsi(self, iteration: int) -> float:
-        return float(self.initialMaxPsi) / math.pow(2.0, iteration)
-        #return float(self.initialMaxPsi)
+        #return float(self.initialMaxPsi) / math.pow(2.0, iteration)
+        return float(self.initialMaxPsi)
 
     def _getIterationMaxShift(self, iteration: int) -> float:
-        return float(self.initialMaxShift) / math.pow(2.0, iteration)
-        #return float(self.initialMaxShift)
+        #return float(self.initialMaxShift) / math.pow(2.0, iteration)
+        return float(self.initialMaxShift)
     
     def _createOutputClasses3D(self, volumes: SetOfVolumes):
         particles = self._createSetOfParticles()
