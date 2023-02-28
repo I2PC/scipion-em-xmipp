@@ -254,6 +254,7 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         ax.set_title('Resolution')
         ax.set_xlabel('Iteration')
         ax.set_ylabel('Resolution (A)')
+        ax.set_ylim(bottom=0)
         ax.legend()
                
         return [fig]
