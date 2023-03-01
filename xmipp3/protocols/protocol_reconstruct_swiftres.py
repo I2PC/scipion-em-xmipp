@@ -117,14 +117,15 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
         lastIds = [correctCtfStepId]
         for i in range(self._getIterationCount()):
-            lastIds = self._insertIterationSteps(i, prerequisites=lastIds)
+            lastIds = self._insertIterationSteps(i, False, prerequisites=lastIds)
         
         self._insertFunctionStep('createOutputStep', prerequisites=lastIds)
  
-    def _insertIterationSteps(self, iteration: int, prerequisites):
-        setupIterationStepId = self._insertFunctionStep('setupIterationStep', iteration, prerequisites=prerequisites)
+    def _insertIterationSteps(self, iteration: int, local: bool, prerequisites):
+        setupIterationStepId = self._insertFunctionStep('setupIterationStep', iteration, local, prerequisites=prerequisites)
+        ctfGroupStepId = self._insertFunctionStep('ctfGroupStep', iteration, prerequisites=[setupIterationStepId])
         projectIds = self._insertProjectSteps(iteration, prerequisites=[setupIterationStepId])
-        alignIds = self._insertGlobalAlignmentSteps(iteration, prerequisites=projectIds)
+        alignIds = self._insertAlignmentSteps(iteration, local, prerequisites=projectIds + [ctfGroupStepId])
         
         ids = []
         for cls in range(self._getClassCount()):
@@ -145,9 +146,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
         return [mergeGalleriesStepId]
         
-    def _insertGlobalAlignmentSteps(self, iteration: int, prerequisites):
+    def _insertAlignmentSteps(self, iteration: int, local: bool, prerequisites):
         trainDatabaseStepId = self._insertFunctionStep('trainDatabaseStep', iteration, prerequisites=prerequisites)
-        alignStepId = self._insertFunctionStep('alignStep', iteration, prerequisites=[trainDatabaseStepId])
+        alignStepId = self._insertFunctionStep('alignStep', iteration, local, prerequisites=[trainDatabaseStepId])
         
         return [alignStepId]
  
@@ -184,12 +185,12 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--sampling_rate', self._getSamplingRate()]
         args += ['--pad', '2']
         args += ['--wc', '-1.0']
-        if (particles.isPhaseFlipped()):
+        if particles.isPhaseFlipped():
             args +=  ['--phase_flipped']
 
         self.runJob('xmipp_ctf_correct_wiener2d', args)
         
-    def setupIterationStep(self, iteration: int):
+    def setupIterationStep(self, iteration: int, local: bool):
         makePath(self._getIterationPath(iteration))
         
         for cls in range(self._getClassCount()):
@@ -241,6 +242,30 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         md.setValue(emlib.MDL_SHIFT_DIFF, shiftStep, id)
         md.setValue(emlib.MDL_ANGLE_DIFF, angleStep, id)
         md.write(self._getIterationParametersFilename(iteration))
+        
+    def ctfGroupStep(self, iteration: int):
+        md = emlib.MetaData(self._getIterationParametersFilename(iteration))
+        resolution = md.getValue(emlib.MDL_RESOLUTION_FREQ, 1)
+        particles = self.inputParticles.get()
+        oroot = self._getCtfGroupOutputRoot(iteration)
+
+        args = []
+        args += ['--ctfdat', self._getInputParticleMdFilename()]
+        args += ['-o', oroot]
+        args += ['--sampling_rate', self._getSamplingRate()]
+        args += ['--pad', 2]
+        args += ['--error', 1.0] # TODO make param
+        args += ['--resol', resolution]
+        if particles.isPhaseFlipped():
+            args +=  ['--phase_flipped']
+        
+        self.runJob('xmipp_ctf_group', args, numberOfMpi=1)
+
+        # Rename files and removed unused ones
+        cleanPath(oroot + 'Info.xmd')
+        cleanPath(oroot + '_split.doc')
+        moveFile(oroot + '_images.sel', self._getCtfGroupMdFilename(iteration))
+        moveFile(oroot + '_ctf.mrcs', self._getCtfGroupAveragesFilename(iteration))
         
     def projectVolumeStep(self, iteration: int, cls: int):
         md = emlib.MetaData(self._getIterationParametersFilename(iteration))
@@ -308,7 +333,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
         self.runJob('xmipp_train_database', args, numberOfMpi=1, env=env)
     
-    def alignStep(self, iteration: int):
+    def alignStep(self, iteration: int, local: bool):
         md = emlib.MetaData(self._getIterationParametersFilename(iteration))
         imageSize = 160 # TODO determine
         maxFrequency = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, 1)
@@ -336,8 +361,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--max_size', self.databaseMaximumSize]
         if self.useGpu:
             args += ['--device', 'cuda:0'] # TODO select
-        #if iteration > 0 or self.considerInputAlignment:
-        if False:
+        if local:
             args += ['--local_shift', '--local_psi']
         
         env = self.getCondaEnv()
@@ -584,6 +608,15 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getIterationInputParticleMdFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'input_particles.xmd')
     
+    def _getCtfGroupOutputRoot(self, iteration: int):
+        return self._getIterationPath(iteration, 'ctf_group')
+    
+    def _getCtfGroupMdFilename(self, iteration: int):
+        return self._getIterationPath(iteration, 'ctf_groups.xmd')
+    
+    def _getCtfGroupAveragesFilename(self, iteration: int):
+        return self._getIterationPath(iteration, 'ctfs.mrcs')
+
     def _getClassGalleryMdFilename(self, iteration: int, cls: int):
         return self._getClassPath(iteration, cls, 'gallery.doc')
     
