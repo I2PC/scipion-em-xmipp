@@ -135,10 +135,10 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
         mask = self.mask.get()
         if part.getDim()[0] != vol.getDim()[0]:
             errors.append("Input particles and volume should have same X and Y dimensions")
-        if part.getSamplingRate() != vol.getSamplingRate():
+        if round(part.getSamplingRate(), 2) != round(vol.getSamplingRate(), 2):
             errors.append("Input particles and volume should have same sampling rate")
         if mask:
-            if vol.getSamplingRate() != mask.getSamplingRate():
+            if round(vol.getSamplingRate(), 2) != round(mask.getSamplingRate(), 2):
                 errors.append("Input volume and mask should have same sampling rate")
             if vol.getDim() != mask.getDim():
                 errors.append("Input volume and mask should have same dimensions")
@@ -205,7 +205,7 @@ class XmippProtBoostParticles(XmippProtSubtractProjectionBase):
         vol = self.vol.get()
         if part.getDim()[0] != vol.getDim()[0]:
             errors.append("Input particles and volume should have same X and Y dimensions")
-        if part.getSamplingRate() != vol.getSamplingRate():
+        if round(part.getSamplingRate(), 2) != round(vol.getSamplingRate(), 2):
             errors.append("Input particles and volume should have same sampling rate")
         if self.resol.get() == 0:
             errors.append("Resolution (angstroms) should be bigger than 0")
