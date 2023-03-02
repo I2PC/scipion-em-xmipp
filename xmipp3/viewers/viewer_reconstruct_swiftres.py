@@ -24,7 +24,7 @@
 # *
 # **************************************************************************
 
-from typing import Tuple, Iterator
+from typing import Tuple, Iterator, Iterable
 import os
 import itertools
 import collections
@@ -60,6 +60,10 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         form.addParam('showFscCutoff', FloatParam, label='Display FSC cutoff',
                       default=0.143)
 
+        form.addSection(label='Angular difference')
+        form.addParam('showAngularDiffVecDiffHist', LabelParam, label='Display vector difference histogram')
+        form.addParam('showAngularDiffShiftDiffHist', LabelParam, label='Display shift difference histogram')
+
         form.addSection(label='Classification')
         form.addParam('showClassMigration', LabelParam, label='Display class migration diagram',
                       default=0.143)
@@ -70,6 +74,9 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
             'showClassFsc': self._showClassFsc,
             'showFscCutoff': self._showFscCutoff,
             
+            'showAngularDiffVecDiffHist': self._showAngleDiffVecDiffHistogram,
+            'showAngularDiffShiftDiffHist': self._showAngleDiffShiftDiffHistogram,
+
             'showClassMigration': self._showClassMigration
         }
     
@@ -90,6 +97,12 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
     def _getFscFilename(self, iteration: int, cls: int):
         return self.protocol._getFscFilename(iteration, cls)
     
+    def _getAngleDiffVecDiffHistogramMdFilename(self, iteration: int):
+        return self.protocol._getAngleDiffVecDiffHistogramMdFilename(iteration)
+
+    def _getAngleDiffShiftDiffHistogramMdFilename(self, iteration: int):
+        return self.protocol._getAngleDiffShiftDiffHistogramMdFilename(iteration)
+    
     def _readFsc(self, fscMd: emlib.MetaData) -> np.ndarray:
         values = []
         for objId in fscMd:
@@ -99,32 +112,33 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
          
         return np.array(values)   
     
-    def _iterAlignmentMdFilenames(self):
-        for it in itertools.count():
-            alignmentFn = self._getAlignmentMdFilename(it)
-            if os.path.exists(alignmentFn):
-                yield alignmentFn
+    def _iterFilenamesUntilNotExist(self, filenames: Iterable[str]):
+        for filename in filenames:
+            if os.path.exists(filename):
+                yield filename
             
             else:
                 break
     
     def _iterFscMdIterationFilenames(self, it: int):
-        for cls in itertools.count():
-            fscFn = self._getFscFilename(it, cls)
-            if os.path.exists(fscFn):
-                yield fscFn
-            
-            else:
-                break
+        return self._iterFilenamesUntilNotExist(
+            map(lambda cls : self._getFscFilename(it, cls), itertools.count())
+        )
 
     def _iterFscMdClassFilenames(self, cls: int):
-        for it in itertools.count():
-            fscFn = self._getFscFilename(it, cls)
-            if os.path.exists(fscFn):
-                yield fscFn
-            
-            else:
-                break
+        return self._iterFilenamesUntilNotExist(
+            map(lambda it : self._getFscFilename(it, cls), itertools.count())
+        )
+    
+    def _iterAngleDiffVecDiffHistMdFilenames(self):
+        return self._iterFilenamesUntilNotExist(
+            map(lambda it : self._getAngleDiffVecDiffHistogramMdFilename(it), itertools.count())
+        )
+        
+    def _iterAngleDiffShiftDiffHistMdFilenames(self):
+        return self._iterFilenamesUntilNotExist(
+            map(lambda it : self._getAngleDiffShiftDiffHistogramMdFilename(it), itertools.count())
+        )
         
     def _readFscCutoff(self, cls: int, cutoff: float) -> np.ndarray:
         samplingRate = self._getSamplingRate()
@@ -179,37 +193,36 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         freq = collections.Counter(class3d)
         return np.array(list(freq.items()))
     
-    def _computeClassMigrationElements(self, alignmentFilenames: Iterator[str]) -> Tuple[np.ndarray, 
-                                                                                         np.ndarray,
-                                                                                         np.ndarray,
-                                                                                         np.ndarray]:
-        segments = []
+    def _computeClassMigrationElements(self, alignmentFilenames: Iterator[str]) -> np.ndarray:
         points = []
-        counts = []
-        sizes = []
         
         srcAlignmentFn = next(alignmentFilenames)
         srcAlignmentMd = emlib.MetaData(srcAlignmentFn)
-        iterationPoints, iterationSizes = self._computeClassFrequencies(srcAlignmentMd)
-        counts.append(iterationCounts)
-        sizes.append(iterationSizes)
         for iteration, dstAlignmentFn in enumerate(alignmentFilenames, start=1):
             dstAlignmentMd = emlib.MetaData(dstAlignmentFn)
             
             srcAlignmentMd.intersection(dstAlignmentMd, emlib.MDL_ITEM_ID)
-            migrations = self._computeClassMigrations(srcAlignmentMd, dstAlignmentMd)
-            iterationSegments, iterationCounts = self._computeIterationClassMigrationSegments(iteration, migrations)
-            iterationPoints, iterationSizes = self._computeClassFrequencies(dstAlignmentMd)
-            
-            segments.append(iterationSegments)
-            points.append(iterationPoints)
-            counts.append(iterationCounts)
-            sizes.append(iterationSizes)
+
+            # TODO
             
             # Save for next
             srcAlignmentMd = dstAlignmentMd
             
-        return np.concatenate(segments), np.concatenate(points), np.concatenate(counts), np.concatenate(sizes)
+        return np.concatenate(points)
+    
+    def _readAngleDiffVecHistogram(self, filename):
+        md = emlib.MetaData(filename)
+        diff = md.getColumnValues(emlib.MDL_ANGLE_DIFF)
+        count = md.getColumnValues(emlib.MDL_COUNT)
+
+        return diff, count
+        
+    def _readAngleDiffShiftHistogram(self, filename):
+        md = emlib.MetaData(filename)
+        diff = md.getColumnValues(emlib.MDL_SHIFT_DIFF)
+        count = md.getColumnValues(emlib.MDL_COUNT)
+
+        return diff, count
 
     # ---------------------------- SHOW functions ------------------------------
     def _showIterationFsc(self, e):
@@ -266,6 +279,36 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
                
         return [fig]
     
+    def _showAngleDiffVecDiffHistogram(self, e):
+        fig, ax = plt.subplots()
+        
+        for it, fn in enumerate(self._iterAngleDiffVecDiffHistMdFilenames()):
+            diff, count = self._readAngleDiffVecHistogram(fn)
+            label = f'Iteration {it}'
+            ax.plot(diff, count, label=label)
+
+        ax.set_title('Angle difference histogram')
+        ax.set_xlabel('Angle difference [deg]')
+        ax.set_ylabel('Particle count')
+        ax.legend()
+               
+        return [fig]
+        
+    def _showAngleDiffShiftDiffHistogram(self, e):
+        fig, ax = plt.subplots()
+        
+        for it, fn in enumerate(self._iterAngleDiffShiftDiffHistMdFilenames()):
+            diff, count = self._readAngleDiffShiftHistogram(fn)
+            label = f'Iteration {it}'
+            ax.plot(diff, count, label=label)
+
+        ax.set_title('Shift difference histogram')
+        ax.set_xlabel('Shift difference [px]')
+        ax.set_ylabel('Particle count')
+        ax.legend()
+               
+        return [fig]
+        
     def _showClassMigration(self, e):
         fig, ax = plt.subplots()
         

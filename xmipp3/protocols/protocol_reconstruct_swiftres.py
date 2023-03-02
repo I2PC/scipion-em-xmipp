@@ -126,14 +126,15 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         ctfGroupStepId = self._insertFunctionStep('ctfGroupStep', iteration, prerequisites=[setupIterationStepId])
         projectIds = self._insertProjectSteps(iteration, prerequisites=[setupIterationStepId])
         alignIds = self._insertAlignmentSteps(iteration, local, prerequisites=projectIds + [ctfGroupStepId])
-        
+        compareAnglesStepId = self._insertFunctionStep('compareAnglesStep', iteration, prerequisites=alignIds)
+
         ids = []
         for cls in range(self._getClassCount()):
             reconstructIds = self._insertReconstructSteps(iteration, cls, prerequisites=alignIds)
             postProcessIds = self._insertPostProcessSteps(iteration, cls, prerequisites=reconstructIds)
             ids += postProcessIds
         
-        return ids
+        return ids + [compareAnglesStepId]
         
     def _insertProjectSteps(self, iteration: int, prerequisites):
         # Project all volumes
@@ -149,13 +150,13 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _insertAlignmentSteps(self, iteration: int, local: bool, prerequisites):
         trainDatabaseStepId = self._insertFunctionStep('trainDatabaseStep', iteration, prerequisites=prerequisites)
         alignStepId = self._insertFunctionStep('alignStep', iteration, local, prerequisites=[trainDatabaseStepId])
+        intersectInputStepId = self._insertFunctionStep('intersectInputStep', iteration, prerequisites=[alignStepId])
         
-        return [alignStepId]
+        return [intersectInputStepId]
  
     def _insertReconstructSteps(self, iteration: int, cls: int, prerequisites):
         selectAlignmentStepId = self._insertFunctionStep('selectAlignmentStep', iteration, cls, prerequisites=prerequisites)
-        compareAnglesStepId = self._insertFunctionStep('compareAnglesStep', iteration, cls, prerequisites=[selectAlignmentStepId])
-        compareReprojectionStepId = self._insertFunctionStep('compareReprojectionStep', iteration, cls, prerequisites=[compareAnglesStepId])
+        compareReprojectionStepId = self._insertFunctionStep('compareReprojectionStep', iteration, cls, prerequisites=[selectAlignmentStepId])
         computeWeightsStepId = self._insertFunctionStep('computeWeightsStep', iteration, cls, prerequisites=[compareReprojectionStepId])
         #filterByWeightsStepId = self._insertFunctionStep('filterByWeightsStep', iteration, cls, prerequisites=[computeWeightsStepId])
         splitStepId = self._insertFunctionStep('splitStep', iteration, cls, prerequisites=[computeWeightsStepId])
@@ -368,31 +369,33 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
         self.runJob('xmipp_query_database', args, numberOfMpi=1, env=env)
 
+    def intersectInputStep(self, iteration: int):
+        args = []
+        args += ['-i', self._getIterationInputParticleMdFilename(iteration)]
+        args += ['-o', self._getInputIntersectionMdFilename(iteration)]
+        args += ['--set', 'intersection', self._getAlignmentMdFilename(iteration), 'itemId']
+        self._runMdUtils(args)
+
+    def compareAnglesStep(self, iteration: int):
+        oroot = self._getAngleDiffOutputRoot(iteration)
+        
+        args = []
+        args += ['--ang1', self._getAlignmentMdFilename(iteration)]
+        args += ['--ang2', self._getInputIntersectionMdFilename(iteration)]
+        args += ['--oroot', oroot]
+        args += ['--sym', self.symmetryGroup]
+        self.runJob('xmipp_angular_distance', args, numberOfMpi=1)
+        
+        # Rename files to have xmd extension
+        moveFile(oroot+'_vec_diff_hist.txt', self._getAngleDiffVecDiffHistogramMdFilename(iteration))
+        moveFile(oroot+'_shift_diff_hist.txt', self._getAngleDiffShiftDiffHistogramMdFilename(iteration))
+        
     def selectAlignmentStep(self, iteration: int, cls: int):
         args = []
         args += ['-i', self._getAlignmentMdFilename(iteration)]
         args += ['-o', self._getReconstructionMdFilename(iteration, cls)]
         args += ['--query', 'select', 'ref3d==%d' % (cls+1)]
         self._runMdUtils(args)
-        
-        args = []
-        args += ['-i', self._getIterationInputParticleMdFilename(iteration)]
-        args += ['-o', self._getInputIntersectionMdFilename(iteration, cls)]
-        args += ['--set', 'intersection', self._getReconstructionMdFilename(iteration, cls), 'itemId']
-        self._runMdUtils(args)
-
-    def compareAnglesStep(self, iteration: int, cls):
-        args = []
-        args += ['--ang1', self._getReconstructionMdFilename(iteration, cls)]
-        args += ['--ang2', self._getInputIntersectionMdFilename(iteration, cls)]
-        args += ['--oroot', self._getReconstructionAngleDiffOutputRoot(iteration, cls)]
-        args += ['--sym', self.symmetryGroup]
-        self.runJob('xmipp_angular_distance', args, numberOfMpi=1)
-        
-        #args = []
-        #args += ['-i', self._getReconstructionMdFilename(iteration, cls)]
-        #args += ['--set', 'join', self._getReconstructionAngleDiffMdFilename(iteration, cls), 'itemId']
-        #self._runMdUtils(args)
     
     def compareReprojectionStep(self, iteration: int, cls: int):
         args = []
@@ -519,12 +522,6 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             self._getAlignmentMdFilename(iteration)
         )
     
-    def mergeAnglesStep(self, iteration: int):
-        self._mergeMetadata(
-            map(lambda cls : self._getReconstructionAngleDiffMdFilename(iteration, cls), range(self._getClassCount())),
-            self._getAngleDiffMdFilename(iteration)
-        )
-
     def createOutputStep(self):
         lastIteration = self._getIterationCount() - 1
 
@@ -635,17 +632,20 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getAlignmentMdFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'aligned.xmd')
     
-    def _getInputIntersectionMdFilename(self, iteration: int, cls: int):
-        return self._getClassPath(iteration, cls, 'input_intersection.xmd')
+    def _getInputIntersectionMdFilename(self, iteration: int):
+        return self._getIterationPath(iteration, 'input_intersection.xmd')
     
-    def _getReconstructionAngleDiffOutputRoot(self, iteration: int, cls: int, suffix=''):
-        return self._getClassPath(iteration, cls, 'angles'+suffix)
-
-    def _getReconstructionAngleDiffMdFilename(self, iteration: int, cls: int):
-        return self._getReconstructionAngleDiffOutputRoot(iteration, cls, '.xmd')
+    def _getAngleDiffOutputRoot(self, iteration: int):
+        return self._getIterationPath(iteration, 'angles')
 
     def _getAngleDiffMdFilename(self, iteration: int):
-        return self._getIterationPath(iteration, 'angles.xmd')
+        return self._getAngleDiffOutputRoot(iteration) + '.xmd'
+
+    def _getAngleDiffVecDiffHistogramMdFilename(self, iteration: int):
+        return self._getAngleDiffOutputRoot(iteration) + '_vec_diff_hist.xmd'
+
+    def _getAngleDiffShiftDiffHistogramMdFilename(self, iteration: int):
+        return self._getAngleDiffOutputRoot(iteration) + '_shift_diff_hist.xmd'
 
     def _getReconstructionMdFilename(self, iteration: int, cls: int):
         return self._getClassPath(iteration, cls, 'aligned.xmd')
