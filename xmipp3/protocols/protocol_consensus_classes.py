@@ -118,12 +118,15 @@ class XmippProtConsensusClasses(ProtClassify3D):
         intersections = self._calculateIntersections(classes)
         intersections = self._pruneIntersections(intersections, int(self.minClassSize))
         
+        images = self._createSetOfImages(intersections)
+        self._insertChild('images', images)
         outputClasses = self._createSetOfClasses(
-            classifications,
-            intersections,
-            self._getMergedIntersectionSuffix(len(intersections)),
-            referenceSizes,
-            normalizedReferenceSizes
+            images=images,
+            classifications=classifications,
+            clustering=intersections,
+            suffix=self._getMergedIntersectionSuffix(len(intersections)),
+            referenceSizes=referenceSizes,
+            normalizedReferenceSizes=normalizedReferenceSizes
         )
         
         self._defineOutputs(outputClasses=outputClasses)
@@ -192,14 +195,11 @@ class XmippProtConsensusClasses(ProtClassify3D):
     def _getSetOfClassesSubtype(self) -> type:
         return type(self._getInputClassification(0))
  
-    def _getOutputIntersectionIds(self):
-        result = []
-        
-        for intersection in self.outputClasses:
-            if intersection.isEnabled():
-                result.append(intersection.getIdSet())
+    def _getSetOfImagesSubtype(self) -> type:
+        return type(self._getInputImages())
 
-        return result
+    def _getOutputIntersectionIds(self):
+        return list(map(SetOfImages.getIdSet, self.outputClasses))
 
     def _getReferenceIntersectionSizeFilename(self) -> str:
         return self._getExtraPath('reference_sizes.npy')
@@ -218,12 +218,21 @@ class XmippProtConsensusClasses(ProtClassify3D):
 
     def _getMergedIntersectionSuffix(self, numel: int) -> str:
         return 'merged_%06d' % numel
+
+    def _getImagesSuffix(self) -> str:
+        return 'used'
  
-    def _getOutputSqliteTemplate(self) -> str:
+    def _getOutputClassesSqliteTemplate(self) -> str:
         return 'classes_%s.sqlite'
 
-    def _getOutputSqliteFilename(self, suffix: str = '') -> str:
-        return self._getPath(self._getOutputSqliteTemplate() % suffix)
+    def _getOutputImagesSqliteTemplate(self) -> str:
+        return 'images_%s.sqlite'
+
+    def _getOutputClassesSqliteFilename(self, suffix: str = '') -> str:
+        return self._getPath(self._getOutputClassesSqliteTemplate() % suffix)
+
+    def _getOutputImagesSqliteFilename(self, suffix: str = '') -> str:
+        return self._getPath(self._getOutputImagesSqliteTemplate() % suffix)
  
     def _writeReferenceIntersectionSizes(self, sizes, normalizedSizes):
         np.save(self._getReferenceIntersectionSizeFilename(), sizes)
@@ -469,7 +478,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
     
     def _obtainMergedIntersections(self, n: int) -> SetOfClasses:
         suffix = self._getMergedIntersectionSuffix(n)
-        filename = self._getOutputSqliteFilename(suffix)
+        filename = self._getOutputClassesSqliteFilename(suffix)
     
         if os.path.exists(filename):
             SetOfClassesSubtype = self._getSetOfClassesSubtype()
@@ -477,6 +486,8 @@ class XmippProtConsensusClasses(ProtClassify3D):
             
         else:
             # Load from input
+            SetOfImagesSubtype = self._getSetOfImagesSubtype()
+            images = SetOfImagesSubtype(self._getOutputImagesSqliteFilename(self._getImagesSuffix()))
             classifications = self._getInputClassifications()
             intersections = self._getOutputIntersectionIds()
             linkage = self._readLinkageMatrix()
@@ -486,31 +497,52 @@ class XmippProtConsensusClasses(ProtClassify3D):
             merging = self._calculateMergedIntersections(intersections, linkage, stop=n)
             merged = merging[-1]
             outputClasses = self._createSetOfClasses(
+                images=images,
                 classifications=classifications,
                 clustering=merged,
                 suffix=suffix,
                 referenceSizes=referenceSizes,
-                referenceRelativeSizes=normalizedReferenceSizes
+                normalizedReferenceSizes=normalizedReferenceSizes
             )
 
             outputClasses.write()
             return outputClasses
         
     # -------------------------- Convert functions -----------------------------
+    def _createSetOfImages(self,
+                           classes: Iterable[Set[int]]):
+        objIds = Set.union(*classes)
+        images = self._getInputImages()
+        
+        result: SetOfImages = self._EMProtocol__createSet( # HACK
+            self._getSetOfImagesSubtype(), 
+            self._getOutputImagesSqliteTemplate(),
+            self._getImagesSuffix()
+        ) 
+        result.copyInfo(images)
+        
+        result.enableAppend()
+        for objId in objIds:
+            result.append(images[objId])
+            
+        return result
+        
+    
     def _createSetOfClasses(self, 
+                            images: SetOfImages,
                             classifications: Sequence[SetOfClasses],
                             clustering: Sequence[Set[int]], 
                             suffix: str,
                             referenceSizes=None, 
-                            referenceRelativeSizes=None ):
+                            normalizedReferenceSizes=None ):
 
         # Create an empty set with the same images as the input classification
         result: SetOfClasses = self._EMProtocol__createSet( # HACK
             self._getSetOfClassesSubtype(), 
-            self._getOutputSqliteTemplate(),
+            self._getOutputClassesSqliteTemplate(),
             suffix
         ) 
-        result.setImages(classifications[0].getImages())
+        result.setImages(images)
     
         # Fill the output
         def updateItem(item: Image, _):
@@ -520,41 +552,31 @@ class XmippProtConsensusClasses(ProtClassify3D):
             for cls, objIds in enumerate(clustering):
                 if objId in objIds:
                     classId = cls + 1
+                    item.setClassId(classId)
                     break # Found!
-                
-            item.setClassId(classId)
         
         def updateClass(item: SetOfImages):
             classId: int = item.getObjId()
-            if classId > 0:
-                classIdx = classId - 1
-                cluster = clustering[classIdx]
-                representativeClass = self._calculateClusterRepresentativeClass(
-                    cluster,
-                    classifications
-                )
-                size = len(clustering)
-                relativeSize = size / len(representativeClass)
+            classIdx = classId - 1
+            cluster = clustering[classIdx]
+            representativeClass = self._calculateClusterRepresentativeClass(
+                cluster,
+                classifications
+            )
+            size = len(clustering)
+            relativeSize = size / len(representativeClass)
+            
+            item.setRepresentative(representativeClass.getRepresentative().clone())
+            
+            if referenceSizes is not None:
+                sizePercentile = self._calculatePercentile(referenceSizes, size)
+                pValue = 1 - sizePercentile
+                setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
                 
-                item.setRepresentative(representativeClass.getRepresentative().clone())
-                
-                if referenceSizes is not None:
-                    sizePercentile = self._calculatePercentile(referenceSizes, size)
-                    pValue = 1 - sizePercentile
-                    setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
-                    
-                if referenceRelativeSizes is not None:
-                    relativeSizePercentile = self._calculatePercentile(referenceRelativeSizes, relativeSize)
-                    pValue = 1 - relativeSizePercentile
-                    setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE, Float(pValue))
-            else:
-                item.setEnabled(False)
-                
-                if referenceSizes is not None:
-                    setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(1.0))
-
-                if referenceRelativeSizes is not None:
-                    setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE, Float(1.0))
+            if normalizedReferenceSizes is not None:
+                relativeSizePercentile = self._calculatePercentile(normalizedReferenceSizes, relativeSize)
+                pValue = 1 - relativeSizePercentile
+                setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE, Float(pValue))
 
         result.classifyItems(
             updateItemCallback=updateItem,
