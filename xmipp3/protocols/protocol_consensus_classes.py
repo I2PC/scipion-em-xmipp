@@ -193,8 +193,14 @@ class XmippProtConsensusClasses(ProtClassify3D):
         return type(self._getInputClassification(0))
  
     def _getOutputIntersectionIds(self):
-        return list(map(SetOfImages.getIdSet, self.outputClasses))
- 
+        result = []
+        
+        for intersection in self.outputClasses:
+            if intersection.isEnabled():
+                result.append(intersection.getIdSet())
+
+        return result
+
     def _getReferenceIntersectionSizeFilename(self) -> str:
         return self._getExtraPath('reference_sizes.npy')
     
