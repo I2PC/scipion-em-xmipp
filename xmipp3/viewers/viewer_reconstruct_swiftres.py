@@ -36,7 +36,7 @@ from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import LabelParam, IntParam, FloatParam
 
 from pwem import emlib
-from pwem.viewers.views import DataView
+from pwem.viewers.views import DataView, ObjectView
 
 from xmipp3.protocols.protocol_reconstruct_swiftres import XmippProtReconstructSwiftres
 
@@ -61,8 +61,10 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
                       default=0.143)
 
         form.addSection(label='Angular difference')
-        form.addParam('showAngularDiffVecDiffHist', LabelParam, label='Display vector difference histogram')
-        form.addParam('showAngularDiffShiftDiffHist', LabelParam, label='Display shift difference histogram')
+        form.addParam('showAngleDiffMetadata', IntParam, label='Display iteration angular difference metadata',
+                      default=0)
+        form.addParam('showAngleDiffVecDiffHist', LabelParam, label='Display vector difference histogram')
+        form.addParam('showAngleDiffShiftDiffHist', LabelParam, label='Display shift difference histogram')
 
         form.addSection(label='Classification')
         form.addParam('showClassMigration', LabelParam, label='Display class migration diagram',
@@ -74,8 +76,9 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
             'showClassFsc': self._showClassFsc,
             'showFscCutoff': self._showFscCutoff,
             
-            'showAngularDiffVecDiffHist': self._showAngleDiffVecDiffHistogram,
-            'showAngularDiffShiftDiffHist': self._showAngleDiffShiftDiffHistogram,
+            'showAngleDiffMetadata': self._showAngleDiffMetadata,
+            'showAngleDiffVecDiffHist': self._showAngleDiffVecDiffHistogram,
+            'showAngleDiffShiftDiffHist': self._showAngleDiffShiftDiffHistogram,
 
             'showClassMigration': self._showClassMigration
         }
@@ -97,6 +100,9 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
     def _getFscFilename(self, iteration: int, cls: int):
         return self.protocol._getFscFilename(iteration, cls)
     
+    def _getAngleDiffMdFilename(self, iteration: int):
+        return self.protocol._getAngleDiffMdFilename(iteration)
+
     def _getAngleDiffVecDiffHistogramMdFilename(self, iteration: int):
         return self.protocol._getAngleDiffVecDiffHistogramMdFilename(iteration)
 
@@ -278,6 +284,11 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         ax.legend()
                
         return [fig]
+    
+    def _showAngleDiffMetadata(self, e):
+        mdFilename = self._getAngleDiffMdFilename(int(self.showAngleDiffMetadata))
+        v = DataView(mdFilename)
+        return [v]
     
     def _showAngleDiffVecDiffHistogram(self, e):
         fig, ax = plt.subplots()
