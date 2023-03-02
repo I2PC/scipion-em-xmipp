@@ -26,14 +26,14 @@
 # *
 # **************************************************************************
 
-from typing import Iterable, Sequence, Optional, List, Set
+from typing import Iterable, Sequence, Optional, Tuple, List, Set
 import itertools
 
 from pwem.protocols import ProtClassify3D
-from pwem.objects import Pointer, Object, SetOfClasses, SetOfImages
+from pwem.objects import Pointer, Image, SetOfClasses, SetOfImages
 from pwem import emlib
 
-from pyworkflow.protocol.params import Form, MultiPointerParam, EnumParam
+from pyworkflow.protocol.params import Form, MultiPointerParam, IntParam, EnumParam
 from pyworkflow.protocol import LEVEL_ADVANCED
 from pyworkflow.constants import BETA
 from pyworkflow.object import Float
@@ -73,6 +73,13 @@ class XmippProtConsensusClasses(ProtClassify3D):
                       label="Input classes", important=True,
                       help='Select several sets of classes where to evaluate the '
                            'intersections.')
+
+        form.addSection(label='Pruning')
+        form.addParam('minClassSize', IntParam, label="Minimum class size",
+                      default = 0,
+                      help='Minimum output class size. If set to zero it will not have '
+                      'any effect')
+        
         
         form.addSection(label='Clustering', expertLevel=LEVEL_ADVANCED)
         form.addParam('distanceMetric', EnumParam, label='Metric',
@@ -100,22 +107,23 @@ class XmippProtConsensusClasses(ProtClassify3D):
         normalizedIntersectionSizes = np.sort(normIntersectionProbabilities) # No need to multiply
 
         # Write
-        np.save(self._getReferenceIntersectionSizeFilename(), intersectionSizes)
-        np.save(self._getReferenceIntersectionNormalizedSizeFilename(), normalizedIntersectionSizes)
+        self._writeReferenceIntersectionSizes(intersectionSizes, normalizedIntersectionSizes)
 
     def intersectStep(self):
         classifications = self._getInputClassifications()
         classes = self._getInputClassificationIds()
+        referenceSizes, normalizedReferenceSizes = self._readReferenceIntersectionSizes()
+
+
         intersections = self._calculateIntersections(classes)
+        intersections = self._pruneIntersections(intersections, int(self.minClassSize))
         
-        referenceSizes = np.load(self._getReferenceIntersectionSizeFilename())
-        referenceRelativeSizes = np.load(self._getReferenceIntersectionNormalizedSizeFilename())
         outputClasses = self._createSetOfClasses(
             classifications,
             intersections,
             self._getMergedIntersectionSuffix(len(intersections)),
             referenceSizes,
-            referenceRelativeSizes
+            normalizedReferenceSizes
         )
         
         self._defineOutputs(outputClasses=outputClasses)
@@ -130,8 +138,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
         linkage = self._calculateLinkage(intersections, allClasses, metric)
 
         # Create outputs
-        #np.save(self._getIntersectionDistancesFilename(), distances)
-        np.save(self._getLinkageMatrixFilename(), linkage)
+        self._writeLinkageMatrix(linkage)
 
     def findElbowsStep(self):
         linkage = np.load(self._getLinkageMatrixFilename())
@@ -141,8 +148,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
             'profile_likelihood': self._calculateElbowProfileLikelihood(cost)
         }
         
-        with open(self._getElbowsFilename(), 'w') as f:
-            f.write(json.dumps(elbows))
+        self._writeElbows(elbows)
 
     # --------------------------- INFO functions -------------------------------
     """
@@ -213,7 +219,32 @@ class XmippProtConsensusClasses(ProtClassify3D):
     def _getOutputSqliteFilename(self, suffix: str = '') -> str:
         return self._getPath(self._getOutputSqliteTemplate() % suffix)
  
+    def _writeReferenceIntersectionSizes(self, sizes, normalizedSizes):
+        np.save(self._getReferenceIntersectionSizeFilename(), sizes)
+        np.save(self._getReferenceIntersectionNormalizedSizeFilename(), normalizedSizes)
+
+    def _readReferenceIntersectionSizes(self) -> Tuple[np.ndarray, np.ndarray]:
+        sizes = np.load(self._getReferenceIntersectionSizeFilename())
+        normalizedSizes = np.load(self._getReferenceIntersectionNormalizedSizeFilename())
+        return sizes, normalizedSizes
  
+    def _writeLinkageMatrix(self, linkage):
+        np.save(self._getLinkageMatrixFilename(), linkage)
+ 
+    def _readLinkageMatrix(self):
+        return np.load(self._getLinkageMatrixFilename())
+    
+    def _writeElbows(self, elbows: dict):
+        with open(self._getElbowsFilename(), 'w') as f:
+            f.write(json.dumps(elbows))
+    
+    def _readElbows(self) -> dict:
+        with open(self._getElbowsFilename(), 'r') as f:
+            return json.load(f)
+        
+        
+        
+    
     
     def _calculateIntersections(self, 
                                 classifications: Iterable[Sequence[Set[int]]]):
@@ -235,6 +266,17 @@ class XmippProtConsensusClasses(ProtClassify3D):
             result = intersections
 
         return result
+
+    def _pruneIntersections(self,
+                            intersections: Iterable[Set[int]],
+                            minSize: int = 0 ):
+
+        def size_criteria(intersection: Set[int]) -> bool:
+            return len(intersection) >= minSize
+    
+        filtered = filter(size_criteria, intersections)
+
+        return list(filtered)
 
     def _calculateIntersectionSourceProbabilities(self, 
                                                   classSizes: Iterable[np.ndarray]) -> np.ndarray:
@@ -431,9 +473,8 @@ class XmippProtConsensusClasses(ProtClassify3D):
             # Load from input
             classifications = self._getInputClassifications()
             intersections = self._getOutputIntersectionIds()
-            linkage = np.load(self._getLinkageMatrixFilename())
-            referenceSizes = np.load(self._getReferenceIntersectionSizeFilename())
-            referenceRelativeSizes = np.load(self._getReferenceIntersectionNormalizedSizeFilename())
+            linkage = self._readLinkageMatrix()
+            referenceSizes, normalizedReferenceSizes = self._readReferenceIntersectionSizes()
             
             # Merge and create the set of classes
             merging = self._calculateMergedIntersections(intersections, linkage, stop=n)
@@ -443,7 +484,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
                 clustering=merged,
                 suffix=suffix,
                 referenceSizes=referenceSizes,
-                referenceRelativeSizes=referenceRelativeSizes
+                referenceRelativeSizes=normalizedReferenceSizes
             )
 
             outputClasses.write()
@@ -466,7 +507,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
         result.setImages(classifications[0].getImages())
     
         # Fill the output
-        def updateItem(item: Object, _):
+        def updateItem(item: Image, _):
             objId: int = item.getObjId()
             
             classId = 0
@@ -479,26 +520,35 @@ class XmippProtConsensusClasses(ProtClassify3D):
         
         def updateClass(item: SetOfImages):
             classId: int = item.getObjId()
-            classIdx = classId - 1
-            cluster = clustering[classIdx]
-            representativeClass = self._calculateClusterRepresentativeClass(
-                cluster,
-                classifications
-            )
-            size = len(clustering[classIdx])
-            relativeSize = size / len(representativeClass)
-            
-            item.setRepresentative(representativeClass.getRepresentative().clone())
-            
-            if referenceSizes is not None:
-                sizePercentile = self._calculatePercentile(referenceSizes, size)
-                pValue = 1 - sizePercentile
-                setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
+            if classId > 0:
+                classIdx = classId - 1
+                cluster = clustering[classIdx]
+                representativeClass = self._calculateClusterRepresentativeClass(
+                    cluster,
+                    classifications
+                )
+                size = len(clustering)
+                relativeSize = size / len(representativeClass)
                 
-            if referenceRelativeSizes is not None:
-                relativeSizePercentile = self._calculatePercentile(referenceRelativeSizes, relativeSize)
-                pValue = 1 - relativeSizePercentile
-                setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE, Float(pValue))
+                item.setRepresentative(representativeClass.getRepresentative().clone())
+                
+                if referenceSizes is not None:
+                    sizePercentile = self._calculatePercentile(referenceSizes, size)
+                    pValue = 1 - sizePercentile
+                    setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(pValue))
+                    
+                if referenceRelativeSizes is not None:
+                    relativeSizePercentile = self._calculatePercentile(referenceRelativeSizes, relativeSize)
+                    pValue = 1 - relativeSizePercentile
+                    setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE, Float(pValue))
+            else:
+                item.setEnabled(False)
+                
+                if referenceSizes is not None:
+                    setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_SIZE_PVALUE, Float(1.0))
+
+                if referenceRelativeSizes is not None:
+                    setXmippAttribute(item, emlib.MDL_CLASS_INTERSECTION_RELATIVE_SIZE_PVALUE, Float(1.0))
 
         result.classifyItems(
             updateItemCallback=updateItem,

@@ -77,17 +77,10 @@ class XmippConsensusClassesViewer(ProtocolViewer):
     
     # --------------------------- UTILS functions ------------------------------
     def _getLinkageMatrix(self) -> np.ndarray:
-        return np.load(self.protocol._getLinkageMatrixFilename())
+        return self.protocol._readLinkageMatrix()
     
-    def _getIntersectionDistances(self) -> np.ndarray:
-        return np.load(self.protocol._getIntersectionDistancesFilename())
-    
-    def _getIntersectionDistanceMatrix(self) -> np.ndarray:
-        return scipy.spatial.distance.squareform(self._getIntersectionDistances(), 'tomatrix')
-    
-    def _getElbows(self):
-        with open(self.protocol._getElbowsFilename()) as f:
-            return json.load(f)
+    def _getElbows(self) -> dict:
+        return self.protocol._readElbows()
     
     def _getMergedIntersections(self, size) -> SetOfClasses:
         return self.protocol._obtainMergedIntersections(size)
