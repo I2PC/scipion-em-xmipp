@@ -73,6 +73,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
         form.addSection(label='Global refinement')
         form.addParam('numberOfIterations', IntParam, label='Number of iterations', default=3)
+        form.addParam('numberOfAlignmentRepetitions', IntParam, label='Number of repetitions', default=2)
         form.addParam('initialResolution', FloatParam, label="Initial resolution (A)", default=10.0,
                       help='Image comparison resolution limit at the first iteration of the refinement')
         form.addParam('maximumResolution', FloatParam, label="Maximum resolution (A)", default=8.0,
@@ -137,20 +138,30 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         return ids + [compareAnglesStepId]
         
     def _insertProjectSteps(self, iteration: int, prerequisites):
-        # Project all volumes
-        projectStepIds = []
-        for cls in range(self._getClassCount()):
-            projectStepIds.append(self._insertFunctionStep('projectVolumeStep', iteration, cls, prerequisites=prerequisites))
+        mergeStepIds = []
+            
+        for repetition in range(self._getAlignmentRepetitionCount()):
+            projectStepIds = []
+
+            # Project all classes
+            for cls in range(self._getClassCount()):
+                projectStepIds.append(self._insertFunctionStep('projectVolumeStep', iteration, cls, repetition, prerequisites=prerequisites))
+
+            # Merge galleries of classes
+            mergeStepIds.append(self._insertFunctionStep('mergeGalleriesStep', iteration, repetition, prerequisites=projectStepIds))
         
-        # Merge galleries
-        mergeGalleriesStepId = self._insertFunctionStep('mergeGalleriesStep', iteration, prerequisites=projectStepIds)
-        
-        return [mergeGalleriesStepId]
+        return mergeStepIds
         
     def _insertAlignmentSteps(self, iteration: int, local: bool, prerequisites):
-        trainDatabaseStepId = self._insertFunctionStep('trainDatabaseStep', iteration, prerequisites=prerequisites)
-        alignStepId = self._insertFunctionStep('alignStep', iteration, local, prerequisites=[trainDatabaseStepId])
-        intersectInputStepId = self._insertFunctionStep('intersectInputStep', iteration, prerequisites=[alignStepId])
+        ensembleTrainingSetStepId = self._insertFunctionStep('ensembleTrainingSetStep', iteration, prerequisites=prerequisites)
+        trainDatabaseStepId = self._insertFunctionStep('trainDatabaseStep', iteration, prerequisites=[ensembleTrainingSetStepId])
+        
+        alignStepIds = []
+        for repetition in range(self._getAlignmentRepetitionCount()):
+            alignStepIds.append(self._insertFunctionStep('alignStep', iteration, repetition, local, prerequisites=[trainDatabaseStepId]))
+            
+        alignmentConsensusStepId = self._insertFunctionStep('alignmentConsensusStep', iteration, prerequisites=alignStepIds)
+        intersectInputStepId = self._insertFunctionStep('intersectInputStep', iteration, prerequisites=[alignmentConsensusStepId])
         
         return [intersectInputStepId]
  
@@ -268,14 +279,14 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         moveFile(oroot + '_images.sel', self._getCtfGroupMdFilename(iteration))
         moveFile(oroot + '_ctf.mrcs', self._getCtfGroupAveragesFilename(iteration))
         
-    def projectVolumeStep(self, iteration: int, cls: int):
+    def projectVolumeStep(self, iteration: int, cls: int, repetition: int):
         md = emlib.MetaData(self._getIterationParametersFilename(iteration))
         angleStep = md.getValue(emlib.MDL_ANGLE_DIFF, 1)
         perturb = math.sin(math.radians(angleStep)) / 4
 
         args = []
         args += ['-i', self._getIterationInputVolumeFilename(iteration, cls)]
-        args += ['-o', self._getClassGalleryStackFilename(iteration, cls)]
+        args += ['-o', self._getClassGalleryStackFilename(iteration, cls, repetition)]
         args += ['--sampling_rate', angleStep]
         args += ['--perturb', perturb]
         args += ['--sym', self.symmetryGroup]
@@ -288,22 +299,28 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob('xmipp_angular_project_library', args)
     
         args = []
-        args += ['-i', self._getClassGalleryMdFilename(iteration, cls)]
+        args += ['-i', self._getClassGalleryMdFilename(iteration, cls, repetition)]
         args += ['--fill', 'ref3d', 'constant', cls+1]
         self._runMdUtils(args)
     
-    def mergeGalleriesStep(self, iteration):
+    def mergeGalleriesStep(self, iteration: int, repetition: int):
         self._mergeMetadata(
-            map(lambda cls : self._getClassGalleryMdFilename(iteration, cls), range(self._getClassCount())),
-            self._getGalleryMdFilename(iteration)
+            map(lambda cls : self._getClassGalleryMdFilename(iteration, cls, repetition), range(self._getClassCount())),
+            self._getGalleryMdFilename(iteration, repetition)
         )
 
         # Reindex
         args = []
-        args += ['-i', self._getGalleryMdFilename(iteration)]
+        args += ['-i', self._getGalleryMdFilename(iteration, repetition)]
         args += ['--fill', 'ref', 'lineal', 1, 1]
         self._runMdUtils(args)
-    
+        
+    def ensembleTrainingSetStep(self, iteration: int):
+        self._mergeMetadata(
+            map(lambda i : self._getGalleryMdFilename(iteration, i), range(self._getAlignmentRepetitionCount())),
+            self._getTrainingMdFilename(iteration)
+        )
+        
     def trainDatabaseStep(self, iteration: int):
         trainingSize = int(self.databaseTrainingSetSize)
         recipe = self.databaseRecipe
@@ -316,7 +333,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         maxShift = maxShiftPx / imageSize
 
         args = []
-        args += ['-i', self._getGalleryMdFilename(iteration)]
+        args += ['-i', self._getTrainingMdFilename(iteration)]
         args += ['-o', self._getTrainingIndexFilename(iteration)]
         args += ['--recipe', recipe]
         #args += ['--weights', self._getWeightsFilename(iteration)]
@@ -334,7 +351,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
         self.runJob('xmipp_train_database', args, numberOfMpi=1, env=env)
     
-    def alignStep(self, iteration: int, local: bool):
+    def alignStep(self, iteration: int, repetition: int, local: bool):
         md = emlib.MetaData(self._getIterationParametersFilename(iteration))
         imageSize = 160 # TODO determine
         maxFrequency = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, 1)
@@ -347,8 +364,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         # Perform the alignment
         args = []
         args += ['-i', self._getIterationInputParticleMdFilename(iteration)]
-        args += ['-o', self._getAlignmentMdFilename(iteration)]
-        args += ['-r', self._getGalleryMdFilename(iteration)]
+        args += ['-o', self._getAlignmentRepetitionMdFilename(iteration, repetition)]
+        args += ['-r', self._getGalleryMdFilename(iteration, repetition)]
         args += ['--index', self._getTrainingIndexFilename(iteration)]
         #args += ['--weights', self._getWeightsFilename(iteration)]
         args += ['--max_shift', maxShift]
@@ -368,6 +385,50 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
         self.runJob('xmipp_query_database', args, numberOfMpi=1, env=env)
+
+    def alignmentConsensusStep(self, iteration: int):
+        repetitionCount = self._getAlignmentRepetitionCount()
+
+        if repetitionCount == 1:
+            copyFile(
+                self._getAlignmentRepetitionMdFilename(iteration, 0),
+                self._getAlignmentMdFilename(iteration),
+            )
+        elif repetitionCount == 2:
+            md = emlib.MetaData(self._getIterationParametersFilename(iteration))
+            angleStep = md.getValue(emlib.MDL_ANGLE_DIFF, 1)
+
+            # Ensure that both alignments have the same particles
+            args = []
+            args += ['-i', self._getAlignmentRepetitionMdFilename(iteration, 0)]
+            args += ['--set', 'intersection', self._getAlignmentRepetitionMdFilename(iteration, 1), 'itemId']
+            self._runMdUtils(args)
+
+            args = []
+            args += ['-i', self._getAlignmentRepetitionMdFilename(iteration, 1)]
+            args += ['--set', 'intersection', self._getAlignmentRepetitionMdFilename(iteration, 0), 'itemId']
+            self._runMdUtils(args)
+            
+            # Compute the angular distance
+            oroot = self._getAlignmentConsensusOutputRoot(iteration)
+            args = []
+            args += ['--ang1', self._getAlignmentRepetitionMdFilename(iteration, 0)]
+            args += ['--ang2', self._getAlignmentRepetitionMdFilename(iteration, 1)]
+            args += ['--oroot', oroot]
+            args += ['--sym', self.symmetryGroup]
+            self.runJob('xmipp_angular_distance', args, numberOfMpi=1)
+            moveFile(oroot+'_vec_diff_hist.txt', self._getAlignmentConsensusVecDiffHistogramMdFilename(iteration))
+            moveFile(oroot+'_shift_diff_hist.txt', self._getAlignmentConsensusShiftDiffHistogramMdFilename(iteration))
+            
+            # Select particles that are less than a step apart
+            args = []
+            args += ['-i', self._getAlignmentConsensusMdFilename(iteration)]
+            args += ['-o', self._getAlignmentMdFilename(iteration)]
+            args += ['--query', 'select', f'angleDiff <= {angleStep}']
+            self._runMdUtils(args)
+
+        else:            
+            raise NotImplementedError('No angular consensus has been implemented for more than 2 alignments')
 
     def intersectInputStep(self, iteration: int):
         args = []
@@ -564,6 +625,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     #--------------------------- UTILS functions --------------------------------------------        
     def _getIterationCount(self) -> int:
         return int(self.numberOfIterations)
+
+    def _getAlignmentRepetitionCount(self) -> int:
+        return int(self.numberOfAlignmentRepetitions)
         
     def _getClassCount(self) -> int:
         return len(self.inputVolumes)
@@ -614,23 +678,41 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getCtfGroupAveragesFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'ctfs.mrcs')
 
-    def _getClassGalleryMdFilename(self, iteration: int, cls: int):
-        return self._getClassPath(iteration, cls, 'gallery.doc')
+    def _getClassGalleryMdFilename(self, iteration: int, cls: int, repetition: int):
+        return self._getClassPath(iteration, cls, 'gallery%05d.doc' % repetition)
     
-    def _getClassGalleryStackFilename(self, iteration: int, cls: int):
-        return self._getClassPath(iteration, cls, 'gallery.mrcs')
+    def _getClassGalleryStackFilename(self, iteration: int, cls: int, repetition: int):
+        return self._getClassPath(iteration, cls, 'gallery%05d.mrcs' % repetition)
     
-    def _getGalleryMdFilename(self, iteration: int):
-        return self._getIterationPath(iteration, 'gallery.xmd')
+    def _getGalleryMdFilename(self, iteration: int, repetition: int):
+        return self._getIterationPath(iteration, 'gallery%05d.xmd' % repetition)
+
+    def _getTrainingMdFilename(self, iteration: int):
+        return self._getIterationPath(iteration, 'training.xmd')
     
     def _getWeightsFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'weights.mrc')
     
     def _getTrainingIndexFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'database.idx')
+
+    def _getAlignmentRepetitionMdFilename(self, iteration: int, repetition: int):
+        return self._getIterationPath(iteration, 'aligned%05d.xmd' % repetition)
     
     def _getAlignmentMdFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'aligned.xmd')
+    
+    def _getAlignmentConsensusOutputRoot(self, iteration: int):
+        return self._getIterationPath(iteration, 'alignment_consensus')
+
+    def _getAlignmentConsensusMdFilename(self, iteration: int):
+        return self._getAlignmentConsensusOutputRoot(iteration) + '.xmd'
+
+    def _getAlignmentConsensusVecDiffHistogramMdFilename(self, iteration: int):
+        return self._getAlignmentConsensusOutputRoot(iteration) + '_vec_diff_hist.xmd'
+
+    def _getAlignmentConsensusShiftDiffHistogramMdFilename(self, iteration: int):
+        return self._getAlignmentConsensusOutputRoot(iteration) + '_shift_diff_hist.xmd'
     
     def _getInputIntersectionMdFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'input_intersection.xmd')
