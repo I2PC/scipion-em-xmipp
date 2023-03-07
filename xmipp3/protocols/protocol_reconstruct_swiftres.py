@@ -35,7 +35,7 @@ from pyworkflow.utils.path import (cleanPath, makePath, copyFile, moveFile,
 import xmipp3
 from xmipp3.convert import writeSetOfParticles, readSetOfParticles
 
-from typing import Iterable
+from typing import Iterable, Sequence, Optional
 import math
 
 class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
@@ -387,38 +387,31 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob('xmipp_query_database', args, numberOfMpi=1, env=env)
 
     def alignmentConsensusStep(self, iteration: int):
-        repetitionCount = self._getAlignmentRepetitionCount()
+        alignmentRepetitionMdFilenames = list(map(
+            lambda i : self._getAlignmentRepetitionMdFilename(iteration, i)),
+            range(self._getAlignmentRepetitionCount())
+        ))
 
-        if repetitionCount == 1:
+        # Ensure that both alignments have the same particles
+        self._keepCommonMetadataElements(
+            alignmentRepetitionMdFilenames
+        )
+        
+        if len(alignmentRepetitionMdFilenames) == 1:
             copyFile(
                 self._getAlignmentRepetitionMdFilename(iteration, 0),
                 self._getAlignmentMdFilename(iteration),
             )
-        elif repetitionCount == 2:
+        elif len(alignmentRepetitionMdFilenames) == 2:
             md = emlib.MetaData(self._getIterationParametersFilename(iteration))
             angleStep = md.getValue(emlib.MDL_ANGLE_DIFF, 1)
 
-            # Ensure that both alignments have the same particles
-            args = []
-            args += ['-i', self._getAlignmentRepetitionMdFilename(iteration, 0)]
-            args += ['--set', 'intersection', self._getAlignmentRepetitionMdFilename(iteration, 1), 'itemId']
-            self._runMdUtils(args)
-
-            args = []
-            args += ['-i', self._getAlignmentRepetitionMdFilename(iteration, 1)]
-            args += ['--set', 'intersection', self._getAlignmentRepetitionMdFilename(iteration, 0), 'itemId']
-            self._runMdUtils(args)
-            
-            # Compute the angular distance
-            oroot = self._getAlignmentConsensusOutputRoot(iteration)
-            args = []
-            args += ['--ang1', self._getAlignmentRepetitionMdFilename(iteration, 0)]
-            args += ['--ang2', self._getAlignmentRepetitionMdFilename(iteration, 1)]
-            args += ['--oroot', oroot]
-            args += ['--sym', self.symmetryGroup]
-            self.runJob('xmipp_angular_distance', args, numberOfMpi=1)
-            moveFile(oroot+'_vec_diff_hist.txt', self._getAlignmentConsensusVecDiffHistogramMdFilename(iteration))
-            moveFile(oroot+'_shift_diff_hist.txt', self._getAlignmentConsensusShiftDiffHistogramMdFilename(iteration))
+            self._runAngularDistance(
+                alignmentRepetitionMdFilenames[0],
+                alignmentRepetitionMdFilenames[1],
+                self._getAlignmentConsensusOutputRoot(iteration),
+                extrargs=['--compute_average_angle', '--compute_average_shift']
+            )
             
             # Select particles that are less than a step apart
             args = []
@@ -438,18 +431,11 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self._runMdUtils(args)
 
     def compareAnglesStep(self, iteration: int):
-        oroot = self._getAngleDiffOutputRoot(iteration)
-        
-        args = []
-        args += ['--ang1', self._getAlignmentMdFilename(iteration)]
-        args += ['--ang2', self._getInputIntersectionMdFilename(iteration)]
-        args += ['--oroot', oroot]
-        args += ['--sym', self.symmetryGroup]
-        self.runJob('xmipp_angular_distance', args, numberOfMpi=1)
-        
-        # Rename files to have xmd extension
-        moveFile(oroot+'_vec_diff_hist.txt', self._getAngleDiffVecDiffHistogramMdFilename(iteration))
-        moveFile(oroot+'_shift_diff_hist.txt', self._getAngleDiffShiftDiffHistogramMdFilename(iteration))
+        self._runAngularDistance(
+            ang1=self._getAlignmentMdFilename(iteration),
+            ang2=self._getInputIntersectionMdFilename(iteration),
+            oroot=self._getAngleDiffOutputRoot(iteration)
+        )
         
     def selectAlignmentStep(self, iteration: int, cls: int):
         args = []
@@ -908,6 +894,42 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             args += ['-i', dst]
             args += ['--set', 'union_all', s] 
             self._runMdUtils(args)
-    
+        
+    def _keepCommonMetadataElements(self, 
+                                    mds: Sequence[str],
+                                    label: str = 'itemId' ):
+        # Intersect the first md with the rest of mds
+        commonMd = mds[0] # Use first item to keep track of common items
+        for md in mds[1:]:
+            args = []
+            args += ['-i', commonMd]
+            args += ['--set', 'intersection', md, label]
+            self._runMdUtils(args)
+            
+        # Intersect all of the mds with the first one
+        for md in mds[1:]:
+            args = []
+            args += ['-i', md]
+            args += ['--set', 'intersection', commonMd, label]
+            self._runMdUtils(args)
+            
     def _runMdUtils(self, args):
         self.runJob('xmipp_metadata_utilities', args, numberOfMpi=1)
+
+    def _runAngularDistance(self, 
+                            ang1: str, 
+                            ang2: str, 
+                            oroot: str, 
+                            sym: Optional[str] = None,
+                            extrargs = []):
+        args = []
+        args += ['--ang1', ang1]
+        args += ['--ang2', ang2]
+        args += ['--oroot', oroot]
+        args += ['--sym', sym or self.symmetryGroup]
+        args += extrargs
+        self.runJob('xmipp_angular_distance', args, numberOfMpi=1)
+        
+        # Rename files to have xmd extension
+        moveFile(oroot+'_vec_diff_hist.txt', oroot+'_vec_diff_hist.xmd')
+        moveFile(oroot+'_shift_diff_hist.txt', oroot+'_shift_diff_hist.xmd')
