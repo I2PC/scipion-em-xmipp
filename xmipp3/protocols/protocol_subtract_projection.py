@@ -66,7 +66,6 @@ class XmippProtSubtractProjectionBase(EMProtocol):
                       help='Decay of the filter (sigma) to smooth the mask transition')
         form.addParam('pad', IntParam, label="Fourier padding factor: ", default=2, expertLevel=LEVEL_ADVANCED,
                       help='The volume is zero padded by this factor to produce projections')
-        form.addParallelSection(threads=0, mpi=4)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -100,6 +99,8 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
                            ' whole images.')
         form.addParam('subtract', EnumParam, default=0, choices=["Keep", "Subtract"], display=EnumParam.DISPLAY_HLIST,
                       label="Mask contains the part to ")
+        form.addParallelSection(threads=0, mpi=4)
+
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertSubSteps(self):
         self._insertFunctionStep('convertStep')
@@ -174,6 +175,7 @@ class XmippProtBoostParticles(XmippProtSubtractProjectionBase):
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         XmippProtSubtractProjectionBase._defineParams(form)
+        form.addParallelSection(threads=0, mpi=4)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertSubSteps(self):
