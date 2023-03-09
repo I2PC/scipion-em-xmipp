@@ -22,6 +22,7 @@
 
 from pwem.protocols import ProtRefine3D
 from pwem.objects import Volume, FSC, SetOfVolumes, Class3D
+from pwem.convert import transformations
 from pwem import emlib
 
 from pyworkflow.protocol.params import (Form, PointerParam, 
@@ -37,6 +38,10 @@ from xmipp3.convert import writeSetOfParticles, readSetOfParticles
 
 from typing import Iterable, Sequence, Optional
 import math
+
+import numpy as np
+from scipy import stats
+import itertools
 
 class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     _label = 'swiftres'
@@ -387,41 +392,28 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob('xmipp_query_database', args, numberOfMpi=1, env=env)
 
     def alignmentConsensusStep(self, iteration: int):
-        alignmentRepetitionMdFilenames = list(map(
-            lambda i : self._getAlignmentRepetitionMdFilename(iteration, i)),
+        paramMd = emlib.MetaData(self._getIterationParametersFilename(iteration))
+        angleStep = paramMd.getValue(emlib.MDL_ANGLE_DIFF, 1)
+        shiftStep = paramMd.getValue(emlib.MDL_SHIFT_DIFF, 1)
+
+        alignmentRepetitionMds = list(map(
+            lambda i : emlib.MetaData(self._getAlignmentRepetitionMdFilename(iteration, i)),
             range(self._getAlignmentRepetitionCount())
         ))
 
         # Ensure that both alignments have the same particles
         self._keepCommonMetadataElements(
-            alignmentRepetitionMdFilenames
+            alignmentRepetitionMds,
+            emlib.MDL_ITEM_ID
         )
         
-        if len(alignmentRepetitionMdFilenames) == 1:
-            copyFile(
-                self._getAlignmentRepetitionMdFilename(iteration, 0),
-                self._getAlignmentMdFilename(iteration),
-            )
-        elif len(alignmentRepetitionMdFilenames) == 2:
-            md = emlib.MetaData(self._getIterationParametersFilename(iteration))
-            angleStep = md.getValue(emlib.MDL_ANGLE_DIFF, 1)
-
-            self._runAngularDistance(
-                alignmentRepetitionMdFilenames[0],
-                alignmentRepetitionMdFilenames[1],
-                self._getAlignmentConsensusOutputRoot(iteration),
-                extrargs=['--compute_average_angle', '--compute_average_shift']
-            )
-            
-            # Select particles that are less than a step apart
-            args = []
-            args += ['-i', self._getAlignmentConsensusMdFilename(iteration)]
-            args += ['-o', self._getAlignmentMdFilename(iteration)]
-            args += ['--query', 'select', f'angleDiff <= {angleStep}']
-            self._runMdUtils(args)
-
-        else:            
-            raise NotImplementedError('No angular consensus has been implemented for more than 2 alignments')
+        consensusMd = self._computeAlignmentConsensus(
+            alignmentRepetitionMds,
+            angleStep,
+            shiftStep
+        )
+        
+        consensusMd.write(self._getAlignmentMdFilename(iteration))
 
     def intersectInputStep(self, iteration: int):
         args = []
@@ -751,6 +743,88 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getTrainingScratchFilename(self):
         return self._getTmpPath('scratch.bin')
     
+    def _averageQuaternions(self, quats: np.ndarray) -> np.ndarray:
+        s = np.matmul(quats.T, quats)
+        s /= len(quats)
+        eigenValues, eigenVectors = np.linalg.eig(s)
+        return np.real(eigenVectors[:,np.argmax(eigenValues)])
+    
+    def _computeAlignmentConsensus( self, 
+                                    mds: Sequence[emlib.MetaData],
+                                    maxAngleDiff: float,
+                                    maxShiftDiff: float ) -> emlib.MetaData:
+        if len(mds) > 1:
+            resultMd = emlib.MetaData()
+            
+            maxAngleDiff = np.deg2rad(maxAngleDiff)
+            
+            quaternions = np.empty((len(mds), 4))
+            shifts = np.empty((len(mds), 2))
+            ref3ds = np.empty(len(mds), dtype=int)
+            row = emlib.metadata.Row()
+            
+            for objIds in zip(*mds):
+                # Obtain the alignment data
+                for i, (objId, md) in enumerate(zip(objIds, mds)):
+                    quaternions[i,:] = transformations.quaternion_from_euler(
+                        -np.deg2rad(md.getValue(emlib.MDL_ANGLE_ROT, objId)),
+                        -np.deg2rad(md.getValue(emlib.MDL_ANGLE_TILT, objId)),
+                        -np.deg2rad(md.getValue(emlib.MDL_ANGLE_PSI, objId)),
+                        axes='szyz'
+                    )
+                    shifts[i,:] = ( md.getValue(emlib.MDL_SHIFT_X, objId),
+                                    md.getValue(emlib.MDL_SHIFT_Y, objId) )
+                    ref3ds[i] = md.getValue(emlib.MDL_REF3D, objId)
+                    
+                # Perform a consensus
+                quaternion, _ = transformations.mean_quaternion(transformations.weighted_tensor(quaternions))
+                shift = np.mean(shifts, axis=0)
+                ref3d = int(stats.mode(ref3ds).mode)
+                
+                # Check if more than a half agree
+                angleDiff = np.array(list(map(lambda q : transformations.quaternion_distance(quaternion, q), quaternions)))
+                #if np.count_nonzero(angleDiff <= maxAngleDiff) <= len(angleDiff) / 2:
+                #    continue
+
+                shiftDiff = np.linalg.norm(shifts-shift, axis=1)
+                if np.count_nonzero(shiftDiff <= maxShiftDiff) <= len(shiftDiff) / 2:
+                    continue
+                
+                if np.count_nonzero(ref3ds == ref3d) <= len(ref3ds) / 2:
+                    continue
+                
+                # All checks succeeded. Elaborate output
+                row.readFromMd(mds[0], objIds[0])
+                
+                rot, tilt, psi = transformations.euler_from_quaternion(quaternion, axes='szyz')
+                row.setValue(emlib.MDL_ANGLE_ROT, -np.rad2deg(rot))
+                row.setValue(emlib.MDL_ANGLE_TILT, -np.rad2deg(tilt))
+                row.setValue(emlib.MDL_ANGLE_PSI, -np.rad2deg(psi))
+                row.setValue(emlib.MDL_SHIFT_X, shift[0])
+                row.setValue(emlib.MDL_SHIFT_Y, shift[1])
+                row.setValue(emlib.MDL_ANGLE_DIFF, np.mean(angleDiff))
+                row.setValue(emlib.MDL_SHIFT_DIFF, np.mean(shiftDiff))
+                row.setValue(emlib.MDL_REF3D, ref3d)
+                
+                assert(len(mds) > 1)
+                row.setValue(emlib.MDL_ANGLE_PSI+1, mds[0].getValue(emlib.MDL_ANGLE_PSI, objIds[0]))
+                row.setValue(emlib.MDL_ANGLE_PSI+2, mds[1].getValue(emlib.MDL_ANGLE_PSI, objIds[1]))
+                row.setValue(emlib.MDL_ANGLE_ROT+1, mds[0].getValue(emlib.MDL_ANGLE_ROT, objIds[0]))
+                row.setValue(emlib.MDL_ANGLE_ROT+2, mds[1].getValue(emlib.MDL_ANGLE_ROT, objIds[1]))
+                row.setValue(emlib.MDL_ANGLE_TILT+1, mds[0].getValue(emlib.MDL_ANGLE_TILT, objIds[0]))
+                row.setValue(emlib.MDL_ANGLE_TILT+2, mds[1].getValue(emlib.MDL_ANGLE_TILT, objIds[1]))
+                row.setValue(emlib.MDL_SHIFT_X+1, mds[0].getValue(emlib.MDL_SHIFT_X, objIds[0]))
+                row.setValue(emlib.MDL_SHIFT_X+2, mds[1].getValue(emlib.MDL_SHIFT_X, objIds[1]))
+                row.setValue(emlib.MDL_SHIFT_Y+1, mds[0].getValue(emlib.MDL_SHIFT_Y, objIds[0]))
+                row.setValue(emlib.MDL_SHIFT_Y+2, mds[1].getValue(emlib.MDL_SHIFT_Y, objIds[1]))
+                
+                row.writeToMd(resultMd, resultMd.addObject())
+
+            return resultMd
+        
+        elif len(mds) == 1:
+            return mds[0]
+            
     def _computeResolution(self, mdFsc, Ts, threshold):
         resolution = 2 * Ts
 
@@ -896,22 +970,16 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             self._runMdUtils(args)
         
     def _keepCommonMetadataElements(self, 
-                                    mds: Sequence[str],
-                                    label: str = 'itemId' ):
+                                    mds: Sequence[emlib.MetaData],
+                                    label: int = emlib.MDL_ITEM_ID ):
         # Intersect the first md with the rest of mds
         commonMd = mds[0] # Use first item to keep track of common items
         for md in mds[1:]:
-            args = []
-            args += ['-i', commonMd]
-            args += ['--set', 'intersection', md, label]
-            self._runMdUtils(args)
+            commonMd.intersection(md, label)
             
         # Intersect all of the mds with the first one
         for md in mds[1:]:
-            args = []
-            args += ['-i', md]
-            args += ['--set', 'intersection', commonMd, label]
-            self._runMdUtils(args)
+            md.intersection(commonMd, label)
             
     def _runMdUtils(self, args):
         self.runJob('xmipp_metadata_utilities', args, numberOfMpi=1)
