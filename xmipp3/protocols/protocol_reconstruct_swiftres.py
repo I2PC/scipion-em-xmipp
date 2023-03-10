@@ -778,11 +778,17 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getTrainingScratchFilename(self):
         return self._getTmpPath('scratch.bin')
     
-    def _averageQuaternions(self, quats: np.ndarray) -> np.ndarray:
-        s = np.matmul(quats.T, quats)
-        s /= len(quats)
+    def _quaternionAverage(self, quaternions: np.ndarray) -> np.ndarray:
+        s = np.matmul(quaternions.T, quaternions)
+        s /= len(quaternions)
         eigenValues, eigenVectors = np.linalg.eig(s)
         return np.real(eigenVectors[:,np.argmax(eigenValues)])
+    
+    def _quaternionDistance(self,
+                            quaternions: np.ndarray,
+                            quaternion: np.ndarray ) -> np.ndarray:
+        dots = np.dot(quaternions, quaternion)
+        return np.arccos(2*(dots**2)-1)
     
     def _computeAlignmentConsensus( self, 
                                     mds: Sequence[emlib.MetaData],
@@ -812,14 +818,14 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                     ref3ds[i] = md.getValue(emlib.MDL_REF3D, objId)
                     
                 # Perform a consensus
-                quaternion, _ = transformations.mean_quaternion(transformations.weighted_tensor(quaternions))
+                quaternion = self._quaternionAverage(quaternions)
                 shift = np.mean(shifts, axis=0)
                 ref3d = int(stats.mode(ref3ds).mode)
                 
                 # Check if more than a half agree
-                angleDiff = np.array(list(map(lambda q : transformations.quaternion_distance(quaternion, q), quaternions)))
-                #if np.count_nonzero(angleDiff <= maxAngleDiff) <= len(angleDiff) / 2:
-                #    continue
+                angleDiff = self._quaternionDistance(quaternions, quaternion)
+                if np.count_nonzero(angleDiff <= maxAngleDiff) <= len(angleDiff) / 2:
+                    continue
 
                 shiftDiff = np.linalg.norm(shifts-shift, axis=1)
                 if np.count_nonzero(shiftDiff <= maxShiftDiff) <= len(shiftDiff) / 2:
@@ -837,7 +843,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                 row.setValue(emlib.MDL_ANGLE_PSI, -np.rad2deg(psi))
                 row.setValue(emlib.MDL_SHIFT_X, shift[0])
                 row.setValue(emlib.MDL_SHIFT_Y, shift[1])
-                row.setValue(emlib.MDL_ANGLE_DIFF, np.mean(angleDiff))
+                row.setValue(emlib.MDL_ANGLE_DIFF, np.rad2deg(np.mean(angleDiff)))
                 row.setValue(emlib.MDL_SHIFT_DIFF, np.mean(shiftDiff))
                 row.setValue(emlib.MDL_REF3D, ref3d)
                 
