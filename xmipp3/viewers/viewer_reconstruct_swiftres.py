@@ -240,6 +240,8 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
             fsc = self._readFsc(fscMd)
             label = f'Class {cls}'
             ax.plot(fsc[:,0], fsc[:,1], label=label)
+        ax.axhline(0.5, color='black', linestyle='--')
+        ax.axhline(0.143, color='black', linestyle='--')
 
         ax.set_title('Class FSC')
         ax.set_xlabel('Resolution (1/A)')
@@ -258,6 +260,8 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
             fsc = self._readFsc(fscMd)
             label = f'Iteration {it}'
             ax.plot(fsc[:,0], fsc[:,1], label=label)
+        ax.axhline(0.5, color='black', linestyle='--')
+        ax.axhline(0.143, color='black', linestyle='--')
 
         ax.set_title('Class FSC')
         ax.set_xlabel('Resolution (1/A)')
