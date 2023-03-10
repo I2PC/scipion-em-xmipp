@@ -415,54 +415,31 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         for i, md in enumerate(alignmentRepetitionMds):
             filename = self._getAlignmentRepetitionMdFilename(iteration, i)
             md.write(filename)
-        """
+            
+        # Run angular distance to bring particles to the closest as possible
+        alignmentConsensusMds = [emlib.MetaData(self._getAlignmentRepetitionMdFilename(iteration, 0))]
+        for i in range(1, self._getAlignmentRepetitionCount()):
+            self._runAngularDistance(
+                self._getAlignmentRepetitionMdFilename(iteration, 0),
+                self._getAlignmentRepetitionMdFilename(iteration, i),
+                self._getAlignmentConsensusOutputRoot(iteration, i),
+                extrargs=['--set', 2]
+            )
+            
+            args = []
+            args += ['-i', self._getAlignmentConsensusMdFilename(iteration, i)]
+            args += ['--set', 'join', self._getAlignmentRepetitionMdFilename(iteration, i), 'itemId']
+            self._runMdUtils(args)
+            
+            alignmentConsensusMds.append(emlib.MetaData(self._getAlignmentRepetitionMdFilename(iteration, i)))
+            
         consensusMd = self._computeAlignmentConsensus(
-            alignmentRepetitionMds,
+            alignmentConsensusMds,
             angleStep,
             shiftStep
         )
         
         consensusMd.write(self._getAlignmentMdFilename(iteration))
-        """
-        if self._getAlignmentRepetitionCount() == 1:
-            copyFile(
-                self._getAlignmentRepetitionMdFilename(iteration, 0),
-                self._getAlignmentMdFilename(iteration)
-            )
-            
-        elif self._getAlignmentRepetitionCount() == 2:
-            self._runAngularDistance(
-                self._getAlignmentRepetitionMdFilename(iteration, 0),
-                self._getAlignmentRepetitionMdFilename(iteration, 1),
-                self._getIterationPath(iteration, 'aligned'),
-                extrargs=['--compute_average_angle', '--compute_average_shift']
-            )
-            
-            # Drop particles far apart
-            args = []
-            args += ['-i', self._getAlignmentMdFilename(iteration)]
-            args += ['--query', 'select', 'angleDiff < %f' % angleStep]
-            self._runMdUtils(args)
-            
-            args = []
-            args += ['-i', self._getAlignmentMdFilename(iteration)]
-            args += ['--query', 'select', 'shiftDiff < %f' % shiftStep]
-            self._runMdUtils(args)
-
-            # Add the missing columns
-            args = []
-            args += ['-i', self._getAlignmentMdFilename(iteration)]
-            args += ['--set', 'join', self._getInputParticleMdFilename(), 'itemId']
-            self._runMdUtils(args)
-            
-            # FIXME
-            args = []
-            args += ['-i', self._getAlignmentMdFilename(iteration)]
-            args += ['--fill', 'ref3d', 'constant', 1]
-            
-            self._runMdUtils(args)
-        else:
-            raise NotImplementedError('Alignment consensus only implemented for N=2')
 
     def intersectInputStep(self, iteration: int):
         args = []
@@ -738,17 +715,17 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getAlignmentMdFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'aligned.xmd')
     
-    def _getAlignmentConsensusOutputRoot(self, iteration: int):
-        return self._getIterationPath(iteration, 'alignment_consensus')
+    def _getAlignmentConsensusOutputRoot(self, iteration: int, repetition: int):
+        return self._getIterationPath(iteration, 'alignment_consensus%05d' % repetition)
 
-    def _getAlignmentConsensusMdFilename(self, iteration: int):
-        return self._getAlignmentConsensusOutputRoot(iteration) + '.xmd'
+    def _getAlignmentConsensusMdFilename(self, iteration: int, repetition: int):
+        return self._getAlignmentConsensusOutputRoot(iteration, repetition) + '.xmd'
 
-    def _getAlignmentConsensusVecDiffHistogramMdFilename(self, iteration: int):
-        return self._getAlignmentConsensusOutputRoot(iteration) + '_vec_diff_hist.xmd'
+    def _getAlignmentConsensusVecDiffHistogramMdFilename(self, iteration: int, repetition: int):
+        return self._getAlignmentConsensusOutputRoot(iteration, repetition) + '_vec_diff_hist.xmd'
 
-    def _getAlignmentConsensusShiftDiffHistogramMdFilename(self, iteration: int):
-        return self._getAlignmentConsensusOutputRoot(iteration) + '_shift_diff_hist.xmd'
+    def _getAlignmentConsensusShiftDiffHistogramMdFilename(self, iteration: int, repetition: int):
+        return self._getAlignmentConsensusOutputRoot(iteration, repetition) + '_shift_diff_hist.xmd'
     
     def _getInputIntersectionMdFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'input_intersection.xmd')
