@@ -65,8 +65,7 @@ from .protocol_helical_parameters import XmippProtHelicalParameters
 from .protocol_kerdensom import XmippProtKerdensom
 from .protocol_ml2d import XmippProtML2D
 from .protocol_movie_gain import XmippProtMovieGain
-from .protocol_movie_average import XmippProtMovieAverage
-from .protocol_movie_correlation import XmippProtMovieCorr
+from .protocol_flexalign import XmippProtFlexAlign
 from .protocol_movie_opticalflow import XmippProtOFAlignment, ProtMovieAlignment
 from .protocol_movie_max_shift import XmippProtMovieMaxShift
 from .protocol_movie_split_frames import XmippProtSplitFrames
@@ -121,10 +120,7 @@ from .protocol_write_testP import XmippProtWriteTestP
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
 from .protocol_deep_denoising import XmippProtDeepDenoising  # deepDenoising has to be after XmippProtGenerateReprojections and XmippProtCompareReprojections
 from .protocol_split_volume_hierarchical_cluster import XmippProtSplitVolumeHierarchical
-from .protocol_reconstruct_heterogeneous import XmippProtReconstructHeterogeneous
 from .protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
-from .protocol_metaprotocol_create_output import XmippMetaProtCreateOutput
-from .protocol_metaprotocol_discrete_heterogeneity_scheduler import XmippMetaProtDiscreteHeterogeneityScheduler # keep this after XmippMetaProtCreateSubset and XmippMetaProtCreateOutput
 from .protocol_volume_deform_zernike3d import XmippProtVolumeDeformZernike3D
 from .protocol_structure_map_zernike3d import XmippProtStructureMapZernike3D
 from .protocol_align_volume_and_particles import XmippProtAlignVolumeParticles
