@@ -42,6 +42,7 @@ import math
 import numpy as np
 from scipy import stats
 import itertools
+import collections
 
 class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     _label = 'swiftres'
@@ -129,9 +130,10 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
  
     def _insertIterationSteps(self, iteration: int, local: bool, prerequisites):
         setupIterationStepId = self._insertFunctionStep('setupIterationStep', iteration, local, prerequisites=prerequisites)
-        ctfGroupStepId = self._insertFunctionStep('ctfGroupStep', iteration, prerequisites=[setupIterationStepId])
+        #ctfGroupStepId = self._insertFunctionStep('ctfGroupStep', iteration, prerequisites=[setupIterationStepId])
         projectIds = self._insertProjectSteps(iteration, prerequisites=[setupIterationStepId])
-        alignIds = self._insertAlignmentSteps(iteration, local, prerequisites=projectIds + [ctfGroupStepId])
+        #alignIds = self._insertAlignmentSteps(iteration, local, prerequisites=projectIds + [ctfGroupStepId])
+        alignIds = self._insertAlignmentSteps(iteration, local, prerequisites=projectIds)
         compareAnglesStepId = self._insertFunctionStep('compareAnglesStep', iteration, prerequisites=alignIds)
 
         ids = []
@@ -172,10 +174,11 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
  
     def _insertReconstructSteps(self, iteration: int, cls: int, prerequisites):
         selectAlignmentStepId = self._insertFunctionStep('selectAlignmentStep', iteration, cls, prerequisites=prerequisites)
-        compareReprojectionStepId = self._insertFunctionStep('compareReprojectionStep', iteration, cls, prerequisites=[selectAlignmentStepId])
-        computeWeightsStepId = self._insertFunctionStep('computeWeightsStep', iteration, cls, prerequisites=[compareReprojectionStepId])
+        #compareReprojectionStepId = self._insertFunctionStep('compareReprojectionStep', iteration, cls, prerequisites=[selectAlignmentStepId])
+        #computeWeightsStepId = self._insertFunctionStep('computeWeightsStep', iteration, cls, prerequisites=[compareReprojectionStepId])
         #filterByWeightsStepId = self._insertFunctionStep('filterByWeightsStep', iteration, cls, prerequisites=[computeWeightsStepId])
-        splitStepId = self._insertFunctionStep('splitStep', iteration, cls, prerequisites=[computeWeightsStepId])
+        splitStepId = self._insertFunctionStep('splitStep', iteration, cls, prerequisites=[selectAlignmentStepId])
+        #splitStepId = self._insertFunctionStep('splitStep', iteration, cls, prerequisites=[computeWeightsStepId])
         reconstructStepId1 = self._insertFunctionStep('reconstructStep', iteration, cls, 1, prerequisites=[splitStepId])
         reconstructStepId2 = self._insertFunctionStep('reconstructStep', iteration, cls, 2, prerequisites=[splitStepId])
         computeFscStepId = self._insertFunctionStep('computeFscStep', iteration, cls, prerequisites=[reconstructStepId1, reconstructStepId2])
@@ -396,17 +399,22 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         angleStep = paramMd.getValue(emlib.MDL_ANGLE_DIFF, 1)
         shiftStep = paramMd.getValue(emlib.MDL_SHIFT_DIFF, 1)
 
-        alignmentRepetitionMds = list(map(
-            lambda i : emlib.MetaData(self._getAlignmentRepetitionMdFilename(iteration, i)),
-            range(self._getAlignmentRepetitionCount())
-        ))
-
         # Ensure that both alignments have the same particles
+        alignmentRepetitionMds = []
+        for i in range(self._getAlignmentRepetitionCount()):
+            filename = self._getAlignmentRepetitionMdFilename(iteration, i)
+            md = emlib.MetaData(filename)
+            alignmentRepetitionMds.append(md)
+
         self._keepCommonMetadataElements(
             alignmentRepetitionMds,
             emlib.MDL_ITEM_ID
         )
         
+        for i, md in enumerate(alignmentRepetitionMds):
+            filename = self._getAlignmentRepetitionMdFilename(iteration, i)
+            md.write(filename)
+        """
         consensusMd = self._computeAlignmentConsensus(
             alignmentRepetitionMds,
             angleStep,
@@ -414,11 +422,57 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         )
         
         consensusMd.write(self._getAlignmentMdFilename(iteration))
+        """
+        if self._getAlignmentRepetitionCount() == 1:
+            copyFile(
+                self._getAlignmentRepetitionMdFilename(iteration, 0),
+                self._getAlignmentMdFilename(iteration)
+            )
+            
+        elif self._getAlignmentRepetitionCount() == 2:
+            self._runAngularDistance(
+                self._getAlignmentRepetitionMdFilename(iteration, 0),
+                self._getAlignmentRepetitionMdFilename(iteration, 1),
+                self._getIterationPath(iteration, 'aligned'),
+                extrargs=['--compute_average_angle', '--compute_average_shift']
+            )
+            
+            # Drop particles far apart
+            args = []
+            args += ['-i', self._getAlignmentMdFilename(iteration)]
+            args += ['--query', 'select', 'angleDiff < %f' % angleStep]
+            self._runMdUtils(args)
+            
+            args = []
+            args += ['-i', self._getAlignmentMdFilename(iteration)]
+            args += ['--query', 'select', 'shiftDiff < %f' % shiftStep]
+            self._runMdUtils(args)
+
+            # Add the missing columns
+            args = []
+            args += ['-i', self._getAlignmentMdFilename(iteration)]
+            args += ['--set', 'join', self._getInputParticleMdFilename(), 'itemId']
+            self._runMdUtils(args)
+            
+            # FIXME
+            args = []
+            args += ['-i', self._getAlignmentMdFilename(iteration)]
+            args += ['--fill', 'ref3d', 'constant', 1]
+            
+            self._runMdUtils(args)
+        else:
+            raise NotImplementedError('Alignment consensus only implemented for N=2')
 
     def intersectInputStep(self, iteration: int):
         args = []
         args += ['-i', self._getIterationInputParticleMdFilename(iteration)]
         args += ['-o', self._getInputIntersectionMdFilename(iteration)]
+        args += ['--set', 'intersection', self._getAlignmentMdFilename(iteration), 'itemId']
+        self._runMdUtils(args)
+        
+        # Add the missing columns
+        args = []
+        args += ['-i', self._getAlignmentMdFilename(iteration)]
         args += ['--set', 'intersection', self._getAlignmentMdFilename(iteration), 'itemId']
         self._runMdUtils(args)
 
