@@ -243,11 +243,12 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             
             resolution = float(self.initialResolution)
         
+        imageSize = self._getImageSize()
         frequency = self._getSamplingRate() / resolution
         maxPsi = self._getIterationMaxPsi(iteration)
         maxShift = self._getIterationMaxShift(iteration)
         shiftStep = self._computeShiftStep(frequency)
-        angleStep = self._computeAngleStep(frequency, 160) #TODO
+        angleStep = self._computeAngleStep(frequency, imageSize)
         maxResolution = max(resolution, float(self.maximumResolution))
         maxFrequency = self._getSamplingRate() / maxResolution
         
@@ -334,7 +335,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         recipe = self.databaseRecipe
 
         md = emlib.MetaData(self._getIterationParametersFilename(iteration))
-        imageSize = 160 # TODO determine
+        imageSize = self._getImageSize()
         maxFrequency = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, 1)
         maxPsi = md.getValue(emlib.MDL_ANGLE_PSI, 1)
         maxShiftPx = md.getValue(emlib.MDL_SHIFT_X, 1)
@@ -361,7 +362,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     def alignStep(self, iteration: int, repetition: int, local: bool):
         md = emlib.MetaData(self._getIterationParametersFilename(iteration))
-        imageSize = 160 # TODO determine
+        imageSize = self._getImageSize()
         maxFrequency = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, 1)
         maxPsi = md.getValue(emlib.MDL_ANGLE_PSI, 1)
         maxShiftPx = md.getValue(emlib.MDL_SHIFT_X, 1)
@@ -670,6 +671,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getSamplingRate(self) -> float:
         return float(self.inputParticles.get().getSamplingRate())
     
+    def _getImageSize(self) -> int:
+        return int(self.inputParticles.get().getXDim())
+
 
     def _getIterationPath(self, iteration: int, *paths):
         return self._getExtraPath('iteration_%04d' % iteration, *paths)
