@@ -287,7 +287,7 @@ class XmippProtVolAdjust(XmippProtVolAdjBase):
     def adjustStep(self):
         vol1 = self.vol1.get().clone()
         vol2 = self.vol2.get().getFileName()
-        if vol1.endswith('.mrc'):
+        if vol1.getFileName().endswith('.mrc'):
             vol1 += ':mrc'
         if vol2.endswith('.mrc'):
             vol2 += ':mrc'
