@@ -196,20 +196,31 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     def correctCtfStep(self):
         particles = self.inputParticles.get()
-
-        args = []
-        args += ['-i', self._getInputParticleMdFilename()]
-        args += ['-o', self._getWienerParticleStackFilename()]
-        args += ['--save_metadata_stack', self._getWienerParticleMdFilename()]
-        args += ['--keep_input_columns']
-        args += ['--sampling_rate', self._getSamplingRate()]
-        args += ['--pad', '2']
-        args += ['--wc', '-1.0']
-        if particles.isPhaseFlipped():
-            args +=  ['--phase_flipped']
-
-        self.runJob('xmipp_ctf_correct_wiener2d', args)
         
+        if particles.hasCTF():
+            args = []
+            args += ['-i', self._getInputParticleMdFilename()]
+            args += ['-o', self._getWienerParticleStackFilename()]
+            args += ['--save_metadata_stack', self._getWienerParticleMdFilename()]
+            args += ['--keep_input_columns']
+            args += ['--sampling_rate', self._getSamplingRate()]
+            args += ['--pad', '2']
+            args += ['--wc', '-1.0']
+            if particles.isPhaseFlipped():
+                args +=  ['--phase_flipped']
+
+            self.runJob('xmipp_ctf_correct_wiener2d', args)
+            
+        else:
+            # TODO When the stack is already in MRC format, simply link
+            args = []
+            args += ['-i', self._getInputParticleMdFilename()]
+            args += ['-o', self._getWienerParticleStackFilename()]
+            args += ['--save_metadata_stack', self._getWienerParticleMdFilename()]
+            args += ['--keep_input_columns']
+
+            self.runJob('xmipp_image_convert', args, numberOfMpi=1)
+            
     def setupIterationStep(self, iteration: int, local: bool):
         makePath(self._getIterationPath(iteration))
         
