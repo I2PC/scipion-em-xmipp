@@ -178,7 +178,7 @@ class XmippProtAngularGraphConsistency(ProtAnalysis3D):
             fnOutParticles = self._getPath('anglesAux.xmd')
             copy(fnAngles, fnOutParticles)
             mdParticles = emlib.MetaData(fnOutParticles)
-            n_false = 0;
+            n_false = 0
             
             nParticles = 0
             for row in iterRows(mdParticles):

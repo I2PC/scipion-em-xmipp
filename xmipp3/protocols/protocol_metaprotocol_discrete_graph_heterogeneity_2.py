@@ -26,7 +26,9 @@
 # **************************************************************************
 
 import sys, time
-from os.path import exists
+import numpy as np
+from os.path import exists, join
+from shutil import copy
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
@@ -42,7 +44,7 @@ from pwem.objects import Volume
 
 from pyworkflow.plugin import Domain
 
-#from xmipp3.protocols import XmippMetaProtCreateOutput
+#from xmipp3.protocols import XmippMetaProtCreateOutput # ya no está
 from xmipp3.protocols import XmippMetaProtCreateSubset
 
 from xmipp3.protocols import XmippProtAngularGraphConsistency
@@ -52,11 +54,11 @@ from pwem.emlib.metadata import iterRows
 from xmipp3.convert import readSetOfParticles, readSetOfImages
 from pwem import emlib
 
-class XmippMetaProtDiscreteGraphHeterogeneity(EMProtocol):
+class XmippMetaProtDiscreteGraphHeterogeneity2(EMProtocol):
     """ Metaprotocol to run together some protocols in order to deal with heterogeneity
         in a dataset, using low resolution validation based on graph analysis
      """
-    _label = 'metaprotocol heterogeneity - graph validation'
+    _label = 'metaprotocol heterogeneity - graph validation 2'
     _lastUpdateVersion = VERSION_2_0
 
     def __init__(self, **kwargs):
@@ -198,23 +200,30 @@ class XmippMetaProtDiscreteGraphHeterogeneity(EMProtocol):
                         self.classListProtocols.append(relionClassify3DProt)
     
         numIter = self.maxNumIter.get() + 1
-        
-        for classItem in relionClassify3DProt.outputClasses:
-            
-            classVar = classItem.getObjId() 
-            print('classItem-ObjId',classItem.getObjId())  
-            
-            for iter in range(1,numIter):
-                
+        highresProtocols = []
+        validationProtocols = []
+        cIter = -1
+        for iter in range(1, numIter):
+            cIter += 1
+            highresProtocols.append([])
+            validationProtocols.append([])
+            cItem = -1
+            for classItem in relionClassify3DProt.outputClasses:
+                classVar = classItem.getObjId()
+                cItem += 1
+
                 if iter == 1:
                     previousProtPart = self
                     partName = 'outputParticlesInit'
                     previousProtVol = relionClassify3DProt
                     volumeName = 'outputVolumes.%d'%classItem.getObjId()
                 else:
-                    previousProtPart = highresNoAlignProt
-                    partName = 'outputParticles'
-                    previousProtVol = highresNoAlignProt
+                    prevIter = cIter - 1
+                    # previousProtPart = highresProtocols[prevIter][cItem]
+                    # partName = 'outputParticles'
+                    previousProtPart = self
+                    partName = 'outputParticlesInit'
+                    previousProtVol = highresProtocols[prevIter][cItem]
                     volumeName = 'outputVolume'
                 
                 print('Highres (one class) - iter', iter,'class',classVar)
@@ -245,14 +254,19 @@ class XmippMetaProtDiscreteGraphHeterogeneity(EMProtocol):
                 self._runPrerequisites.append(newHighres.getObjId())
                 self.childs.append(newHighres)                               
                 # self._finishedProt(newHighres)
+
+                # append to list
+                highresProtocols[cIter].append(newHighres)
+                print("Iter %d, Class %d"%(cIter,cItem))
+                print("TestInfo newHighres.getObjId(): ", highresProtocols[cIter][cItem].getObjId())
         
-                # angular graph validation
+                # angular graph validation                
                 print('angular graph validation - iter',iter,'class',classVar)
                 sys.stdout.flush()
                 
                 validationProt = project.newProtocol(
                     XmippProtAngularGraphConsistency,
-                    objLabel='graphValidation - iter %d' % iter,
+                    objLabel='graphValidation - iter  %d class %d' % (iter,classVar),
                     symmetryGroup=self.symmetryGroup.get(),
                     maximumTargetResolution=10,
                     numberOfMpi=self.numberOfMpi.get()
@@ -269,179 +283,245 @@ class XmippMetaProtDiscreteGraphHeterogeneity(EMProtocol):
                 # Next schedule will be after this one
                 self._runPrerequisites.append(validationProt.getObjId())
                 self.childs.append(validationProt)     
-                # self._finishedProt(validationProt)
+                self._finishedProt(validationProt)
                 
-                # angular assignment from newHigresProt
-                print('angular assignment from Highres - iter',iter,'class',classVar)
-                sys.stdout.flush()
-                
-                angAssignProt = project.newProtocol(
-                    ProtAlignmentAssign,
-                    objLabel='assignment from highres',
-                    )
-                previousProtPart = validationProt
-                partName = 'outputParticlesAux'
-                angAssignProt.inputParticles.set(validationProt)
-                angAssignProt.inputParticles.setExtended(partName)
-                   
-                angAssignProt.inputAlignment.set(newHighres)
-                angAssignProt.inputAlignment.setExtended('outputParticles')
-                
-                project.scheduleProtocol(angAssignProt, self._runPrerequisites)
-                # Next schedule will be after this one
-                self._runPrerequisites.append(angAssignProt.getObjId())
-                self.childs.append(angAssignProt)    
-                # self._finishedProt(angAssignProt)
-                            
-                # reconstruction of new volume for reference using only correctly assigned particles
-                print('Highres reconstruction No-Alignment - iter',iter,'class',classVar)
-                sys.stdout.flush()
-                
-                highresNoAlignProt = project.newProtocol(
+                # append to list
+                validationProtocols[cIter].append(validationProt)
+                print("Iter %d, Class %d"%(cIter,cItem))
+                print("TestInfo validationProt.getObjId(): ", validationProtocols[cIter][cItem].getObjId())
+        
+                    
+
+                # copy outputdata from validation protocol to metaprotocol extraPath folder
+                # in order to get info about
+                # _xmipp_maxCCprevious, _xmipp_maxCCprevious, _xmipp_distance2MaxGraphPrevious
+                fnOutParticles = validationProt._getPath('angles.xmd')
+                fnInputTest = self._getExtraPath('partGraphValidated_Class_%s.xmd' % (classVar))
+                copy(fnOutParticles, fnInputTest)
+
+            
+            # assign each particle to a particular class
+            self.separateParticles()
+
+            # remove disabled particles
+            # class1
+            i=0
+            fnInputNext_1 = self._getPath('inputHighres%s.xmd'%str(i+1)) # TODO cambiar por chr(65+i)
+            copy(self.fnAuxPart1_copy, fnInputNext_1)
+            params = '-i %s --query select "enabled==1"' % (fnInputNext_1)
+            self.runJob("xmipp_metadata_utilities", params, numberOfMpi=1)
+            self.subsets = []
+            self.subsets.append(self._createSetOfParticles(str(i)))
+            self.subsets[i].copyInfo(self.inputParticles.get())
+            readSetOfParticles(fnInputNext_1, self.subsets[i])
+            result = {'outputParticlesClass%s'%str(i+1) : self.subsets[i]}
+            self._defineOutputs(**result)
+            self._store(self.subsets[i])
+            # # al definir estas salidas el metaprotocolo se pone en FINISHED
+            # outputinputSetOfParticles = self._createSetOfParticles()
+            # outputinputSetOfParticles.copyInfo(self.inputParticles.get())
+            # readSetOfParticles(fnInputNext_1, outputinputSetOfParticles)
+            # self._defineOutputs(outputParticlesClass1=outputinputSetOfParticles)
+            # self._store(outputinputSetOfParticles)
+
+            # class2
+            i=1
+            fnInputNext_2 = self._getPath('inputHighres%s.xmd'%str(i+1))
+            copy(self.fnAuxPart2_copy, fnInputNext_2)
+            params = '-i %s --query select "enabled==1"' % (fnInputNext_2)
+            self.runJob("xmipp_metadata_utilities", params, numberOfMpi=1)
+            self.subsets.append(self._createSetOfParticles(str(i)))
+            self.subsets[i].copyInfo(self.inputParticles.get())
+            readSetOfParticles(fnInputNext_2, self.subsets[i])
+            result = {'outputParticlesClass%s'%str(i+1) : self.subsets[i]}
+            self._defineOutputs(**result)
+            self._store(self.subsets[i])
+            # # # al definir estas salidas el metaprotocolo se pone en FINISHED
+            # outputinputSetOfParticles = self._createSetOfParticles()
+            # outputinputSetOfParticles.copyInfo(self.inputParticles.get())
+            # readSetOfParticles(fnInputNext_2, outputinputSetOfParticles)
+            # self._defineOutputs(outputParticlesClass2=outputinputSetOfParticles)
+            # self._store(outputinputSetOfParticles)
+
+            # reconstruct new references using highres
+            #for each class
+            cItem = -1
+            for classItem in relionClassify3DProt.outputClasses:
+                cItem += 1
+                classVar = classItem.getObjId()
+                # TODO las líneas que están antes de este for debo ponerlas acá dentro
+                print('Highres (one class) - iter', iter,'class',classVar)
+                newHighres = project.newProtocol(
                         XmippProtReconstructHighRes,
-                        objLabel='xmipp Highres - No alignment',
+                        objLabel='xmipp Highres 2 - iter %d class %d' % (iter,classVar),
                         symmetryGroup=self.symmetryGroup.get(),
                         numberOfIterations=1, 
                         particleRadius = self.particleRadius.get(),
                         maximumTargetResolution = self.targetResolution.get(),
+                        #multiresolution=False,
                         numberOfMpi=self.numberOfMpi.get(),
-                        alignmentMethod=XmippProtReconstructHighRes.NO_ALIGNMENT,
-                        useGpu=self.useGpu.get(),
+                        alignmentMethod=XmippProtReconstructHighRes.GLOBAL_ALIGNMENT,
+                        useGpu=self.useGpu.get(), # si algo cambiar a false
                         gpuList = self.gpuList.get()
-                        )    
-                previousProtPart = angAssignProt
-                highresNoAlignProt.inputParticles.set(previousProtPart)
-                highresNoAlignProt.inputParticles.setExtended('outputParticles') # is important this name to match
-                 
-                highresNoAlignProt.inputVolumes.set(previousProtVol)
-                highresNoAlignProt.inputVolumes.setExtended(volumeName) # is important this name to match
+                        )   
                 
-                project.scheduleProtocol(highresNoAlignProt, self._runPrerequisites)
+                previousProtPart = self
+                partName = 'outputParticlesClass%s'%classItem.getObjId()
+                previousProtVol = highresProtocols[cIter][cItem]
+                volumeName = 'outputVolume'
+                newHighres.inputParticles.set(previousProtPart)
+                newHighres.inputParticles.setExtended(partName) 
+                 
+                newHighres.inputVolumes.set(previousProtVol)
+                newHighres.inputVolumes.setExtended(volumeName) 
+
+                project.scheduleProtocol(newHighres, self._runPrerequisites)
                 # Next schedule will be after this one
-                self._runPrerequisites.append(angAssignProt.getObjId())
-                self.childs.append(angAssignProt)     
-                self._finishedProt(highresNoAlignProt)                
-                #clear prerequisites after 1st iter
-                self._runPrerequisites.clear()
+                self._runPrerequisites.append(newHighres.getObjId())
+                self.childs.append(newHighres)                               
+                self._finishedProt(newHighres)
+
+                # replace highres protocol
+                highresProtocols[cIter][cItem] = newHighres
+
+
+             #clear prerequisites after 1st iter
+            self._runPrerequisites.clear()  
+
+
+            ## this approach hasn't worked
+            ## for a large set of particles 
+            ## exceeds my laptop's memmory
+
+            # fnAuxPart1 = self._getExtraPath('partGraphValidated_Class_%s.xmd' % str(1))
+            # mdParticles1 = emlib.MetaData(fnAuxPart1)
+            # fnAuxPart2 = self._getExtraPath('partGraphValidated_Class_%s.xmd' % str(2))
+            # mdParticles2 = emlib.MetaData(fnAuxPart2)
+            # nParticles = 0
+            # c1 = 0
+            # c2 = 0
+            # count = 0
+            # for row1 in iterRows(mdParticles1):
+            #     count += 1
+            #     maxCC_p_1 = row1.getValue(emlib.MDL_MAXCC_PREVIOUS)
+            #     graphCCPrev_1 = row1.getValue(emlib.MDL_GRAPH_CC_PREVIOUS)
+            #     graphDistMaxGraphPrev_1 = row1.getValue(emlib.MDL_GRAPH_DISTANCE2MAX_PREVIOUS)
+            #     # objId_1 = row1.getValue(emlib.MDL_PARTICLE_ID)
+            #     print("count = %d" % count)
+            #     objId_1 = row1.getObjId()
+            #     sys.stdout.flush()
+                
+            #     for row2 in iterRows(mdParticles2):
+            #         # objId_2 = row2.getValue(emlib.MDL_PARTICLE_ID)
+            #         objId_2 = row2.getObjId()
+            #         if objId_1 == objId_2:
+            #             # print("same particle: %d , %d" % ( objId_1, objId_2) )
+            #             maxCC_p_2 = row2.getValue(emlib.MDL_MAXCC_PREVIOUS)
+            #             graphCCPrev_2 = row2.getValue(emlib.MDL_GRAPH_CC_PREVIOUS)
+            #             graphDistMaxGraphPrev_2 = row2.getValue(emlib.MDL_GRAPH_DISTANCE2MAX_PREVIOUS)
+            #             # print(maxCC_p_1, graphCCPrev_1, graphDistMaxGraphPrev_1)
+            #             # print(maxCC_p_2, graphCCPrev_2, graphDistMaxGraphPrev_2)
+
+            #             if ( maxCC_p_1 > maxCC_p_2 and  graphCCPrev_1 > graphCCPrev_2 ):
+            #                 #deactivate within class2
+            #                 mdParticles2.setValue(emlib.MDL_ENABLED, -1, objId_2)
+            #                 # print("CLASS 1")
+            #                 c1 += 1
+            #             elif ( maxCC_p_2 > maxCC_p_1 and  graphCCPrev_2 > graphCCPrev_1 ):
+            #                 #deactivate within class1
+            #                 mdParticles1.setValue(emlib.MDL_ENABLED, -1, objId_1)
+            #                 # print("CLASS 2")
+            #                 c2 += 1
+            #             elif ( graphDistMaxGraphPrev_1 < graphDistMaxGraphPrev_2 ):
+            #                 #deactivate within class2
+            #                 mdParticles2.setValue(emlib.MDL_ENABLED, -1, objId_2)
+            #                 # print("CLASS 1")
+            #                 c1 += 1
+            #             else:
+            #                 #deactivate within class1
+            #                 mdParticles1.setValue(emlib.MDL_ENABLED, -1, objId_1)
+            #                 # print("CLASS 2")
+            #                 c2 += 1
+            # print("double iteration finished")
+            # fnAuxPart1_copy = self._getExtraPath('deact_partGraphValidated_Class_1.xmd')
+            # fnAuxPart2_copy = self._getExtraPath('deact_partGraphValidated_Class_2.xmd')
+            # mdParticles1.write(fnAuxPart1_copy)
+            # mdParticles2.write(fnAuxPart2_copy)
+            # print("totales c1 = %d, c2 = %d" % (c1, c2))
+
+
+            # una mejor idea para la aplicación más adelante:
+            # me copio las columas ordenadas según el ItemId/particleID
+            # con los datos que voy a comparar y uso np.array o cualquier otra 
+            # cosa de python para saber cuál de las columnas tiene 
+            # lo mejor de los datos y la coloco en una columna al final
+            # un identificador de la clase a la que va a pertener esa imagen
+            # las demás las puede desactivar,
+            # luego creo nuevos metadatas con las que quedaron activadas
+            # hago una reconstrucción con highres (y su asignación)
+            # para que sean los nuevos volumenes referencia para la siguiente iteración
+
+         
         
-        
-#         for iter in range(1, numIter):
-#             print('iter: ',iter)
-#             
-#             # se debe actualizar las partículas que van a pasar a cada iteración
-#             # para iter 1 particles es self
-#             # para iter>1 particles es el subset  de newhighres que cumple con criterios de calidad
-#             
-#             # en cuanto al volumen
-#             # en iter == 1
-#             # el volumen es relionClassify3DProt
-#             # en iter > 1
-#             # el volumen es la reconstruccion que se haga con las partículas buenas 
-#             # que salen de la validación con graph consistence
-#             # para este volumen se puede usar la asignación para esas partículas hecha por newhigres
-#                   
-#             for classItem in relionClassify3DProt.outputClasses:
-#                 classVar = classItem.getObjId()
-#                 print('classItem-ObjId',classItem.getObjId())
-#                 # highres with all particles
-#                 print('Highres (one class) - iter', iter,'class',classVar)
-#                 sys.stdout.flush()
-#                 
-#                 newHighres = project.newProtocol(
-#                         XmippProtReconstructHighRes,
-#                         objLabel='xmipp Highres - iter %d class %d' % (iter,classVar),
-#                         symmetryGroup=self.symmetryGroup.get(),
-#                         numberOfIterations=1, 
-#                         particleRadius = self.particleRadius.get(),
-#                         maximumTargetResolution = self.targetResolution.get(),
-#                         numberOfMpi=self.numberOfMpi.get(),
-#                         alignmentMethod=XmippProtReconstructHighRes.GLOBAL_ALIGNMENT,
-#                         useGpu=self.useGpu.get(),
-#                         gpuList = self.gpuList.get()
-#                         )    
-#                 previousProtPart = self
-#                 newHighres.inputParticles.set(previousProtPart)
-#                 newHighres.inputParticles.setExtended('outputParticlesInit') # is important this name to match
-#                  
-#                 previousProtVol = relionClassify3DProt
-#                 newHighres.inputVolumes.set(previousProtVol)
-#                 volumeName = 'outputVolumes.%d'%classItem.getObjId()
-#                 newHighres.inputVolumes.setExtended(volumeName) # is important this name to match
-#                 
-#                 project.scheduleProtocol(newHighres, self._runPrerequisites)                               
-#                 self._finishedProt(newHighres)
-#         
-#                 # angular graph validation
-#                 print('angular graph validation - iter',iter,'class',classVar)
-#                 sys.stdout.flush()
-#                 
-#                 validationProt = project.newProtocol(
-#                     XmippProtAngularGraphConsistency,
-#                     objLabel='graphValidation - iter %d' % iter,
-#                     symmetryGroup=self.symmetryGroup.get(),
-#                     maximumTargetResolution=10,
-#                     numberOfMpi=self.numberOfMpi.get()
-#                     )
-#                 previousProtPart = newHighres
-#                 validationProt.inputParticles.set(previousProtPart)
-#                 validationProt.inputParticles.setExtended('outputParticles') # todo no es así !!
-#                 
-#                 previousProtVol = relionClassify3DProt
-#                 validationProt.inputVolume.set(previousProtVol)
-#                 volumeName = 'outputVolume.%d'%classItem.getObjId()
-#                 validationProt.inputVolume.setExtended(volumeName) 
-#                 
-#                 project.scheduleProtocol(validationProt, self._runPrerequisites) 
-#                 self._finishedProt(validationProt)
-#                 
-#                 # angular assignment from newHigresProt
-#                 print('angular assignment from Highres - iter',iter,'class',classVar)
-#                 sys.stdout.flush()
-#                 
-#                 angAssignProt = project.newProtocol(
-#                     ProtAlignmentAssign,
-#                     objLabel='assignment from highres',
-#                     )
-#                 previousProtPart = validationProt
-#                 partName = 'outputParticlesAux'
-#                 angAssignProt.inputParticles.set(validationProt)
-#                 angAssignProt.inputParticles.setExtended(partName)
-#                    
-#                 angAssignProt.inputAlignment.set(newHighres)
-#                 angAssignProt.inputAlignment.setExtended('outputParticles')
-#                 
-#                 project.scheduleProtocol(angAssignProt, self._runPrerequisites) 
-#                 self._finishedProt(angAssignProt)
-#                             
-#                 # reconstruction of new volume for reference using only correctly assigned particles
-#                 print('Highres reconstruction No-Alignment - iter',iter,'class',classVar)
-#                 sys.stdout.flush()
-#                 
-#                 highresNoAlignProt = project.newProtocol(
-#                         XmippProtReconstructHighRes,
-#                         objLabel='xmipp Highres - No alignment',
-#                         symmetryGroup=self.symmetryGroup.get(),
-#                         numberOfIterations=1, 
-#                         particleRadius = self.particleRadius.get(),
-#                         maximumTargetResolution = self.targetResolution.get(),
-#                         numberOfMpi=self.numberOfMpi.get(),
-#                         alignmentMethod=XmippProtReconstructHighRes.NO_ALIGNMENT,
-#                         useGpu=self.useGpu.get(),
-#                         gpuList = self.gpuList.get()
-#                         )    
-#                 previousProtPart = angAssignProt
-#                 highresNoAlignProt.inputParticles.set(previousProtPart)
-#                 highresNoAlignProt.inputParticles.setExtended('outputParticles') # is important this name to match
-#                  
-#                 previousProtVol = relionClassify3DProt
-#                 highresNoAlignProt.inputVolumes.set(previousProtVol)
-#                 volumeName = 'outputVolumes.%d'%classItem.getObjId()
-#                 highresNoAlignProt.inputVolumes.setExtended(volumeName) # is important this name to match
-#                 
-#                 project.scheduleProtocol(highresNoAlignProt, self._runPrerequisites) 
-#                 self._finishedProt(highresNoAlignProt)
-                    
+
+
     # --------------------------- STEPS functions -------------------------------
+
+    def separateParticles(self):
+            # get column values 
+            print("Assigning particles to each class")                      
+            fnAuxPart1 = self._getExtraPath('partGraphValidated_Class_%s.xmd' % str(1))
+            self.runJob('xmipp_metadata_utilities','-i %s --operate sort particleId'%fnAuxPart1,numberOfMpi=1)
+            mdParticles1 = emlib.MetaData(fnAuxPart1)
+            maxCC_p_1 = np.array( mdParticles1.getColumnValues(emlib.MDL_MAXCC_PREVIOUS) )
+            ccAssignedDir_1 = np.array( mdParticles1.getColumnValues(emlib.MDL_ASSIGNED_DIR_REF_CC) )
+            graphCCPrev_1 = np.array( mdParticles1.getColumnValues(emlib.MDL_GRAPH_CC_PREVIOUS) )
+            graphDistMaxGraphPrev_1 = np.array( mdParticles1.getColumnValues(emlib.MDL_GRAPH_DISTANCE2MAX_PREVIOUS) )
+            
+            fnAuxPart2 = self._getExtraPath('partGraphValidated_Class_%s.xmd' % str(2))
+            self.runJob('xmipp_metadata_utilities','-i %s --operate sort particleId'%fnAuxPart2,numberOfMpi=1)
+            mdParticles2 = emlib.MetaData(fnAuxPart2)
+            maxCC_p_2 = np.array( mdParticles2.getColumnValues(emlib.MDL_MAXCC_PREVIOUS) )
+            ccAssignedDir_2 = np.array( mdParticles1.getColumnValues(emlib.MDL_ASSIGNED_DIR_REF_CC) )
+            graphCCPrev_2 = np.array( mdParticles2.getColumnValues(emlib.MDL_GRAPH_CC_PREVIOUS) )
+            graphDistMaxGraphPrev_2 = np.array( mdParticles2.getColumnValues(emlib.MDL_GRAPH_DISTANCE2MAX_PREVIOUS) )
+            
+            # logic for 2 clasess -- True for class 1
+            biggerCC = maxCC_p_1 > maxCC_p_2
+            biggerCC_Dir = ccAssignedDir_1 > ccAssignedDir_2
+            biggerGraphCC = graphCCPrev_1 > graphCCPrev_2
+            smallerDistance = graphDistMaxGraphPrev_1 < graphDistMaxGraphPrev_2
+
+            # enableClass1 = (biggerCC & biggerCC_Dir & biggerGraphCC) | smallerDistance
+            enableClass1 = (biggerCC & biggerCC_Dir) | smallerDistance
+            enableClass2 = ~(enableClass1)
+
+            # translate that npArray to enable class 1
+            # need to be sure that metadata is ordered by itemId before
+            # print("\n===class 1")
+            ii = 0
+            for row in iterRows(mdParticles1):
+                objId = row.getObjId()
+                if ~enableClass1[ii]:
+                    # print(enableClass1[ii], "\t desactivar %d"%objId)
+                    mdParticles1.setValue(emlib.MDL_ENABLED, -1, objId)
+                ii += 1
+
+            ii = 0
+            # print("\n===class 2")
+            for row in iterRows(mdParticles2):
+                objId = row.getObjId()
+                if ~enableClass2[ii]:
+                    # print(enableClass2[ii], "\t desactivar %d"%objId)
+                    mdParticles2.setValue(emlib.MDL_ENABLED, -1, objId)
+                ii += 1
+
+            # print("double iteration finished")
+            self.fnAuxPart1_copy = self._getExtraPath('deact_partGraphValidated_Class_1.xmd')
+            self.fnAuxPart2_copy = self._getExtraPath('deact_partGraphValidated_Class_2.xmd')
+            mdParticles1.write(self.fnAuxPart1_copy)
+            mdParticles2.write(self.fnAuxPart2_copy)
+
     
     def _finishedProt(self, protocol):
         # Next schedule will be after this one
@@ -511,4 +591,3 @@ class XmippMetaProtDiscreteGraphHeterogeneity(EMProtocol):
     def _summary(self):
         summary = []
         return summary
-
