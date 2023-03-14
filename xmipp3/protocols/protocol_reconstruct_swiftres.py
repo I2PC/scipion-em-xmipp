@@ -109,8 +109,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                       help='Maximum number of elements that can be stored in the database '
                       'before performing an alignment and flush')
         form.addParam('batchSize', IntParam, label='Batch size', 
-                      default=1024,
-                      help='Batch size used when processing')
+                      default=8192,
+                      help='It is recommended to use powers of 2. Using numbers around 8192 works well')
 
         form.addParallelSection(threads=1, mpi=8)
     
