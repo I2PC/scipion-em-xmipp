@@ -38,8 +38,9 @@ from pyworkflow.protocol.params import LabelParam, IntParam, FloatParam
 from pwem import emlib
 from pwem.viewers.views import DataView, ObjectView
 
-from xmipp3.protocols.protocol_reconstruct_swiftres import XmippProtReconstructSwiftres
+import xmippLib
 
+from xmipp3.protocols.protocol_reconstruct_swiftres import XmippProtReconstructSwiftres
 
 
 class XmippReconstructSwiftresViewer(ProtocolViewer):
@@ -66,6 +67,14 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         form.addParam('showAngleDiffVecDiffHist', LabelParam, label='Display vector difference histogram')
         form.addParam('showAngleDiffShiftDiffHist', LabelParam, label='Display shift difference histogram')
 
+        form.addSection(label='Volumes')
+        form.addParam('showIterationVolume', IntParam, label='Display iteration volume',
+                      default=0)
+        
+        form.addSection(label='Noise model')
+        form.addParam('showNoiseModel', LabelParam, label='Display radial noise model profile')
+        form.addParam('showWeights', LabelParam, label='Display radial weight profile')
+        
         form.addSection(label='Classification')
         form.addParam('showClassMigration', LabelParam, label='Display class migration diagram',
                       default=0.143)
@@ -80,7 +89,12 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
             'showAngleDiffVecDiffHist': self._showAngleDiffVecDiffHistogram,
             'showAngleDiffShiftDiffHist': self._showAngleDiffShiftDiffHistogram,
 
-            'showClassMigration': self._showClassMigration
+            'showIterationVolume': self._showIterationVolume,
+            
+            'showNoiseModel': self._showNoiseModel,
+            'showWeights': self._showWeights,
+            
+            #'showClassMigration': self._showClassMigration
         }
     
 
@@ -100,6 +114,9 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
     def _getFscFilename(self, iteration: int, cls: int):
         return self.protocol._getFscFilename(iteration, cls)
     
+    def _getFilteredReconstructionFilename(self, iteration: int, cls: int):
+        return self.protocol._getFilteredReconstructionFilename(iteration, cls)
+    
     def _getAngleDiffMdFilename(self, iteration: int):
         return self.protocol._getAngleDiffMdFilename(iteration)
 
@@ -108,6 +125,12 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
 
     def _getAngleDiffShiftDiffHistogramMdFilename(self, iteration: int):
         return self.protocol._getAngleDiffShiftDiffHistogramMdFilename(iteration)
+    
+    def _getNoiseModelFilename(self, iteration: int):
+        return self.protocol._getNoiseModelFilename(iteration)
+    
+    def _getWeightsFilename(self, iteration: int):
+        return self.protocol._getWeightsFilename(iteration)
     
     def _readFsc(self, fscMd: emlib.MetaData) -> np.ndarray:
         values = []
@@ -138,12 +161,22 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
     
     def _iterAngleDiffVecDiffHistMdFilenames(self):
         return self._iterFilenamesUntilNotExist(
-            map(lambda it : self._getAngleDiffVecDiffHistogramMdFilename(it), itertools.count())
+            map(self._getAngleDiffVecDiffHistogramMdFilename, itertools.count())
         )
         
     def _iterAngleDiffShiftDiffHistMdFilenames(self):
         return self._iterFilenamesUntilNotExist(
-            map(lambda it : self._getAngleDiffShiftDiffHistogramMdFilename(it), itertools.count())
+            map(self._getAngleDiffShiftDiffHistogramMdFilename, itertools.count())
+        )
+        
+    def _iterNoiseModelFilenames(self):
+        return self._iterFilenamesUntilNotExist(
+            map(self._getNoiseModelFilename, itertools.count())
+        )
+        
+    def _iterWeightsFilenames(self):
+        return self._iterFilenamesUntilNotExist(
+            map(self._getWeightsFilename, itertools.count())
         )
         
     def _readFscCutoff(self, cls: int, cutoff: float) -> np.ndarray:
@@ -207,9 +240,12 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         for iteration, dstAlignmentFn in enumerate(alignmentFilenames, start=1):
             dstAlignmentMd = emlib.MetaData(dstAlignmentFn)
             
+            # Obtain common elements
             srcAlignmentMd.intersection(dstAlignmentMd, emlib.MDL_ITEM_ID)
 
-            # TODO
+            
+            #points = self._computeClassPoints(dstAlignmentMd)
+            #points = np.c_[np.full(len(points), iteration), points]
             
             # Save for next
             srcAlignmentMd = dstAlignmentMd
@@ -229,6 +265,24 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         count = md.getColumnValues(emlib.MDL_COUNT)
 
         return diff, count
+
+    def _computePsdRadialProfile(self, psd: np.ndarray, n: int = 128) -> np.ndarray:
+        result = np.empty(n)
+
+        # Compute the frequency grid
+        freqX = np.fft.rfftfreq(len(psd))
+        freqY = np.fft.fftfreq(len(psd))
+        freq2 = freqX**2 + (freqY**2)[None].T
+
+        # Select by bands
+        limits = np.linspace(0, 0.5, n+1)
+        limits2 = limits**2
+        for i in range(len(result)):
+            low2, high2 = limits2[i], limits2[i+1]
+            mask = np.logical_and(low2 <= freq2, freq2 <= high2)
+            result[i] = np.average(psd[mask])
+
+        return result
 
     # ---------------------------- SHOW functions ------------------------------
     def _showIterationFsc(self, e):
@@ -322,6 +376,51 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         ax.set_ylabel('Particle count')
         ax.legend()
                
+        return [fig]
+        
+    def _showIterationVolume(self, e):
+        iteration = int(self.showIterationVolume)
+        filename = self._getFilteredReconstructionFilename(iteration, 0)
+        return DataView(filename)
+    
+    def _showNoiseModel(self, e):
+        fig, ax = plt.subplots()
+
+        psd = xmippLib.Image()
+        freq = np.linspace(0, 0.5, 128)[:-1]
+        freq += freq[1] / 2
+        for iteration, filename in enumerate(self._iterNoiseModelFilenames()):
+            psd.read(filename)
+            profile = self._computePsdRadialProfile(psd.getData(), len(freq))
+            label = f'Iteration {iteration}'
+            ax.plot(freq, profile, label=label)
+            
+        ax.set_title('Noise model')
+        ax.set_xlabel('Resolution (1/A)')
+        ax.set_ylabel('$\sigma^2$')
+        ax.set_xticklabels(self._computeFscTickLabels(ax.get_xticks()))
+        ax.legend()
+        
+        return [fig]
+    
+    def _showWeights(self, e):
+        fig, ax = plt.subplots()
+
+        psd = xmippLib.Image()
+        freq = np.linspace(0, 0.5, 128)[:-1]
+        freq += freq[1] / 2
+        for iteration, filename in enumerate(self._iterWeightsFilenames()):
+            psd.read(filename)
+            profile = self._computePsdRadialProfile(psd.getData(), len(freq))
+            label = f'Iteration {iteration}'
+            ax.plot(freq, profile, label=label)
+            
+        ax.set_title('Weights')
+        ax.set_xlabel('Resolution (1/A)')
+        ax.set_ylabel('Weight')
+        ax.set_xticklabels(self._computeFscTickLabels(ax.get_xticks()))
+        ax.legend()
+        
         return [fig]
         
     def _showClassMigration(self, e):

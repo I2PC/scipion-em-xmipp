@@ -157,6 +157,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             # Merge galleries of classes
             mergeStepIds.append(self._insertFunctionStep('mergeGalleriesStep', iteration, repetition, prerequisites=projectStepIds))
         
+        mergeStepIds.append(self._insertFunctionStep('computeNoiseModelStep', iteration, prerequisites=prerequisites))
+        
         return mergeStepIds
         
     def _insertAlignmentSteps(self, iteration: int, local: bool, prerequisites):
@@ -334,6 +336,19 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['-i', self._getGalleryMdFilename(iteration, repetition)]
         args += ['--fill', 'ref', 'lineal', 1, 1]
         self._runMdUtils(args)
+        
+    def computeNoiseModelStep(self, iteration: int):
+        args = []
+        args += ['-i', self._getIterationInputParticleMdFilename(iteration)]
+        args += ['-r', self._getIterationInputVolumeFilename(iteration, cls=0)] # TODO for multiple classes
+        args += ['--oroot', self._getIterationPath(iteration, '')]
+        self.runJob('xmipp_reconstruct_noise_psd', args, numberOfMpi=1)
+        
+        args = []
+        args += ['-i', self._getNoiseModelFilename(iteration)]
+        args += ['-o', self._getWeightsFilename(iteration)]
+        args += ['--pow', -1]
+        self.runJob('xmipp_image_operate', args)
         
     def ensembleTrainingSetStep(self, iteration: int):
         self._mergeMetadata(
@@ -713,6 +728,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
 
     def _getTrainingMdFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'training.xmd')
+    
+    def _getNoiseModelFilename(self, iteration: int):
+        return self._getIterationPath(iteration, 'avgNoisePsd.mrc')
     
     def _getWeightsFilename(self, iteration: int):
         return self._getIterationPath(iteration, 'weights.mrc')
