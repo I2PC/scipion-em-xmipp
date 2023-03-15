@@ -342,6 +342,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['-i', self._getIterationInputParticleMdFilename(iteration)]
         args += ['-r', self._getIterationInputVolumeFilename(iteration, cls=0)] # TODO for multiple classes
         args += ['--oroot', self._getIterationPath(iteration, '')]
+        args += ['--padding', 2.0]
+        args += ['--max_resolution', 1.0] # TODO
         self.runJob('xmipp_reconstruct_noise_psd', args, numberOfMpi=1)
         
         args = []
