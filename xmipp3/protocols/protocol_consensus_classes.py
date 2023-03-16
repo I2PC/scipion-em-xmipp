@@ -563,7 +563,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
                 cluster,
                 classifications
             )
-            size = len(clustering)
+            size = len(cluster)
             relativeSize = size / len(representativeClass)
             
             item.setRepresentative(representativeClass.getRepresentative().clone())
