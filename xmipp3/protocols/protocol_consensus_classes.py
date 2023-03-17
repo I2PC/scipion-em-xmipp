@@ -149,7 +149,8 @@ class XmippProtConsensusClasses(ProtClassify3D):
         
         elbows = {
             'profile_likelihood': self._calculateElbowProfileLikelihood(cost) + 1,
-            'derivative_variance': self._calculateElbowDerivativeVar(cost) + 1
+            'derivative_stddev': self._calculateElbowDerivativeStddev(cost) + 1,
+            'origin': self._calculateElbowOrigin(cost) + 1,
         }
         
         self._writeElbows(elbows)
@@ -452,8 +453,8 @@ class XmippProtConsensusClasses(ProtClassify3D):
             # Compute the average and mean of each partition
             mu1 = np.mean(d1)
             mu2 = np.mean(d2)
-            sigma1 = np.std(d1)
-            sigma2 = np.std(d2)
+            sigma1 = np.std(d1, ddof=1)
+            sigma2 = np.std(d2, ddof=1)
             sigma = (len(d1)*sigma1 + len(d2)*sigma2) / (len(d1) + len(d2)) # Weighted average
         
             # Compute the log likelihood
@@ -461,17 +462,24 @@ class XmippProtConsensusClasses(ProtClassify3D):
             logLikelihoods2 = scipy.stats.norm.logpdf(d2, mu2, sigma)
             return np.sum(logLikelihoods1) + np.sum(logLikelihoods2)
             
-        return max(range(1, len(cost)), key=cost_fun)
+        return max(range(2, len(cost)-1), key=cost_fun)
     
-    def _calculateElbowDerivativeVar(self, cost: np.ndarray) -> int:
+    def _calculateElbowDerivativeStddev(self, cost: np.ndarray) -> int:
         diff = np.diff(cost)
         
         def cost_fun(i: int) -> float:
-            var1 = np.std(diff[:i])
-            var2 = np.std(diff[i:])
+            var1 = np.std(diff[:i], ddof=1)
+            var2 = np.std(diff[i:], ddof=1)
             return var1+var2
             
-        return min(range(1, len(cost)), key=cost_fun)
+        return min(range(2, len(diff)-1), key=cost_fun)
+    
+    def _calculateElbowOrigin(self, cost: np.ndarray) -> int:
+        y = (cost - cost.min()) / (cost.max() - cost.min())
+        x = np.linspace(1.0, 0.0, len(y))
+        dist2 = x*x + y*y
+            
+        return int(dist2.argmin())
     
     def _obtainMergedIntersections(self, n: int) -> SetOfClasses:
         suffix = self._getMergedIntersectionSuffix(n)
