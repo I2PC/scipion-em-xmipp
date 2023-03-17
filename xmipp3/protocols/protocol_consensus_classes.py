@@ -145,10 +145,11 @@ class XmippProtConsensusClasses(ProtClassify3D):
 
     def findElbowsStep(self):
         linkage = np.load(self._getLinkageMatrixFilename())
-        cost = linkage[:,3]
+        cost = linkage[:,2]
         
         elbows = {
-            'profile_likelihood': self._calculateElbowProfileLikelihood(cost)
+            'profile_likelihood': self._calculateElbowProfileLikelihood(cost) + 1,
+            'derivative_variance': self._calculateElbowDerivativeVar(cost) + 1
         }
         
         self._writeElbows(elbows)
@@ -441,40 +442,36 @@ class XmippProtConsensusClasses(ProtClassify3D):
             next(it)
         
         return next(it)
-    
-    def _calculateProfileLogLikelihood(self, d, q):
-        """ Profile log likelihood for given parameters """
-        # Partition the function in q
-        d1 = d[:q]
-        d2 = d[q:]
-        
-        # Compute the average and mean of each partition
-        mu1 = np.mean(d1)
-        mu2 = np.mean(d2)
-        sigma1 = np.std(d1)
-        sigma2 = np.std(d2)
-        sigma = (len(d1)*sigma1 + len(d2)*sigma2) / (len(d1) + len(d2)) # Weighted average
-        
-        # Compute the log likelihood
-        logLikelihoods1 = np.log(scipy.stats.norm.pdf(d1, mu1, sigma))
-        logLikelihoods2 = np.log(scipy.stats.norm.pdf(d2, mu2, sigma))
-        logLikelihood = np.sum(logLikelihoods1) + np.sum(logLikelihoods2)
-        
-        return logLikelihood
-    
-    def _calculateProfileLogLikelihoods(self, cost):
-        """ Calculate profile log likelihood for each partition
-            of the data """
-        result = np.empty(len(cost) - 1)
 
-        for i in range(len(result)):
-            result[i] = self._calculateProfileLogLikelihood(cost, i+1)
+    def _calculateElbowProfileLikelihood(self, cost: np.ndarray) -> int:
+        def cost_fun(i: int) -> float:
+            # Partition the function in q
+            d1 = cost[:i]
+            d2 = cost[i:]
+            
+            # Compute the average and mean of each partition
+            mu1 = np.mean(d1)
+            mu2 = np.mean(d2)
+            sigma1 = np.std(d1)
+            sigma2 = np.std(d2)
+            sigma = (len(d1)*sigma1 + len(d2)*sigma2) / (len(d1) + len(d2)) # Weighted average
         
-        return np.array(result)
+            # Compute the log likelihood
+            logLikelihoods1 = scipy.stats.norm.logpdf(d1, mu1, sigma)
+            logLikelihoods2 = scipy.stats.norm.logpdf(d2, mu2, sigma)
+            return np.sum(logLikelihoods1) + np.sum(logLikelihoods2)
+            
+        return max(range(1, len(cost)), key=cost_fun)
     
-    def _calculateElbowProfileLikelihood(self, cost):
-        f = self._calculateProfileLogLikelihoods(cost)
-        return len(f) - int(np.argmax(f)) + 1
+    def _calculateElbowDerivativeVar(self, cost: np.ndarray) -> int:
+        diff = np.diff(cost)
+        
+        def cost_fun(i: int) -> float:
+            var1 = np.std(diff[:i])
+            var2 = np.std(diff[i:])
+            return var1+var2
+            
+        return min(range(1, len(cost)), key=cost_fun)
     
     def _obtainMergedIntersections(self, n: int) -> SetOfClasses:
         suffix = self._getMergedIntersectionSuffix(n)
