@@ -153,7 +153,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
         elbows = {
             'profile_likelihood': convert_index(self._calculateElbowProfileLikelihood(cost)),
             'origin': convert_index(self._calculateElbowOrigin(cost)),
-            'distance_lin': convert_index(self._calculateElbowDistanceToLine(cost)),
+            'distance_line': convert_index(self._calculateElbowDistanceToLine(cost)),
             'slope': convert_index(self._calculateElbowSlope(cost)),
         }
         
