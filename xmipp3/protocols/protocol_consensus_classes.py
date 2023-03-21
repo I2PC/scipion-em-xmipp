@@ -151,6 +151,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
             'profile_likelihood': self._calculateElbowProfileLikelihood(cost) + 1,
             'derivative_stddev': self._calculateElbowDerivativeStddev(cost) + 1,
             'origin': self._calculateElbowOrigin(cost) + 1,
+            'slope': self._calculateElbowSlope(cost) + 1,
         }
         
         self._writeElbows(elbows)
@@ -480,6 +481,12 @@ class XmippProtConsensusClasses(ProtClassify3D):
         dist2 = x*x + y*y
             
         return int(dist2.argmin())
+
+    def _calculateElbowSlope(self, cost: np.ndarray) -> int:
+        diff = np.diff(cost)
+        avgDiff = (cost[-1] - cost[0]) / (len(cost) - 1)
+        delta = np.abs(diff - avgDiff)
+        return delta.argmin() + 1   
     
     def _obtainMergedIntersections(self, n: int) -> SetOfClasses:
         suffix = self._getMergedIntersectionSuffix(n)
