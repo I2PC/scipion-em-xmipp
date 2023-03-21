@@ -147,11 +147,14 @@ class XmippProtConsensusClasses(ProtClassify3D):
         linkage = np.load(self._getLinkageMatrixFilename())
         cost = linkage[:,2]
         
+        def convert_index(i: int) -> int:
+            return len(cost) - i
+        
         elbows = {
-            'profile_likelihood': self._calculateElbowProfileLikelihood(cost) + 1,
-            'derivative_stddev': self._calculateElbowDerivativeStddev(cost) + 1,
-            'origin': self._calculateElbowOrigin(cost) + 1,
-            'slope': self._calculateElbowSlope(cost) + 1,
+            'profile_likelihood': convert_index(self._calculateElbowProfileLikelihood(cost)),
+            'origin': convert_index(self._calculateElbowOrigin(cost)),
+            'distance_lin': convert_index(self._calculateElbowDistanceToLine(cost)),
+            'slope': convert_index(self._calculateElbowSlope(cost)),
         }
         
         self._writeElbows(elbows)
@@ -456,24 +459,14 @@ class XmippProtConsensusClasses(ProtClassify3D):
             mu2 = np.mean(d2)
             sigma1 = np.std(d1, ddof=1)
             sigma2 = np.std(d2, ddof=1)
-            sigma = (len(d1)*sigma1 + len(d2)*sigma2) / (len(d1) + len(d2)) # Weighted average
+            #sigma = (len(d1)*sigma1 + len(d2)*sigma2) / (len(d1) + len(d2)) # Weighted average
         
             # Compute the log likelihood
-            logLikelihoods1 = scipy.stats.norm.logpdf(d1, mu1, sigma)
-            logLikelihoods2 = scipy.stats.norm.logpdf(d2, mu2, sigma)
+            logLikelihoods1 = scipy.stats.norm.logpdf(d1, mu1, sigma1)
+            logLikelihoods2 = scipy.stats.norm.logpdf(d2, mu2, sigma2)
             return np.sum(logLikelihoods1) + np.sum(logLikelihoods2)
             
         return max(range(2, len(cost)-1), key=cost_fun)
-    
-    def _calculateElbowDerivativeStddev(self, cost: np.ndarray) -> int:
-        diff = np.diff(cost)
-        
-        def cost_fun(i: int) -> float:
-            var1 = np.std(diff[:i], ddof=1)
-            var2 = np.std(diff[i:], ddof=1)
-            return var1+var2
-            
-        return min(range(2, len(diff)-1), key=cost_fun)
     
     def _calculateElbowOrigin(self, cost: np.ndarray) -> int:
         y = (cost - cost.min()) / (cost.max() - cost.min())
@@ -481,12 +474,21 @@ class XmippProtConsensusClasses(ProtClassify3D):
         dist2 = x*x + y*y
             
         return int(dist2.argmin())
+    
+    def _calculateElbowDistanceToLine(self, cost: np.ndarray) -> int:
+        # Based on:
+        # https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line
+        a = cost - cost[0]
+        b = np.linspace(0.0, cost[-1] - cost[0], len(cost))
+        d = np.abs(a - b)
+        
+        return int(d.argmax())
 
     def _calculateElbowSlope(self, cost: np.ndarray) -> int:
         diff = np.diff(cost)
         avgDiff = (cost[-1] - cost[0]) / (len(cost) - 1)
         delta = np.abs(diff - avgDiff)
-        return delta.argmin() + 1   
+        return int(delta.argmin() + 1)
     
     def _obtainMergedIntersections(self, n: int) -> SetOfClasses:
         suffix = self._getMergedIntersectionSuffix(n)
