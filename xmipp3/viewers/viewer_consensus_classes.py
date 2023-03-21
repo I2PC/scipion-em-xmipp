@@ -39,7 +39,6 @@ from pwem.objects import SetOfClasses
 
 from xmipp3.protocols.protocol_consensus_classes import XmippProtConsensusClasses
 
-import json
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.spatial
