@@ -146,10 +146,13 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
                 errors.append("Input volume and mask should have same dimensions")
         if self.resol.get() == 0:
             errors.append("Resolution (angstroms) should be bigger than 0")
-        if part.getDim()[0] > 750 or part.getDim()[1] > 750:
-            errors.append("Particles are quite big, consider to change 'pad=1' (advanced parameter) in order to save "
-                          "RAM (even if your RAM is big).")
         return errors
+
+    def _warnings(self):
+        part = self.inputParticles.get().getFirstItem()
+        if part.getDim()[0] > 750 or part.getDim()[1] > 750:
+            return ["Particles are quite big, consider to change 'pad=1' (advanced parameter) in order to save RAM "
+                    "(even if your RAM is big)."]
 
     def _summary(self):
         summary = ["Volume: %s\nSet of particles: %s\nMask: %s" %
@@ -212,6 +215,12 @@ class XmippProtBoostParticles(XmippProtSubtractProjectionBase):
         if self.resol.get() == 0:
             errors.append("Resolution (angstroms) should be bigger than 0")
         return errors
+
+    def _warnings(self):
+        part = self.inputParticles.get().getFirstItem()
+        if part.getDim()[0] > 750 or part.getDim()[1] > 750:
+            return ["Particles are quite big, consider to change 'pad=1' (advanced parameter) in order to save RAM "
+                    "(even if your RAM is big)."]
 
     def _summary(self):
         summary = ["Volume: %s\nSet of particles: %s\n" %
