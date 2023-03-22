@@ -29,14 +29,16 @@ import os
 import itertools
 import collections
 import numpy as np
-import matplotlib.collections
+from matplotlib.collections import LineCollection
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import LabelParam, IntParam, FloatParam
 
 from pwem import emlib
 from pwem.viewers.views import DataView, ObjectView
+from pwem.viewers import EmPlotter
 
 import xmippLib
 
@@ -68,6 +70,12 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         form.addParam('showAngleDiffShiftDiffHist', LabelParam, label='Display shift difference histogram')
 
         form.addSection(label='Reconstruction')
+        form.addParam('showIterationAngularDistribution', IntParam, label='Display iteration angular distribution',
+                      default=0)
+        form.addParam('showIterationAngularDistribution3d', IntParam, label='Display iteration angular distribution 3D',
+                      default=0)
+        form.addParam('showIterationShiftHistogram', IntParam, label='Display iteration shift histogram',
+                      default=0)
         form.addParam('showIterationVolume', IntParam, label='Display iteration volume',
                       default=0)
         
@@ -92,6 +100,9 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
             'showAngleDiffVecDiffHist': self._showAngleDiffVecDiffHistogram,
             'showAngleDiffShiftDiffHist': self._showAngleDiffShiftDiffHistogram,
 
+            'showIterationAngularDistribution': self._showIterationAngularDistribution,
+            'showIterationAngularDistribution3d': self._showIterationAngularDistribution3d,
+            'showIterationShiftHistogram': self._showIterationShiftHistogram,
             'showIterationVolume': self._showIterationVolume,
 
             'showIterationFsc': self._showIterationFsc,
@@ -102,6 +113,9 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
     
 
     # --------------------------- UTILS functions ------------------------------
+    def _getIterationParametersFilename(self, iteration: int):
+        return self.protocol._getIterationParametersFilename(iteration)
+            
     def _getIterationCount(self) -> int:
         return self.protocol._getIterationCount()
     
@@ -260,14 +274,12 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         counts = np.array(list(migrations.values()))
 
         # Write the y values form migrations
-        for i, (srcClass, dstClass) in enumerate(migrations.keys()):
+        for i, (srcClass, dstClass) in enumerate(migrations.items()):
             segments[i,:] = (srcClass, dstClass)
             
         return segments, counts
     
-    def _computeClassMigrationElements(self, alignmentFilenames: Iterator[str]) -> np.ndarray:
-        points = []
-        
+    def _computeClassMigrationElements(self, alignmentFilenames: Iterator[str]) -> Tuple[LineCollection, np.ndarray]:
         srcAlignmentFn = next(alignmentFilenames)
         srcAlignmentMd = emlib.MetaData(srcAlignmentFn)
         for iteration, dstAlignmentFn in enumerate(alignmentFilenames, start=1):
@@ -276,15 +288,15 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
             # Obtain common elements
             srcAlignmentMd.intersection(dstAlignmentMd, emlib.MDL_ITEM_ID)
 
-            
-            #points = self._computeClassPoints(dstAlignmentMd)
-            #points = np.c_[np.full(len(points), iteration), points]
+            migrations = self._computeClassMigrations(srcAlignmentMd, dstAlignmentMd)
+            sizes = self._computeIterationClassSizes(dstAlignmentMd)
+            segments, counts = self._computeIterationClassMigrationSegments(migrations)
             
             # Save for next
             srcAlignmentMd = dstAlignmentMd
-            
-        return np.concatenate(points)
-    
+        
+        #TODO
+        
     def _readAngleDiffVecHistogram(self, filename):
         md = emlib.MetaData(filename)
         diff = md.getColumnValues(emlib.MDL_ANGLE_DIFF)
@@ -361,15 +373,10 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
     def _showClassMigration(self, e):
         fig, ax = plt.subplots()
         
-        it = self._iterAlignmentMdFilenames()
-        segments, counts = self._computeClassMigrationSegments(it)
-        lines = matplotlib.collections.LineCollection(segments, array=counts)
-
-        it = self._iterAlignmentMdFilenames()
-        points, sizes = self._computeClassSizePoints(it)
-                
+        lines, points = self._computeClassMigrationElements()
+        
         ax.add_collection(lines)
-        sc = ax.scatter(points[:,0], points[:,1], c=sizes)
+        sc = ax.scatter(points[:,0], points[:,1], c=points[:,2])
         ax.set_xlabel('Iteration')
         ax.set_ylabel('Class')
         fig.colorbar(sc, ax=ax)
@@ -436,6 +443,70 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         filename = self._getFilteredReconstructionFilename(iteration, 0)
         return DataView(filename)
     
+    def _showIterationAngularDistribution(self, e):
+        iteration = int(self.showIterationAngularDistribution)
+        view = EmPlotter(x=1, y=1, mainTitle="Iteration %d" % iteration, windowTitle="Angular distribution")
+        axis = view.plotAngularDistributionFromMd(self._getAlignmentMdFilename(iteration), '', histogram=True)
+        view.getFigure().colorbar(axis)
+        return [view]    
+
+    def _showIterationAngularDistribution3d(self, e):
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        
+        # Read data
+        iteration = int(self.showIterationAngularDistribution3d)
+        md = emlib.MetaData(self._getAlignmentMdFilename(iteration))
+        rot = np.deg2rad(md.getColumnValues(emlib.MDL_ANGLE_ROT))
+        tilt = np.deg2rad(md.getColumnValues(emlib.MDL_ANGLE_TILT))
+        
+        # Make histogram
+        N = 32
+        heatmap, rotEdges, tiltEdges = np.histogram2d(
+            x=rot, 
+            y=tilt, 
+            density=True,
+            range=[[-np.pi, +np.pi], [0.0, np.pi]],
+            bins=N
+        )
+        
+        # Cartesian coordinates in unit sphere
+        rotEdges, tiltEdges = np.meshgrid(rotEdges, tiltEdges)
+        x = np.sin(tiltEdges) * np.cos(rotEdges)
+        y = np.sin(tiltEdges) * np.sin(rotEdges)
+        z = np.cos(tiltEdges)
+        
+        # Plot surface
+        ax.plot_surface(x, y, z,  rstride=1, cstride=1, facecolors=cm.plasma(heatmap))
+        ax.set_title('Angular distribution')
+        
+        return [fig]    
+
+    def _showIterationShiftHistogram(self, e):
+        fig, ax = plt.subplots()
+        
+        iteration = int(self.showIterationShiftHistogram)
+        md = emlib.MetaData(self._getAlignmentMdFilename(iteration))
+
+        shiftX = md.getColumnValues(emlib.MDL_SHIFT_X)
+        shiftY = md.getColumnValues(emlib.MDL_SHIFT_Y)
+        
+        N = 128
+        heatmap, xEdges, yEdges = np.histogram2d(
+            x=shiftX, 
+            y=shiftY, 
+            density=True,
+            bins=N
+        )
+
+        image = ax.imshow(heatmap, extent=(xEdges[0], xEdges[-1], yEdges[0], yEdges[-1]))
+        ax.set_title('Shift histogram')
+        ax.set_xlabel('Shift X [px]')
+        ax.set_ylabel('Shift Y [px]')
+        fig.colorbar(image)
+               
+        return [fig]
+        
 
     def _showIterationFsc(self, e):
         fig, ax = plt.subplots()
@@ -494,3 +565,4 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         ax.legend()
                
         return [fig]
+

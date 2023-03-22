@@ -176,7 +176,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
  
     def _insertReconstructSteps(self, iteration: int, cls: int, prerequisites):
         selectAlignmentStepId = self._insertFunctionStep('selectAlignmentStep', iteration, cls, prerequisites=prerequisites)
-        #compareReprojectionStepId = self._insertFunctionStep('compareReprojectionStep', iteration, cls, prerequisites=[selectAlignmentStepId])
+        compareReprojectionStepId = self._insertFunctionStep('compareReprojectionStep', iteration, cls, prerequisites=[selectAlignmentStepId])
         #computeWeightsStepId = self._insertFunctionStep('computeWeightsStep', iteration, cls, prerequisites=[compareReprojectionStepId])
         #filterByWeightsStepId = self._insertFunctionStep('filterByWeightsStep', iteration, cls, prerequisites=[computeWeightsStepId])
         splitStepId = self._insertFunctionStep('splitStep', iteration, cls, prerequisites=[selectAlignmentStepId])
@@ -464,7 +464,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         consensusMd = self._computeAlignmentConsensus(
             alignmentConsensusMds,
             angleStep,
-            shiftStep
+            shiftStep,
+            np.inf 
         )
         
         consensusMd.write(self._getAlignmentMdFilename(iteration))
@@ -824,7 +825,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _computeAlignmentConsensus( self, 
                                     mds: Sequence[emlib.MetaData],
                                     maxAngleDiff: float,
-                                    maxShiftDiff: float ) -> emlib.MetaData:
+                                    maxShiftDiff: float,
+                                    maxCost: float ) -> emlib.MetaData:
         if len(mds) > 1:
             resultMd = emlib.MetaData()
             
@@ -833,6 +835,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             quaternions = np.empty((len(mds), 4))
             shifts = np.empty((len(mds), 2))
             ref3ds = np.empty(len(mds), dtype=int)
+            costs = np.empty(len(mds))
             row = emlib.metadata.Row()
             
             for objIds in zip(*mds):
@@ -847,22 +850,25 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                     shifts[i,:] = ( md.getValue(emlib.MDL_SHIFT_X, objId),
                                     md.getValue(emlib.MDL_SHIFT_Y, objId) )
                     ref3ds[i] = md.getValue(emlib.MDL_REF3D, objId)
+                    costs[i] = md.getValue(emlib.MDL_COST, objId)
                     
-                # Perform a consensus
-                quaternion = self._quaternionAverage(quaternions)
-                shift = np.mean(shifts, axis=0)
-                ref3d = int(stats.mode(ref3ds).mode)
-                
                 # Check if more than a half agree
+                quaternion = self._quaternionAverage(quaternions)
                 angleDiff = self._quaternionDistance(quaternions, quaternion)
                 if np.count_nonzero(angleDiff <= maxAngleDiff) <= len(angleDiff) / 2:
                     continue
 
+                shift = np.mean(shifts, axis=0)
                 shiftDiff = np.linalg.norm(shifts-shift, axis=1)
                 if np.count_nonzero(shiftDiff <= maxShiftDiff) <= len(shiftDiff) / 2:
                     continue
                 
+                ref3d = int(stats.mode(ref3ds).mode)
                 if np.count_nonzero(ref3ds == ref3d) <= len(ref3ds) / 2:
+                    continue
+                
+                cost = np.median(costs)
+                if cost > maxCost:
                     continue
                 
                 # All checks succeeded. Elaborate output
@@ -877,6 +883,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                 row.setValue(emlib.MDL_ANGLE_DIFF, np.rad2deg(np.mean(angleDiff)))
                 row.setValue(emlib.MDL_SHIFT_DIFF, np.mean(shiftDiff))
                 row.setValue(emlib.MDL_REF3D, ref3d)
+                row.setValue(emlib.MDL_COST, cost)
                 
                 assert(len(mds) > 1)
                 row.setValue(emlib.MDL_ANGLE_PSI+1, mds[0].getValue(emlib.MDL_ANGLE_PSI, objIds[0]))
@@ -889,6 +896,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                 row.setValue(emlib.MDL_SHIFT_X+2, mds[1].getValue(emlib.MDL_SHIFT_X, objIds[1]))
                 row.setValue(emlib.MDL_SHIFT_Y+1, mds[0].getValue(emlib.MDL_SHIFT_Y, objIds[0]))
                 row.setValue(emlib.MDL_SHIFT_Y+2, mds[1].getValue(emlib.MDL_SHIFT_Y, objIds[1]))
+                
                 
                 row.writeToMd(resultMd, resultMd.addObject())
 
