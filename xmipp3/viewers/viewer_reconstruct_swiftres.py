@@ -507,7 +507,6 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
                
         return [fig]
         
-
     def _showIterationFsc(self, e):
         fig, ax = plt.subplots()
         
