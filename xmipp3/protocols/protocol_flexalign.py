@@ -46,7 +46,7 @@ from pwem.protocols import ProtAlignMovies
 from xmipp3.convert import writeMovieMd
 from xmipp3.base import isXmippCudaPresent
 import xmipp3.utils as xmutils
-
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 class XmippProtFlexAlign(ProtAlignMovies):
     """
@@ -54,7 +54,7 @@ class XmippProtFlexAlign(ProtAlignMovies):
     """
     NO_ROTATION = 0
     NO_FLIP = 0
-
+    _devStatus = UPDATED
     _label = 'FlexAlign'
     _lastUpdateVersion = VERSION_1_1
 

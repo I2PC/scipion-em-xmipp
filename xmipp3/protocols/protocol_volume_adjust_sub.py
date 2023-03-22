@@ -286,7 +286,12 @@ class XmippProtVolAdjust(XmippProtVolAdjBase):
     # --------------------------- STEPS functions --------------------------------------------
     def adjustStep(self):
         vol1 = self.vol1.get().clone()
+        fnVol1 = vol1.getFileName()
         vol2 = self.vol2.get().getFileName()
+        if fnVol1.endswith('.mrc'):
+            fnVol1 += ':mrc'
+        if vol2.endswith('.mrc'):
+            vol2 += ':mrc'
         resol = self.resol.get()
         iter = self.iter.get()
         program = "xmipp_volume_subtraction"
