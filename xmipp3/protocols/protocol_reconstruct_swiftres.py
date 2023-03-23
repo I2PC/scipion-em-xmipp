@@ -124,11 +124,11 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
         lastIds = [correctCtfStepId]
         for i in range(self._getIterationCount()):
-            lastIds = self._insertIterationSteps(i, False, prerequisites=lastIds)
+            lastIds = self._insertIterationSteps(i, 0, prerequisites=lastIds)
         
         self._insertFunctionStep('createOutputStep', prerequisites=lastIds)
  
-    def _insertIterationSteps(self, iteration: int, local: bool, prerequisites):
+    def _insertIterationSteps(self, iteration: int, local: int, prerequisites):
         setupIterationStepId = self._insertFunctionStep('setupIterationStep', iteration, local, prerequisites=prerequisites)
         #ctfGroupStepId = self._insertFunctionStep('ctfGroupStep', iteration, prerequisites=[setupIterationStepId])
         projectIds = self._insertProjectSteps(iteration, prerequisites=[setupIterationStepId])
@@ -161,7 +161,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
         return mergeStepIds
         
-    def _insertAlignmentSteps(self, iteration: int, local: bool, prerequisites):
+    def _insertAlignmentSteps(self, iteration: int, local: int, prerequisites):
         ensembleTrainingSetStepId = self._insertFunctionStep('ensembleTrainingSetStep', iteration, prerequisites=prerequisites)
         trainDatabaseStepId = self._insertFunctionStep('trainDatabaseStep', iteration, prerequisites=[ensembleTrainingSetStepId])
         
@@ -223,7 +223,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
 
             self.runJob('xmipp_image_convert', args, numberOfMpi=1)
             
-    def setupIterationStep(self, iteration: int, local: bool):
+    def setupIterationStep(self, iteration: int, local: int):
         makePath(self._getIterationPath(iteration))
         
         for cls in range(self._getClassCount()):
@@ -255,6 +255,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             )
             
             resolution = float(self.initialResolution)
+        
+        if local > 0:
+            raise NotImplementedError('Local searches are not implemented')
         
         imageSize = self._getImageSize()
         frequency = self._getSamplingRate() / resolution
@@ -388,7 +391,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
         self.runJob('xmipp_train_database', args, numberOfMpi=1, env=env)
     
-    def alignStep(self, iteration: int, repetition: int, local: bool):
+    def alignStep(self, iteration: int, repetition: int, local: int):
         md = emlib.MetaData(self._getIterationParametersFilename(iteration))
         imageSize = self._getImageSize()
         maxFrequency = md.getValue(emlib.MDL_RESOLUTION_FREQREAL, 1)
@@ -416,7 +419,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--max_size', self.databaseMaximumSize]
         if self.useGpu:
             args += ['--device', 'cuda:0'] # TODO select
-        if local:
+        if local > 0:
             args += ['--local_shift', '--local_psi']
         
         env = self.getCondaEnv()
@@ -665,6 +668,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _getIterationCount(self) -> int:
         return int(self.numberOfIterations)
 
+    def _getCompletedIterationCount(self) -> int:
+        return self._getIterationCount() # TODO
+    
     def _getAlignmentRepetitionCount(self) -> int:
         return int(self.numberOfAlignmentRepetitions)
         
@@ -679,7 +685,6 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     def _getImageSize(self) -> int:
         return int(self.inputParticles.get().getXDim())
-
 
     def _getIterationPath(self, iteration: int, *paths):
         return self._getExtraPath('iteration_%04d' % iteration, *paths)

@@ -55,6 +55,12 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
     
     # --------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
+        form.addSection(label='Settings')
+        form.addParam('iteration', IntParam, label='Iteration', default=-1,
+                      help='Iteration to be visualized. Zero based. Use -1 for last one')
+        form.addParam('classId', IntParam, label='Class', default=1,
+                      help='Class to be visualized. One based')
+        
         form.addSection(label='Noise model')
         form.addParam('showNoiseModel', LabelParam, label='Display radial noise model profile')
         form.addParam('showWeights', LabelParam, label='Display radial weight profile')
@@ -64,26 +70,19 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         form.addParam('showClassSizes', LabelParam, label='Display class sizes')
         
         form.addSection(label='Angular difference from previous iteration')
-        form.addParam('showAngleDiffMetadata', IntParam, label='Display iteration angular difference metadata',
-                      default=0)
+        form.addParam('showAngleDiffMetadata', LabelParam, label='Display iteration angular difference metadata')
         form.addParam('showAngleDiffVecDiffHist', LabelParam, label='Display vector difference histogram')
         form.addParam('showAngleDiffShiftDiffHist', LabelParam, label='Display shift difference histogram')
 
         form.addSection(label='Reconstruction')
-        form.addParam('showIterationAngularDistribution', IntParam, label='Display iteration angular distribution',
-                      default=0)
-        form.addParam('showIterationAngularDistribution3d', IntParam, label='Display iteration angular distribution 3D',
-                      default=0)
-        form.addParam('showIterationShiftHistogram', IntParam, label='Display iteration shift histogram',
-                      default=0)
-        form.addParam('showIterationVolume', IntParam, label='Display iteration volume',
-                      default=0)
+        form.addParam('showIterationAngularDistribution', LabelParam, label='Display iteration angular distribution')
+        form.addParam('showIterationAngularDistribution3d', LabelParam, label='Display iteration angular distribution 3D')
+        form.addParam('showIterationShiftHistogram', LabelParam, label='Display iteration shift histogram')
+        form.addParam('showIterationVolume', LabelParam, label='Display iteration volume')
         
         form.addSection(label='FSC')
-        form.addParam('showIterationFsc', IntParam, label='Display iteration FSC',
-                      default=0 )
-        form.addParam('showClassFsc', IntParam, label='Display class FSC',
-                      default=0)
+        form.addParam('showIterationFsc', LabelParam, label='Display iteration FSC')
+        form.addParam('showClassFsc', LabelParam, label='Display class FSC')
         form.addParam('showFscCutoff', FloatParam, label='Display FSC cutoff',
                       default=0.143)
 
@@ -113,11 +112,21 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
     
 
     # --------------------------- UTILS functions ------------------------------
-    def _getIterationParametersFilename(self, iteration: int):
-        return self.protocol._getIterationParametersFilename(iteration)
-            
+    def _getIteration(self) -> int:
+        iteration = int(self.iteration)
+        if iteration < 0:
+            return self._getCompletedIterationCount() + iteration
+        else:
+            return iteration
+    
+    def _getClass(self) -> int:
+        return int(self.classId) - 1
+    
     def _getIterationCount(self) -> int:
         return self.protocol._getIterationCount()
+    
+    def _getCompletedIterationCount(self) -> int:
+        return self.protocol._getCompletedIterationCount()
     
     def _getClassCount(self) -> int:
         return self.protocol._getClassCount()
@@ -125,14 +134,20 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
     def _getSamplingRate(self) -> float:
         return self.protocol._getSamplingRate()
     
+    def _getIterationPath(self, iteration: int, *paths) -> str:
+        return self.protocol._getIterationPath(iteration *paths)
+    
+    def _getIterationParametersFilename(self, iteration: int):
+        return self.protocol._getIterationParametersFilename(iteration)
+            
     def _getAlignmentMdFilename(self, iteration: int):
         return self.protocol._getAlignmentMdFilename(iteration)
     
     def _getFscFilename(self, iteration: int, cls: int):
         return self.protocol._getFscFilename(iteration, cls)
     
-    def _getFilteredReconstructionFilename(self, iteration: int, cls: int):
-        return self.protocol._getFilteredReconstructionFilename(iteration, cls)
+    def _getFilteredVolumeFilename(self, iteration: int, cls: int):
+        return self.protocol._getFilteredVolumeFilename(iteration, cls)
     
     def _getAngleDiffMdFilename(self, iteration: int):
         return self.protocol._getAngleDiffMdFilename(iteration)
@@ -156,7 +171,7 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
             fsc = fscMd.getValue(emlib.MDL_RESOLUTION_FRC, objId)
             values.append((freq, fsc))
          
-        return np.array(values)   
+        return np.array(values)
     
     def _iterFilenamesUntilNotExist(self, filenames: Iterable[str]):
         for filename in filenames:
@@ -345,7 +360,8 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         ax.set_title('Noise model')
         ax.set_xlabel('Resolution (1/A)')
         ax.set_ylabel('$\sigma^2$')
-        ax.set_xticklabels(self._computeFscTickLabels(ax.get_xticks()))
+        ax.set_xlim((0.0, 0.5))
+        ax.set_xticks(ax.get_xticks(), self._computeFscTickLabels(ax.get_xticks()))
         ax.legend()
         
         return [fig]
@@ -365,7 +381,8 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         ax.set_title('Weights')
         ax.set_xlabel('Resolution (1/A)')
         ax.set_ylabel('Weight')
-        ax.set_xticklabels(self._computeFscTickLabels(ax.get_xticks()))
+        ax.set_xlim((0.0, 0.5))
+        ax.set_xticks(ax.get_xticks(), self._computeFscTickLabels(ax.get_xticks()))
         ax.legend()
         
         return [fig]
@@ -404,7 +421,8 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         return [fig]
         
     def _showAngleDiffMetadata(self, e):
-        mdFilename = self._getAngleDiffMdFilename(int(self.showAngleDiffMetadata))
+        iteration = self._getIteration()
+        mdFilename = self._getAngleDiffMdFilename(iteration)
         v = DataView(mdFilename)
         return [v]
     
@@ -439,12 +457,14 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         return [fig]
         
     def _showIterationVolume(self, e):
-        iteration = int(self.showIterationVolume)
-        filename = self._getFilteredReconstructionFilename(iteration, 0)
-        return DataView(filename)
+        iteration = self._getIteration()
+        cls = self._getClass()
+        filename = self._getFilteredVolumeFilename(iteration, cls)
+        view = DataView(filename)
+        return [view]
     
     def _showIterationAngularDistribution(self, e):
-        iteration = int(self.showIterationAngularDistribution)
+        iteration = self._getIteration()
         view = EmPlotter(x=1, y=1, mainTitle="Iteration %d" % iteration, windowTitle="Angular distribution")
         axis = view.plotAngularDistributionFromMd(self._getAlignmentMdFilename(iteration), '', histogram=True)
         view.getFigure().colorbar(axis)
@@ -455,7 +475,7 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         ax = fig.add_subplot(111, projection='3d')
         
         # Read data
-        iteration = int(self.showIterationAngularDistribution3d)
+        iteration = self._getIteration()
         md = emlib.MetaData(self._getAlignmentMdFilename(iteration))
         rot = np.deg2rad(md.getColumnValues(emlib.MDL_ANGLE_ROT))
         tilt = np.deg2rad(md.getColumnValues(emlib.MDL_ANGLE_TILT))
@@ -485,7 +505,7 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
     def _showIterationShiftHistogram(self, e):
         fig, ax = plt.subplots()
         
-        iteration = int(self.showIterationShiftHistogram)
+        iteration = self._getIteration()
         md = emlib.MetaData(self._getAlignmentMdFilename(iteration))
 
         shiftX = md.getColumnValues(emlib.MDL_SHIFT_X)
@@ -510,8 +530,8 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
     def _showIterationFsc(self, e):
         fig, ax = plt.subplots()
         
-        it = int(self.showIterationFsc)
-        for cls, fscFn in enumerate(self._iterFscMdIterationFilenames(it), start=1):
+        iteration = self._getIteration()
+        for cls, fscFn in enumerate(self._iterFscMdIterationFilenames(iteration), start=1):
             fscMd = emlib.MetaData(fscFn)
             fsc = self._readFsc(fscMd)
             label = f'Class {cls}'
@@ -519,10 +539,11 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         ax.axhline(0.5, color='black', linestyle='--')
         ax.axhline(0.143, color='black', linestyle='--')
 
-        ax.set_title('Class FSC')
+        ax.set_title('Iteration %d FSC' % iteration)
         ax.set_xlabel('Resolution (1/A)')
         ax.set_ylabel('FSC')
-        ax.set_xticklabels(self._computeFscTickLabels(ax.get_xticks()))
+        ax.set_xlim((0.0, 0.5))
+        ax.set_xticks(ax.get_xticks(), self._computeFscTickLabels(ax.get_xticks()))
         ax.legend()
                
         return [fig]
@@ -530,7 +551,7 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
     def _showClassFsc(self, e):
         fig, ax = plt.subplots()
         
-        cls = int(self.showClassFsc)
+        cls = self._getClass()
         for it, fscFn in enumerate(self._iterFscMdClassFilenames(cls), start=1):
             fscMd = emlib.MetaData(fscFn)
             fsc = self._readFsc(fscMd)
@@ -539,10 +560,11 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         ax.axhline(0.5, color='black', linestyle='--')
         ax.axhline(0.143, color='black', linestyle='--')
 
-        ax.set_title('Class FSC')
+        ax.set_title('Class %d FSC' % (cls+1))
         ax.set_xlabel('Resolution (1/A)')
         ax.set_ylabel('FSC')
-        ax.set_xticklabels(self._computeFscTickLabels(ax.get_xticks()))
+        ax.set_xlim((0.0, 0.5))
+        ax.set_xticks(ax.get_xticks(), self._computeFscTickLabels(ax.get_xticks()))
         ax.legend()
                
         return [fig]
