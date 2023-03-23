@@ -902,7 +902,6 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                 row.setValue(emlib.MDL_SHIFT_Y+1, mds[0].getValue(emlib.MDL_SHIFT_Y, objIds[0]))
                 row.setValue(emlib.MDL_SHIFT_Y+2, mds[1].getValue(emlib.MDL_SHIFT_Y, objIds[1]))
                 
-                
                 row.writeToMd(resultMd, resultMd.addObject())
 
             return resultMd

@@ -472,21 +472,26 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
 
     def _showIterationAngularDistribution3d(self, e):
         fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
         
         # Read data
         iteration = self._getIteration()
         md = emlib.MetaData(self._getAlignmentMdFilename(iteration))
         rot = np.deg2rad(md.getColumnValues(emlib.MDL_ANGLE_ROT))
         tilt = np.deg2rad(md.getColumnValues(emlib.MDL_ANGLE_TILT))
+        psi = np.deg2rad(md.getColumnValues(emlib.MDL_ANGLE_PSI))
         
         # Make histogram
         N = 32
         heatmap, rotEdges, tiltEdges = np.histogram2d(
             x=rot, 
             y=tilt, 
+            range=[(-np.pi, np.pi), (0.0, np.pi)],
             density=True,
-            range=[[-np.pi, +np.pi], [0.0, np.pi]],
+            bins=N
+        )
+        hist, psiEdges = np.histogram(
+            psi, 
+            density=True,
             bins=N
         )
         
@@ -496,9 +501,15 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         y = np.sin(tiltEdges) * np.sin(rotEdges)
         z = np.cos(tiltEdges)
         
-        # Plot surface
-        ax.plot_surface(x, y, z,  rstride=1, cstride=1, facecolors=cm.plasma(heatmap))
-        ax.set_title('Angular distribution')
+        # Plot the sphere
+        ax1 = fig.add_subplot(1, 2, 1, projection='3d')
+        ax1.plot_surface(x, y, z,  rstride=1, cstride=1, facecolors=cm.plasma(heatmap))
+        ax1.set_title('TILT and ROT distribution histogram')
+        
+        # Plot the
+        ax2 = fig.add_subplot(1, 2, 2, projection='polar')
+        ax2.bar((psiEdges[:-1] + psiEdges[1:])/2, hist)
+        ax2.set_title('PSI distribution histogram')
         
         return [fig]    
 
@@ -534,7 +545,7 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         for cls, fscFn in enumerate(self._iterFscMdIterationFilenames(iteration), start=1):
             fscMd = emlib.MetaData(fscFn)
             fsc = self._readFsc(fscMd)
-            label = f'Class {cls}'
+            label = f'Class {cls+1}'
             ax.plot(fsc[:,0], fsc[:,1], label=label)
         ax.axhline(0.5, color='black', linestyle='--')
         ax.axhline(0.143, color='black', linestyle='--')
@@ -576,7 +587,7 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         for cls in range(self._getClassCount()):
             y = self._readFscCutoff(cls, cutoff)
             x = np.arange(len(y))
-            label = f'Class {cls}'
+            label = f'Class {cls+1}'
             ax.plot(x, y, label=label)
 
         ax.set_title('Resolution')
