@@ -102,7 +102,7 @@ class XmippConsensusClassesViewer(ProtocolViewer):
         for key, value in elbows.items():
             index = len(y) - value
             label = key + ': ' + str(value)
-            ax.axhline((y[index] + y[index+1])/2, label=label)
+            ax.axhline((y[index] + y[index+1])/2, label=label, color='black', linestyle='--')
         
         ax.legend()
         ax.set_ylabel('cost')
