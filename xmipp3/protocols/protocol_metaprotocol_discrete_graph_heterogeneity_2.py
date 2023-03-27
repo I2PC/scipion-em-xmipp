@@ -482,7 +482,7 @@ class XmippMetaProtDiscreteGraphHeterogeneity2(EMProtocol):
             self.runJob('xmipp_metadata_utilities','-i %s --operate sort particleId'%fnAuxPart2,numberOfMpi=1)
             mdParticles2 = emlib.MetaData(fnAuxPart2)
             maxCC_p_2 = np.array( mdParticles2.getColumnValues(emlib.MDL_MAXCC_PREVIOUS) )
-            ccAssignedDir_2 = np.array( mdParticles1.getColumnValues(emlib.MDL_ASSIGNED_DIR_REF_CC) )
+            ccAssignedDir_2 = np.array( mdParticles2.getColumnValues(emlib.MDL_ASSIGNED_DIR_REF_CC) )
             graphCCPrev_2 = np.array( mdParticles2.getColumnValues(emlib.MDL_GRAPH_CC_PREVIOUS) )
             graphDistMaxGraphPrev_2 = np.array( mdParticles2.getColumnValues(emlib.MDL_GRAPH_DISTANCE2MAX_PREVIOUS) )
             
@@ -493,7 +493,8 @@ class XmippMetaProtDiscreteGraphHeterogeneity2(EMProtocol):
             smallerDistance = graphDistMaxGraphPrev_1 < graphDistMaxGraphPrev_2
 
             # enableClass1 = (biggerCC & biggerCC_Dir & biggerGraphCC) | smallerDistance
-            enableClass1 = (biggerCC & biggerCC_Dir) | smallerDistance
+            # enableClass1 = (biggerCC & biggerCC_Dir) | smallerDistance
+            enableClass1 = biggerCC
             enableClass2 = ~(enableClass1)
 
             # translate that npArray to enable class 1
