@@ -41,7 +41,7 @@ from xmipp3.protocols import XmippProtExtractParticlesPairs
 from xmipp3.protocols import XmippProtKerdensom
 from xmipp3.protocols import XmippParticlePickingAutomatic
 from xmipp3.protocols import XmippProtParticlePickingPairs
-from xmipp3.protocols import XmippProtRotSpectra
+#from xmipp3.protocols import XmippProtRotSpectra
 from xmipp3.protocols import XmippProtScreenParticles
 from xmipp3.protocols import XmippProtCTFMicrographs
 from xmipp3.protocols import XmippProtValidateNonTilt
@@ -70,7 +70,6 @@ class XmippViewer(DataViewer):
                 XmippProtExtractParticlesPairs,
                 XmippProtKerdensom,
                 XmippProtParticlePickingPairs,
-                XmippProtRotSpectra,
                 XmippProtScreenParticles,
                 XmippProtCTFMicrographs,
                 XmippProtValidateNonTilt,
@@ -187,15 +186,6 @@ class XmippViewer(DataViewer):
             #                                     ratio2Value=4.5)
             # self._views.append(MovieGainMonitorPlotter(movieGainMonitor))
 
-        elif issubclass(cls, XmippProtRotSpectra):
-            self._visualize(obj.outputClasses,
-                            viewParams={'columns': obj.SomXdim.get(),
-                                        RENDER: ' spectraPlot._filename average._filename',
-                                        ZOOM: 30,
-                                        VISIBLE: 'enabled id _size average._filename '
-                                                 'spectraPlot._filename',
-                                        'labels': 'id _size',
-                                        SORT_BY: 'id'})
 
         elif issubclass(cls, XmippProtKerdensom):
             self._visualize(obj.outputClasses, viewParams={'columns': obj.SomXdim.get(),
