@@ -98,9 +98,13 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
 
         form.addSection(label='Compute')
         form.addParam('databaseRecipe', StringParam, label='Database recipe', 
-                      default='OPQ48_192,IVF32768,PQ48', expertLevel=LEVEL_ADVANCED,
+                      default='OPQ48_192,IVF32768,PQ48',
                       help='FAISS database structure. Please refer to '
                       'https://github.com/facebookresearch/faiss/wiki/The-index-factory')
+        form.addParam('useFloat16', BooleanParam, label='Use float16', default=False, 
+                      help='When enabled, FAISS will be prompted to use half precision floating point '
+                      'numbers. This may improve performance and/or memory footprint at some '
+                      'accuracy cost. Only supported for GPUs')
         form.addParam('databaseTrainingSetSize', IntParam, label='Database training set size', 
                       default=int(2e6),
                       help='Number of data-augmented particles to used when training the database')
@@ -386,6 +390,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--scratch', self._getTrainingScratchFilename()]
         if self.useGpu:
             args += ['--device', 'cuda:0'] # TODO select
+        if self.useFloat16:
+            args += ['--fp16']
         
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
