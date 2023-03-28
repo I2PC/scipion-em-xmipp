@@ -75,7 +75,7 @@ from .protocol_normalize_strain import XmippProtNormalizeStrain
 from .protocol_particle_pick_automatic import XmippParticlePickingAutomatic
 from .protocol_particle_pick_consensus import XmippProtConsensusPicking
 from .protocol_pick_noise import XmippProtPickNoise
-from .protocol_particle_boxsize import XmippProtParticleBoxsize
+#from .protocol_particle_boxsize import XmippProtParticleBoxsize
 from .protocol_particle_pick import XmippProtParticlePicking
 from .protocol_particle_pick_pairs import XmippProtParticlePickingPairs
 from .protocol_phantom_create import XmippProtPhantom
