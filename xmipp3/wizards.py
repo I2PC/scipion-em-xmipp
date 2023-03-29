@@ -35,7 +35,7 @@ from xmipp3.viewers import XmippMonoResViewer, XmippResDeepResViewer, XmippProtF
 from .protocols.protocol_cl2d import IMAGES_PER_CLASS
 
 from .protocols import (
-    XmippProtCTFMicrographs, XmippProtPreprocessParticles,
+    XmippProtCTFMicrographs, XmippProtPreprocessParticles, XmippProtProjMatch,
     XmippProtPreprocessMicrographs, XmippProtPreprocessVolumes,
     XmippProtExtractParticles, XmippProtExtractParticlesPairs, XmippProtPickingRemoveDuplicates,
     XmippProtFilterParticles, XmippProtFilterVolumes, XmippProtMaskParticles,
@@ -312,6 +312,20 @@ class XmippVolumeInnerRadiusWizard(XmippVolumeMaskRadiusWizard):
         protParams['value']= protocol.cylinderInnerRadius.get()
         return protParams
 
+class XmippVolumeMaskRadiusProjMWizard(XmippVolumeMaskRadiusWizard):
+    _targets = [(XmippProtProjMatch, ['maskRadius'])]
+
+    def _getParameters(self, protocol):
+
+        label, value = self._getInputProtocol(self._targets, protocol)
+
+        protParams = {}
+        protParams['input']= protocol.input3DReferences
+        protParams['label']= label
+        protParams['value']= value
+        return protParams
+
+
 
 
 class XmippVolumeRadiiWizard(VolumeMaskRadiiWizard):
@@ -338,6 +352,21 @@ class XmippVolumeRadiiWizard(VolumeMaskRadiiWizard):
         _label = params['label']
         VolumeMaskRadiiWizard.show(self, form, _value, _label, UNIT_PIXEL)
 
+
+class XmippVolumeRadiiProjMWizard(XmippVolumeRadiiWizard):
+    _targets = [(XmippProtProjMatch, ['innerRadius', 'outerRadius'])]
+
+    def _getParameters(self, protocol):
+
+        label, value = self._getInputProtocol(self._targets, protocol)
+        # Convert values to integer (From NumericListParam they come as string)
+        value = [int(val) for val in value]
+
+        protParams = {}
+        protParams['input']= protocol.input3DReferences
+        protParams['label']= label
+        protParams['value']= value
+        return protParams
 
 class Zernike3DMaskWizard(VolumeMaskRadiusWizard):
     _targets = [(XmippProtVolumeDeformZernike3D, ['Rmax']),

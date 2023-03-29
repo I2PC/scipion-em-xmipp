@@ -1032,7 +1032,54 @@ class TestXmippRotationalSymmetry(TestXmippBase):
         self.assertIsNotNone(protRotSym.outputVolume,
                              "There was a problem with Rotational Symmetry")
 
+class TestXmippProjMatching(TestXmippBase):
 
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet('relion_tutorial')
+        cls.vol = cls.dataset.getFile('volume')
+
+    def testXmippProjMatching(self):
+        print("Import Particles")
+        protImportParts = self.newProtocol(ProtImportParticles,
+                                 objLabel='Particles from scipion',
+                                 importFrom=ProtImportParticles.IMPORT_FROM_SCIPION,
+                                 sqliteFile=self.dataset.getFile('import/case2/particles.sqlite'),
+                                 magnification=50000,
+                                 samplingRate=7.08,
+                                 haveDataBeenPhaseFlipped=True
+                                 )
+        self.launchProtocol(protImportParts)
+        self.assertIsNotNone(protImportParts.getFiles(), "There was a problem with the import")
+
+        print("Get a Subset of particles")
+        protSubset = self.newProtocol(ProtSubSet,
+                                         objLabel='100 Particles',
+                                         chooseAtRandom=True,
+                                         nElements=100)
+        protSubset.inputFullSet.set(protImportParts.outputParticles)
+        self.launchProtocol(protSubset)
+
+        print("Import Volume")
+        protImportVol = self.newProtocol(ProtImportVolumes,
+                                         objLabel='Volume',
+                                         filesPath=self.vol,
+                                         samplingRate=7.08)
+        self.launchProtocol(protImportVol)
+        self.assertIsNotNone(protImportVol.getFiles(), "There was a problem with the import")
+
+        print("Run Projection Matching")
+        protProjMatch = self.newProtocol(XmippProtProjMatch,
+                                         ctfGroupMaxDiff=0.00001,
+                                         mpiJobSize=10,
+                                         numberOfIterations=2,
+                                         numberOfThreads=2,
+                                         numberOfMpi=3)
+        protProjMatch.inputParticles.set(protSubset.outputParticles)
+        protProjMatch.input3DReferences.set(protImportVol.outputVolume)
+        self.launchProtocol(protProjMatch)
+        self.assertIsNotNone(protProjMatch.outputVolume, "There was a problem with Projection Matching")
 
 class TestPdbImport(TestXmippBase):
     
