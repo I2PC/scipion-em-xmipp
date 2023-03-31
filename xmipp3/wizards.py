@@ -157,7 +157,10 @@ class XmippParticleConsensusRadiusWizard(Wizard):
 
     def _getRadius(self, protocol):
         if protocol.inputCoordinates.hasValue():
-            boxSize=protocol.inputCoordinates[0].get().getBoxSize()
+            if protocol.inputCoordinates.get() == None:  # Protocol=XmippProtConsensusPicking => inputCoordinates=list
+                boxSize = protocol.inputCoordinates[0].get().getBoxSize()
+            else:  # Protocol=XmippProtPickingRemoveDuplicates => inputCoordinates=setOfCoordinates
+                boxSize = protocol.inputCoordinates.get().getBoxSize()
             radius = int(boxSize*0.1)
             if radius<10:
                 radius=10
