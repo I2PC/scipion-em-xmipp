@@ -658,10 +658,8 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
             if self.xmippCTF == INPUT1:
                 ctfX = ctf
-            elif self.xmippCTF == INPUT2:
-                ctfX = self.allCtf2.get(ctfId)
             else:
-                raise Exception("No xmipp ctf was found")
+                ctfX = self.allCtf2.get(ctfId)
 
 
             secondCondition = (
