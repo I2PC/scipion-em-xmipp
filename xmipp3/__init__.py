@@ -224,7 +224,7 @@ def installDeepLearningToolkit(plugin, env):
 
     if nvidiaDriverVer is not None:
         preMsgs.append("CUDA support find. Driver version: %s" % nvidiaDriverVer)
-        msg = "Tensorflow installed with CUDA SUPPORT."
+        msg = "Tensorflow will be installed with CUDA SUPPORT."
         cudaMsgs.append(msg)
         useGpu = True
     else:
