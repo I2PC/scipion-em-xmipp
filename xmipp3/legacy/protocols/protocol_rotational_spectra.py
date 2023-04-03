@@ -1,4 +1,3 @@
-# **************************************************************************
 # *
 # * Authors:     Josue Gomez Blanco (josue.gomez-blanco@mcgill.ca)
 # *
