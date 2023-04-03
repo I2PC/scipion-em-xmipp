@@ -76,6 +76,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('symmetryGroup', StringParam, default='c1',
                       label='Symmetry group',
                       help='If no symmetry is present, give c1')
+        form.addParam('mask', PointerParam, label="Mask", pointerClass='VolumeMask', allowsNull=True,
+                      help='The mask values must be between 0 (remove these pixels) and 1 (let them pass). Smooth masks are recommended.')
         
         form.addSection(label='Global refinement')
         form.addParam('numberOfIterations', IntParam, label='Number of iterations', default=3)
