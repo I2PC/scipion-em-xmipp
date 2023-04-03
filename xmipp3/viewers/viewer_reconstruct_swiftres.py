@@ -38,7 +38,7 @@ from pyworkflow.protocol.params import LabelParam, IntParam, FloatParam
 
 from pwem import emlib
 from pwem.viewers.views import DataView, ObjectView
-from pwem.viewers import EmPlotter
+from pwem.viewers import EmPlotter, ChimeraAngDist
 
 import xmippLib
 
@@ -77,6 +77,7 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         form.addSection(label='Reconstruction')
         form.addParam('showIterationAngularDistribution', LabelParam, label='Display iteration angular distribution')
         form.addParam('showIterationAngularDistribution3d', LabelParam, label='Display iteration angular distribution 3D')
+        form.addParam('showIterationAngularDistributionChimera', LabelParam, label='Display iteration angular distribution in Chimera')
         form.addParam('showIterationShiftHistogram', LabelParam, label='Display iteration shift histogram')
         form.addParam('showIterationVolume', LabelParam, label='Display iteration volume')
         
@@ -101,6 +102,7 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
 
             'showIterationAngularDistribution': self._showIterationAngularDistribution,
             'showIterationAngularDistribution3d': self._showIterationAngularDistribution3d,
+            'showIterationAngularDistributionChimera': self._showIterationAngularDistributionChimera,
             'showIterationShiftHistogram': self._showIterationShiftHistogram,
             'showIterationVolume': self._showIterationVolume,
 
@@ -513,6 +515,23 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         
         return [fig]    
 
+    def _showIterationAngularDistributionChimera(self, e):
+        iteration = self._getIteration()
+        cls = self._getClass()
+        
+        volFn = self._getFilteredVolumeFilename(iteration, cls)
+        alignmentMdFn = self._getAlignmentMdFilename(iteration)
+        volOrigin = (0, 0, 0) #TODO
+        
+        view = ChimeraAngDist(
+            volFile=volFn, 
+            tmpFilesPath=self.protocol._getPath(),
+            angularDistFile=alignmentMdFn,
+            volOrigin=volOrigin
+        )
+
+        return [view]
+    
     def _showIterationShiftHistogram(self, e):
         fig, ax = plt.subplots()
         
