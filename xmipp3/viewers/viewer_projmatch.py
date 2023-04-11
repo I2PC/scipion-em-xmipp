@@ -43,7 +43,7 @@ from pyworkflow.protocol.params import (LabelParam, IntParam, FloatParam,
 import pyworkflow.utils as pwutils
 from xmipp3.convert import *
 from xmipp3.viewers.plotter import XmippPlotter
-from xmipp3.protocols import XmippProtProjMatch
+from ..protocols.protocol_projmatch import XmippProtProjMatch
 
 
 ITER_LAST = 0

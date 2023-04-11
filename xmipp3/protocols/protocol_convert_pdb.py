@@ -75,13 +75,13 @@ class XmippProtConvertPdb(ProtInitialVolume):
                       label="Input volume ", condition='vol', allowsNull=True,
                       help='The origin and the final size of the output volume will be taken from this volume.')
         form.addParam('setSize', params.BooleanParam, label='Set final size?', default=False, condition='vol == False')
-        form.addParam('size_z', params.IntParam, condition='setSize', allowsNull=True,
+        form.addParam('size_z', params.IntParam, condition='setSize and not vol', allowsNull=True,
                       label="Final size (px) Z",
                       help='Final size in Z in pixels. If no value is provided, protocol will estimate it.')
-        form.addParam('size_y', params.IntParam, condition='setSize', allowsNull=True,
+        form.addParam('size_y', params.IntParam, condition='setSize and not vol', allowsNull=True,
                       label="Final size (px) Y",
                       help='Final size in Y in pixels. If no value is provided, protocol will estimate it.')
-        form.addParam('size_x', params.IntParam, condition='setSize', allowsNull=True,
+        form.addParam('size_x', params.IntParam, condition='setSize and not vol', allowsNull=True,
                       label="Final size (px) X",
                       help='Final size in X in pixels. If desired output size is x = y = z you can only fill this '
                            'field. If no value is provided, protocol will estimate it.')
@@ -147,14 +147,14 @@ class XmippProtConvertPdb(ProtInitialVolume):
                                                           self.shifts[1]/samplingR,
                                                           self.shifts[2]/samplingR)
 
-        if self.setSize:
+        if self.setSize and not self.vol:
             args += ' --size'
 
-        if self.size_x.hasValue() and self.setSize:
-            args += ' %d' % self.size_x.get()
+            if self.size_x.hasValue():
+                args += ' %d' % self.size_x.get()
 
-        if self.size_y.hasValue() and self.size_z.hasValue() and self.setSize:
-            args += ' %d %d' % (self.size_y.get(), self.size_z.get())
+            if self.size_y.hasValue() and self.size_z.hasValue():
+                args += ' %d %d' % (self.size_y.get(), self.size_z.get())
 
         self.info("Input file: " + pdbFn)
         self.info("Output file: " + outFile)

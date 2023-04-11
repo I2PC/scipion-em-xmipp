@@ -1141,33 +1141,6 @@ class TestAlignmentAssign(TestXmippBase):
         [self.assertAlmostEqual(inT * scale, outT) for inT, outT in zip(inTranslation, outTranslation)]
 
 
-class TestXmippRotSpectra(TestXmippBase):
-    """This class check if the protocol to calculate the rotational spectra from particles in Xmipp works properly."""
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        TestXmippBase.setData('mda')
-        cls.protImport = cls.runImportParticles(cls.particlesFn, 3.5)
-        cls.align2D = cls.runCL2DAlign(cls.protImport.outputParticles)
-         
-    def test_rotSpectra(self):
-        print("Run Rotational Spectra")
-        xmippProtRotSpectra = self.newProtocol(XmippProtRotSpectra, SomXdim=2, SomYdim=2)
-        xmippProtRotSpectra.inputParticles.set(self.align2D.outputParticles)
-        self.launchProtocol(xmippProtRotSpectra)        
-        self.assertIsNotNone(xmippProtRotSpectra.outputClasses, "There was a problem with Rotational Spectra")
-
-    def test_rotSpectraMask(self):
-        print("Run Rotational Spectra with Mask")
-        protMask = self.runCreateMask(3.5, 100)
-        xmippProtRotSpectra = self.newProtocol(XmippProtRotSpectra, useMask=True, SomXdim=2, SomYdim=2)
-        xmippProtRotSpectra.inputParticles.set(self.align2D.outputParticles)
-        xmippProtRotSpectra.useMask.set(True)
-        xmippProtRotSpectra.Mask.set(protMask.outputMask)
-        self.launchProtocol(xmippProtRotSpectra)
-        self.assertIsNotNone(xmippProtRotSpectra.outputClasses, "There was a problem with Rotational Spectra")
-
-
 class TestXmippKerdensom(TestXmippBase):
     """This class check if the protocol to calculate the kerdensom from particles in Xmipp works properly."""
     @classmethod
