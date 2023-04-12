@@ -236,8 +236,7 @@ def installDeepLearningToolkit(plugin, env):
 
 
     # commands  = [(command, target), (cmd, tgt), ...]
-    cmdsInstall = [(cmd, envName + ".yml") for cmd, envName in
-                   CondaEnvManager.yieldInstallAllCmds(useGpu=useGpu)]
+    cmdsInstall = list(CondaEnvManager.yieldInstallAllCmds(useGpu=useGpu))
 
     now = datetime.now()
     installDLvars = {'modelsUrl': "http://scipion.cnb.csic.es/downloads/scipion/software/em",
