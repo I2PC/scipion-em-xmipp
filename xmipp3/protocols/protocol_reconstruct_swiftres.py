@@ -97,6 +97,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                       help='Maximum shift of the particle in pixels')
         form.addParam('reconstructPercentage', FloatParam, label='Reconstruct percentage (%)', default=50,
                       help='Percentage of best particles used for reconstruction')
+        form.addParam('numberOfMatches', IntParam, label='Number of matches', default=1,
+                      help='Number of reference matches for each particle')
 
         form.addSection(label='Compute')
         form.addParam('databaseRecipe', StringParam, label='Database recipe', 
@@ -425,6 +427,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--dropna']
         args += ['--batch', self.batchSize]
         args += ['--max_size', self.databaseMaximumSize]
+        args += ['-k', self.numberOfMatches]
         if self.useGpu:
             args += ['--device', 'cuda:0'] # TODO select
         if local > 0:
