@@ -46,7 +46,7 @@ import collections
 
 class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     _label = 'swiftres'
-    _conda_env = 'xmipp_torch'
+    _conda_env = 'xmipp_swiftres'
         
     def __init__(self, **kwargs):
         ProtRefine3D.__init__(self, **kwargs)
