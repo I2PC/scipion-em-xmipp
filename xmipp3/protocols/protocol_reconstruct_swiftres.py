@@ -46,7 +46,7 @@ import collections
 
 class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     _label = 'swiftres'
-    _conda_env = 'xmipp_swiftres'
+    _conda_env = 'xmipp_swiftalign'
         
     def __init__(self, **kwargs):
         ProtRefine3D.__init__(self, **kwargs)
@@ -399,7 +399,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
-        self.runJob('xmipp_train_database', args, numberOfMpi=1, env=env)
+        self.runJob('xmipp_swiftalign_train', args, numberOfMpi=1, env=env)
     
     def alignStep(self, iteration: int, repetition: int, local: int):
         md = emlib.MetaData(self._getIterationParametersFilename(iteration))
@@ -435,7 +435,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
-        self.runJob('xmipp_query_database', args, numberOfMpi=1, env=env)
+        self.runJob('xmipp_swiftalign_query', args, numberOfMpi=1, env=env)
 
     def alignmentConsensusStep(self, iteration: int):
         paramMd = emlib.MetaData(self._getIterationParametersFilename(iteration))
