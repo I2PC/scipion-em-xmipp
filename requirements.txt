@@ -1,4 +1,3 @@
-scikit-learn==1.2.1
 scipion-em
 scipy<=1.10.0
 joblib
