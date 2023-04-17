@@ -256,7 +256,7 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
             if self.maskType == ALIGN_MASK_CIRCULAR:
                 maskArgs+=" --mask circular -%d" % self.maskRadius
             else:
-                maskArgs+=" --mask binary_file %s" % self.volMask
+                maskArgs+=" --mask binary_file %s" % self.maskFile.getFileName()
         return maskArgs
 
           
