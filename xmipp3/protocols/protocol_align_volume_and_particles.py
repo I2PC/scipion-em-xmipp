@@ -160,7 +160,11 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
                (self.fnRefVol, self.fnInputVol, outVolFn)
         args += maskArgs
         if self.alignmentMode.get()==ALIGN_GLOBAL:
-            if not self.checkMirrors:
+            if self.checkMirrors:
+                args += ' --psi -180 +179'
+                args += ' --rot 0 359'
+                args += ' --tilt 0 179'
+            else:
                 args += " --frm" # Only use FRM when not considering mirrors
         else:
             args += " --local"
