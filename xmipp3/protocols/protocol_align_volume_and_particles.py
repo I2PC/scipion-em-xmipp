@@ -93,7 +93,10 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
                       label="Symmetry group",
                       help='See %s page for a description of the symmetries '
                            'accepted by Xmipp' % SYM_URL)
-        form.addParam('wrap', params.BooleanParam, default=False,
+        form.addParam('checkMirrors', params.BooleanParam, default=False,
+                      label='Check mirros',
+                      help='Consider mirrors of the volume. This is useful when input volumes have different handedness')
+        form.addParam('wrap', params.BooleanParam, default=True,
                       label='Wrap', expertLevel=LEVEL_ADVANCED,
                       help='Wrap the input volume when aligning to the reference')
         
@@ -157,10 +160,13 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
                (self.fnRefVol, self.fnInputVol, outVolFn)
         args += maskArgs
         if self.alignmentMode.get()==ALIGN_GLOBAL:
-            args += " --frm"
+            if not self.checkMirrors:
+                args += " --frm" # Only use FRM when not considering mirrors
         else:
             args += " --local"
         args += " --copyGeo %s" % fhInputTranMat
+        if self.checkMirrors:
+            args += '--checkMirrors'
         if not self.wrap:
             args += ' --dontWrap'
         self.runJob("xmipp_volume_align", args)
