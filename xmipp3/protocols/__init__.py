@@ -137,3 +137,4 @@ from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtract
 from .protocol_volume_consensus import XmippProtVolConsensus
 from .protocol_classes_2d_mapping import XmippProtCL2DMap
 from .protocol_deep_hand import XmippProtDeepHand
+from .protocol_align_global_pca import XmippProtAlignGlobalPca
