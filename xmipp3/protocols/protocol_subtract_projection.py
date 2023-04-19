@@ -118,13 +118,17 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
         args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --padding %f ' \
-               '--sigma %d --limit_freq %d --cirmaskrad %d --save %s' % \
-               (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles"),
+               '--sigma %d --limit_freq %d --cirmaskrad %d --save %s --oroot %s' % \
+               (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles.xmd"),
                 vol.getSamplingRate(), self.resol.get(), self.pad.get(), self.sigma.get(),
-                int(self.limit_freq.get()), self.cirmaskrad.get(), self._getExtraPath())
+                int(self.limit_freq.get()), self.cirmaskrad.get(), self._getExtraPath(),
+                self._getExtraPath("subtracted_part"))
         mask = self.mask.get()
+        fnMask = mask.getFileName()
+        if fnMask.endswith('.mrc'):
+            fnMask += ':mrc'
         if mask is not None:
-            args += ' --mask %s' % mask.getFileName()
+            args += ' --mask %s' % fnMask
         if self.nonNegative.get():
             args += ' --nonNegative'
         if self.subtract.get():
@@ -197,10 +201,10 @@ class XmippProtBoostParticles(XmippProtSubtractProjectionBase):
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
         args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --padding %f --sigma %d --limit_freq %d ' \
-               '--cirmaskrad %d --boost --save %s'\
-               % (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles"),
+               '--cirmaskrad %d --boost --save %s --oroot %s'\
+               % (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles.xmd"),
                   vol.getSamplingRate(), self.resol.get(), self.pad.get(), self.sigma.get(), int(self.limit_freq.get()),
-                  self.cirmaskrad.get(), self._getExtraPath())
+                  self.cirmaskrad.get(), self._getExtraPath(), self._getExtraPath("subtracted_part"))
 
         if self.nonNegative.get():
             args += ' --nonNegative'
