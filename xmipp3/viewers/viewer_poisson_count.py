@@ -27,9 +27,10 @@
 from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import LabelParam
 from pwem.viewers import showj, EmProtocolViewer, ObjectView
-from pwem.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE
+from pwem.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER
 from xmipp3.protocols.protocol_movie_poisson_count import XmippProtMoviePoissonCount
 import matplotlib.pyplot as plt
+import os
 
 
 
@@ -45,8 +46,11 @@ class XmippMoviePoissonCountViewer(EmProtocolViewer):
     def _defineParams(self, form):
         form.addSection(label='Visualization')
         form.addParam('visualizeMovies', LabelParam,
-                      label="Visualize movies",
+                      label="Visualize accepted movies",
                       help="Visualize movies with the respective dose scores.")
+        form.addParam('visualizeDiscardedMovies', LabelParam,
+                      label="Visualize discarded movies",
+                      help="Visualize discarded movies with the respective dose scores.")
         form.addParam('visualizeDoseVsTime', LabelParam,
                       label="Visualize Dose vs Time",
                       help="Visualize plot dose vs time.")
@@ -57,6 +61,7 @@ class XmippMoviePoissonCountViewer(EmProtocolViewer):
     def _getVisualizeDict(self):
         return {
                  'visualizeMovies': self._visualizeMoviesF,
+                 'visualizeDiscardedMovies' : self._visualizeDiscardedMoviesF,
                  'visualizeDoseVsTime': self._visualizeDoseTime,
                  'visualizeDoseDiffVsTime': self._visualizeDoseDiffTime
                 }
@@ -64,9 +69,12 @@ class XmippMoviePoissonCountViewer(EmProtocolViewer):
     def _visualizeMoviesF(self, e=None):
         return self._visualizeMovies("outputMovies")
 
+    def _visualizeDiscardedMoviesF(self, e=None):
+        return self._visualizeMovies("outputMoviesDiscarded")
+
     def _visualizeDoseTime(self, e=None):
         views = []
-        if self.protocol.hasAttribute("outputMovies"):
+        if os.path.exists(self.protocol.getDosePlot()):
             image = plt.imread(self.protocol.getDosePlot())
             plt.figure()
             fig = plt.imshow(image)
@@ -78,7 +86,7 @@ class XmippMoviePoissonCountViewer(EmProtocolViewer):
 
     def _visualizeDoseDiffTime(self, e=None):
         views = []
-        if self.protocol.hasAttribute("outputMovies"):
+        if os.path.exists(self.protocol.getDoseDiffPlot()):
             image = plt.imread(self.protocol.getDoseDiffPlot())
             plt.figure()
             fig = plt.imshow(image)
@@ -91,14 +99,15 @@ class XmippMoviePoissonCountViewer(EmProtocolViewer):
     def _visualizeMovies(self, objName):
         views = []
 
-        labels = 'id _filename _samplingRate _acquisition._dosePerFrame' \
-                 ' _acquisition._doseInitial _MEAN_DOSE_PER_FRAME _STD_DOSE_PER_FRAME'
+        labels = 'id _filename _samplingRate _acquisition._dosePerFrame ' \
+                 '_acquisition._doseInitial _MEAN_DOSE_PER_ANGSTROM2 _STD_DOSE_PER_ANGSTROM2 ' \
+                 '_DIFF_TO_DOSE_PER_ANGSTROM2 '
 
         if self.protocol.hasAttribute(objName):
             set = getattr(self.protocol, objName)
             views.append(ObjectView(
                 self._project, set.getObjId(), set.getFileName(),
-                viewParams={MODE: MODE_MD, ORDER: labels, VISIBLE: labels}))
+                viewParams={MODE: MODE_MD, ORDER: labels, VISIBLE: labels})) # FIXME: DO NOT RENDER THE FILENAME
         else:
             self.infoMessage('%s does not have %s%s'
                              % (self.protocol.getObjLabel(), objName,
