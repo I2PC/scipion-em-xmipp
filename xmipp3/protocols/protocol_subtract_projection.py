@@ -34,6 +34,7 @@ from pwem.protocols import EMProtocol
 from xmipp3.convert import writeSetOfParticles, readSetOfParticles
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
+OUTPUT = "output_particles.xmd"
 
 class XmippProtSubtractProjectionBase(EMProtocol):
     """ Helper class that contains some Protocol utilities methods
@@ -79,7 +80,7 @@ class XmippProtSubtractProjectionBase(EMProtocol):
         inputSet = self.inputParticles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
-        readSetOfParticles(self._getExtraPath("output_particles.xmd"), outputSet,
+        readSetOfParticles(self._getExtraPath(OUTPUT), outputSet,
                            extraLabels=[emlib.MDL_SUBTRACTION_R2, emlib.MDL_SUBTRACTION_BETA0,
                                         emlib.MDL_SUBTRACTION_BETA1])
         self._defineOutputs(outputParticles=outputSet)
@@ -119,7 +120,7 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
             fnVol += ':mrc'
         args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --padding %f ' \
                '--sigma %d --limit_freq %d --cirmaskrad %d --save %s --oroot %s' % \
-               (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles.xmd"),
+               (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath(OUTPUT),
                 vol.getSamplingRate(), self.resol.get(), self.pad.get(), self.sigma.get(),
                 int(self.limit_freq.get()), self.cirmaskrad.get(), self._getExtraPath(),
                 self._getExtraPath("subtracted_part"))
@@ -202,7 +203,7 @@ class XmippProtBoostParticles(XmippProtSubtractProjectionBase):
             fnVol += ':mrc'
         args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --padding %f --sigma %d --limit_freq %d ' \
                '--cirmaskrad %d --boost --save %s --oroot %s'\
-               % (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles.xmd"),
+               % (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath(OUTPUT),
                   vol.getSamplingRate(), self.resol.get(), self.pad.get(), self.sigma.get(), int(self.limit_freq.get()),
                   self.cirmaskrad.get(), self._getExtraPath(), self._getExtraPath("subtracted_part"))
 
