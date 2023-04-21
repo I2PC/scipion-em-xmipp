@@ -79,6 +79,11 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('mask', PointerParam, label="Mask", pointerClass='VolumeMask', allowsNull=True,
                       help='The mask values must be between 0 (remove these pixels) and 1 (let them pass). Smooth masks are recommended.')
         
+        form.addSection(label='CTF')
+        form.addParam('considerInputCtf', BooleanParam, label='Consider CTF',
+                      default=True,
+                      help='Consider the CTF of the particles')
+
         form.addSection(label='Global refinement')
         form.addParam('numberOfIterations', IntParam, label='Number of iterations', default=3)
         form.addParam('numberOfAlignmentRepetitions', IntParam, label='Number of repetitions', default=2)
@@ -123,7 +128,14 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParallelSection(threads=1, mpi=8)
     
     #--------------------------- INFO functions --------------------------------------------
+    def _validate(self):
+        errors = []
+        particles = self.inputParticles.get()
 
+        if self.considerInputCtf and not particles.hasCTF():
+            errors.append('Input must have CTF information for being able to consider it')
+
+        return errors
     
     #--------------------------- INSERT steps functions --------------------------------------------    
     def _insertAllSteps(self):
@@ -207,7 +219,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def correctCtfStep(self):
         particles = self.inputParticles.get()
         
-        if particles.hasCTF():
+        if self.considerInputCtf:
             args = []
             args += ['-i', self._getInputParticleMdFilename()]
             args += ['-o', self._getWienerParticleStackFilename()]
