@@ -165,7 +165,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             # Merge galleries of classes
             mergeStepIds.append(self._insertFunctionStep('mergeGalleriesStep', iteration, repetition, prerequisites=projectStepIds))
         
-        mergeStepIds.append(self._insertFunctionStep('computeNoiseModelStep', iteration, prerequisites=prerequisites))
+        #mergeStepIds.append(self._insertFunctionStep('computeNoiseModelStep', iteration, prerequisites=prerequisites))
         
         return mergeStepIds
         
@@ -184,7 +184,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
  
     def _insertReconstructSteps(self, iteration: int, cls: int, prerequisites):
         selectAlignmentStepId = self._insertFunctionStep('selectAlignmentStep', iteration, cls, prerequisites=prerequisites)
-        compareReprojectionStepId = self._insertFunctionStep('compareReprojectionStep', iteration, cls, prerequisites=[selectAlignmentStepId])
+        #compareReprojectionStepId = self._insertFunctionStep('compareReprojectionStep', iteration, cls, prerequisites=[selectAlignmentStepId])
         #computeWeightsStepId = self._insertFunctionStep('computeWeightsStep', iteration, cls, prerequisites=[compareReprojectionStepId])
         #filterByWeightsStepId = self._insertFunctionStep('filterByWeightsStep', iteration, cls, prerequisites=[computeWeightsStepId])
         splitStepId = self._insertFunctionStep('splitStep', iteration, cls, prerequisites=[selectAlignmentStepId])
