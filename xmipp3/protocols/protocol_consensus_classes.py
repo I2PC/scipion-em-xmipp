@@ -466,7 +466,10 @@ class XmippProtConsensusClasses(ProtClassify3D):
             logLikelihoods2 = scipy.stats.norm.logpdf(d2, mu2, sigma2)
             return np.sum(logLikelihoods1) + np.sum(logLikelihoods2)
             
-        return max(range(2, len(cost)-1), key=cost_fun)
+        if len(cost) > 4:
+            return max(range(2, len(cost)-1), key=cost_fun)
+        else:
+            return len(cost) // 2
     
     def _calculateElbowOrigin(self, cost: np.ndarray) -> int:
         y = (cost - cost.min()) / (cost.max() - cost.min())
