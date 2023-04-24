@@ -76,6 +76,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('symmetryGroup', StringParam, default='c1',
                       label='Symmetry group',
                       help='If no symmetry is present, give c1')
+        form.addParam('initialResolution', FloatParam, label="Initial resolution (A)", default=10.0,
+                      help='Image comparison resolution limit at the first iteration of the refinement')
         form.addParam('mask', PointerParam, label="Mask", pointerClass='VolumeMask', allowsNull=True,
                       help='The mask values must be between 0 (remove these pixels) and 1 (let them pass). Smooth masks are recommended.')
         
@@ -87,9 +89,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         form.addSection(label='Global refinement')
         form.addParam('numberOfIterations', IntParam, label='Number of iterations', default=3)
         form.addParam('numberOfAlignmentRepetitions', IntParam, label='Number of repetitions', default=2)
-        form.addParam('initialResolution', FloatParam, label="Initial resolution (A)", default=10.0,
-                      help='Image comparison resolution limit at the first iteration of the refinement')
-        form.addParam('maximumResolution', FloatParam, label="Maximum resolution (A)", default=8.0,
+        form.addParam('maximumResolution', FloatParam, label="Maximum alignment resolution (A)", default=8.0,
                       help='Image comparison resolution limit of the refinement')
         form.addParam('nextResolutionCriterion', FloatParam, label="FSC criterion", default=0.5, 
                       expertLevel=LEVEL_ADVANCED,
@@ -100,6 +100,12 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                       help='Maximum psi parameter of the particles')
         form.addParam('initialMaxShift', FloatParam, label='Maximum shift (px)', default=16.0,
                       help='Maximum shift of the particle in pixels')
+        form.addParam('useAutomaticStep', BooleanParam, label='Use automatic step', default=True,
+                      expertLevel=LEVEL_ADVANCED,
+                      help='Automatically determine the step used when exploring the projection landscape')
+        stepGroup = form.addGroup('Steps', condition='not useAutomaticStep', expertLevel=LEVEL_ADVANCED)
+        stepGroup.addParam('angleStep', FloatParam, label='Angle step (deg)', default=5.0)
+        stepGroup.addParam('shiftStep', FloatParam, label='Shift step (px)', default=2.0)
         form.addParam('reconstructPercentage', FloatParam, label='Reconstruct percentage (%)', default=50,
                       help='Percentage of best particles used for reconstruction')
         form.addParam('numberOfMatches', IntParam, label='Number of matches', default=1,
@@ -283,8 +289,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         frequency = self._getSamplingRate() / resolution
         maxPsi = self._getIterationMaxPsi(iteration)
         maxShift = self._getIterationMaxShift(iteration)
-        shiftStep = self._computeShiftStep(frequency)
-        angleStep = self._computeAngleStep(frequency, imageSize)
+        shiftStep = self._computeShiftStep(frequency) if self.useAutomaticStep else float(self.shiftStep)
+        angleStep = self._computeAngleStep(frequency, imageSize) if self.useAutomaticStep else float(self.angleStep)
         maxResolution = max(resolution, float(self.maximumResolution))
         maxFrequency = self._getSamplingRate() / maxResolution
         
