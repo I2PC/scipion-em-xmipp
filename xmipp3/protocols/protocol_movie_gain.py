@@ -419,7 +419,7 @@ class XmippProtMovieGain(ProtProcessMovies):
         best_M = np.matmul(np.linalg.inv(T), best_R)
         best_gain_array = xmutils.applyTransform(np.asarray(exp_gain.getData(), dtype=np.float64), best_M, est_gain_array.shape)
 
-        self.info('Best correlation: ', best_cor)
+        self.info('Best correlation: %f' %best_cor)
         self.info('Rotation angle: {}\nHorizontal mirror: {}'.format(best_transf[0],best_transf[1]==1))
 
         inv_best_gain_array = invert_array(best_gain_array)
