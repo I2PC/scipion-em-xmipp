@@ -1,4 +1,4 @@
-scipion-pyworkflow==3.0.31
+scipion-pyworkflow>=3.0.31
 scipion-em
 scipy<=1.10.0
 joblib
