@@ -111,20 +111,31 @@ class XmippProtConsensusClasses(ProtClassify3D):
 
     def intersectStep(self):
         classifications = self._getInputClassifications()
-        classes = self._getInputClassificationIds()
+        classParticleIds = self._getInputClassParticleIds()
+        classIds = self._getInputClassIds()
         referenceSizes, normalizedReferenceSizes = self._readReferenceIntersectionSizes()
 
+        # Perform the intersections between input classes
+        intersections, traces = self._calculateIntersections(classParticleIds, classIds)
 
-        intersections = self._calculateIntersections(classes)
+        # Prune if requested
+        s = len(intersections)
         intersections = self._pruneIntersections(intersections, int(self.minClassSize))
+        if s != len(intersections):
+            # TODO do something with traces
+            traces = None
+            images = self._createSetOfImages(intersections)
+            self._insertChild('images', images)
+        else:
+            images = self._getInputImages()
         
-        images = self._createSetOfImages(intersections)
-        self._insertChild('images', images)
+        # Create the output
         outputClasses = self._createSetOfClasses(
             images=images,
             classifications=classifications,
             clustering=intersections,
             suffix=self._getMergedIntersectionSuffix(len(intersections)),
+            comments=traces,
             referenceSizes=referenceSizes,
             normalizedReferenceSizes=normalizedReferenceSizes
         )
@@ -133,8 +144,8 @@ class XmippProtConsensusClasses(ProtClassify3D):
         self._defineSourceRelation(self.inputClassifications, outputClasses)
 
     def mergeStep(self):
-        classes = self._getInputClassificationIds()
-        allClasses = list(itertools.chain(*classes))
+        classParticleIds = self._getInputClassParticleIds()
+        allClasses = list(itertools.chain(*classParticleIds))
         intersections = self._getOutputIntersectionIds()
         
         metric = self.METRICS[int(self.distanceMetric)]
@@ -183,9 +194,15 @@ class XmippProtConsensusClasses(ProtClassify3D):
     def _getInputClassifications(self) -> Sequence[SetOfClasses]:
         return list(map(Pointer.get, self.inputClassifications))
 
-    def _getInputClassificationIds(self) -> Sequence[Sequence[Set[int]]]:
+    def _getInputClassParticleIds(self) -> Sequence[Sequence[Set[int]]]:
         def convertClassification(classification: Pointer):
             return list(map(SetOfImages.getIdSet, classification.get()))
+            
+        return list(map(convertClassification, self.inputClassifications))
+
+    def _getInputClassIds(self) -> Sequence[Sequence[int]]:
+        def convertClassification(classification: Pointer):
+            return list(map(SetOfImages.getObjId, classification.get()))
             
         return list(map(convertClassification, self.inputClassifications))
 
@@ -264,29 +281,35 @@ class XmippProtConsensusClasses(ProtClassify3D):
             return json.load(f)
         
         
-        
-    
-    
+            
     def _calculateIntersections(self, 
-                                classifications: Iterable[Sequence[Set[int]]]):
+                                classifications: Iterable[Iterable[Set[int]]],
+                                ids: Iterable[Iterable[int]] ) -> Sequence[Set[int]]:
         # Start with the first classification
-        result = classifications[0]
+        itCls = iter(classifications)
+        itId = iter(ids)
 
-        for i in range(1, len(classifications)):
-            classification = classifications[i]
+        result = next(itCls)
+        traces = list(map('001.{:d}'.format, next(itId)))
+        
+        for i, (classification, ids) in enumerate(zip(itCls, itId), start=2):
             intersections = []
+            intersection_traces = []
 
             # Perform the intersection with previous classes
-            for cls0 in result:
-                for cls1 in classification:
+            for cls0, trace in zip(result, traces):
+                for cls1, id in zip(classification, ids):
                     intersection = cls0.intersection(cls1)
                     if len(intersection) > 0:
                         intersections.append(intersection)
+                        intersection_traces.append(trace + ' & {:03d}.{:d}'.format(i, id))
 
             # Use the new intersection for the next step
             result = intersections
+            traces = intersection_traces
 
-        return result
+        assert(len(result) == len(traces))
+        return result, traces
 
     def _pruneIntersections(self,
                             intersections: Iterable[Set[int]],
@@ -550,6 +573,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
                             classifications: Sequence[SetOfClasses],
                             clustering: Sequence[Set[int]], 
                             suffix: str,
+                            comments=None,
                             referenceSizes=None, 
                             normalizedReferenceSizes=None ):
 
@@ -584,6 +608,9 @@ class XmippProtConsensusClasses(ProtClassify3D):
             relativeSize = size / len(representativeClass)
             
             item.setRepresentative(representativeClass.getRepresentative().clone())
+
+            if comments is not None:
+                item.setObjComment(comments[classIdx])
             
             if referenceSizes is not None:
                 sizePercentile = self._calculatePercentile(referenceSizes, size)
