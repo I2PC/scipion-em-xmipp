@@ -55,9 +55,7 @@ jobs:
         pip install scons numpy
     - name: Install dependencies
       run: sudo apt-get install -y libfftw3-dev libopenmpi-dev openmpi-bin libhdf5-dev python3-numpy python3-dev libtiff5-dev unzip libsqlite3-dev default-jdk git cmake
-        
 
-    
     # Installing Scipion
     - name: Install Scipion with dependencies
       working-directory: ${{ github.workspace }}/../
@@ -65,13 +63,12 @@ jobs:
         sudo apt-get install -y gcc-10 g++-10 libopenmpi-dev make && \
         eval "$(${{ github.workspace }}/../miniconda/bin/conda shell.bash hook)" && \
         pip3 install --user scipion-installer && \
-        python3 -m scipioninstaller -conda -noXmipp -noAsk ${{ github.workspace }}/../scipion3
+        python3 -m scipioninstaller -conda -noXmipp -noAsk ${{ github.workspace }}/../scipion
         
      #Cloning Xmipp 
     - name: Cloning Xmipp
-      working-directory: ${{ github.workspace }}/../scipion3
-      run: git clone https://github.com/I2PC/xmipp.git xmipp-bundle 
-
+      working-directory: ${{ github.workspace }}/../
+      run: git clone https://github.com/I2PC/xmipp.git xmipp-bundle
 
     # Check out the repository in the pull request
     - name: Checkout repository
@@ -81,8 +78,10 @@ jobs:
         
     #Installing Xmipp
     - name: Compile Xmipp
-      working-directory: ${{ github.workspace }}/../scipion3/xmipp-bundle
-      run:  /../../scipion3/scipio3 run ./xmipp noAsk
+      working-directory: ${{ github.workspace }}/../xmipp-bundle
+      run: |
+        git branch && \
+        ${{ github.workspace }}/../scipion/scipion3 run ./xmipp noAsk
             
     # Install plugin from the pull request using the Scipion3 installp command
     - name: Install plugin from pull request
