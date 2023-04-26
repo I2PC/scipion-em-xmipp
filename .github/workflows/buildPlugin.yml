@@ -29,6 +29,7 @@ jobs:
       run: echo $R_TIME
     
     #Installing CUDA
+    - name: Install CUDA
     - uses: Jimver/cuda-toolkit@v0.2.8
       id: cuda-toolkit
       with:
@@ -74,16 +75,19 @@ jobs:
     
     # Checkout Xmipp to Pull Request branch if exists, by default stays in devel
     - name: Conditionally checkout Xmipp to ${{ github.head_ref }}
+      working-directory: ${{ github.workspace }}/../xmipp-bundle
       env:
         BRANCH_NAME: ${{ github.head_ref }}
       run: |
-        if [ $(git ls-remote --heads git@github.com:I2PC/xmipp.git $BRANCH_NAME | wc -l) -eq 1 ]; then
+        if [ $(git ls-remote --heads https://github.com/I2PC/xmipp.git $BRANCH_NAME | wc -l) -eq 1 ]; then
           git checkout $BRANCH_NAME
         fi
       
     #Installing Xmipp
     - name: Compile Xmipp
       working-directory: ${{ github.workspace }}/../xmipp-bundle
+      env:
+        BUILD_TESTS: True
       run: ${{ github.workspace }}/../scipion/scipion3 run ./xmipp noAsk
     
     # Check out the repository in the pull request
