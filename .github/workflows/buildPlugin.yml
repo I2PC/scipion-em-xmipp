@@ -45,6 +45,10 @@ jobs:
         bash Miniconda3-latest-Linux-x86_64.sh -b -p ${{ github.workspace }}/../miniconda/ && \
         source ./miniconda/etc/profile.d/conda.sh
     
+    #Updating libraries
+    - name: Update 
+      run: sudo apt-get update
+        
     #Installing Xmipp dependencies
     - name: Install python dependencies
       run:  python -m pip install --upgrade pip
