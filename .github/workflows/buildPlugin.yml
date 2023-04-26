@@ -84,9 +84,7 @@ jobs:
     #Installing Xmipp
     - name: Compile Xmipp
       working-directory: ${{ github.workspace }}/../xmipp-bundle
-      run: |
-        git branch && \
-        ${{ github.workspace }}/../scipion/scipion3 run ./xmipp noAsk
+      run: ${{ github.workspace }}/../scipion/scipion3 run ./xmipp noAsk
     
     # Check out the repository in the pull request
     - name: Checkout repository
