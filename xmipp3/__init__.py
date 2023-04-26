@@ -217,7 +217,7 @@ def installDeepLearningToolkit(plugin, env):
                                 "To enable CUDA (drivers>390 needed), "
                                 "set CUDA=True in 'scipion.conf' file")
                 nvidiaDriverVer = None
-        except ValueError or TypeError:
+        except (ValueError, TypeError):
             nvidiaDriverVer = None
             preMsgs.append("Not nvidia driver found. Type: "
                            " nvidia-smi --query-gpu=driver_version --format=csv,noheader")
