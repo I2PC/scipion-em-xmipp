@@ -54,7 +54,7 @@ jobs:
         
     #Installing Xmipp 
     - name: Compile Xmipp
-      run: build-wrapper-linux-x86-64 --out-dir bw-outputs ./xmipp noAsk
+      run: --out-dir bw-outputs ./xmipp noAsk
       env:
         CIBuild: 1
         BUILD_TESTS: True
