@@ -30,7 +30,7 @@ jobs:
     
     #Installing CUDA
     - name: Install CUDA
-    - uses: Jimver/cuda-toolkit@v0.2.8
+      uses: Jimver/cuda-toolkit@v0.2.8
       id: cuda-toolkit
       with:
         cuda: '11.7.0'
