@@ -34,6 +34,7 @@ from pwem.protocols import EMProtocol
 from xmipp3.convert import writeSetOfParticles, readSetOfParticles
 from pyworkflow import BETA, UPDATED, NEW, PROD
 
+OUTPUT = "output_particles.xmd"
 
 class XmippProtSubtractProjectionBase(EMProtocol):
     """ Helper class that contains some Protocol utilities methods
@@ -79,7 +80,7 @@ class XmippProtSubtractProjectionBase(EMProtocol):
         inputSet = self.inputParticles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
-        readSetOfParticles(self._getExtraPath("output_particles.xmd"), outputSet,
+        readSetOfParticles(self._getExtraPath(OUTPUT), outputSet,
                            extraLabels=[emlib.MDL_SUBTRACTION_R2, emlib.MDL_SUBTRACTION_BETA0,
                                         emlib.MDL_SUBTRACTION_BETA1])
         self._defineOutputs(outputParticles=outputSet)
@@ -101,6 +102,8 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
                            ' whole images.')
         form.addParam('subtract', EnumParam, default=0, choices=["Keep", "Subtract"], display=EnumParam.DISPLAY_HLIST,
                       label="Mask contains the part to ")
+        form.addParallelSection(threads=0, mpi=4)
+
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertSubSteps(self):
         self._insertFunctionStep('convertStep')
@@ -116,13 +119,17 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
         args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --padding %f ' \
-               '--sigma %d --limit_freq %d --cirmaskrad %d --save %s' % \
-               (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles"),
+               '--sigma %d --limit_freq %d --cirmaskrad %d --save %s --oroot %s' % \
+               (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath(OUTPUT),
                 vol.getSamplingRate(), self.resol.get(), self.pad.get(), self.sigma.get(),
-                int(self.limit_freq.get()), self.cirmaskrad.get(), self._getExtraPath())
+                int(self.limit_freq.get()), self.cirmaskrad.get(), self._getExtraPath(),
+                self._getExtraPath("subtracted_part"))
         mask = self.mask.get()
+        fnMask = mask.getFileName()
+        if fnMask.endswith('.mrc'):
+            fnMask += ':mrc'
         if mask is not None:
-            args += ' --mask %s' % mask.getFileName()
+            args += ' --mask %s' % fnMask
         if self.nonNegative.get():
             args += ' --nonNegative'
         if self.subtract.get():
@@ -178,6 +185,7 @@ class XmippProtBoostParticles(XmippProtSubtractProjectionBase):
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         XmippProtSubtractProjectionBase._defineParams(form)
+        form.addParallelSection(threads=0, mpi=4)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertSubSteps(self):
@@ -194,10 +202,10 @@ class XmippProtBoostParticles(XmippProtSubtractProjectionBase):
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
         args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --padding %f --sigma %d --limit_freq %d ' \
-               '--cirmaskrad %d --boost --save %s'\
-               % (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles"),
+               '--cirmaskrad %d --boost --save %s --oroot %s'\
+               % (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath(OUTPUT),
                   vol.getSamplingRate(), self.resol.get(), self.pad.get(), self.sigma.get(), int(self.limit_freq.get()),
-                  self.cirmaskrad.get(), self._getExtraPath())
+                  self.cirmaskrad.get(), self._getExtraPath(), self._getExtraPath("subtracted_part"))
 
         if self.nonNegative.get():
             args += ' --nonNegative'
