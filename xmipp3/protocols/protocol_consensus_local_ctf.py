@@ -37,7 +37,6 @@ from pwem import emlib
 
 from xmipp3.convert import setXmippAttribute
 
-
 class XmippProtConsensusLocalCTF(ProtAnalysis3D):
     """This protocol compares the estimations of local defocus computed by different protocols for a set of particles"""
     _label = 'consensus local defocus'
@@ -60,8 +59,8 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
 
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        self._insertFunctionStep("compareDefocus")
-        self._insertFunctionStep("createOutputStep")
+        self._insertFunctionStep(self.compareDefocus)
+        self._insertFunctionStep(self.createOutputStep)
 
     #--------------------------- STEPS functions ---------------------------------------------------
     def compareDefocus(self):
