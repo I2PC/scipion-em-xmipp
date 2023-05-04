@@ -117,7 +117,8 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
                 newPart = part.clone()
                 pMedian = Float(self.median[index])
                 pMad = Float(self.mad[index])
-                setXmippAttribute(newPart.getCTF(), emlib.MDL_CTF_DEFOCUSA, pMedian)
+                newPart._ctfModel._defocusU.set(pMedian)
+                newPart._ctfModel._defocusV.set(pMedian)
                 setXmippAttribute(newPart.getCTF(), emlib.MDL_CTF_DEFOCUS_RESIDUAL, pMad)
                 outputSet.append(newPart)
 
