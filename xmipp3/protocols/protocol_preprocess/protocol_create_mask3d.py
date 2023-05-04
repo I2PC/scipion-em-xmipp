@@ -392,7 +392,11 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
             messages.append("And, we smoothed it (sigma=%f voxels)."
                             % self.sigmaConvolution.get())
         if self.hasAttribute('outputMask'):
-            messages.append('We refer to the output mask as %s.'
-                            % self.outputMask.getNameId())
+            messages.append('We refer to the output mask as %s.'  % self.outputMask.getNameId())
         return messages
     
+    def _validate(self):
+        errors = []
+        if self.source == SOURCE_VOLUME and not self.inputVolume.get():
+            errors.append("You need to select an input volume")
+            return errors

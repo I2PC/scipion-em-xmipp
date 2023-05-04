@@ -35,13 +35,13 @@ from xmipp3.viewers import XmippMonoResViewer, XmippResDeepResViewer, XmippProtF
 from .protocols.protocol_cl2d import IMAGES_PER_CLASS
 
 from .protocols import (
-    XmippProtCTFMicrographs, XmippProtProjMatch, XmippProtPreprocessParticles,
+    XmippProtCTFMicrographs, XmippProtPreprocessParticles, XmippProtProjMatch,
     XmippProtPreprocessMicrographs, XmippProtPreprocessVolumes,
     XmippProtExtractParticles, XmippProtExtractParticlesPairs, XmippProtPickingRemoveDuplicates,
     XmippProtFilterParticles, XmippProtFilterVolumes, XmippProtMaskParticles,
     XmippProtMaskVolumes, XmippProtAlignVolume, XmippProtCL2D,
     XmippProtHelicalParameters, XmippProtConsensusPicking, XmippProtMonoRes,
-    XmippProtRotSpectra, XmippProtReconstructHighRes, XmippProtExtractUnit,
+    XmippProtReconstructHighRes, XmippProtExtractUnit,
     XmippProtShiftParticles, XmippProtVolumeDeformZernike3D, XmippProtStructureMapZernike3D,
     XmippProtSubtractProjection, XmippProtBoostParticles)
 
@@ -157,7 +157,10 @@ class XmippParticleConsensusRadiusWizard(Wizard):
 
     def _getRadius(self, protocol):
         if protocol.inputCoordinates.hasValue():
-            boxSize=protocol.inputCoordinates[0].get().getBoxSize()
+            if protocol.inputCoordinates.get() == None:  # Protocol=XmippProtConsensusPicking => inputCoordinates=list
+                boxSize = protocol.inputCoordinates[0].get().getBoxSize()
+            else:  # Protocol=XmippProtPickingRemoveDuplicates => inputCoordinates=setOfCoordinates
+                boxSize = protocol.inputCoordinates.get().getBoxSize()
             radius = int(boxSize*0.1)
             if radius<10:
                 radius=10
@@ -220,8 +223,7 @@ class XmippParticleMaskRadiusWizard(ParticleMaskRadiusWizard):
 
 
 class XmippParticleMaskRadiiWizard(ParticlesMaskRadiiWizard):
-    _targets = [(XmippProtMaskParticles, ['innerRadius', 'outerRadius']),
-                (XmippProtRotSpectra, ['spectraInnerRadius', 'spectraOuterRadius'])]
+    _targets = [(XmippProtMaskParticles, ['innerRadius', 'outerRadius'])]
 
     def _getParameters(self, protocol):
 
@@ -313,7 +315,6 @@ class XmippVolumeInnerRadiusWizard(XmippVolumeMaskRadiusWizard):
         protParams['value']= protocol.cylinderInnerRadius.get()
         return protParams
 
-
 class XmippVolumeMaskRadiusProjMWizard(XmippVolumeMaskRadiusWizard):
     _targets = [(XmippProtProjMatch, ['maskRadius'])]
 
@@ -326,6 +327,8 @@ class XmippVolumeMaskRadiusProjMWizard(XmippVolumeMaskRadiusWizard):
         protParams['label']= label
         protParams['value']= value
         return protParams
+
+
 
 
 class XmippVolumeRadiiWizard(VolumeMaskRadiiWizard):
@@ -351,6 +354,7 @@ class XmippVolumeRadiiWizard(VolumeMaskRadiiWizard):
         _value = params['value']
         _label = params['label']
         VolumeMaskRadiiWizard.show(self, form, _value, _label, UNIT_PIXEL)
+
 
 class XmippVolumeRadiiProjMWizard(XmippVolumeRadiiWizard):
     _targets = [(XmippProtProjMatch, ['innerRadius', 'outerRadius'])]
