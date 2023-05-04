@@ -34,13 +34,17 @@ from pyworkflow.protocol.params import MultiPointerParam, PointerParam
 
 from pwem.protocols import ProtAnalysis3D
 from pwem import emlib
+from pwem.objects import SetOfParticles
 
 from xmipp3.convert import setXmippAttribute
+
+OUTPUTNAME = "outputParticles"
 
 class XmippProtConsensusLocalCTF(ProtAnalysis3D):
     """This protocol compares the estimations of local defocus computed by different protocols for a set of particles"""
     _label = 'consensus local defocus'
     _lastUpdateVersion = VERSION_2_0
+    _possibleOutputs = {OUTPUTNAME:SetOfParticles}
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
@@ -121,7 +125,7 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
                 setXmippAttribute(newPart.getCTF(), emlib.MDL_CTF_DEFOCUS_RESIDUAL, pMad)
                 outputSet.append(newPart)
 
-        self._defineOutputs(outputParticles=outputSet)
+        self._defineOutputs(**{OUTPUTNAME:outputSet})
         self._defineSourceRelation(self.inputSet, outputSet)
 
 
@@ -134,7 +138,7 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
     #--------------------------- INFO functions --------------------------------------------
     def _summary(self):
         summary = []
-        summary.append("Consensus local defocus and residual computed for %s particles" % self.getObjectTag('outputParticles'))
+        summary.append("Consensus local defocus and residual computed for %s particles" % self.getObjectTag(OUTPUTNAME))
         return summary
 
     def _methods(self):
