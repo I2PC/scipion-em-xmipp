@@ -73,7 +73,6 @@ class XmippMovieDoseAnalysisViewer(EmProtocolViewer):
         return self._visualizeMovies("outputMoviesDiscarded")
 
     def _visualizeDoseTime(self, e=None):
-        views = []
         if os.path.exists(self.protocol.getDosePlot()):
             image = plt.imread(self.protocol.getDosePlot())
             plt.figure()
@@ -82,10 +81,7 @@ class XmippMovieDoseAnalysisViewer(EmProtocolViewer):
             fig.axes.get_yaxis().set_visible(False)
             plt.show()
 
-        #return views
-
     def _visualizeDoseDiffTime(self, e=None):
-        views = []
         if os.path.exists(self.protocol.getDoseDiffPlot()):
             image = plt.imread(self.protocol.getDoseDiffPlot())
             plt.figure()
@@ -93,8 +89,6 @@ class XmippMovieDoseAnalysisViewer(EmProtocolViewer):
             fig.axes.get_xaxis().set_visible(False)
             fig.axes.get_yaxis().set_visible(False)
             plt.show()
-
-        #return views
 
     def _visualizeMovies(self, objName):
         views = []
@@ -104,9 +98,9 @@ class XmippMovieDoseAnalysisViewer(EmProtocolViewer):
                  '_DIFF_TO_DOSE_PER_ANGSTROM2 '
 
         if self.protocol.hasAttribute(objName):
-            set = getattr(self.protocol, objName)
+            setMovies = getattr(self.protocol, objName)
             views.append(ObjectView(
-                self._project, set.getObjId(), set.getFileName(),
+                self._project, setMovies.getObjId(), setMovies.getFileName(),
                 viewParams={MODE: MODE_MD, ORDER: labels, VISIBLE: labels})) # FIXME: DO NOT RENDER THE FILENAME
         else:
             self.infoMessage('%s does not have %s%s'

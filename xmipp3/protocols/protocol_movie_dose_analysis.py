@@ -59,7 +59,6 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
 
     def __init__(self, **args):
         ProtProcessMovies.__init__(self, **args)
-        # self.stepsExecutionMode = STEPS_PARALLEL
 
     # -------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
@@ -85,10 +84,6 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                       label="Windows maximum faulty proportion", expertLevel=LEVEL_ADVANCED,
                       help='By default, if 30% of the movies are discarded'
                            'it assume that the dose has an incorrect value that endures in time.')
-
-        # It should be in parallel (>2) in order to be able of attaching
-        #  new movies to the output while estimating residual gain
-        # form.addParallelSection(threads=4, mpi=1) # COMMENT THIS LINE as it introduce error
 
     # -------------------------- STEPS functions ------------------------------
     def createOutputStep(self):
@@ -169,9 +164,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
             outputSet = SetClass(filename=setFile)
             outputSet.setStreamState(outputSet.STREAM_OPEN)
             inputMovies = self.inputMovies.get()
-            # inputMovies.loadAllProperties()
             outputSet.copyInfo(inputMovies)
-            # outputSet.setFramesRange(inputMovies.getFramesRange())
 
         return outputSet
 
@@ -212,7 +205,6 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
             self.debug('   listOfMovies: %s, doneList: %s, newDone: %s'
                        % (len(self.listOfMovies), len(doneList), len(newDone)))
 
-            firstTime = len(doneList) == 0
             allDone = len(doneList) + len(newDone)
             # We have finished when there is no more input movies
             # (stream closed) and the number of processed movies is
@@ -370,13 +362,13 @@ def setAttribute(obj, label, value):
 def computeStats(mean_frames):
     mean = np.mean(mean_frames)
     std = np.std(mean_frames)
-    max = np.max(mean_frames)
-    min = np.min(mean_frames)
+    max_dose = np.max(mean_frames)
+    min_dose = np.min(mean_frames)
 
     stats = {'mean': mean,
              'std': std,
-             'max': max,
-             'min': min,
+             'max': max_dose,
+             'min': min_dose,
              }
     return stats
 
