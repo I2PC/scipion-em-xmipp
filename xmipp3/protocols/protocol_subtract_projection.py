@@ -32,11 +32,14 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pwem import emlib
 from pwem.protocols import EMProtocol
 from xmipp3.convert import writeSetOfParticles, readSetOfParticles
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
+OUTPUT = "output_particles.xmd"
 
 class XmippProtSubtractProjectionBase(EMProtocol):
     """ Helper class that contains some Protocol utilities methods
     used by both  XmippProtSubtractProjection and XmippProtBoostParticles."""
+    _devStatus = UPDATED
 
     # --------------------------- DEFINE param functions --------------------------------------------
     @classmethod
@@ -77,7 +80,7 @@ class XmippProtSubtractProjectionBase(EMProtocol):
         inputSet = self.inputParticles.get()
         outputSet = self._createSetOfParticles()
         outputSet.copyInfo(inputSet)
-        readSetOfParticles(self._getExtraPath("output_particles.xmd"), outputSet,
+        readSetOfParticles(self._getExtraPath(OUTPUT), outputSet,
                            extraLabels=[emlib.MDL_SUBTRACTION_R2, emlib.MDL_SUBTRACTION_BETA0,
                                         emlib.MDL_SUBTRACTION_BETA1])
         self._defineOutputs(outputParticles=outputSet)
@@ -99,6 +102,8 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
                            ' whole images.')
         form.addParam('subtract', EnumParam, default=0, choices=["Keep", "Subtract"], display=EnumParam.DISPLAY_HLIST,
                       label="Mask contains the part to ")
+        form.addParallelSection(threads=0, mpi=4)
+
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertSubSteps(self):
         self._insertFunctionStep('convertStep')
@@ -114,13 +119,17 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
         args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --padding %f ' \
-               '--sigma %d --limit_freq %d --cirmaskrad %d --save %s' % \
-               (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles"),
+               '--sigma %d --limit_freq %d --cirmaskrad %d --save %s --oroot %s' % \
+               (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath(OUTPUT),
                 vol.getSamplingRate(), self.resol.get(), self.pad.get(), self.sigma.get(),
-                int(self.limit_freq.get()), self.cirmaskrad.get(), self._getExtraPath())
+                int(self.limit_freq.get()), self.cirmaskrad.get(), self._getExtraPath(),
+                self._getExtraPath("subtracted_part"))
         mask = self.mask.get()
+        fnMask = mask.getFileName()
+        if fnMask.endswith('.mrc'):
+            fnMask += ':mrc'
         if mask is not None:
-            args += ' --mask %s' % mask.getFileName()
+            args += ' --mask %s' % fnMask
         if self.nonNegative.get():
             args += ' --nonNegative'
         if self.subtract.get():
@@ -135,19 +144,22 @@ class XmippProtSubtractProjection(XmippProtSubtractProjectionBase):
         mask = self.mask.get()
         if part.getDim()[0] != vol.getDim()[0]:
             errors.append("Input particles and volume should have same X and Y dimensions")
-        if part.getSamplingRate() != vol.getSamplingRate():
+        if round(part.getSamplingRate(), 2) != round(vol.getSamplingRate(), 2):
             errors.append("Input particles and volume should have same sampling rate")
         if mask:
-            if vol.getSamplingRate() != mask.getSamplingRate():
+            if round(vol.getSamplingRate(), 2) != round(mask.getSamplingRate(), 2):
                 errors.append("Input volume and mask should have same sampling rate")
             if vol.getDim() != mask.getDim():
                 errors.append("Input volume and mask should have same dimensions")
         if self.resol.get() == 0:
             errors.append("Resolution (angstroms) should be bigger than 0")
-        if part.getDim()[0] > 750 or part.getDim()[1] > 750:
-            errors.append("Particles are quite big, consider to change 'pad=1' (advanced parameter) in order to save "
-                          "RAM (even if your RAM is big).")
         return errors
+
+    def _warnings(self):
+        part = self.inputParticles.get().getFirstItem()
+        if part.getDim()[0] > 750 or part.getDim()[1] > 750:
+            return ["Particles are quite big, consider to change 'pad=1' (advanced parameter) in order to save RAM "
+                    "(even if your RAM is big)."]
 
     def _summary(self):
         summary = ["Volume: %s\nSet of particles: %s\nMask: %s" %
@@ -173,6 +185,7 @@ class XmippProtBoostParticles(XmippProtSubtractProjectionBase):
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         XmippProtSubtractProjectionBase._defineParams(form)
+        form.addParallelSection(threads=0, mpi=4)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertSubSteps(self):
@@ -189,10 +202,10 @@ class XmippProtBoostParticles(XmippProtSubtractProjectionBase):
         if fnVol.endswith('.mrc'):
             fnVol += ':mrc'
         args = '-i %s --ref %s -o %s --sampling %f --max_resolution %f --padding %f --sigma %d --limit_freq %d ' \
-               '--cirmaskrad %d --boost --save %s'\
-               % (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath("output_particles"),
+               '--cirmaskrad %d --boost --save %s --oroot %s'\
+               % (self._getExtraPath(self.INPUT_PARTICLES), fnVol, self._getExtraPath(OUTPUT),
                   vol.getSamplingRate(), self.resol.get(), self.pad.get(), self.sigma.get(), int(self.limit_freq.get()),
-                  self.cirmaskrad.get(), self._getExtraPath())
+                  self.cirmaskrad.get(), self._getExtraPath(), self._getExtraPath("subtracted_part"))
 
         if self.nonNegative.get():
             args += ' --nonNegative'
@@ -205,11 +218,17 @@ class XmippProtBoostParticles(XmippProtSubtractProjectionBase):
         vol = self.vol.get()
         if part.getDim()[0] != vol.getDim()[0]:
             errors.append("Input particles and volume should have same X and Y dimensions")
-        if part.getSamplingRate() != vol.getSamplingRate():
+        if round(part.getSamplingRate(), 2) != round(vol.getSamplingRate(), 2):
             errors.append("Input particles and volume should have same sampling rate")
         if self.resol.get() == 0:
             errors.append("Resolution (angstroms) should be bigger than 0")
         return errors
+
+    def _warnings(self):
+        part = self.inputParticles.get().getFirstItem()
+        if part.getDim()[0] > 750 or part.getDim()[1] > 750:
+            return ["Particles are quite big, consider to change 'pad=1' (advanced parameter) in order to save RAM "
+                    "(even if your RAM is big)."]
 
     def _summary(self):
         summary = ["Volume: %s\nSet of particles: %s\n" %

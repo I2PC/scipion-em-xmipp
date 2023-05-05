@@ -29,7 +29,7 @@ import numpy as np
 import os
 from pyworkflow import VERSION_2_0
 from pwem.constants import ALIGN_2D
-from pwem.objects import Class2D, Particle, Coordinate, Transform
+from pwem.objects import Class2D, Particle, Coordinate, Transform, SetOfClasses2D, SetOfParticles
 from pwem.protocols import ProtClassify2D
 import pwem.emlib.metadata as md
 import pyworkflow.protocol.params as params
@@ -38,11 +38,14 @@ from pwem.emlib import MD_APPEND
 from xmipp3.convert import (rowToAlignment, alignmentToRow,
                             rowToParticle, writeSetOfClasses2D, xmippToLocation)
 
+OUTPUT_CLASSES = 'outputClasses'
+OUTPUT_PARTICLES = 'outputParticles'
 
 class XmippProtCenterParticles(ProtClassify2D):
     """ Realignment of un-centered particles. """
     _label = 'center particles'
     _lastUpdateVersion = VERSION_2_0
+    _possibleOutputs = {OUTPUT_CLASSES:SetOfClasses2D, OUTPUT_PARTICLES:SetOfParticles}
 
     # --------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
@@ -176,16 +179,13 @@ class XmippProtCenterParticles(ProtClassify2D):
         inputParticles = self.inputClasses.get().getImages()
         outputClasses = self._createSetOfClasses2D(self.inputClasses.get().getImagesPointer())
         self._fillClasses(outputClasses)
-        result = {'outputClasses': outputClasses}
-        self._defineOutputs(**result)
-        self._defineSourceRelation(self.inputClasses, outputClasses)
-
         outputParticles = self._createSetOfParticles()
         outputParticles.copyInfo(inputParticles)
-
         self._fillParticles(outputParticles)
-        result = {'outputParticles': outputParticles}
+
+        result = {OUTPUT_CLASSES: outputClasses, OUTPUT_PARTICLES: outputParticles}
         self._defineOutputs(**result)
+        self._defineSourceRelation(self.inputClasses, outputClasses)
         self._defineSourceRelation(self.inputClasses, outputParticles)
 
     # --------------------------- UTILS functions ------------------------------
