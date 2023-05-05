@@ -62,8 +62,8 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
     """This is a 3D global refinement protocol"""
     _label = 'alignPca'
     _lastUpdateVersion = VERSION_2_0
-    _conda_env = 'flexutils-tensorflow'
-    # _conda_env = 'xmipp_DLTK_v0.3'
+    # _conda_env = 'flexutils-tensorflow'
+    _conda_env = 'xmipp_pyTorch'
     
     # def __init__(self, **args):
     #     ProtRefine3D.__init__(self, **args)
@@ -216,8 +216,11 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
     def pcaTraining(self):
         args = ' -i %s -n 1 -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA'% \
                 (self.imgsFn, self.sampling, self.resolution.get(), self.coef.get(), self.numPart.get(), self._getExtraPath())
-        program = self.getProgram("train_pca.py")
-        self.runJob(program, args, numberOfMpi=1)
+        # program = self.getProgram("train_pca.py")
+        # program = self.getProgram("xmipp_global_align_train")
+        # self.runJob(program, args, numberOfMpi=1)
+        self.runJob("xmipp_global_align_train", args, numberOfMpi=1,
+            env=self.getCondaEnv())
         
         
     def globalAlign(self, inputXmd, outputXmd, angle, MaxAngle, shift, MaxShift, applyShift):
@@ -226,8 +229,11 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
                  self._getExtraPath(), self._getExtraPath(), outputXmd, inputXmd, self.refsFnXmd, self.sampling)
         if applyShift:
             args += ' --apply_shifts ' 
-        program = self.getProgram("align_images.py")        
-        self.runJob(program, args, numberOfMpi=1)
+        # program = self.getProgram("align_images.py")  
+        # program = self.getProgram("xmipp_global_align")       
+        # self.runJob(program, args, numberOfMpi=1)
+        self.runJob("xmipp_global_align", args, numberOfMpi=1,
+                    env=self.getCondaEnv())
 
 
     def reconstructVolume(self, iter):
