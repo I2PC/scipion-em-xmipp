@@ -55,7 +55,7 @@ from .viewer_deepEMHancer import viewerXmippProtDeepVolPostProc
 from .viewer_local_sharpening import viewerXmippProtLocSharp
 from .viewer_volume_subtraction import XmippProtVolSubtractionViewer
 from .viewer_volume_consensus import XmippVolumeConsensusViewer
-from .viewer_poisson_count import XmippMoviePoissonCountViewer
+from .viewer_dose_analysis import XmippMovieDoseAnalysisViewer
 
 #from .viewer_combine_pdb import XmippProtCombinePdbViewer
 

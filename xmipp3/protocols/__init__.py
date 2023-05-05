@@ -69,7 +69,7 @@ from .protocol_movie_average import XmippProtMovieAverage
 from .protocol_movie_correlation import XmippProtMovieCorr
 from .protocol_movie_opticalflow import XmippProtOFAlignment, ProtMovieAlignment
 from .protocol_movie_max_shift import XmippProtMovieMaxShift
-from .protocol_movie_poisson_count import XmippProtMoviePoissonCount
+from .protocol_movie_dose_analysis import XmippProtMovieDoseAnalysis
 from .protocol_movie_split_frames import XmippProtSplitFrames
 from .protocol_multiple_fscs import XmippProtMultipleFSCs
 from .protocol_multireference_alignability import XmippProtMultiRefAlignability

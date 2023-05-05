@@ -28,19 +28,19 @@ from pyworkflow.viewer import Viewer, DESKTOP_TKINTER, WEB_DJANGO
 from pyworkflow.protocol.params import LabelParam
 from pwem.viewers import showj, EmProtocolViewer, ObjectView
 from pwem.viewers.showj import MODE, MODE_MD, ORDER, VISIBLE, RENDER
-from xmipp3.protocols.protocol_movie_poisson_count import XmippProtMoviePoissonCount
+from xmipp3.protocols.protocol_movie_dose_analysis import XmippProtMovieDoseAnalysis
 import matplotlib.pyplot as plt
 import os
 
 
 
-class XmippMoviePoissonCountViewer(EmProtocolViewer):
+class XmippMovieDoseAnalysisViewer(EmProtocolViewer):
     """ This viewer is intended to visualize the selection made by
         the Xmipp - Movie poisson count protocol.
     """
-    _label = 'viewer Movie Poisson Count'
+    _label = 'viewer Movie Dose Analysis'
     _environments = [DESKTOP_TKINTER, WEB_DJANGO]
-    _targets = [XmippProtMoviePoissonCount]
+    _targets = [XmippProtMovieDoseAnalysis]
 
 
     def _defineParams(self, form):

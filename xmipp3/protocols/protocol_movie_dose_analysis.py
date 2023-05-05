@@ -41,11 +41,11 @@ import statistics as stat
 
 THRESHOLD = 0.02
 
-class XmippProtMoviePoissonCount(ProtProcessMovies):
+class XmippProtMovieDoseAnalysis(ProtProcessMovies):
     """ Protocol for the dose analysis """
     # FIXME: WITH .mrcs IT DOES NOT FILL THE LABELS
 
-    _label = 'movie poisson count'
+    _label = 'movie dose analysis'
     _lastUpdateVersion = VERSION_3_0
 
     finished = False
@@ -71,7 +71,7 @@ class XmippProtMoviePoissonCount(ProtProcessMovies):
                            'be calculated for each one of them.')
         form.addParam('proportion_threshold', FloatParam, default=0.05,
                       label="Maximum proportional difference",
-                      help='By default, a difference of 10% against the median dose is used to '
+                      help='By default, a difference of 5% against the median dose is used to '
                            'assume that the dose has an incorrect value.')
         form.addParam('n_samples', IntParam, default=20,
                       label="Samples to estimate the median dose", expertLevel=LEVEL_ADVANCED,
