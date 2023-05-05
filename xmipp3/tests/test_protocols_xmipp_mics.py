@@ -290,30 +290,6 @@ class TestXmippCTFEstimation(TestXmippBase):
         sampling = ctfModel.getMicrograph().getSamplingRate()
         self.assertAlmostEquals(sampling, 2.474, delta=0.001)
 
-class TestXmippBoxsize(TestXmippBase):
-    """This class check if the protocol to determine the BoxSize in Xmipp works properly."""
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        TestXmippBase.setData()
-        fileName = DataSet.getDataSet('relion_tutorial').getFile('allMics')
-        cls.protImport = cls.runImportMicrograph(fileName,
-                                                 samplingRate=3.54,
-                                                 voltage=300,
-                                                 sphericalAberration=2,
-                                                 scannedPixelSize=None,
-                                                 magnification=56000)
-    def test1(self):
-        #TODO: CHECK IF THE PREDICTIONS ON MIC MATCH THE PREDICTIONS ON DOWNSAMPLED MICS
-        # Estimate CTF on the downsampled micrographs
-        print("Estimating boxsize...")
-        protCTF = XmippProtParticleBoxsize()
-        protCTF.inputMicrographs.set(self.protImport.outputMicrographs)
-        self.proj.launchProtocol(protCTF, wait=True)
-        self.assertIsNotNone(protCTF.boxsize, "Boxsize has not been produced.")
-        self.assertAlmostEquals(protCTF.boxsize.get(), 50, delta=20,
-                                msg='Wrong estimated boxsize.')
-
 
 class TestXmippAutomaticPicking(TestXmippBase):
     """This class check if the protocol to pick the micrographs automatically in Xmipp works properly."""
@@ -1192,3 +1168,39 @@ class TestXmippParticlesPickConsensus(TestXmippBase):
     #     self.assertAlmostEqual(outputParts.getSamplingRate() / samplingMics,
     #                            downFactor, 1)
     #     self._checkSamplingConsistency(outputParts)
+
+
+class TestXmippProtTiltAnalysis(TestXmippBase):
+    """This class check if the preprocessing micrographs protocol in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        TestXmippBase.setData()
+        fileName = DataSet.getDataSet('relion_tutorial').getFile('allMics')
+        cls.protImport = cls.runImportMicrograph(fileName,
+                                                 samplingRate=3.54,
+                                                 voltage=300,
+                                                 sphericalAberration=2,
+                                                 scannedPixelSize=None,
+                                                 magnification=56000)
+
+    def testTiltAnalysis(self):
+        protTilt = XmippProtTiltAnalysis(window_size=512, objective_resolution=8, objLabel=
+                                        'Tilt analysis window 512 obj resolution 8A')
+        protTilt.inputMicrographs.set(self.protImport.outputMicrographs)
+        self.proj.launchProtocol(protTilt, wait=True)
+        # check that output micrographs have double sampling rate than input micrographs
+        self.assertEquals(len(protTilt.outputMicrographs), 20, "Incorrect number of accepted micrographs")
+        self.assertTrue(protTilt.isFinished(), "Tilt analysis failed")
+
+
+    def testTiltAnalysis2(self):
+        protTilt2 = XmippProtTiltAnalysis(window_size=600, objective_resolution=4,
+                                          meanCorr_threshold=0.9,
+                                          objLabel='Tilt analysis window 600 obj resolution 4A and threshold 0.9')
+        protTilt2.inputMicrographs.set(self.protImport.outputMicrographs)
+        self.proj.launchProtocol(protTilt2, wait=True)
+        # check that output micrographs have double sampling rate than input micrographs
+        self.assertEquals(len(protTilt2.outputMicrographs), 17, "Incorrect number of accepted micrographs")
+        self.assertEquals(len(protTilt2.discardedMicrographs), 3, "Incorrect number of discarded micrographs")
+        self.assertTrue(protTilt2.isFinished(), "Tilt analysis failed")

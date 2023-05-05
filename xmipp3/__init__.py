@@ -39,7 +39,9 @@ from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
 
 _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
-_currentVersion = '3.22.04.0'
+_currentBinVersion = '3.23.03.0'
+# This will allow scipion to detect the plugin version and print it in the log.
+__version__ = _currentBinVersion[2:] + ".0"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
 
 
 class Plugin(pwem.Plugin):
@@ -117,7 +119,7 @@ class Plugin(pwem.Plugin):
         xmippDeps = []  # Deps should be at requirements.txt (old: scons, joblib, scikit_learn)
 
         # Installation vars for commands formating
-        verToken = getXmippPath('v%s' % _currentVersion)
+        verToken = getXmippPath('v%s' % _currentBinVersion)
         confToken = getXmippPath("xmipp.conf")
         installVars = {'installedToken': "installation_finished",
                        'bindingsToken': "bindings_linked",
@@ -131,7 +133,7 @@ class Plugin(pwem.Plugin):
                        'libsDst': Config.getLibFolder(),
                        'confToken': confToken,
                        'strPlaceHolder': '%s',  # to be replaced in the future
-                       'currVersion': _currentVersion
+                       'currVersion': _currentBinVersion
                        }
 
         ## Installation commands (removing bindingsToken)
@@ -176,12 +178,12 @@ class Plugin(pwem.Plugin):
                            deps=xmippDeps, default=False)
 
         avoidConfig = os.environ.get('XMIPP_NOCONFIG', 'False') == 'True'
-        alreadyCompiled = os.path.isfile(getXmippPath('v'+_currentVersion))  # compilation token (see the xmipp script)
+        alreadyCompiled = os.path.isfile(getXmippPath('v' + _currentBinVersion))  # compilation token (see the xmipp script)
         configSrc = ('./xmipp check_config' if avoidConfig
                      else './xmipp config noAsk && ./xmipp check_config')
-        env.addPackage('xmippSrc', version=_currentVersion,
+        env.addPackage('xmippSrc', version=_currentBinVersion,
                        # adding 'v' before version to fix a package target (post-link)
-                       tar='xmippSrc-v'+_currentVersion+'.tgz',
+                       tar='xmippSrc-v' + _currentBinVersion + '.tgz',
                        commands=[(installCmd.format(**installVars, cwd='.',
                                                     configCmd=configSrc,
                                                     compileCmd='./xmipp compileAndInstall'),
@@ -207,35 +209,34 @@ def installDeepLearningToolkit(plugin, env):
                                                env=plugin.getEnviron(),
                                                stdout=subprocess.PIPE
                                                ).stdout.read().decode('utf-8').split(".")[0]
-            try:
-                int(nvidiaDriverVer)
-            except ValueError:
-                nvidiaDriverVer = None
             if int(nvidiaDriverVer) < 390:
                 preMsgs.append("Incompatible driver %s" % nvidiaDriverVer)
                 cudaMsgs.append("Your NVIDIA drivers are too old (<390). "
                                 "Tensorflow was installed without GPU support. "
-                                "Just CPU computations enabled (slow computations).")
+                                "Just CPU computations enabled (slow computations)."
+                                "To enable CUDA (drivers>390 needed), "
+                                "set CUDA=True in 'scipion.conf' file")
                 nvidiaDriverVer = None
-        except Exception as e:
-            preMsgs.append(str(e))
+        except ValueError or TypeError:
+            nvidiaDriverVer = None
+            preMsgs.append("Not nvidia driver found. Type: "
+                           " nvidia-smi --query-gpu=driver_version --format=csv,noheader")
+            preMsgs.append(
+                "CUDA will NOT be USED. (not found or incompatible)")
+            msg = ("Tensorflow installed without GPU. Just CPU computations "
+                   "enabled (slow computations).")
+            cudaMsgs.append(msg)
+            useGpu = False
 
     if nvidiaDriverVer is not None:
-        preMsgs.append("CUDA support find. Driver version: %s" % nvidiaDriverVer)
-        msg = "Tensorflow installed with CUDA SUPPORT."
+        preMsgs.append("CUDA support found. Driver version: %s" % nvidiaDriverVer)
+        msg = "Tensorflow will be installed with CUDA SUPPORT."
         cudaMsgs.append(msg)
         useGpu = True
-    else:
-        preMsgs.append("CUDA will NOT be USED. (not found or incompatible)")
-        msg = ("Tensorflow installed without GPU. Just CPU computations "
-               "enabled (slow computations). To enable CUDA (drivers>390 needed), "
-               "set CUDA=True in 'scipion.conf' file")
-        cudaMsgs.append(msg)
-        useGpu = False
+
 
     # commands  = [(command, target), (cmd, tgt), ...]
-    cmdsInstall = [(cmd, envName + ".yml") for cmd, envName in
-                   CondaEnvManager.yieldInstallAllCmds(useGpu=useGpu)]
+    cmdsInstall = list(CondaEnvManager.yieldInstallAllCmds(useGpu=useGpu))
 
     now = datetime.now()
     installDLvars = {'modelsUrl': "http://scipion.cnb.csic.es/downloads/scipion/software/em",

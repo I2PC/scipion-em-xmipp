@@ -29,7 +29,7 @@ Consensus picking protocol
 """
 
 import os
-
+import enum
 from math import sqrt
 import numpy as np
 
@@ -43,6 +43,13 @@ from pyworkflow.utils import getFiles, removeBaseExt, moveFile
 
 PICK_MODE_LARGER = 0
 PICK_MODE_EQUAL = 1
+
+
+class ProtPickingConsensusOutput(enum.Enum):
+    """ Possible outputs for particle picking protocols
+    """
+    consensusCoordinates = SetOfCoordinates
+
 
 class XmippProtConsensusPicking(ProtParticlePicking):
     """
@@ -65,7 +72,8 @@ class XmippProtConsensusPicking(ProtParticlePicking):
     """
 
     _label = 'picking consensus'
-    outputName = 'consensusCoordinates'
+    _possibleOutputs = ProtPickingConsensusOutput
+    outputName = ProtPickingConsensusOutput.consensusCoordinates.name
     FN_PREFIX = 'consensusCoords_'
 
     def __init__(self, **args):

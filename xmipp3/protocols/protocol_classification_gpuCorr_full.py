@@ -753,10 +753,8 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
 
 
     def _createFinalClasses(self):
-
-        inputs = self.inputParticles.get()
         # Here the defineOutputs function will call the write() method
-        outputSet = self._createSetOfClasses2D(inputs)
+        outputSet = self._createSetOfClasses2D(self.inputParticles)
         self._fillClasses(outputSet)
         self._defineOutputs(**{'outputClasses': outputSet})
         self._defineSourceRelation(self.inputParticles, outputSet)
@@ -986,8 +984,7 @@ class XmippProtStrGpuCrrCL2D(ProtAlign2D):
         if newSize>x or newSize>y:
             errors.append('The image size must be smaller than the size of '
                           'the input images')
-        if not isXmippCudaPresent("xmipp_cuda_correlation"):
-            errors.append("I cannot find the Xmipp GPU programs in the path")
+
         return errors
 
     def _summary(self):

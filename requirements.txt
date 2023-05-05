@@ -1,4 +1,6 @@
-scikit-learn==0.22.1
+scipion-pyworkflow==3.0.31
+scipion-em
+scipy<=1.10.0
 joblib
 peppercorn
 plotter
