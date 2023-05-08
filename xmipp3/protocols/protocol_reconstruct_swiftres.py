@@ -232,7 +232,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
 
         def is_mrc(path: str) -> bool:
             _, ext = os.path.splitext(path)
-            return ext == 'mrc' or ext == 'mrcs'
+            return ext == '.mrc' or ext == '.mrcs'
         
         # Convert to MRC if necessary
         if not all(map(is_mrc, particles.getFiles())):
