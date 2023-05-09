@@ -100,6 +100,11 @@ class XmippProtStructureMapViewer(ProtocolViewer):
         self.coordinates = (np.loadtxt(file) for file in fnOutput)
         self.coordinates = np.vstack(self.coordinates)
         labels = [v.getObjLabel() for v in self.protocol.inputVolumes.get()]
+        for l in labels:
+            if l =='':
+                labels = [str(idp) for idp in
+                          range(1, self.coordinates.shape[0] + 1)]
+                break
         if os.path.isfile(self._getExtraPath('weigths.txt')):
             weights = np.loadtxt(self._getExtraPath('weigths.txt'))
         else:

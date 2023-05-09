@@ -201,6 +201,8 @@ class XmippProtAlignVolume(ProtAlignVolume):
             outVol.setLocation(fnOutVol)
             outVol.setObjComment(vol.getObjComment())
             outVol.setObjLabel(vol.getObjLabel())
+            self.info('vol.getObjComment(): {}'.format(vol.getObjComment()))
+            self.info('vol.getObjlabel(): {}'.format(vol.getObjLabel()))
 
             #set transformation matrix
             fhInputTranMat = self._getExtraPath('transformation-matrix_vol%06d.txt'%idx)
