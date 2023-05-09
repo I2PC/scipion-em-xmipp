@@ -33,8 +33,7 @@ import os
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
-                                        BooleanParam, IntParam, EnumParam,
-                                        NumericListParam, USE_GPU, GPU_LIST)
+                                        BooleanParam, IntParam,GPU_LIST)
 from pyworkflow.utils.path import (cleanPath, makePath, copyFile, moveFile,
                                    createLink, cleanPattern)
 from pwem.protocols import ProtRefine3D
@@ -64,23 +63,21 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
     _lastUpdateVersion = VERSION_2_0
     # _conda_env = 'flexutils-tensorflow'
     _conda_env = 'xmipp_pyTorch'
+
     
-    # def __init__(self, **args):
-    #     ProtRefine3D.__init__(self, **args)
+    def __init__(self, **args):
+        ProtRefine3D.__init__(self, **args)
     #     self.resolutionHalf = Float()
     
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
-        form.addHidden(USE_GPU, BooleanParam, default=True,
-                       label="Use GPU for execution",
-                       help="This protocol has both CPU and GPU implementation.\
-                       Select the one you want to use.")
-
+        
         form.addHidden(GPU_LIST, StringParam, default='0',
-                       expertLevel=LEVEL_ADVANCED,
-                       label="Choose GPU IDs",
-                       help="Add a list of GPU devices that can be used")
+                       label="Choose GPU ID",
+                       help="GPU may have several cores. Set it to zero"
+                            " if you do not know what we are talking about."
+                            " First core index is 0, second 1 and so on.")
 
 
         form.addSection(label='Input')
@@ -136,7 +133,7 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         
 
 
-        form.addParallelSection(threads=1, mpi=16)
+        form.addParallelSection(threads=1, mpi=4)
 
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -159,7 +156,7 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
 
         self._insertFunctionStep('convertInputStep', self.inputParticles.get(), self.imgsFnXmd)
         self._insertFunctionStep("createGallery", self.angleGallery.get())
-        self._insertFunctionStep("pcaTraining")
+        self._insertFunctionStep("pcaTraining", self.resolution.get())
         
         for iter in range(iterations):
 
@@ -179,7 +176,7 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
                outputXmd = self._getExtraPath('align_iter%s.xmd'%(iter+1))
                applyShift = True
                
-               if self.angleGallery.get() > 3:
+               if self.angleGallery.get() > 4:
                    self._insertFunctionStep("createGallery", 4)
             if iter == 3:
                angle, MaxAngle, shift, maxShift = self.angle.get()/8, 180, 0.5, 1.5  
@@ -213,9 +210,9 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         moveFile( self._getExtraPath('references.doc'), self.refsFnXmd)
     
     
-    def pcaTraining(self):
+    def pcaTraining(self, resolutionTrain):
         args = ' -i %s -n 1 -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA'% \
-                (self.imgsFn, self.sampling, self.resolution.get(), self.coef.get(), self.numPart.get(), self._getExtraPath())
+                (self.imgsFn, self.sampling, resolutionTrain, self.coef.get(), self.numPart.get(), self._getExtraPath())
         # program = self.getProgram("train_pca.py")
         # program = self.getProgram("xmipp_global_align_train")
         # self.runJob(program, args, numberOfMpi=1)
@@ -233,7 +230,7 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         # program = self.getProgram("xmipp_global_align")       
         # self.runJob(program, args, numberOfMpi=1)
         self.runJob("xmipp_global_align", args, numberOfMpi=1,
-                    env=self.getCondaEnv())
+            env=self.getCondaEnv())
 
 
     def reconstructVolume(self, iter):
@@ -296,16 +293,16 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
     
 
     #--------------------------- UTILS functions --------------------------------------------
-    def getTensorflowActivation(self):
-        return "conda activate flexutils-tensorflow"
-    
-    def getProgram(self, program):
-        cmd = '%s %s && ' % (xmipp3.Plugin.getCondaActivationCmd(), self.getTensorflowActivation())
-        return cmd + ' %(program)s ' % locals()
-    
-    def _updateLocation(self, item, row):
-        index, filename = xmippToLocation(row.getValue(md.MDL_IMAGE))
-        item.setLocation(index, filename)
+    # def getTensorflowActivation(self):
+    #     return "conda activate flexutils-tensorflow"
+    #
+    # def getProgram(self, program):
+    #     cmd = '%s %s && ' % (xmipp3.Plugin.getCondaActivationCmd(), self.getTensorflowActivation())
+    #     return cmd + ' %(program)s ' % locals()
+    #
+    # def _updateLocation(self, item, row):
+    #     index, filename = xmippToLocation(row.getValue(md.MDL_IMAGE))
+    #     item.setLocation(index, filename)
     
     def _reconstructHalf(self, input, output):
         gpuList = self.getGpuList()
