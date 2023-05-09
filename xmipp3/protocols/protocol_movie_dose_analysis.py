@@ -27,7 +27,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-from pyworkflow import VERSION_3_0
+from pyworkflow import VERSION_3_0, NEW
 from pyworkflow.object import Set
 from pyworkflow.protocol import STEPS_PARALLEL
 from pyworkflow.protocol.params import (PointerParam, IntParam, FloatParam, LEVEL_ADVANCED)
@@ -39,7 +39,9 @@ from pwem.protocols import ProtProcessMovies
 from xmipp3.convert import getScipionObj
 import statistics as stat
 
-THRESHOLD = 0.02
+THRESHOLD = 2
+OUTPUT_ACCEPTED = 'outputMovies'
+OUTPUT_DISCARDED = 'outputMoviesDiscarded'
 
 class XmippProtMovieDoseAnalysis(ProtProcessMovies):
     """ Protocol for the dose analysis """
@@ -47,6 +49,11 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
 
     _label = 'movie dose analysis'
     _lastUpdateVersion = VERSION_3_0
+    _devStatus = NEW
+    _possibleOutputs = {
+        OUTPUT_ACCEPTED: SetOfMovies,
+        OUTPUT_DISCARDED: SetOfMovies
+    }
 
     finished = False
     stats = {}
@@ -68,8 +75,8 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                       label=Message.LABEL_INPUT_MOVS,
                       help='Select one or several movies. A dose analysis '
                            'be calculated for each one of them.')
-        form.addParam('proportion_threshold', FloatParam, default=0.05,
-                      label="Maximum proportional difference",
+        form.addParam('percentage_threshold', FloatParam, default=5,
+                      label="Maximum percentage difference (%)",
                       help='By default, a difference of 5% against the median dose is used to '
                            'assume that the dose has an incorrect value.')
         form.addParam('n_samples', IntParam, default=20,
@@ -77,11 +84,12 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                       help='By default, 20 movies are used to '
                            'compute the global median.')
         form.addParam('window', IntParam, default=50,
-                      label="Window step", expertLevel=LEVEL_ADVANCED,
-                      help='By default, every 50 movies (window=50) we'
-                           'compute the proportion of incorrect dose analysis.')
-        form.addParam('proportion_window', FloatParam, default=0.30,
-                      label="Windows maximum faulty proportion", expertLevel=LEVEL_ADVANCED,
+                      label="Window step (movies)", expertLevel=LEVEL_ADVANCED,
+                      help='By default, every 50 movies (window=50) we '
+                           'compute the percentage of incorrect dose analysis to check if there '
+                           'is any anomally in the dose.')
+        form.addParam('percentage_window', FloatParam, default=30,
+                      label="Windows maximum faulty percentage (%)", expertLevel=LEVEL_ADVANCED,
                       help='By default, if 30% of the movies are discarded'
                            'it assume that the dose has an incorrect value that endures in time.')
 
@@ -180,7 +188,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
             medianDoseExperimental = np.median(self.meanDoseList)
             if hasattr(self, 'dosePerFrame'):
                 refDose = self.dosePerFrame
-                diff = abs((medianDoseExperimental/refDose)-1)
+                diff = abs((medianDoseExperimental/refDose)-1) * 100
                 if diff < THRESHOLD:
                    self.mu = refDose
                 else:
@@ -189,7 +197,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                     self.info("The given dose per frame %f does not match with the experimental one %f"
                               " having a difference of %f percent. "
                               "Therefore, using the experimental as global median."
-                              %(refDose, medianDoseExperimental, diff * 100))
+                              %(refDose, medianDoseExperimental, diff))
             else:
                 self.mu = medianDoseExperimental
 
@@ -243,7 +251,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                 std = stats['std']
                 minDose = stats['min']
                 maxDose = stats['max']
-                diff_median = (mean/self.mu)-1
+                diff_median = ((mean/self.mu)-1)*100
 
                 setAttribute(newMovie, '_DIFF_TO_DOSE_PER_ANGSTROM2', abs(diff_median))
                 setAttribute(newMovie, '_MEAN_DOSE_PER_ANGSTROM2', mean)
@@ -253,7 +261,7 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
 
                 self.medianDifferences.append(diff_median)
                 self.medianDoseTemporal.append(mean)
-                self.info('Movie with id %d has a mean dose per frame of %f and a diff of %f'
+                self.info('Movie with id %d has a mean dose per frame of %f and a diff of %f percent'
                           %(movie.getObjId(), mean, diff_median))
 
                 if lower <= mean <= upper:
@@ -270,28 +278,28 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
                         self.info('Updating median global to %f' %self.mu)
 
                     windowList = self.medianDoseTemporal[-self.window.get():]
-                    proportion = len([dose for dose in windowList
-                                      if lower < dose < upper]) / len(windowList)
-                    self.info('The proportion of this window is %f' %proportion)
+                    percentage = (1 - (len([dose for dose in windowList
+                                      if lower < dose < upper]) / len(windowList)))*100
+                    self.info('The faulty percentage of this window is %f' %percentage)
 
-                    if proportion > self.proportion_window.get():
+                    if percentage > self.percentage_window.get():
                         with open(self._getExtraPath('WARNING.TXT'), 'a') as f:
-                            self.info('Proportion of wrong dose in a window surpass the threshold: {} > {}'
-                                      .format(proportion, self.proportion_threshold.get()))
-                            f.write('Proportion of wrong dose in a window surpass the threshold: {} > {} \n'
-                                    .format(proportion, self.proportion_threshold.get()))
+                            self.info('Percentage of wrong dose in a window surpass the threshold: {}% > {}%'
+                                      .format(percentage, self.percentage_window.get()))
+                            f.write('Percentage of wrong dose in a window surpass the threshold: {}% > {}% \n'
+                                    .format(percentage, self.percentage_window.get()))
                             f.close()
 
             if len(acceptedMovies)>0:
                 moviesSet = self._loadOutputSet(SetOfMovies, 'movies.sqlite')
                 for movie in acceptedMovies:
                     moviesSet.append(movie)
-                self._updateOutputSet('outputMovies', moviesSet, streamMode)
+                self._updateOutputSet(OUTPUT_ACCEPTED, moviesSet, streamMode)
             if len(discardedMovies)>0:
                 moviesSetDiscarded = self._loadOutputSet(SetOfMovies, 'movies_discarded.sqlite')
                 for movie in discardedMovies:
                     moviesSetDiscarded.append(movie)
-                self._updateOutputSet('outputMoviesDiscarded', moviesSetDiscarded, streamMode)
+                self._updateOutputSet(OUTPUT_DISCARDED, moviesSetDiscarded, streamMode)
 
             plotDoseAnalysis(self.getDosePlot(), self.meanDoseList, self.mu, lower, upper)
             plotDoseAnalysisDiff(self.getDoseDiffPlot(), self.medianDifferences)
@@ -322,8 +330,8 @@ class XmippProtMovieDoseAnalysis(ProtProcessMovies):
 # ------------------------- UTILS functions --------------------------------
     def getLimitIntervals(self):
         """ Funtion to obtain the acceptance interval limits."""
-        lower = self.mu - self.mu * self.proportion_threshold.get()
-        upper = self.mu + self.mu * self.proportion_threshold.get()
+        lower = self.mu - self.mu * (self.percentage_threshold.get()/100)
+        upper = self.mu + self.mu * (self.percentage_threshold.get()/100)
 
         return lower, upper
 
@@ -377,8 +385,8 @@ def plotDoseAnalysis(filename, doseValues, medianGlobal, lower, upper):
     plt.figure()
     plt.scatter(x, doseValues,s=10)
     plt.axhline(y=medianGlobal, color='r', linestyle='-', label='Median dose')
-    plt.axhline(y=upper, color='b', linestyle='-.', label='Upper limit')
-    plt.axhline(y=lower, color='g', linestyle='-.', label='Lower limit')
+    plt.axhline(y=upper, color='b', linestyle='-.', label='Upper limit dose')
+    plt.axhline(y=lower, color='g', linestyle='-.', label='Lower limit dose')
     plt.xlabel("Movies ID")
     plt.ylabel("Dose (electrons impacts per angstrom**2 )")
     plt.title('Dose vs time')
@@ -393,7 +401,7 @@ def plotDoseAnalysisDiff(filename, medianDifferences):
     plt.scatter(x, medianDifferences, s=10)
     plt.axhline(y=medianDiff, color='r', linestyle='-',  label='Median dose difference')
     plt.xlabel("Movies ID")
-    plt.ylabel("Dose differences")
+    plt.ylabel("Dose differences (%)")
     plt.title('Dose differences with respect to the global median vs time')
     plt.legend()
     plt.grid()
