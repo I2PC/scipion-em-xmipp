@@ -195,7 +195,7 @@ class XmippProtVolSubtraction(XmippProtVolAdjBase):
         iter = self.iter.get()
         program = "xmipp_volume_subtraction"
         args = '--i1 %s --i2 %s -o %s --iter %s --lambda %s --sub' % \
-               (fileName1.getFileName(), vol2, self._getExtraPath("output_volume.mrc"), iter, self.rfactor.get())
+               (fileName1, vol2, self._getExtraPath("output_volume.mrc"), iter, self.rfactor.get())
         if resol:
             fc = vol1.getSamplingRate()/resol
             args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
@@ -296,7 +296,7 @@ class XmippProtVolAdjust(XmippProtVolAdjBase):
         iter = self.iter.get()
         program = "xmipp_volume_subtraction"
         args = '--i1 %s --i2 %s -o %s --iter %s --lambda %s' % \
-               (fnVol1.getFileName(), vol2, self._getExtraPath("output_volume.mrc"), iter, self.rfactor.get())
+               (fnVol1, vol2, self._getExtraPath("output_volume.mrc"), iter, self.rfactor.get())
         if resol:
             fc = vol1.getSamplingRate()/resol
             args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
