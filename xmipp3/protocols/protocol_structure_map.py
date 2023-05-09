@@ -172,8 +172,6 @@ class XmippProtStructureMap(ProtAnalysis3D):
         weight = []
         if not isinstance(self.inputVolumes.get(), SetOfVolumes):
             for cls in self.inputVolumes.get().iterItems():
-                self.info('cls: vol.getObjComment(): {}'.format(vol.getObjComment()))
-                self.info('cls: vol.getObjLabel(): {}'.format(vol.getObjLabel()))
                 vol = cls.getRepresentative()
                 volList.append(vol.getFileName())
                 dimList.append(vol.getDim()[0])
@@ -183,8 +181,6 @@ class XmippProtStructureMap(ProtAnalysis3D):
                 count += 1
         else:
             for vol in self.inputVolumes.get().iterItems():
-                self.info('vol.getObjComment(): {}'.format(vol.getObjComment()))
-                self.info('vol.getObjLabel(): {}'.format(vol.getObjLabel()))
                 volList.append(vol.getFileName())
                 dimList.append(vol.getDim()[0])
                 srList.append(vol.getSamplingRate())
