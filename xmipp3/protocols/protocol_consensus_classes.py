@@ -527,7 +527,10 @@ class XmippProtConsensusClasses(ProtClassify3D):
         else:
             # Load from input
             SetOfImagesSubtype = self._getSetOfImagesSubtype()
-            images = SetOfImagesSubtype(filename=self._getOutputImagesSqliteFilename(self._getImagesSuffix()))
+            if os.path.exists(self._getOutputImagesSqliteFilename(self._getImagesSuffix())):
+                images = SetOfImagesSubtype(filename=self._getOutputImagesSqliteFilename(self._getImagesSuffix()))
+            else:
+                images = self._getInputImages()
             classifications = self._getInputClassifications()
             intersections = self._getOutputIntersectionIds()
             linkage = self._readLinkageMatrix()
