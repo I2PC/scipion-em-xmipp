@@ -131,6 +131,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('batchSize', IntParam, label='Batch size', 
                       default=8192,
                       help='It is recommended to use powers of 2. Using numbers around 8192 works well')
+        form.addParam('copyParticles', BooleanParam, label='Copy particles to scratch', default=False, 
+                      help='Copy input particles to scratch directory. Note that if input file format is '
+                      'incompatible the particles will be converted into scratch anyway')
 
         form.addParallelSection(threads=1, mpi=8)
     
@@ -235,12 +238,13 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             return ext == '.mrc' or ext == '.mrcs'
         
         # Convert to MRC if necessary
-        if not all(map(is_mrc, particles.getFiles())):
+        if self.copyParticles or not all(map(is_mrc, particles.getFiles())):
             args = []
             args += ['-i', self._getInputParticleMdFilename()]
             args += ['-o', self._getInputParticleStackFilename()]
             args += ['--save_metadata_stack', self._getInputParticleMdFilename()]
             args += ['--keep_input_columns']
+            args += ['--track_origin']
 
             self.runJob('xmipp_image_convert', args, numberOfMpi=1)
     
@@ -692,10 +696,18 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         lastIteration = self._getIterationCount() - 1
 
         # Link last iteration
-        createLink(
-            self._getAlignmentMdFilename(lastIteration),
-            self._getOutputParticlesMdFilename()
-        )
+        if os.path.exists(self._getInputParticleStackFilename()):
+            # Use original images
+            alignmentMd = emlib.MetaData(self._getAlignmentMdFilename(lastIteration))
+            alignmentMd.copyColumn(emlib.MDL_IMAGE, emlib.MDL_IMAGE_ORIGINAL)
+            alignmentMd.write(self._getOutputParticlesMdFilename())
+
+        else:
+            # Link
+            createLink(
+                self._getAlignmentMdFilename(lastIteration),
+                self._getOutputParticlesMdFilename()
+            )
         
         for cls in range(self._getClassCount()):
             for i in range(1, 3):
@@ -751,7 +763,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         return self._getExtraPath('input_particles.xmd')
     
     def _getInputParticleStackFilename(self):
-        return self._getExtraPath('input_particles.mrcs')
+        return self._getTmpPath('input_particles.mrcs')
     
     def _getWienerParticleMdFilename(self):
         return self._getExtraPath('input_particles_wiener.xmd')
