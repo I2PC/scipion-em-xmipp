@@ -792,3 +792,81 @@ class TestMaxShift(BaseTest):
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True,
                                      hasDw=True, results=[True, True])
 
+
+class TestMovieDoseAnalysis(BaseTest):
+
+    @classmethod
+    def setData(cls):
+        setupTestProject(cls)
+        cls.ds = DataSet.getDataSet('relion30_tutorial')
+
+    @classmethod
+    def runImportMovies(cls):
+        protImport = cls.newProtocol(
+            ProtImportMovies,
+            filesPath=cls.ds.getFile('Movies/'),
+            filesPattern='*.tiff',
+            samplingRateMode=0,
+            samplingRate=0.885,
+            magnification=50000,
+            scannedPixelSize=7.0,
+            voltage=200,
+            sphericalAberration=1.4,
+            doseInitial=0.0,
+            dosePerFrame=1.277,
+            gainFile=cls.ds.getFile("Movies/gain.mrc")
+        )
+        protImport.setObjLabel('import 24 movies')
+        protImport.setObjComment('Relion 3 tutorial movies:\n\n'
+                                 'Microscope Jeol Cryo-ARM 200\n'
+                                 'Data courtesy of Takyuki Kato in the Namba '
+                                 'group\n(Osaka University, Japan)')
+        return cls.launchProtocol(protImport)
+
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.setData()
+        cls.protImport = cls.runImportMovies()
+
+    # ------- Tests ---------------------------------------
+    def testDoseAnalysisAssert(self):
+        """ This must create two sets of movies.
+        """
+        label = 'Dose Analysis Assert'
+        protPoisson = self.newProtocol(XmippProtMovieDoseAnalysis,
+                                       objLabel=label,
+                                       n_samples=10,
+                                       movieStep=4
+                                       )
+        protPoisson.inputMovies.set(self.protImport.outputMovies)
+        self.launchProtocol(protPoisson)
+
+        self.assertIsNotNone(getattr(protPoisson, 'outputMoviesDiscarded', None),
+                          "outputMoviesDiscarded were not created. "
+                          "Bad filtering in test.")
+
+        self.assertIsNotNone(getattr(protPoisson, 'outputMovies', None),
+                             "outputMovies were not created. "
+                             "Bad filtering in test.")
+
+    def testDoseAnalysisFiltering(self):
+        """ This must discard movies by dose analysis.
+        """
+        label = 'Dose Analysis Filter'
+        protPoisson = self.newProtocol(XmippProtMovieDoseAnalysis,
+                                       objLabel=label,
+                                       n_samples=24,
+                                       movieStep=4
+                                       )
+        protPoisson.inputMovies.set(self.protImport.outputMovies)
+        self.launchProtocol(protPoisson)
+
+        sizeAccepted = protPoisson.outputMovies.getSize()
+        self.assertEqual(sizeAccepted, 19, 'Number of accepted movies must be 19 and its '
+                                           '%d' % sizeAccepted)
+
+        sizeDiscarded = protPoisson.outputMoviesDiscarded.getSize()
+        self.assertEqual(sizeDiscarded, 5, 'Number of accepted movies must be 5 and its '
+                                            '%d' % sizeDiscarded)

@@ -44,6 +44,7 @@ _currentBinVersion = '3.23.03.0'
 __version__ = _currentBinVersion[2:] + ".3"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
 
 
+
 class Plugin(pwem.Plugin):
     _homeVar = XMIPP_HOME
     _pathVars = [XMIPP_HOME]
@@ -209,35 +210,34 @@ def installDeepLearningToolkit(plugin, env):
                                                env=plugin.getEnviron(),
                                                stdout=subprocess.PIPE
                                                ).stdout.read().decode('utf-8').split(".")[0]
-            try:
-                int(nvidiaDriverVer)
-            except ValueError:
-                nvidiaDriverVer = None
             if int(nvidiaDriverVer) < 390:
                 preMsgs.append("Incompatible driver %s" % nvidiaDriverVer)
                 cudaMsgs.append("Your NVIDIA drivers are too old (<390). "
                                 "Tensorflow was installed without GPU support. "
-                                "Just CPU computations enabled (slow computations).")
+                                "Just CPU computations enabled (slow computations)."
+                                "To enable CUDA (drivers>390 needed), "
+                                "set CUDA=True in 'scipion.conf' file")
                 nvidiaDriverVer = None
-        except Exception as e:
-            preMsgs.append(str(e))
+        except (ValueError, TypeError):
+            nvidiaDriverVer = None
+            preMsgs.append("Not nvidia driver found. Type: "
+                           " nvidia-smi --query-gpu=driver_version --format=csv,noheader")
+            preMsgs.append(
+                "CUDA will NOT be USED. (not found or incompatible)")
+            msg = ("Tensorflow installed without GPU. Just CPU computations "
+                   "enabled (slow computations).")
+            cudaMsgs.append(msg)
+            useGpu = False
 
     if nvidiaDriverVer is not None:
-        preMsgs.append("CUDA support find. Driver version: %s" % nvidiaDriverVer)
-        msg = "Tensorflow installed with CUDA SUPPORT."
+        preMsgs.append("CUDA support found. Driver version: %s" % nvidiaDriverVer)
+        msg = "Tensorflow will be installed with CUDA SUPPORT."
         cudaMsgs.append(msg)
         useGpu = True
-    else:
-        preMsgs.append("CUDA will NOT be USED. (not found or incompatible)")
-        msg = ("Tensorflow installed without GPU. Just CPU computations "
-               "enabled (slow computations). To enable CUDA (drivers>390 needed), "
-               "set CUDA=True in 'scipion.conf' file")
-        cudaMsgs.append(msg)
-        useGpu = False
+
 
     # commands  = [(command, target), (cmd, tgt), ...]
-    cmdsInstall = [(cmd, envName + ".yml") for cmd, envName in
-                   CondaEnvManager.yieldInstallAllCmds(useGpu=useGpu)]
+    cmdsInstall = list(CondaEnvManager.yieldInstallAllCmds(useGpu=useGpu))
 
     now = datetime.now()
     installDLvars = {'modelsUrl': "http://scipion.cnb.csic.es/downloads/scipion/software/em",

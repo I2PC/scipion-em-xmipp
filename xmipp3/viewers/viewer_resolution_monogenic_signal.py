@@ -207,9 +207,12 @@ class XmippMonoResViewer(LocalResolutionViewer):
         _plotter = EmPlotter()
         _plotter.createSubPlot("Resolutions Histogram",
                                "Resolution (A)", "# of Counts")
-        barwidth = (x_axis[-1] - x_axis[0]) / len(x_axis)
-
-        _plotter.plotDataBar(x_axis[:-2], y_axis[:-2], barwidth)
+        if len(x_axis) == 1:
+            barwidth = 0.1
+            _plotter.plotDataBar(x_axis, y_axis, barwidth)
+        else:
+            barwidth = (x_axis[-1] - x_axis[0]) / len(x_axis)
+            _plotter.plotDataBar(x_axis[:-2], y_axis[:-2], barwidth)
 
         return [_plotter]
 
