@@ -138,7 +138,7 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
     #--------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         
-        updateEnviron(self.gpuList.get())
+        updateEnviron(self.gpuList.get()) 
         
         if self.corectCtf:
             self.imgsFnXmd = self._getExtraPath('images.xmd')
@@ -216,8 +216,10 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         # program = self.getProgram("train_pca.py")
         # program = self.getProgram("xmipp_global_align_train")
         # self.runJob(program, args, numberOfMpi=1)
-        self.runJob("xmipp_global_align_train", args, numberOfMpi=1,
-            env=self.getCondaEnv())
+
+        env = self.getCondaEnv()
+        env['LD_LIBRARY_PATH'] = ''
+        self.runJob("xmipp_global_align_train", args, numberOfMpi=1, env=env)
         
         
     def globalAlign(self, inputXmd, outputXmd, angle, MaxAngle, shift, MaxShift, applyShift):
@@ -229,8 +231,9 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         # program = self.getProgram("align_images.py")  
         # program = self.getProgram("xmipp_global_align")       
         # self.runJob(program, args, numberOfMpi=1)
-        self.runJob("xmipp_global_align", args, numberOfMpi=1,
-            env=self.getCondaEnv())
+        env=self.getCondaEnv()
+        env['LD_LIBRARY_PATH'] = ''
+        self.runJob("xmipp_global_align", args, numberOfMpi=1, env=env)
 
 
     def reconstructVolume(self, iter):
@@ -294,7 +297,7 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
 
     #--------------------------- UTILS functions --------------------------------------------
     # def getTensorflowActivation(self):
-    #     return "conda activate flexutils-tensorflow"
+    #     return "conda activate xmipp_pyTorch"
     #
     # def getProgram(self, program):
     #     cmd = '%s %s && ' % (xmipp3.Plugin.getCondaActivationCmd(), self.getTensorflowActivation())
