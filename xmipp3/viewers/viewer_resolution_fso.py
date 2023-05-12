@@ -323,12 +323,25 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         res_01, okToPlot_01 = self.interpolRes(0.1, xx, yy)
         res_05, okToPlot_05 = self.interpolRes(0.5, xx, yy)
         res_09, okToPlot_09 = self.interpolRes(0.9, xx, yy)
-        
+
+        textstr = ''
+
         if okToPlot_09:
-           if self.protocol.halfVolumesFile:
-              sampling = self.protocol.inputHalves.get().getSamplingRate()
-           else:
-              sampling = self.protocol.half1.get().getSamplingRate()
+           textstr += str(0.9) + ' --> ' + str("{:.2f}".format(res_09)) + 'A\n'
+        if okToPlot_05:
+           textstr += str(0.5) + ' --> ' + str("{:.2f}".format(res_05)) + 'A\n'
+        if okToPlot_01:
+           textstr += str(0.1) + ' --> ' + str("{:.2f}".format(res_01)) + 'A'
+
+        props = dict(boxstyle='round', facecolor='white')
+        a.axes.text(0.0, 0.0, textstr, fontsize=12, ha="left", va="bottom", bbox=props)
+        
+        if self.protocol.halfVolumesFile:
+           sampling = self.protocol.inputHalves.get().getSamplingRate()
+        else:
+           sampling = self.protocol.half1.get().getSamplingRate()
+
+        if okToPlot_09 and okToPlot_01:
            t = round((2*sampling/(res_01))*len(yyBingham)) + 3
            if t<len(yyBingham):
               for component in range(t, len(yyBingham)-1):
@@ -337,13 +350,10 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         else:
            a.axes.plot(xx, yyBingham, 'r--')
 
-        if (okToPlot_01 and okToPlot_05 and okToPlot_09):
-            textstr = str(0.9) + ' --> ' + str("{:.2f}".format(res_09)) + 'A\n' + str(0.5) + ' --> ' + str(
-                "{:.2f}".format(res_05)) + 'A\n' + str(0.1) + ' --> ' + str("{:.2f}".format(res_01)) + 'A'
-            a.axes.axvspan(1.0 / res_09, 1.0 / res_01, alpha=0.3, color='green')
+        if not okToPlot_01:
+           res_01 = 2*sampling
 
-            props = dict(boxstyle='round', facecolor='white')
-            a.axes.text(0.0, 0.0, textstr, fontsize=12, ha="left", va="bottom", bbox=props)
+        a.axes.axvspan(1.0 / res_09, 1.0 / res_01, alpha=0.3, color='green')
 
         return plt.show()
 
