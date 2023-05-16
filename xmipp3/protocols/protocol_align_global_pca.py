@@ -33,7 +33,7 @@ import os
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
-                                        BooleanParam, IntParam,GPU_LIST)
+                                        BooleanParam, EnumParam, IntParam, GPU_LIST)
 from pyworkflow.utils.path import (cleanPath, makePath, copyFile, moveFile,
                                    createLink, cleanPattern)
 from pwem.protocols import ProtRefine3D
@@ -64,6 +64,9 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
     # _conda_env = 'flexutils-tensorflow'
     _conda_env = 'xmipp_pyTorch'
 
+    #Mode 
+    REFINE = 0
+    ALIGN = 1
     
     def __init__(self, **args):
         ProtRefine3D.__init__(self, **args)
@@ -85,25 +88,27 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('inputParticles', PointerParam, label="Experimental Images", important=True,
                       pointerClass='SetOfParticles', allowsNull=True,
                       help='Select a set of images at full resolution')
-        # form.addParam('inputReferences', PointerParam, label="References Images", important=True,
-        #               pointerClass='SetOfParticles', allowsNull=True,
-        #               help='Select a set of references at full resolution')
         form.addParam('inputVolume', PointerParam, label="Initial volumes", important=True,
                       pointerClass='Volume', allowsNull=True,
                       help='Select a initial volume . ')
+        form.addParam('mode', EnumParam, choices=['refine', 'align'],
+              label="Refine or align?", default=self.REFINE,
+              display=EnumParam.DISPLAY_HLIST, 
+              help='This option allows for either global refinement from an initial volume '
+                    ' or just alignment of particles. If the reference volume is at a high resolution, '
+                    ' it is advisable to only align the particles and reconstruct at the end of the iterative process.') 
         form.addParam('corectCtf', BooleanParam, default=True,
                       label='Correct CTF?',
                       help='If you set to *Yes*, the CTF of the experimental particles will be corrected')
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group',
                       help='If no symmetry is present, give c1')
-        form.addParam('createVolume', BooleanParam, default=False, expertLevel=LEVEL_ADVANCED,
-              label='Create output volume?',
-              help='If you set to *Yes*, the final volume is created')
+        # form.addParam('createVolume', BooleanParam, default=False, expertLevel=LEVEL_ADVANCED,
+        #       label='Create output volume?',
+        #       help='If you set to *Yes*, the final volume is created')
         form.addParam('angleGallery',FloatParam, label="angle for references", default=5, expertLevel=LEVEL_ADVANCED,
                       help='Distance in degrees between sampling points for generate gallery of references images')
-
-        
+       
                   
         form.addSection(label='Pca training')
         
@@ -151,43 +156,43 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         size =self.inputParticles.get().getDimensions()[0]
         # self.MaxShift = int(size * self.MaxShift.get() / 100)
         self.MaxShift = self.MaxShift.get()
-        iterations = self.numberOfIterations.get()
+        refVol = self.inputVolume.get().getFileName()
+        
+        #maximum number of iteration = 4
+        if self.numberOfIterations.get() <= 4:
+            self.iterations = self.numberOfIterations.get()
+        else:
+            self.iterations = 4
 
 
         self._insertFunctionStep('convertInputStep', self.inputParticles.get(), self.imgsFnXmd)
-        self._insertFunctionStep("createGallery", self.angleGallery.get())
+        self._insertFunctionStep("createGallery", self.angleGallery.get(), refVol)
         self._insertFunctionStep("pcaTraining", self.resolution.get())
         
-        for iter in range(iterations):
+        for iter in range(self.iterations):
+            
+            if iter > 0 and self.mode == self.REFINE:
+                refVol = self._getExtraPath('output_iter%s_avg_filt.mrc'%iter)              
+                self._insertFunctionStep("createGallery", 4, refVol)
 
             if iter == 0:
                 angle, MaxAngle, shift, maxShift = self.angle.get(), 180, self.shift.get(), self.MaxShift
                 inputXmd = self.imgsFnXmd
                 outputXmd = self._getExtraPath('align_iter%s.xmd'%(iter+1))
                 applyShift = self.applyShift 
-            if iter == 1:
-               angle, MaxAngle, shift, maxShift = self.angle.get()/2, 180, 2, 6  
-               inputXmd = self._getExtraPath('align_iter%s.xmd'%iter)
-               outputXmd = self._getExtraPath('align_iter%s.xmd'%(iter+1))
-               applyShift = True
-            if iter == 2:
-               angle, MaxAngle, shift, maxShift = self.angle.get()/4, 180, 1, 3  
-               inputXmd = self._getExtraPath('align_iter%s.xmd'%iter)
-               outputXmd = self._getExtraPath('align_iter%s.xmd'%(iter+1))
-               applyShift = True
-               
-               if self.angleGallery.get() > 4:
-                   self._insertFunctionStep("createGallery", 4)
-            if iter == 3:
-               angle, MaxAngle, shift, maxShift = self.angle.get()/8, 180, 0.5, 1.5  
+            if iter > 0:
+               angle, MaxAngle, shift, maxShift = 4/iter, 180, 2/iter, 6/iter 
                inputXmd = self._getExtraPath('align_iter%s.xmd'%iter)
                outputXmd = self._getExtraPath('align_iter%s.xmd'%(iter+1))
                applyShift = True
            
             self._insertFunctionStep("globalAlign", inputXmd, outputXmd, angle, MaxAngle, shift, maxShift, applyShift)   
         
-        if self.createVolume:    
-            self._insertFunctionStep("reconstructVolume", iter)    
+            if self.mode == self.REFINE:   
+                self._insertFunctionStep("reconstructVolume", iter) 
+            elif iter == self.iterations-1:
+                self._insertFunctionStep("reconstructVolume", iter)
+        
         self._insertFunctionStep("createOutput", iter)
     
 
@@ -202,9 +207,8 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
             args = ' -i  %s -o %s '%(self.imgsFnXmd, self.imgsFn)
             self.runJob("xmipp_image_convert",args, numberOfMpi=1)           
     
-    def createGallery(self, angle):
-        refVol = self.inputVolume.get().getFileName()
-        args = ' -i  %s --sym %s --sampling_rate %s  -o %s '% \
+    def createGallery(self, angle, refVol):
+        args = ' -i  %s --sym %s --sampling_rate %s  -o %s -v 0'% \
                 (refVol, self.symmetryGroup.get(), angle, self.refsFn)
         self.runJob("xmipp_angular_project_library", args)
         moveFile( self._getExtraPath('references.doc'), self.refsFnXmd)
@@ -213,9 +217,6 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
     def pcaTraining(self, resolutionTrain):
         args = ' -i %s -n 1 -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA'% \
                 (self.imgsFn, self.sampling, resolutionTrain, self.coef.get(), self.numPart.get(), self._getExtraPath())
-        # program = self.getProgram("train_pca.py")
-        # program = self.getProgram("xmipp_global_align_train")
-        # self.runJob(program, args, numberOfMpi=1)
 
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = ''
@@ -228,9 +229,7 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
                  self._getExtraPath(), self._getExtraPath(), outputXmd, inputXmd, self.refsFnXmd, self.sampling)
         if applyShift:
             args += ' --apply_shifts ' 
-        # program = self.getProgram("align_images.py")  
-        # program = self.getProgram("xmipp_global_align")       
-        # self.runJob(program, args, numberOfMpi=1)
+
         env=self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = ''
         self.runJob("xmipp_global_align", args, numberOfMpi=1, env=env)
@@ -247,8 +246,17 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         mdFsc =  emlib.MetaData(self._getExtraPath('fsc.xmd'))
         thr = 0.143
         self.resolutionHalf = self._computeResolution(mdFsc, thr)
-        print('la resolucion es %s' %self.resolutionHalf)
-        self._filterVolume(self._getExtraPath('output_avg.mrc'), self._getExtraPath('output_avg_filt.mrc'), self.resolutionHalf)
+        print('resolution = %s' %self.resolutionHalf)
+        self._filterVolume(self._getExtraPath('output_avg.mrc'), self._getExtraPath('output_iter%s_avg_filt.mrc'%(iter+1)), self.resolutionHalf)
+        
+        #If required, repeat training
+        if iter < self.iterations-1: #and self.resolutionHalf > 10:
+            if self.resolutionHalf > 10:
+                res = self.resolutionHalf
+            else:
+                res = 10                
+            self.pcaTraining(res)
+            
 
     def createOutput(self, iter):      
         #output particle
@@ -268,14 +276,14 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         self._defineSourceRelation(self.inputParticles, partSet)
         
         #output volume
-        if self.createVolume: 
+        # if self.createVolume: 
             # self.resolutionHalf = self.resolutionHalf.set(self.resolutionHalf)
             # self._store(self.resolutionHalf)
-            volume=Volume()
-            volume.setFileName(self._getExtraPath('output_avg_filt.mrc'))
-            volume.setSamplingRate(self.inputParticles.get().getSamplingRate())
-            self._defineOutputs(outputVolume=volume)
-            self._defineTransformRelation(self.inputParticles.get(), volume)
+        volume=Volume()
+        volume.setFileName(self._getExtraPath('output_iter%s_avg_filt.mrc'%(iter+1)))
+        volume.setSamplingRate(self.inputParticles.get().getSamplingRate())
+        self._defineOutputs(outputVolume=volume)
+        self._defineTransformRelation(self.inputParticles.get(), volume)
         
     
     #--------------------------- INFO functions --------------------------------------------
@@ -289,20 +297,12 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
     
     def _summary(self):
         summary = []
-        summary.append("Symmetry: %s" % self.symmetryGroup.get()) 
-        # if self.createVolume:
-        #     summary.append("Resolution: %s" % self.resolutionHalf) 
+        summary.append("Symmetry: %s" % self.symmetryGroup.get())  
         return summary
     
 
     #--------------------------- UTILS functions --------------------------------------------
-    # def getTensorflowActivation(self):
-    #     return "conda activate xmipp_pyTorch"
-    #
-    # def getProgram(self, program):
-    #     cmd = '%s %s && ' % (xmipp3.Plugin.getCondaActivationCmd(), self.getTensorflowActivation())
-    #     return cmd + ' %(program)s ' % locals()
-    #
+
     # def _updateLocation(self, item, row):
     #     index, filename = xmippToLocation(row.getValue(md.MDL_IMAGE))
     #     item.setLocation(index, filename)
@@ -310,18 +310,18 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
     def _reconstructHalf(self, input, output):
         gpuList = self.getGpuList()
         program = 'xmipp_cuda_reconstruct_fourier'    
-        args = '-i %s -o %s --sym %s  --max_resolution 0.5  --sampling %s --thr %s --device 0 -gpusPerNode 1 -threadsPerGPU 4' %\
+        args = '-i %s -o %s --sym %s  --max_resolution 0.5  --sampling %s --thr %s --device 0 -gpusPerNode 1 -threadsPerGPU 4 -v 0' %\
         (input, output, self.symmetryGroup.get(), self.sampling, self.numberOfMpi.get()) 
         self.runJob(program, args, numberOfMpi=self.numberOfMpi.get())
         
     def _reconstructAvg(self, half1, half2, output):
-        args = ' -i %s --plus %s -o %s' %(half1, half2, output)
+        args = ' -i %s --plus %s -o %s -v 0' %(half1, half2, output)
         self.runJob('xmipp_image_operate', args, numberOfMpi=1)
         args = ' -i %s --mult 0.5' %output
         self.runJob('xmipp_image_operate', args, numberOfMpi=1)
         
     def _computeFSC(self, input, ref):
-        args = ' -i %s --ref %s --sampling_rate %s -o %s' %(input, ref, self.sampling, self._getExtraPath('fsc.xmd'))
+        args = ' -i %s --ref %s --sampling_rate %s -o %s -v 0' %(input, ref, self.sampling, self._getExtraPath('fsc.xmd'))
         self.runJob('xmipp_resolution_fsc', args, numberOfMpi=1)
         
     def _computeResolution(self, mdFsc, threshold):
@@ -336,7 +336,7 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         return resolution
     
     def _filterVolume(self, input, output, resolution):
-        args = ' -i %s -o %s --fourier low_pass %s --sampling %s '%(input, output, resolution, self.sampling)
+        args = ' -i %s -o %s --fourier low_pass %s --sampling %s -v 0'%(input, output, resolution, self.sampling)
         self.runJob('xmipp_transform_filter', args, numberOfMpi=1)
         
         
