@@ -41,7 +41,7 @@ from .protocols import (
     XmippProtFilterParticles, XmippProtFilterVolumes, XmippProtMaskParticles,
     XmippProtMaskVolumes, XmippProtAlignVolume, XmippProtCL2D,
     XmippProtHelicalParameters, XmippProtConsensusPicking, XmippProtMonoRes,
-    XmippProtReconstructHighRes, XmippProtExtractUnit,
+    XmippProtReconstructHighRes, XmippProtReconstructGlobalPca, XmippProtExtractUnit,
     XmippProtShiftParticles, XmippProtVolumeDeformZernike3D, XmippProtStructureMapZernike3D,
     XmippProtSubtractProjection, XmippProtBoostParticles)
 
@@ -198,6 +198,7 @@ class XmippParticleMaskRadiusWizard(ParticleMaskRadiusWizard):
     _targets = [(XmippProtMaskParticles, ['radius']),
                 (XmippProtPreprocessParticles, ['backRadius']),
                 (XmippProtReconstructHighRes, ['particleRadius']),
+                (XmippProtReconstructGlobalPca, ['particleRadius']),
                 (XmippProtSubtractProjection, ['cirmaskrad']),
                 (XmippProtBoostParticles, ['cirmaskrad'])]
 

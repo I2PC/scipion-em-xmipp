@@ -57,11 +57,10 @@ def updateEnviron(gpuNum):
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpuNum)
 
 
-class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
+class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
     """This is a 3D global refinement protocol"""
     _label = 'alignPca'
     _lastUpdateVersion = VERSION_2_0
-    # _conda_env = 'flexutils-tensorflow'
     _conda_env = 'xmipp_pyTorch'
 
     #Mode 
@@ -91,13 +90,21 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('inputVolume', PointerParam, label="Initial volumes", important=True,
                       pointerClass='Volume', allowsNull=True,
                       help='Select a initial volume . ')
+        form.addParam('scale', BooleanParam, default=False,
+                      label='scale leveling?',
+                      help='If you set to *Yes*, the intensity level of the reference particles'
+                        ' are leveled to the intensity levels of the experimental particles.'
+                        ' If the initial volume was reconstructed  with XMIPP, this step is not necessary.')
+        form.addParam('particleRadius', IntParam, default=-1,
+                     label='Radius of particle (px)', condition='scale',
+                     help='This is the radius (in pixels) of the spherical mask covering the particle in the input images')
         form.addParam('mode', EnumParam, choices=['refine', 'align'],
-              label="Refine or align?", default=self.REFINE,
-              display=EnumParam.DISPLAY_HLIST, 
-              help='This option allows for either global refinement from an initial volume '
+                      label="Refine or align?", default=self.REFINE,
+                      display=EnumParam.DISPLAY_HLIST, 
+                      help='This option allows for either global refinement from an initial volume '
                     ' or just alignment of particles. If the reference volume is at a high resolution, '
                     ' it is advisable to only align the particles and reconstruct at the end of the iterative process.') 
-        form.addParam('corectCtf', BooleanParam, default=True,
+        form.addParam('correctCtf', BooleanParam, default=True,
                       label='Correct CTF?',
                       help='If you set to *Yes*, the CTF of the experimental particles will be corrected')
         form.addParam('symmetryGroup', StringParam, default="c1",
@@ -145,10 +152,11 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         
         updateEnviron(self.gpuList.get()) 
         
-        if self.corectCtf:
-            self.imgsFnXmd = self._getExtraPath('images.xmd')
-        else:
-            self.imgsFnXmd = self._getExtraPath('images_original.xmd')
+        # self.imgsOrigXmd = self._getExtraPath('images_original.xmd')
+        # if self.correctCtf:
+        self.imgsFnXmd = self._getExtraPath('images.xmd')
+        # else:
+        #     self.imgsFnXmd = self._getExtraPath('images_original.xmd')
         self.imgsFn = self._getExtraPath('images.mrcs')
         self.refsFn = self._getExtraPath('references.mrcs')
         self.refsFnXmd = self._getExtraPath('references.xmd')
@@ -157,6 +165,13 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         # self.MaxShift = int(size * self.MaxShift.get() / 100)
         self.MaxShift = self.MaxShift.get()
         refVol = self.inputVolume.get().getFileName()
+        
+        if self.scale:
+            if self.particleRadius.get() == -1:
+                radius = size/2
+            else:
+                radius = self.particleRadius.get()
+
         
         #maximum number of iteration = 4
         if self.numberOfIterations.get() <= 4:
@@ -167,6 +182,13 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
 
         self._insertFunctionStep('convertInputStep', self.inputParticles.get(), self.imgsFnXmd)
         self._insertFunctionStep("createGallery", self.angleGallery.get(), refVol)
+        
+        if self.scale:
+            self._insertFunctionStep("scaleLeveling", self.imgsFn, self.refsFn, self.refsFn, radius)
+            
+        if self.correctCtf:
+            self._insertFunctionStep('correctCTF', self.imgsFnXmd, self.imgsFn, self.sampling)
+
         self._insertFunctionStep("pcaTraining", self.resolution.get())
         
         for iter in range(self.iterations):
@@ -198,21 +220,34 @@ class XmippProtAlignGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
 
     #--------------------------- STEPS functions ---------------------------------------------------        
     def convertInputStep(self, inputFn, outputFn):
-        writeSetOfParticles(inputFn, outputFn)  
-
-        if self.corectCtf:  
-            args = ' -i  %s -o %s --sampling_rate %s '%(self.imgsFnXmd, self.imgsFn, self.sampling)
-            self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get()) 
-        else:
-            args = ' -i  %s -o %s '%(self.imgsFnXmd, self.imgsFn)
-            self.runJob("xmipp_image_convert",args, numberOfMpi=1)           
+        writeSetOfParticles(inputFn, outputFn)
+        
+        args = ' -i  %s -o %s '%(outputFn, self.imgsFn)
+        self.runJob("xmipp_image_convert",args, numberOfMpi=1) 
+        
+        # if self.correctCtf:  
+        #     args = ' -i  %s -o %s --sampling_rate %s '%(self.imgsFnXmd, self.imgsFn, self.sampling)
+        #     self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get()) 
+        # else:
+        #     args = ' -i  %s -o %s '%(self.imgsFnXmd, self.imgsFn)
+        #     self.runJob("xmipp_image_convert",args, numberOfMpi=1) 
+        
+    def correctCTF(self, input, output, sampling):  
+        args = ' -i  %s -o %s --sampling_rate %s '%(input, output, sampling)
+        self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get())        
     
     def createGallery(self, angle, refVol):
         args = ' -i  %s --sym %s --sampling_rate %s  -o %s -v 0'% \
                 (refVol, self.symmetryGroup.get(), angle, self.refsFn)
         self.runJob("xmipp_angular_project_library", args)
         moveFile( self._getExtraPath('references.doc'), self.refsFnXmd)
-    
+        
+    def scaleLeveling(self, expIm, refIm, output, radius):
+        args = ' -i %s -r %s -o %s -rad %s' %(expIm, refIm, output, radius)
+        
+        env = self.getCondaEnv()
+        env['LD_LIBRARY_PATH'] = ''
+        self.runJob("xmipp_global_align_preprocess", args, numberOfMpi=1, env=env) 
     
     def pcaTraining(self, resolutionTrain):
         args = ' -i %s -n 1 -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA'% \
