@@ -203,10 +203,11 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
                 outputXmd = self._getExtraPath('align_iter%s.xmd'%(iter+1))
                 applyShift = self.applyShift 
             if iter > 0:
-               angle, MaxAngle, shift, maxShift = 4/iter, 180, 2/iter, 6/iter 
-               inputXmd = self._getExtraPath('align_iter%s.xmd'%iter)
-               outputXmd = self._getExtraPath('align_iter%s.xmd'%(iter+1))
-               applyShift = True
+                denom = pow(2,iter-1)
+                angle, MaxAngle, shift, maxShift = 4/denom, 180, 2/denom, 6/denom 
+                inputXmd = self._getExtraPath('align_iter%s.xmd'%iter)
+                outputXmd = self._getExtraPath('align_iter%s.xmd'%(iter+1))
+                applyShift = True
            
             self._insertFunctionStep("globalAlign", inputXmd, outputXmd, angle, MaxAngle, shift, maxShift, applyShift)   
         
