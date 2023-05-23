@@ -41,6 +41,7 @@ from pwem.objects import SetOfVolumes, Volume
 from pwem.emlib.metadata import getFirstRow, getSize
 from pyworkflow.object import Float
 from pyworkflow.utils.utils import getFloatListFromValues
+from pyworkflow.utils import getExt
 from pwem.emlib.image import ImageHandler
 import pwem.emlib.metadata as md
 import xmipp3
@@ -90,8 +91,8 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('inputVolume', PointerParam, label="Initial volumes", important=True,
                       pointerClass='Volume', allowsNull=True,
                       help='Select a initial volume . ')
-        form.addParam('scale', BooleanParam, default=False,
-                      label='scale leveling?',
+        form.addParam('scale', BooleanParam, default=True,
+                      label='adjust gray scale?',
                       help='If you set to *Yes*, the intensity level of the reference particles'
                         ' are leveled to the intensity levels of the experimental particles.'
                         ' If the initial volume was reconstructed  with XMIPP, this step is not necessary.')
@@ -104,12 +105,12 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
                       help='This option allows for either global refinement from an initial volume '
                     ' or just alignment of particles. If the reference volume is at a high resolution, '
                     ' it is advisable to only align the particles and reconstruct at the end of the iterative process.') 
-        form.addParam('correctCtf', BooleanParam, default=True,
-                      label='Correct CTF?',
-                      help='If you set to *Yes*, the CTF of the experimental particles will be corrected')
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group',
                       help='If no symmetry is present, give c1')
+        form.addParam('correctCtf', BooleanParam, default=True, expertLevel=LEVEL_ADVANCED,
+              label='Correct CTF?',
+              help='If you set to *Yes*, the CTF of the experimental particles will be corrected')
         # form.addParam('createVolume', BooleanParam, default=False, expertLevel=LEVEL_ADVANCED,
         #       label='Create output volume?',
         #       help='If you set to *Yes*, the final volume is created')
@@ -133,7 +134,9 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('applyShift', BooleanParam, default=False,
                       label='Consider previous alignment?',
                       help='If you set to *Yes*, the particles will be centered acording to previous alignment')
-        form.addParam('numberOfIterations', IntParam, default=1, label='Number of iterations')
+        form.addParam('numberOfIterations', IntParam, default=3, label='Number of iterations',
+                      help='Number of iterations for refinement. Three iterations are usually sufficient.'
+                      ' Do not use more than four iterations.')
         form.addParam('angle' ,IntParam, label="initial angular sampling", default=8, 
                       help='Angular sampling for particles alignment')
         form.addParam('shift' ,IntParam, label="initial shift sampling", default=4, 
@@ -165,6 +168,9 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         # self.MaxShift = int(size * self.MaxShift.get() / 100)
         self.MaxShift = self.MaxShift.get()
         refVol = self.inputVolume.get().getFileName()
+        extVol = getExt(refVol)
+        if (extVol == '.mrc') or (extVol == '.map'):
+           refVol = refVol + ':mrc'  
         
         if self.scale:
             if self.particleRadius.get() == -1:
@@ -195,7 +201,7 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
             
             if iter > 0 and self.mode == self.REFINE:
                 refVol = self._getExtraPath('output_iter%s_avg_filt.mrc'%iter)              
-                self._insertFunctionStep("createGallery", 4, refVol)
+                self._insertFunctionStep("createGallery", 4, refVol+ ':mrc')
 
             if iter == 0:
                 angle, MaxAngle, shift, maxShift = self.angle.get(), 180, self.shift.get(), self.MaxShift
@@ -277,13 +283,16 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         self._reconstructHalf(self._getExtraPath('split000001.xmd'), self._getExtraPath('split000001_vol.mrc'))
         self._reconstructHalf(self._getExtraPath('split000002.xmd'), self._getExtraPath('split000002_vol.mrc'))
         # self._reconstruct(self._getExtraPath('align_iter%s.xmd'%(iter+1)), self._getExtraPath('output_vol.mrc'))
-        self._reconstructAvg(self._getExtraPath('split000001_vol.mrc'), self._getExtraPath('split000002_vol.mrc'), self._getExtraPath('output_avg.mrc'))
-        self._computeFSC(self._getExtraPath('split000001_vol.mrc'), self._getExtraPath('split000002_vol.mrc'))
+        half1 = self._getExtraPath('split000001_vol.mrc')
+        half2 = self._getExtraPath('split000002_vol.mrc')
+        avg = self._getExtraPath('output_avg.mrc')
+        self._reconstructAvg(half1+':mrc', half2+':mrc', avg+':mrc')
+        self._computeFSC(half1+':mrc', half2+':mrc')
         mdFsc =  emlib.MetaData(self._getExtraPath('fsc.xmd'))
         thr = 0.143
         self.resolutionHalf = self._computeResolution(mdFsc, thr)
         print('resolution = %s' %self.resolutionHalf)
-        self._filterVolume(self._getExtraPath('output_avg.mrc'), self._getExtraPath('output_iter%s_avg_filt.mrc'%(iter+1)), self.resolutionHalf)
+        self._filterVolume(avg+':mrc', self._getExtraPath('output_iter%s_avg_filt.mrc'%(iter+1)), self.resolutionHalf)
         
         #If required, repeat training
         if iter < self.iterations-1: #and self.resolutionHalf > 10:
