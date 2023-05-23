@@ -200,8 +200,11 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         for iter in range(self.iterations):
             
             if iter > 0 and self.mode == self.REFINE:
-                refVol = self._getExtraPath('output_iter%s_avg_filt.mrc'%iter)              
-                self._insertFunctionStep("createGallery", 4, refVol+ ':mrc')
+                refVol = self._getExtraPath('output_iter%s_avg_filt.mrc'%iter) 
+                samp_angle = 4
+                if samp_angle >  self.angleGallery.get():
+                      samp_angle = self.angleGallery.get()          
+                self._insertFunctionStep("createGallery", samp_angle, refVol+ ':mrc')
 
             if iter == 0:
                 angle, MaxAngle, shift, maxShift = self.angle.get(), 180, self.shift.get(), self.MaxShift
