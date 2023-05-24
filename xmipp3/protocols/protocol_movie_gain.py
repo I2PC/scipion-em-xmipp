@@ -409,7 +409,7 @@ class XmippProtMovieGain(ProtProcessMovies):
                     best_R = R
                     # T = np.asarray([[1, 0, np.asscalar(corLoc[1])], [0, 1, np.asscalar(corLoc[0])], [0, 0, 1]])
                     T = np.asarray([[1, 0, corLoc[1].item()],
-                                    [0, 1, corLoc[0].item],
+                                    [0, 1, corLoc[0].item()],
                                     [0, 0, 1]])
                 if abs(maxVal) > abs(best_cor):
                     corLoc = translation_correction(maxLoc, est_gain_array.shape)
