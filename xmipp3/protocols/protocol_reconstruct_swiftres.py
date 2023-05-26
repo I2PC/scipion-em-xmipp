@@ -21,7 +21,7 @@
 # ***************************************************************************/
 
 from pwem.protocols import ProtRefine3D
-from pwem.objects import Volume, FSC, SetOfVolumes, Class3D, SetOfParticles
+from pwem.objects import Volume, FSC, SetOfVolumes, Class3D, SetOfParticles, SetOfClasses3D, Particle
 from pwem.convert import transformations
 from pwem import emlib
 
@@ -34,7 +34,7 @@ from pyworkflow.utils.path import (cleanPath, makePath, copyFile, moveFile,
                                    createLink, cleanPattern)
 
 import xmipp3
-from xmipp3.convert import writeSetOfParticles, readSetOfParticles
+from xmipp3.convert import writeSetOfParticles, rowToParticle
 
 from typing import Iterable, Sequence, Optional
 import math
@@ -46,8 +46,15 @@ import collections
 import os
 
 class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
+    OUTPUT_CLASSES_NAME = 'classes'
+    OUTPUT_VOLUMES_NAME = 'volumes'
+    
     _label = 'swiftres'
     _conda_env = 'xmipp_swiftalign'
+    _possibleOutputs = {
+        OUTPUT_CLASSES_NAME: SetOfClasses3D,
+        OUTPUT_VOLUMES_NAME: SetOfVolumes
+    }
         
     def __init__(self, **kwargs):
         ProtRefine3D.__init__(self, **kwargs)
@@ -309,7 +316,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
         imageSize = self._getImageSize()
         frequency = self._getSamplingRate() / resolution
+        #maxPsi = self._getIterationMaxPsi(iteration) * math.pow(2, -local)
         maxPsi = self._getIterationMaxPsi(iteration)
+        #maxShift = self._getIterationMaxShift(iteration) * math.pow(2, -local)
         maxShift = self._getIterationMaxShift(iteration)
         shiftStep = self._computeShiftStep(frequency) if self.useAutomaticStep else float(self.shiftStep)
         angleStep = self._computeAngleStep(frequency, imageSize) if self.useAutomaticStep else float(self.angleStep)
@@ -480,7 +489,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         if self.useGpu:
             args += ['--device', 'cuda:0'] # TODO select
         if local > 0:
-            args += ['--local_shift', '--local_psi']
+            args += ['--local']
         if self.considerInputCtf:
             args += ['--ctf', self._getCtfGroupInfoMdFilename(iteration)]
         
@@ -1009,9 +1018,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _computeAngleStep(self, maxFrequency: float, size: int) -> float:
         # At the alignment resolution limit, determine the 
         # angle between to neighboring Fourier coefficients
-        c = maxFrequency*size  # Cos: radius
-        s = 1.0 # Sin: 1 coefficient
-        angle = math.atan2(s, c)
+        s = 1.0 / (maxFrequency*size)
+        angle = math.asin(s)
         
         # The angular error is at most half of the sampling
         # Therefore use the double angular sampling
@@ -1033,8 +1041,6 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         return float(self.initialMaxShift)
     
     def _createOutputClasses3D(self, volumes: SetOfVolumes):
-        particles = self._createSetOfParticles()
-
         EXTRA_LABELS = [
             #emlib.MDL_COST,
             #emlib.MDL_WEIGHT,
@@ -1044,25 +1050,28 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             #emlib.MDL_IMED
         ]
         
-        # Fill
-        readSetOfParticles(
-            self._getOutputParticlesMdFilename(), 
-            particles,
-            extraLabels=EXTRA_LABELS
-        )
-        particles.setSamplingRate(self._getSamplingRate())
-        self._insertChild('outputParticles', particles)
-        
+        def updateItem(item: Particle, row: emlib.metadata.Row):
+            if row is not None:
+                particle: Particle = rowToParticle(row, extraLabels=EXTRA_LABELS)
+                item.copy(particle)
+            else:
+                item._appendItem = False
+                
         def updateClass(cls: Class3D):
             clsId = cls.getObjId()
             representative = volumes[clsId]
             cls.setRepresentative(representative)
             
-        classes3d = self._createSetOfClasses3D(particles)
-        classes3d.classifyItems(updateClassCallback=updateClass)
+        particlesMd = emlib.MetaData(self._getOutputParticlesMdFilename())
+        classes3d = self._createSetOfClasses3D(self.inputParticles)
+        classes3d.classifyItems(
+            updateItemCallback=updateItem,
+            updateClassCallback=updateClass,
+            itemDataIterator=itertools.chain(emlib.metadata.iterRows(particlesMd), itertools.repeat(None))
+        )
         
         # Define the output
-        self._defineOutputs(outputClasses=classes3d)
+        self._defineOutputs(**{self.OUTPUT_CLASSES_NAME: classes3d})
         self._defineSourceRelation(self.inputParticles, classes3d)
         self._defineSourceRelation(self.inputVolumes, classes3d)
         
