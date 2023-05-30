@@ -96,6 +96,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
 
         form.addSection(label='Global refinement')
         form.addParam('numberOfIterations', IntParam, label='Number of iterations', default=3)
+        form.addParam('numberOfLocalIterations', IntParam, label='Number of local iterations', default=4)
         form.addParam('numberOfAlignmentRepetitions', IntParam, label='Number of repetitions', default=2)
         form.addParam('maximumResolution', FloatParam, label="Maximum alignment resolution (A)", default=8.0,
                       help='Image comparison resolution limit of the refinement')
@@ -165,17 +166,18 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             lastIds = [convertInputStepId]
             
         for i in range(self._getIterationCount()):
-            lastIds = self._insertIterationSteps(i, 0, prerequisites=lastIds)
+            lastIds = self._insertIterationSteps(i, prerequisites=lastIds)
         
         self._insertFunctionStep('createOutputStep', prerequisites=lastIds)
  
-    def _insertIterationSteps(self, iteration: int, local: int, prerequisites):
-        setupIterationStepId = self._insertFunctionStep('setupIterationStep', iteration, local, prerequisites=prerequisites)
+    def _insertIterationSteps(self, iteration: int, prerequisites):
+        setupIterationStepId = self._insertFunctionStep('setupIterationStep', iteration, prerequisites=prerequisites)
         ctfGroupStepIds = []
         if self.considerInputCtf:
             ctfGroupStepIds.append(self._insertFunctionStep('ctfGroupStep', iteration, prerequisites=[setupIterationStepId]))
+            
         projectIds = self._insertProjectSteps(iteration, prerequisites=[setupIterationStepId])
-        alignIds = self._insertAlignmentSteps(iteration, local, prerequisites=projectIds + ctfGroupStepIds)
+        alignIds = self._insertAlignmentSteps(iteration, prerequisites=projectIds + ctfGroupStepIds)
         compareAnglesStepId = self._insertFunctionStep('compareAnglesStep', iteration, prerequisites=alignIds)
 
         ids = []
@@ -203,13 +205,16 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
         return mergeStepIds
         
-    def _insertAlignmentSteps(self, iteration: int, local: int, prerequisites):
+    def _insertAlignmentSteps(self, iteration: int, prerequisites):
         ensembleTrainingSetStepId = self._insertFunctionStep('ensembleTrainingSetStep', iteration, prerequisites=prerequisites)
         trainDatabaseStepId = self._insertFunctionStep('trainDatabaseStep', iteration, prerequisites=[ensembleTrainingSetStepId])
         
         alignStepIds = []
         for repetition in range(self._getAlignmentRepetitionCount()):
-            alignStepIds.append(self._insertFunctionStep('alignStep', iteration, repetition, local, prerequisites=[trainDatabaseStepId]))
+            alignStepId = trainDatabaseStepId
+            for local in range(self._getLocalIterationCount()):
+                alignStepId = self._insertFunctionStep('alignStep', iteration, repetition, local, prerequisites=[alignStepId])
+            alignStepIds.append(alignStepId)
             
         alignmentConsensusStepId = self._insertFunctionStep('alignmentConsensusStep', iteration, prerequisites=alignStepIds)
         intersectInputStepId = self._insertFunctionStep('intersectInputStep', iteration, prerequisites=[alignmentConsensusStepId])
@@ -278,7 +283,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         inputMd.setColumnValues(emlib.MDL_IMAGE1, wienerImageFns)
         inputMd.write(self._getInputParticleMdFilename())
 
-    def setupIterationStep(self, iteration: int, local: int):
+    def setupIterationStep(self, iteration: int):
         makePath(self._getIterationPath(iteration))
         
         for cls in range(self._getClassCount()):
@@ -311,14 +316,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             
             resolution = float(self.initialResolution)
         
-        if local > 0:
-            raise NotImplementedError('Local searches are not implemented')
-        
         imageSize = self._getImageSize()
         frequency = self._getSamplingRate() / resolution
-        #maxPsi = self._getIterationMaxPsi(iteration) * math.pow(2, -local)
         maxPsi = self._getIterationMaxPsi(iteration)
-        #maxShift = self._getIterationMaxShift(iteration) * math.pow(2, -local)
         maxShift = self._getIterationMaxShift(iteration)
         shiftStep = self._computeShiftStep(frequency) if self.useAutomaticStep else float(self.shiftStep)
         angleStep = self._computeAngleStep(frequency, imageSize) if self.useAutomaticStep else float(self.angleStep)
@@ -434,13 +434,13 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         maxPsi = md.getValue(emlib.MDL_ANGLE_PSI, 1)
         maxShiftPx = md.getValue(emlib.MDL_SHIFT_X, 1)
         maxShift = maxShiftPx / imageSize
-
+    
         args = []
         args += ['-i', self._getTrainingMdFilename(iteration)]
         args += ['-o', self._getTrainingIndexFilename(iteration)]
         args += ['--recipe', recipe]
         #args += ['--weights', self._getWeightsFilename(iteration)]
-        args += ['--max_shift', maxShift]
+        args += ['--max_shift', maxShift] #FIXME fails with != 190
         args += ['--max_psi', maxPsi]
         args += ['--max_frequency', maxFrequency]
         args += ['--method', 'fourier']
@@ -468,10 +468,19 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         maxShift = maxShiftPx / imageSize
         nShift = round((2*maxShiftPx) / md.getValue(emlib.MDL_SHIFT_DIFF, 1)) + 1
         nRotations = round(360 / md.getValue(emlib.MDL_ANGLE_DIFF, 1))
-
+        
+        if local > 0:
+            inputMdFilename = self._getAlignmentRepetitionMdFilename(iteration, repetition) 
+        else: 
+            inputMdFilename = self._getIterationInputParticleMdFilename(iteration)
+        
+        localFactor = math.pow(2, -local)
+        maxPsi *= localFactor
+        maxShift /= localFactor
+    
         # Perform the alignment
         args = []
-        args += ['-i', self._getIterationInputParticleMdFilename(iteration)]
+        args += ['-i', inputMdFilename]
         args += ['-o', self._getAlignmentRepetitionMdFilename(iteration, repetition)]
         args += ['-r', self._getGalleryMdFilename(iteration, repetition)]
         args += ['--index', self._getTrainingIndexFilename(iteration)]
@@ -749,6 +758,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     def _getAlignmentRepetitionCount(self) -> int:
         return int(self.numberOfAlignmentRepetitions)
+        
+    def _getLocalIterationCount(self) -> int:
+        return int(self.numberOfLocalIterations)
         
     def _getClassCount(self) -> int:
         return len(self.inputVolumes)
