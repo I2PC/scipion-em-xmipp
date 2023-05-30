@@ -476,7 +476,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
         localFactor = math.pow(2, -local)
         maxPsi *= localFactor
-        maxShift /= localFactor
+        maxShift *= localFactor
     
         # Perform the alignment
         args = []
