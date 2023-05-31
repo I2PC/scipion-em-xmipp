@@ -41,6 +41,8 @@ from pyworkflow.protocol.params import (LabelParam, IntParam, FloatParam,
                                         StringParam, EnumParam,
                                         NumericRangeParam, BooleanParam)
 import pyworkflow.utils as pwutils
+from pwem import emlib
+
 from xmipp3.convert import *
 from xmipp3.viewers.plotter import XmippPlotter
 from ..protocols.protocol_projmatch import XmippProtProjMatch
