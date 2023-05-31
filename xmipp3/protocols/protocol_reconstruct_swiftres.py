@@ -495,6 +495,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--batch', self.batchSize]
         args += ['--max_size', self.databaseMaximumSize]
         args += ['-k', self.numberOfMatches]
+        args += ['--reference_labels', 'angleRot', 'angleTilt', 'ref3d', 'imageRef']
         if self.useGpu:
             args += ['--device', 'cuda:0'] # TODO select
         if local > 0:
