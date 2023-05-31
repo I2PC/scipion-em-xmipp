@@ -96,7 +96,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
 
         form.addSection(label='Global refinement')
         form.addParam('numberOfIterations', IntParam, label='Number of iterations', default=3)
-        form.addParam('numberOfLocalIterations', IntParam, label='Number of local iterations', default=4)
+        form.addParam('numberOfLocalIterations', IntParam, label='Number of local iterations', default=1)
         form.addParam('numberOfAlignmentRepetitions', IntParam, label='Number of repetitions', default=2)
         form.addParam('maximumResolution', FloatParam, label="Maximum alignment resolution (A)", default=8.0,
                       help='Image comparison resolution limit of the refinement')
