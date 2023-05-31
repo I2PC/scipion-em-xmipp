@@ -70,39 +70,61 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
     def compareDefocus(self):
         """compare with median, mad and correlation matrix the local defocus value for each pixel estimated by
         different programs (Xmipp, Relion, gCTF, ...)"""
-        allParticlesDef = {}
+        allParticlesDefU = {}
+        allParticlesDefV = {}
         for defsetP in self.inputSets:
             defset = defsetP.get()
             for particle in defset:
                 pIDs = []
-                pDefAs = []
+                pDefUs = []
+                pDefVs = []
                 pIDs.append(particle.getObjId())
-                defU = particle.getCTF().getDefocusU()
-                defV = particle.getCTF().getDefocusV()
-                pDefAs.append((defU+defV)/2)
-                for pId, pDefA in zip(pIDs,pDefAs):
-                    if not pId in allParticlesDef.keys():
-                        allParticlesDef[pId]=[]
-                    allParticlesDef[pId].append(pDefA)
-        self.defMatrix = np.full(shape=(len(allParticlesDef.keys()),len(self.inputSets)),fill_value=np.NaN)
+                pDefUs.append(particle.getCTF().getDefocusU())
+                pDefVs.append(particle.getCTF().getDefocusV())
+                for pId, pDefU, pDefV in zip(pIDs, pDefUs, pDefVs):
+                    if not pId in allParticlesDefU.keys():
+                        allParticlesDefU[pId]=[]
+                        allParticlesDefV[pId] = []
+                    allParticlesDefU[pId].append(pDefU)
+                    allParticlesDefV[pId].append(pDefV)
+        self.defMatrixU = np.full(shape=(len(allParticlesDefU.keys()),len(self.inputSets)),fill_value=np.NaN)
+        self.defMatrixV = np.full(shape=(len(allParticlesDefV.keys()),len(self.inputSets)),fill_value=np.NaN)
         i=0
         self.pMatrixIdx={}
-        for pId,pdefi in allParticlesDef.items():
-            self.pMatrixIdx[pId]=i
-            for j in enumerate(pdefi):
-                self.defMatrix[i,j[0]]=j[1]
+        for pIdU, pdefiU in allParticlesDefU.items():
+            self.pMatrixIdx[pIdU]=i
+            for j in enumerate(pdefiU):
+                self.defMatrixU[i,j[0]]=j[1]
             i+=1
+        l=0
+        for pIdV, pdefiV in allParticlesDefV.items():
+            self.pMatrixIdx[pIdV] = l
+            for k in enumerate(pdefiV):
+                self.defMatrixV[l, k[0]] = k[1]
+            l += 1
 
-        self.median = np.nanmedian(self.defMatrix, axis=1)
-        self.mad = np.empty_like(self.median)
-        for k in enumerate(self.median):
-            self.mad[k[0]] = np.nanmedian(np.abs(self.defMatrix[k[0],:] - self.median[k[0]]))
-        self.defMatrix = np.hstack((self.defMatrix, self.median.reshape(len(self.median),1)))
-        self.corrMatrix = np.zeros((self.defMatrix.shape[0],self.defMatrix.shape[1]))
-        defMatrixInvalid = np.ma.masked_invalid(self.defMatrix)
-        self.corrMatrix = np.ma.corrcoef(defMatrixInvalid,rowvar=False)
-        np.savetxt(self._getExtraPath("defocusMatrix.txt"),self.defMatrix)
-        np.savetxt(self._getExtraPath("correlationMatrix.txt"),self.corrMatrix)
+        self.medianU = np.nanmedian(self.defMatrixU, axis=1)
+        self.medianV = np.nanmedian(self.defMatrixV, axis=1)
+        self.madU = np.empty_like(self.medianU)
+        self.madV = np.empty_like(self.medianV)
+        for l in enumerate(self.medianU):
+            self.madU[l[0]] = np.nanmedian(np.abs(self.defMatrixU[l[0],:] - self.medianU[l[0]]))
+        for m in enumerate(self.medianV):
+            self.madV[m[0]] = np.nanmedian(np.abs(self.defMatrixV[m[0], :] - self.medianV[m[0]]))
+
+        self.defMatrixU = np.hstack((self.defMatrixU, self.medianU.reshape(len(self.medianU),1)))
+        self.corrMatrixU = np.zeros((self.defMatrixU.shape[0],self.defMatrixU.shape[1]))
+        defMatrixInvalidU = np.ma.masked_invalid(self.defMatrixU)
+        self.corrMatrixU = np.ma.corrcoef(defMatrixInvalidU,rowvar=False)
+        np.savetxt(self._getExtraPath("defocusMatrixU.txt"),self.defMatrixU)
+        np.savetxt(self._getExtraPath("correlationMatrixU.txt"),self.corrMatrixU)
+
+        self.defMatrixV = np.hstack((self.defMatrixV, self.medianV.reshape(len(self.medianV),1)))
+        self.corrMatrixV = np.zeros((self.defMatrixV.shape[0],self.defMatrixV.shape[1]))
+        defMatrixInvalidV = np.ma.masked_invalid(self.defMatrixV)
+        self.corrMatrixV = np.ma.corrcoef(defMatrixInvalidV,rowvar=False)
+        np.savetxt(self._getExtraPath("defocusMatrixV.txt"),self.defMatrixV)
+        np.savetxt(self._getExtraPath("correlationMatrixV.txt"),self.corrMatrixV)
 
     def createOutputStep(self):
         """create as output a setOfParticles with a consensus estimation of local defocus (median) and its median
@@ -118,11 +140,12 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
             if id in self.pMatrixIdx:
                 index = self.pMatrixIdx[id]
                 newPart = part.clone()
-                pMedian = Float(self.median[index])
-                pMad = Float(self.mad[index])
-                newPart._ctfModel._defocusU.set(pMedian)
-                newPart._ctfModel._defocusV.set(pMedian)
-                setXmippAttribute(newPart.getCTF(), emlib.MDL_CTF_DEFOCUS_RESIDUAL, pMad)
+                pMedianU = Float(self.medianU[index]) # consensus defocus U
+                pMedianV = Float(self.medianV[index]) # consensus defocus V
+                pMadU = Float(self.madU[index]) # residual consensus defocus U
+                newPart._ctfModel._defocusU.set(pMedianU)
+                newPart._ctfModel._defocusV.set(pMedianV)
+                setXmippAttribute(newPart.getCTF(), emlib.MDL_CTF_DEFOCUS_RESIDUAL, pMadU)
                 outputSet.append(newPart)
 
         self._defineOutputs(**{OUTPUTNAME:outputSet})
@@ -132,8 +155,8 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
     def _updateItem(self, particle, row):
         """update each particle in the set with the values computed"""
         pId = particle.getObjId()
-        setXmippAttribute(particle,emlib.MDL_CTF_DEFOCUSA,self.median[self.pMatrixIdx[pId]])
-        setXmippAttribute(particle,emlib.MDL_CTF_DEFOCUS_RESIDUAL,self.mad[self.pMatrixIdx[pId]])
+        setXmippAttribute(particle,emlib.MDL_CTF_DEFOCUSA,self.medianU[self.pMatrixIdx[pId]])
+        setXmippAttribute(particle,emlib.MDL_CTF_DEFOCUS_RESIDUAL,self.madU[self.pMatrixIdx[pId]])
 
     #--------------------------- INFO functions --------------------------------------------
     def _summary(self):
