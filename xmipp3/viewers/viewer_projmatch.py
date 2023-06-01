@@ -32,7 +32,7 @@ visualization program.
 
 from pyworkflow.protocol.executor import StepExecutor
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from pwem.viewers import (DataView, EmPlotter, showj, ChimeraClientView,
+from pwem.viewers import (DataView, EmPlotter, showj,
                           ChimeraView, ObjectView, ChimeraAngDist)
 import pwem.objects as emobj
 from pyworkflow.utils import createUniqueFileName, cleanPattern, cleanPath
@@ -41,7 +41,6 @@ from pyworkflow.protocol.params import (LabelParam, IntParam, FloatParam,
                                         StringParam, EnumParam,
                                         NumericRangeParam, BooleanParam)
 import pyworkflow.utils as pwutils
-from pwem import emlib
 
 from xmipp3.convert import *
 from xmipp3.viewers.plotter import XmippPlotter
@@ -325,8 +324,7 @@ Examples:
             view = ChimeraView(cmdFile)
         else:
             
-            #view = CommandView('xmipp_chimera_client --input "%s" --mode projector 256 &' % volumes[0])
-            view = ChimeraClientView(volumes[0], showProjection=True)
+            view = ChimeraView(volumes[0])
         
         return [view]
     
