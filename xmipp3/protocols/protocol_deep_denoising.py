@@ -45,6 +45,8 @@ from xmipp3.protocols import XmippProtCompareReprojections
 from xmipp3.protocols import XmippProtGenerateReprojections
 from xmipp3 import XmippProtocol
 
+from pyworkflow import BETA, UPDATED, NEW, PROD
+
 EXEC_MODES = ['Train & Predict', 'Predict']
 ITER_TRAIN = 0
 ITER_PREDICT = 1
@@ -71,6 +73,7 @@ class XmippProtDeepDenoising(XmippProtGenerateReprojections, XmippProtocol):
     _label ="deep denoising"
     _lastUpdateVersion = VERSION_2_0
     _conda_env = 'xmipp_DLTK_v0.3'
+    _devStatus = BETA
 
     def __init__(self, **args):
         XmippProtGenerateReprojections.__init__(self, **args)

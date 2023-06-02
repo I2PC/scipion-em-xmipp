@@ -189,7 +189,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                            'If *No*, only the primary metadata (plus consensus '
                            'scores) will be in the resulting CTF.')
 
-        form.addParallelSection(threads=1, mpi=1)
+        form.addParallelSection(threads=4, mpi=1)
 
 # --------------------------- INSERT steps functions -------------------------
     def _insertAllSteps(self):
@@ -658,10 +658,8 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
             if self.xmippCTF == INPUT1:
                 ctfX = ctf
-            elif self.xmippCTF == INPUT2:
-                ctfX = self.allCtf2.get(ctfId)
             else:
-                raise Exception("No xmipp ctf was found")
+                ctfX = self.allCtf2.get(ctfId)
 
 
             secondCondition = (

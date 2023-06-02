@@ -242,14 +242,6 @@ class XmippProtTiltAnalysis(ProtMicrographs):
             if outputStep and outputStep.isWaiting():
                 outputStep.setStatus(cons.STATUS_NEW)
 
-    def _closeOutputSet(self):
-        if self.hasAttribute('outputMicrographs'):
-            self.outputMicrographs.close()
-            self.outputMicrographs.setStreamState(Set.STREAM_CLOSED)
-        if self.hasAttribute('discardedMicrographs'):
-            self.discardedMicrographs.close()
-            self.discardedMicrographs.setStreamState(Set.STREAM_CLOSED)
-
     def _insertNewMicrographSteps(self, insertedDict, inputMics):
         """ Insert steps to process new micrographs (from streaming)
         Params:

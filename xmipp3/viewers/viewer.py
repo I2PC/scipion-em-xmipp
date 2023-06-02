@@ -41,7 +41,7 @@ from xmipp3.protocols import XmippProtExtractParticlesPairs
 from xmipp3.protocols import XmippProtKerdensom
 from xmipp3.protocols import XmippParticlePickingAutomatic
 from xmipp3.protocols import XmippProtParticlePickingPairs
-from xmipp3.protocols import XmippProtRotSpectra
+#from xmipp3.protocols import XmippProtRotSpectra
 from xmipp3.protocols import XmippProtScreenParticles
 from xmipp3.protocols import XmippProtCTFMicrographs
 from xmipp3.protocols import XmippProtValidateNonTilt
@@ -50,7 +50,6 @@ from xmipp3.protocols import XmippProtAngularGraphConsistency
 from xmipp3.protocols import XmippProtAssignmentTiltPair
 from xmipp3.protocols import XmippProtMovieGain
 from xmipp3.protocols import XmippProtDeepDenoising
-from xmipp3.protocols import XmippProtParticleBoxsize
 from .plotter import XmippPlotter
 from xmipp3.protocols import XmippProtTiltAnalysis
 from pwem.viewers.viewers_data import MicrographsView
@@ -70,7 +69,6 @@ class XmippViewer(DataViewer):
                 XmippProtExtractParticlesPairs,
                 XmippProtKerdensom,
                 XmippProtParticlePickingPairs,
-                XmippProtRotSpectra,
                 XmippProtScreenParticles,
                 XmippProtCTFMicrographs,
                 XmippProtValidateNonTilt,
@@ -79,7 +77,6 @@ class XmippViewer(DataViewer):
                 XmippProtAngularGraphConsistency,
                 XmippProtMovieGain,
                 XmippProtDeepDenoising,
-                XmippProtParticleBoxsize,
                 XmippProtTiltAnalysis
                 ]
 
@@ -187,15 +184,6 @@ class XmippViewer(DataViewer):
             #                                     ratio2Value=4.5)
             # self._views.append(MovieGainMonitorPlotter(movieGainMonitor))
 
-        elif issubclass(cls, XmippProtRotSpectra):
-            self._visualize(obj.outputClasses,
-                            viewParams={'columns': obj.SomXdim.get(),
-                                        RENDER: ' spectraPlot._filename average._filename',
-                                        ZOOM: 30,
-                                        VISIBLE: 'enabled id _size average._filename '
-                                                 'spectraPlot._filename',
-                                        'labels': 'id _size',
-                                        SORT_BY: 'id'})
 
         elif issubclass(cls, XmippProtKerdensom):
             self._visualize(obj.outputClasses, viewParams={'columns': obj.SomXdim.get(),
@@ -289,32 +277,6 @@ class XmippViewer(DataViewer):
             memory = showj.getJvmMaxMemory()
             launchSupervisedPickerGUI(micsfn, posDir, obj, mode='review',
                                       memory=memory, inTmpFolder=inTmpFolder)
-
-        elif issubclass(cls, XmippProtParticleBoxsize):
-            """ Launching a Coordinates viewer with only one coord in the center
-                with the estimated boxsize.
-            """
-            micSet = obj.inputMicrographs.get()
-
-            coordsFn = self._getExtraPath(micSet.getName()+'_coords_to_view.sqlite')
-            if not os.path.exists(coordsFn):
-                # Just creating the coords once
-                coordsSet = SetOfCoordinates(filename=coordsFn)
-                coordsSet.setBoxSize(obj.boxsize)
-                for mic in micSet:
-                    coord = Coordinate()
-                    coord.setMicrograph(mic)
-                    coord.setPosition(mic.getXDim()/2, mic.getYDim()/2)
-                    coordsSet.append(coord)
-                coordsSet.write()
-            else:
-                coordsSet = SetOfCoordinates(filename=coordsFn)
-                coordsSet.loadAllProperties()
-
-            coordsSet.setMicrographs(micSet)
-            coordsSet.setName(micSet.getName())
-            self._visualize(coordsSet)
-
          # We need this case to happens before the ProtParticlePicking one
         elif issubclass(cls, XmippProtAssignmentTiltPair):
             if obj.getOutputsSize() >= 1:

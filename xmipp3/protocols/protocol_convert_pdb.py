@@ -28,9 +28,11 @@
 # *
 # **************************************************************************
 
+import os
+
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as const
-from pyworkflow.utils import replaceBaseExt, removeExt, getExt
+from pyworkflow.utils import replaceBaseExt, removeExt, getExt, createLink
 
 from pwem.convert import cifToPdb, downloadPdb, headers
 from pwem.objects import Volume, Transform
@@ -73,13 +75,13 @@ class XmippProtConvertPdb(ProtInitialVolume):
                       label="Input volume ", condition='vol', allowsNull=True,
                       help='The origin and the final size of the output volume will be taken from this volume.')
         form.addParam('setSize', params.BooleanParam, label='Set final size?', default=False, condition='vol == False')
-        form.addParam('size_z', params.IntParam, condition='setSize', allowsNull=True,
+        form.addParam('size_z', params.IntParam, condition='setSize and not vol', allowsNull=True,
                       label="Final size (px) Z",
                       help='Final size in Z in pixels. If no value is provided, protocol will estimate it.')
-        form.addParam('size_y', params.IntParam, condition='setSize', allowsNull=True,
+        form.addParam('size_y', params.IntParam, condition='setSize and not vol', allowsNull=True,
                       label="Final size (px) Y",
                       help='Final size in Y in pixels. If no value is provided, protocol will estimate it.')
-        form.addParam('size_x', params.IntParam, condition='setSize', allowsNull=True,
+        form.addParam('size_x', params.IntParam, condition='setSize and not vol', allowsNull=True,
                       label="Final size (px) X",
                       help='Final size in X in pixels. If desired output size is x = y = z you can only fill this '
                            'field. If no value is provided, protocol will estimate it.')
@@ -87,6 +89,11 @@ class XmippProtConvertPdb(ProtInitialVolume):
                       expertLevel=const.LEVEL_ADVANCED, 
                       label="Center PDB",
                       help='Center PDB with the center of mass')
+        form.addParam('outPdb', params.BooleanParam, default=False, 
+                      expertLevel=const.LEVEL_ADVANCED, 
+                      label="Store centered PDB",
+                      help='Set to \'Yes\' if you want to save centered PDB. '
+                           'It will be stored in the output directory of this protocol')
     
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -114,12 +121,21 @@ class XmippProtConvertPdb(ProtInitialVolume):
             cifToPdb(pdbFn, pdbFn2)
             pdbFn = pdbFn2
 
+        if " " in pdbFn:
+            pdbFn_extra = self._getExtraPath(os.path.basename(pdbFn.replace(" ", "_")))
+        else:
+            pdbFn_extra = self._getExtraPath(os.path.basename(pdbFn))
+
+        createLink(pdbFn, pdbFn_extra)
+
         samplingR = self.sampling.get()
 
-        args = '-i %s --sampling %f -o %s' % (pdbFn, samplingR, outFile)
+        args = '-i %s --sampling %f -o %s' % (pdbFn_extra, samplingR, outFile)
         
         if self.centerPdb:
             args += ' --centerPDB'
+            if self.outPdb:
+                args += ' --oPDB'
 
         if self.vol:
             vol = self.volObj.get()
@@ -131,14 +147,14 @@ class XmippProtConvertPdb(ProtInitialVolume):
                                                           self.shifts[1]/samplingR,
                                                           self.shifts[2]/samplingR)
 
-        if self.setSize:
+        if self.setSize and not self.vol:
             args += ' --size'
 
-        if self.size_x.hasValue() and self.setSize:
-            args += ' %d' % self.size_x.get()
+            if self.size_x.hasValue():
+                args += ' %d' % self.size_x.get()
 
-        if self.size_y.hasValue() and self.size_z.hasValue() and self.setSize:
-            args += ' %d %d' % (self.size_y.get(), self.size_z.get())
+            if self.size_y.hasValue() and self.size_z.hasValue():
+                args += ' %d %d' % (self.size_y.get(), self.size_z.get())
 
         self.info("Input file: " + pdbFn)
         self.info("Output file: " + outFile)
@@ -199,4 +215,4 @@ class XmippProtConvertPdb(ProtInitialVolume):
             return self.pdbFile.get()
     
     def _getVolName(self):
-        return self._getExtraPath(replaceBaseExt(self._getPdbFileName(), "vol"))
+        return self._getExtraPath(replaceBaseExt(self._getPdbFileName().replace(" ", "_"), "vol"))

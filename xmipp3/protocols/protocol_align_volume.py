@@ -200,7 +200,9 @@ class XmippProtAlignVolume(ProtAlignVolume):
             fnOutVol = self._getExtraPath("vol%02d.mrc"%idx)
             outVol.setLocation(fnOutVol)
             outVol.setObjComment(vol.getObjComment())
-            #set transformation matrix             
+            outVol.setObjLabel(vol.getObjLabel())
+
+            #set transformation matrix
             fhInputTranMat = self._getExtraPath('transformation-matrix_vol%06d.txt'%idx)
             transMatFromFile = np.loadtxt(fhInputTranMat)
             transformationMat = np.reshape(transMatFromFile,(4,4))

@@ -36,6 +36,7 @@ from pwem.constants import ALIGN_PROJ
 from pwem.objects import Image, Volume
 from pwem.protocols import ProtAnalysis3D
 import pwem.emlib.metadata as md
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 from pwem import emlib
 from xmipp3.base import findRow, readInfoField, writeInfoField, isXmippCudaPresent
@@ -52,6 +53,7 @@ class XmippProtSolidAngles(ProtAnalysis3D):
 
     _label = 'solid angles'
     _lastUpdateVersion = VERSION_1_1
+    _devStatus = BETA
 
     def __init__(self, *args, **kwargs):
         ProtAnalysis3D.__init__(self, *args, **kwargs)

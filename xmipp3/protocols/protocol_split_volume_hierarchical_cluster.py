@@ -30,6 +30,8 @@ import os
 from shutil import copy
 
 import pyworkflow.protocol.params as params
+from pyworkflow import BETA, UPDATED, NEW, PROD
+
 from pyworkflow import VERSION_2_0
 from pyworkflow.utils.path import makePath, cleanPattern, moveFile, cleanPath
 from pwem.emlib.image import ImageHandler
@@ -55,6 +57,7 @@ class XmippProtSplitVolumeHierarchical(ProtAnalysis3D):
 
     _label = 'split volume hierarchical'
     _lastUpdateVersion = VERSION_2_0
+    _devStatus = BETA
 
     def __init__(self, *args, **kwargs):
         ProtAnalysis3D.__init__(self, *args, **kwargs)

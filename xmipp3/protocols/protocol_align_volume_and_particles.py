@@ -23,23 +23,20 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import enum
 
 import numpy as np
 import pyworkflow.protocol.params as params
-from pyworkflow import VERSION_2_0
-from pyworkflow.protocol import STEPS_PARALLEL
+from pwem.convert.headers import setMRCSamplingRate
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 
 from pwem.protocols import ProtAlignVolume
 from pwem.emlib.image import ImageHandler
-import pwem.emlib.metadata as md
-from pwem.objects import Transform, Volume
-from pwem.constants import ALIGN_PROJ
+from pwem.objects import Transform, Volume, SetOfParticles
+from pyworkflow.utils import weakImport
 
 from pyworkflow.utils.path import cleanPath
 
-from xmipp3.convert import (rowToAlignment, alignmentToRow, writeSetOfParticles,
-                            readSetOfParticles)
 from xmipp3.constants import SYM_URL
 
 ALIGN_MASK_CIRCULAR = 0
@@ -48,22 +45,34 @@ ALIGN_MASK_BINARY_FILE = 1
 ALIGN_GLOBAL = 0
 ALIGN_LOCAL = 1
 
+pointerClasses = [SetOfParticles]
+with weakImport("tomo"):
+    from tomo.objects import SetOfSubTomograms
+    pointerClasses.append(SetOfSubTomograms)
+
+class AlignVolPartOutputs(enum.Enum):
+    Volume = Volume
+    Particles = SetOfParticles
 
 class XmippProtAlignVolumeParticles(ProtAlignVolume):
     """ 
     Aligns a volume (inputVolume) using a Fast Fourier method
     with respect to a reference one (inputReference).
-     The obtained alignment parameters are used to align the set of particles
+     The obtained alignment parameters are used to align the set of particles or subtomograms
      (inputParticles) that generated the input volume.
      """
     _label = 'align volume and particles'
-    _lastUpdateVersion = VERSION_2_0
+    _possibleOutputs = AlignVolPartOutputs
     nVols = 0
     
     def __init__(self, **args):
         ProtAlignVolume.__init__(self, **args)
-        self.stepsExecutionMode = STEPS_PARALLEL
-    
+
+        # These 2 must match the output enum above.
+        self._alignmentMatrix = None
+        self.Volume = None
+        self.Particles = None
+
     #--------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
         form.addSection(label='Volume parameters')
@@ -73,7 +82,7 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
         form.addParam('inputVolume', params.PointerParam, pointerClass='Volume',
                       label="Input volume", important=True, 
                       help='Select one volume to be aligned against the reference volume.')
-        form.addParam('inputParticles', params.PointerParam, pointerClass='SetOfParticles',
+        form.addParam('inputParticles', params.PointerParam, pointerClass=pointerClasses,
                       label="Input particles", important=True, 
                       help='Select one set of particles to be aligned against '
                            'the reference set of particles using the transformation '
@@ -115,31 +124,19 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
         #Some definitions of filenames
         self.fnRefVol = self._getExtraPath("refVolume.vol")
         self.fnInputVol = self._getExtraPath("inputVolume.vol")
-        self.imgsInputFn = self._getExtraPath("inputParticles.xmd")
 
         maskArgs = self._getMaskArgs()
-        alignSteps = []
 
-        stepId0 = self._insertFunctionStep('convertStep', prerequisites=[])
-        alignSteps.append(stepId0) 
-        stepId1 = self._insertFunctionStep('alignVolumeStep', maskArgs,
-                                           prerequisites=alignSteps)
-        alignSteps.append(stepId1)     
-        stepId2 = self._insertFunctionStep('alignParticlesStep',
-                                           prerequisites=alignSteps)
-        alignSteps.append(stepId2)
-
-        self._insertFunctionStep('createOutputStep', prerequisites=alignSteps)
+        self._insertFunctionStep(self.convertStep)
+        self._insertFunctionStep(self.alignVolumeStep, maskArgs)
+        self._insertFunctionStep(self.createOutputStep)
         
     #--------------------------- STEPS functions --------------------------------------------
 
 
     def convertStep(self):
 
-        inputParts = self.inputParticles.get()
-        writeSetOfParticles(inputParts, self.imgsInputFn)
-
-        #Resizing inputs
+        # Resizing inputs
         ih = ImageHandler()
         ih.convert(self.inputReference.get(), self.fnRefVol)
         XdimRef = self.inputReference.get().getDim()[0]
@@ -153,8 +150,8 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
 
     def alignVolumeStep(self, maskArgs):
 
-        fhInputTranMat = self._getExtraPath('transformation-matrix.txt')
-        outVolFn = self._getExtraPath("inputVolumeAligned.mrc")
+        fhInputTranMat = self.getTransformationFile()
+        outVolFn = self.getOutputAlignedVolumePath()
       
         args = "--i1 %s --i2 %s --apply %s" % \
                (self.fnRefVol, self.fnInputVol, outVolFn)
@@ -170,41 +167,31 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
         cleanPath(self.fnRefVol)
         cleanPath(self.fnInputVol)
 
-    def alignParticlesStep(self):
+    def getAlignmentMatrix(self):
 
-        fhInputTranMat = self._getExtraPath('transformation-matrix.txt')
-        outParticlesFn = self._getExtraPath('outputParticles.xmd')
-        transMatFromFile = np.loadtxt(fhInputTranMat)
-        transformationMat = np.reshape(transMatFromFile,(4,4))
-        transform = Transform()
-        transform.setMatrix(transformationMat)
+        if self._alignmentMatrix is None:
+            fhInputTranMat = self.getTransformationFile()
+            transMatFromFile = np.loadtxt(fhInputTranMat)
+            self._alignmentMatrix = np.reshape(transMatFromFile, (4, 4))
 
-        resultMat = Transform()
-        outputParts = md.MetaData()
-        mdToAlign = md.MetaData(self.imgsInputFn)
-        for row in md.iterRows(mdToAlign):
-            inMat = rowToAlignment(row, ALIGN_PROJ)
-            partTransformMat = inMat.getMatrix()
-            partTransformMatrix = np.matrix(partTransformMat)
-            newTransformMatrix = np.matmul(transformationMat, partTransformMatrix)
-            resultMat.setMatrix(newTransformMatrix)
-            rowOut = md.Row()
-            rowOut.copyFromRow(row)
-            alignmentToRow(resultMat, rowOut, ALIGN_PROJ)
-            rowOut.addToMd(outputParts)
-        outputParts.write(outParticlesFn)
-        cleanPath(self.imgsInputFn)
+        return self._alignmentMatrix
+
+    def getTransformationFile(self):
+        return self._getExtraPath('transformation-matrix.txt')
 
 
     def createOutputStep(self):   
 
-        outVolFn = self._getExtraPath("inputVolumeAligned.mrc")
+        # VOLUME aligned to the reference
+        outVolFn = self.getOutputAlignedVolumePath()
         Ts = self.inputVolume.get().getSamplingRate()
-        self.runJob("xmipp_image_header","-i %s --sampling_rate %f"%(outVolFn,Ts))
         outVol = Volume()
         outVol.setLocation(outVolFn)
-        #set transformation matrix             
-        fhInputTranMat = self._getExtraPath('transformation-matrix.txt')
+        # Set the mrc header for sampling rate.
+        setMRCSamplingRate(outVolFn, Ts)
+
+        # Set transformation matrix
+        fhInputTranMat = self.getTransformationFile()
         transMatFromFile = np.loadtxt(fhInputTranMat)
         transformationMat = np.reshape(transMatFromFile,(4,4))
         transform = Transform()
@@ -212,25 +199,41 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
         outVol.setTransform(transform)
         outVol.setSamplingRate(Ts)
 
-        outputArgs = {'outputVolume': outVol}
+        outputArgs = {AlignVolPartOutputs.Volume.name: outVol}
         self._defineOutputs(**outputArgs)
         self._defineSourceRelation(self.inputVolume, outVol)
 
-        #particles....
-        outParticlesFn = self._getExtraPath('outputParticles.xmd')
-        outputParticles = self._createSetOfParticles()
+        # PARTICLES ....
+        inputParts = self.inputParticles.get()
+        outputParticles = inputParts.create(self._getExtraPath())
         outputParticles.copyInfo(self.inputParticles.get())
         outputParticles.setAlignmentProj()
-        readSetOfParticles(outParticlesFn, outputParticles)
-        outputArgs = {'outputParticles': outputParticles}
+
+        # Clone set
+        #readSetOfParticles(outParticlesFn, outputParticles)
+        outputParticles.copyItems(inputParts,updateItemCallback=self._updateParticleTransform)
+        outputArgs = {AlignVolPartOutputs.Particles.name: outputParticles}
         self._defineOutputs(**outputArgs)
         self._defineSourceRelation(self.inputParticles, outputParticles)
 
+    def _updateParticleTransform(self, particle, row):
+
+        aliMatrix = self.getAlignmentMatrix()
+        partTransformMat = particle.getTransform().getMatrix()
+        partTransformMatrix = np.matrix(partTransformMat)
+        newTransformMatrix = np.matmul(aliMatrix, partTransformMatrix)
+        particle.getTransform().setMatrix(newTransformMatrix)
+
+    def getOutputAlignedVolumePath(self):
+        outVolFn = self._getExtraPath("inputVolumeAligned.mrc")
+        return outVolFn
 
     #--------------------------- INFO functions --------------------------------------------
     
     def _validate(self):
         errors = []
+        if self.inputParticles.get().hasAlignment() is False:
+            errors.append("Input particles need to be aligned (they should have transformation matrix)")
         return errors
     
     def _summary(self):
@@ -253,7 +256,7 @@ class XmippProtAlignVolumeParticles(ProtAlignVolume):
             if self.maskType == ALIGN_MASK_CIRCULAR:
                 maskArgs+=" --mask circular -%d" % self.maskRadius
             else:
-                maskArgs+=" --mask binary_file %s" % self.volMask
+                maskArgs+=" --mask binary_file %s" % self.maskFile.get().getFileName()
         return maskArgs
 
           

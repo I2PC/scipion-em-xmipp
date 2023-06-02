@@ -784,8 +784,6 @@ class XmippProtGpuCrrCL2D(ProtAlign2D):
                                   'have different sizes' % (x2, y2, x1, y1))
             else:
                 errors.append("Please, enter the reference images")
-        if not isXmippCudaPresent("xmipp_cuda_correlation"):
-            errors.append("I cannot find the Xmipp GPU programs in the path")
 
         return errors
 

@@ -30,6 +30,7 @@ Protocol to split a volume in two volumes based on a set of images
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import PointerParam, FloatParam, IntParam, StringParam
 from pyworkflow.utils.path import cleanPath
+from pyworkflow import BETA, UPDATED, NEW, PROD
 from pwem.protocols import ProtClassify3D
 from pwem.objects import Volume
 from pwem.emlib.image import ImageHandler
@@ -39,7 +40,8 @@ from xmipp3.convert import writeSetOfParticles
 class XmippProtSplitvolume(ProtClassify3D):
     """Split volume in two"""
     _label = 'split volume'
-    
+    _devStatus = BETA
+
     def __init__(self, **args):
         ProtClassify3D.__init__(self, **args)
 

@@ -30,6 +30,7 @@ from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.params import (PointerParam, FloatParam, BooleanParam,
                                         IntParam, StringParam, LEVEL_ADVANCED,
                                         USE_GPU, GPU_LIST)
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 from pyworkflow.project import Manager
 from pyworkflow.protocol import getProtocolFromDb
@@ -50,6 +51,7 @@ class XmippMetaProtDiscreteHeterogeneityScheduler(EMProtocol):
      """
     _label = 'metaprotocol heterogeneity'
     _lastUpdateVersion = VERSION_2_0
+    _devStatus = BETA
 
     def __init__(self, **kwargs):
         EMProtocol.__init__(self, **kwargs)

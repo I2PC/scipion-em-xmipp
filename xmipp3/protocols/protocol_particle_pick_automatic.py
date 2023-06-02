@@ -230,10 +230,7 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
         # Get micrographs to pick
         if self.micsToPick == MICS_SAMEASPICKING:
             inputPicking = self.xmippParticlePicking.get()
-            if inputPicking is None:
-                return None
-            else:
-                return inputPicking.inputMicrographs
+            return inputPicking.inputMicrographs if inputPicking else None
         else:
             return self.inputMicrographs
         
@@ -243,7 +240,4 @@ class XmippParticlePickingAutomatic(ProtParticlePickingAuto, XmippProtocol):
         a new set of micrographs with the same properties than a previous
         trained ones. )
         """ 
-        if self.getInputMicrographsPointer() is not None:
-            return self.getInputMicrographsPointer().get()
-        else:
-            return None
+        return self.getInputMicrographsPointer().get() if self.getInputMicrographsPointer() else None

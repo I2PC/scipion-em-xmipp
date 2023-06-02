@@ -195,7 +195,7 @@ class XmippProtVolSubtraction(XmippProtVolAdjBase):
         iter = self.iter.get()
         program = "xmipp_volume_subtraction"
         args = '--i1 %s --i2 %s -o %s --iter %s --lambda %s --sub' % \
-               (vol1.getFileName(), vol2, self._getExtraPath("output_volume.mrc"), iter, self.rfactor.get())
+               (fileName1, vol2, self._getExtraPath("output_volume.mrc"), iter, self.rfactor.get())
         if resol:
             fc = vol1.getSamplingRate()/resol
             args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())
@@ -286,12 +286,17 @@ class XmippProtVolAdjust(XmippProtVolAdjBase):
     # --------------------------- STEPS functions --------------------------------------------
     def adjustStep(self):
         vol1 = self.vol1.get().clone()
+        fnVol1 = vol1.getFileName()
         vol2 = self.vol2.get().getFileName()
+        if fnVol1.endswith('.mrc'):
+            fnVol1 += ':mrc'
+        if vol2.endswith('.mrc'):
+            vol2 += ':mrc'
         resol = self.resol.get()
         iter = self.iter.get()
         program = "xmipp_volume_subtraction"
         args = '--i1 %s --i2 %s -o %s --iter %s --lambda %s' % \
-               (vol1.getFileName(), vol2, self._getExtraPath("output_volume.mrc"), iter, self.rfactor.get())
+               (fnVol1, vol2, self._getExtraPath("output_volume.mrc"), iter, self.rfactor.get())
         if resol:
             fc = vol1.getSamplingRate()/resol
             args += ' --cutFreq %f --sigma %d' % (fc, self.sigma.get())

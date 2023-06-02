@@ -31,6 +31,8 @@ from pyworkflow.object import Float
 from pyworkflow.utils import getExt
 from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
                                         LEVEL_ADVANCED)
+
+from pyworkflow import BETA, UPDATED, NEW, PROD
 from pwem.objects import Volume
 from pwem.protocols import ProtAnalysis3D
 
@@ -46,6 +48,7 @@ class XmippProtFSO(ProtAnalysis3D):
     """
     _label = 'resolution fso'
     _lastUpdateVersion = VERSION_2_0
+    _devStatus = NEW
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)
@@ -69,8 +72,7 @@ class XmippProtFSO(ProtAnalysis3D):
         form.addParam('half1', PointerParam, pointerClass='Volume',
                       condition = "not halfVolumesFile",
                       label="Half Map 1", important=True,
-                      help='Select one map for determining the '
-		                    'directional FSC resolution.')
+                      help='Select one map for determining the directional FSC resolution.')
 
         form.addParam('half2', PointerParam, pointerClass='Volume',
                       condition = "not halfVolumesFile",
@@ -88,20 +90,13 @@ class XmippProtFSO(ProtAnalysis3D):
                       expertLevel=LEVEL_ADVANCED,
                       label="Cone Angle",
                       help='Angle between the axis of the cone and the generatrix. '
-                           'An angle of 17 degrees is the best angle (see publication'
-                           'Vilas 2021) to measuare directional FSCs')
+                           'An angle of 17 degrees is the best angle (see Nat Methods'
+                           'JL Vilas 2023) to measuare the directional FSCs')
 
         form.addParam('estimate3DFSC', BooleanParam, default=True,
-                      label="Estimate 3DFSC and directional filtered map",
-                      help='Set to estimate the 3DFSCD map, and applyting the '
-                           ' 3DFSC as anisotropic filter to obtain a directional'
-                           'filtered map.')
-
-#        form.addParam('filterHalfMaps', BooleanParam, default=True,
-#                      condition="estimate3DFSC",
-#                      label="Anisotropic filtering of Half Maps",
-#                      help='Use the 3DFSCD map as anisotropic filter to directionally'
-#                           'filter the half maps')
+                      label="Estimate 3DFSC ",
+                      help='Set to estimate the 3DFSCD map. This is a 3D function that depends of the resolution.'
+                           'The profile of the 3DFSC along a given direction is the directiontal FSC')
 
         form.addParam('threshold', FloatParam, expertLevel=LEVEL_ADVANCED,
                       default=0.143,
@@ -186,10 +181,6 @@ class XmippProtFSO(ProtAnalysis3D):
 
         if self.estimate3DFSC.get():
             params += ' --threedfsc_filter'
-            #if self.filterHalfMaps.get():
-            #    params += ' --threedfsc_filter_halves'
-
-
 
         params += ' --threshold %s' % self.threshold.get()
         params += ' --threads %s' % self.numberOfThreads.get()
@@ -198,41 +189,16 @@ class XmippProtFSO(ProtAnalysis3D):
 
 
     def createOutputStep(self):
-
-        if self.estimate3DFSC:
-            volume = Volume()
-            volume.setFileName(self._getExtraPath("filteredMap.mrc"))
-
-            #if self.filterHalfMaps:
-            #    half1filt = Volume()
-            #    half2filt = Volume()
-            #    fnhalfMap1 = self._getExtraPath("dirfiltered_half1.mrc")
-            #    fnhalfMap2 = self._getExtraPath("dirfiltered_half2.mrc")
-            #    half1filt.setFileName(fnhalfMap1)
-            #    half2filt.setFileName(fnhalfMap2)
-
-            if self.halfVolumesFile:
-                volume.setSamplingRate(self.inputHalves.get().getSamplingRate())
-                #if self.filterHalfMaps:
-                #    volume.setHalfMaps([fnhalfMap1, fnhalfMap2])
-                self._defineOutputs(directionalFilteredMap=volume)
-                self._defineSourceRelation(self.inputHalves, volume)
-            else:
-                volume.setSamplingRate(self.half1.get().getSamplingRate())
-                #if self.filterHalfMaps:
-                #    volume.setHalfMaps([fnhalfMap1, fnhalfMap2])
-                self._defineOutputs(directionalFilteredMap=volume)
-                self._defineSourceRelation(self.half1, volume)
-
-
+        """
+        There is no output for this method. The result is a plot similar to the FSC, but Scipion has no object for it
+        This method is left with a pass to leave flexible enought in a possible future
+        """
+        pass
 
     # --------------------------- INFO functions ------------------------------
-
     def _methods(self):
         messages = []
-        if hasattr(self, 'resolution_Volume'):
-            messages.append(
-                'Information about the method/article in ')
+        messages.append('Information about the method/article in ')
         return messages
 
     def _validate(self):
@@ -255,4 +221,4 @@ class XmippProtFSO(ProtAnalysis3D):
         return summary
 
     def _citations(self):
-        return ['Vilas2021']
+        return ['Vilas2023']

@@ -91,9 +91,9 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         groupDirFSC.addParam('doShowDirectionalResolution', LabelParam,
                              label="Show Directional Resolution on sphere")
 
-        if self.protocol.estimate3DFSC:
-            group = form.addGroup('Choose a Color Map')
+        group = form.addGroup('Choose a Color Map')
 
+        if self.protocol.estimate3DFSC:
             group.addParam('sliceAxis', EnumParam, default=AX_Z,
                            choices=['x', 'y', 'z'],
                            display=EnumParam.DISPLAY_HLIST,
@@ -104,8 +104,8 @@ class XmippProtFSOViewer(LocalResolutionViewer):
             group.addParam('sliceNumber', IntParam, default=-1,
                            expertLevel=LEVEL_ADVANCED,
                            label='Show slice number')
-            ColorScaleWizardBase.defineColorScaleParams(group, defaultLowest=0.0,
-                                                        defaultHighest=1.0)
+
+        ColorScaleWizardBase.defineColorScaleParams(group, defaultLowest=0.0, defaultHighest=1.0)
 
     def _getVisualizeDict(self):
         self.protocol._createFilenameTemplates()
@@ -324,15 +324,36 @@ class XmippProtFSOViewer(LocalResolutionViewer):
         res_05, okToPlot_05 = self.interpolRes(0.5, xx, yy)
         res_09, okToPlot_09 = self.interpolRes(0.9, xx, yy)
 
-        a.axes.plot(xx, yyBingham, 'r--')
+        textstr = ''
 
-        if (okToPlot_01 and okToPlot_05 and okToPlot_09):
-            textstr = str(0.9) + ' --> ' + str("{:.2f}".format(res_09)) + 'A\n' + str(0.5) + ' --> ' + str(
-                "{:.2f}".format(res_05)) + 'A\n' + str(0.1) + ' --> ' + str("{:.2f}".format(res_01)) + 'A'
-            a.axes.axvspan(1.0 / res_09, 1.0 / res_01, alpha=0.3, color='green')
+        if okToPlot_09:
+           textstr += str(0.9) + ' --> ' + str("{:.2f}".format(res_09)) + 'A\n'
+        if okToPlot_05:
+           textstr += str(0.5) + ' --> ' + str("{:.2f}".format(res_05)) + 'A\n'
+        if okToPlot_01:
+           textstr += str(0.1) + ' --> ' + str("{:.2f}".format(res_01)) + 'A'
 
-            props = dict(boxstyle='round', facecolor='white')
-            a.axes.text(0.0, 0.0, textstr, fontsize=12, ha="left", va="bottom", bbox=props)
+        props = dict(boxstyle='round', facecolor='white')
+        a.axes.text(0.0, 0.0, textstr, fontsize=12, ha="left", va="bottom", bbox=props)
+        
+        if self.protocol.halfVolumesFile:
+           sampling = self.protocol.inputHalves.get().getSamplingRate()
+        else:
+           sampling = self.protocol.half1.get().getSamplingRate()
+
+        if okToPlot_09 and okToPlot_01:
+           t = round((2*sampling/(res_01))*len(yyBingham)) + 3
+           if t<len(yyBingham):
+              for component in range(t, len(yyBingham)-1):
+                 yyBingham[component] = 0
+           a.axes.plot(xx, yyBingham, 'r--')
+        else:
+           a.axes.plot(xx, yyBingham, 'r--')
+
+        if not okToPlot_01:
+           res_01 = 2*sampling
+
+        a.axes.axvspan(1.0 / res_09, 1.0 / res_01, alpha=0.3, color='green')
 
         return plt.show()
 
@@ -379,7 +400,7 @@ class XmippProtFSOViewer(LocalResolutionViewer):
 
         highlim = values.max() + stp
         fig, ax = plt.subplots(subplot_kw=dict(projection='polar'))
-        pc = plt.contourf(theta, r, values, np.arange(lowlim, highlim, stp))
+        pc = plt.contourf(theta, r, values, np.arange(lowlim, highlim, stp), cmap=self.getColorMap())
 
         plt.colorbar(pc)
         plt.show()

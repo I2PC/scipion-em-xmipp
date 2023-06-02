@@ -581,14 +581,14 @@ ISSN = {2079-9292},
 DOI = {http://doi.org/10.3390/electronics9061040}
 }
 
-@Article{Vilas2021,
+@Article{Vilas2023,
 AUTHOR = {Vilas, JL and Tagare, HD},
 TITLE = {A simple and intuitive measurement of directional resolution anisotropy of cryoEM maps},
-JOURNAL = {XXXX},
+JOURNAL = {Nature Methods},
 VOLUME = {X},
-YEAR = {2021},
+YEAR = {2023},
 NUMBER = {X},
-ARTICLE-NUMBER = {xxx},
+ARTICLE-NUMBER = {in press},
 URL = {https://github.com/I2PC/xmipp/wiki/FSO---Fourier-Shell-Occupancy},
 }
 
