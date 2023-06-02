@@ -134,7 +134,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
 
         samplingR = self.sampling.get()
 
-        args = '-i %s --sampling %f -o %s' % (pdbFn_extra, samplingR, outFile)
+        args = '-i "%s" --sampling %f -o "%s"' % (pdbFn_extra, samplingR, outFile)
         
         if self.centerPdb:
             args += ' --centerPDB'
