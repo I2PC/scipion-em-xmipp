@@ -1,5 +1,5 @@
 ## Release 3.23.?
-- Convert pdb generates an mrc file.
+- Convert pdb generates an mrc file. Tolerate spaces in the file names
 
 ## Hot fix 3.22.11.2
 - Align volume and particles works in the absence of tomo plugin.
