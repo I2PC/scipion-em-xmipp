@@ -283,7 +283,7 @@ class TestCorrelationAlignment(BaseTest):
                          msgRoi % (goldRoi, roi, type(goldRoi), type(roi)))
 
     def test_qbeta_cpu(self):
-        prot = self.newProtocol(XmippProtFlexAlign,doPSD=True, useGpu=False, doLocalAlignment=False)
+        prot = self.newProtocol(XmippProtFlexAlign, doPSD=True, useGpu=False, doLocalAlignment=False)
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
 
@@ -292,7 +292,7 @@ class TestCorrelationAlignment(BaseTest):
                              (1, 7), [0, 0, 0, 0])
 
     def test_qbeta(self):
-        prot = self.newProtocol(XmippProtFlexAlign,doPSD=True)
+        prot = self.newProtocol(XmippProtFlexAlign, doPSD=True)
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
 
@@ -301,7 +301,7 @@ class TestCorrelationAlignment(BaseTest):
                              (1, 7), [0, 0, 0, 0])
 
     def test_qbeta_patches(self):
-        prot = self.newProtocol(XmippProtFlexAlign,doPSD=True, patchX=7, patchY=7)
+        prot = self.newProtocol(XmippProtFlexAlign, doPSD=True, patchX=7, patchY=7)
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
 
@@ -310,7 +310,7 @@ class TestCorrelationAlignment(BaseTest):
                              (1, 7), [0, 0, 0, 0])
 
     def test_qbeta_corrDownscale(self):
-        prot = self.newProtocol(XmippProtFlexAlign,doPSD=True, corrDownscale=3)
+        prot = self.newProtocol(XmippProtFlexAlign, doPSD=True, corrDownscale=3)
         prot.inputMovies.set(self.protImport1.outputMovies)
         self.launchProtocol(prot)
 
@@ -703,7 +703,8 @@ class TestMaxShift(BaseTest):
         protNoMic = self.doFilter(self.alignedMovies, rejType, label)
         self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11) # roughly half the precision of the non-binned version
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label,
+                                  0.11)  # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True, results=[False, True])
 
     def testFilterMovie(self):
@@ -715,7 +716,8 @@ class TestMaxShift(BaseTest):
         protNoMic = self.doFilter(self.alignedMovies, rejType, label)
         self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 0.16) # roughly half the precision of the non-binned version
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11,
+                                  0.16)  # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True, results=[False, True])
 
     def testFilterAnd(self):
@@ -727,7 +729,8 @@ class TestMaxShift(BaseTest):
         protNoMic = self.doFilter(self.alignedMovies, rejType, label)
         self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 0.16) # roughly half the precision of the non-binned version
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11,
+                                  0.16)  # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True, results=[False, True])
 
     def testFilterOrFrame(self):
@@ -739,7 +742,8 @@ class TestMaxShift(BaseTest):
         protNoMic = self.doFilter(self.alignedMovies, rejType, label, mxMo=1)
         self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 1.0) # roughly half the precision of the non-binned version
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11,
+                                  1.0)  # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True, results=[False, True])
 
     def testFilterOrMovie(self):
@@ -751,7 +755,8 @@ class TestMaxShift(BaseTest):
         protNoMic = self.doFilter(self.alignedMovies, rejType, label, mxFm=1)
         self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 1.0, 0.16) # roughly half the precision of the non-binned version
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 1.0,
+                                  0.16)  # roughly half the precision of the non-binned version
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True, results=[False, True])
 
     def testFilterOrBoth(self):
@@ -763,7 +768,8 @@ class TestMaxShift(BaseTest):
         protNoMic = self.doFilter(self.alignedMovies, rejType, label)
         self._checkMaxShiftFiltering(protNoMic, label, hasMic=False, results=[False, True])
 
-        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11, 0.16) # roughly half the precision of the non-binned version)
+        protDoMic = self.doFilter(self.alignedMovMics, rejType, label, 0.11,
+                                  0.16)  # roughly half the precision of the non-binned version)
         self._checkMaxShiftFiltering(protDoMic, label, hasMic=True, results=[False, True])
 
     def testFilterRejectBoth(self):
@@ -825,7 +831,6 @@ class TestMovieDoseAnalysis(BaseTest):
                                  'group\n(Osaka University, Japan)')
         return cls.launchProtocol(protImport)
 
-
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
@@ -846,8 +851,8 @@ class TestMovieDoseAnalysis(BaseTest):
         self.launchProtocol(protPoisson)
 
         self.assertIsNotNone(getattr(protPoisson, 'outputMoviesDiscarded', None),
-                          "outputMoviesDiscarded were not created. "
-                          "Bad filtering in test.")
+                             "outputMoviesDiscarded were not created. "
+                             "Bad filtering in test.")
 
         self.assertIsNotNone(getattr(protPoisson, 'outputMovies', None),
                              "outputMovies were not created. "
@@ -871,7 +876,9 @@ class TestMovieDoseAnalysis(BaseTest):
 
         sizeDiscarded = protPoisson.outputMoviesDiscarded.getSize()
         self.assertEqual(sizeDiscarded, 5, 'Number of accepted movies must be 5 and its '
-                                            '%d' % sizeDiscarded)
+                                           '%d' % sizeDiscarded)
+
+
 class TestSplitFrames(BaseTest):
     @classmethod
     def setData(cls):
@@ -924,6 +931,12 @@ class TestSplitFrames(BaseTest):
         xo, yo, zo = protocol.oddMovie.getDim()
         outputDimOdd = (xo, yo)
 
+        print(dims)
+        print(outputDimEven)
+        print(outputDimOdd)
+        print((xe, ye, ze))
+        print((xo, yo, zo))
+
         msgError = "The dimensions must be %s and it is %s"
         self.assertEqual(outputDimEven, dims, msgError % (dims, outputDimEven))
         self.assertEqual(outputDimOdd, dims, msgError % (dims, outputDimOdd))
@@ -940,5 +953,3 @@ class TestSplitFrames(BaseTest):
 
         self.launchProtocol(protSplitFramesSumFalse)
         self._checkOutput(protSplitFramesSumFalse)
-
-
