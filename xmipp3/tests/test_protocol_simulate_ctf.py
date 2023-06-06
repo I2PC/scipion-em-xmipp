@@ -32,7 +32,7 @@ import pyworkflow.utils as pwutils
 from pwem.protocols import ProtImportVolumes
 from xmipp3.protocols import XmippProtSimulateCTF, XmippProtCreateGallery
 
-
+OUTPARTERROR = "There was a problem with particles output"
 class TestXmippProtSimulateCTF(BaseTest):
     """ Testing CTF simulation
     """
@@ -90,9 +90,9 @@ class TestXmippProtSimulateCTF(BaseTest):
         # Check default defoci values
         projectionsCTFDefault = self.runSimulateCTF(projectionsGallery)
         self.assertTrue(projectionsCTFDefault,
-                        "There was a problem with particles output")
+                        OUTPARTERROR)
         self.assertEqual(projectionsCTFDefault.getSize(),1647,
-                        "There was a problem with particles output")
+                        OUTPARTERROR)
         self.assertEqual(projectionsCTFDefault.getXDim(),60,
                         "Unexpected particle size in output particles")
         self.assertEqual(projectionsCTFDefault.getSamplingRate(),1,
@@ -114,9 +114,9 @@ class TestXmippProtSimulateCTF(BaseTest):
         # Check default defoci values
         projectionsCTFDefaultAstig = self.runSimulateCTFAstig(projectionsGallery)
         self.assertTrue(projectionsCTFDefaultAstig,
-                        "There was a problem with particles output")
+                        OUTPARTERROR)
         self.assertEqual(projectionsCTFDefaultAstig.getSize(),1647,
-                        "There was a problem with particles output")
+                        OUTPARTERROR)
         self.assertEqual(projectionsCTFDefaultAstig.getXDim(),60,
                         "Unexpected particle size in output particles")
         self.assertEqual(projectionsCTFDefaultAstig.getSamplingRate(),1,
