@@ -72,6 +72,17 @@ class TestXmippProtSimulateCTF(BaseTest):
         self.launchProtocol(protSimulateCTF)
         return protSimulateCTF.outputParticles
 
+    def runSimulateCTFAstig(self, projections, defocus0=5000, defocusF=25000):
+        protSimulateCTFAstig = self.newProtocol(XmippProtSimulateCTF,
+                                           inputParticles=projections,
+                                           Defocus0=defocus0,
+                                           DefocusF=defocusF,
+                                           astig=True,
+                                           objLabel='Projections with CTF Astig - [%.2f, %.2f]' % (defocus0, defocusF))
+
+        self.launchProtocol(protSimulateCTFAstig)
+        return protSimulateCTFAstig.outputParticles
+
     def testSimulateCTF(self):
         importedVolume = self.runImportVolume(self.volume, 1)
         projectionsGallery = self.runCreateGallery(importedVolume)
@@ -94,3 +105,36 @@ class TestXmippProtSimulateCTF(BaseTest):
                                     '[%f, %f]' % (5000, 25000))
             self.assertLessEqual(defocusU,25000, 'DefocusU and DefocusV values are outside the specified range:'
                                     '[%f, %f]' % (5000, 25000))
+
+
+    def testSimulateCTFAstig(self):
+        importedVolume = self.runImportVolume(self.volume, 1)
+        projectionsGallery = self.runCreateGallery(importedVolume)
+
+        # Check default defoci values
+        projectionsCTFDefaultAstig = self.runSimulateCTFAstig(projectionsGallery)
+        self.assertTrue(projectionsCTFDefaultAstig,
+                        "There was a problem with particles output")
+        self.assertEqual(projectionsCTFDefaultAstig.getSize(),1647,
+                        "There was a problem with particles output")
+        self.assertEqual(projectionsCTFDefaultAstig.getXDim(),60,
+                        "Unexpected particle size in output particles")
+        self.assertEqual(projectionsCTFDefaultAstig.getSamplingRate(),1,
+                        "Unexpected sampling rate in output particles")
+        for projection in projectionsCTFDefaultAstig.iterItems():
+            defocusU = projection.getCTF().getDefocusU()
+            defocusV = projection.getCTF().getDefocusV()
+            angle = projection.getCTF().getDefocusAngle()
+            self.assertNotEqual(defocusU,defocusV,'DefocusU and DeofcusV are equal but they should be')
+            self.assertGreaterEqual(defocusU,5000, 'DefocusU values are outside the specified range:'
+                                    '[%f, %f]' % (5000, 25000))
+            self.assertLessEqual(defocusU,25000, 'DefocusU values are outside the specified range:'
+                                    '[%f, %f]' % (5000, 25000))
+            self.assertGreaterEqual(defocusV,(5000-500), 'DefocusV values are outside the specified range:'
+                                    '[%f, %f]' % (5000-500, 25000+500))
+            self.assertLessEqual(defocusV,(25000+500), 'DefocusV values are outside the specified range:'
+                                    '[%f, %f]' % (5000-500, 25000+500))
+            self.assertGreaterEqual(angle,40, 'Defocus angle values are outside the specified range:'
+                                    '[%f, %f]' % (40, 50))
+            self.assertLessEqual(angle,50, 'Defocus angle values are outside the specified range:'
+                                    '[%f, %f]' % (40, 50))
