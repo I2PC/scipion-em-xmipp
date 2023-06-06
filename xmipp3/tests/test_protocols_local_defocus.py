@@ -52,7 +52,8 @@ class TestXmippLocalDefocusEstimation(BaseTest):
 
         protEstimateLocalDefocus = self.newProtocol(XmippProtLocalCTF,
                                                     inputSet=protSimulateCTF.outputParticles,
-                                                    inputVolume=self.protCreatePhantom.outputVolume)
+                                                    inputVolume=self.protCreatePhantom.outputVolume,
+                                                    sameDefocus=True)
         self.launchProtocol(protEstimateLocalDefocus)
         self.assertIsNotNone(protEstimateLocalDefocus.outputParticles.getFiles(),
                              "There was a problem with local CTF estimation")
@@ -70,7 +71,8 @@ class TestXmippLocalDefocusEstimationConsensus(TestXmippLocalDefocusEstimation):
 
     def testXmippLocalDefocusConsensus(self):
         protSimulateCTF2 = self.newProtocol(XmippProtSimulateCTF,
-                                            inputParticles=self.protCreateGallery.outputReprojections)
+                                            inputParticles=self.protCreateGallery.outputReprojections,
+                                            astig=True)
         self.launchProtocol(protSimulateCTF2)
         self.assertIsNotNone(protSimulateCTF2.outputParticles, "There was a problem with second CTF simulation")
 
@@ -82,7 +84,8 @@ class TestXmippLocalDefocusEstimationConsensus(TestXmippLocalDefocusEstimation):
                              "There was a problem with second CTF estimation")
 
         protSimulateCTF3 = self.newProtocol(XmippProtSimulateCTF,
-                                            inputParticles=self.protCreateGallery.outputReprojections)
+                                            inputParticles=self.protCreateGallery.outputReprojections,
+                                            astig=True)
         self.launchProtocol(protSimulateCTF3)
         self.assertIsNotNone(protSimulateCTF3.outputParticles, "There was a problem with third CTF simulation")
 
