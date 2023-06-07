@@ -26,12 +26,14 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import os
 
 import pyworkflow.protocol.constants as const
+from pyworkflow.object import String
 from pwem.convert.headers import setMRCSamplingRate
 from pyworkflow.protocol.params import (BooleanParam, EnumParam, FloatParam,
                                         IntParam)
-from pwem.objects import Volume
+from pwem.objects import Volume, SetOfParticles, Mask
 
 from .protocol_process import XmippProcessParticles, XmippProcessVolumes
 
@@ -48,9 +50,9 @@ class XmippResizeHelper:
 
     WINDOW_OP_CROP = 0
     WINDOW_OP_WINDOW = 1
-
-    #--------------------------- DEFINE param functions --------------------------------------------
-    @classmethod
+    
+    #--------------------------- DEFINE param functions --------------------------------------------       
+    @classmethod   
     def _defineProcessParams(cls, protocol, form):
         # Resize operation
         form.addParam('doResize', BooleanParam, default=False,
@@ -244,11 +246,20 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
     """ Crop or resize a set of particles """
     _label = 'crop/resize particles'
     _inputLabel = 'particles'
+    _possibleOutputs = {'outputParticles': SetOfParticles, 'outputMask': Mask}
     
     def __init__(self, **kwargs):
         XmippProcessParticles.__init__(self, **kwargs)
     
     #--------------------------- DEFINE param functions --------------------------------------------
+    def _defineParams(self, form):
+        # Creating super form
+        super()._defineParams(form)
+       
+        # Obtaining input particles param to accept also a mask
+        inputParticles = form.getParam('inputParticles')
+        inputParticles.pointerClass = String(str(inputParticles.pointerClass)+',Mask')
+
     def _defineProcessParams(self, form):
         XmippResizeHelper._defineProcessParams(self, form)
         form.addParallelSection(threads=0, mpi=8)
@@ -265,16 +276,42 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
     
     def windowStep(self, isFirstStep, args):
         XmippResizeHelper.windowStep(self, self._ioArgs(isFirstStep)+args)
+    
+    def convertInputStep(self):
+        """ convert if necessary"""
+        if self.inputParticles.get().getClassName() == 'Mask':
+            # If input is a Mask, modify filter params
+            self.inputFn = self.inputParticles.get().getFileName()
+            self.outputStk = self._getExtraPath(os.path.basename(self.inputFn))
+            self.outputMd = self._getTmpPath('tmp.xmd')
+        else:
+            # If input is not Mask, keep default behaviour
+            super().convertInputStep()
+    
+    def createOutputStep(self):
+        if self.inputParticles.get().getClassName() == 'Mask':
+            # If input is a Mask, create output Mask
+            outputMask = Mask(self.outputStk)
+            outputMask.copyInfo(self.inputParticles.get())
+            self._preprocessOutput(outputMask)
+            self._defineOutputs(outputMask=outputMask)
+            self._defineTransformRelation(self.inputParticles.get(), outputMask)
+        else:
+            # If input is not Mask, keep default behaviour
+            super().createOutputStep()
         
     def _preprocessOutput(self, output):
         """ We need to update the sampling rate of the 
         particles if the Resize option was used.
         """
-        self.inputHasAlign = self.inputParticles.get().hasAlignment()
+        isMask = True if self.inputParticles.get().getClassName() == 'Mask' else False
+        if not isMask:
+            self.inputHasAlign = self.inputParticles.get().hasAlignment()
         
         if self.doResize:
             output.setSamplingRate(self.samplingRate)
-            setMRCSamplingRate(self.outputStk, self.samplingRate)
+            if not isMask:
+                setMRCSamplingRate(self.outputStk, self.samplingRate)
             
     def _updateItem(self, item, row):
         """ Update also the sampling rate and 
