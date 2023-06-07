@@ -279,7 +279,7 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
     
     def convertInputStep(self):
         """ convert if necessary"""
-        if self.inputParticles.get().getClassName() == 'Mask':
+        if self.isMask(self.inputParticles.get()):
             # If input is a Mask, modify filter params
             self.inputFn = self.inputParticles.get().getFileName()
             self.outputStk = self._getExtraPath(os.path.basename(self.inputFn))
@@ -289,7 +289,7 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
             super().convertInputStep()
     
     def createOutputStep(self):
-        if self.inputParticles.get().getClassName() == 'Mask':
+        if self.isMask(self.inputParticles.get()):
             # If input is a Mask, create output Mask
             outputMask = Mask(self.outputStk)
             outputMask.copyInfo(self.inputParticles.get())
@@ -301,10 +301,11 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
             super().createOutputStep()
         
     def _preprocessOutput(self, output):
-        """ We need to update the sampling rate of the 
+        """
+        We need to update the sampling rate of the 
         particles if the Resize option was used.
         """
-        isMask = True if self.inputParticles.get().getClassName() == 'Mask' else False
+        isMask = self.isMask(self.inputParticles.get())
         if not isMask:
             self.inputHasAlign = self.inputParticles.get().hasAlignment()
         
@@ -378,6 +379,14 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
         return XmippResizeHelper._validate(self)
     
     #--------------------------- UTILS functions ---------------------------------------------------
+    def isMask(self, inputObject):
+      """ This function returns True if the given object is a Mask. False otherwise. """
+      try:
+        return inputObject.getClassName() == 'Mask'
+      except AttributeError:
+        # If the object does not have method getClassName, it cannot be a Mask object
+        return False
+      
     def _ioArgs(self, isFirstStep):
         if isFirstStep:
             return "-i %s -o %s --save_metadata_stack %s --keep_input_columns " % (self.inputFn, self.outputStk, self.outputMd)
