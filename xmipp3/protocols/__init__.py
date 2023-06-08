@@ -68,6 +68,7 @@ from .protocol_movie_gain import XmippProtMovieGain
 from .protocol_flexalign import XmippProtFlexAlign
 from .protocol_movie_opticalflow import XmippProtOFAlignment, ProtMovieAlignment
 from .protocol_movie_max_shift import XmippProtMovieMaxShift
+from .protocol_movie_dose_analysis import XmippProtMovieDoseAnalysis
 from .protocol_movie_split_frames import XmippProtSplitFrames
 from .protocol_multiple_fscs import XmippProtMultipleFSCs
 from .protocol_multireference_alignability import XmippProtMultiRefAlignability
