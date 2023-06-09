@@ -119,19 +119,11 @@ class XmippProtConsensusClasses(ProtClassify3D):
         intersections, traces = self._calculateIntersections(classParticleIds, classIds)
 
         # Prune if requested
-        s = len(intersections)
         intersections = self._pruneIntersections(intersections, int(self.minClassSize))
-        if s != len(intersections):
-            # TODO do something with traces
-            traces = None
-            images = self._createSetOfImages(intersections)
-            self._insertChild('images', images)
-        else:
-            images = self._getInputImages()
-        
+
         # Create the output
         outputClasses = self._createSetOfClasses(
-            images=images,
+            images=self._getInputImages(),
             classifications=classifications,
             clustering=intersections,
             suffix=self._getMergedIntersectionSuffix(len(intersections)),
@@ -315,12 +307,16 @@ class XmippProtConsensusClasses(ProtClassify3D):
                             intersections: Iterable[Set[int]],
                             minSize: int = 0 ):
 
-        def size_criteria(intersection: Set[int]) -> bool:
-            return len(intersection) >= minSize
-    
-        filtered = filter(size_criteria, intersections)
+        if minSize > 1:
+            def size_criteria(intersection: Set[int]) -> bool:
+                return len(intersection) >= minSize
+        
+            filtered = filter(size_criteria, intersections)
 
-        return list(filtered)
+            return list(filtered)
+        else:
+            # Nothing to do
+            return intersections
 
     def _calculateIntersectionSourceProbabilities(self, 
                                                   classSizes: Iterable[np.ndarray]) -> np.ndarray:
@@ -552,25 +548,6 @@ class XmippProtConsensusClasses(ProtClassify3D):
             return outputClasses
         
     # -------------------------- Convert functions -----------------------------
-    def _createSetOfImages(self,
-                           classes: Iterable[Set[int]]):
-        objIds = Set.union(*classes)
-        images = self._getInputImages()
-        
-        result: SetOfImages = self._EMProtocol__createSet( # HACK
-            self._getSetOfImagesSubtype(), 
-            self._getOutputImagesSqliteTemplate(),
-            self._getImagesSuffix()
-        ) 
-        result.copyInfo(images)
-        
-        result.enableAppend()
-        for objId in objIds:
-            result.append(images[objId])
-            
-        return result
-        
-    
     def _createSetOfClasses(self, 
                             images: SetOfImages,
                             classifications: Sequence[SetOfClasses],
@@ -592,12 +569,16 @@ class XmippProtConsensusClasses(ProtClassify3D):
         def updateItem(item: Image, _):
             objId: int = item.getObjId()
             
-            classId = 0
             for cls, objIds in enumerate(clustering):
                 if objId in objIds:
                     classId = cls + 1
                     item.setClassId(classId)
                     break # Found!
+                
+            else:
+                # Do not classify (exclude from output)
+                item.setClassId(0)
+                item._appendItem = False
         
         def updateClass(item: SetOfImages):
             classId: int = item.getObjId()
