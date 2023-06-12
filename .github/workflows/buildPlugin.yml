@@ -36,6 +36,11 @@ jobs:
         cuda: '11.7.0'
         linux-local-args: '[ "--toolkit" ]'
     
+    # Install Nvidia Drivers
+    - name: Install Nvidia Drivers
+      working-directory: ${{ github.workspace }}/../
+      run: sudo apt install -y ubuntu-drivers-common && sudo ubuntu-drivers autoinstall
+    
     # Echo CUDA Version
     - name: Echo CUDA Version
       run: echo "Installed cuda version is:${{steps.cuda-toolkit.outputs.cuda}}"
@@ -99,14 +104,11 @@ jobs:
     # Install plugin from the pull request using the Scipion3 installp command
     - name: Install plugin from pull request
       working-directory: ${{ github.workspace }}
-      run: |
-        # Install the repository from the pull request
-        ${{ github.workspace }}/../scipion/scipion3 installp -p . --devel
-        
-        
-      # Install DLTK
+      run: ../scipion/scipion3 installp -p . --devel
+    
+    
+      
+    # Install DLTK
     - name: Install DLTK
       working-directory: ${{ github.workspace }}
-      run: |
-        # InstallDLTK
-        ${{ github.workspace }}/../scipion/scipion3 installb deepLearningToolkit
+      run: ../scipion/scipion3 installb deepLearningToolkit
