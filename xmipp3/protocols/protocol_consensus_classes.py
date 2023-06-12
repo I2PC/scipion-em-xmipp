@@ -544,7 +544,8 @@ class XmippProtConsensusClasses(ProtClassify3D):
                 normalizedReferenceSizes=normalizedReferenceSizes
             )
 
-            outputClasses.write()
+            self._defineOutputs(**{'merged' + str(n): outputClasses})
+            self._defineSourceRelation(self.inputClassifications, outputClasses)
             return outputClasses
         
     # -------------------------- Convert functions -----------------------------
