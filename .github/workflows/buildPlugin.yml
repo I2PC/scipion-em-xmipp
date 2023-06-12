@@ -39,7 +39,9 @@ jobs:
     # Install Nvidia Drivers
     - name: Install Nvidia Drivers
       working-directory: ${{ github.workspace }}/../
-      run: sudo apt install -y ubuntu-drivers-common && sudo ubuntu-drivers autoinstall
+      env:
+        DRIVER_VERSION: 525
+      run: sudo apt install -y nvidia-$DRIVER_VERSION
     
     # Echo CUDA Version
     - name: Echo CUDA Version
