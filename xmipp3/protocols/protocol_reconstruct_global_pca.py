@@ -122,12 +122,9 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         
         form.addParam('resolution',FloatParam, label="max resolution", default=10,
                       help='Maximum resolution to be consider for alignment')
-        form.addParam('coef' ,FloatParam, label="% variance", default=0.75, expertLevel=LEVEL_ADVANCED,
+        form.addParam('coef' ,FloatParam, label="% variance", default=0.35, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of variance to determine the number of coefficients to be considers (between 0-1).'
                       ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
-        form.addParam('numPart' ,IntParam, label="number of particles for PCA", default=20000, 
-                      expertLevel=LEVEL_ADVANCED,
-                      help='number of particles to be consider for PCA training')
         
         
         form.addSection(label='Global alignment')
@@ -143,8 +140,6 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
                       help='Sampling rate in the alignment')
         form.addParam('MaxShift', IntParam, label="Max. shift", default=20, expertLevel=LEVEL_ADVANCED,
                       help='Maximum shift for translational search')
-        # form.addParam('MaxShift', IntParam, label="Max. shift (%)", default=10, expertLevel=LEVEL_ADVANCED,
-        #               help='Maximum shift as a percentage of the image size')
         
 
 
@@ -155,17 +150,14 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         
         updateEnviron(self.gpuList.get()) 
         
-        # self.imgsOrigXmd = self._getExtraPath('images_original.xmd')
-        # if self.correctCtf:
-        self.imgsFnXmd = self._getExtraPath('images.xmd')
-        # else:
-        #     self.imgsFnXmd = self._getExtraPath('images_original.xmd')
-        self.imgsFn = self._getExtraPath('images.mrcs')
-        self.refsFn = self._getExtraPath('references.mrcs')
-        self.refsFnXmd = self._getExtraPath('references.xmd')
+        self.imgsOrigXmd = self._getExtraPath('images_original.xmd')
+        self.imgsFnXmd = self._getTmpPath('images.xmd')
+        self.imgsFn = self._getTmpPath('images.mrcs')
+        self.refsFn = self._getTmpPath('references.mrcs')
+        self.refsFnXmd = self._getTmpPath('references.xmd')
         self.sampling = self.inputParticles.get().getSamplingRate()
         size =self.inputParticles.get().getDimensions()[0]
-        # self.MaxShift = int(size * self.MaxShift.get() / 100)
+  
         self.MaxShift = self.MaxShift.get()
         refVol = self.inputVolume.get().getFileName()
         extVol = getExt(refVol)
@@ -186,16 +178,16 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
             self.iterations = 4
 
 
-        self._insertFunctionStep('convertInputStep', self.inputParticles.get(), self.imgsFnXmd)
+        self._insertFunctionStep('convertInputStep', self.inputParticles.get(), self.imgsOrigXmd)
         self._insertFunctionStep("createGallery", self.angleGallery.get(), refVol)
         
         if self.scale:
             self._insertFunctionStep("scaleLeveling", self.imgsFn, self.refsFn, self.refsFn, radius)
             
         if self.correctCtf:
-            self._insertFunctionStep('correctCTF', self.imgsFnXmd, self.imgsFn, self.sampling)
+            self._insertFunctionStep('correctCTF', self.imgsOrigXmd, self.imgsFn, self.sampling)
 
-        self._insertFunctionStep("pcaTraining", self.resolution.get())
+        self._insertFunctionStep("pcaTraining", self.refsFn, self.resolution.get())
         
         for iter in range(self.iterations):
             
@@ -229,17 +221,17 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
     
 
     #--------------------------- STEPS functions ---------------------------------------------------        
-    def convertInputStep(self, inputFn, outputFn):
-        writeSetOfParticles(inputFn, outputFn)
+    def convertInputStep(self, input, outputOrig):
+        writeSetOfParticles(input, outputOrig)
         
-        args = ' -i  %s -o %s '%(outputFn, self.imgsFn)
+        args = ' -i  %s -o %s '%(outputOrig, self.imgsFn)
         self.runJob("xmipp_image_convert",args, numberOfMpi=1) 
         
-        # if self.correctCtf:  
-        #     args = ' -i  %s -o %s --sampling_rate %s '%(self.imgsFnXmd, self.imgsFn, self.sampling)
+        # if self.correctCtf: 
+        #     args = ' -i  %s -o %s --sampling_rate %s '%(outputOrig, self.imgsFn, self.sampling)
         #     self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get()) 
         # else:
-        #     args = ' -i  %s -o %s '%(self.imgsFnXmd, self.imgsFn)
+        #     args = ' -i  %s -o %s '%(outputOrig, self.imgsFn)
         #     self.runJob("xmipp_image_convert",args, numberOfMpi=1) 
         
     def correctCTF(self, input, output, sampling):  
@@ -250,7 +242,7 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         args = ' -i  %s --sym %s --sampling_rate %s  -o %s -v 0'% \
                 (refVol, self.symmetryGroup.get(), angle, self.refsFn)
         self.runJob("xmipp_angular_project_library", args)
-        moveFile( self._getExtraPath('references.doc'), self.refsFnXmd)
+        moveFile( self._getTmpPath('references.doc'), self.refsFnXmd)
         
     def scaleLeveling(self, expIm, refIm, output, radius):
         args = ' -i %s -r %s -o %s -rad %s' %(expIm, refIm, output, radius)
@@ -259,9 +251,9 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         env['LD_LIBRARY_PATH'] = ''
         self.runJob("xmipp_global_align_preprocess", args, numberOfMpi=1, env=env) 
     
-    def pcaTraining(self, resolutionTrain):
-        args = ' -i %s -n 1 -s %s -hr %s -lr 530 -p %s -t %s -o %s/train_pca  --batchPCA'% \
-                (self.imgsFn, self.sampling, resolutionTrain, self.coef.get(), self.numPart.get(), self._getExtraPath())
+    def pcaTraining(self, inputIm, resolutionTrain):
+        args = ' -i %s  -s %s -hr %s -lr 530 -p %s -o %s/train_pca  --batchPCA'% \
+                (inputIm, self.sampling, resolutionTrain, self.coef.get(), self._getExtraPath())
 
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = ''
@@ -281,13 +273,13 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
 
 
     def reconstructVolume(self, iter):
-        args = '-i %s -n 2 --oroot %s '%(self._getExtraPath('align_iter%s.xmd'%(iter+1)), self._getExtraPath('split'))
+        args = '-i %s -n 2 --oroot %s '%(self._getExtraPath('align_iter%s.xmd'%(iter+1)), self._getTmpPath('split'))
         self.runJob("xmipp_metadata_split", args, numberOfMpi=1)
-        self._reconstructHalf(self._getExtraPath('split000001.xmd'), self._getExtraPath('split000001_vol.mrc'))
-        self._reconstructHalf(self._getExtraPath('split000002.xmd'), self._getExtraPath('split000002_vol.mrc'))
+        self._reconstructHalf(self._getTmpPath('split000001.xmd'), self._getTmpPath('split000001_vol.mrc'))
+        self._reconstructHalf(self._getTmpPath('split000002.xmd'), self._getTmpPath('split000002_vol.mrc'))
         # self._reconstruct(self._getExtraPath('align_iter%s.xmd'%(iter+1)), self._getExtraPath('output_vol.mrc'))
-        half1 = self._getExtraPath('split000001_vol.mrc')
-        half2 = self._getExtraPath('split000002_vol.mrc')
+        half1 = self._getTmpPath('split000001_vol.mrc')
+        half2 = self._getTmpPath('split000002_vol.mrc')
         avg = self._getExtraPath('output_avg.mrc')
         self._reconstructAvg(half1+':mrc', half2+':mrc', avg+':mrc')
         self._computeFSC(half1+':mrc', half2+':mrc')
@@ -303,25 +295,34 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
                 res = self.resolutionHalf
             else:
                 res = 10                
-            self.pcaTraining(res)
+            self.pcaTraining(self.refsFn, res)
             
 
     def createOutput(self, iter):      
         #output particle
+        
+        #modify column name to insert original mrcs name
+        args = ' -i %s --operate  rename_column "image image1" '%self._getExtraPath('align_iter%s.xmd'%(iter+1))   
+        self.runJob('xmipp_metadata_utilities', args, numberOfMpi=1)
+        args = ' -i %s --set join %s itemId ' %(self._getExtraPath('align_iter%s.xmd'%(iter+1)), self.imgsOrigXmd)   
+        self.runJob('xmipp_metadata_utilities', args, numberOfMpi=1)
+        
+        imgInitial = self.inputParticles.get()
         imgSet = self._getExtraPath('align_iter%s.xmd'%(iter+1))
-        partSet = self._createSetOfParticles()             
+        outSet = self._createSetOfParticles()    
+        outSet.copyInfo(imgInitial)         
         EXTRA_LABELS = [
             #emlib.MDL_COST
         ]
          # Fill
         readSetOfParticles(
             imgSet,
-            partSet,
+            outSet,
             extraLabels=EXTRA_LABELS
         )
-        partSet.setSamplingRate(self.inputParticles.get().getSamplingRate())       
-        self._defineOutputs(outputParticles=partSet)
-        self._defineSourceRelation(self.inputParticles, partSet)
+        outSet.setSamplingRate(self.inputParticles.get().getSamplingRate())       
+        self._defineOutputs(outputParticles=outSet)
+        self._defineSourceRelation(self.inputParticles, outSet)
         
         #output volume
         # if self.createVolume: 
