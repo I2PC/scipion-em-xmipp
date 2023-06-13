@@ -30,7 +30,7 @@ jobs:
     
     #Installing CUDA
     - name: Install CUDA
-      uses: Jimver/cuda-toolkit@v0.2.8
+      uses: Jimver/cuda-toolkit@v0.2.10
       id: cuda-toolkit
       with:
         cuda: '11.7.0'
@@ -99,6 +99,4 @@ jobs:
     # Install plugin from the pull request using the Scipion3 installp command
     - name: Install plugin from pull request
       working-directory: ${{ github.workspace }}
-      run: |
-        # Install the repository from the pull request
-        ${{ github.workspace }}/../scipion/scipion3 installp -p . --devel
+      run: ../scipion/scipion3 installp -p . --devel
