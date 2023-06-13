@@ -123,7 +123,6 @@ class XmippProtConsensusClasses(ProtClassify3D):
 
         # Create the output
         outputClasses = self._createSetOfClasses(
-            images=self._getInputImages(),
             classifications=classifications,
             clustering=intersections,
             suffix=self._getMergedIntersectionSuffix(len(intersections)),
@@ -205,8 +204,11 @@ class XmippProtConsensusClasses(ProtClassify3D):
         return list(map(convertClassification, self.inputClassifications))
 
     def _getInputImages(self, classification: int = 0) -> SetOfImages:
-        return self._getInputClassification(classification).getImages()
+        return self._getInputImagesPointer(classification=classification).get()
  
+    def _getInputImagesPointer(self, classification: int = 0) -> Pointer:
+        return self._getInputClassification(classification).getImagesPointer()
+
     def _getSetOfClassesSubtype(self) -> type:
         return type(self._getInputClassification(0))
  
@@ -234,21 +236,12 @@ class XmippProtConsensusClasses(ProtClassify3D):
     def _getMergedIntersectionSuffix(self, numel: int) -> str:
         return 'merged_%06d' % numel
 
-    def _getImagesSuffix(self) -> str:
-        return 'used'
- 
     def _getOutputClassesSqliteTemplate(self) -> str:
         return 'classes_%s.sqlite'
-
-    def _getOutputImagesSqliteTemplate(self) -> str:
-        return 'images_%s.sqlite'
 
     def _getOutputClassesSqliteFilename(self, suffix: str = '') -> str:
         return self._getPath(self._getOutputClassesSqliteTemplate() % suffix)
 
-    def _getOutputImagesSqliteFilename(self, suffix: str = '') -> str:
-        return self._getPath(self._getOutputImagesSqliteTemplate() % suffix)
- 
     def _writeReferenceIntersectionSizes(self, sizes, normalizedSizes):
         np.save(self._getReferenceIntersectionSizeFilename(), sizes)
         np.save(self._getReferenceIntersectionNormalizedSizeFilename(), normalizedSizes)
@@ -522,11 +515,6 @@ class XmippProtConsensusClasses(ProtClassify3D):
             
         else:
             # Load from input
-            SetOfImagesSubtype = self._getSetOfImagesSubtype()
-            if os.path.exists(self._getOutputImagesSqliteFilename(self._getImagesSuffix())):
-                images = SetOfImagesSubtype(filename=self._getOutputImagesSqliteFilename(self._getImagesSuffix()))
-            else:
-                images = self._getInputImages()
             classifications = self._getInputClassifications()
             intersections = self._getOutputIntersectionIds()
             linkage = self._readLinkageMatrix()
@@ -536,7 +524,6 @@ class XmippProtConsensusClasses(ProtClassify3D):
             merging = self._calculateMergedIntersections(intersections, linkage, stop=n)
             merged = merging[-1]
             outputClasses = self._createSetOfClasses(
-                images=images,
                 classifications=classifications,
                 clustering=merged,
                 suffix=suffix,
@@ -550,7 +537,6 @@ class XmippProtConsensusClasses(ProtClassify3D):
         
     # -------------------------- Convert functions -----------------------------
     def _createSetOfClasses(self, 
-                            images: SetOfImages,
                             classifications: Sequence[SetOfClasses],
                             clustering: Sequence[Set[int]], 
                             suffix: str,
@@ -564,7 +550,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
             self._getOutputClassesSqliteTemplate(),
             suffix
         ) 
-        result.setImages(images)
+        result.setImages(self._getInputImagesPointer())
     
         # Fill the output
         def updateItem(item: Image, _):
