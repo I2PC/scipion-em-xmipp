@@ -32,6 +32,8 @@ import os
 
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as const
+from pwem.convert.headers import setMRCSamplingRate
+from pwem.emlib.image import ImageHandler
 from pyworkflow.utils import replaceBaseExt, removeExt, getExt, createLink
 
 from pwem.convert import cifToPdb, downloadPdb, headers
@@ -44,7 +46,9 @@ class XmippProtConvertPdb(ProtInitialVolume):
     _label = 'convert a PDB'
     IMPORT_FROM_ID = 0
     IMPORT_OBJ = 1
-    IMPORT_FROM_FILES = 2 
+    IMPORT_FROM_FILES = 2
+    OUTPUT_NAME = "outputVolume"
+    _possibleOutputs = {OUTPUT_NAME: Volume}
        
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
@@ -101,9 +105,9 @@ class XmippProtConvertPdb(ProtInitialVolume):
         be defined. Two of the most used functions are: _insertFunctionStep or _insertRunJobStep
         """
         if self.inputPdbData == self.IMPORT_FROM_ID:
-            self._insertFunctionStep('pdbDownloadStep')
-        self._insertFunctionStep('convertPdbStep')
-        self._insertFunctionStep('createOutput')
+            self._insertFunctionStep(self.pdbDownloadStep)
+        self._insertFunctionStep(self.convertPdbStep)
+        self._insertFunctionStep(self.createOutput)
     
     # --------------------------- STEPS functions --------------------------------------------
     def pdbDownloadStep(self):
@@ -130,7 +134,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
 
         samplingR = self.sampling.get()
 
-        args = '-i %s --sampling %f -o %s' % (pdbFn_extra, samplingR, outFile)
+        args = '-i "%s" --sampling %f -o "%s"' % (pdbFn_extra, samplingR, outFile)
         
         if self.centerPdb:
             args += ' --centerPDB'
@@ -165,12 +169,19 @@ class XmippProtConvertPdb(ProtInitialVolume):
     def createOutput(self):
         volume = Volume()
         volume.setSamplingRate(self.sampling.get())
-        volume.setFileName(self._getVolName())
+
+        # Since xmipp generates always a .vol we do the conversion here
+        ih = ImageHandler()
+        mrcFn = self._getVolName(extension="mrc")
+        ih.convert(self._getVolName(), mrcFn)
+        volume.setFileName(mrcFn)
+        volume.fixMRCVolume(setSamplingRate=True)
+        setMRCSamplingRate(mrcFn, self.sampling.get())
         if self.vol:
             origin = Transform()
             origin.setShiftsTuple(self.shifts)
             volume.setOrigin(origin)
-        self._defineOutputs(outputVolume=volume)
+        self._defineOutputs(**{self.OUTPUT_NAME:volume})
         if self.inputPdbData == self.IMPORT_OBJ:
             self._defineSourceRelation(self.pdbObj, volume)
     
@@ -181,7 +192,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
         """ 
         summary = []
         # Add some lines of summary information
-        if not hasattr(self, 'outputVolume'):
+        if not hasattr(self, self.OUTPUT_NAME):
             summary.append("outputVolume not ready yet.")
         else:
             if self.inputPdbData == self.IMPORT_FROM_ID:
@@ -214,5 +225,5 @@ class XmippProtConvertPdb(ProtInitialVolume):
         else:
             return self.pdbFile.get()
     
-    def _getVolName(self):
-        return self._getExtraPath(replaceBaseExt(self._getPdbFileName().replace(" ", "_"), "vol"))
+    def _getVolName(self, extension="vol"):
+        return self._getExtraPath(replaceBaseExt(self._getPdbFileName().replace(" ", "_"), extension))
