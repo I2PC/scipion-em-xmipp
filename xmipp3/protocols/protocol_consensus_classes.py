@@ -28,6 +28,7 @@
 
 from typing import Iterable, Sequence, Optional, Tuple, List, Set
 import itertools
+import operator
 
 from pwem.protocols import ProtClassify3D
 from pwem.objects import Pointer, Image, SetOfClasses, SetOfImages
@@ -356,44 +357,76 @@ class XmippProtConsensusClasses(ProtClassify3D):
         return result
     
     def _calculateLinkage(self,
-                          intersections: List[Set[int]],
-                          classes: List[Set[int]],
+                          intersections: Sequence[Set[int]],
+                          classes: Sequence[Set[int]],
                           metric: str ) -> np.ndarray:
+        
+        def entropy(classification: Iterable[Set[int]]) -> float:
+            return scipy.stats.entropy(list(map(len, classification)))
+        
+        def merge(classification: Sequence[Set[int]], indices: Sequence[int]):
+            included = [classification[i] for i in indices]
+            excluded = [classification[i] for i in range(len(classification)) if i not in indices]
+            excluded.append(Set.union(*included))
+            return excluded
         
         linkage = np.zeros((len(intersections)-1, 4))
         
         # Initialize the working data structures
         similarities = list(map(lambda x : self._calculateClusterSimilarityVector(x, classes), intersections))
-        clusters = list(enumerate(intersections))
+        clusters = list(intersections)
+        ids = list(range(len(clusters)))
         
         for id, row in enumerate(linkage, start=len(intersections)):
             # Determine the indices to be merged
-            # TODO optimize to not use squareform
-            distances = scipy.spatial.distance.pdist(similarities, metric=metric) 
-            distance_matrix = scipy.spatial.distance.squareform(distances, 'tomatrix')
-            np.fill_diagonal(distance_matrix, np.inf)
-            idx0, idx1 = np.unravel_index(np.argmin(distance_matrix), distance_matrix.shape)
+            previous_entropy = entropy(clusters)
+            def cost(indices: Sequence[int]) -> float:
+                #Compute the euclidean distance
+                assert(len(indices) == 2)
+                distance = scipy.spatial.distance.euclidean(
+                    similarities[indices[0]],
+                    similarities[indices[1]]
+                )
+                
+                # Compute the entropy gain
+                merged = merge(clusters, indices)
+                merged_entropy = entropy(merged)
+                entropy_gain = merged_entropy - previous_entropy
+                
+                # Build the cost function
+                return distance * entropy_gain
+            
+            # Minimize the cost function by brute-force
+            idx0, idx1 = min(itertools.combinations(range(len(clusters)), r=2), key=cost)
             
             # Be careful to pop from the back first
-            idx0, idx1 = max(idx0, idx1), min(idx0, idx1)
+            assert(idx0 < idx1)
+            value = cost((idx0, idx1)) # TODO optimize inside min
             
             # Merge clusters
-            row[0], cluster0 = clusters.pop(idx0)
-            row[1], cluster1 = clusters.pop(idx1)
-            row[2] = distance_matrix[idx0, idx1]
-            # TODO row[3] is not written
+            cluster1 = clusters.pop(idx1)
+            cluster0 = clusters.pop(idx0)
             merged = cluster0.union(cluster1)
-            clusters.append((id, merged))
-            
-            # Add the new similarity
-            similarities.pop(idx0)
+            clusters.append(merged)
+
+            # Update similarities
             similarities.pop(idx1)
+            similarities.pop(idx0)
             similarities.append(self._calculateClusterSimilarityVector(merged, classes))
-        
+            
+            # Update ids
+            row[0] = ids.pop(idx1)
+            row[1] = ids.pop(idx0)
+            row[2] = value
+            # TODO row[3] is not written
+            ids.append(id)
+            
             assert(len(similarities) == len(clusters))
+            assert(len(ids) == len(clusters))
         
-        assert(len(similarities) == 1)
         assert(len(clusters) == 1)
+        assert(len(similarities) == 1)
+        assert(len(ids) == 1)
         return linkage 
             
     def _calculateMergedIntersections(self, 
