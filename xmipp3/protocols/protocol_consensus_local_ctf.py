@@ -72,23 +72,29 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
         different programs (Xmipp, Relion, gCTF, ...)"""
         allParticlesDefU = {}
         allParticlesDefV = {}
+        allParticlesDefAngle = {}
         for defsetP in self.inputSets:
             defset = defsetP.get()
             for particle in defset:
                 pIDs = []
                 pDefUs = []
                 pDefVs = []
+                pDefAngles = []
                 pIDs.append(particle.getObjId())
                 pDefUs.append(particle.getCTF().getDefocusU())
                 pDefVs.append(particle.getCTF().getDefocusV())
-                for pId, pDefU, pDefV in zip(pIDs, pDefUs, pDefVs):
+                pDefAngles.append(particle.getCTF().getDefocusAngle())
+                for pId, pDefU, pDefV, pDefAngle in zip(pIDs, pDefUs, pDefVs, pDefAngles):
                     if not pId in allParticlesDefU.keys():
                         allParticlesDefU[pId]=[]
                         allParticlesDefV[pId] = []
+                        allParticlesDefAngle[pId] = []
                     allParticlesDefU[pId].append(pDefU)
                     allParticlesDefV[pId].append(pDefV)
+                    allParticlesDefAngle[pId].append(pDefAngle)
         self.defMatrixU = np.full(shape=(len(allParticlesDefU.keys()),len(self.inputSets)),fill_value=np.NaN)
         self.defMatrixV = np.full(shape=(len(allParticlesDefV.keys()),len(self.inputSets)),fill_value=np.NaN)
+        self.defMatrixAngle = np.full(shape=(len(allParticlesDefAngle.keys()),len(self.inputSets)),fill_value=np.NaN)
         i=0
         self.pMatrixIdx={}
         for pIdU, pdefiU in allParticlesDefU.items():
@@ -101,16 +107,29 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
             self.pMatrixIdx[pIdV] = l
             for k in enumerate(pdefiV):
                 self.defMatrixV[l, k[0]] = k[1]
-            l += 1
+            l+=1
+        n=0
+        for pIdAngle, pdefiAngle in allParticlesDefAngle.items():
+            self.pMatrixIdx[pIdAngle] = n
+            for p in enumerate(pdefiAngle):
+                self.defMatrixAngle[n, p[0]] = p[1]
+            n+=1
 
         self.medianU = np.nanmedian(self.defMatrixU, axis=1)
         self.medianV = np.nanmedian(self.defMatrixV, axis=1)
+        self.medianAngle = np.nanmedian(self.defMatrixAngle, axis=1)
+        print(self.medianAngle)
+
         self.madU = np.empty_like(self.medianU)
         self.madV = np.empty_like(self.medianV)
+        self.madAngle = np.empty_like(self.medianAngle)
+
         for l in enumerate(self.medianU):
             self.madU[l[0]] = np.nanmedian(np.abs(self.defMatrixU[l[0],:] - self.medianU[l[0]]))
         for m in enumerate(self.medianV):
             self.madV[m[0]] = np.nanmedian(np.abs(self.defMatrixV[m[0], :] - self.medianV[m[0]]))
+        for o in enumerate(self.medianAngle):
+            self.madAngle[o[0]] = np.nanmedian(np.abs(self.defMatrixAngle[o[0], :] - self.medianAngle[o[0]]))
 
         self.defMatrixU = np.hstack((self.defMatrixU, self.medianU.reshape(len(self.medianU),1)))
         self.corrMatrixU = np.zeros((self.defMatrixU.shape[0],self.defMatrixU.shape[1]))
@@ -125,6 +144,13 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
         self.corrMatrixV = np.ma.corrcoef(defMatrixInvalidV,rowvar=False)
         np.savetxt(self._getExtraPath("defocusMatrixV.txt"),self.defMatrixV)
         np.savetxt(self._getExtraPath("correlationMatrixV.txt"),self.corrMatrixV)
+
+        self.defMatrixAngle = np.hstack((self.defMatrixAngle, self.medianAngle.reshape(len(self.medianAngle),1)))
+        self.corrMatrixAngle = np.zeros((self.defMatrixAngle.shape[0],self.defMatrixAngle.shape[1]))
+        defMatrixInvalidAngle = np.ma.masked_invalid(self.defMatrixAngle)
+        self.corrMatrixAngle = np.ma.corrcoef(defMatrixInvalidAngle,rowvar=False)
+        np.savetxt(self._getExtraPath("defocusMatrixAngle.txt"),self.defMatrixAngle)
+        np.savetxt(self._getExtraPath("correlationMatrixAngle.txt"),self.corrMatrixAngle)
 
     def createOutputStep(self):
         """create as output a setOfParticles with a consensus estimation of local defocus (median) and its median
@@ -142,9 +168,13 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
                 newPart = part.clone()
                 pMedianU = Float(self.medianU[index]) # consensus defocus U
                 pMedianV = Float(self.medianV[index]) # consensus defocus V
+                pMedianAngle = Float(self.medianAngle[index]) # consensus defocus Angle
+
                 pMadU = Float(self.madU[index]) # residual consensus defocus U
                 newPart._ctfModel._defocusU.set(pMedianU)
                 newPart._ctfModel._defocusV.set(pMedianV)
+                newPart._ctfModel._defocusAngle.set(pMedianAngle)
+
                 setXmippAttribute(newPart.getCTF(), emlib.MDL_CTF_DEFOCUS_RESIDUAL, pMadU)
                 outputSet.append(newPart)
 
@@ -157,6 +187,8 @@ class XmippProtConsensusLocalCTF(ProtAnalysis3D):
         pId = particle.getObjId()
         setXmippAttribute(particle,emlib.MDL_CTF_DEFOCUSA,self.medianU[self.pMatrixIdx[pId]])
         setXmippAttribute(particle,emlib.MDL_CTF_DEFOCUS_RESIDUAL,self.madU[self.pMatrixIdx[pId]])
+        setXmippAttribute(particle,emlib.MDL_CTF_DEFOCUS_ANGLE,self.medianAngle[self.pMatrixIdx[pId]])
+
 
     #--------------------------- INFO functions --------------------------------------------
     def _summary(self):
