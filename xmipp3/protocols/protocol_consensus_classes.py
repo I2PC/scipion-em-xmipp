@@ -383,7 +383,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
             def cost(indices: Sequence[int]) -> float:
                 #Compute the euclidean distance
                 assert(len(indices) == 2)
-                distance = scipy.spatial.distance.euclidean(
+                distance = scipy.spatial.distance.cosine(
                     similarities[indices[0]],
                     similarities[indices[1]]
                 )
@@ -391,7 +391,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
                 # Compute the entropy gain
                 merged = merge(clusters, indices)
                 merged_entropy = entropy(merged)
-                entropy_gain = merged_entropy - previous_entropy
+                entropy_gain = previous_entropy - merged_entropy
                 
                 # Build the cost function
                 return distance * entropy_gain
