@@ -205,7 +205,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
         return list(map(convertClassification, self.inputClassifications))
 
     def _getInputImages(self, classification: int = 0) -> SetOfImages:
-        return self._getInputImagesPointer(classification=classification).get()
+        return self._getInputClassification(classification).getImages()
  
     def _getInputImagesPointer(self, classification: int = 0) -> Pointer:
         return self._getInputClassification(classification).getImagesPointer()
