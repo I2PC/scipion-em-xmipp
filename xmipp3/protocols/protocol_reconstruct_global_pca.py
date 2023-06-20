@@ -91,14 +91,14 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('inputVolume', PointerParam, label="Initial volumes", important=True,
                       pointerClass='Volume', allowsNull=True,
                       help='Select a initial volume . ')
+        form.addParam('particleRadius', FloatParam, default=-1,
+                     label='Radius of particle (px)', #condition='scale',
+                     help='This is the radius (in pixels) of the spherical mask covering the particle in the input images')
         form.addParam('scale', BooleanParam, default=True,
                       label='adjust gray scale?',
                       help='If you set to *Yes*, the intensity level of the reference particles'
                         ' are leveled to the intensity levels of the experimental particles.'
                         ' If the initial volume was reconstructed  with XMIPP, this step is not necessary.')
-        form.addParam('particleRadius', IntParam, default=-1,
-                     label='Radius of particle (px)', condition='scale',
-                     help='This is the radius (in pixels) of the spherical mask covering the particle in the input images')
         form.addParam('mode', EnumParam, choices=['refine', 'align'],
                       label="Refine or align?", default=self.REFINE,
                       display=EnumParam.DISPLAY_HLIST, 
@@ -164,11 +164,11 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         if (extVol == '.mrc') or (extVol == '.map'):
            refVol = refVol + ':mrc'  
         
-        if self.scale:
-            if self.particleRadius.get() == -1:
-                radius = size/2
-            else:
-                radius = self.particleRadius.get()
+ 
+        if self.particleRadius.get() == -1:
+            radius = int(size/2)
+        else:
+            radius = int(self.particleRadius.get())
 
         
         #maximum number of iteration = 4
@@ -210,7 +210,7 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
                 outputXmd = self._getExtraPath('align_iter%s.xmd'%(iter+1))
                 applyShift = True
            
-            self._insertFunctionStep("globalAlign", inputXmd, outputXmd, angle, MaxAngle, shift, maxShift, applyShift)   
+            self._insertFunctionStep("globalAlign", inputXmd, outputXmd, angle, MaxAngle, shift, maxShift, applyShift, radius)   
         
             if self.mode == self.REFINE:   
                 self._insertFunctionStep("reconstructVolume", iter) 
@@ -260,10 +260,10 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         self.runJob("xmipp_global_align_train", args, numberOfMpi=1, env=env)
         
         
-    def globalAlign(self, inputXmd, outputXmd, angle, MaxAngle, shift, MaxShift, applyShift):
-        args = ' -i %s -r %s -a %s -amax %s -sh %s -msh %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt  -o %s -stExp %s  -stRef %s  -s %s '% \
+    def globalAlign(self, inputXmd, outputXmd, angle, MaxAngle, shift, MaxShift, applyShift, rad):
+        args = ' -i %s -r %s -a %s -amax %s -sh %s -msh %s -b %s/train_pca_bands.pt -v %s/train_pca_vecs.pt  -o %s -stExp %s  -stRef %s  -s %s -radius %s'% \
                 (self.imgsFn, self.refsFn, angle, MaxAngle, shift, MaxShift,\
-                 self._getExtraPath(), self._getExtraPath(), outputXmd, inputXmd, self.refsFnXmd, self.sampling)
+                 self._getExtraPath(), self._getExtraPath(), outputXmd, inputXmd, self.refsFnXmd, self.sampling, rad)
         if applyShift:
             args += ' --apply_shifts ' 
 
@@ -351,10 +351,6 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
     
 
     #--------------------------- UTILS functions --------------------------------------------
-
-    # def _updateLocation(self, item, row):
-    #     index, filename = xmippToLocation(row.getValue(md.MDL_IMAGE))
-    #     item.setLocation(index, filename)
     
     def _reconstructHalf(self, input, output):
         gpuList = self.getGpuList()
