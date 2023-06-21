@@ -56,14 +56,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
     """
     _label = 'consensus classes'
     _devStatus = BETA
-
-    METRICS = [
-        'cosine',
-        'euclidean',
-        'cityblock',
-        'correlation',
-    ]
-
+    
     def __init__(self, *args, **kwargs):
         ProtClassify3D.__init__(self, *args, **kwargs)
         
@@ -80,13 +73,6 @@ class XmippProtConsensusClasses(ProtClassify3D):
                       default = 0,
                       help='Minimum output class size. If set to zero it will not have '
                       'any effect')
-        
-        
-        form.addSection(label='Clustering', expertLevel=LEVEL_ADVANCED)
-        form.addParam('distanceMetric', EnumParam, label='Metric',
-                      choices=self.METRICS, default=0,
-                      help='Distance metric used when comparing clusters')
-        
 
     # --------------------------- INSERT steps functions -----------------------
     def _insertAllSteps(self):
@@ -140,8 +126,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
         allClasses = list(itertools.chain(*classParticleIds))
         intersections = self._getOutputIntersectionIds()
         
-        metric = self.METRICS[int(self.distanceMetric)]
-        linkage = self._calculateLinkage(intersections, allClasses, metric)
+        linkage = self._calculateLinkage(intersections, allClasses)
 
         # Create outputs
         self._writeLinkageMatrix(linkage)
@@ -358,8 +343,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
     
     def _calculateLinkage(self,
                           intersections: Sequence[Set[int]],
-                          classes: Sequence[Set[int]],
-                          metric: str ) -> np.ndarray:
+                          classes: Sequence[Set[int]] ) -> np.ndarray:
         
         def entropy(classification: Iterable[Set[int]]) -> float:
             return scipy.stats.entropy(list(map(len, classification)))
