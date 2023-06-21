@@ -45,7 +45,6 @@ import os
 import json
 import numpy as np
 import scipy.stats
-import scipy.cluster
 import scipy.spatial
 
 class XmippProtConsensusClasses(ProtClassify3D):
