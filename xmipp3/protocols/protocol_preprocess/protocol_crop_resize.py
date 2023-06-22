@@ -282,7 +282,16 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
         if self.isMask(self.inputParticles.get()):
             # If input is a Mask, modify filter params
             self.inputFn = self.inputParticles.get().getFileName()
-            self.outputStk = self._getExtraPath(os.path.basename(self.inputFn))
+            inputName, inputExt = os.path.splitext(os.path.basename(self.inputFn))
+
+            # If mask extension is not .mrc, convert to .mrc
+            targetExt = targetExt
+            outputFile = self._getExtraPath(os.path.basename(inputName + targetExt))
+            if inputExt != targetExt:
+                self.runJob('xmipp_image_convert', ['-i', self.inputFn, '-o', outputFile])
+
+            # Set output mask path
+            self.outputStk = outputFile
             self.outputMd = self._getTmpPath('tmp.xmd')
         else:
             # If input is not Mask, keep default behaviour
@@ -311,8 +320,7 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
         
         if self.doResize:
             output.setSamplingRate(self.samplingRate)
-            if not isMask:
-                setMRCSamplingRate(self.outputStk, self.samplingRate)
+            setMRCSamplingRate(self.outputStk, self.samplingRate)
             
     def _updateItem(self, item, row):
         """ Update also the sampling rate and 
