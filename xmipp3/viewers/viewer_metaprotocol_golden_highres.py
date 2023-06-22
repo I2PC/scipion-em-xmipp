@@ -31,7 +31,7 @@ from pyworkflow.protocol.params import EnumParam, NumericRangeParam, LabelParam,
     IntParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-from pwem.viewers import ObjectView, DataView, ChimeraClientView
+from pwem.viewers import ObjectView, DataView
 import pwem.viewers.showj as showj
 from pwem import emlib
 

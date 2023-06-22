@@ -32,7 +32,7 @@ from os.path import exists
 
 from pwem.objects import FSC
 from pwem.viewers import (DataView, Classes3DView, FscViewer, ObjectView,
-                          ChimeraView, ChimeraClientView)
+                          ChimeraView)
 import pwem.viewers.showj as showj
 import pwem.emlib.metadata as md
 from pyworkflow.protocol.params import EnumParam, NumericRangeParam, LabelParam
@@ -186,7 +186,7 @@ class XmippMLTomoViewer(ProtocolViewer):
             f.close()
             view = ChimeraView(cmdFile)
         else:
-            view = ChimeraClientView(volumes[0])
+            view = ChimeraView(volumes[0])
 
         return [view]
 
