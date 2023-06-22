@@ -285,7 +285,7 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
             inputName, inputExt = os.path.splitext(os.path.basename(self.inputFn))
 
             # If mask extension is not .mrc, convert to .mrc
-            targetExt = targetExt
+            targetExt = '.mrc'
             outputFile = self._getExtraPath(os.path.basename(inputName + targetExt))
             if inputExt != targetExt:
                 self.runJob('xmipp_image_convert', ['-i', self.inputFn, '-o', outputFile])
