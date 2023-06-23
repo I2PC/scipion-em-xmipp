@@ -308,8 +308,7 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
         We need to update the sampling rate of the 
         particles if the Resize option was used.
         """
-        isMask = self.isMask(self.inputParticles.get())
-        if not isMask:
+        if not self.isMask(self.inputParticles.get()):
             self.inputHasAlign = self.inputParticles.get().hasAlignment()
         
         if self.doResize:
