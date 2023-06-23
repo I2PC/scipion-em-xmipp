@@ -244,9 +244,13 @@ def _getSampling(imgSet):
 
 class XmippProtCropResizeParticles(XmippProcessParticles):
     """ Crop or resize a set of particles """
+    # Protocol constants
+    OUTPUT_PARTICLES_NAME = 'outputParticles'
+    OUTPUT_MASK_NAME = 'outputMask'
+
     _label = 'crop/resize particles'
     _inputLabel = 'particles'
-    _possibleOutputs = {'outputParticles': SetOfParticles, 'outputMask': Mask}
+    _possibleOutputs = {OUTPUT_PARTICLES_NAME: SetOfParticles, OUTPUT_MASK_NAME: Mask}
     
     def __init__(self, **kwargs):
         XmippProcessParticles.__init__(self, **kwargs)
@@ -299,7 +303,7 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
             outputMask = Mask(self.outputStk)
             outputMask.copyInfo(self.inputParticles.get())
             self._preprocessOutput(outputMask)
-            self._defineOutputs(outputMask=outputMask)
+            self._defineOutputs(**{self.OUTPUT_MASK_NAME: outputMask})
             self._defineTransformRelation(self.inputParticles.get(), outputMask)
         else:
             # If input is not Mask, keep default behaviour
