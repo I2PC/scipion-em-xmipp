@@ -383,7 +383,16 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
         return [str]
 
     def _validate(self):
-        return XmippResizeHelper._validate(self)
+        """ This function validates the input parameters so only allowed operations take place. """
+        # Getting default errors
+        errors = XmippResizeHelper._validate(self)
+
+        # Checking if at least one of the operations has been selected
+        if not self.doResize and not self.doWindow.get():
+            errors.append('At least one of the possible operations needs to be selected.')
+        
+        # Returning errors
+        return errors
     
     #--------------------------- UTILS functions ---------------------------------------------------
     def isMask(self):
