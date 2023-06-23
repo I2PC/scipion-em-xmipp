@@ -281,7 +281,7 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
     
     def convertInputStep(self):
         """ convert if necessary"""
-        if self.isMask(self.inputParticles.get()):
+        if self.isMask():
             # If input is a Mask, modify filter params
             self.inputFn = self.inputParticles.get().getFileName()
             inputName = os.path.splitext(os.path.basename(self.inputFn))[0]
@@ -294,7 +294,7 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
             super().convertInputStep()
     
     def createOutputStep(self):
-        if self.isMask(self.inputParticles.get()):
+        if self.isMask():
             # If input is a Mask, create output Mask
             outputMask = Mask(self.outputStk)
             outputMask.copyInfo(self.inputParticles.get())
@@ -310,7 +310,7 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
         We need to update the sampling rate of the 
         particles if the Resize option was used.
         """
-        if not self.isMask(self.inputParticles.get()):
+        if not self.isMask():
             self.inputHasAlign = self.inputParticles.get().hasAlignment()
         
         if self.doResize:
@@ -382,10 +382,10 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
         return XmippResizeHelper._validate(self)
     
     #--------------------------- UTILS functions ---------------------------------------------------
-    def isMask(self, inputObject):
-      """ This function returns True if the given object is a Mask. False otherwise. """
+    def isMask(self):
+      """ This function returns True if the input object is a Mask. False otherwise. """
       try:
-        return inputObject.getClassName() == 'Mask'
+        return self.inputParticles.get().getClassName() == 'Mask'
       except AttributeError:
         # If the object does not have method getClassName, it cannot be a Mask object
         return False
