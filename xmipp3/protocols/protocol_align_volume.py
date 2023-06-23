@@ -331,7 +331,7 @@ class XmippProtAlignVolume(ProtAlignVolume):
         return maskArgs
     
     def _getAlignArgs(self):
-        alignArgs = ''
+        alignArgs = ' --dontWrap'
         
         if self.alignmentAlgorithm == ALIGN_ALGORITHM_FAST_FOURIER:
             alignArgs += " --frm"

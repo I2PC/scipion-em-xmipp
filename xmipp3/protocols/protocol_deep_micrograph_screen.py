@@ -215,6 +215,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
           else:
               args += ' -g -1'
 
+          os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
           self.runJob('xmipp_deep_micrograph_cleaner', args)
 
 
