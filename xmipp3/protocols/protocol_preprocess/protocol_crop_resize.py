@@ -258,7 +258,9 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
        
         # Obtaining input particles param to accept also a mask
         inputParticles = form.getParam('inputParticles')
-        inputParticles.pointerClass = String(str(inputParticles.pointerClass)+',Mask')
+        inputParticles.pointerClass = String(str(inputParticles.pointerClass) + ',Mask')
+        inputParticles.label = String(str(inputParticles.label) + '/Mask')
+        inputParticles.help = String('Input particles or 2D Mask to be cropped/resized.')
 
     def _defineProcessParams(self, form):
         XmippResizeHelper._defineProcessParams(self, form)
