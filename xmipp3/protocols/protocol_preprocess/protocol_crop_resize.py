@@ -383,12 +383,8 @@ class XmippProtCropResizeParticles(XmippProcessParticles):
     
     #--------------------------- UTILS functions ---------------------------------------------------
     def isMask(self):
-      """ This function returns True if the input object is a Mask. False otherwise. """
-      try:
-        return self.inputParticles.get().getClassName() == 'Mask'
-      except AttributeError:
-        # If the object does not have method getClassName, it cannot be a Mask object
-        return False
+        """ This function returns True if the input object is a Mask. False otherwise. """
+        return isinstance(self.inputParticles.get(), Mask)
       
     def _ioArgs(self, isFirstStep):
         if isFirstStep:
