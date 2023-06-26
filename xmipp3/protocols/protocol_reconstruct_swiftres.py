@@ -42,7 +42,6 @@ import math
 import numpy as np
 from scipy import stats
 import itertools
-import collections
 import os
 
 class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
