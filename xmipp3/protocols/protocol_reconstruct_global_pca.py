@@ -178,7 +178,7 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
             self.iterations = 4
 
 
-        self._insertFunctionStep('convertInputStep', self.inputParticles.get(), self.imgsOrigXmd)
+        self._insertFunctionStep('convertInputStep', self.inputParticles.get(), self.imgsOrigXmd, self.imgsFn)
         self._insertFunctionStep("createGallery", self.angleGallery.get(), refVol)
         
         if self.scale:
@@ -191,12 +191,12 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         
         for iter in range(self.iterations):
             
-            if iter > 0 and self.mode == self.REFINE:
-                refVol = self._getExtraPath('output_iter%s_avg_filt.mrc'%iter) 
-                samp_angle = 4
-                if samp_angle >  self.angleGallery.get():
-                      samp_angle = self.angleGallery.get()          
-                self._insertFunctionStep("createGallery", samp_angle, refVol+ ':mrc')
+            # if iter > 0 and self.mode == self.REFINE:
+            #     refVol = self._getExtraPath('output_iter%s_avg_filt.mrc'%iter) 
+            #     samp_angle = 4
+            #     if samp_angle >  self.angleGallery.get():
+            #           samp_angle = self.angleGallery.get()          
+            #     self._insertFunctionStep("createGallery", samp_angle, refVol+ ':mrc')
 
             if iter == 0:
                 angle, MaxAngle, shift, maxShift = self.angle.get(), 180, self.shift.get(), self.MaxShift
@@ -221,10 +221,10 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
     
 
     #--------------------------- STEPS functions ---------------------------------------------------        
-    def convertInputStep(self, input, outputOrig):
+    def convertInputStep(self, input, outputOrig, outputConvert):
         writeSetOfParticles(input, outputOrig)
         
-        args = ' -i  %s -o %s '%(outputOrig, self.imgsFn)
+        args = ' -i  %s -o %s --save_metadata_stack '%(outputOrig, outputConvert)
         self.runJob("xmipp_image_convert",args, numberOfMpi=1) 
         
         # if self.correctCtf: 
@@ -275,13 +275,16 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
     def reconstructVolume(self, iter):
         args = '-i %s -n 2 --oroot %s '%(self._getExtraPath('align_iter%s.xmd'%(iter+1)), self._getTmpPath('split'))
         self.runJob("xmipp_metadata_split", args, numberOfMpi=1)
+        
         self._reconstructHalf(self._getTmpPath('split000001.xmd'), self._getTmpPath('split000001_vol.mrc'))
         self._reconstructHalf(self._getTmpPath('split000002.xmd'), self._getTmpPath('split000002_vol.mrc'))
-        # self._reconstruct(self._getExtraPath('align_iter%s.xmd'%(iter+1)), self._getExtraPath('output_vol.mrc'))
+        
         half1 = self._getTmpPath('split000001_vol.mrc')
         half2 = self._getTmpPath('split000002_vol.mrc')
         avg = self._getExtraPath('output_avg.mrc')
+        
         self._reconstructAvg(half1+':mrc', half2+':mrc', avg+':mrc')
+        
         self._computeFSC(half1+':mrc', half2+':mrc')
         mdFsc =  emlib.MetaData(self._getExtraPath('fsc.xmd'))
         thr = 0.143
@@ -290,7 +293,15 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         self._filterVolume(avg+':mrc', self._getExtraPath('output_iter%s_avg_filt.mrc'%(iter+1)), self.resolutionHalf)
         
         #If required, repeat training
+        # Only does it in Refine mode
         if iter < self.iterations-1: #and self.resolutionHalf > 10:
+            
+            refVol = self._getExtraPath('output_iter%s_avg_filt.mrc'%(iter+1)) 
+            samp_angle = 4
+            if samp_angle >  self.angleGallery.get():
+                  samp_angle = self.angleGallery.get() 
+            self.createGallery(samp_angle, refVol+ ':mrc')         
+            
             if self.resolutionHalf > 10:
                 res = self.resolutionHalf
             else:
