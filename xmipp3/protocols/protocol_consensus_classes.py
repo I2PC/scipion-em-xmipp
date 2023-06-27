@@ -66,6 +66,11 @@ class XmippProtConsensusClasses(ProtClassify3D):
                       label="Input classes", important=True,
                       help='Select several sets of classes where to evaluate the '
                            'intersections.')
+        form.addParam('outputImages', IntParam, label='Use images from classification', 
+                      default=0, expertLevel=LEVEL_ADVANCED,
+                      help='When generating output use the images from the indexed classification.'
+                      ' this will determine which classifier used for determining parameters such'
+                      ' as CTF and angular assignment.')
 
         form.addSection(label='Pruning')
         form.addParam('minClassSize', IntParam, label="Minimum class size",
@@ -147,18 +152,21 @@ class XmippProtConsensusClasses(ProtClassify3D):
         self._writeElbows(elbows)
 
     # --------------------------- INFO functions -------------------------------
-    """
     def _validate(self):
         errors = []
 
+        if self.outputImages < 0 or self.outputImages >= len(self.inputClassifications):
+            errors.append('Ouput images must be in range [0, len(inputClassifications))')
+
+        """
         # Ensure that all classifications are made of the same images
         items = self._getInputImages(0)
         for i in range(1, len(self.inputClassifications)):
             if self._getInputImages(i) != items:
                 errors.append(f'Classification {i} has been done with different images')
+        """
 
         return errors
-    """
     
     # --------------------------- UTILS functions ------------------------------
     def _getInputClassificationCount(self) -> int:
@@ -566,7 +574,7 @@ class XmippProtConsensusClasses(ProtClassify3D):
             self._getOutputClassesSqliteTemplate(),
             suffix
         ) 
-        result.setImages(self._getInputImagesPointer())
+        result.setImages(self._getInputImagesPointer(int(self.outputImages)))
     
         # Fill the output
         def updateItem(item: Image, _):
