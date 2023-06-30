@@ -32,11 +32,12 @@ from os.path import exists
 
 from pwem.objects import FSC
 from pwem.viewers import (DataView, Classes3DView, FscViewer, ObjectView,
-                          ChimeraView, ChimeraClientView)
+                          ChimeraView)
 import pwem.viewers.showj as showj
 import pwem.emlib.metadata as md
 from pyworkflow.protocol.params import EnumParam, NumericRangeParam, LabelParam
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
+import pyworkflow.utils as pwutils
 
 from xmipp3.protocols.protocol_mltomo import XmippProtMLTomo
 
@@ -185,7 +186,7 @@ class XmippMLTomoViewer(ProtocolViewer):
             f.close()
             view = ChimeraView(cmdFile)
         else:
-            view = ChimeraClientView(volumes[0])
+            view = ChimeraView(volumes[0])
 
         return [view]
 
@@ -264,7 +265,7 @@ class XmippMLTomoViewer(ProtocolViewer):
             self.formWindow.showError('Provide %s selection.' % label)
             result = []
         else:
-            result = self._getListFromRangeString(value)
+            result = pwutils.getListFromRangeString(value)
         return result
 
     def _getVolumeNames(self):

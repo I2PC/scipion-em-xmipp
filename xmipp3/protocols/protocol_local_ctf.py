@@ -57,7 +57,7 @@ class XmippProtLocalCTF(ProtAnalysis3D):
         form.addParam('inputVolume', PointerParam, label="Volume to compare images to",
                       pointerClass='Volume',
                       help='Volume to be used for class comparison')
-        form.addParam('maxDefocusChange', FloatParam, label="Maximum defocus change (A)", default=10000,
+        form.addParam('maxDefocusChange', FloatParam, label="Maximum defocus change (A)", default=500,
                       expertLevel=LEVEL_ADVANCED)
         form.addParam('maxGrayScaleChange', FloatParam, label="Maximum gray scale change", default=1,
                       expertLevel=LEVEL_ADVANCED, help="The reprojection is modified as a*P+b, a is restricted to the "
@@ -65,7 +65,7 @@ class XmippProtLocalCTF(ProtAnalysis3D):
         form.addParam('maxGrayShiftChange', FloatParam, label="Maximum gray shift change", default=1,
                       expertLevel=LEVEL_ADVANCED, help="The reprojection is modified as a*P+b, b is restricted to the "
                                                        "interval [-maxGrayShift,maxGrayShift]")
-        form.addParam('sameDefocus', BooleanParam, label="Force defocusV to be equal than defocusU", default=True,
+        form.addParam('sameDefocus', BooleanParam, label="Force defocusV to be equal than defocusU", default=False,
                       expertLevel=LEVEL_ADVANCED,
                       help="As the CTF usually suffers from astigmatism (it is not spherical but ellipsoidal), the "
                            "defocus vary if computed in X or Y direction, being defocus U value the defocus in X "

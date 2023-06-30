@@ -29,7 +29,7 @@ import numpy as np
 import os
 from pyworkflow import VERSION_2_0
 from pwem.constants import ALIGN_2D
-from pwem.objects import Class2D, Particle, Coordinate, Transform
+from pwem.objects import Class2D, Particle, Coordinate, Transform, SetOfClasses2D, SetOfParticles
 from pwem.protocols import ProtClassify2D
 import pwem.emlib.metadata as md
 import pyworkflow.protocol.params as params
@@ -38,11 +38,14 @@ from pwem.emlib import MD_APPEND
 from xmipp3.convert import (rowToAlignment, alignmentToRow,
                             rowToParticle, writeSetOfClasses2D, xmippToLocation)
 
+OUTPUT_CLASSES = 'outputClasses'
+OUTPUT_PARTICLES = 'outputParticles'
 
 class XmippProtCenterParticles(ProtClassify2D):
     """ Realignment of un-centered particles. """
     _label = 'center particles'
     _lastUpdateVersion = VERSION_2_0
+    _possibleOutputs = {OUTPUT_CLASSES:SetOfClasses2D, OUTPUT_PARTICLES:SetOfParticles}
 
     # --------------------------- DEFINE param functions -----------------------
     def _defineParams(self, form):
@@ -51,7 +54,7 @@ class XmippProtCenterParticles(ProtClassify2D):
                       pointerClass='SetOfClasses2D',
                       important=True,
                       label="Input Classes",
-                      help='Set of classes to be realing')
+                      help='Set of classes to be read')
         form.addParam('inputMics', params.PointerParam,
                       pointerClass='SetOfMicrographs',
                       important=True,
@@ -120,7 +123,7 @@ class XmippProtCenterParticles(ProtClassify2D):
                 mdClass = md.MetaData(block + "@" + inputMdName)
                 mdNewClass = md.MetaData()
                 i += 1
-                j = 0
+                flag_psi = True
                 for rowIn in md.iterRows(mdClass):
                     #To create the transformation matrix (and its parameters)
                     #  for the realigned particles
@@ -156,7 +159,6 @@ class XmippProtCenterParticles(ProtClassify2D):
                         md.MDL_YCOOR)+int(centerPoint[1]))
 
                     rowOut.addToMd(mdNewClass)
-                    j += 1
 
                 mdNewClass.write(block + "@" + self._getExtraPath(
                     'final_classes.xmd'), MD_APPEND)
@@ -175,18 +177,15 @@ class XmippProtCenterParticles(ProtClassify2D):
 
     def createOutputStep(self):
         inputParticles = self.inputClasses.get().getImages()
-        outputClasses = self._createSetOfClasses2D(inputParticles)
+        outputClasses = self._createSetOfClasses2D(self.inputClasses.get().getImagesPointer())
         self._fillClasses(outputClasses)
-        result = {'outputClasses': outputClasses}
-        self._defineOutputs(**result)
-        self._defineSourceRelation(self.inputClasses, outputClasses)
-
         outputParticles = self._createSetOfParticles()
         outputParticles.copyInfo(inputParticles)
-
         self._fillParticles(outputParticles)
-        result = {'outputParticles': outputParticles}
+
+        result = {OUTPUT_CLASSES: outputClasses, OUTPUT_PARTICLES: outputParticles}
         self._defineOutputs(**result)
+        self._defineSourceRelation(self.inputClasses, outputClasses)
         self._defineSourceRelation(self.inputClasses, outputParticles)
 
     # --------------------------- UTILS functions ------------------------------
@@ -253,9 +252,9 @@ class XmippProtCenterParticles(ProtClassify2D):
     def _validate(self):
         errors = []
         try:
-            self.inputClasses.get().getImages().getAcquisition()
+            self.inputClasses.get().getImages()
         except AttributeError:
-            errors.append('InputClasses has not clases')
+            errors.append('Try and catch InputClasses has no particles.')
 
         return errors
 

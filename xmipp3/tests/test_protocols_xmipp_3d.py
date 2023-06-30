@@ -24,10 +24,11 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
+from pwem.convert import Ccp4Header
 from pwem.protocols import (ProtImportVolumes, ProtImportMask,
                             ProtImportParticles, ProtImportAverages,
                             ProtImportPdb, ProtSubSet, ProtUnionSet)
+from xmipp3.protocols.protocol_align_volume_and_particles import AlignVolPartOutputs
 
 try:
     from itertools import izip
@@ -48,6 +49,18 @@ from xmipp3.protocols.protocol_align_volume import (ALIGN_ALGORITHM_EXHAUSTIVE,
                                                ALIGN_ALGORITHM_EXHAUSTIVE_LOCAL,
                                                ALIGN_ALGORITHM_LOCAL)
 
+# Global variables
+db_xmipp_tutorial = 'xmipp_tutorial'
+db_general = 'general'
+db_model_building_tutorial = 'model_building_tutorial'
+vol_coot1 = 'volumes/coot1.mrc'
+vol1_iter2 = 'volumes/volume_1_iter_002.mrc'
+vol2_iter2 = 'volumes/volume_2_iter_002.mrc'
+helix = 'volumes/helix_59_4__6_7.vol'
+pdb_coot1 = 'PDBx_mmCIF/coot1.pdb'
+
+
+# Output error messages
 MSG_WRONG_SAMPLING = "There was a problem with the sampling rate value of the output "
 MSG_WRONG_SIZE = "There was a problem with the size of the output "
 MSG_WRONG_DIM = "There was a problem with the dimensions of the output "
@@ -58,12 +71,15 @@ MSG_WRONG_GALLERY = "There was a problem with the gallery creation"
 MSG_WRONG_ROTATION = "There was a problem with the rotation"
 MSG_WRONG_RECONSTRUCTION = "There was a problem with the reconstruction"
 MSG_WRONG_MERGER = "There was a problem with the merger of the "
+MSG_WRONG_IMPORT = "There was a problem with the import of "
+MSG_WRONG_PROTOCOL = "There was a problem with the protocol: "
+MSG_WRONG_MAP = "There was a problem with the map creation"
 
 class TestXmippBase(BaseTest):
     """ Some utility functions to import volumes that are used in several tests."""
 
     @classmethod
-    def setData(cls, dataProject='xmipp_tutorial'):
+    def setData(cls, dataProject=db_xmipp_tutorial):
         cls.dataset = DataSet.getDataSet(dataProject)
         cls.volumes = cls.dataset.getFile('volumes')
         cls.vol1 = cls.dataset.getFile('vol1')
@@ -715,7 +731,7 @@ class TestXmippOperateVolumes(TestXmippBase):
 
 class TestXmippProtAlignVolume(TestXmippBase):
     @classmethod
-    def setData(cls, dataProject='xmipp_tutorial'):
+    def setData(cls, dataProject=db_xmipp_tutorial):
         cls.dataset = DataSet.getDataSet(dataProject)
         cls.volumes = cls.dataset.getFile('volumes')
         cls.vol1 = cls.dataset.getFile('vol1')
@@ -994,7 +1010,7 @@ class TestXmippRotationalSymmetry(TestXmippBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
-        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
+        cls.dataset = DataSet.getDataSet(db_xmipp_tutorial)
         cls.vol = cls.dataset.getFile('vol110')
 
     def test_rotsym(self):
@@ -1018,7 +1034,6 @@ class TestXmippRotationalSymmetry(TestXmippBase):
         self.assertIsNotNone(protRotSym.outputVolume,
                              "There was a problem with Rotational Symmetry")
 
-
 class TestXmippProjMatching(TestXmippBase):
 
     @classmethod
@@ -1039,7 +1054,7 @@ class TestXmippProjMatching(TestXmippBase):
                                  )
         self.launchProtocol(protImportParts)
         self.assertIsNotNone(protImportParts.getFiles(), "There was a problem with the import")
-        
+
         print("Get a Subset of particles")
         protSubset = self.newProtocol(ProtSubSet,
                                          objLabel='100 Particles',
@@ -1047,7 +1062,7 @@ class TestXmippProjMatching(TestXmippBase):
                                          nElements=100)
         protSubset.inputFullSet.set(protImportParts.outputParticles)
         self.launchProtocol(protSubset)
-        
+
         print("Import Volume")
         protImportVol = self.newProtocol(ProtImportVolumes,
                                          objLabel='Volume',
@@ -1055,7 +1070,7 @@ class TestXmippProjMatching(TestXmippBase):
                                          samplingRate=7.08)
         self.launchProtocol(protImportVol)
         self.assertIsNotNone(protImportVol.getFiles(), "There was a problem with the import")
-        
+
         print("Run Projection Matching")
         protProjMatch = self.newProtocol(XmippProtProjMatch,
                                          ctfGroupMaxDiff=0.00001,
@@ -1067,7 +1082,6 @@ class TestXmippProjMatching(TestXmippBase):
         protProjMatch.input3DReferences.set(protImportVol.outputVolume)
         self.launchProtocol(protProjMatch)
         self.assertIsNotNone(protProjMatch.outputVolume, "There was a problem with Projection Matching")
-
 
 class TestPdbImport(TestXmippBase):
     
@@ -1107,10 +1121,12 @@ class TestXmippPdbConvert(TestXmippBase):
         protConvert = self.newProtocol(XmippProtConvertPdb, pdbId="3j3i", sampling=4, setSize=True,
                                        size_z=100, size_y=100, size_x=100)
         self.launchProtocol(protConvert)
-        self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
-        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
+
+        volume = getattr(protConvert,protConvert.OUTPUT_NAME, None)
+        self.assertIsNotNone(volume.getFileName(), "There was a problem with the conversion")
+        self.assertAlmostEqual(volume.getSamplingRate(), protConvert.sampling.get(), places=1,
                                msg=(MSG_WRONG_SAMPLING, "volume"))
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1,
+        self.assertAlmostEqual(volume.getDim()[0], protConvert.size_z.get(), places=1,
                                msg=(MSG_WRONG_SIZE, "volume"))
         
     def testXmippPdbConvertFromObj(self):
@@ -1126,20 +1142,28 @@ class TestXmippPdbConvert(TestXmippBase):
                                        sampling=3, setSize=True, size_z=20, size_y=20, size_x=20)
         protConvert.pdbObj.set(protImport.outputPdb)
         self.launchProtocol(protConvert)
-        self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
-        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
+
+        volume = getattr(protConvert, protConvert.OUTPUT_NAME, None)
+        volumeFn = volume.getFileName()
+        self.assertTrue(volumeFn.endswith(".mrc"), "Output volume form converting a pdb is not an mrc")
+        ccp4header = Ccp4Header(volumeFn, readHeader=True)
+        headerSr = ccp4header.getSampling()[0]
+        self.assertAlmostEquals(volume.getSamplingRate(), headerSr, "%s header for sampling rate is wrong." % volumeFn)
+
+        self.assertAlmostEqual(volume.getSamplingRate(), protConvert.sampling.get(), places=1,
                                msg=(MSG_WRONG_SAMPLING, "volume"))
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1,
+        self.assertAlmostEqual(volume.getDim()[0], protConvert.size_z.get(), places=1,
                                msg=(MSG_WRONG_SIZE, "volume"))
 
     def testXmippPdbConvertFromFn(self):
         print("Run convert a pdb from file")
         protConvert = self.newProtocol(XmippProtConvertPdb,inputPdbData=2, pdbFile=self.pdb, sampling=2, setSize=False)
         self.launchProtocol(protConvert)
-        self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
-        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
+        volume = getattr(protConvert, protConvert.OUTPUT_NAME, None)
+        self.assertIsNotNone(volume.getFileName(), "There was a problem with the conversion")
+        self.assertAlmostEqual(volume.getSamplingRate(), protConvert.sampling.get(), places=1,
                                msg=(MSG_WRONG_SAMPLING, "volume"))
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], 48, places=1, msg=(MSG_WRONG_SIZE, "volume"))
+        self.assertAlmostEqual(volume.getDim()[0], 48, places=1, msg=(MSG_WRONG_SIZE, "volume"))
 
 
 class TestXmippValidateNonTilt(TestXmippBase):
@@ -1209,9 +1233,9 @@ class TestXmippVolSubtraction(TestXmippBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
-        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
-        cls.vol1 = cls.dataset.getFile('volumes/volume_1_iter_002.mrc')
-        cls.vol2 = cls.dataset.getFile('volumes/volume_2_iter_002.mrc')
+        cls.dataset = DataSet.getDataSet(db_xmipp_tutorial)
+        cls.vol1 = cls.dataset.getFile(vol1_iter2)
+        cls.vol2 = cls.dataset.getFile(vol2_iter2)
 
     def testXmippVolSub(self):
         print("Import Volume 1")
@@ -1366,8 +1390,8 @@ class TestXmippShiftParticlesAndVolume(TestXmippBase):
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
-        cls.dataset = DataSet.getDataSet('xmipp_tutorial')
-        cls.vol1 = cls.dataset.getFile('volumes/volume_1_iter_002.mrc')
+        cls.dataset = DataSet.getDataSet(db_xmipp_tutorial)
+        cls.vol1 = cls.dataset.getFile(vol1_iter2)
 
     def testXmippShiftParticlesAndVolume(self):
         protImportVol = self.newProtocol(ProtImportVolumes,
@@ -1465,7 +1489,7 @@ class TestXmippShiftParticlesAndVolume(TestXmippBase):
         self.assertEqual(protShiftVolPad.shiftZ.get(), 5.0, (MSG_WRONG_SHIFT, "z"))
 
 
-class TestXmippProjSubtraction(TestXmippBase):
+class TestXmippProjSubtractionAndBoostParticles(TestXmippBase):
 
     @classmethod
     def setUpClass(cls):
@@ -1500,20 +1524,11 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.assertIsNotNone(protCreateMaskKeep.getFiles(),
                              "There was a problem with the 3D mask of the 1 item phantom")
 
-        # Subtraction of particles - reference volume with and without mask
-        protSubtractProj = self.newProtocol(XmippProtSubtractProjection,
-                                            particles=protCreateGallery.outputReprojections,
-                                            vol=protCreatePhantom1item.outputVolume)
-        self.launchProtocol(protSubtractProj)
-        self.assertIsNotNone(protSubtractProj.outputParticles,
-                             "There was a problem with projection subtraction")
-        self.assertEqual(protSubtractProj.outputParticles.getSamplingRate(), 1.0, (MSG_WRONG_SAMPLING, "particles"))
-        self.assertEqual(protSubtractProj.outputParticles.getFirstItem().getDim(), (80, 80, 1),
-                         (MSG_WRONG_DIM, "particles"))
-        self.assertEqual(protSubtractProj.outputParticles.getSize(), 181, (MSG_WRONG_SIZE, "particles"))
+        # Subtraction of particles - reference volume with mask
         protSubtractProjMask = self.newProtocol(XmippProtSubtractProjection,
-                                                particles=protCreateGallery.outputReprojections,
-                                                vol=protCreatePhantom1item.outputVolume,
+                                                inputParticles=protCreateGallery.outputReprojections,
+                                                vol=protCreatePhantom2items.outputVolume,
+                                                subtract=1,
                                                 mask=protCreateMaskKeep.outputMask)
         self.launchProtocol(protSubtractProjMask)
         self.assertIsNotNone(protSubtractProjMask.outputParticles,
@@ -1530,8 +1545,10 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.assertIsNotNone(protSimulateCTF.outputParticles,
                              "There was a problem with CTF simulation")
         protSubtractProjCTF = self.newProtocol(XmippProtSubtractProjection,
-                                               particles=protSimulateCTF.outputParticles,
-                                               vol=protCreatePhantom1item.outputVolume)
+                                               inputParticles=protSimulateCTF.outputParticles,
+                                               vol=protCreatePhantom1item.outputVolume,
+                                               subtract=1,
+                                               mask=protCreateMaskKeep.outputMask)
         self.launchProtocol(protSubtractProjCTF)
         self.assertIsNotNone(protSubtractProjCTF.outputParticles,
                              "There was a problem with projection subtraction CTF")
@@ -1546,8 +1563,10 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.assertIsNotNone(protAddNoise.outputParticles,
                              "There was a problem with add noise protocol")
         protSubtractProjNoise = self.newProtocol(XmippProtSubtractProjection,
-                                                 particles=protAddNoise.outputParticles,
-                                                 vol=protCreatePhantom1item.outputVolume)
+                                                 inputParticles=protAddNoise.outputParticles,
+                                                 vol=protCreatePhantom1item.outputVolume,
+                                                 subtract=1,
+                                                 mask=protCreateMaskKeep.outputMask)
         self.launchProtocol(protSubtractProjNoise)
         self.assertIsNotNone(protSubtractProjNoise.outputParticles,
                              "There was a problem with projection subtraction with noise")
@@ -1562,8 +1581,10 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.assertIsNotNone(protAddNoiseCTF.outputParticles,
                              "There was a problem with add noise to ctf particles protocol")
         protSubtractProjNoiseCTF = self.newProtocol(XmippProtSubtractProjection,
-                                                    particles=protAddNoiseCTF.outputParticles,
-                                                    vol=protCreatePhantom1item.outputVolume)
+                                                    inputParticles=protAddNoiseCTF.outputParticles,
+                                                    vol=protCreatePhantom1item.outputVolume,
+                                                    subtract=1,
+                                                    mask=protCreateMaskKeep.outputMask)
         self.launchProtocol(protSubtractProjNoiseCTF)
         self.assertIsNotNone(protSubtractProjNoiseCTF.outputParticles,
                              "There was a problem with projection subtraction with noise and CTF")
@@ -1601,9 +1622,10 @@ class TestXmippProjSubtraction(TestXmippBase):
 
         # Perform subtraction of overlapping particles with and without mask, noise and CTF
         protSubtractProjOver = self.newProtocol(XmippProtSubtractProjection,
-                                                particles=protCreateGalleryOver.outputReprojections,
-                                                vol=protCreatePhantom1Over.outputVolume,
-                                                mask=protCreateMaskKeepOver.outputMask)
+                                                inputParticles=protCreateGalleryOver.outputReprojections,
+                                                vol=protCreatePhantom2Over.outputVolume,
+                                                mask=protCreateMaskKeepOver.outputMask,
+                                                subtract=1)
         self.launchProtocol(protSubtractProjOver)
         self.assertIsNotNone(protSubtractProjOver.outputParticles,
                              "There was a problem with projection subtraction with overlap")
@@ -1612,8 +1634,10 @@ class TestXmippProjSubtraction(TestXmippBase):
                          (MSG_WRONG_DIM, "particles"))
         self.assertEqual(protSubtractProjOver.outputParticles.getSize(), 1647, (MSG_WRONG_SIZE, "particles"))
         protSubtractProjOverNoMask = self.newProtocol(XmippProtSubtractProjection,
-                                                      particles=protCreateGalleryOver.outputReprojections,
-                                                      vol=protCreatePhantom1Over.outputVolume)
+                                                      inputParticles=protCreateGalleryOver.outputReprojections,
+                                                      vol=protCreatePhantom1Over.outputVolume,
+                                                      mask=protCreateMaskKeepOver.outputMask,
+                                                      subtract=1)
         self.launchProtocol(protSubtractProjOverNoMask)
         self.assertIsNotNone(protSubtractProjOverNoMask.outputParticles,
                              "There was a problem with projection subtraction with overlap")
@@ -1633,8 +1657,10 @@ class TestXmippProjSubtraction(TestXmippBase):
         self.assertIsNotNone(protAddNoiseCTFOver.outputParticles,
                              "There was a problem with add noise to ctf overlap particles protocol")
         protSubtractProjNoiseCTFOver = self.newProtocol(XmippProtSubtractProjection,
-                                                        particles=protAddNoiseCTFOver.outputParticles,
-                                                        vol=protCreatePhantom1Over.outputVolume)
+                                                        inputParticles=protAddNoiseCTFOver.outputParticles,
+                                                        vol=protCreatePhantom1Over.outputVolume,
+                                                        mask=protCreateMaskKeepOver.outputMask,
+                                                        subtract=1)
         self.launchProtocol(protSubtractProjNoiseCTFOver)
         self.assertIsNotNone(protSubtractProjNoiseCTFOver.outputParticles,
                              "There was a problem with projection subtraction with noise and CTF overlap")
@@ -1643,6 +1669,19 @@ class TestXmippProjSubtraction(TestXmippBase):
                          (MSG_WRONG_DIM, "particles"))
         self.assertEqual(protSubtractProjNoiseCTFOver.outputParticles.getSize(), 1647, (MSG_WRONG_SIZE, "particles"))
 
+        # Boost particles with reference volume
+        protBoostPart = self.newProtocol(XmippProtBoostParticles,
+                                         inputParticles=protCreateGallery.outputReprojections,
+                                         vol=protCreatePhantom1item.outputVolume)
+        self.launchProtocol(protBoostPart)
+        self.assertIsNotNone(protBoostPart.outputParticles,
+                             "There was a problem with projection subtraction")
+        self.assertEqual(protBoostPart.outputParticles.getSamplingRate(), 1.0, (MSG_WRONG_SAMPLING, "particles"))
+        self.assertEqual(protBoostPart.outputParticles.getFirstItem().getDim(), (80, 80, 1),
+                         (MSG_WRONG_DIM, "particles"))
+        self.assertEqual(protBoostPart.outputParticles.getSize(), 181, (MSG_WRONG_SIZE, "particles"))
+
+
 class TestXmippAlignVolumeAndParticles(TestXmippBase):
 
     @classmethod
@@ -1650,27 +1689,26 @@ class TestXmippAlignVolumeAndParticles(TestXmippBase):
         setupTestProject(cls)
 
     def testXmippAlignVolumeAndParticles(self):
-        finalMatrix = np.array([[-4.32981701e-17, 1.29893286e-16, -1.00000000e+00, -0.00000000e+00],
-                           [-7.07108780e-01, 7.07104782e-01, 1.22464680e-16, -0.00000000e+00],
-                           [ 7.07104782e-01, 7.07108780e-01, 6.12323400e-17, 0.00000000e+00],
-                           [ 0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
+
         # Create input data: phantom with two cylinders and its projections (particles)
-        protCreatePhantom1item1 = self.newProtocol(XmippProtPhantom,
+        protPhantomRef = self.newProtocol(XmippProtPhantom,
                                                desc='80 80 80 0\ncyl + 1 0 0 0 5 5 10 0 0 0',
-                                               sampling=1.0)
-        self.launchProtocol(protCreatePhantom1item1)
-        self.assertIsNotNone(protCreatePhantom1item1.getFiles(),
+                                               sampling=1.0,
+                                               objLabel="Reference phantom")
+        self.launchProtocol(protPhantomRef)
+        self.assertIsNotNone(protPhantomRef.getFiles(),
                              "There was a problem with the first phantom creation")
 
-        protCreatePhantom1item2 = self.newProtocol(XmippProtPhantom,
+        protPhantomToAlign = self.newProtocol(XmippProtPhantom,
                                                desc='80 80 80 0\ncyl + 5 0 0 0 5 5 10 45 90 0',
-                                               sampling=1.0)
-        self.launchProtocol(protCreatePhantom1item2)
-        self.assertIsNotNone(protCreatePhantom1item2.getFiles(),
+                                               sampling=1.0,
+                                               objLabel="Phantom to align")
+        self.launchProtocol(protPhantomToAlign)
+        self.assertIsNotNone(protPhantomToAlign.getFiles(),
                              "There was a problem with the second phantom creation")
 
         protCreateGallery = self.newProtocol(XmippProtCreateGallery,
-                                             inputVolume=protCreatePhantom1item2.outputVolume,
+                                             inputVolume=protPhantomToAlign.outputVolume,
                                              rotStep=15.0,
                                              tiltStep=90.0)
         self.launchProtocol(protCreateGallery)
@@ -1678,24 +1716,771 @@ class TestXmippAlignVolumeAndParticles(TestXmippBase):
                              MSG_WRONG_GALLERY)
 
         protAlignVolumeParticles = self.newProtocol(XmippProtAlignVolumeParticles,
-                                                    inputReference=protCreatePhantom1item1.outputVolume,
-                                                    inputVolume=protCreatePhantom1item2.outputVolume,
+                                                    inputReference=protPhantomRef.outputVolume,
+                                                    inputVolume=protPhantomToAlign.outputVolume,
                                                     inputParticles=protCreateGallery.outputReprojections)
 
         self.launchProtocol(protAlignVolumeParticles)
-        self.assertIsNotNone(protAlignVolumeParticles.outputVolume,
+
+        volume = getattr(protAlignVolumeParticles, AlignVolPartOutputs.Volume.name, None)
+        particles = getattr(protAlignVolumeParticles, AlignVolPartOutputs.Particles.name, None)
+
+        self.assertIsNotNone(volume,
                              "There was a problem with the alignment of the volume")
-        self.assertIsNotNone(protAlignVolumeParticles.outputParticles,
+        self.assertIsNotNone(particles,
                              "There was a problem with the alignment of the particles")
-        self.assertEqual(protAlignVolumeParticles.outputParticles.getSamplingRate(), 1.0, (MSG_WRONG_SAMPLING, "particles"))
-        self.assertEqual(protAlignVolumeParticles.outputParticles.getFirstItem().getDim(), (80, 80, 1),
+        self.assertEqual(particles.getSamplingRate(), 1.0, (MSG_WRONG_SAMPLING, "particles"))
+        self.assertEqual(particles.getFirstItem().getDim(), (80, 80, 1),
                          (MSG_WRONG_DIM, "particles"))
-        self.assertEqual(protAlignVolumeParticles.outputParticles.getSize(), 181, (MSG_WRONG_SIZE, "particles"))
-        self.assertEqual(protAlignVolumeParticles.outputParticles.getFirstItem().getTransform().getMatrix().all(),
-                         protCreateGallery.outputReprojections.getFirstItem().getTransform().getMatrix().all(),
-                         (MSG_WRONG_ALIGNMENT, "particles"))
-        self.assertEqual(protAlignVolumeParticles.outputParticles.getFirstItem().getTransform().getMatrix().all(),
-                         finalMatrix.all(), (MSG_WRONG_ALIGNMENT, "particles"))
+        self.assertEqual(particles.getSize(), 181, (MSG_WRONG_SIZE, "particles"))
+
+
+        matrices = self.getExpectedMatrices()
+
+        for particle in particles:
+
+            partMatrix = particle.getTransform().getMatrix()
+            expectedMatrix = matrices[particle.getObjId() - 1]
+
+            self.assertTrue(np.allclose(partMatrix,expectedMatrix, atol=1.e-4), (MSG_WRONG_ALIGNMENT, "particles"))
+
+
+
+    def getExpectedMatrices(self):
+        matrices = [
+            [[-1.29893531e-16, 4.32974355e-17, -1.00000000e+00, -0.00000000e+00],
+             [7.07108780e-01, -7.07104782e-01, -1.22464680e-16, 0.00000000e+00],
+             [-7.07104782e-01, -7.07108780e-01, 6.12323400e-17, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[2.58818972e-01, -6.33160306e-09, -9.65925846e-01, -0.00000000e+00],
+             [6.83014657e-01, -7.07104771e-01, 1.83013175e-01, 0.00000000e+00],
+             [-6.83010775e-01, -7.07108792e-01, -1.83012126e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[2.58818969e-01, 1.35951160e-09, -9.65925847e-01, -0.00000000e+00],
+             [-2.49997373e-01, -9.65926556e-01, -6.69865745e-02, -0.00000000e+00],
+             [-9.33013427e-01, 2.58816320e-01, -2.50000115e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[2.58818972e-01, 3.02503078e-09, -9.65925846e-01, -0.00000000e+00],
+             [-9.33012015e-01, -2.58821773e-01, -2.49999741e-01, -0.00000000e+00],
+             [-2.50002640e-01, 9.65925095e-01, -6.69879822e-02, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[2.58818972e-01, -6.33160300e-09, -9.65925846e-01, -0.00000000e+00],
+             [-6.83014657e-01, 7.07104771e-01, -1.83013175e-01, -0.00000000e+00],
+             [6.83010775e-01, 7.07108792e-01, 1.83012126e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[2.58818969e-01, 1.35951158e-09, -9.65925847e-01, -0.00000000e+00],
+             [2.49997373e-01, 9.65926556e-01, 6.69865745e-02, 0.00000000e+00],
+             [9.33013427e-01, -2.58816320e-01, 2.50000115e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[2.58818972e-01, 3.02503071e-09, -9.65925846e-01, -0.00000000e+00],
+             [9.33012015e-01, 2.58821773e-01, 2.49999741e-01, 0.00000000e+00],
+             [2.50002640e-01, -9.65925095e-01, 6.69879822e-02, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999888e-01, 2.14734474e-08, -8.66025468e-01, -0.00000000e+00],
+             [6.12374243e-01, -7.07104756e-01, 3.53554311e-01, 0.00000000e+00],
+             [-6.12370720e-01, -7.07108806e-01, -3.53552312e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999890e-01, 5.88497022e-09, -8.66025467e-01, -0.00000000e+00],
+             [2.24146271e-01, -9.65925089e-01, 1.29410866e-01, -0.00000000e+00],
+             [-8.36515726e-01, -2.58821798e-01, -4.82962439e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999890e-01, -1.03496165e-08, -8.66025467e-01, -0.00000000e+00],
+             [-2.24141542e-01, -9.65926552e-01, -1.29408130e-01, -0.00000000e+00],
+             [-8.36516992e-01, 2.58816335e-01, -4.82963173e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999877e-01, -2.10888133e-08, -8.66025475e-01, -0.00000000e+00],
+             [-6.12370783e-01, -7.07108756e-01, -3.53552303e-01, -0.00000000e+00],
+             [-6.12374189e-01, 7.07104806e-01, -3.53554304e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999879e-01, -4.88024898e-09, -8.66025474e-01, -0.00000000e+00],
+             [-8.36515743e-01, -2.58821757e-01, -4.82962432e-01, -0.00000000e+00],
+             [-2.24146232e-01, 9.65925100e-01, -1.29410851e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999883e-01, 1.32033358e-08, -8.66025472e-01, -0.00000000e+00],
+             [-8.36517006e-01, 2.58816307e-01, -4.82963164e-01, -0.00000000e+00],
+             [2.24141508e-01, 9.65926560e-01, 1.29408134e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999888e-01, 2.14734474e-08, -8.66025468e-01, -0.00000000e+00],
+             [-6.12374243e-01, 7.07104756e-01, -3.53554311e-01, -0.00000000e+00],
+             [6.12370720e-01, 7.07108806e-01, 3.53552312e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999890e-01, 5.88497019e-09, -8.66025467e-01, -0.00000000e+00],
+             [-2.24146271e-01, 9.65925089e-01, -1.29410866e-01, 0.00000000e+00],
+             [8.36515726e-01, 2.58821798e-01, 4.82962439e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999890e-01, -1.03496168e-08, -8.66025467e-01, -0.00000000e+00],
+             [2.24141542e-01, 9.65926552e-01, 1.29408130e-01, 0.00000000e+00],
+             [8.36516992e-01, -2.58816335e-01, 4.82963173e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999877e-01, -2.10888136e-08, -8.66025475e-01, -0.00000000e+00],
+             [6.12370783e-01, 7.07108756e-01, 3.53552303e-01, 0.00000000e+00],
+             [6.12374189e-01, -7.07104806e-01, 3.53554304e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999879e-01, -4.88024898e-09, -8.66025474e-01, -0.00000000e+00],
+             [8.36515743e-01, 2.58821757e-01, 4.82962432e-01, 0.00000000e+00],
+             [2.24146232e-01, -9.65925100e-01, 1.29410851e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999883e-01, 1.32033356e-08, -8.66025472e-01, -0.00000000e+00],
+             [8.36517006e-01, -2.58816307e-01, 4.82963164e-01, 0.00000000e+00],
+             [-2.24141508e-01, -9.65926560e-01, -1.29408134e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106672e-01, 4.35939631e-08, -7.07106890e-01, -0.00000000e+00],
+             [5.00001540e-01, -7.07104743e-01, 5.00001342e-01, 0.00000000e+00],
+             [-4.99998614e-01, -7.07108819e-01, -4.99998504e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106670e-01, 5.52544747e-08, -7.07106893e-01, -0.00000000e+00],
+             [2.85617224e-01, -9.14792706e-01, 2.85617062e-01, -0.00000000e+00],
+             [-6.46856212e-01, -4.03923637e-01, -6.46856040e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106669e-01, 1.68940571e-08, -7.07106893e-01, -0.00000000e+00],
+             [3.26586630e-02, -9.98932843e-01, 3.26586288e-02, -0.00000000e+00],
+             [-7.06352299e-01, -4.61862999e-02, -7.06352076e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106672e-01, -2.97394772e-08, -7.07106890e-01, -0.00000000e+00],
+             [-2.24710654e-01, -9.48161533e-01, -2.24710545e-01, -0.00000000e+00],
+             [-6.70451547e-01, 3.17788777e-01, -6.70451353e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106673e-01, -5.99903706e-08, -7.07106890e-01, -0.00000000e+00],
+             [-4.51731499e-01, -7.69335746e-01, -4.51731295e-01, -0.00000000e+00],
+             [-5.44002579e-01, 6.38844668e-01, -5.44002466e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106675e-01, -3.06564823e-08, -7.07106888e-01, -0.00000000e+00],
+             [-6.17743458e-01, -4.86606921e-01, -6.17743251e-01, -0.00000000e+00],
+             [-3.44083086e-01, 8.73621030e-01, -3.44083021e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106677e-01, -1.08103433e-09, -7.07106885e-01, -0.00000000e+00],
+             [-7.00325760e-01, -1.38159139e-01, -7.00325554e-01, -0.00000000e+00],
+             [-9.76932779e-02, 9.90410042e-01, -9.76932507e-02, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106671e-01, 1.64166702e-08, -7.07106891e-01, -0.00000000e+00],
+             [-6.88325222e-01, 2.28947769e-01, -6.88325002e-01, -0.00000000e+00],
+             [1.61890534e-01, 9.73438709e-01, 1.61890506e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106673e-01, 4.23610224e-08, -7.07106890e-01, -0.00000000e+00],
+             [-5.83362562e-01, 5.65134047e-01, -5.83362349e-01, -0.00000000e+00],
+             [3.99610154e-01, 8.24999096e-01, 3.99610081e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106676e-01, 4.44615930e-08, -7.07106886e-01, -0.00000000e+00],
+             [-3.99613558e-01, 8.24995845e-01, -3.99613388e-01, 0.00000000e+00],
+             [5.83360226e-01, 5.65138793e-01, 5.83360087e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106675e-01, 3.88472993e-08, -7.07106888e-01, -0.00000000e+00],
+             [-1.61894504e-01, 9.73437400e-01, -1.61894402e-01, 0.00000000e+00],
+             [6.88324284e-01, 2.28953331e-01, 6.88324089e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106672e-01, -3.23226656e-08, -7.07106891e-01, -0.00000000e+00],
+             [9.76893638e-02, 9.90410819e-01, 9.76892882e-02, 0.00000000e+00],
+             [7.00326312e-01, -1.38153570e-01, 7.00326101e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106670e-01, -6.50865464e-08, -7.07106893e-01, -0.00000000e+00],
+             [3.44079709e-01, 8.73623739e-01, 3.44079520e-01, 0.00000000e+00],
+             [6.17745345e-01, -4.86602058e-01, 6.17745195e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106669e-01, -4.82454159e-08, -7.07106894e-01, -0.00000000e+00],
+             [5.44000123e-01, 6.38848940e-01, 5.43999906e-01, 0.00000000e+00],
+             [4.51734463e-01, -7.69332199e-01, 4.51734372e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106667e-01, -2.29245414e-08, -7.07106896e-01, -0.00000000e+00],
+             [6.70450308e-01, 3.17794075e-01, 6.70450080e-01, 0.00000000e+00],
+             [2.24714367e-01, -9.48159757e-01, 2.24714325e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106677e-01, -7.22923877e-09, -7.07106885e-01, -0.00000000e+00],
+             [7.06352476e-01, -4.61806309e-02, 7.06352269e-01, 0.00000000e+00],
+             [-3.26546472e-02, -9.98933106e-01, -3.26546274e-02, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106668e-01, 3.31554107e-08, -7.07106894e-01, -0.00000000e+00],
+             [6.46857880e-01, -4.03918380e-01, 6.46857655e-01, 0.00000000e+00],
+             [-2.85613449e-01, -9.14795028e-01, -2.85613401e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025336e-01, 7.64847654e-08, -5.00000118e-01, 0.00000000e+00],
+             [3.53554536e-01, -7.07104752e-01, 6.12374118e-01, 0.00000000e+00],
+             [-3.53552413e-01, -7.07108811e-01, -6.12370657e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025333e-01, 1.10193108e-07, -5.00000123e-01, 0.00000000e+00],
+             [2.26996679e-01, -8.91005211e-01, 3.93169457e-01, -0.00000000e+00],
+             [-4.45502671e-01, -4.53993078e-01, -7.71633109e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025334e-01, 4.76845001e-08, -5.00000121e-01, 0.00000000e+00],
+             [7.82187053e-02, -9.87687893e-01, 1.35478634e-01, -0.00000000e+00],
+             [-4.93844059e-01, -1.56437291e-01, -8.55362741e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025335e-01, -5.44865966e-08, -5.00000118e-01, 0.00000000e+00],
+             [-7.82159161e-02, -9.87688778e-01, -1.35473790e-01, -0.00000000e+00],
+             [-4.93844499e-01, 1.56431702e-01, -8.55363510e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025337e-01, -1.06291172e-07, -5.00000115e-01, 0.00000000e+00],
+             [-2.26994148e-01, -8.91007784e-01, -3.93165087e-01, -0.00000000e+00],
+             [-4.45503953e-01, 4.53988027e-01, -7.71635341e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025334e-01, -8.31178995e-08, -5.00000121e-01, 0.00000000e+00],
+             [-3.53552543e-01, -7.07108749e-01, -6.12370652e-01, -0.00000000e+00],
+             [-3.53554409e-01, 7.07104813e-01, -6.12374120e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025336e-01, -5.47984173e-08, -5.00000118e-01, 0.00000000e+00],
+             [-4.45502752e-01, -4.53992999e-01, -7.71633109e-01, -0.00000000e+00],
+             [-2.26996511e-01, 8.91005251e-01, -3.93169464e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025341e-01, -1.49156698e-08, -5.00000109e-01, 0.00000000e+00],
+             [-4.93844058e-01, -1.56437257e-01, -8.55362748e-01, -0.00000000e+00],
+             [-7.82186327e-02, 9.87687898e-01, -1.35478636e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025338e-01, 1.29877133e-08, -5.00000114e-01, 0.00000000e+00],
+             [-4.93844506e-01, 1.56431668e-01, -8.55363512e-01, -0.00000000e+00],
+             [7.82158406e-02, 9.87688784e-01, 1.35473794e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025341e-01, 5.45050422e-08, -5.00000109e-01, 0.00000000e+00],
+             [-4.45504029e-01, 4.53987956e-01, -7.71635339e-01, -0.00000000e+00],
+             [2.26993986e-01, 8.91007820e-01, 3.93165099e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025336e-01, 7.64847656e-08, -5.00000118e-01, 0.00000000e+00],
+             [-3.53554536e-01, 7.07104752e-01, -6.12374118e-01, -0.00000000e+00],
+             [3.53552413e-01, 7.07108811e-01, 6.12370657e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025333e-01, 1.10193109e-07, -5.00000123e-01, 0.00000000e+00],
+             [-2.26996679e-01, 8.91005211e-01, -3.93169457e-01, 0.00000000e+00],
+             [4.45502671e-01, 4.53993078e-01, 7.71633109e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025334e-01, 4.76845005e-08, -5.00000121e-01, 0.00000000e+00],
+             [-7.82187053e-02, 9.87687893e-01, -1.35478634e-01, 0.00000000e+00],
+             [4.93844059e-01, 1.56437291e-01, 8.55362741e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025335e-01, -5.44865966e-08, -5.00000118e-01, 0.00000000e+00],
+             [7.82159161e-02, 9.87688778e-01, 1.35473790e-01, 0.00000000e+00],
+             [4.93844499e-01, -1.56431702e-01, 8.55363510e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025337e-01, -1.06291172e-07, -5.00000115e-01, 0.00000000e+00],
+             [2.26994148e-01, 8.91007784e-01, 3.93165087e-01, 0.00000000e+00],
+             [4.45503953e-01, -4.53988027e-01, 7.71635341e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025334e-01, -8.31178997e-08, -5.00000121e-01, 0.00000000e+00],
+             [3.53552543e-01, 7.07108749e-01, 6.12370652e-01, 0.00000000e+00],
+             [3.53554409e-01, -7.07104813e-01, 6.12374120e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025336e-01, -5.47984172e-08, -5.00000118e-01, 0.00000000e+00],
+             [4.45502752e-01, 4.53992999e-01, 7.71633109e-01, 0.00000000e+00],
+             [2.26996511e-01, -8.91005251e-01, 3.93169464e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025341e-01, -1.49156700e-08, -5.00000109e-01, 0.00000000e+00],
+             [4.93844058e-01, 1.56437257e-01, 8.55362748e-01, 0.00000000e+00],
+             [7.82186327e-02, -9.87687898e-01, 1.35478636e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025338e-01, 1.29877134e-08, -5.00000114e-01, 0.00000000e+00],
+             [4.93844506e-01, -1.56431668e-01, 8.55363512e-01, 0.00000000e+00],
+             [-7.82158406e-02, -9.87688784e-01, -1.35473794e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025341e-01, 5.45050421e-08, -5.00000109e-01, 0.00000000e+00],
+             [4.45504029e-01, -4.53987956e-01, 7.71635339e-01, 0.00000000e+00],
+             [-2.26993986e-01, -8.91007820e-01, -3.93165099e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, 6.48608573e-08, -2.58819120e-01, 0.00000000e+00],
+             [1.83013322e-01, -7.07104762e-01, 6.83014626e-01, 0.00000000e+00],
+             [-1.83012188e-01, -7.07108800e-01, -6.83010750e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, 1.02567524e-07, -2.58819121e-01, 0.00000000e+00],
+             [1.26850627e-01, -8.71659069e-01, 4.73412490e-01, -0.00000000e+00],
+             [-2.25601986e-01, -4.90112709e-01, -8.41958002e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925807e-01, 1.24808279e-07, -2.58819118e-01, 0.00000000e+00],
+             [6.12799952e-02, -9.71566412e-01, 2.28699518e-01, -0.00000000e+00],
+             [-2.51459934e-01, -2.36767200e-01, -9.38461078e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925804e-01, -2.74816234e-08, -2.58819127e-01, 0.00000000e+00],
+             [-8.83567101e-03, -9.99417118e-01, -3.29750558e-02, -0.00000000e+00],
+             [-2.58668265e-01, 3.41382980e-02, -9.65362784e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, -1.41380484e-07, -2.58819120e-01, 0.00000000e+00],
+             [-7.82959938e-02, -9.53145608e-01, -2.92204015e-01, -0.00000000e+00],
+             [-2.46692267e-01, 3.02511899e-01, -9.20667951e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, -1.03750915e-07, -2.58819123e-01, 0.00000000e+00],
+             [-1.41949311e-01, -8.36183656e-01, -5.29761537e-01, -0.00000000e+00],
+             [-2.16420265e-01, 5.48449536e-01, -8.07691386e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925805e-01, -6.38452202e-08, -2.58819125e-01, 0.00000000e+00],
+             [-1.95074905e-01, -6.57205811e-01, -7.28029054e-01, -0.00000000e+00],
+             [-1.70097386e-01, 7.53711167e-01, -6.34812064e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925807e-01, -2.65380312e-08, -2.58819118e-01, 0.00000000e+00],
+             [-2.33732703e-01, -4.29485992e-01, -8.72302015e-01, -0.00000000e+00],
+             [-1.11159163e-01, 9.03073520e-01, -4.14851610e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925807e-01, -1.38442081e-08, -2.58819118e-01, 0.00000000e+00],
+             [-2.55055641e-01, -1.69913175e-01, -9.51880315e-01, -0.00000000e+00],
+             [-4.39767648e-02, 9.85459037e-01, -1.64123524e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925805e-01, 7.46517604e-09, -2.58819123e-01, 0.00000000e+00],
+             [-2.57462282e-01, 1.02261331e-01, -9.60862005e-01, -0.00000000e+00],
+             [2.64671807e-02, 9.94757569e-01, 9.87768601e-02, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925804e-01, 2.48804253e-08, -2.58819127e-01, 0.00000000e+00],
+             [-2.40774133e-01, 3.66851576e-01, -8.98580958e-01, -0.00000000e+00],
+             [9.49481822e-02, 9.30279486e-01, 3.54351409e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, 4.58456376e-08, -2.58819120e-01, 0.00000000e+00],
+             [-2.06228870e-01, 6.04234121e-01, -7.69656275e-01, -0.00000000e+00],
+             [1.56387308e-01, 7.96806832e-01, 5.83645339e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925805e-01, 9.19733392e-08, -2.58819125e-01, 0.00000000e+00],
+             [-1.56388592e-01, 7.96803389e-01, -5.83649696e-01, 0.00000000e+00],
+             [2.06227902e-01, 6.04238661e-01, 7.69652969e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, 1.17212953e-07, -2.58819121e-01, 0.00000000e+00],
+             [-9.49496808e-02, 9.30277394e-01, -3.54356500e-01, 0.00000000e+00],
+             [2.40773536e-01, 3.66856881e-01, 8.98578952e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925805e-01, 9.55871518e-08, -2.58819124e-01, 0.00000000e+00],
+             [-2.64687443e-02, 9.94756987e-01, -9.87822987e-02, 0.00000000e+00],
+             [2.57462123e-01, 1.02266989e-01, 9.60861446e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925805e-01, -1.15973981e-07, -2.58819124e-01, 0.00000000e+00],
+             [4.39754569e-02, 9.85459991e-01, 1.64118144e-01, 0.00000000e+00],
+             [2.55055873e-01, -1.69907640e-01, 9.51881240e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, -1.14862176e-07, -2.58819122e-01, 0.00000000e+00],
+             [1.11157976e-01, 9.03075929e-01, 4.14846683e-01, 0.00000000e+00],
+             [2.33733271e-01, -4.29480926e-01, 8.72304357e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925808e-01, -7.90071770e-08, -2.58819115e-01, 0.00000000e+00],
+             [1.70096386e-01, 7.53714865e-01, 6.34807941e-01, 0.00000000e+00],
+             [1.95075764e-01, -6.57201569e-01, 7.28032653e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925807e-01, -4.45608176e-08, -2.58819117e-01, 0.00000000e+00],
+             [2.16419542e-01, 5.48454233e-01, 8.07688391e-01, 0.00000000e+00],
+             [1.41950404e-01, -8.36180575e-01, 5.29766107e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925808e-01, -1.91493226e-08, -2.58819113e-01, 0.00000000e+00],
+             [2.46691868e-01, 3.02517243e-01, 9.20666302e-01, 0.00000000e+00],
+             [7.82972268e-02, -9.53143912e-01, 2.92209217e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, -2.00565933e-10, -2.58819121e-01, 0.00000000e+00],
+             [2.58668211e-01, 3.41439414e-02, 9.65362599e-01, 0.00000000e+00],
+             [8.83710472e-03, -9.99416926e-01, 3.29805141e-02, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, 1.01961976e-08, -2.58819119e-01, 0.00000000e+00],
+             [2.51460315e-01, -2.36761659e-01, 9.38462374e-01, 0.00000000e+00],
+             [-6.12784346e-02, -9.71567762e-01, -2.28694199e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925808e-01, 4.32637529e-08, -2.58819112e-01, 0.00000000e+00],
+             [2.25602769e-01, -4.90107745e-01, 8.41960681e-01, 0.00000000e+00],
+             [-1.26849215e-01, -8.71661860e-01, -4.73407730e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, -1.04530020e-16, 4.32979252e-17, 0.00000000e+00],
+             [-1.04530020e-16, -7.07104782e-01, 7.07108780e-01, 0.00000000e+00],
+             [-4.32979252e-17, -7.07108780e-01, -7.07104782e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, -1.14606065e-16, 3.00107463e-17, 0.00000000e+00],
+             [-1.14606065e-16, -8.71659085e-01, 4.90112680e-01, -0.00000000e+00],
+             [-3.00107463e-17, -4.90112680e-01, -8.71659085e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, -1.20723625e-16, 1.44978075e-17, 0.00000000e+00],
+             [-1.20723625e-16, -9.71566421e-01, 2.36767165e-01, -0.00000000e+00],
+             [-1.44978075e-17, -2.36767165e-01, -9.71566421e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, 1.22428989e-16, 2.09036731e-18, 0.00000000e+00],
+             [1.22428989e-16, -9.99417119e-01, -3.41382890e-02, -0.00000000e+00],
+             [-2.09036731e-18, 3.41382890e-02, -9.99417119e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, 1.19595677e-16, 1.85235092e-17, 0.00000000e+00],
+             [1.19595677e-16, -9.53145620e-01, -3.02511862e-01, -0.00000000e+00],
+             [-1.85235092e-17, 3.02511862e-01, -9.53145620e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, 1.12433823e-16, 3.35828471e-17, 0.00000000e+00],
+             [1.12433823e-16, -8.36183671e-01, -5.48449513e-01, -0.00000000e+00],
+             [-3.35828471e-17, 5.48449513e-01, -8.36183671e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, 1.01474590e-16, 4.61514981e-17, 0.00000000e+00],
+             [1.01474590e-16, -6.57205816e-01, -7.53711162e-01, -0.00000000e+00],
+             [-4.61514981e-17, 7.53711162e-01, -6.57205816e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, 8.75307729e-17, 5.52973045e-17, 0.00000000e+00],
+             [8.75307729e-17, -4.29486003e-01, -9.03073515e-01, -0.00000000e+00],
+             [-5.52973045e-17, 9.03073515e-01, -4.29486003e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, 7.16365213e-17, 6.03419627e-17, 0.00000000e+00],
+             [7.16365213e-17, -1.69913177e-01, -9.85459036e-01, -0.00000000e+00],
+             [-6.03419627e-17, 9.85459036e-01, -1.69913177e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, 5.49706393e-17, 6.09113336e-17, 0.00000000e+00],
+             [5.49706393e-17, 1.02261333e-01, -9.94757568e-01, -0.00000000e+00],
+             [-6.09113336e-17, 9.94757568e-01, 1.02261333e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, 3.87691589e-17, 5.69631895e-17, 0.00000000e+00],
+             [3.87691589e-17, 3.66851586e-01, -9.30279481e-01, -0.00000000e+00],
+             [-5.69631895e-17, 9.30279481e-01, 3.66851586e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, 2.42336699e-17, 4.87903461e-17, 0.00000000e+00],
+             [2.42336699e-17, 6.04234136e-01, -7.96806820e-01, -0.00000000e+00],
+             [-4.87903461e-17, 7.96806820e-01, 6.04234136e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, 1.24422031e-17, 3.69989459e-17, 0.00000000e+00],
+             [1.24422031e-17, 7.96803403e-01, -6.04238642e-01, 0.00000000e+00],
+             [-3.69989459e-17, 6.04238642e-01, 7.96803403e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, 4.26927752e-18, 2.24635032e-17, 0.00000000e+00],
+             [4.26927752e-18, 9.30277407e-01, -3.66856847e-01, 0.00000000e+00],
+             [-2.24635032e-17, 3.66856847e-01, 9.30277407e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, 3.21041765e-19, 6.26204513e-18, 0.00000000e+00],
+             [3.21041765e-19, 9.94756990e-01, -1.02266958e-01, 0.00000000e+00],
+             [-6.26204513e-18, 1.02266958e-01, 9.94756990e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, -8.90318393e-19, 1.04038402e-17, 0.00000000e+00],
+             [-8.90318393e-19, 9.85459997e-01, 1.69907604e-01, 0.00000000e+00],
+             [-1.04038402e-17, -1.69907604e-01, 9.85459997e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, -5.93488676e-18, 2.62981202e-17, 0.00000000e+00],
+             [-5.93488676e-18, 9.03075944e-01, 4.29480896e-01, 0.00000000e+00],
+             [-2.62981202e-17, -4.29480896e-01, 9.03075944e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, -1.50806143e-17, 4.02419890e-17, 0.00000000e+00],
+             [-1.50806143e-17, 7.53714878e-01, 6.57201554e-01, 0.00000000e+00],
+             [-4.02419890e-17, -6.57201554e-01, 7.53714878e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, -2.76492034e-17, 5.12012929e-17, 0.00000000e+00],
+             [-2.76492034e-17, 5.48454242e-01, 8.36180569e-01, 0.00000000e+00],
+             [-5.12012929e-17, -8.36180569e-01, 5.48454242e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, -4.27085008e-17, 5.83632319e-17, 0.00000000e+00],
+             [-4.27085008e-17, 3.02517252e-01, 9.53143910e-01, 0.00000000e+00],
+             [-5.83632319e-17, -9.53143910e-01, 3.02517252e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, -5.91416266e-17, 6.11966370e-17, 0.00000000e+00],
+             [-5.91416266e-17, 3.41439405e-02, 9.99416926e-01, 0.00000000e+00],
+             [-6.11966370e-17, -9.99416926e-01, 3.41439405e-02, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, -7.57298111e-17, 5.94913673e-17, 0.00000000e+00],
+             [-7.57298111e-17, -2.36761670e-01, 9.71567760e-01, 0.00000000e+00],
+             [-5.94913673e-17, -9.71567760e-01, -2.36761670e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[1.00000000e+00, -9.12427844e-17, 5.33738951e-17, 0.00000000e+00],
+             [-9.12427844e-17, -4.90107751e-01, 8.71661857e-01, 0.00000000e+00],
+             [-5.33738951e-17, -8.71661857e-01, -4.90107751e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, -6.48608573e-08, 2.58819120e-01, 0.00000000e+00],
+             [-1.83013322e-01, -7.07104762e-01, 6.83014626e-01, 0.00000000e+00],
+             [1.83012188e-01, -7.07108800e-01, -6.83010750e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, -1.02567525e-07, 2.58819121e-01, 0.00000000e+00],
+             [-1.26850627e-01, -8.71659069e-01, 4.73412490e-01, -0.00000000e+00],
+             [2.25601986e-01, -4.90112709e-01, -8.41958002e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925807e-01, -1.24808280e-07, 2.58819118e-01, 0.00000000e+00],
+             [-6.12799952e-02, -9.71566412e-01, 2.28699518e-01, -0.00000000e+00],
+             [2.51459934e-01, -2.36767200e-01, -9.38461078e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925804e-01, 2.74816234e-08, 2.58819127e-01, 0.00000000e+00],
+             [8.83567101e-03, -9.99417118e-01, -3.29750558e-02, -0.00000000e+00],
+             [2.58668265e-01, 3.41382980e-02, -9.65362784e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, 1.41380484e-07, 2.58819120e-01, 0.00000000e+00],
+             [7.82959938e-02, -9.53145608e-01, -2.92204015e-01, -0.00000000e+00],
+             [2.46692267e-01, 3.02511899e-01, -9.20667951e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, 1.03750915e-07, 2.58819123e-01, 0.00000000e+00],
+             [1.41949311e-01, -8.36183656e-01, -5.29761537e-01, -0.00000000e+00],
+             [2.16420265e-01, 5.48449536e-01, -8.07691386e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925805e-01, 6.38452204e-08, 2.58819125e-01, 0.00000000e+00],
+             [1.95074905e-01, -6.57205811e-01, -7.28029054e-01, -0.00000000e+00],
+             [1.70097386e-01, 7.53711167e-01, -6.34812064e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925807e-01, 2.65380313e-08, 2.58819118e-01, 0.00000000e+00],
+             [2.33732703e-01, -4.29485992e-01, -8.72302015e-01, -0.00000000e+00],
+             [1.11159163e-01, 9.03073520e-01, -4.14851610e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925807e-01, 1.38442080e-08, 2.58819118e-01, 0.00000000e+00],
+             [2.55055641e-01, -1.69913175e-01, -9.51880315e-01, -0.00000000e+00],
+             [4.39767648e-02, 9.85459037e-01, -1.64123524e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925805e-01, -7.46517612e-09, 2.58819123e-01, 0.00000000e+00],
+             [2.57462282e-01, 1.02261331e-01, -9.60862005e-01, -0.00000000e+00],
+             [-2.64671807e-02, 9.94757569e-01, 9.87768601e-02, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925804e-01, -2.48804251e-08, 2.58819127e-01, 0.00000000e+00],
+             [2.40774133e-01, 3.66851576e-01, -8.98580958e-01, -0.00000000e+00],
+             [-9.49481822e-02, 9.30279486e-01, 3.54351409e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, -4.58456374e-08, 2.58819120e-01, 0.00000000e+00],
+             [2.06228870e-01, 6.04234121e-01, -7.69656275e-01, -0.00000000e+00],
+             [-1.56387308e-01, 7.96806832e-01, 5.83645339e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925805e-01, -9.19733390e-08, 2.58819125e-01, 0.00000000e+00],
+             [1.56388592e-01, 7.96803389e-01, -5.83649696e-01, 0.00000000e+00],
+             [-2.06227902e-01, 6.04238661e-01, 7.69652969e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, -1.17212953e-07, 2.58819121e-01, 0.00000000e+00],
+             [9.49496808e-02, 9.30277394e-01, -3.54356500e-01, 0.00000000e+00],
+             [-2.40773536e-01, 3.66856881e-01, 8.98578952e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925805e-01, -9.55871517e-08, 2.58819124e-01, 0.00000000e+00],
+             [2.64687443e-02, 9.94756987e-01, -9.87822987e-02, 0.00000000e+00],
+             [-2.57462123e-01, 1.02266989e-01, 9.60861446e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925805e-01, 1.15973980e-07, 2.58819124e-01, 0.00000000e+00],
+             [-4.39754569e-02, 9.85459991e-01, 1.64118144e-01, 0.00000000e+00],
+             [-2.55055873e-01, -1.69907640e-01, 9.51881240e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, 1.14862176e-07, 2.58819122e-01, 0.00000000e+00],
+             [-1.11157976e-01, 9.03075929e-01, 4.14846683e-01, 0.00000000e+00],
+             [-2.33733271e-01, -4.29480926e-01, 8.72304357e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925808e-01, 7.90071770e-08, 2.58819115e-01, 0.00000000e+00],
+             [-1.70096386e-01, 7.53714865e-01, 6.34807941e-01, 0.00000000e+00],
+             [-1.95075764e-01, -6.57201569e-01, 7.28032653e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925807e-01, 4.45608175e-08, 2.58819117e-01, 0.00000000e+00],
+             [-2.16419542e-01, 5.48454233e-01, 8.07688391e-01, 0.00000000e+00],
+             [-1.41950404e-01, -8.36180575e-01, 5.29766107e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925808e-01, 1.91493227e-08, 2.58819113e-01, 0.00000000e+00],
+             [-2.46691868e-01, 3.02517243e-01, 9.20666302e-01, 0.00000000e+00],
+             [-7.82972268e-02, -9.53143912e-01, 2.92209217e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, 2.00565819e-10, 2.58819121e-01, 0.00000000e+00],
+             [-2.58668211e-01, 3.41439414e-02, 9.65362599e-01, 0.00000000e+00],
+             [-8.83710472e-03, -9.99416926e-01, 3.29805141e-02, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925806e-01, -1.01961977e-08, 2.58819119e-01, 0.00000000e+00],
+             [-2.51460315e-01, -2.36761659e-01, 9.38462374e-01, 0.00000000e+00],
+             [6.12784346e-02, -9.71567762e-01, -2.28694199e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[9.65925808e-01, -4.32637531e-08, 2.58819112e-01, 0.00000000e+00],
+             [-2.25602769e-01, -4.90107745e-01, 8.41960681e-01, 0.00000000e+00],
+             [1.26849215e-01, -8.71661860e-01, -4.73407730e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025336e-01, -7.64847658e-08, 5.00000118e-01, 0.00000000e+00],
+             [-3.53554536e-01, -7.07104752e-01, 6.12374118e-01, 0.00000000e+00],
+             [3.53552413e-01, -7.07108811e-01, -6.12370657e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025333e-01, -1.10193108e-07, 5.00000123e-01, 0.00000000e+00],
+             [-2.26996679e-01, -8.91005211e-01, 3.93169457e-01, -0.00000000e+00],
+             [4.45502671e-01, -4.53993078e-01, -7.71633109e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025334e-01, -4.76845009e-08, 5.00000121e-01, 0.00000000e+00],
+             [-7.82187053e-02, -9.87687893e-01, 1.35478634e-01, -0.00000000e+00],
+             [4.93844059e-01, -1.56437291e-01, -8.55362741e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025335e-01, 5.44865968e-08, 5.00000118e-01, 0.00000000e+00],
+             [7.82159161e-02, -9.87688778e-01, -1.35473790e-01, -0.00000000e+00],
+             [4.93844499e-01, 1.56431702e-01, -8.55363510e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025337e-01, 1.06291172e-07, 5.00000115e-01, 0.00000000e+00],
+             [2.26994148e-01, -8.91007784e-01, -3.93165087e-01, -0.00000000e+00],
+             [4.45503953e-01, 4.53988027e-01, -7.71635341e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025334e-01, 8.31178996e-08, 5.00000121e-01, 0.00000000e+00],
+             [3.53552543e-01, -7.07108749e-01, -6.12370652e-01, -0.00000000e+00],
+             [3.53554409e-01, 7.07104813e-01, -6.12374120e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025336e-01, 5.47984172e-08, 5.00000118e-01, 0.00000000e+00],
+             [4.45502752e-01, -4.53992999e-01, -7.71633109e-01, -0.00000000e+00],
+             [2.26996511e-01, 8.91005251e-01, -3.93169464e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025341e-01, 1.49156699e-08, 5.00000109e-01, 0.00000000e+00],
+             [4.93844058e-01, -1.56437257e-01, -8.55362748e-01, -0.00000000e+00],
+             [7.82186327e-02, 9.87687898e-01, -1.35478636e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025338e-01, -1.29877134e-08, 5.00000114e-01, 0.00000000e+00],
+             [4.93844506e-01, 1.56431668e-01, -8.55363512e-01, -0.00000000e+00],
+             [-7.82158406e-02, 9.87688784e-01, 1.35473794e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025341e-01, -5.45050421e-08, 5.00000109e-01, 0.00000000e+00],
+             [4.45504029e-01, 4.53987956e-01, -7.71635339e-01, -0.00000000e+00],
+             [-2.26993986e-01, 8.91007820e-01, 3.93165099e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025336e-01, -7.64847657e-08, 5.00000118e-01, 0.00000000e+00],
+             [3.53554536e-01, 7.07104752e-01, -6.12374118e-01, -0.00000000e+00],
+             [-3.53552413e-01, 7.07108811e-01, 6.12370657e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025333e-01, -1.10193108e-07, 5.00000123e-01, 0.00000000e+00],
+             [2.26996679e-01, 8.91005211e-01, -3.93169457e-01, 0.00000000e+00],
+             [-4.45502671e-01, 4.53993078e-01, 7.71633109e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025334e-01, -4.76845005e-08, 5.00000121e-01, 0.00000000e+00],
+             [7.82187053e-02, 9.87687893e-01, -1.35478634e-01, 0.00000000e+00],
+             [-4.93844059e-01, 1.56437291e-01, 8.55362741e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025335e-01, 5.44865968e-08, 5.00000118e-01, 0.00000000e+00],
+             [-7.82159161e-02, 9.87688778e-01, 1.35473790e-01, 0.00000000e+00],
+             [-4.93844499e-01, -1.56431702e-01, 8.55363510e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025337e-01, 1.06291172e-07, 5.00000115e-01, 0.00000000e+00],
+             [-2.26994148e-01, 8.91007784e-01, 3.93165087e-01, 0.00000000e+00],
+             [-4.45503953e-01, -4.53988027e-01, 7.71635341e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025334e-01, 8.31178996e-08, 5.00000121e-01, 0.00000000e+00],
+             [-3.53552543e-01, 7.07108749e-01, 6.12370652e-01, 0.00000000e+00],
+             [-3.53554409e-01, -7.07104813e-01, 6.12374120e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025336e-01, 5.47984172e-08, 5.00000118e-01, 0.00000000e+00],
+             [-4.45502752e-01, 4.53992999e-01, 7.71633109e-01, 0.00000000e+00],
+             [-2.26996511e-01, -8.91005251e-01, 3.93169464e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025341e-01, 1.49156699e-08, 5.00000109e-01, 0.00000000e+00],
+             [-4.93844058e-01, 1.56437257e-01, 8.55362748e-01, 0.00000000e+00],
+             [-7.82186327e-02, -9.87687898e-01, 1.35478636e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025338e-01, -1.29877133e-08, 5.00000114e-01, 0.00000000e+00],
+             [-4.93844506e-01, -1.56431668e-01, 8.55363512e-01, 0.00000000e+00],
+             [7.82158406e-02, -9.87688784e-01, -1.35473794e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[8.66025341e-01, -5.45050422e-08, 5.00000109e-01, 0.00000000e+00],
+             [-4.45504029e-01, -4.53987956e-01, 7.71635339e-01, 0.00000000e+00],
+             [2.26993986e-01, -8.91007820e-01, -3.93165099e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106672e-01, -4.35939631e-08, 7.07106890e-01, 0.00000000e+00],
+             [-5.00001540e-01, -7.07104743e-01, 5.00001342e-01, -0.00000000e+00],
+             [4.99998614e-01, -7.07108819e-01, -4.99998504e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106670e-01, -5.52544745e-08, 7.07106893e-01, 0.00000000e+00],
+             [-2.85617224e-01, -9.14792706e-01, 2.85617062e-01, -0.00000000e+00],
+             [6.46856212e-01, -4.03923637e-01, -6.46856040e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106669e-01, -1.68940567e-08, 7.07106893e-01, 0.00000000e+00],
+             [-3.26586630e-02, -9.98932843e-01, 3.26586288e-02, -0.00000000e+00],
+             [7.06352299e-01, -4.61862999e-02, -7.06352076e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106672e-01, 2.97394765e-08, 7.07106890e-01, 0.00000000e+00],
+             [2.24710654e-01, -9.48161533e-01, -2.24710545e-01, -0.00000000e+00],
+             [6.70451547e-01, 3.17788777e-01, -6.70451353e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106673e-01, 5.99903707e-08, 7.07106890e-01, 0.00000000e+00],
+             [4.51731499e-01, -7.69335746e-01, -4.51731295e-01, 0.00000000e+00],
+             [5.44002579e-01, 6.38844668e-01, -5.44002466e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106675e-01, 3.06564824e-08, 7.07106888e-01, 0.00000000e+00],
+             [6.17743458e-01, -4.86606921e-01, -6.17743251e-01, 0.00000000e+00],
+             [3.44083086e-01, 8.73621030e-01, -3.44083021e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106677e-01, 1.08103441e-09, 7.07106885e-01, 0.00000000e+00],
+             [7.00325760e-01, -1.38159139e-01, -7.00325554e-01, 0.00000000e+00],
+             [9.76932779e-02, 9.90410042e-01, -9.76932507e-02, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106671e-01, -1.64166701e-08, 7.07106891e-01, 0.00000000e+00],
+             [6.88325222e-01, 2.28947769e-01, -6.88325002e-01, 0.00000000e+00],
+             [-1.61890534e-01, 9.73438709e-01, 1.61890506e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106673e-01, -4.23610226e-08, 7.07106890e-01, 0.00000000e+00],
+             [5.83362562e-01, 5.65134047e-01, -5.83362349e-01, 0.00000000e+00],
+             [-3.99610154e-01, 8.24999096e-01, 3.99610081e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106676e-01, -4.44615927e-08, 7.07106886e-01, 0.00000000e+00],
+             [3.99613558e-01, 8.24995845e-01, -3.99613388e-01, 0.00000000e+00],
+             [-5.83360226e-01, 5.65138793e-01, 5.83360087e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106675e-01, -3.88472995e-08, 7.07106888e-01, 0.00000000e+00],
+             [1.61894504e-01, 9.73437400e-01, -1.61894402e-01, 0.00000000e+00],
+             [-6.88324284e-01, 2.28953331e-01, 6.88324089e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106672e-01, 3.23226657e-08, 7.07106891e-01, 0.00000000e+00],
+             [-9.76893638e-02, 9.90410819e-01, 9.76892882e-02, 0.00000000e+00],
+             [-7.00326312e-01, -1.38153570e-01, 7.00326101e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106670e-01, 6.50865465e-08, 7.07106893e-01, 0.00000000e+00],
+             [-3.44079709e-01, 8.73623739e-01, 3.44079520e-01, 0.00000000e+00],
+             [-6.17745345e-01, -4.86602058e-01, 6.17745195e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106669e-01, 4.82454161e-08, 7.07106894e-01, 0.00000000e+00],
+             [-5.44000123e-01, 6.38848940e-01, 5.43999906e-01, -0.00000000e+00],
+             [-4.51734463e-01, -7.69332199e-01, 4.51734372e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106667e-01, 2.29245413e-08, 7.07106896e-01, 0.00000000e+00],
+             [-6.70450308e-01, 3.17794075e-01, 6.70450080e-01, -0.00000000e+00],
+             [-2.24714367e-01, -9.48159757e-01, 2.24714325e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106677e-01, 7.22923882e-09, 7.07106885e-01, 0.00000000e+00],
+             [-7.06352476e-01, -4.61806309e-02, 7.06352269e-01, -0.00000000e+00],
+             [3.26546472e-02, -9.98933106e-01, -3.26546274e-02, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.07106668e-01, -3.31554106e-08, 7.07106894e-01, 0.00000000e+00],
+             [-6.46857880e-01, -4.03918380e-01, 6.46857655e-01, -0.00000000e+00],
+             [2.85613449e-01, -9.14795028e-01, -2.85613401e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999888e-01, -2.14734474e-08, 8.66025468e-01, 0.00000000e+00],
+             [-6.12374243e-01, -7.07104756e-01, 3.53554311e-01, -0.00000000e+00],
+             [6.12370720e-01, -7.07108806e-01, -3.53552312e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999890e-01, -5.88496993e-09, 8.66025467e-01, 0.00000000e+00],
+             [-2.24146271e-01, -9.65925089e-01, 1.29410866e-01, -0.00000000e+00],
+             [8.36515726e-01, -2.58821798e-01, -4.82962439e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999890e-01, 1.03496171e-08, 8.66025467e-01, 0.00000000e+00],
+             [2.24141542e-01, -9.65926552e-01, -1.29408130e-01, -0.00000000e+00],
+             [8.36516992e-01, 2.58816335e-01, -4.82963173e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999877e-01, 2.10888136e-08, 8.66025475e-01, 0.00000000e+00],
+             [6.12370783e-01, -7.07108756e-01, -3.53552303e-01, 0.00000000e+00],
+             [6.12374189e-01, 7.07104806e-01, -3.53554304e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999879e-01, 4.88024892e-09, 8.66025474e-01, 0.00000000e+00],
+             [8.36515743e-01, -2.58821757e-01, -4.82962432e-01, 0.00000000e+00],
+             [2.24146232e-01, 9.65925100e-01, -1.29410851e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999883e-01, -1.32033357e-08, 8.66025472e-01, 0.00000000e+00],
+             [8.36517006e-01, 2.58816307e-01, -4.82963164e-01, 0.00000000e+00],
+             [-2.24141508e-01, 9.65926560e-01, 1.29408134e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999888e-01, -2.14734476e-08, 8.66025468e-01, 0.00000000e+00],
+             [6.12374243e-01, 7.07104756e-01, -3.53554311e-01, 0.00000000e+00],
+             [-6.12370720e-01, 7.07108806e-01, 3.53552312e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999890e-01, -5.88497003e-09, 8.66025467e-01, 0.00000000e+00],
+             [2.24146271e-01, 9.65925089e-01, -1.29410866e-01, 0.00000000e+00],
+             [-8.36515726e-01, 2.58821798e-01, 4.82962439e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999890e-01, 1.03496170e-08, 8.66025467e-01, 0.00000000e+00],
+             [-2.24141542e-01, 9.65926552e-01, 1.29408130e-01, 0.00000000e+00],
+             [-8.36516992e-01, -2.58816335e-01, 4.82963173e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999877e-01, 2.10888135e-08, 8.66025475e-01, 0.00000000e+00],
+             [-6.12370783e-01, 7.07108756e-01, 3.53552303e-01, -0.00000000e+00],
+             [-6.12374189e-01, -7.07104806e-01, 3.53554304e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999879e-01, 4.88024905e-09, 8.66025474e-01, 0.00000000e+00],
+             [-8.36515743e-01, 2.58821757e-01, 4.82962432e-01, -0.00000000e+00],
+             [-2.24146232e-01, -9.65925100e-01, 1.29410851e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[4.99999883e-01, -1.32033356e-08, 8.66025472e-01, 0.00000000e+00],
+             [-8.36517006e-01, -2.58816307e-01, 4.82963164e-01, -0.00000000e+00],
+             [2.24141508e-01, -9.65926560e-01, -1.29408134e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[2.58818972e-01, 6.33160309e-09, 9.65925846e-01, 0.00000000e+00],
+             [-6.83014657e-01, -7.07104771e-01, 1.83013175e-01, -0.00000000e+00],
+             [6.83010775e-01, -7.07108792e-01, -1.83012126e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[2.58818969e-01, -1.35951157e-09, 9.65925847e-01, 0.00000000e+00],
+             [2.49997373e-01, -9.65926556e-01, -6.69865745e-02, -0.00000000e+00],
+             [9.33013427e-01, 2.58816320e-01, -2.50000115e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[2.58818972e-01, -3.02503072e-09, 9.65925846e-01, 0.00000000e+00],
+             [9.33012015e-01, -2.58821773e-01, -2.49999741e-01, 0.00000000e+00],
+             [2.50002640e-01, 9.65925095e-01, -6.69879822e-02, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[2.58818972e-01, 6.33160300e-09, 9.65925846e-01, 0.00000000e+00],
+             [6.83014657e-01, 7.07104771e-01, -1.83013175e-01, 0.00000000e+00],
+             [-6.83010775e-01, 7.07108792e-01, 1.83012126e-01, 0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[2.58818969e-01, -1.35951156e-09, 9.65925847e-01, 0.00000000e+00],
+             [-2.49997373e-01, 9.65926556e-01, 6.69865745e-02, 0.00000000e+00],
+             [-9.33013427e-01, -2.58816320e-01, 2.50000115e-01, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[2.58818972e-01, -3.02503058e-09, 9.65925846e-01, 0.00000000e+00],
+             [-9.33012015e-01, 2.58821773e-01, 2.49999741e-01, -0.00000000e+00],
+             [-2.50002640e-01, -9.65925095e-01, 6.69879822e-02, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+            [[7.91668712e-17, 1.65761784e-16, 1.00000000e+00, 0.00000000e+00],
+             [-7.07108780e-01, -7.07104782e-01, 1.73190540e-16, -0.00000000e+00],
+             [7.07104782e-01, -7.07108780e-01, 6.12323400e-17, -0.00000000e+00],
+             [0.00000000e+00, 0.00000000e+00, 0.00000000e+00, 1.00000000e+00]],
+        ]
+        
+        npArrays = []
+
+        for matrix in matrices:
+            
+            npArrays.append(np.array(matrix))
+
+        return npArrays
 
 class TestXmippRotateVolume(TestXmippBase):
     """This class checks if the protocol rotate volume in Xmipp works properly."""
@@ -1824,6 +2609,109 @@ class TestXmippReconstructSignificant(TestXmippBase):
         self.assertIsNotNone(protReconstructSignificant3.outputVolume,
                              (MSG_WRONG_RECONSTRUCTION, " of the final volume"))
 
+
+class TestXmippDeepHand(TestXmippBase):
+    """This class checks if the protocol deep hand in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet(db_general)
+        cls.vol1 = cls.dataset.getFile(helix)
+
+    def testXmippDeepHand(self):
+        # Import input data
+        protImportVol = self.newProtocol(ProtImportVolumes,
+                                         objLabel='Volume',
+                                         filesPath=self.vol1,
+                                         samplingRate=7.08)
+        self.launchProtocol(protImportVol)
+        # Check if there is an output
+        self.assertIsNotNone(protImportVol.getFiles(),
+                             "There was a problem with the volume import")
+
+        # Creation of the mask
+        protDeepHand = self.newProtocol(XmippProtDeepHand,
+                                        inputVolume=protImportVol.outputVolume,
+                                        threshold=0.05)
+        self.launchProtocol(protDeepHand)
+        # Check if there is an output
+        self.assertIsNotNone(protDeepHand.getFiles(), "There was a problem with the mask creation")
+
+        # Check if the sampling rate is right
+        self.assertEqual(protDeepHand.outputVol.getSamplingRate(), 7.08, (MSG_WRONG_SAMPLING, "volume"))
+        # Check if the input threshold is the same as the density of the volume
+        self.assertEqual(protDeepHand.threshold.get(), 0.05, "There was a problem with the density value")
+        # Check if the thresholdAlpha and thresholdHand match the default values
+        self.assertEqual(protDeepHand.thresholdAlpha.get(), 0.7, "There was a problem with the thresholdAlpha value")
+        self.assertEqual(protDeepHand.thresholdHand.get(), 0.6, "There was a problem with the thresholdHand value")
+        # Check if the dimension of the volume does not vary
+        self.assertEqual(protDeepHand.outputVol.getDim(), protImportVol.outputVolume.getDim(),
+                         (MSG_WRONG_DIM, "volume"))
+        # Check if the hand value is right
+        self.assertAlmostEquals(protDeepHand.outputHand.get(), 0.3805, 4,"There was a problem with the hand value")
+        # Check if the flip is right
+        self.assertTrue(protDeepHand.outputHand.get()<protDeepHand.thresholdHand.get(), "There was a problem with the flip")
+
+class TestXmippResolutionBfactor(TestXmippBase):
+    """This class checks if the protocol resolution b factor in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet(db_model_building_tutorial)
+        cls.vol1 = cls.dataset.getFile(vol_coot1)
+        cls.pdb = cls.dataset.getFile(pdb_coot1)
+
+    def testXmippResolutionBfactor(self):
+        # Import input volume
+        print("Import input volume")
+        protImportVol = self.newProtocol(ProtImportVolumes,
+                                         objLabel='Volume',
+                                         filesPath=self.vol1,
+                                         samplingRate=4)
+        self.launchProtocol(protImportVol)
+        # Check if there is an output volume
+        self.assertIsNotNone(protImportVol.getFiles(),
+                             (MSG_WRONG_IMPORT, "volume"))
+
+        # Create a mask from the volume
+        print("Create a mask from the volume")
+        protCreateMask = self.newProtocol(XmippProtCreateMask3D,
+                                          inputVolume=protImportVol.outputVolume,
+                                          threshold=0.09)
+        self.launchProtocol(protCreateMask)
+        # Check if there is an output 3D mask
+        self.assertIsNotNone(protCreateMask.getFiles(),
+                             MSG_WRONG_MASK)
+
+        # Create a map
+        print("Create a map")
+        protCreateMap = self.newProtocol(XmippProtMonoRes,
+                                         fullMap=protImportVol.outputVolume,
+                                         mask=protCreateMask.outputMask,
+                                         maxRes=10)
+        self.launchProtocol(protCreateMap)
+        # Check if there is an output map
+        self.assertIsNotNone(protCreateMap.getFiles(),
+                             MSG_WRONG_MAP)
+
+        # Import atomic structure
+        print("Import atomic structure")
+        protImportPdb = self.newProtocol(ProtImportPdb,
+                                         inputPdbData=ProtImportPdb.IMPORT_FROM_FILES,
+                                         pdbFile=self.pdb,
+                                         inputVolume=protImportVol.outputVolume)
+        self.launchProtocol(protImportPdb)
+        # Check if there is an output atomic structure
+        self.assertIsNotNone(protImportPdb.getFiles(),
+                             (MSG_WRONG_IMPORT, "atomic structure"))
+
+        # Protocol local resolution/local bfactor
+        print("Protocol local resolution/local bfactor")
+        protbfactorResolution = self.newProtocol(XmippProtbfactorResolution,
+                                                 pdbfile=protImportPdb.outputPdb,
+                                                 localResolutionMap=protCreateMap.resolution_Volume,
+                                                 fscResolution=8.35)
+        self.launchProtocol(protbfactorResolution)
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

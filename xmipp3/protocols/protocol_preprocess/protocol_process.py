@@ -87,7 +87,7 @@ class XmippProcessParticles(ProtProcessParticles):
         inputSet = self.inputParticles.get()
         # outputSet could be SetOfParticles, SetOfAverages or any future sub-class of SetOfParticles
         className = inputSet.getClassName()
-        outputSet = self._createSetFromName(className)
+        outputSet = inputSet.createCopy(self._getPath())
         outputSet.copyInfo(inputSet)
 
         self._preprocessOutput(outputSet)

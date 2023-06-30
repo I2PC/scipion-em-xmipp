@@ -32,7 +32,7 @@ visualization program.
 
 from pyworkflow.protocol.executor import StepExecutor
 from pyworkflow.viewer import ProtocolViewer, DESKTOP_TKINTER, WEB_DJANGO
-from pwem.viewers import (DataView, EmPlotter, showj, ChimeraClientView,
+from pwem.viewers import (DataView, EmPlotter, showj,
                           ChimeraView, ObjectView, ChimeraAngDist)
 import pwem.objects as emobj
 from pyworkflow.utils import createUniqueFileName, cleanPattern, cleanPath
@@ -40,9 +40,11 @@ from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.protocol.params import (LabelParam, IntParam, FloatParam,
                                         StringParam, EnumParam,
                                         NumericRangeParam, BooleanParam)
+import pyworkflow.utils as pwutils
+
 from xmipp3.convert import *
 from xmipp3.viewers.plotter import XmippPlotter
-from xmipp3.protocols import XmippProtProjMatch
+from ..protocols.protocol_projmatch import XmippProtProjMatch
 
 
 ITER_LAST = 0
@@ -221,7 +223,7 @@ Examples:
         if self.showRef3DNo == REF_ALL:
             self._refsList = range(1, self.protocol.numberOfReferences+1)
         else:
-            self._refsList = self._getListFromRangeString(self.ref3DSelection.get())
+            self._refsList = pwutils.getListFromRangeString(self.ref3DSelection.get())
         # ToDo: enhance this
         self.firstIter = 1
         #self.lastIter = self.protocol.numberOfIterations.get()
@@ -230,7 +232,7 @@ Examples:
         if self.viewIter.get() == ITER_LAST:
             self._iterations = [self.lastIter]
         else:
-            self._iterations = self._getListFromRangeString(self.iterSelection.get())
+            self._iterations = pwutils.getListFromRangeString(self.iterSelection.get())
             
         from matplotlib.ticker import FuncFormatter
         self._plotFormatter = FuncFormatter(self._formatFreq) 
@@ -322,8 +324,7 @@ Examples:
             view = ChimeraView(cmdFile)
         else:
             
-            #view = CommandView('xmipp_chimera_client --input "%s" --mode projector 256 &' % volumes[0])
-            view = ChimeraClientView(volumes[0], showProjection=True)
+            view = ChimeraView(volumes[0])
         
         return [view]
     
