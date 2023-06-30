@@ -51,7 +51,7 @@ from .protocol_create_gallery import XmippProtCreateGallery
 from .protocol_ctf_consensus import XmippProtCTFConsensus
 from .protocol_ctf_micrographs import XmippProtCTFMicrographs
 from .protocol_ctf_correct_wiener2d import XmippProtCTFCorrectWiener2D
-from .protocol_consensus_classes3D import XmippProtConsensusClasses3D
+from .protocol_consensus_classes import XmippProtConsensusClasses
 from .protocol_denoise_particles import XmippProtDenoiseParticles
 from .protocol_deep_micrograph_screen import  XmippProtDeepMicrographScreen
 from .protocol_eliminate_empty_images import (XmippProtEliminateEmptyParticles,
@@ -68,6 +68,7 @@ from .protocol_movie_gain import XmippProtMovieGain
 from .protocol_flexalign import XmippProtFlexAlign
 from .protocol_movie_opticalflow import XmippProtOFAlignment, ProtMovieAlignment
 from .protocol_movie_max_shift import XmippProtMovieMaxShift
+from .protocol_movie_dose_analysis import XmippProtMovieDoseAnalysis
 from .protocol_movie_split_frames import XmippProtSplitFrames
 from .protocol_multiple_fscs import XmippProtMultipleFSCs
 from .protocol_multireference_alignability import XmippProtMultiRefAlignability

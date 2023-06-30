@@ -65,7 +65,7 @@ class XmippProtLocalCTF(ProtAnalysis3D):
         form.addParam('maxGrayShiftChange', FloatParam, label="Maximum gray shift change", default=1,
                       expertLevel=LEVEL_ADVANCED, help="The reprojection is modified as a*P+b, b is restricted to the "
                                                        "interval [-maxGrayShift,maxGrayShift]")
-        form.addParam('sameDefocus', BooleanParam, label="Force defocusV to be equal than defocusU", default=True,
+        form.addParam('sameDefocus', BooleanParam, label="Force defocusV to be equal than defocusU", default=False,
                       expertLevel=LEVEL_ADVANCED,
                       help="As the CTF usually suffers from astigmatism (it is not spherical but ellipsoidal), the "
                            "defocus vary if computed in X or Y direction, being defocus U value the defocus in X "

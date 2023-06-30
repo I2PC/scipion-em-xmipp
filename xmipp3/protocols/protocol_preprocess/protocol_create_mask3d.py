@@ -208,6 +208,8 @@ sph + 1 '3.03623188  0.02318841 -5.04130435' '7'
     def createMaskFromVolumeStep(self):
         volume = self.inputVolume.get()
         fnVol = getImageLocation(volume)
+        if fnVol.endswith(".mrc"):
+            fnVol += ":mrc"
         Ts = volume.getSamplingRate()
         
         if self.volumeOperation == OPERATION_THRESHOLD:

@@ -41,7 +41,8 @@ _logo = "xmipp_logo.png"
 _references = ['delaRosaTrevin2013', 'Sorzano2013']
 _currentBinVersion = '3.23.03.0'
 # This will allow scipion to detect the plugin version and print it in the log.
-__version__ = _currentBinVersion[2:] + ".0"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
+__version__ = _currentBinVersion[2:] + ".3"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
+
 
 
 class Plugin(pwem.Plugin):
@@ -217,7 +218,7 @@ def installDeepLearningToolkit(plugin, env):
                                 "To enable CUDA (drivers>390 needed), "
                                 "set CUDA=True in 'scipion.conf' file")
                 nvidiaDriverVer = None
-        except ValueError or TypeError:
+        except (ValueError, TypeError):
             nvidiaDriverVer = None
             preMsgs.append("Not nvidia driver found. Type: "
                            " nvidia-smi --query-gpu=driver_version --format=csv,noheader")
@@ -266,6 +267,6 @@ def installDeepLearningToolkit(plugin, env):
                          " fi" % installDLvars,           # End of command
                          installDLvars['xmippLibToken'])  # Target
 
-    env.addPackage(XMIPP_DLTK_NAME, version='0.2', urlSuffix='external',
+    env.addPackage(XMIPP_DLTK_NAME, version='1.0', urlSuffix='external',
                    commands=[xmippInstallCheck]+cmdsInstall+[modelsDownloadCmd],
                    deps=[], tar=XMIPP_DLTK_NAME+'.tgz')
