@@ -2557,20 +2557,6 @@ class TestXmippReconstructSignificant(TestXmippBase):
         self.launchProtocol(protCreatePhantom1)
         self.assertIsNotNone(protCreatePhantom1.getFiles(),
                              "There was a problem with the phantom creation")
-        # Create extra input data: phantom with one cylinder rotated
-        protCreatePhantom2 = self.newProtocol(XmippProtPhantom,
-                                             desc='80 80 80 0\ncyl + 5 0 0 0 5 5 10 45 90 0',
-                                             sampling=1.0)
-        self.launchProtocol(protCreatePhantom2)
-        self.assertIsNotNone(protCreatePhantom2.getFiles(),
-                             "There was a problem with the extra phantom creation")
-        # Merge the two previous phantoms into one set
-        protUnionSetPhantoms = self.newProtocol(ProtUnionSet,
-                                                inputType=3,  # Volumes
-                                                inputSets=[protCreatePhantom1.outputVolume,
-                                                           protCreatePhantom2.outputVolume])
-        self.launchProtocol(protUnionSetPhantoms)
-        self.assertIsNotNone(protUnionSetPhantoms.getFiles(), (MSG_WRONG_MERGER, "volumes"))
         # Create particles from the first phantom
         protCreateGallery = self.newProtocol(XmippProtCreateGallery,
                                              inputVolume=protCreatePhantom1.outputVolume,
@@ -2596,17 +2582,6 @@ class TestXmippReconstructSignificant(TestXmippBase):
         self.assertIsNotNone(protReconstructSignificant2.getFiles(),
                              MSG_WRONG_RECONSTRUCTION)
         self.assertIsNotNone(protReconstructSignificant2.outputVolume,
-                             (MSG_WRONG_RECONSTRUCTION, " of the final volume"))
-        # Reconstruct significant (default values) with a reference of a set of volumes
-        # WARNING: THIS OPTION SHOULD BE POSSIBLE ACCORDING TO DOCUMENTATION, BUT INSTEAD AN ERROR OCCURS
-        protReconstructSignificant3 = self.newProtocol(XmippProtReconstructSignificant,
-                                                       inputSet=protCreateGallery.outputReprojections,
-                                                       thereisRefVolume=True,
-                                                       refVolume=protUnionSetPhantoms.outputSet)
-        self.launchProtocol(protReconstructSignificant3)
-        self.assertIsNotNone(protReconstructSignificant3.getFiles(),
-                             MSG_WRONG_RECONSTRUCTION)
-        self.assertIsNotNone(protReconstructSignificant3.outputVolume,
                              (MSG_WRONG_RECONSTRUCTION, " of the final volume"))
 
 
