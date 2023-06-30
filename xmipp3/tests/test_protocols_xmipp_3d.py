@@ -29,7 +29,8 @@ import os.path
 from pwem.convert import Ccp4Header
 from pwem.protocols import (ProtImportVolumes, ProtImportMask,
                             ProtImportParticles, ProtImportAverages,
-                            ProtImportPdb, ProtSubSet, ProtImportSetOfAtomStructs)
+                            ProtImportPdb, ProtSubSet, ProtUnionSet, ProtImportSetOfAtomStructs)
+
 from xmipp3.protocols.protocol_align_volume_and_particles import AlignVolPartOutputs
 
 try:
@@ -71,6 +72,8 @@ MSG_WRONG_ALIGNMENT = "There was a problem with the alignment of the output "
 MSG_WRONG_SHIFT = "There was a problem with output shift "
 MSG_WRONG_GALLERY = "There was a problem with the gallery creation"
 MSG_WRONG_ROTATION = "There was a problem with the rotation"
+MSG_WRONG_RECONSTRUCTION = "There was a problem with the reconstruction"
+MSG_WRONG_MERGER = "There was a problem with the merger of the "
 MSG_WRONG_IMPORT = "There was a problem with the import of "
 MSG_WRONG_PROTOCOL = "There was a problem with the protocol: "
 MSG_WRONG_MAP = "There was a problem with the map creation"
@@ -2575,6 +2578,48 @@ class TestXmippRotateVolume(TestXmippBase):
                          protCreatePhantomReference.outputVolume.getSamplingRate(),
                          (MSG_WRONG_SAMPLING, "rotated phantom"))
 
+class TestXmippReconstructSignificant(TestXmippBase):
+    """This class checks if the protocol reconstruct significant in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testXmippReconstructSignificant(self):
+        # Create input data: phantom with one cylinder
+        protCreatePhantom1 = self.newProtocol(XmippProtPhantom,
+                                               desc='80 80 80 0\ncyl + 5 0 0 0 5 5 10 0 0 0',
+                                               sampling=1.0)
+        self.launchProtocol(protCreatePhantom1)
+        self.assertIsNotNone(protCreatePhantom1.getFiles(),
+                             "There was a problem with the phantom creation")
+        # Create particles from the first phantom
+        protCreateGallery = self.newProtocol(XmippProtCreateGallery,
+                                             inputVolume=protCreatePhantom1.outputVolume,
+                                             rotStep=15.0,
+                                             tiltStep=90.0)
+        self.launchProtocol(protCreateGallery)
+        self.assertIsNotNone(protCreateGallery.getFiles(),
+                             MSG_WRONG_GALLERY)
+        # Reconstruct significant (default values)
+        protReconstructSignificant = self.newProtocol(XmippProtReconstructSignificant,
+                                                      inputSet=protCreateGallery.outputReprojections)
+        self.launchProtocol(protReconstructSignificant)
+        self.assertIsNotNone(protReconstructSignificant.getFiles(),
+                             MSG_WRONG_RECONSTRUCTION)
+        self.assertIsNotNone(protReconstructSignificant.outputVolume,
+                             (MSG_WRONG_RECONSTRUCTION, " of the final volume"))
+        # Reconstruct significant (default values) with a reference volume
+        protReconstructSignificant2 = self.newProtocol(XmippProtReconstructSignificant,
+                                                       inputSet=protCreateGallery.outputReprojections,
+                                                       thereisRefVolume=True,
+                                                       refVolume=protCreatePhantom1.outputVolume)
+        self.launchProtocol(protReconstructSignificant2)
+        self.assertIsNotNone(protReconstructSignificant2.getFiles(),
+                             MSG_WRONG_RECONSTRUCTION)
+        self.assertIsNotNone(protReconstructSignificant2.outputVolume,
+                             (MSG_WRONG_RECONSTRUCTION, " of the final volume"))
+
+
 class TestXmippDeepHand(TestXmippBase):
     """This class checks if the protocol deep hand in Xmipp works properly."""
     @classmethod
@@ -2677,7 +2722,6 @@ class TestXmippResolutionBfactor(TestXmippBase):
                                                  localResolutionMap=protCreateMap.resolution_Volume,
                                                  fscResolution=8.35)
         self.launchProtocol(protbfactorResolution)
-
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
