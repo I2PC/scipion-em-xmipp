@@ -24,10 +24,12 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import os.path
+
 from pwem.convert import Ccp4Header
 from pwem.protocols import (ProtImportVolumes, ProtImportMask,
                             ProtImportParticles, ProtImportAverages,
-                            ProtImportPdb, ProtSubSet)
+                            ProtImportPdb, ProtSubSet, ProtImportSetOfAtomStructs)
 from xmipp3.protocols.protocol_align_volume_and_particles import AlignVolPartOutputs
 
 try:
@@ -1163,6 +1165,38 @@ class TestXmippPdbConvert(TestXmippBase):
                                msg=(MSG_WRONG_SAMPLING, "volume"))
         self.assertAlmostEqual(volume.getDim()[0], 48, places=1, msg=(MSG_WRONG_SIZE, "volume"))
 
+class TestXmippPdbsConvert(TestXmippBase):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet('nma')
+        cls.pdb = cls.dataset.getFile('pdb')
+
+    def testXmippPdbsConvert(self):
+        print("Run convert a set of pdbs")
+        protImport = self.newProtocol(ProtImportSetOfAtomStructs,
+                                      inputPdbData=ProtImportSetOfAtomStructs.IMPORT_FROM_FILES,
+                                      filesPath=os.path.dirname(self.pdb),
+                                      )
+        self.launchProtocol(protImport)
+        self.assertIsNotNone(protImport.outputAtomStructs.getFirstItem().getFileName(), "There was a problem with the import")
+
+        protConvert = self.newProtocol(XmippProtConvertPdbs,
+                                       sampling=3, size=20)
+        protConvert.pdbObj.set(protImport.outputAtomStructs)
+        self.launchProtocol(protConvert)
+
+        volumes = getattr(protConvert, protConvert.OUTPUT_NAME, None)
+        volumeFn = volumes.getFirstItem().getFileName()
+        self.assertTrue(volumeFn.endswith(".mrc"), "Output volume form converting a pdb is not an mrc")
+        ccp4header = Ccp4Header(volumeFn, readHeader=True)
+        headerSr = ccp4header.getSampling()[0]
+        self.assertAlmostEquals(volumes.getSamplingRate(), headerSr, "%s header for sampling rate is wrong." % volumeFn)
+        self.assertAlmostEqual(volumes.getSamplingRate(), protConvert.sampling.get(), places=1,
+                               msg=(MSG_WRONG_SAMPLING, "volumes"))
+        self.assertAlmostEqual(volumes.getDim()[0], protConvert.size.get(), places=1,
+                               msg=(MSG_WRONG_SIZE, "volumes"))
 
 class TestXmippValidateNonTilt(TestXmippBase):
     @classmethod
