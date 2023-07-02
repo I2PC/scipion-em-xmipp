@@ -40,8 +40,9 @@ class XmippProtResolutionAlignment(ProtAnalysis3D):
     Given two half maps the protocol estimates if the reconstruction presents angular
     alignment errors. To do that, a set of directional FSC along all possible directions
     are estimated. The result is a curve Resolution-radius. If this curve presents a slope
-    then the map present angular assignment errors, but it the curve is flat, the map
-    is error free.
+    then the map present angular assignment errors, but it the graph is flat (horizontal), the map
+    is error free. Note that this protocol generates a plot, not a Scipion object. Its result
+    can only be visualized.
     """
     _label = 'resolution alignment'
     _lastUpdateVersion = VERSION_2_0
@@ -177,9 +178,9 @@ class XmippProtResolutionAlignment(ProtAnalysis3D):
 
     def _methods(self):
         messages = []
-        #if hasattr(self, 'resolution_Volume'):
-        #    messages.append(
-        #        'Information about the method/article in ')
+        ARTICLE_URL = 'Pending on publication'
+        messages.append('Information about the method/article in ' + ARTICLE_URL)
+
         return messages
 
     def _validate(self):
@@ -198,8 +199,6 @@ class XmippProtResolutionAlignment(ProtAnalysis3D):
 
     def _summary(self):
         summary = []
-        summary.append(" ")
+        summary.append("This protocol does not produce Scipion Objects as output. Click on Analyze results to visualize the results")
         return summary
 
-#    def _citations(self):
-#        return ['Vilas2021']

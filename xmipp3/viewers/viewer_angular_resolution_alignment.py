@@ -92,7 +92,6 @@ class XmippProtAngResAlignViewer(ProtocolViewer):
         a = xplotter.createSubPlot(title, xTitle, yTitle, 1, 1)
         xplotter.plotMdFile(md, mdLabelX, mdLabelY, 'g')
 
-        ##a.xaxis.set_major_formatter(FuncFormatter(self._formatFreq))
         xx, yy = self._prepareDataForPlot(md, mdLabelX, mdLabelY)
         a.grid(True)
 
