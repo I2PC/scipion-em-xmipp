@@ -19,8 +19,6 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y libfftw3-dev libopenmpi-dev openmpi-bin libhdf5-dev python3-numpy python3-dev libtiff5-dev unzip libsqlite3-dev default-jdk git cmake libopencv-dev libopenmpi-dev make cmake
-        python -m pip install --upgrade pip
-        pip install scons numpy        
     
     # Installing CUDA
     - name: Install CUDA
@@ -46,6 +44,12 @@ jobs:
         eval "$(${{ github.workspace }}/../miniconda/bin/conda shell.bash hook)"
         pip3 install --user scipion-installer
         python3 -m scipioninstaller -conda -noXmipp -noAsk scipion
+    
+    # Installing Xmipp's Python dependencies in scipion conda enviroment
+    - name: Install scons in scipion enviroment
+      run: |
+        conda activate scipion3
+        pip install scons
         
     # Cloning Xmipp 
     - name: Cloning Xmipp
