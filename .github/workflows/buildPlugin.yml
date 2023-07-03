@@ -67,7 +67,7 @@ jobs:
       working-directory: ${{ github.workspace }}/../xmipp
       env:
         BUILD_TESTS: True
-      run: ${{ github.workspace }}/../scipion/scipion3 run ./xmipp noAsk
+      run: ${{ github.workspace }}/../scipion/scipion3 run ./xmipp
     
     # Check out the repository in the pull request
     - name: Checkout repository
