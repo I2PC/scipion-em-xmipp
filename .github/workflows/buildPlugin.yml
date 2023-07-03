@@ -45,7 +45,7 @@ jobs:
       run: |
         eval "$(${{ github.workspace }}/../miniconda/bin/conda shell.bash hook)"
         pip3 install --user scipion-installer
-        python3 -m scipioninstaller -conda -noXmipp -noAsk ${{ github.workspace }}/../scipion
+        python3 -m scipioninstaller -conda -noXmipp -noAsk scipion
         
     # Cloning Xmipp 
     - name: Cloning Xmipp
@@ -67,7 +67,7 @@ jobs:
       working-directory: ${{ github.workspace }}/../xmipp
       env:
         BUILD_TESTS: True
-      run: ${{ github.workspace }}/../scipion/scipion3 run ./xmipp
+      run: ../scipion/scipion3 run ./xmipp
     
     # Check out the repository in the pull request
     - name: Checkout repository
