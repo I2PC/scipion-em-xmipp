@@ -1112,27 +1112,13 @@ class TestPdbImport(TestXmippBase):
 
 
 class TestXmippPdbConvert(TestXmippBase):
-    
     @classmethod
     def setUpClass(cls):
         setupTestProject(cls)
         cls.dataset = DataSet.getDataSet('nma')
         cls.pdb = cls.dataset.getFile('pdb')
     
-    def testXmippPdbConvertFromDb(self):
-        print("Run convert a pdb from database")
-        protConvert = self.newProtocol(XmippProtConvertPdb, pdbId="3j3i", sampling=4, setSize=True,
-                                       size_z=100, size_y=100, size_x=100)
-        self.launchProtocol(protConvert)
-
-        volume = getattr(protConvert,protConvert.OUTPUT_NAME, None)
-        self.assertIsNotNone(volume.getFileName(), "There was a problem with the conversion")
-        self.assertAlmostEqual(volume.getSamplingRate(), protConvert.sampling.get(), places=1,
-                               msg=(MSG_WRONG_SAMPLING, "volume"))
-        self.assertAlmostEqual(volume.getDim()[0], protConvert.size_z.get(), places=1,
-                               msg=(MSG_WRONG_SIZE, "volume"))
-        
-    def testXmippPdbConvertFromObj(self):
+    def testXmippSinglePdb(self):
         print("Run convert a pdb from import")
         protImport = self.newProtocol(ProtImportPdb, 
                                       inputPdbData=ProtImportPdb.IMPORT_FROM_FILES, 
@@ -1141,12 +1127,11 @@ class TestXmippPdbConvert(TestXmippBase):
         self.assertIsNotNone(protImport.outputPdb.getFileName(), "There was a problem with the import")
         
         protConvert = self.newProtocol(XmippProtConvertPdb, 
-                                       inputPdbData=XmippProtConvertPdb.IMPORT_OBJ, 
                                        sampling=3, setSize=True, size_z=20, size_y=20, size_x=20)
         protConvert.pdbObj.set(protImport.outputPdb)
         self.launchProtocol(protConvert)
 
-        volume = getattr(protConvert, protConvert.OUTPUT_NAME, None)
+        volume = getattr(protConvert, protConvert.OUTPUT_NAME1, None)
         volumeFn = volume.getFileName()
         self.assertTrue(volumeFn.endswith(".mrc"), "Output volume form converting a pdb is not an mrc")
         ccp4header = Ccp4Header(volumeFn, readHeader=True)
@@ -1158,25 +1143,7 @@ class TestXmippPdbConvert(TestXmippBase):
         self.assertAlmostEqual(volume.getDim()[0], protConvert.size_z.get(), places=1,
                                msg=(MSG_WRONG_SIZE, "volume"))
 
-    def testXmippPdbConvertFromFn(self):
-        print("Run convert a pdb from file")
-        protConvert = self.newProtocol(XmippProtConvertPdb,inputPdbData=2, pdbFile=self.pdb, sampling=2, setSize=False)
-        self.launchProtocol(protConvert)
-        volume = getattr(protConvert, protConvert.OUTPUT_NAME, None)
-        self.assertIsNotNone(volume.getFileName(), "There was a problem with the conversion")
-        self.assertAlmostEqual(volume.getSamplingRate(), protConvert.sampling.get(), places=1,
-                               msg=(MSG_WRONG_SAMPLING, "volume"))
-        self.assertAlmostEqual(volume.getDim()[0], 48, places=1, msg=(MSG_WRONG_SIZE, "volume"))
-
-class TestXmippPdbsConvert(TestXmippBase):
-
-    @classmethod
-    def setUpClass(cls):
-        setupTestProject(cls)
-        cls.dataset = DataSet.getDataSet('nma')
-        cls.pdb = cls.dataset.getFile('pdb')
-
-    def testXmippPdbsConvert(self):
+    def testXmippPdbSet(self):
         print("Run convert a set of pdbs")
         protImport = self.newProtocol(ProtImportSetOfAtomStructs,
                                       inputPdbData=ProtImportSetOfAtomStructs.IMPORT_FROM_FILES,
@@ -1185,12 +1152,12 @@ class TestXmippPdbsConvert(TestXmippBase):
         self.launchProtocol(protImport)
         self.assertIsNotNone(protImport.outputAtomStructs.getFirstItem().getFileName(), "There was a problem with the import")
 
-        protConvert = self.newProtocol(XmippProtConvertPdbs,
+        protConvert = self.newProtocol(XmippProtConvertPdb,
                                        sampling=3, size=20)
         protConvert.pdbObj.set(protImport.outputAtomStructs)
         self.launchProtocol(protConvert)
 
-        volumes = getattr(protConvert, protConvert.OUTPUT_NAME, None)
+        volumes = getattr(protConvert, protConvert.OUTPUT_NAME2, None)
         volumeFn = volumes.getFirstItem().getFileName()
         self.assertTrue(volumeFn.endswith(".mrc"), "Output volume form converting a pdb is not an mrc")
         ccp4header = Ccp4Header(volumeFn, readHeader=True)
