@@ -190,7 +190,6 @@ class XmippProtConvertPdb(ProtInitialVolume):
 
         # Generating output object
         outputObj = self._createSetOfVolumes() if isSet else None
-        outputName = self.OUTPUT_NAME2 if isSet else self.OUTPUT_NAME1
 
         # Instantiating image handler
         ih = ImageHandler()
@@ -229,6 +228,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
         self.runJob('rm', '-rf {}/*.vol'.format(self._getExtraPath()))
 
         # Defining output
+        outputName = self.OUTPUT_NAME2 if isSet else self.OUTPUT_NAME1
         self._defineOutputs(**{outputName: outputObj})
         self._defineSourceRelation(self.pdbObj, outputObj)
 
