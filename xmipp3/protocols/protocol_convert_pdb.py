@@ -36,23 +36,28 @@ from pwem.convert.headers import setMRCSamplingRate
 from pwem.emlib.image import ImageHandler
 from pyworkflow.utils import replaceBaseExt, removeExt, getExt, createLink, replaceExt
 
-from pwem.convert import cifToPdb, downloadPdb, headers
-from pwem.objects import Volume, Transform, SetOfVolumes, SetOfAtomStructs, AtomStruct
+from pwem.convert import cifToPdb, headers
+from pwem.objects import Volume, Transform, SetOfVolumes, AtomStruct
 from pwem.protocols import ProtInitialVolume
 
 
 class XmippProtConvertPdb(ProtInitialVolume):
     """ Convert atomic structure(s) into volume(s) """
-    _label = 'convert pdb to volume'
+    _label = 'convert pdbs to volumes'
     OUTPUT_NAME1 = "outputVolume"
     OUTPUT_NAME2 = "outputVolumes"
     _possibleOutputs = {OUTPUT_NAME1: Volume, OUTPUT_NAME2: SetOfVolumes}
        
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
-        """ Define the parameters that will be input for the Protocol.
+        """
+        Define the parameters that will be input for the Protocol.
         This definition is also used to generate automatically the GUI.
         """
+        # Defining condition string for x, y, z coords
+        coordsCondition = 'setSize and not vol'
+
+        # Generating form
         form.addSection(label='Input')
         form.addParam('pdbObj', params.PointerParam, pointerClass='AtomStruct, SetOfAtomStructs',
                       label="Input structure(s) ",
@@ -72,14 +77,11 @@ class XmippProtConvertPdb(ProtInitialVolume):
         form.addParam('size', params.IntParam,
                       label="Box side size (px)", condition='isinstance(pdbObj, SetOfAtomStructs)', allowsNull=True,
                       help='This size should apply to all volumes')
-        form.addParam('size_z', params.IntParam, condition='setSize and not vol', allowsNull=True,
-                      label="Final size (px) Z",
+        form.addParam('size_z', params.IntParam, condition=coordsCondition, allowsNull=True, label="Final size (px) Z",
                       help='Final size in Z in pixels. If no value is provided, protocol will estimate it.')
-        form.addParam('size_y', params.IntParam, condition='setSize and not vol', allowsNull=True,
-                      label="Final size (px) Y",
+        form.addParam('size_y', params.IntParam, condition=coordsCondition, allowsNull=True, label="Final size (px) Y",
                       help='Final size in Y in pixels. If no value is provided, protocol will estimate it.')
-        form.addParam('size_x', params.IntParam, condition='setSize and not vol', allowsNull=True,
-                      label="Final size (px) X",
+        form.addParam('size_x', params.IntParam, condition=coordsCondition, allowsNull=True, label="Final size (px) X",
                       help='Final size in X in pixels. If desired output size is x = y = z you can only fill this '
                            'field. If no value is provided, protocol will estimate it.')
         form.addParam('centerPdb', params.BooleanParam, default=True,
@@ -105,7 +107,8 @@ class XmippProtConvertPdb(ProtInitialVolume):
 
     # --------------------------- STEPS functions --------------------------------------------
     def convertPdbStep(self):
-        """ Although is not mandatory, usually is used by the protocol to
+        """
+        Although is not mandatory, usually is used by the protocol to
         register the resulting outputs in the database.
         """
         pdbFn = self._getPdbFileName()
@@ -158,8 +161,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
 
 
     def convertPdbSetStep(self):
-        """ A function to loop over a set of atomic structures and converts each to volume
-        """
+        """ A function to loop over a set of atomic structures and converts each to volume """
         pdbFns = self._getPdbFileName()
         samplingR = self.sampling.get()
 
@@ -183,39 +185,52 @@ class XmippProtConvertPdb(ProtInitialVolume):
 
 
     def createOutput(self):
-        if isinstance(self.pdbObj.get(), AtomStruct):
+        # Defining if input is set or single atom struct
+        isSet = not isinstance(self.pdbObj.get(), AtomStruct)
+
+        # Generating output object
+        outputObj = self._createSetOfVolumes() if isSet else None
+        outputName = self.OUTPUT_NAME2 if isSet else self.OUTPUT_NAME1
+
+        # Instantiating image handler
+        ih = ImageHandler()
+
+        # Generating input list (only one element for non-set inputs)
+        pdbFns = self._getPdbFileName() if isSet else [self._getVolName()]
+
+        # Converting volumes. Since xmipp generates always a .vol we do the conversion here
+        for pdbFn in pdbFns:
+            # Generating ouput mrc
+            volumeFn = self._getExtraPath(replaceBaseExt(pdbFn, 'vol'))
+            mrcFn = replaceExt(volumeFn, 'mrc')
+            ih.convert(volumeFn, mrcFn)
+            setMRCSamplingRate(mrcFn, self.sampling.get())
+            # Generating output volume object from mrc
             volume = Volume()
             volume.setSamplingRate(self.sampling.get())
-            # Since xmipp generates always a .vol we do the conversion here
-            ih = ImageHandler()
-            mrcFn = self._getVolName(extension="mrc")
-            ih.convert(self._getVolName(), mrcFn)
             volume.setFileName(mrcFn)
             volume.fixMRCVolume(setSamplingRate=True)
-            setMRCSamplingRate(mrcFn, self.sampling.get())
+            # If input is set, append volume to set
+            if isSet:
+                outputObj.append(volume)
+        
+        if not isSet:
+            # If input is single atom struct, get produced volume as output
+            outputObj = volume
             if self.vol:
                 origin = Transform()
                 origin.setShiftsTuple(self.shifts)
-                volume.setOrigin(origin)
-            self._defineOutputs(**{self.OUTPUT_NAME1:volume})
-            self._defineSourceRelation(self.pdbObj, volume)
-        else:  # case of a set of atomic structures as input
-            volumes = self._createSetOfVolumes()
-            volumes.setSamplingRate(self.sampling.get())
-            pdbFns = self._getPdbFileName()
-            for pdbFn in pdbFns:
-                volumefn = self._getExtraPath(replaceBaseExt(pdbFn, 'vol'))
-                ih = ImageHandler()
-                mrcFn = replaceExt(volumefn, 'mrc')
-                ih.convert(volumefn, mrcFn)
-                volume = Volume()
-                volume.setSamplingRate(self.sampling.get())
-                volume.setFileName(mrcFn)
-                volume.fixMRCVolume(setSamplingRate=True)
-                setMRCSamplingRate(mrcFn, self.sampling.get())
-                volumes.append(volume)
-            self._defineOutputs(**{self.OUTPUT_NAME2: volumes})
-            self._defineSourceRelation(self.pdbObj, volumes)
+                outputObj.setOrigin(origin)
+
+        # Setting ouput sampling rate
+        outputObj.setSamplingRate(self.sampling.get())
+
+        # Removing temporary .vol files
+        self.runJob('rm', '-rf {}/*.vol'.format(self._getExtraPath()))
+
+        # Defining output
+        self._defineOutputs(**{outputName: outputObj})
+        self._defineSourceRelation(self.pdbObj, outputObj)
 
     # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
