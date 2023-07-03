@@ -63,11 +63,13 @@ jobs:
         fi
       
     # Installing Xmipp
-    - name: Compile Xmipp
+    - name: Compile Xmipp and show log
       working-directory: ${{ github.workspace }}/../xmipp
       env:
         BUILD_TESTS: True
-      run: ../scipion/scipion3 run ./xmipp
+      run: |
+        ../scipion/scipion3 run ./xmipp
+        cat compileLOG.txt
     
     # Check out the repository in the pull request
     - name: Checkout repository
