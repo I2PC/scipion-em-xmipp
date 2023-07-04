@@ -28,9 +28,6 @@
 # *
 # **************************************************************************
 
-# General imports
-import os
-
 # Scipion em imports
 from pwem.convert.headers import setMRCSamplingRate
 from pwem.emlib.image import ImageHandler
