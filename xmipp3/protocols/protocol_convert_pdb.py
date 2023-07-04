@@ -243,7 +243,10 @@ class XmippProtConvertPdb(ProtInitialVolume):
                 args += ' --oPDB'
         
         # Setting size and origin if chosen (only for non-set inputs)
-        if not isSet:
+        if isSet:
+            args += ' --size %d' % (self.size.get())
+            pass
+        else:
             if self.vol:
                 vol = self.volObj.get()
                 size = vol.getDim()
