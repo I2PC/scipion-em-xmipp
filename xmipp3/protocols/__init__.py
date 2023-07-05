@@ -31,6 +31,7 @@ from .protocol_preprocess import *
 from .protocol_assignment_tilt_pair import XmippProtAssignmentTiltPair
 from .protocol_align_volume import XmippProtAlignVolume, XmippProtAlignVolumeForWeb
 from .protocol_angular_graph_consistency import XmippProtAngularGraphConsistency
+from .protocol_angular_resolution_alignment import XmippProtResolutionAlignment
 from .protocol_preprocess.protocol_add_noise import (XmippProtAddNoiseVolumes,
                                                      XmippProtAddNoiseParticles)
 from .protocol_apply_alignment import XmippProtApplyAlignment
@@ -121,7 +122,6 @@ from .protocol_write_testC import XmippProtWriteTestC
 from .protocol_write_testP import XmippProtWriteTestP
 from .protocol_generate_reprojections import XmippProtGenerateReprojections
 from .protocol_deep_denoising import XmippProtDeepDenoising  # deepDenoising has to be after XmippProtGenerateReprojections and XmippProtCompareReprojections
-from .protocol_split_volume_hierarchical_cluster import XmippProtSplitVolumeHierarchical
 from .protocol_metaprotocol_create_subset import XmippMetaProtCreateSubset
 from .protocol_volume_deform_zernike3d import XmippProtVolumeDeformZernike3D
 from .protocol_structure_map_zernike3d import XmippProtStructureMapZernike3D
