@@ -26,7 +26,7 @@
 # *
 # **************************************************************************
 
-from pyworkflow.protocol.params import PointerParam
+from pyworkflow.protocol.params import PointerParam, BooleanParam, IntParam
 
 from pwem.convert import headers
 from pwem.objects import Volume, Transform
@@ -40,11 +40,17 @@ class XmippProtLocalVolAdj(EMProtocol):
     @classmethod
     def _defineParams(self, form):
         form.addSection(label='Input')
-        form.addParam('vol1', PointerParam, pointerClass='Volume', label="Volume 1 ", help='Specify a volume.')
-        form.addParam('vol2', PointerParam, pointerClass='Volume', label="Volume 2 ", help='Specify a volume.')
-        form.addParam('mask1', PointerParam, pointerClass='VolumeMask', label="Mask for volume 1",
-                      help='Specify a mask for volume 1.')
-
+        form.addParam('vol1', PointerParam, pointerClass='Volume', label="Reference volume",
+                      help='Specify a volume to be used as reference volume.')
+        form.addParam('vol2', PointerParam, pointerClass='Volume', label="Input volume",
+                      help='Specify a volume which will be adjusted to the reference volume.')
+        form.addParam('mask', PointerParam, pointerClass='VolumeMask', label="Mask for reference volume",
+                      help='Specify a mask to define region of interest (which is signal in white (1s) and noise in '
+                           'black (0s))')
+        form.addParam('neighborhood', IntParam, label="Neighborhood", default=5,
+                      help='side length (in pixels) of a square which will define the region of adjustment')
+        form.addParam('subtract', BooleanParam, label="Perform subtraction?", default=False,
+                      help='Perform subtraction of reference volume minus input volume in real space')
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self._insertFunctionStep('adjustStep')
@@ -60,8 +66,11 @@ class XmippProtLocalVolAdj(EMProtocol):
         if vol2.endswith('.mrc'):
             vol2 += ':mrc'
         program = "xmipp_local_volume_adjust"
-        args = '--i1 %s --i2 %s -o %s --mask1 %s' % \
-               (fnVol1, vol2, self._getExtraPath("output_volume.mrc"), self.mask1.get().getFileName())
+        args = '--i1 %s --i2 %s -o %s --mask %s --neighborhood %d' % \
+               (fnVol1, vol2, self._getExtraPath("output_volume.mrc"), self.mask.get().getFileName(),
+                self.neighborhood.get())
+        if self.subtract.get():
+            args += ' --sub'
         self.runJob(program, args)
 
     def createOutputStep(self):
@@ -83,7 +92,7 @@ class XmippProtLocalVolAdj(EMProtocol):
     # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
         summary = ["Volume 1: %s\nVolume 2: %s\nInput mask 1: %s" %
-                   (self.vol1.get().getFileName(), self.vol2.get().getFileName(), self.mask1.get().getFileName())]
+                   (self.vol1.get().getFileName(), self.vol2.get().getFileName(), self.mask.get().getFileName())]
         return summary
 
     def _methods(self):
@@ -94,7 +103,3 @@ class XmippProtLocalVolAdj(EMProtocol):
             methods.append("Volume %s adjusted to volume %s" % (self.vol2.get().getFileName(),
                                                                 self.vol1.get().getFileName()))
         return methods
-
-    def _validate(self):
-        errors = []
-        return errors

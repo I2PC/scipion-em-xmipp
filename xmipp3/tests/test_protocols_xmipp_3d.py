@@ -2688,6 +2688,64 @@ class TestXmippResolutionBfactor(TestXmippBase):
                                                  fscResolution=8.35)
         self.launchProtocol(protbfactorResolution)
 
+class TestXmippLocalVolAdjust(TestXmippBase):
+
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+        cls.dataset = DataSet.getDataSet(db_xmipp_tutorial)
+        cls.vol1 = cls.dataset.getFile(vol1_iter2)
+        cls.vol2 = cls.dataset.getFile(vol2_iter2)
+
+    def testXmippVolSub(self):
+        print("Import Volume 1")
+        protImportVol1 = self.newProtocol(ProtImportVolumes,
+                                          objLabel='Volume',
+                                          filesPath=self.vol1,
+                                          samplingRate=7.08)
+        self.launchProtocol(protImportVol1)
+        self.assertIsNotNone(protImportVol1.getFiles(),
+                             "There was a problem with the import 1")
+
+        print("Import Volume 2")
+        protImportVol2 = self.newProtocol(ProtImportVolumes,
+                                          objLabel='Volume',
+                                          filesPath=self.vol2,
+                                          samplingRate=7.08)
+        self.launchProtocol(protImportVol2)
+        self.assertIsNotNone(protImportVol2.getFiles(),
+                             "There was a problem with the import 2")
+
+        print("Create mask")
+        protCreateMask = self.newProtocol(XmippProtCreateMask3D,
+                                          inputVolume=protImportVol1.outputVolume,
+                                          threshold=0.28)
+        self.launchProtocol(protCreateMask)
+        self.assertIsNotNone(protCreateMask.getFiles(),
+                             "There was a problem with the 3D mask")
+
+        print("Run volume local adjust")
+        protVolLocalAdj = self.newProtocol(XmippProtLocalVolAdj,
+                                      vol1=protImportVol1.outputVolume,
+                                      vol2=protImportVol2.outputVolume,
+                                      mask=protCreateMask.outputMask)
+        self.launchProtocol(protVolLocalAdj)
+        self.assertIsNotNone(protVolLocalAdj.outputVolume, "There was a problem with Volumes local adjust")
+        self.assertEqual(protVolLocalAdj.outputVolume.getSamplingRate(), 7.08, (MSG_WRONG_SAMPLING, "volume"))
+        self.assertEqual(protVolLocalAdj.outputVolume.getDim(), (64, 64, 64), (MSG_WRONG_DIM, "volume"))
+
+        print("Run volume local adjust with subtraction")
+        protVolLocalAdjSub = self.newProtocol(XmippProtLocalVolAdj,
+                                         vol1=protImportVol1.outputVolume,
+                                         vol2=protImportVol2.outputVolume,
+                                         mask=protCreateMask.outputMask,
+                                         subtract=True)
+        self.launchProtocol(protVolLocalAdjSub)
+        self.assertIsNotNone(protVolLocalAdjSub.outputVolume,
+                             "There was a problem with Volumes adjust without computing energy")
+        self.assertEqual(protVolLocalAdjSub.outputVolume.getSamplingRate(), 7.08, (MSG_WRONG_SAMPLING, "volume"))
+        self.assertEqual(protVolLocalAdjSub.outputVolume.getDim(), (64, 64, 64), (MSG_WRONG_DIM, "volume"))
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         className = sys.argv[1]

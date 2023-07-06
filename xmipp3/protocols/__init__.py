@@ -64,7 +64,6 @@ from .protocol_extract_particles_pairs import XmippProtExtractParticlesPairs
 from .protocol_extract_asymmetric_unit import XmippProtExtractUnit
 from .protocol_helical_parameters import XmippProtHelicalParameters
 from .protocol_kerdensom import XmippProtKerdensom
-from .protocol_local_volume_adjust import XmippProtLocalVolAdj
 from .protocol_ml2d import XmippProtML2D
 from .protocol_movie_gain import XmippProtMovieGain
 from .protocol_flexalign import XmippProtFlexAlign
@@ -137,5 +136,6 @@ from .protocol_structure_map import XmippProtStructureMap
 from .protocol_apply_zernike3d import XmippApplyZernike3D
 from .protocol_volume_adjust_sub import XmippProtVolAdjust, XmippProtVolSubtraction
 from .protocol_volume_consensus import XmippProtVolConsensus
+from .protocol_volume_local_adjust import XmippProtLocalVolAdj
 from .protocol_classes_2d_mapping import XmippProtCL2DMap
 from .protocol_deep_hand import XmippProtDeepHand
