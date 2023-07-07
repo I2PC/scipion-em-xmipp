@@ -24,19 +24,20 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+
+# General imports
+import os.path, shutil
+
+# Scipion em imports
 from pwem.convert import Ccp4Header
 from pwem.protocols import (ProtImportVolumes, ProtImportMask,
                             ProtImportParticles, ProtImportAverages,
-                            ProtImportPdb, ProtSubSet, ProtUnionSet)
-from xmipp3.protocols.protocol_align_volume_and_particles import AlignVolPartOutputs
-
-try:
-    from itertools import izip
-except ImportError:
-    izip = zip
-
+                            ProtImportPdb, ProtSubSet, ProtImportSetOfAtomStructs)
 from pyworkflow.utils import greenStr, magentaStr
 from pyworkflow.tests import *
+
+# Plugin imports
+from xmipp3.protocols.protocol_align_volume_and_particles import AlignVolPartOutputs
 from xmipp3.base import *
 from xmipp3.convert import *
 from xmipp3.constants import *
@@ -1109,41 +1110,32 @@ class TestPdbImport(TestXmippBase):
 
 
 class TestXmippPdbConvert(TestXmippBase):
-    
     @classmethod
     def setUpClass(cls):
+        """ This function prepares the project before instantiating and running any protocol. """
         setupTestProject(cls)
         cls.dataset = DataSet.getDataSet('nma')
         cls.pdb = cls.dataset.getFile('pdb')
     
-    def testXmippPdbConvertFromDb(self):
-        print("Run convert a pdb from database")
-        protConvert = self.newProtocol(XmippProtConvertPdb, pdbId="3j3i", sampling=4, setSize=True,
-                                       size_z=100, size_y=100, size_x=100)
-        self.launchProtocol(protConvert)
-
-        volume = getattr(protConvert,protConvert.OUTPUT_NAME, None)
-        self.assertIsNotNone(volume.getFileName(), "There was a problem with the conversion")
-        self.assertAlmostEqual(volume.getSamplingRate(), protConvert.sampling.get(), places=1,
-                               msg=(MSG_WRONG_SAMPLING, "volume"))
-        self.assertAlmostEqual(volume.getDim()[0], protConvert.size_z.get(), places=1,
-                               msg=(MSG_WRONG_SIZE, "volume"))
-        
-    def testXmippPdbConvertFromObj(self):
+    def test1XmippSinglePdb(self):
+        """ This function runs a test with a single pdb as input. """
         print("Run convert a pdb from import")
+
+        # Creating and launching import protocol to obtain input pdb
         protImport = self.newProtocol(ProtImportPdb, 
                                       inputPdbData=ProtImportPdb.IMPORT_FROM_FILES, 
                                       pdbFile=self.pdb)
         self.launchProtocol(protImport)
         self.assertIsNotNone(protImport.outputPdb.getFileName(), "There was a problem with the import")
         
+        # Creating and launching convert to pdb protocol
         protConvert = self.newProtocol(XmippProtConvertPdb, 
-                                       inputPdbData=XmippProtConvertPdb.IMPORT_OBJ, 
-                                       sampling=3, setSize=True, size_z=20, size_y=20, size_x=20)
+                                       numberOfMpi=1, sampling=3, setSize=True, size_z=20, size_y=20, size_x=20)
         protConvert.pdbObj.set(protImport.outputPdb)
         self.launchProtocol(protConvert)
 
-        volume = getattr(protConvert, protConvert.OUTPUT_NAME, None)
+        # Obtaining output and analyzing results
+        volume = getattr(protConvert, protConvert.OUTPUT_NAME1, None)
         volumeFn = volume.getFileName()
         self.assertTrue(volumeFn.endswith(".mrc"), "Output volume form converting a pdb is not an mrc")
         ccp4header = Ccp4Header(volumeFn, readHeader=True)
@@ -1155,16 +1147,51 @@ class TestXmippPdbConvert(TestXmippBase):
         self.assertAlmostEqual(volume.getDim()[0], protConvert.size_z.get(), places=1,
                                msg=(MSG_WRONG_SIZE, "volume"))
 
-    def testXmippPdbConvertFromFn(self):
-        print("Run convert a pdb from file")
-        protConvert = self.newProtocol(XmippProtConvertPdb,inputPdbData=2, pdbFile=self.pdb, sampling=2, setSize=False)
-        self.launchProtocol(protConvert)
-        volume = getattr(protConvert, protConvert.OUTPUT_NAME, None)
-        self.assertIsNotNone(volume.getFileName(), "There was a problem with the conversion")
-        self.assertAlmostEqual(volume.getSamplingRate(), protConvert.sampling.get(), places=1,
-                               msg=(MSG_WRONG_SAMPLING, "volume"))
-        self.assertAlmostEqual(volume.getDim()[0], 48, places=1, msg=(MSG_WRONG_SIZE, "volume"))
+    def test2XmippPdbSet(self):
+        """ This function runs a test with a set of pdbs as input. """
+        print("Run convert a set of pdbs")
 
+        # Defining data path
+        dataPath = os.path.dirname(self.pdb)
+
+        # Obtaining list of pdb files inside folder
+        files = os.listdir(dataPath)
+        pdbFiles = [pdbFile for pdbFile in files if pdbFile.endswith('.pdb')]
+
+        # If there is only one .pdb file, duplicate it so we can have a set with at least two atom structures
+        tmpFiles = []
+        if len(pdbFiles) < 2:
+            newFile = pdbFiles[0].replace('.pdb', '_tmp.pdb')
+            shutil.copyfile(os.path.join(dataPath, pdbFiles[0]), os.path.join(dataPath, newFile))
+            tmpFiles.append(newFile)
+
+        # Creating and launching import protocol to obtain input pdbs
+        protImport = self.newProtocol(ProtImportSetOfAtomStructs,
+                                      inputPdbData=ProtImportSetOfAtomStructs.IMPORT_FROM_FILES,
+                                      filesPath=dataPath)
+        self.launchProtocol(protImport)
+        self.assertIsNotNone(protImport.outputAtomStructs.getFirstItem().getFileName(), "There was a problem with the import")
+
+        # Creating and launching convert to pdb protocol
+        protConvert = self.newProtocol(XmippProtConvertPdb, numberOfMpi=1, numberOfThreads=2, sampling=3, size=20)
+        protConvert.pdbObj.set(protImport.outputAtomStructs)
+        self.launchProtocol(protConvert)
+
+        # Deleting tmp files if there were any
+        for tmpFile in tmpFiles:
+            os.remove(os.path.join(dataPath, tmpFile))
+
+        # Obtaining output and analyzing results
+        volumes = getattr(protConvert, protConvert.OUTPUT_NAME2, None)
+        volumeFn = volumes.getFirstItem().getFileName()
+        self.assertTrue(volumeFn.endswith(".mrc"), "Output volume form converting a pdb is not an mrc")
+        ccp4header = Ccp4Header(volumeFn, readHeader=True)
+        headerSr = ccp4header.getSampling()[0]
+        self.assertAlmostEquals(volumes.getSamplingRate(), headerSr, "%s header for sampling rate is wrong." % volumeFn)
+        self.assertAlmostEqual(volumes.getSamplingRate(), protConvert.sampling.get(), places=1,
+                               msg=(MSG_WRONG_SAMPLING, "volumes"))
+        self.assertAlmostEqual(volumes.getDim()[0], protConvert.size.get(), places=1,
+                               msg=(MSG_WRONG_SIZE, "volumes"))
 
 class TestXmippValidateNonTilt(TestXmippBase):
     @classmethod
