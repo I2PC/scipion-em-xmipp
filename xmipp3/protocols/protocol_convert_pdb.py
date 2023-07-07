@@ -157,9 +157,9 @@ class XmippProtConvertPdb(ProtInitialVolume):
 
         # Saving centered pdbs if wanted
         if self.centerPdb and self.outPdb:
-            centered_pdbs = '{}/centerted'.format(extraPath)
-            self.runJob('mkdir',  centered_pdbs)
-            self.runJob('mv', '{}/*_centered.pdb {}'.format(extraPath, centered_pdbs))
+            centeredPdbs = self._getExtraPath('centerted')
+            self.runJob('mkdir -p',  centeredPdbs)
+            self.runJob('mv', '{}/*_centered.pdb {}'.format(extraPath, centeredPdbs))
 
         # Generating output objects
         outputVol = self._createSetOfVolumes() if isSet else None
@@ -188,11 +188,11 @@ class XmippProtConvertPdb(ProtInitialVolume):
             # If input is set, append volume to set
             if isSet:
                 outputVol.append(volume)
-            # generating output PDB
+            # Generating output PDB
             if pdbOut:
-                centeredPdbFn = '{}/{}_centered.pdb'.format(centered_pdbs, removeBaseExt(pdbFn))
-                atom = AtomStruct()
-                atom.setFileName(centeredPdbFn)
+                centeredPdbFn = '{}/{}_centered.pdb'.format(centeredPdbs, removeBaseExt(pdbFn))
+                atom = AtomStruct(filename=centeredPdbFn)
+                atom.setVolume(volume)
                 if isSet:
                     outputPdb.append(atom)
         
@@ -244,7 +244,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
         # Checking if MPI is selected (only threads are allowed)
         if self.numberOfMpi > 1:
             errors.append('MPI cannot be selected, because Scipion is going to drop support for it. Select threads instead.')
-            
+
         return errors
     
     # --------------------------- UTLIS functions --------------------------------------------
