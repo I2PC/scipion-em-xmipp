@@ -116,7 +116,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
         isSet = not isinstance(self.pdbObj.get(), AtomStruct)
 
         # Generating pdb list and obtaining input sampling rate
-        pdbList = self._getPdbFileName() if isSet else [self._getPdbFileName()]
+        pdbList = self._getPdbFileNames()
         samplingR = self.sampling.get()
 
         # Defining list of function ids to be waited by the createOutput function
@@ -154,8 +154,8 @@ class XmippProtConvertPdb(ProtInitialVolume):
         # Instantiating image handler
         ih = ImageHandler()
 
-        # Generating input list (only one element for non-set inputs)
-        pdbFns = self._getPdbFileName() if isSet else [self._getVolName()]
+        # Generating input list
+        pdbFns = self._getPdbFileNames()
 
         # Converting volumes. Since xmipp generates always a .vol we do the conversion here
         for pdbFn in pdbFns:
@@ -214,15 +214,16 @@ class XmippProtConvertPdb(ProtInitialVolume):
         return errors
     
     # --------------------------- UTLIS functions --------------------------------------------
-    def _getPdbFileName(self):
-        if isinstance(self.pdbObj.get(), AtomStruct):
-            return self.pdbObj.get().getFileName()
+    def _getPdbFileNames(self):
+        """ This function returns the input file/s stored in a list. """
+        pbdObj = self.pdbObj.get()
+        if isinstance(pbdObj, AtomStruct):
+            # If it is a single AtomStruct, place it inside a list of 1 element
+            return [pbdObj.getFileName()]
         else:
-            return [i.getFileName() for i in self.pdbObj.get()]
+            # If it is a SetOfAtom Structs, get all of the elements iterating the set
+            return [i.getFileName() for i in pbdObj]
 
-    def _getVolName(self, extension="vol"):
-        return self._getExtraPath(replaceBaseExt(self._getPdbFileName().replace(" ", "_"), extension))
-    
     def _convertToPdb(self, pdbRaw):
         """ This function receives an atomic struct file, and converts it to .pdb if it is in .cif format. """
         # Get output path for pdb file
