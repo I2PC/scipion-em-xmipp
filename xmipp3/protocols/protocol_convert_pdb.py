@@ -44,6 +44,14 @@ class XmippProtConvertPdb(ProtInitialVolume):
     OUTPUT_NAME1 = "outputVolume"
     OUTPUT_NAME2 = "outputVolumes"
     _possibleOutputs = {OUTPUT_NAME1: Volume, OUTPUT_NAME2: SetOfVolumes}
+
+    # --------------------------- Class constructor --------------------------------------------
+    def __init__(self, **args):
+        # Calling parent class constructor
+        super().__init__(**args)
+
+        # Defining execution mode. Steps will take place in parallel now
+        self.stepsExecutionMode = params.STEPS_PARALLEL
        
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
@@ -53,6 +61,9 @@ class XmippProtConvertPdb(ProtInitialVolume):
         """
         # Defining condition string for x, y, z coords
         coordsCondition = 'setSize and not vol'
+
+        # Defining parallel arguments
+        form.addParallelSection(threads=4)
 
         # Generating form
         form.addSection(label='Input')
@@ -101,15 +112,6 @@ class XmippProtConvertPdb(ProtInitialVolume):
         In this function the steps that are going to be executed should
         be defined. Two of the most used functions are: _insertFunctionStep or _insertRunJobStep
         """
-        self._insertFunctionStep(self.convertPdbStep)
-        self._insertFunctionStep(self.createOutput)
-
-    # --------------------------- STEPS functions --------------------------------------------
-    def convertPdbStep(self):
-        """
-        Although is not mandatory, usually is used by the protocol to
-        register the resulting outputs in the database.
-        """
         # Checking if input is set or not
         isSet = not isinstance(self.pdbObj.get(), AtomStruct)
 
@@ -117,27 +119,35 @@ class XmippProtConvertPdb(ProtInitialVolume):
         pdbList = self._getPdbFileName() if isSet else [self._getPdbFileName()]
         samplingR = self.sampling.get()
 
+        # Defining list of function ids to be waited by the createOutput function
+        deps = []
         for pdbFn in pdbList:
-            # Converting all input atomic structures to .pdb
-            pdbFn = self._convertToPdb(pdbFn)
-            
-            # Generating output file for each input
-            outFile = removeExt(pdbFn)
+            # Calling processConversion in parallel with each input data
+            deps.append(self._insertFunctionStep(self.processConversion, pdbFn, samplingR, isSet, prerequisites=[]))
+        
+        # Insert output conversion step
+        self._insertFunctionStep(self.createOutput, isSet, samplingR, prerequisites=deps)
 
-            # Getting args for program call
-            args = self._getConversionArgs(pdbFn, samplingR, outFile, isSet=isSet)
+    # --------------------------- STEPS functions --------------------------------------------
+    def processConversion(self, pdb, samplingR, isSet):
+        """ This step runs the pdb conversion. """
+        # Converting all input atomic structures to .pdb
+        pdb = self._convertToPdb(pdb)
+        
+        # Generating output file for each input
+        outFile = removeExt(pdb)
 
-            # Showing input and output file names
-            self.info("Input file: " + pdbFn)
-            self.info("Output file: " + outFile)
+        # Getting args for program call
+        args = self._getConversionArgs(pdb, samplingR, outFile, isSet=isSet)
 
-            # Calling program
-            self.runJob("xmipp_volume_from_pdb", args)
+        # Showing input and output file names
+        self.info("Input file: " + pdb)
+        self.info("Output file: " + outFile)
 
-    def createOutput(self):
-        # Defining if input is set or single atom struct
-        isSet = not isinstance(self.pdbObj.get(), AtomStruct)
+        # Calling program
+        self.runJob("xmipp_volume_from_pdb", args)
 
+    def createOutput(self, isSet, samplingR):
         # Generating output object
         outputObj = self._createSetOfVolumes() if isSet else None
 
@@ -153,10 +163,10 @@ class XmippProtConvertPdb(ProtInitialVolume):
             volumeFn = self._getExtraPath(replaceBaseExt(pdbFn, 'vol'))
             mrcFn = replaceExt(volumeFn, 'mrc')
             ih.convert(volumeFn, mrcFn)
-            setMRCSamplingRate(mrcFn, self.sampling.get())
+            setMRCSamplingRate(mrcFn, samplingR)
             # Generating output volume object from mrc
             volume = Volume()
-            volume.setSamplingRate(self.sampling.get())
+            volume.setSamplingRate(samplingR)
             volume.setFileName(mrcFn)
             volume.fixMRCVolume(setSamplingRate=True)
             # If input is set, append volume to set
@@ -172,7 +182,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
                 outputObj.setOrigin(origin)
 
         # Setting ouput sampling rate
-        outputObj.setSamplingRate(self.sampling.get())
+        outputObj.setSamplingRate(samplingR)
 
         # Removing temporary files
         if self.clean:

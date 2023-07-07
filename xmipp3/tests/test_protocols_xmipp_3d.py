@@ -24,17 +24,20 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-import os.path
 
+# General imports
+import os.path, shutil
+
+# Scipion em imports
 from pwem.convert import Ccp4Header
 from pwem.protocols import (ProtImportVolumes, ProtImportMask,
                             ProtImportParticles, ProtImportAverages,
                             ProtImportPdb, ProtSubSet, ProtImportSetOfAtomStructs)
-
-from xmipp3.protocols.protocol_align_volume_and_particles import AlignVolPartOutputs
-
 from pyworkflow.utils import greenStr, magentaStr
 from pyworkflow.tests import *
+
+# Plugin imports
+from xmipp3.protocols.protocol_align_volume_and_particles import AlignVolPartOutputs
 from xmipp3.base import *
 from xmipp3.convert import *
 from xmipp3.constants import *
@@ -1127,7 +1130,7 @@ class TestXmippPdbConvert(TestXmippBase):
         
         # Creating and launching convert to pdb protocol
         protConvert = self.newProtocol(XmippProtConvertPdb, 
-                                       sampling=3, setSize=True, size_z=20, size_y=20, size_x=20)
+                                       numberOfMpi=1, sampling=3, setSize=True, size_z=20, size_y=20, size_x=20)
         protConvert.pdbObj.set(protImport.outputPdb)
         self.launchProtocol(protConvert)
 
@@ -1148,18 +1151,35 @@ class TestXmippPdbConvert(TestXmippBase):
         """ This function runs a test with a set of pdbs as input. """
         print("Run convert a set of pdbs")
 
+        # Defining data path
+        dataPath = os.path.dirname(self.pdb)
+
+        # Obtaining list of pdb files inside folder
+        files = os.listdir(dataPath)
+        pdbFiles = [pdbFile for pdbFile in files if pdbFile.endswith('.pdb')]
+
+        # If there is only one .pdb file, duplicate it so we can have a set with at least two atom structures
+        tmpFiles = []
+        if len(pdbFiles) < 2:
+            newFile = pdbFiles[0].replace('.pdb', '_tmp.pdb')
+            shutil.copyfile(os.path.join(dataPath, pdbFiles[0]), os.path.join(dataPath, newFile))
+            tmpFiles.append(newFile)
+
         # Creating and launching import protocol to obtain input pdbs
         protImport = self.newProtocol(ProtImportSetOfAtomStructs,
                                       inputPdbData=ProtImportSetOfAtomStructs.IMPORT_FROM_FILES,
-                                      filesPath=os.path.dirname(self.pdb))
+                                      filesPath=dataPath)
         self.launchProtocol(protImport)
         self.assertIsNotNone(protImport.outputAtomStructs.getFirstItem().getFileName(), "There was a problem with the import")
 
         # Creating and launching convert to pdb protocol
-        protConvert = self.newProtocol(XmippProtConvertPdb,
-                                       sampling=3, size=20)
+        protConvert = self.newProtocol(XmippProtConvertPdb, numberOfMpi=1, numberOfThreads=2, sampling=3, size=20)
         protConvert.pdbObj.set(protImport.outputAtomStructs)
         self.launchProtocol(protConvert)
+
+        # Deleting tmp files if there were any
+        for tmpFile in tmpFiles:
+            os.remove(os.path.join(dataPath, tmpFile))
 
         # Obtaining output and analyzing results
         volumes = getattr(protConvert, protConvert.OUTPUT_NAME2, None)
