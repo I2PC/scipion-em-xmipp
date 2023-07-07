@@ -213,6 +213,11 @@ class XmippProtConvertPdb(ProtInitialVolume):
         empty the protocol can be executed.
         """
         errors = []
+
+        # Checking if MPI is selected (only threads are allowed)
+        if self.numberOfMpi > 1:
+            errors.append('MPI cannot be selected, because Scipion is going to drop support for it. Select threads instead.')
+            
         return errors
     
     # --------------------------- UTLIS functions --------------------------------------------
