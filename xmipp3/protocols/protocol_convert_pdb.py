@@ -51,6 +51,8 @@ class XmippProtConvertPdb(ProtInitialVolume):
         super().__init__(**args)
 
         # Defining execution mode. Steps will take place in parallel now
+        # Full tutorial on how to parallelize protocols can be read here:
+        # https://scipion-em.github.io/docs/release-3.0.0/docs/developer/parallelization.html
         self.stepsExecutionMode = params.STEPS_PARALLEL
        
     # --------------------------- DEFINE param functions --------------------------------------------
