@@ -32,18 +32,21 @@
 from pwem.convert.headers import setMRCSamplingRate
 from pwem.emlib.image import ImageHandler
 from pwem.convert import cifToPdb, headers
-from pwem.objects import Volume, Transform, SetOfVolumes, AtomStruct
+from pwem.objects import Volume, Transform, SetOfVolumes, AtomStruct, SetOfAtomStructs
 from pwem.protocols import ProtInitialVolume
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as const
-from pyworkflow.utils import replaceBaseExt, removeExt, getExt, createLink, replaceExt
+from pyworkflow.utils import replaceBaseExt, removeExt, getExt, createLink, replaceExt, removeBaseExt
 
 class XmippProtConvertPdb(ProtInitialVolume):
     """ Convert atomic structure(s) into volume(s) """
     _label = 'convert pdbs to volumes'
     OUTPUT_NAME1 = "outputVolume"
     OUTPUT_NAME2 = "outputVolumes"
-    _possibleOutputs = {OUTPUT_NAME1: Volume, OUTPUT_NAME2: SetOfVolumes}
+    OUTPUT_NAME3 = "outputPdb"
+    OUTPUT_NAME4 = "outputAtomStructs"
+    _possibleOutputs = {OUTPUT_NAME1: Volume, OUTPUT_NAME2: SetOfVolumes,
+                        OUTPUT_NAME3: AtomStruct, OUTPUT_NAME4: SetOfAtomStructs}
 
     # --------------------------- Class constructor --------------------------------------------
     def __init__(self, **args):
@@ -150,8 +153,19 @@ class XmippProtConvertPdb(ProtInitialVolume):
         self.runJob("xmipp_volume_from_pdb", args)
 
     def createOutput(self, isSet, samplingR):
-        # Generating output object
-        outputObj = self._createSetOfVolumes() if isSet else None
+        extraPath = self._getExtraPath()
+
+        # Saving centered pdbs if wanted
+        if self.centerPdb and self.outPdb:
+            centered_pdbs = '{}/centerted'.format(extraPath)
+            self.runJob('mkdir',  centered_pdbs)
+            self.runJob('mv', '{}/*_centered.pdb {}'.format(extraPath, centered_pdbs))
+
+        # Generating output objects
+        outputVol = self._createSetOfVolumes() if isSet else None
+        pdbOut = self.centerPdb and self.outPdb
+        if pdbOut:
+            outputPdb = self._createSetOfPDBs() if isSet else None
 
         # Instantiating image handler
         ih = ImageHandler()
@@ -173,28 +187,41 @@ class XmippProtConvertPdb(ProtInitialVolume):
             volume.fixMRCVolume(setSamplingRate=True)
             # If input is set, append volume to set
             if isSet:
-                outputObj.append(volume)
+                outputVol.append(volume)
+            # generating output PDB
+            if pdbOut:
+                centeredPdbFn = '{}/{}_centered.pdb'.format(centered_pdbs, removeBaseExt(pdbFn))
+                atom = AtomStruct()
+                atom.setFileName(centeredPdbFn)
+                if isSet:
+                    outputPdb.append(atom)
         
         if not isSet:
             # If input is single atom struct, get produced volume as output
-            outputObj = volume
+            outputVol = volume
             if self.vol:
                 origin = Transform()
                 origin.setShiftsTuple(self.shifts)
-                outputObj.setOrigin(origin)
+                outputVol.setOrigin(origin)
+
+            if pdbOut:
+                outputPdb = atom
 
         # Setting ouput sampling rate
-        outputObj.setSamplingRate(samplingR)
+        outputVol.setSamplingRate(samplingR)
 
         # Removing temporary files
         if self.clean:
-            outputPath = self._getExtraPath()
-            self.runJob('rm', '-rf {}/*.vol {}/*.cif {}/*.pdb'.format(outputPath, outputPath, outputPath))
+            self.runJob('rm', '-rf {}/*.vol {}/*.cif {}/*.pdb'.format(extraPath, extraPath, extraPath))
+
+        if pdbOut:
+            outputPdbName = self.OUTPUT_NAME4 if isSet else self.OUTPUT_NAME3
+            self._defineOutputs(**{outputPdbName: outputPdb})
 
         # Defining output
-        outputName = self.OUTPUT_NAME2 if isSet else self.OUTPUT_NAME1
-        self._defineOutputs(**{outputName: outputObj})
-        self._defineSourceRelation(self.pdbObj, outputObj)
+        outputVolName = self.OUTPUT_NAME2 if isSet else self.OUTPUT_NAME1
+        self._defineOutputs(**{outputVolName: outputVol})
+        self._defineSourceRelation(self.pdbObj, outputVol)
 
     # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
