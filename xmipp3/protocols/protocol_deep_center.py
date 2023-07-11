@@ -51,7 +51,7 @@ class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
        to a volume, and they must have 3D alignment information. """
     _label = 'deep center'
     _lastUpdateVersion = VERSION_3_0
-    _conda_env = 'xmipp_DLTK_v0.3'
+    _conda_env = 'xmipp_DLTK_v1.0'
     _cond_modelPretrainTrue = 'modelPretrain==True'
     _cond_modelPretrainFalse = 'modelPretrain==False'
 
