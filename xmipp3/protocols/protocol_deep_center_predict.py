@@ -50,7 +50,7 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
     """Predict the center particles using deep learning.""" 
     _label = 'deep center predict'
     _lastUpdateVersion = VERSION_3_0
-    _conda_env = 'xmipp_DLTK_v0.3'
+    _conda_env = 'xmipp_DLTK_v1.0'
     _cond_predictAnglesTrue = 'predictAngles==True'
     _cond_predictAnglesFalse = 'predictAngles==False'
     _cond_trainedModelTrue = 'trainedModel==True'

@@ -51,7 +51,7 @@ class XmippProtDeepGlobalAssignmentPredict(ProtAlign2D, xmipp3.XmippProtocol):
     """Predict the center particles using deep learning."""
     _label = 'deep global assignment predict'
     _lastUpdateVersion = VERSION_3_0
-    _conda_env = 'xmipp_DLTK_v0.3'
+    _conda_env = 'xmipp_DLTK_v1.0'
 
     def __init__(self, **args):
         ProtAlign2D.__init__(self, **args)
