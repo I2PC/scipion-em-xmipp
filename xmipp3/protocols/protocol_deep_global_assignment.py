@@ -86,9 +86,6 @@ class XmippProtDeepGlobalAssignment(ProtAlign2D, xmipp3.XmippProtocol):
                       label='Pretrained model',
                       help='Select the pretrained model. ')
 
-        form.addParam('symmetry', IntParam, label="Order of Symmetry", default=1,
-                      help='Order of symmetry by the symmetry axis of the molecule')
-
         form.addSection(label='Training parameters')
         form.addParam('numAngModels', IntParam,
                       label="Number of models for angular assignment", default=5,
@@ -157,10 +154,10 @@ class XmippProtDeepGlobalAssignment(ProtAlign2D, xmipp3.XmippProtocol):
             self.pretrained = 'yes'
             self.pathToModel = self.model._getExtraPath("modelAngular0.h5")
 
-        args = "%s %s %f %d %d %s %d %f %d %s %d %s" % (
+        args = "%s %s %f %d %d %s %d %f %d %s %s" % (
             self._getExtraPath("trainingResized.xmd"), self._getExtraPath("modelAngular"), sig,
             self.numEpochs_ang, self.batchSize.get(), gpuId, self.numAngModels.get(), self.learningRate.get(),
-            self.patience.get(), self.pretrained, self.symmetry.get(), self.pathToModel)
+            self.patience.get(), self.pretrained, self.pathToModel)
         print(args)
         self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 

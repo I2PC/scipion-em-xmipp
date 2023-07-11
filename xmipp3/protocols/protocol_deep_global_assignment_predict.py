@@ -77,9 +77,6 @@ class XmippProtDeepGlobalAssignmentPredict(ProtAlign2D, xmipp3.XmippProtocol):
                       pointerClass='XmippProtDeepGlobalAssignment',
                       help='The model to predict angles')
 
-        form.addParam('symmetry', IntParam, label="Order of Symmetry", default=1,
-                      help='Order of symmetry by the symmetry axis of the molecule')
-
         form.addSection(label='Consensus')
 
         form.addParam('numAngModels', IntParam,
@@ -122,9 +119,9 @@ class XmippProtDeepGlobalAssignmentPredict(ProtAlign2D, xmipp3.XmippProtocol):
 
     def predict(self, gpuId):
         self.modelAng = self.inputModel.get()
-        args = "%s %s %s %s %s %d %d %d %d" % (
+        args = "%s %s %s %s %s %d %d %d" % (
             self._getExtraPath("trainingResized.xmd"), gpuId, self._getPath(), self.predictImgsFn,
-            self.modelAng._getExtraPath("modelAngular"), self.numAngModels.get(), self.tolerance.get(), self.maxModels.get(), self.symmetry.get())
+            self.modelAng._getExtraPath("modelAngular"), self.numAngModels.get(), self.tolerance.get(), self.maxModels.get())
 
         self.runJob("xmipp_deep_global_assignment_predict", args, numberOfMpi=1, env=self.getCondaEnv())
 
