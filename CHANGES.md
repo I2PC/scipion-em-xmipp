@@ -11,12 +11,10 @@
       - Movie Gain: changed _stepsCheckSecs and fixed inputMovies calling, np.asscalar discontinued in numpy 1.16
       - convert_pdb: dont allow set size if template volume, to convert a set of pdbs to volumes, generates an mrc file
       - CTF_consensus: add 4 threads by default
-      - particle_pick_automatic: Improved conditions
       - process: Better instantiation of Scipion subclasses
-      - create_mask3d: Addding a validate in 3dmask
+      - create_mask3d: Addding a validate in 3dmask, add :mrc to input filename
       - consensus_local_ctf: save defocus in proper fields,  compute consensus for local defocus U and V separately, add consensus angle
-      - create3dMaks: add :mrc to input filename
-      - align_volume: Included the label in the volumes, change the label for each volume, Do not wrap
+      - align_volume: Included the label in the volumes
       - crop_resize: Add mask as input. Mask resize is now possible
       - subtract_projection: change pad validation error for warning
    - Protocols fixed
@@ -40,6 +38,8 @@
       - viewer_resolution_fs: fixing 0.1 threshold not found
       - viewer_projmatch, viewer_metaprotocol_golden_highres: Fixing viewers, change removed ChimeraClientView to ChimeraView
       - monores_viewer: fix histogram
+      - viewer_structure_map: Change the label for each volume
+
 
 ## Release 3.23.03 - Kratos
   - New protocol status: beta, new, production and updated. Will appear in the left pannel of Scipion 
