@@ -16,7 +16,7 @@
       - consensus_local_ctf: save defocus in proper fields,  compute consensus for local defocus U and V separately, add consensus angle
       - align_volume: Included the label in the volumes
       - crop_resize: Add mask as input. Mask resize is now possible
-      - subtract_projection: change pad validation error for warning
+      - subtract_projection: change pad validation error for warning, parallelized
    - Protocols fixed
       - Tilt analysis: Close correctly the output sets once finished
       - Deep micrograph cleaner: fix two bugs that occured during streaming implementation bug 
