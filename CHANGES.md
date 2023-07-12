@@ -1,5 +1,5 @@
 
-## Release 3.23.07
+## Release 3.23.07 - 
    - New protocols: Movie Dose analysis, consensus_classes (Efficient p-value calculation, 
 Updated intersection merging process, generalized protocol for other set of classes), deep_center, deep_global_assignment, deep_center_predict, deep_global_assignment_predict
    - Tilt analysis: Close correctly the output sets once finished
@@ -28,7 +28,7 @@ Updated intersection merging process, generalized protocol for other set of clas
    - viewer_projmatch, viewer_metaprotocol_golden_highres: Fixing viewers, change removed ChimeraClientView to ChimeraView
    - monores_viewer: fix histogram
 
-## Release 3.23.03
+## Release 3.23.03 - Kratos
   - New protocol status: beta, new, production and updated. Will appear in the left pannel of Scipion 
   - Protocol subtract_projection: user experience improvements, no final mask by default, apply ciruclar mask in adjustment image to avoid edge artifacts, validate same sampling rate with tolerance in third decimal
   - Protocol convert_pdb: Allowed to save centered PDB used for conversion. 
@@ -45,7 +45,7 @@ Updated intersection merging process, generalized protocol for other set of clas
 ## Hot fix 3.22.11.1
 - Align volume and particles adapted to tomography. Defines possible outputs. Optimized. Test more exhaustive for matrices
 
-## Release 3.22.11
+## Release 3.22.11 - Iris
   - Protocol_cl2d_align: The input can now be a set of averages or a set of 2D classes 
   - Protocol_local_ctf: Default value are now changed for maxDefocusChange
   - Protocol_apply_zernike3d: Now accepts either a Volume or SetOfVolumes and applies the coefficients in a loop in the deform step
@@ -62,7 +62,7 @@ Updated intersection merging process, generalized protocol for other set of clas
   - **New tests:** deep_hand, pick_noise, screen_deep_learning, resolution_B_factor
   - Fixed TestHighres test
 
-## Release 3.22.07
+## Release 3.22.07 - Helios 
 - rotate_volume: New protocol
 - subtract_projection: New implementation based on adjustment by regression instead of POCS and improved performance
 - local_ctf: Add new sameDefocus option + formatting
@@ -80,7 +80,7 @@ Updated intersection merging process, generalized protocol for other set of clas
 - Improved tests: test_protocols_deepVolPostprocessing, test_protocols_xmipp_3d, Test ProjSubtracion
 - Excluded tests: test_protocols_zernike3d, test_protocols_metaprotocol_heterogeneity
 
-## Release 3.22.04
+## Release 3.22.04 - Gaia
 - protocol_core_analysis: New protocol
 - protocol_compare_angles: Bug fix in compare angles under some conditions
 - protocol_center_particles: protocol simplified (removed setofCoordinates as output)
@@ -93,10 +93,10 @@ Updated intersection merging process, generalized protocol for other set of clas
 - protocol_shift_particles: apply transform is now optional
 
 
-## Release 3.22.01
+## Release 3.22.01 - Eris
 - Visit changeLog.md of xmipp
 
-## Release 3.21.06 -
+## Release 3.21.06 - Caerus
 
 - CUDA-11 support
 - New protocol: Deep align
@@ -108,7 +108,7 @@ Updated intersection merging process, generalized protocol for other set of clas
 - Improved documentation
 
 
-## Release 3.20.07 -
+## Release 3.20.07 - Boreas
 
 - New Protocol: MicrographCleaner is a new algorithm that removes coordinates picked from carbon edges, aggregations, ice crystals and other contaminations
 - New functionality: The protocol compare reprojections can now compute the residuals after alignment
