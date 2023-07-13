@@ -45,12 +45,15 @@ from shutil import copy
 from os import remove
 from os.path import exists, join
 import xmipp3
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 class XmippProtDeepGlobalAssignmentPredict(ProtAlign2D, xmipp3.XmippProtocol):
     """Predict the center particles using deep learning."""
     _label = 'deep global assignment predict'
     _lastUpdateVersion = VERSION_3_0
+    _devStatus = BETA
+
     _conda_env = 'xmipp_DLTK_v1.0'
 
     def __init__(self, **args):

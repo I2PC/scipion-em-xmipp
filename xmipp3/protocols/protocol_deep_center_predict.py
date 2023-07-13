@@ -45,11 +45,14 @@ from shutil import copy
 from os import remove
 from os.path import exists, join
 import xmipp3
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
     """Predict the center particles using deep learning.""" 
     _label = 'deep center predict'
     _lastUpdateVersion = VERSION_3_0
+    _devStatus = BETA
+
     _conda_env = 'xmipp_DLTK_v1.0'
     _cond_predictAnglesTrue = 'predictAngles==True'
     _cond_predictAnglesFalse = 'predictAngles==False'

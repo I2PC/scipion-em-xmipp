@@ -28,6 +28,7 @@ from pwem.constants import ALIGN_NONE
 from pwem.protocols import ProtProcessParticles, ProtPreprocessVolumes
 from pwem.objects import Volume
 import pwem.emlib.metadata as md
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 from xmipp3.convert import (writeSetOfParticles, xmippToLocation,
                             writeSetOfVolumes, getImageLocation)
@@ -37,6 +38,8 @@ class XmippProcessParticles(ProtProcessParticles):
     """ Class to create a base template for Xmipp protocols 
     that process SetOfParticles
     """
+    _devStatus = UPDATED
+
     def __init__(self, **kwargs):
         ProtProcessParticles.__init__(self, **kwargs)
         self._args = "-i %(inputFn)s "

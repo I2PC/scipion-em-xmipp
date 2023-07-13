@@ -39,6 +39,7 @@ from pyworkflow.constants import BETA
 from pyworkflow.object import Float
 
 from xmipp3.convert import setXmippAttribute
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 import os
 import json
