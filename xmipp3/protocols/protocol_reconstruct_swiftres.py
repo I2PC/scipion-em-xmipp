@@ -442,9 +442,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--max_shift', maxShift] #FIXME fails with != 190
         args += ['--max_psi', maxPsi]
         args += ['--max_frequency', maxFrequency]
-        args += ['--method', 'fourier']
         args += ['--training', trainingSize]
-        args += ['--batch', self.batchSize]
+        #args += ['--batch', self.batchSize] # TODO
+        args += ['--batch', 1024]
         args += ['--scratch', self._getTrainingScratchFilename()]
         if self.useGpu:
             args += ['--device', 'cuda:0'] # TODO select
@@ -489,7 +489,6 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--rotations', nRotations]
         args += ['--shifts', nShift]
         args += ['--max_frequency', maxFrequency]
-        args += ['--method', 'fourier']
         args += ['--dropna']
         args += ['--batch', self.batchSize]
         args += ['--max_size', self.databaseMaximumSize]
