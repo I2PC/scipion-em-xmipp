@@ -75,6 +75,10 @@ class XmippProtDeepGlobalAssignment(ProtAlign2D, xmipp3.XmippProtocol):
 
         form.addParam('Xdim', IntParam, label="Size of the images for training", default=128)
 
+        form.addParam('symmetryGroup', StringParam, default="c1",
+                      label='Symmetry group',
+                      help='If no symmetry is present, give c1')
+
         form.addParam('modelPretrain', BooleanParam, default=False,
                       label='Choose if you want to use a pretrained model',
                       help='Set "yes" if you want to use a previously trained model. '
@@ -154,10 +158,10 @@ class XmippProtDeepGlobalAssignment(ProtAlign2D, xmipp3.XmippProtocol):
             self.pretrained = 'yes'
             self.pathToModel = self.model._getExtraPath("modelAngular0.h5")
 
-        args = "%s %s %f %d %d %s %d %f %d %s %s" % (
+        args = "%s %s %f %d %d %s %d %f %d %s %s %s" % (
             self._getExtraPath("trainingResized.xmd"), self._getExtraPath("modelAngular"), sig,
             self.numEpochs_ang, self.batchSize.get(), gpuId, self.numAngModels.get(), self.learningRate.get(),
-            self.patience.get(), self.pretrained, self.pathToModel)
+            self.patience.get(), self.pretrained, self.pathToModel, self.symmetryGroup.get())
         print(args)
         self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
