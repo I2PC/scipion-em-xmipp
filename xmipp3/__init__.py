@@ -37,7 +37,9 @@ import pyworkflow.utils as pwutils
 from .base import *
 from .constants import XMIPP_HOME, XMIPP_URL, XMIPP_DLTK_NAME
 
-_logo = "xmipp_logo.png"
+type_of_version = 'devel' #'release'
+_logo = "xmipp_logo" + ("" if type_of_version == 'release' else '_devel') + '.png'
+
 _references = ['delaRosaTrevin2013', 'Sorzano2013', 'Strelak2021']
 _currentBinVersion = '3.23.07.0'
 __version__ = _currentBinVersion[2:] + ".0"  # Set this to ".0" on each xmipp binary release, otherwise increase it --> ".1", ".2", ...
