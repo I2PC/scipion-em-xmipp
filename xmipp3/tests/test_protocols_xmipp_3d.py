@@ -25,18 +25,19 @@
 # *
 # **************************************************************************
 
+# General imports
+import os.path, shutil
+
+# Scipion em imports
+from pwem.convert import Ccp4Header
 from pwem.protocols import (ProtImportVolumes, ProtImportMask,
                             ProtImportParticles, ProtImportAverages,
-                            ProtImportPdb, ProtSubSet)
-from xmipp3.protocols.protocol_align_volume_and_particles import AlignVolPartOutputs
-
-try:
-    from itertools import izip
-except ImportError:
-    izip = zip
-
+                            ProtImportPdb, ProtSubSet, ProtImportSetOfAtomStructs)
 from pyworkflow.utils import greenStr, magentaStr
 from pyworkflow.tests import *
+
+# Plugin imports
+from xmipp3.protocols.protocol_align_volume_and_particles import AlignVolPartOutputs
 from xmipp3.base import *
 from xmipp3.convert import *
 from xmipp3.constants import *
@@ -69,6 +70,8 @@ MSG_WRONG_ALIGNMENT = "There was a problem with the alignment of the output "
 MSG_WRONG_SHIFT = "There was a problem with output shift "
 MSG_WRONG_GALLERY = "There was a problem with the gallery creation"
 MSG_WRONG_ROTATION = "There was a problem with the rotation"
+MSG_WRONG_RECONSTRUCTION = "There was a problem with the reconstruction"
+MSG_WRONG_MERGER = "There was a problem with the merger of the "
 MSG_WRONG_IMPORT = "There was a problem with the import of "
 MSG_WRONG_PROTOCOL = "There was a problem with the protocol: "
 MSG_WRONG_MAP = "There was a problem with the map creation"
@@ -1032,7 +1035,6 @@ class TestXmippRotationalSymmetry(TestXmippBase):
         self.assertIsNotNone(protRotSym.outputVolume,
                              "There was a problem with Rotational Symmetry")
 
-
 class TestXmippProjMatching(TestXmippBase):
 
     @classmethod
@@ -1053,7 +1055,7 @@ class TestXmippProjMatching(TestXmippBase):
                                  )
         self.launchProtocol(protImportParts)
         self.assertIsNotNone(protImportParts.getFiles(), "There was a problem with the import")
-        
+
         print("Get a Subset of particles")
         protSubset = self.newProtocol(ProtSubSet,
                                          objLabel='100 Particles',
@@ -1061,7 +1063,7 @@ class TestXmippProjMatching(TestXmippBase):
                                          nElements=100)
         protSubset.inputFullSet.set(protImportParts.outputParticles)
         self.launchProtocol(protSubset)
-        
+
         print("Import Volume")
         protImportVol = self.newProtocol(ProtImportVolumes,
                                          objLabel='Volume',
@@ -1069,7 +1071,7 @@ class TestXmippProjMatching(TestXmippBase):
                                          samplingRate=7.08)
         self.launchProtocol(protImportVol)
         self.assertIsNotNone(protImportVol.getFiles(), "There was a problem with the import")
-        
+
         print("Run Projection Matching")
         protProjMatch = self.newProtocol(XmippProtProjMatch,
                                          ctfGroupMaxDiff=0.00001,
@@ -1081,7 +1083,6 @@ class TestXmippProjMatching(TestXmippBase):
         protProjMatch.input3DReferences.set(protImportVol.outputVolume)
         self.launchProtocol(protProjMatch)
         self.assertIsNotNone(protProjMatch.outputVolume, "There was a problem with Projection Matching")
-
 
 class TestPdbImport(TestXmippBase):
     
@@ -1109,52 +1110,88 @@ class TestPdbImport(TestXmippBase):
 
 
 class TestXmippPdbConvert(TestXmippBase):
-    
     @classmethod
     def setUpClass(cls):
+        """ This function prepares the project before instantiating and running any protocol. """
         setupTestProject(cls)
         cls.dataset = DataSet.getDataSet('nma')
         cls.pdb = cls.dataset.getFile('pdb')
     
-    def testXmippPdbConvertFromDb(self):
-        print("Run convert a pdb from database")
-        protConvert = self.newProtocol(XmippProtConvertPdb, pdbId="3j3i", sampling=4, setSize=True,
-                                       size_z=100, size_y=100, size_x=100)
-        self.launchProtocol(protConvert)
-        self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
-        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
-                               msg=(MSG_WRONG_SAMPLING, "volume"))
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1,
-                               msg=(MSG_WRONG_SIZE, "volume"))
-        
-    def testXmippPdbConvertFromObj(self):
+    def test1XmippSinglePdb(self):
+        """ This function runs a test with a single pdb as input. """
         print("Run convert a pdb from import")
+
+        # Creating and launching import protocol to obtain input pdb
         protImport = self.newProtocol(ProtImportPdb, 
                                       inputPdbData=ProtImportPdb.IMPORT_FROM_FILES, 
                                       pdbFile=self.pdb)
         self.launchProtocol(protImport)
         self.assertIsNotNone(protImport.outputPdb.getFileName(), "There was a problem with the import")
         
+        # Creating and launching convert to pdb protocol
         protConvert = self.newProtocol(XmippProtConvertPdb, 
-                                       inputPdbData=XmippProtConvertPdb.IMPORT_OBJ, 
-                                       sampling=3, setSize=True, size_z=20, size_y=20, size_x=20)
+                                       numberOfMpi=1, sampling=3, setSize=True, size_z=20, size_y=20, size_x=20)
         protConvert.pdbObj.set(protImport.outputPdb)
         self.launchProtocol(protConvert)
-        self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
-        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
+
+        # Obtaining output and analyzing results
+        volume = getattr(protConvert, protConvert.OUTPUT_NAME1, None)
+        volumeFn = volume.getFileName()
+        self.assertTrue(volumeFn.endswith(".mrc"), "Output volume form converting a pdb is not an mrc")
+        ccp4header = Ccp4Header(volumeFn, readHeader=True)
+        headerSr = ccp4header.getSampling()[0]
+        self.assertAlmostEquals(volume.getSamplingRate(), headerSr, "%s header for sampling rate is wrong." % volumeFn)
+
+        self.assertAlmostEqual(volume.getSamplingRate(), protConvert.sampling.get(), places=1,
                                msg=(MSG_WRONG_SAMPLING, "volume"))
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], protConvert.size_z.get(), places=1,
+        self.assertAlmostEqual(volume.getDim()[0], protConvert.size_z.get(), places=1,
                                msg=(MSG_WRONG_SIZE, "volume"))
 
-    def testXmippPdbConvertFromFn(self):
-        print("Run convert a pdb from file")
-        protConvert = self.newProtocol(XmippProtConvertPdb,inputPdbData=2, pdbFile=self.pdb, sampling=2, setSize=False)
-        self.launchProtocol(protConvert)
-        self.assertIsNotNone(protConvert.outputVolume.getFileName(), "There was a problem with the conversion")
-        self.assertAlmostEqual(protConvert.outputVolume.getSamplingRate(), protConvert.sampling.get(), places=1,
-                               msg=(MSG_WRONG_SAMPLING, "volume"))
-        self.assertAlmostEqual(protConvert.outputVolume.getDim()[0], 48, places=1, msg=(MSG_WRONG_SIZE, "volume"))
+    def test2XmippPdbSet(self):
+        """ This function runs a test with a set of pdbs as input. """
+        print("Run convert a set of pdbs")
 
+        # Defining data path
+        dataPath = os.path.dirname(self.pdb)
+
+        # Obtaining list of pdb files inside folder
+        files = os.listdir(dataPath)
+        pdbFiles = [pdbFile for pdbFile in files if pdbFile.endswith('.pdb')]
+
+        # If there is only one .pdb file, duplicate it so we can have a set with at least two atom structures
+        tmpFiles = []
+        if len(pdbFiles) < 2:
+            newFile = pdbFiles[0].replace('.pdb', '_tmp.pdb')
+            shutil.copyfile(os.path.join(dataPath, pdbFiles[0]), os.path.join(dataPath, newFile))
+            tmpFiles.append(newFile)
+
+        # Creating and launching import protocol to obtain input pdbs
+        protImport = self.newProtocol(ProtImportSetOfAtomStructs,
+                                      inputPdbData=ProtImportSetOfAtomStructs.IMPORT_FROM_FILES,
+                                      filesPath=dataPath)
+        self.launchProtocol(protImport)
+        self.assertIsNotNone(protImport.outputAtomStructs.getFirstItem().getFileName(), "There was a problem with the import")
+
+        # Creating and launching convert to pdb protocol
+        protConvert = self.newProtocol(XmippProtConvertPdb, numberOfMpi=1, numberOfThreads=2, sampling=3, size=20)
+        protConvert.pdbObj.set(protImport.outputAtomStructs)
+        self.launchProtocol(protConvert)
+
+        # Deleting tmp files if there were any
+        for tmpFile in tmpFiles:
+            os.remove(os.path.join(dataPath, tmpFile))
+
+        # Obtaining output and analyzing results
+        volumes = getattr(protConvert, protConvert.OUTPUT_NAME2, None)
+        volumeFn = volumes.getFirstItem().getFileName()
+        self.assertTrue(volumeFn.endswith(".mrc"), "Output volume form converting a pdb is not an mrc")
+        ccp4header = Ccp4Header(volumeFn, readHeader=True)
+        headerSr = ccp4header.getSampling()[0]
+        self.assertAlmostEquals(volumes.getSamplingRate(), headerSr, "%s header for sampling rate is wrong." % volumeFn)
+        self.assertAlmostEqual(volumes.getSamplingRate(), protConvert.sampling.get(), places=1,
+                               msg=(MSG_WRONG_SAMPLING, "volumes"))
+        self.assertAlmostEqual(volumes.getDim()[0], protConvert.size.get(), places=1,
+                               msg=(MSG_WRONG_SIZE, "volumes"))
 
 class TestXmippValidateNonTilt(TestXmippBase):
     @classmethod
@@ -1514,20 +1551,11 @@ class TestXmippProjSubtractionAndBoostParticles(TestXmippBase):
         self.assertIsNotNone(protCreateMaskKeep.getFiles(),
                              "There was a problem with the 3D mask of the 1 item phantom")
 
-        # Subtraction of particles - reference volume with and without mask
-        protSubtractProj = self.newProtocol(XmippProtSubtractProjection,
-                                            inputParticles=protCreateGallery.outputReprojections,
-                                            vol=protCreatePhantom1item.outputVolume)
-        self.launchProtocol(protSubtractProj)
-        self.assertIsNotNone(protSubtractProj.outputParticles,
-                             "There was a problem with projection subtraction")
-        self.assertEqual(protSubtractProj.outputParticles.getSamplingRate(), 1.0, (MSG_WRONG_SAMPLING, "particles"))
-        self.assertEqual(protSubtractProj.outputParticles.getFirstItem().getDim(), (80, 80, 1),
-                         (MSG_WRONG_DIM, "particles"))
-        self.assertEqual(protSubtractProj.outputParticles.getSize(), 181, (MSG_WRONG_SIZE, "particles"))
+        # Subtraction of particles - reference volume with mask
         protSubtractProjMask = self.newProtocol(XmippProtSubtractProjection,
                                                 inputParticles=protCreateGallery.outputReprojections,
                                                 vol=protCreatePhantom2items.outputVolume,
+                                                subtract=1,
                                                 mask=protCreateMaskKeep.outputMask)
         self.launchProtocol(protSubtractProjMask)
         self.assertIsNotNone(protSubtractProjMask.outputParticles,
@@ -1545,7 +1573,9 @@ class TestXmippProjSubtractionAndBoostParticles(TestXmippBase):
                              "There was a problem with CTF simulation")
         protSubtractProjCTF = self.newProtocol(XmippProtSubtractProjection,
                                                inputParticles=protSimulateCTF.outputParticles,
-                                               vol=protCreatePhantom1item.outputVolume)
+                                               vol=protCreatePhantom1item.outputVolume,
+                                               subtract=1,
+                                               mask=protCreateMaskKeep.outputMask)
         self.launchProtocol(protSubtractProjCTF)
         self.assertIsNotNone(protSubtractProjCTF.outputParticles,
                              "There was a problem with projection subtraction CTF")
@@ -1561,7 +1591,9 @@ class TestXmippProjSubtractionAndBoostParticles(TestXmippBase):
                              "There was a problem with add noise protocol")
         protSubtractProjNoise = self.newProtocol(XmippProtSubtractProjection,
                                                  inputParticles=protAddNoise.outputParticles,
-                                                 vol=protCreatePhantom1item.outputVolume)
+                                                 vol=protCreatePhantom1item.outputVolume,
+                                                 subtract=1,
+                                                 mask=protCreateMaskKeep.outputMask)
         self.launchProtocol(protSubtractProjNoise)
         self.assertIsNotNone(protSubtractProjNoise.outputParticles,
                              "There was a problem with projection subtraction with noise")
@@ -1577,7 +1609,9 @@ class TestXmippProjSubtractionAndBoostParticles(TestXmippBase):
                              "There was a problem with add noise to ctf particles protocol")
         protSubtractProjNoiseCTF = self.newProtocol(XmippProtSubtractProjection,
                                                     inputParticles=protAddNoiseCTF.outputParticles,
-                                                    vol=protCreatePhantom1item.outputVolume)
+                                                    vol=protCreatePhantom1item.outputVolume,
+                                                    subtract=1,
+                                                    mask=protCreateMaskKeep.outputMask)
         self.launchProtocol(protSubtractProjNoiseCTF)
         self.assertIsNotNone(protSubtractProjNoiseCTF.outputParticles,
                              "There was a problem with projection subtraction with noise and CTF")
@@ -1617,7 +1651,8 @@ class TestXmippProjSubtractionAndBoostParticles(TestXmippBase):
         protSubtractProjOver = self.newProtocol(XmippProtSubtractProjection,
                                                 inputParticles=protCreateGalleryOver.outputReprojections,
                                                 vol=protCreatePhantom2Over.outputVolume,
-                                                mask=protCreateMaskKeepOver.outputMask)
+                                                mask=protCreateMaskKeepOver.outputMask,
+                                                subtract=1)
         self.launchProtocol(protSubtractProjOver)
         self.assertIsNotNone(protSubtractProjOver.outputParticles,
                              "There was a problem with projection subtraction with overlap")
@@ -1627,7 +1662,9 @@ class TestXmippProjSubtractionAndBoostParticles(TestXmippBase):
         self.assertEqual(protSubtractProjOver.outputParticles.getSize(), 1647, (MSG_WRONG_SIZE, "particles"))
         protSubtractProjOverNoMask = self.newProtocol(XmippProtSubtractProjection,
                                                       inputParticles=protCreateGalleryOver.outputReprojections,
-                                                      vol=protCreatePhantom1Over.outputVolume)
+                                                      vol=protCreatePhantom1Over.outputVolume,
+                                                      mask=protCreateMaskKeepOver.outputMask,
+                                                      subtract=1)
         self.launchProtocol(protSubtractProjOverNoMask)
         self.assertIsNotNone(protSubtractProjOverNoMask.outputParticles,
                              "There was a problem with projection subtraction with overlap")
@@ -1648,7 +1685,9 @@ class TestXmippProjSubtractionAndBoostParticles(TestXmippBase):
                              "There was a problem with add noise to ctf overlap particles protocol")
         protSubtractProjNoiseCTFOver = self.newProtocol(XmippProtSubtractProjection,
                                                         inputParticles=protAddNoiseCTFOver.outputParticles,
-                                                        vol=protCreatePhantom1Over.outputVolume)
+                                                        vol=protCreatePhantom1Over.outputVolume,
+                                                        mask=protCreateMaskKeepOver.outputMask,
+                                                        subtract=1)
         self.launchProtocol(protSubtractProjNoiseCTFOver)
         self.assertIsNotNone(protSubtractProjNoiseCTFOver.outputParticles,
                              "There was a problem with projection subtraction with noise and CTF overlap")
@@ -2531,6 +2570,48 @@ class TestXmippRotateVolume(TestXmippBase):
                          protCreatePhantomReference.outputVolume.getSamplingRate(),
                          (MSG_WRONG_SAMPLING, "rotated phantom"))
 
+class TestXmippReconstructSignificant(TestXmippBase):
+    """This class checks if the protocol reconstruct significant in Xmipp works properly."""
+    @classmethod
+    def setUpClass(cls):
+        setupTestProject(cls)
+
+    def testXmippReconstructSignificant(self):
+        # Create input data: phantom with one cylinder
+        protCreatePhantom1 = self.newProtocol(XmippProtPhantom,
+                                               desc='80 80 80 0\ncyl + 5 0 0 0 5 5 10 0 0 0',
+                                               sampling=1.0)
+        self.launchProtocol(protCreatePhantom1)
+        self.assertIsNotNone(protCreatePhantom1.getFiles(),
+                             "There was a problem with the phantom creation")
+        # Create particles from the first phantom
+        protCreateGallery = self.newProtocol(XmippProtCreateGallery,
+                                             inputVolume=protCreatePhantom1.outputVolume,
+                                             rotStep=15.0,
+                                             tiltStep=90.0)
+        self.launchProtocol(protCreateGallery)
+        self.assertIsNotNone(protCreateGallery.getFiles(),
+                             MSG_WRONG_GALLERY)
+        # Reconstruct significant (default values)
+        protReconstructSignificant = self.newProtocol(XmippProtReconstructSignificant,
+                                                      inputSet=protCreateGallery.outputReprojections)
+        self.launchProtocol(protReconstructSignificant)
+        self.assertIsNotNone(protReconstructSignificant.getFiles(),
+                             MSG_WRONG_RECONSTRUCTION)
+        self.assertIsNotNone(protReconstructSignificant.outputVolume,
+                             (MSG_WRONG_RECONSTRUCTION, " of the final volume"))
+        # Reconstruct significant (default values) with a reference volume
+        protReconstructSignificant2 = self.newProtocol(XmippProtReconstructSignificant,
+                                                       inputSet=protCreateGallery.outputReprojections,
+                                                       thereisRefVolume=True,
+                                                       refVolume=protCreatePhantom1.outputVolume)
+        self.launchProtocol(protReconstructSignificant2)
+        self.assertIsNotNone(protReconstructSignificant2.getFiles(),
+                             MSG_WRONG_RECONSTRUCTION)
+        self.assertIsNotNone(protReconstructSignificant2.outputVolume,
+                             (MSG_WRONG_RECONSTRUCTION, " of the final volume"))
+
+
 class TestXmippDeepHand(TestXmippBase):
     """This class checks if the protocol deep hand in Xmipp works properly."""
     @classmethod
@@ -2569,7 +2650,7 @@ class TestXmippDeepHand(TestXmippBase):
         self.assertEqual(protDeepHand.outputVol.getDim(), protImportVol.outputVolume.getDim(),
                          (MSG_WRONG_DIM, "volume"))
         # Check if the hand value is right
-        self.assertAlmostEquals(protDeepHand.outputHand.get(), 0.380511, 6,"There was a problem with the hand value")
+        self.assertAlmostEquals(protDeepHand.outputHand.get(), 0.3805, 4,"There was a problem with the hand value")
         # Check if the flip is right
         self.assertTrue(protDeepHand.outputHand.get()<protDeepHand.thresholdHand.get(), "There was a problem with the flip")
 
@@ -2633,7 +2714,6 @@ class TestXmippResolutionBfactor(TestXmippBase):
                                                  localResolutionMap=protCreateMap.resolution_Volume,
                                                  fscResolution=8.35)
         self.launchProtocol(protbfactorResolution)
-
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:

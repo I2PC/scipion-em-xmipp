@@ -28,64 +28,78 @@
 # *
 # **************************************************************************
 
-import os
-
+# Scipion em imports
+from pwem.convert.headers import setMRCSamplingRate
+from pwem.emlib.image import ImageHandler
+from pwem.convert import cifToPdb, headers
+from pwem.objects import Volume, Transform, SetOfVolumes, AtomStruct, SetOfAtomStructs
+from pwem.protocols import ProtInitialVolume
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as const
-from pyworkflow.utils import replaceBaseExt, removeExt, getExt, createLink
-
-from pwem.convert import cifToPdb, downloadPdb, headers
-from pwem.objects import Volume, Transform
-from pwem.protocols import ProtInitialVolume
-
+from pyworkflow.utils import replaceBaseExt, removeExt, getExt, createLink, replaceExt, removeBaseExt
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 class XmippProtConvertPdb(ProtInitialVolume):
-    """ Convert a PDB file into a volume.  """
-    _label = 'convert a PDB'
-    IMPORT_FROM_ID = 0
-    IMPORT_OBJ = 1
-    IMPORT_FROM_FILES = 2 
+    """ Convert atomic structure(s) into volume(s) """
+    _label = 'convert pdbs to volumes'
+    _devStatus = UPDATED
+    OUTPUT_NAME1 = "outputVolume"
+    OUTPUT_NAME2 = "outputVolumes"
+    OUTPUT_NAME3 = "outputPdb"
+    OUTPUT_NAME4 = "outputAtomStructs"
+    _possibleOutputs = {OUTPUT_NAME1: Volume, OUTPUT_NAME2: SetOfVolumes,
+                        OUTPUT_NAME3: AtomStruct, OUTPUT_NAME4: SetOfAtomStructs}
+
+    # --------------------------- Class constructor --------------------------------------------
+    def __init__(self, **args):
+        # Calling parent class constructor
+        super().__init__(**args)
+
+        # Defining execution mode. Steps will take place in parallel now
+        # Full tutorial on how to parallelize protocols can be read here:
+        # https://scipion-em.github.io/docs/release-3.0.0/docs/developer/parallelization.html
+        self.stepsExecutionMode = params.STEPS_PARALLEL
        
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
-        """ Define the parameters that will be input for the Protocol.
+        """
+        Define the parameters that will be input for the Protocol.
         This definition is also used to generate automatically the GUI.
         """
+        # Defining condition string for x, y, z coords
+        coordsCondition = 'setSize and not vol'
+
+        # Defining parallel arguments
+        form.addParallelSection(threads=4)
+
+        # Generating form
         form.addSection(label='Input')
-        form.addParam('inputPdbData', params.EnumParam, choices=['id', 'object', 'file'],
-                      label="Retrieve PDB from", default=self.IMPORT_FROM_ID,
-                      display=params.EnumParam.DISPLAY_HLIST,
-                      help='Retrieve PDB data from server, use a pdb Object, or a local file')
-        form.addParam('pdbId', params.StringParam, condition='inputPdbData == IMPORT_FROM_ID',
-                      label="Pdb Id ", allowsNull=True,
-                      help='Type a pdb Id (four alphanumeric characters).')
-        form.addParam('pdbObj', params.PointerParam, pointerClass='AtomStruct',
-                      label="Input pdb ", condition='inputPdbData == IMPORT_OBJ', allowsNull=True,
-                      help='Specify a pdb object.')
-        form.addParam('pdbFile', params.FileParam,
-                      label="File path", condition='inputPdbData == IMPORT_FROM_FILES', allowsNull=True,
-                      help='Specify a path to desired PDB structure.')
-        form.addParam('sampling', params.FloatParam, default=1.0, 
+        form.addParam('pdbObj', params.PointerParam, pointerClass='AtomStruct, SetOfAtomStructs',
+                      label="Input structure(s) ",
+                      help='Specify input atomic structure(s).')
+        form.addParam('sampling', params.FloatParam, default=1.0,
                       label="Sampling rate (Å/px)",
                       help='Sampling rate (Angstroms/pixel)')
         form.addParam('vol', params.BooleanParam, label='Use a volume as an empty template?', default=False,
+                      condition='not isinstance(pdbObj, SetOfAtomStructs)',
                       help='Use an existing volume to define the size and origin for the output volume. If this option'
                            'is selected, make sure that "Center PDB" in advanced parameters is set to *No*.')
         form.addParam('volObj', params.PointerParam, pointerClass='Volume',
-                      label="Input volume ", condition='vol', allowsNull=True,
+                      label="Input volume ", condition='not isinstance(pdbObj, SetOfAtomStructs) and vol', allowsNull=True,
                       help='The origin and the final size of the output volume will be taken from this volume.')
-        form.addParam('setSize', params.BooleanParam, label='Set final size?', default=False, condition='vol == False')
-        form.addParam('size_z', params.IntParam, condition='setSize', allowsNull=True,
-                      label="Final size (px) Z",
+        form.addParam('setSize', params.BooleanParam, label='Set final size?', default=False,
+                      condition='not vol and not isinstance(pdbObj, SetOfAtomStructs)')
+        form.addParam('size', params.IntParam,
+                      label="Box side size (px)", condition='isinstance(pdbObj, SetOfAtomStructs)', allowsNull=True,
+                      help='This size should apply to all volumes')
+        form.addParam('size_z', params.IntParam, condition=coordsCondition, allowsNull=True, label="Final size (px) Z",
                       help='Final size in Z in pixels. If no value is provided, protocol will estimate it.')
-        form.addParam('size_y', params.IntParam, condition='setSize', allowsNull=True,
-                      label="Final size (px) Y",
+        form.addParam('size_y', params.IntParam, condition=coordsCondition, allowsNull=True, label="Final size (px) Y",
                       help='Final size in Y in pixels. If no value is provided, protocol will estimate it.')
-        form.addParam('size_x', params.IntParam, condition='setSize', allowsNull=True,
-                      label="Final size (px) X",
+        form.addParam('size_x', params.IntParam, condition=coordsCondition, allowsNull=True, label="Final size (px) X",
                       help='Final size in X in pixels. If desired output size is x = y = z you can only fill this '
                            'field. If no value is provided, protocol will estimate it.')
-        form.addParam('centerPdb', params.BooleanParam, default=True, 
+        form.addParam('centerPdb', params.BooleanParam, default=True,
                       expertLevel=const.LEVEL_ADVANCED, 
                       label="Center PDB",
                       help='Center PDB with the center of mass')
@@ -94,86 +108,123 @@ class XmippProtConvertPdb(ProtInitialVolume):
                       label="Store centered PDB",
                       help='Set to \'Yes\' if you want to save centered PDB. '
                            'It will be stored in the output directory of this protocol')
+        form.addParam('clean', params.BooleanParam, default=True,
+                      expertLevel=const.LEVEL_ADVANCED, 
+                      label="Clean tmp files",
+                      help='Delete all non-output files once the protocol has finished producing them.')
     
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
-        """ In this function the steps that are going to be executed should
+        """
+        In this function the steps that are going to be executed should
         be defined. Two of the most used functions are: _insertFunctionStep or _insertRunJobStep
         """
-        if self.inputPdbData == self.IMPORT_FROM_ID:
-            self._insertFunctionStep('pdbDownloadStep')
-        self._insertFunctionStep('convertPdbStep')
-        self._insertFunctionStep('createOutput')
-    
-    # --------------------------- STEPS functions --------------------------------------------
-    def pdbDownloadStep(self):
-        """Download all pdb files in file_list and unzip them."""
-        downloadPdb(self.pdbId.get(), self._getPdbFileName(), self._log)
-        
-    def convertPdbStep(self):
-        """ Although is not mandatory, usually is used by the protocol to
-        register the resulting outputs in the database.
-        """
-        pdbFn = self._getPdbFileName()
-        outFile = removeExt(self._getVolName())
-        if getExt(pdbFn)==".cif":
-            pdbFn2=replaceBaseExt(pdbFn, 'pdb')
-            cifToPdb(pdbFn, pdbFn2)
-            pdbFn = pdbFn2
+        # Checking if input is set or not
+        isSet = not isinstance(self.pdbObj.get(), AtomStruct)
 
-        if " " in pdbFn:
-            pdbFn_extra = self._getExtraPath(os.path.basename(pdbFn.replace(" ", "_")))
-        else:
-            pdbFn_extra = self._getExtraPath(os.path.basename(pdbFn))
-
-        createLink(pdbFn, pdbFn_extra)
-
+        # Generating pdb list and obtaining input sampling rate
+        pdbList = self._getPdbFileNames()
         samplingR = self.sampling.get()
 
-        args = '-i %s --sampling %f -o %s' % (pdbFn_extra, samplingR, outFile)
+        # Defining list of function ids to be waited by the createOutput function
+        deps = []
+        for pdbFn in pdbList:
+            # Calling processConversion in parallel with each input data
+            deps.append(self._insertFunctionStep(self.processConversion, pdbFn, samplingR, isSet, prerequisites=[]))
         
-        if self.centerPdb:
-            args += ' --centerPDB'
-            if self.outPdb:
-                args += ' --oPDB'
+        # Insert output conversion step
+        self._insertFunctionStep(self.createOutput, isSet, samplingR, prerequisites=deps)
 
-        if self.vol:
-            vol = self.volObj.get()
-            size = vol.getDim()
-            ccp4header = headers.Ccp4Header(vol.getFileName(), readHeader=True)
-            self.shifts = ccp4header.getOrigin()
-            args += ' --size %d %d %d --orig %d %d %d' % (size[2], size[1], size[0],
-                                                          self.shifts[0]/samplingR,
-                                                          self.shifts[1]/samplingR,
-                                                          self.shifts[2]/samplingR)
+    # --------------------------- STEPS functions --------------------------------------------
+    def processConversion(self, pdb, samplingR, isSet):
+        """ This step runs the pdb conversion. """
+        # Converting all input atomic structures to .pdb
+        pdb = self._convertToPdb(pdb)
+        
+        # Generating output file for each input
+        outFile = removeExt(pdb)
 
-        if self.setSize:
-            args += ' --size'
+        # Getting args for program call
+        args = self._getConversionArgs(pdb, samplingR, outFile, isSet=isSet)
 
-        if self.size_x.hasValue() and self.setSize:
-            args += ' %d' % self.size_x.get()
-
-        if self.size_y.hasValue() and self.size_z.hasValue() and self.setSize:
-            args += ' %d %d' % (self.size_y.get(), self.size_z.get())
-
-        self.info("Input file: " + pdbFn)
+        # Showing input and output file names
+        self.info("Input file: " + pdb)
         self.info("Output file: " + outFile)
-        
-        program = "xmipp_volume_from_pdb"
-        self.runJob(program, args)
 
-    def createOutput(self):
-        volume = Volume()
-        volume.setSamplingRate(self.sampling.get())
-        volume.setFileName(self._getVolName())
-        if self.vol:
-            origin = Transform()
-            origin.setShiftsTuple(self.shifts)
-            volume.setOrigin(origin)
-        self._defineOutputs(outputVolume=volume)
-        if self.inputPdbData == self.IMPORT_OBJ:
-            self._defineSourceRelation(self.pdbObj, volume)
-    
+        # Calling program
+        self.runJob("xmipp_volume_from_pdb", args)
+
+    def createOutput(self, isSet, samplingR):
+        extraPath = self._getExtraPath()
+
+        # Saving centered pdbs if wanted
+        if self.centerPdb and self.outPdb:
+            centeredPdbs = self._getExtraPath('centerted')
+            self.runJob('mkdir -p',  centeredPdbs)
+            self.runJob('mv', '{}/*_centered.pdb {}'.format(extraPath, centeredPdbs))
+
+        # Generating output objects
+        outputVol = self._createSetOfVolumes() if isSet else None
+        pdbOut = self.centerPdb and self.outPdb
+        if pdbOut:
+            outputPdb = self._createSetOfPDBs() if isSet else None
+
+        # Instantiating image handler
+        ih = ImageHandler()
+
+        # Generating input list
+        pdbFns = self._getPdbFileNames()
+
+        # Converting volumes. Since xmipp generates always a .vol we do the conversion here
+        for pdbFn in pdbFns:
+            # Generating ouput mrc
+            volumeFn = self._getExtraPath(replaceBaseExt(pdbFn, 'vol'))
+            mrcFn = replaceExt(volumeFn, 'mrc')
+            ih.convert(volumeFn, mrcFn)
+            setMRCSamplingRate(mrcFn, samplingR)
+            # Generating output volume object from mrc
+            volume = Volume()
+            volume.setSamplingRate(samplingR)
+            volume.setFileName(mrcFn)
+            volume.fixMRCVolume(setSamplingRate=True)
+            # If input is set, append volume to set
+            if isSet:
+                outputVol.append(volume)
+            # Generating output PDB
+            if pdbOut:
+                centeredPdbFn = '{}/{}_centered.pdb'.format(centeredPdbs, removeBaseExt(pdbFn))
+                atom = AtomStruct(filename=centeredPdbFn)
+                atom.setVolume(volume)
+                if isSet:
+                    outputPdb.append(atom)
+        
+        if not isSet:
+            # If input is single atom struct, get produced volume as output
+            outputVol = volume
+            if self.vol:
+                origin = Transform()
+                origin.setShiftsTuple(self.shifts)
+                outputVol.setOrigin(origin)
+
+            if pdbOut:
+                outputPdb = atom
+
+        # Setting ouput sampling rate
+        outputVol.setSamplingRate(samplingR)
+
+        # Removing temporary files
+        if self.clean:
+            self.runJob('rm', '-rf {}/*.vol {}/*.cif {}/*.pdb'.format(extraPath, extraPath, extraPath))
+
+        if pdbOut:
+            outputPdbName = self.OUTPUT_NAME4 if isSet else self.OUTPUT_NAME3
+            self._defineOutputs(**{outputPdbName: outputPdb})
+
+        # Defining output
+        outputVolName = self.OUTPUT_NAME2 if isSet else self.OUTPUT_NAME1
+        self._defineOutputs(**{outputVolName: outputVol})
+        self._defineSourceRelation(self.pdbObj, outputVol)
+
     # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
         """ Even if the full set of parameters is available, this function provides
@@ -181,15 +232,8 @@ class XmippProtConvertPdb(ProtInitialVolume):
         """ 
         summary = []
         # Add some lines of summary information
-        if not hasattr(self, 'outputVolume'):
-            summary.append("outputVolume not ready yet.")
-        else:
-            if self.inputPdbData == self.IMPORT_FROM_ID:
-                summary.append("Input PDB ID: %s" % self.pdbId.get())
-            elif self.inputPdbData == self.IMPORT_OBJ:
-                summary.append("Input PDB File: %s" % self.pdbObj.get().getFileName())
-            else:
-                summary.append("Input PDB File: %s" % self.pdbFile.get())
+        if not (hasattr(self, self.OUTPUT_NAME1) or hasattr(self, self.OUTPUT_NAME2)):
+            summary.append("The output is not ready yet.")
         return summary
       
     def _validate(self):
@@ -198,21 +242,72 @@ class XmippProtConvertPdb(ProtInitialVolume):
         empty the protocol can be executed.
         """
         errors = []
-        if self.inputPdbData == self.IMPORT_FROM_ID:
-            lenStr = len(self.pdbId.get())
-            if lenStr != 4:
-                errors = ["Pdb id is composed only by four alphanumeric characters"]
-        
+
+        # Checking if MPI is selected (only threads are allowed)
+        if self.numberOfMpi > 1:
+            errors.append('MPI cannot be selected, because Scipion is going to drop support for it. Select threads instead.')
+
         return errors
     
     # --------------------------- UTLIS functions --------------------------------------------
-    def _getPdbFileName(self):
-        if self.inputPdbData == self.IMPORT_FROM_ID:
-            return self._getExtraPath('%s.cif' % self.pdbId.get())
-        elif self.inputPdbData == self.IMPORT_OBJ:
-            return self.pdbObj.get().getFileName()
+    def _getPdbFileNames(self):
+        """ This function returns the input file/s stored in a list. """
+        pbdObj = self.pdbObj.get()
+        if isinstance(pbdObj, AtomStruct):
+            # If it is a single AtomStruct, place it inside a list of 1 element
+            return [pbdObj.getFileName()]
         else:
-            return self.pdbFile.get()
+            # If it is a SetOfAtom Structs, get all of the elements iterating the set
+            return [i.getFileName() for i in pbdObj]
+
+    def _convertToPdb(self, pdbRaw):
+        """ This function receives an atomic struct file, and converts it to .pdb if it is in .cif format. """
+        # Get output path for pdb file
+        convertedPdb = self._getExtraPath(replaceBaseExt(pdbRaw, 'pdb')).replace(" ", "_")
+
+        # If file extension is .cif, convert to .pdb, or else we link it as is
+        if getExt(pdbRaw) == ".cif":
+            cifToPdb(pdbRaw, convertedPdb)
+        else:
+            createLink(pdbRaw, convertedPdb)
+
+        # Return optionally converted file
+        return convertedPdb
     
-    def _getVolName(self):
-        return self._getExtraPath(replaceBaseExt(self._getPdbFileName().replace(" ", "_"), "vol"))
+    def _getConversionArgs(self, pdb, samplingRate, outputFile, isSet=False):
+        """ This function generates the arguments to convert an input pdb to a volume. """
+        # Main arguments
+        args = '-i "%s" --sampling %f -o "%s"' % (pdb, samplingRate, outputFile)
+
+        # Flag for centered pdbs
+        if self.centerPdb:
+            args += ' --centerPDB'
+            # Flag for output pdbs
+            if self.outPdb:
+                args += ' --oPDB'
+        
+        # Setting size and origin if selected
+        if isSet:
+            args += ' --size %d' % (self.size.get())
+        else:
+            if self.vol:
+                vol = self.volObj.get()
+                size = vol.getDim()
+                ccp4header = headers.Ccp4Header(vol.getFileName(), readHeader=True)
+                self.shifts = ccp4header.getOrigin()
+                args += ' --size %d %d %d --orig %d %d %d' % (size[2], size[1], size[0],
+                                                            self.shifts[0]/samplingRate,
+                                                            self.shifts[1]/samplingRate,
+                                                            self.shifts[2]/samplingRate)
+            else:
+                if self.setSize:
+                    args += ' --size'
+
+                    if self.size_x.hasValue():
+                        args += ' %d' % self.size_x.get()
+
+                    if self.size_y.hasValue() and self.size_z.hasValue():
+                        args += ' %d %d' % (self.size_y.get(), self.size_z.get())
+        
+        # Returning produced args
+        return args

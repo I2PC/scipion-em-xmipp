@@ -41,6 +41,7 @@ import pyworkflow.utils as pwutils
 from pwem.protocols import ProtCTFMicrographs
 from pwem.emlib.metadata import Row
 from pyworkflow.protocol.constants import (STATUS_NEW)
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 from pwem import emlib
 import xmipp3
@@ -58,6 +59,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
     the agreement with a secondary CTF for the same set of micrographs.
     """
     _label = 'ctf consensus'
+    _devStatus = UPDATED
     _lastUpdateVersion = VERSION_3_0
 
     def __init__(self, **args):
@@ -189,7 +191,7 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
                            'If *No*, only the primary metadata (plus consensus '
                            'scores) will be in the resulting CTF.')
 
-        form.addParallelSection(threads=1, mpi=1)
+        form.addParallelSection(threads=4, mpi=1)
 
 # --------------------------- INSERT steps functions -------------------------
     def _insertAllSteps(self):
@@ -658,10 +660,8 @@ class XmippProtCTFConsensus(ProtCTFMicrographs):
 
             if self.xmippCTF == INPUT1:
                 ctfX = ctf
-            elif self.xmippCTF == INPUT2:
-                ctfX = self.allCtf2.get(ctfId)
             else:
-                raise Exception("No xmipp ctf was found")
+                ctfX = self.allCtf2.get(ctfId)
 
 
             secondCondition = (

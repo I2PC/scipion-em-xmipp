@@ -31,11 +31,10 @@ from pyworkflow.protocol.params import EnumParam, NumericRangeParam, LabelParam,
     IntParam, FloatParam
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.viewer import DESKTOP_TKINTER, WEB_DJANGO, ProtocolViewer
-from pwem.viewers import ObjectView, DataView, ChimeraClientView
+from pwem.viewers import ObjectView, DataView
 import pwem.viewers.showj as showj
+from pwem import emlib
 
-from xmippLib import (MDL_SAMPLINGRATE, MDL_ANGLE_ROT, MDL_ANGLE_TILT,
-                      MDL_RESOLUTION_FREQ, MDL_RESOLUTION_FRC, MetaData)
 from xmipp3.protocols.protocol_metaprotocol_golden_highres import \
     XmippMetaProtGoldenHighRes
 from .plotter import XmippPlotter
@@ -123,9 +122,9 @@ class XmippMetaprotocolGoldenHighResViewer(ProtocolViewer):
 
 
     def _plotFSC(self, ab, fnFSC):
-        md = MetaData(fnFSC)
-        resolution_inv = [md.getValue(MDL_RESOLUTION_FREQ, f) for f in md]
-        frc = [md.getValue(MDL_RESOLUTION_FRC, f) for f in md]
+        md = emlib.MetaData(fnFSC)
+        resolution_inv = [md.getValue(emlib.MDL_RESOLUTION_FREQ, f) for f in md]
+        frc = [md.getValue(emlib.MDL_RESOLUTION_FRC, f) for f in md]
         # self.maxFrc = max(frc)
         self.minInv.append(min(resolution_inv))
         self.maxInv.append(max(resolution_inv))

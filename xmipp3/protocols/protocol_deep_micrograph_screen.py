@@ -215,6 +215,7 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
           else:
               args += ' -g -1'
 
+          os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
           self.runJob('xmipp_deep_micrograph_cleaner', args)
 
 
@@ -282,7 +283,6 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
       return scale
 
     def _updateOutputCoordSet(self, micList, streamMode):
-
         # Do no proceed if there is not micrograph ready
         if not micList:
             return []
@@ -296,15 +296,13 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         firstTime = outputCoords is None
 
         if firstTime:
-            if self.micsSource==SAME_AS_PICKING or self.useOtherScale.get()==1:
+            if self.useOtherScale.get() == 1:
               boxSize = self.getBoxSize()
-              micSetPtr = self.getInputMicrographs()
             else:
               boxSize = self.inputCoordinates.get().getBoxSize()
-              micSetPtr = self.inputCoordinates.get().getMicrographs()
-              
-            outputCoords = self._createSetOfCoordinates(micSetPtr,
-                                                        suffix=self.getAutoSuffix())
+
+            micSetPtr = self.getInputMicrographsPointer()
+            outputCoords = self._createSetOfCoordinates(micSetPtr, suffix=self.getAutoSuffix())
             outputCoords.copyInfo(self.inputCoordinates.get())
             outputCoords.setBoxSize(boxSize)
         else:
@@ -320,25 +318,27 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
 
         return micList
 
-
     #--------------------------- INFO functions --------------------------------
-
     def _getStreamingBatchSize(self):
-      self.firstBatch=True
-      if self.streamingBatchSize.get()==-1:
+      self.firstBatch = True
+      if self.streamingBatchSize.get() == -1:
         if not hasattr(self, "actualBatchSize"):
           if self.isInStreaming():
-            self.actualBatchSize= 16
+            self.actualBatchSize = 16
+            batchSize = self.actualBatchSize
           else:
             if self.firstBatch:
-              self.firstBatch=False
-              batchSize= 4
+              self.firstBatch = False
+              batchSize = 4
             else:
               nPickMics = self._getNumPickedMics()
-              self.actualBatchSize= min(50, nPickMics)
-              batchSize= self.actualBatchSize
+              self.actualBatchSize = min(50, nPickMics)
+              batchSize = self.actualBatchSize
+        else:
+            batchSize = self.actualBatchSize
       else:
-        batchSize= self.streamingBatchSize.get()
+        batchSize = self.streamingBatchSize.get()
+
       return batchSize
 
     def _getNumPickedMics(self):
@@ -422,6 +422,16 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         else:
             return self.inputMicrographs.get()
 
+    def getInputMicrographsPointer(self):
+        """ Return the micrographs pointer associated to the SetOfCoordinates or
+        Other micrographs. """
+        if not self._micsOther():
+            inMicsPointer = Pointer(self.getMapper().getParent(self.inputCoordinates.get().getMicrographs()),
+                                    extended='outputMicrographs')
+            return inMicsPointer
+        else:
+            return self.inputMicrographs
+
     def getCoords(self):
         return self.inputCoordinates.get()
 
@@ -485,12 +495,9 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         and it is used from the Java picking GUI to register
         a new SetOfCoordinates when the user click on +Particles button.
         """
-
-        inputset = self.getInputMicrographs()
-        
+        inputset = self.getInputMicrographsPointer()
         mySuffix = '_Manual_%s' % coordsDir.split('manualThresholding_')[1]
         outputName = 'outputCoordinates' + mySuffix
-
         outputset = self._createSetOfCoordinates(inputset, suffix=mySuffix)
         readSetOfCoordinates(coordsDir, outputset.getMicrographs(), outputset)
         # summary = self.getSummary(outputset)
@@ -501,6 +508,6 @@ class XmippProtDeepMicrographScreen(ProtExtractParticles, XmippProtocol):
         # Using a pointer to define the relations is more robust to scheduling
         # and id changes between the protocol run.db and the main project
         # database. The pointer defined below points to the outputset object
-        self._defineSourceRelation(self.getInputMicrographs(),
+        self._defineSourceRelation(inputset,
                                    Pointer(value=self, extended=outputName))
         self._store()
