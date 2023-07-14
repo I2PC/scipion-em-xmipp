@@ -39,6 +39,7 @@ from pyworkflow.constants import BETA
 from pyworkflow.object import Float
 
 from xmipp3.convert import setXmippAttribute
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 import os
 import json
@@ -163,18 +164,6 @@ class XmippProtConsensusClasses(ProtClassify3D):
         self._writeElbows(elbows)
 
     # --------------------------- INFO functions -------------------------------
-    """
-    def _validate(self):
-        errors = []
-
-        # Ensure that all classifications are made of the same images
-        items = self._getInputImages(0)
-        for i in range(1, len(self.inputClassifications)):
-            if self._getInputImages(i) != items:
-                errors.append(f'Classification {i} has been done with different images')
-
-        return errors
-    """
     
     # --------------------------- UTILS functions ------------------------------
     def _getInputClassificationCount(self) -> int:
@@ -478,7 +467,6 @@ class XmippProtConsensusClasses(ProtClassify3D):
             mu2 = np.mean(d2)
             sigma1 = np.std(d1, ddof=1)
             sigma2 = np.std(d2, ddof=1)
-            #sigma = (len(d1)*sigma1 + len(d2)*sigma2) / (len(d1) + len(d2)) # Weighted average
         
             # Compute the log likelihood
             logLikelihoods1 = scipy.stats.norm.logpdf(d1, mu1, sigma1)
