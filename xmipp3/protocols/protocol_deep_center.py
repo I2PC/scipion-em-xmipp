@@ -45,12 +45,14 @@ from shutil import copy
 from os import remove
 from os.path import exists, join
 import xmipp3
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
     """Learns a model to center particles using deep learning. Particles must be previously centered with respect
        to a volume, and they must have 3D alignment information. """
     _label = 'deep center'
     _lastUpdateVersion = VERSION_3_0
+    _devStatus = BETA
     _conda_env = 'xmipp_DLTK_v1.0'
     _cond_modelPretrainTrue = 'modelPretrain==True'
     _cond_modelPretrainFalse = 'modelPretrain==False'

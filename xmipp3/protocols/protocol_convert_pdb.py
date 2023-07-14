@@ -37,10 +37,12 @@ from pwem.protocols import ProtInitialVolume
 import pyworkflow.protocol.params as params
 import pyworkflow.protocol.constants as const
 from pyworkflow.utils import replaceBaseExt, removeExt, getExt, createLink, replaceExt, removeBaseExt
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 class XmippProtConvertPdb(ProtInitialVolume):
     """ Convert atomic structure(s) into volume(s) """
     _label = 'convert pdbs to volumes'
+    _devStatus = UPDATED
     OUTPUT_NAME1 = "outputVolume"
     OUTPUT_NAME2 = "outputVolumes"
     OUTPUT_NAME3 = "outputPdb"

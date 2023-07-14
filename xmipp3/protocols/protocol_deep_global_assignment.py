@@ -45,6 +45,7 @@ from shutil import copy
 from os import remove
 from os.path import exists, join
 import xmipp3
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 
 class XmippProtDeepGlobalAssignment(ProtAlign2D, xmipp3.XmippProtocol):
@@ -52,6 +53,8 @@ class XmippProtDeepGlobalAssignment(ProtAlign2D, xmipp3.XmippProtocol):
        to a volume, and they must have 3D alignment information. """
     _label = 'deep global assignment'
     _lastUpdateVersion = VERSION_3_0
+    _devStatus = BETA
+
     _conda_env = 'xmipp_DLTK_v1.0'
     _cond_modelPretrainTrue = 'modelPretrain==True'
     _cond_modelPretrainFalse = 'modelPretrain==False'
