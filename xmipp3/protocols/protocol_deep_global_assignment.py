@@ -47,27 +47,21 @@ from os.path import exists, join
 import xmipp3
 
 
+
 class XmippProtDeepGlobalAssignment(ProtAlign2D, xmipp3.XmippProtocol):
     """Learns a model to assign angles to particles using deep learning. Particles must be previously centered with respect
        to a volume, and they must have 3D alignment information. """
     _label = 'deep global assignment'
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_DLTK_v1.0'
+    _cond_modelPretrainTrue = 'modelPretrain==True'
+    _cond_modelPretrainFalse = 'modelPretrain==False'
 
     def __init__(self, **args):
         ProtAlign2D.__init__(self, **args)
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
-        _cond_modelAngPretrainTrue = 'modelAngPretrain==True'
-        _cond_modelAngPretrainFalse = 'modelAngPretrain==False'
-        _cond_modelCenPretrainTrue = 'modelCenPretrain==True'
-        _cond_modelCenPretrainFalse = 'modelCenPretrain==False'
-        trainingOption = 'trainingOption=='
-        _center_training = 0
-        _angular_training = 1
-        _center_angular_training = 2
-
         form.addHidden(GPU_LIST, StringParam, default='0',
                        expertLevel=LEVEL_ADVANCED,
                        label="Choose GPU IDs",
@@ -86,115 +80,48 @@ class XmippProtDeepGlobalAssignment(ProtAlign2D, xmipp3.XmippProtocol):
                       label='Symmetry group',
                       help='If no symmetry is present, give c1')
 
+        form.addParam('modelPretrain', BooleanParam, default=False,
+                      label='Choose if you want to use a pretrained model',
+                      help='Set "yes" if you want to use a previously trained model. '
+                           'If you choose "no" new models will be trained.')
+
+        form.addParam('pretrainedModels', PointerParam,
+                      pointerClass='XmippProtDeepGlobalAssignment',
+                      condition=self._cond_modelPretrainTrue,
+                      label='Pretrained model',
+                      help='Select the pretrained model. ')
+
         form.addSection(label='Training parameters')
-
-        form.addParam('trainingOption', EnumParam, display=EnumParam.DISPLAY_COMBO,
-                      default=_center_angular_training,
-                      choices=['Center assignment', 'Angular assignment', 'Center and angular assignment'], label="Training option: ",
-                      help='Select if you want to train a model to center particles, perform angular assignment or '
-                           'both.')
-
-        form.addParam('modelAngPretrain', BooleanParam, default=False,
-                      label='Use a pretrained model for global assignment',
-                      condition=f'not {trainingOption}{_center_training}',
-                      help='Set "yes" if you want to use a previously trained model. '
-                           'If you choose "no" new models will be trained.')
-
-        form.addParam('modelCenPretrain', BooleanParam, default=False,
-                      label='Use a pretrained model to center particles',
-                      condition=f'not {trainingOption}{_angular_training}',
-                      help='Set "yes" if you want to use a previously trained model. '
-                           'If you choose "no" new models will be trained.')
-
-        form.addParam('pretrainedAngModels', PointerParam,
-                      pointerClass='XmippProtDeepGlobalAssignment',
-                      condition=f'{_cond_modelAngPretrainTrue} and (not {trainingOption}{_center_training})',
-                      label='Pretrained global assignment model',
-                      help='Select a pretrained model that performs global assignment to re-train it. ')
-
-        form.addParam('pretrainedCenModels', PointerParam,
-                      pointerClass='XmippProtDeepGlobalAssignment',
-                      condition=f'{_cond_modelCenPretrainTrue} and (not {trainingOption}{_angular_training})',
-                      label='Pretrained center model',
-                      help='Select a pretrained model that centers particles to re-train it. ')
-
         form.addParam('numAngModels', IntParam,
                       label="Number of models for angular assignment", default=5,
-                      condition=f'not {trainingOption}{_center_training}',
                       help="Choose number of models you want to train. More than 1 is recommended only if next step "
                            "is inference.")
 
-        form.addParam('numCenModels', IntParam,
-                      label="Number of models to center particles", default=5,
-                      condition=f'not {trainingOption}{_angular_training}',
-                      help="Choose number of models you want to train. More than 1 is recommended only if next step "
-                           "is inference.")
-
-        form.addParam('numAngEpochs', IntParam,
-                      label="Number of epochs for global assignment",
+        form.addParam('numEpochs_ang', IntParam,
+                      label="Number of epochs",
                       default=25, expertLevel=LEVEL_ADVANCED,
-                      condition=f'not {trainingOption}{_center_training}',
                       help="Number of epochs for training.")
 
-        form.addParam('numCenEpochs', IntParam,
-                      label="Number of epochs to center particles",
-                      default=25, expertLevel=LEVEL_ADVANCED,
-                      condition=f'not {trainingOption}{_angular_training}',
-                      help="Number of epochs for training.")
-
-        form.addParam('batchSizeAng', IntParam,
-                      label="Batch size for global assignment",
+        form.addParam('batchSize', IntParam,
+                      label="Batch size for training",
                       default=32, expertLevel=LEVEL_ADVANCED,
-                      condition=f'not {trainingOption}{_center_training}',
                       help="Batch size for training.")
 
-        form.addParam('batchSizeCen', IntParam,
-                      label="Batch size to center particles",
-                      default=32, expertLevel=LEVEL_ADVANCED,
-                      condition=f'not {trainingOption}{_angular_training}',
-                      help="Batch size for training.")
-
-        form.addParam('learningRateAng', FloatParam,
-                      label="Learning rate for global assignment",
+        form.addParam('learningRate', FloatParam,
+                      label="Learning rate",
                       default=0.001, expertLevel=LEVEL_ADVANCED,
-                      condition=f'not {trainingOption}{_center_training}',
                       help="Learning rate for training.")
 
-        form.addParam('learningRateCen', FloatParam,
-                      label="Learning rate to cneter particles",
-                      default=0.001, expertLevel=LEVEL_ADVANCED,
-                      condition=f'not {trainingOption}{_angular_training}',
-                      help="Learning rate for training.")
+        form.addParam('sigma', FloatParam,
+                      label="Image shifting",
+                      default=2, expertLevel=LEVEL_ADVANCED,
+                      help="Maximum number of pixels that particles can be shifted in each direction from the center.")
 
-        form.addParam('sigmaAng', FloatParam,
-                      label="Image shifting during global assignment training",
-                      default=3, expertLevel=LEVEL_ADVANCED,
-                      condition=f'not {trainingOption}{_center_training}',
-                      help="Perform Data Augmentation. Maximum number of pixels that particles can be shifted in each "
-                           "direction from the center.")
-
-        form.addParam('sigmaCen', FloatParam,
-                      label="Image shifting during center training",
-                      default=15, expertLevel=LEVEL_ADVANCED,
-                      condition=f'not {trainingOption}{_angular_training}',
-                      help="Perform Data Augmentation. Maximum number of pixels that particles can be shifted in each "
-                           "direction from the center.")
-
-        form.addParam('patienceAng', IntParam,
-                      label="Training patience for global assignment",
-                      default=10, expertLevel=LEVEL_ADVANCED,
-                      condition=f'not {trainingOption}{_center_training}',
+        form.addParam('patience', IntParam,
+                      label="Patience",
+                      default=20, expertLevel=LEVEL_ADVANCED,
                       help="Training will be stopped if the number of epochs without improvement is greater than "
                            "patience.")
-
-        form.addParam('patienceCen', IntParam,
-                      label="Training patience to center particles",
-                      default=10, expertLevel=LEVEL_ADVANCED,
-                      condition=f'not {trainingOption}{_angular_training}',
-                      help="Training will be stopped if the number of epochs without improvement is greater than "
-                           "patience.")
-
-
 
         form.addParallelSection(threads=1, mpi=1)
 
@@ -227,13 +154,13 @@ class XmippProtDeepGlobalAssignment(ProtAlign2D, xmipp3.XmippProtocol):
 
         self.pretrained = 'no'
         self.pathToModel = 'none'
-        #if self.modelPretrain:
-        #    self.model = self.pretrainedModels.get()
-        #    self.pretrained = 'yes'
-        #    self.pathToModel = self.model._getExtraPath("modelAngular0.h5")
+        if self.modelPretrain:
+            self.model = self.pretrainedModels.get()
+            self.pretrained = 'yes'
+            self.pathToModel = self.model._getExtraPath("modelAngular0.h5")
 
         args = "%s %s %f %d %d %s %d %f %d %s %s %s" % (
-            self._getExtraPath("trainingResized.xmd"), self._getExtraPath("modelAngular"), sig,
+            self._getExtraPath("trainingResized.xmd"), self._getExtraPath(), sig,
             self.numEpochs_ang, self.batchSize.get(), gpuId, self.numAngModels.get(), self.learningRate.get(),
             self.patience.get(), self.pretrained, self.pathToModel, self.symmetryGroup.get())
         print(args)
