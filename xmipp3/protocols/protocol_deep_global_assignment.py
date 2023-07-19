@@ -160,7 +160,7 @@ class XmippProtDeepGlobalAssignment(ProtAlign2D, xmipp3.XmippProtocol):
             self.pathToModel = self.model._getExtraPath("modelAngular0.h5")
 
         args = "%s %s %f %d %d %s %d %f %d %s %s %s" % (
-            self._getExtraPath("trainingResized.xmd"), self._getExtraPath(), sig,
+            self._getExtraPath("trainingResized.xmd"), self._getExtraPath('modelAngular'), sig,
             self.numEpochs_ang, self.batchSize.get(), gpuId, self.numAngModels.get(), self.learningRate.get(),
             self.patience.get(), self.pretrained, self.pathToModel, self.symmetryGroup.get())
         print(args)
