@@ -100,7 +100,7 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
                         ' are leveled to the intensity levels of the experimental particles.'
                         ' If the initial volume was reconstructed  with XMIPP, this step is not necessary.')
         form.addParam('mode', EnumParam, choices=['refine', 'align'],
-                      label="Refine or align?", default=self.REFINE,
+                      label="Refine or align?", default=self.ALIGN,
                       display=EnumParam.DISPLAY_HLIST, 
                       help='This option allows for either global refinement from an initial volume '
                     ' or just alignment of particles. If the reference volume is at a high resolution, '
@@ -111,9 +111,9 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('correctCtf', BooleanParam, default=True, expertLevel=LEVEL_ADVANCED,
               label='Correct CTF?',
               help='If you set to *Yes*, the CTF of the experimental particles will be corrected')
-        # form.addParam('createVolume', BooleanParam, default=False, expertLevel=LEVEL_ADVANCED,
-        #       label='Create output volume?',
-        #       help='If you set to *Yes*, the final volume is created')
+        form.addParam('createVolume', BooleanParam, default=False, expertLevel=LEVEL_ADVANCED,
+              label='Create output volume?',
+              help='If you set to *Yes*, the final volume is created in aligment mode')
         form.addParam('angleGallery',FloatParam, label="angle for references", default=5, expertLevel=LEVEL_ADVANCED,
                       help='Distance in degrees between sampling points for generate gallery of references images')
        
@@ -214,7 +214,7 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         
             if self.mode == self.REFINE:   
                 self._insertFunctionStep("reconstructVolume", iter) 
-            elif iter == self.iterations-1:
+            elif iter == self.iterations-1 and self.createVolume:
                 self._insertFunctionStep("reconstructVolume", iter)
         
         self._insertFunctionStep("createOutput", iter)
@@ -335,15 +335,12 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         self._defineOutputs(outputParticles=outSet)
         self._defineSourceRelation(self.inputParticles, outSet)
         
-        #output volume
-        # if self.createVolume: 
-            # self.resolutionHalf = self.resolutionHalf.set(self.resolutionHalf)
-            # self._store(self.resolutionHalf)
-        volume=Volume()
-        volume.setFileName(self._getExtraPath('output_iter%s_avg_filt.mrc'%(iter+1)))
-        volume.setSamplingRate(self.inputParticles.get().getSamplingRate())
-        self._defineOutputs(outputVolume=volume)
-        self._defineTransformRelation(self.inputParticles.get(), volume)
+        if self.createVolume or self.mode == self.REFINE:
+            volume=Volume()
+            volume.setFileName(self._getExtraPath('output_iter%s_avg_filt.mrc'%(iter+1)))
+            volume.setSamplingRate(self.inputParticles.get().getSamplingRate())
+            self._defineOutputs(outputVolume=volume)
+            self._defineTransformRelation(self.inputParticles.get(), volume)
         
     
     #--------------------------- INFO functions --------------------------------------------
