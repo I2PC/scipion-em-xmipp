@@ -29,6 +29,7 @@ Protocol to perform global alignment
 
 from os.path import join, exists, split
 import os
+import numpy as np
 
 from pyworkflow import VERSION_2_0
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
@@ -45,6 +46,7 @@ from pyworkflow.utils import getExt
 from pwem.emlib.image import ImageHandler
 import pwem.emlib.metadata as md
 import xmipp3
+import xmippLib
 
 from pwem import emlib
 from xmipp3.convert import  writeSetOfParticles, readSetOfParticles, xmippToLocation
@@ -156,7 +158,7 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         self.refsFn = self._getTmpPath('references.mrcs')
         self.refsFnXmd = self._getTmpPath('references.xmd')
         self.sampling = self.inputParticles.get().getSamplingRate()
-        size =self.inputParticles.get().getDimensions()[0]
+        self.size = self.inputParticles.get().getDimensions()[0]
   
         self.MaxShift = self.MaxShift.get()
         refVol = self.inputVolume.get().getFileName()
@@ -166,7 +168,7 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         
  
         if self.particleRadius.get() == -1:
-            radius = int(size/2)
+            radius = int(self.size/2)
         else:
             radius = int(self.particleRadius.get())
 
@@ -182,10 +184,11 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         self._insertFunctionStep("createGallery", self.angleGallery.get(), refVol)
         
         if self.scale:
-            self._insertFunctionStep("scaleLeveling", self.imgsFn, self.refsFn, self.refsFn, radius)
+            # self._insertFunctionStep("scaleLeveling", self.imgsFn, self.refsFn, self.refsFn, radius)
+            self._insertFunctionStep("scaleLeveling", self._getTmpPath("matrix.npy"), self.refsFn, self.refsFn, radius)
             
-        if self.correctCtf:
-            self._insertFunctionStep('correctCTF', self.imgsOrigXmd, self.imgsFn, self.sampling)
+        # if self.correctCtf:
+        #     self._insertFunctionStep('correctCTF', self.imgsOrigXmd, self.imgsFn, self.sampling)
 
         self._insertFunctionStep("pcaTraining", self.refsFn, self.resolution.get())
         
@@ -224,19 +227,22 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
     def convertInputStep(self, input, outputOrig, outputConvert):
         writeSetOfParticles(input, outputOrig)
         
-        args = ' -i  %s -o %s --save_metadata_stack '%(outputOrig, outputConvert)
-        self.runJob("xmipp_image_convert",args, numberOfMpi=1) 
+        self._create_batch_for_scale(5000, outputOrig)
+
         
-        # if self.correctCtf: 
-        #     args = ' -i  %s -o %s --sampling_rate %s '%(outputOrig, self.imgsFn, self.sampling)
-        #     self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get()) 
-        # else:
-        #     args = ' -i  %s -o %s '%(outputOrig, self.imgsFn)
-        #     self.runJob("xmipp_image_convert",args, numberOfMpi=1) 
+        # args = ' -i  %s -o %s --save_metadata_stack '%(outputOrig, outputConvert)
+        # self.runJob("xmipp_image_convert",args, numberOfMpi=1) 
         
-    def correctCTF(self, input, output, sampling):  
-        args = ' -i  %s -o %s --sampling_rate %s '%(input, output, sampling)
-        self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get())        
+        if self.correctCtf: 
+            args = ' -i  %s -o %s --sampling_rate %s '%(outputOrig, outputConvert, self.sampling)
+            self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get()) 
+        else:
+            args = ' -i  %s -o %s --save_metadata_stack '%(outputOrig, outputConvert)
+            self.runJob("xmipp_image_convert",args, numberOfMpi=1) 
+        
+    # def correctCTF(self, input, output, sampling):  
+    #     args = ' -i  %s -o %s --sampling_rate %s '%(input, output, sampling)
+    #     self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get())        
     
     def createGallery(self, angle, refVol):
         args = ' -i  %s --sym %s --sampling_rate %s  -o %s -v 0'% \
@@ -392,6 +398,18 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         args = ' -i %s -o %s --fourier low_pass %s --sampling %s -v 0'%(input, output, resolution, self.sampling)
         self.runJob('xmipp_transform_filter', args, numberOfMpi=1)
         
+        
+    def _create_batch_for_scale(self, batch, input):
+        M = xmippLib.MetaData(input)
+        images_matrix = np.zeros((batch, self.size, self.size))
+        row = 1
+        while (row < batch+1):
+            # M.getValue(xmippLib.MDL_IMAGE,row)
+            images_matrix[row-1] = xmippLib.Image(M.getValue(xmippLib.MDL_IMAGE,row)).getData()
+            row +=1
+        # print(images_matrix)
+        np.save(self._getTmpPath("matrix.npy"), images_matrix)
+
         
         
     
