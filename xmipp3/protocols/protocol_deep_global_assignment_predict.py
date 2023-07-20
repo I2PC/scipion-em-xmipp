@@ -121,7 +121,7 @@ class XmippProtDeepGlobalAssignmentPredict(ProtAlign2D, xmipp3.XmippProtocol):
         self.modelAng = self.inputModel.get()
         args = "%s %s %s %s %s %d %d %d" % (
             self._getExtraPath("trainingResized.xmd"), gpuId, self._getPath(), self.predictImgsFn,
-            self.modelAng._getExtraPath("modelAngular"), self.numAngModels.get(), self.tolerance.get(), self.maxModels.get())
+            self.modelAng._getExtraPath(), self.numAngModels.get(), self.tolerance.get(), self.maxModels.get())
 
         self.runJob("xmipp_deep_global_assignment_predict", args, numberOfMpi=1, env=self.getCondaEnv())
 
