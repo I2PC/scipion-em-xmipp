@@ -2719,16 +2719,17 @@ class TestXmippLocalVolAdjust(TestXmippBase):
         print("Create mask")
         protCreateMask = self.newProtocol(XmippProtCreateMask3D,
                                           inputVolume=protImportVol1.outputVolume,
-                                          threshold=0.28)
+                                          threshold=0.1)
         self.launchProtocol(protCreateMask)
         self.assertIsNotNone(protCreateMask.getFiles(),
                              "There was a problem with the 3D mask")
 
         print("Run volume local adjust")
         protVolLocalAdj = self.newProtocol(XmippProtLocalVolAdj,
-                                      vol1=protImportVol1.outputVolume,
-                                      vol2=protImportVol2.outputVolume,
-                                      mask=protCreateMask.outputMask)
+                                           vol1=protImportVol1.outputVolume,
+                                           vol2=protImportVol2.outputVolume,
+                                           mask=protCreateMask.outputMask,
+                                           neighborhood=35)
         self.launchProtocol(protVolLocalAdj)
         self.assertIsNotNone(protVolLocalAdj.outputVolume, "There was a problem with Volumes local adjust")
         self.assertEqual(protVolLocalAdj.outputVolume.getSamplingRate(), 7.08, (MSG_WRONG_SAMPLING, "volume"))
@@ -2736,10 +2737,11 @@ class TestXmippLocalVolAdjust(TestXmippBase):
 
         print("Run volume local adjust with subtraction")
         protVolLocalAdjSub = self.newProtocol(XmippProtLocalVolAdj,
-                                         vol1=protImportVol1.outputVolume,
-                                         vol2=protImportVol2.outputVolume,
-                                         mask=protCreateMask.outputMask,
-                                         subtract=True)
+                                              vol1=protImportVol1.outputVolume,
+                                              vol2=protImportVol2.outputVolume,
+                                              mask=protCreateMask.outputMask,
+                                              neighborhood=35,
+                                              subtract=True)
         self.launchProtocol(protVolLocalAdjSub)
         self.assertIsNotNone(protVolLocalAdjSub.outputVolume,
                              "There was a problem with Volumes adjust without computing energy")

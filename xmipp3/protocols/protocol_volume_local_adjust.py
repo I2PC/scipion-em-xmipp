@@ -47,8 +47,8 @@ class XmippProtLocalVolAdj(EMProtocol):
         form.addParam('mask', PointerParam, pointerClass='VolumeMask', label="Mask for reference volume",
                       help='Specify a mask to define region of interest (which is signal in white (1s) and noise in '
                            'black (0s))')
-        form.addParam('neighborhood', IntParam, label="Neighborhood", default=5,
-                      help='side length (in pixels) of a square which will define the region of adjustment')
+        form.addParam('neighborhood', IntParam, label="Neighborhood (A)", default=5,
+                      help='side length (in Angstroms) of a square which will define the region of adjustment')
         form.addParam('subtract', BooleanParam, label="Perform subtraction?", default=False,
                       help='Perform subtraction of reference volume minus input volume in real space')
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -66,9 +66,9 @@ class XmippProtLocalVolAdj(EMProtocol):
         if vol2.endswith('.mrc'):
             vol2 += ':mrc'
         program = "xmipp_local_volume_adjust"
-        args = '--i1 %s --i2 %s -o %s --mask %s --neighborhood %d' % \
+        args = '--i1 %s --i2 %s -o %s --mask %s --neighborhood %d --sampling %s' % \
                (fnVol1, vol2, self._getExtraPath("output_volume.mrc"), self.mask.get().getFileName(),
-                self.neighborhood.get())
+                self.neighborhood.get(), vol1.getSamplingRate())
         if self.subtract.get():
             args += ' --sub'
         self.runJob(program, args)
@@ -103,3 +103,11 @@ class XmippProtLocalVolAdj(EMProtocol):
             methods.append("Volume %s adjusted to volume %s" % (self.vol2.get().getFileName(),
                                                                 self.vol1.get().getFileName()))
         return methods
+
+    def _validate(self):
+        errors = []
+        if self.vol1.get().getSamplingRate() != self.vol2.get().getSamplingRate():
+            errors.append('Input volumes should have same pixel size')
+        if self.vol1.get().getSamplingRate() != self.mask.get().getSamplingRate():
+            errors.append('\nInput mask and volumes should have same pixel size')
+        return errors
