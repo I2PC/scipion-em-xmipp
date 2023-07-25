@@ -37,7 +37,6 @@ class XmippProtLocalVolAdj(EMProtocol):
     _label = 'volume local adjustment'
 
     # --------------------------- DEFINE param functions --------------------------------------------
-    @classmethod
     def _defineParams(self, form):
         form.addSection(label='Input')
         form.addParam('vol1', PointerParam, pointerClass='Volume', label="Reference volume",
