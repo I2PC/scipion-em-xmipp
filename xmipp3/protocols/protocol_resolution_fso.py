@@ -35,6 +35,7 @@ from pyworkflow.protocol.params import (PointerParam, BooleanParam, FloatParam,
 from pyworkflow import BETA, UPDATED, NEW, PROD
 from pwem.objects import Volume
 from pwem.protocols import ProtAnalysis3D
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 OUTPUT_3DFSC = '3dFSC.mrc'
 OUTPUT_DIRECTIONAL_FILTER = 'filteredMap.mrc'
@@ -48,7 +49,7 @@ class XmippProtFSO(ProtAnalysis3D):
     """
     _label = 'resolution fso'
     _lastUpdateVersion = VERSION_2_0
-    _devStatus = NEW
+    _devStatus = PROD
 
     def __init__(self, **args):
         ProtAnalysis3D.__init__(self, **args)

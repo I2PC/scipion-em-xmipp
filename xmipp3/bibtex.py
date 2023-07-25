@@ -604,5 +604,21 @@ url = {https://www.sciencedirect.com/science/article/pii/S104784772100085X},
 author = {E. Fernández-Giménez and M. Martínez and R. Sánchez-García and R. Marabini and E. Ramírez-Aportela and
 P. Conesa and J.M. Carazo and C.O.S. Sorzano},
 }
+
+@Article{Strelak2021,
+AUTHOR = {Strelak, David and Jiménez-Moreno, Amaya and Vilas, José L. and Ramírez-Aportela, Erney and Sánchez-García, Ruben and Maluenda, David and Vargas, Javier and Herreros, David and Fernández-Giménez, Estrella and de Isidro-Gómez, Federico P. and Horacek, Jan and Myska, David and Horacek, Martin and Conesa, Pablo and Fonseca-Reyna, Yunior C. and Jiménez, Jorge and Martínez, Marta and Harastani, Mohamad and Jonić, Slavica and Filipovic, Jiri and Marabini, Roberto and Carazo, José M. and Sorzano, Carlos O. S.},
+TITLE = {Advances in Xmipp for Cryo–Electron Microscopy: From Xmipp to Scipion},
+JOURNAL = {Molecules},
+VOLUME = {26},
+YEAR = {2021},
+NUMBER = {20},
+ARTICLE-NUMBER = {6224},
+URL = {https://www.mdpi.com/1420-3049/26/20/6224},
+PubMedID = {34684805},
+ISSN = {1420-3049},
+DOI = {https://doi.org/10.3390/molecules26206224}
+}
+
+
 """
 
