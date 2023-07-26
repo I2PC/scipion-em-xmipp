@@ -90,8 +90,13 @@ class XmippProtLocalVolAdj(EMProtocol):
 
     # --------------------------- INFO functions --------------------------------------------
     def _summary(self):
-        summary = ["Volume 1: %s\nVolume 2: %s\nInput mask 1: %s" %
-                   (self.vol1.get().getFileName(), self.vol2.get().getFileName(), self.mask.get().getFileName())]
+        neighborhood = self.neighborhood.get()
+        vol1 = self.vol1.get()
+        summary = ["Volume 1: %s\nVolume 2: %s\nInput mask 1: %s\n\nNeighborhood: %d A (%d px)" %
+                   (vol1.getFileName(), self.vol2.get().getFileName(), self.mask.get().getFileName(),
+                    neighborhood, round(neighborhood/vol1.getSamplingRate()))]
+        if self.subtract.get():
+            summary.append("\nSubtraction performed")
         return summary
 
     def _methods(self):
