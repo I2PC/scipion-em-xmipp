@@ -21,7 +21,8 @@
 # ***************************************************************************/
 
 from pwem.protocols import ProtRefine3D
-from pwem.objects import Volume, FSC, SetOfVolumes, Class3D, SetOfParticles, SetOfClasses3D, Particle
+from pwem.objects import (Volume, FSC, SetOfVolumes, Class3D, 
+                          SetOfParticles, SetOfClasses3D, Particle)
 from pwem.convert import transformations
 from pwem import emlib
 
@@ -260,20 +261,26 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             self.runJob('xmipp_image_convert', args, numberOfMpi=1)
     
     def correctCtfStep(self):
-        particles = self.inputParticles.get()
+        particles: SetOfParticles = self.inputParticles.get()
+        acquisition = particles.getAcquisition()
         
         # Perform a CTF correction using Wiener Filtering
         args = []
         args += ['-i', self._getInputParticleMdFilename()]
-        args += ['-o', self._getWienerParticleStackFilename()]
-        args += ['--save_metadata_stack', self._getWienerParticleMdFilename()]
-        args += ['--sampling_rate', self._getSamplingRate()]
-        args += ['--pad', '2']
-        args += ['--wc', -1]
+        args += ['-o', self._getWienerParticleMdFilename()]
+        args += ['--pixel_size', self._getSamplingRate()]
+        args += ['--spherical_aberration', acquisition.getSphericalAberration()]
+        args += ['--voltage', acquisition.getVoltage()]
         if particles.isPhaseFlipped():
             args +=  ['--phase_flipped']
 
-        self.runJob('xmipp_ctf_correct_wiener2d', args)
+        args += ['--batch', self.batchSize]
+        if self.useGpu:
+            args += ['--device', 'cuda:0'] # TODO select
+
+        env = self.getCondaEnv()
+        env['LD_LIBRARY_PATH'] = '' # Torch does not like it
+        self.runJob('xmipp_swiftalign_wiener_2d', args, numberOfMpi=1, env=env)
         
         # Append the wiener corrected images to the second image label of the input
         inputMd = emlib.MetaData(self._getInputParticleMdFilename())
