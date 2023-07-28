@@ -276,7 +276,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
 
         args += ['--batch', self.batchSize]
         if self.useGpu:
-            args += ['--device', 'cuda:0'] # TODO select
+            args += ['--device'] + self._getDeviceList()
 
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
@@ -385,11 +385,6 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--perturb', perturb]
         args += ['--sym', self.symmetryGroup]
         
-        if False: # TODO speak with coss
-            args += ['--compute_neighbors']
-            args += ['--angular_distance', -1]    
-            args += ['--experimental_images', self._getIterationInputParticleMdFilename(iteration)]
-
         self.runJob('xmipp_angular_project_library', args)
     
         args = []
@@ -446,15 +441,14 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['-o', self._getTrainingIndexFilename(iteration)]
         args += ['--recipe', recipe]
         #args += ['--weights', self._getWeightsFilename(iteration)]
-        args += ['--max_shift', maxShift] #FIXME fails with != 190
+        args += ['--max_shift', maxShift] #FIXME fails with != 180
         args += ['--max_psi', maxPsi]
         args += ['--max_frequency', maxFrequency]
         args += ['--training', trainingSize]
-        #args += ['--batch', self.batchSize] # TODO
-        args += ['--batch', 1024]
+        args += ['--batch', self.batchSize]
         args += ['--scratch', self._getTrainingScratchFilename()]
         if self.useGpu:
-            args += ['--device', 'cuda:0'] # TODO select
+            args += ['--device'] + self._getDeviceList()
         if self.useFloat16:
             args += ['--fp16']
         if self.considerInputCtf:
@@ -502,7 +496,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['-k', self.numberOfMatches]
         args += ['--reference_labels', 'angleRot', 'angleTilt', 'ref3d', 'imageRef']
         if self.useGpu:
-            args += ['--device', 'cuda:0'] # TODO select
+            args += ['--device'] + self._getDeviceList()
         if local > 0:
             args += ['--local']
         if self.considerInputCtf:
@@ -635,7 +629,6 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['-i', self._getReconstructionHalfMdFilename(iteration, cls, half)]
         args += ['-o', self._getHalfVolumeFilename(iteration, cls, half)]
         args += ['--sym', self.symmetryGroup.get()]
-        args += ['--weight'] # TODO determine if used
     
         # Determine the execution parameters
         numberOfMpi = self.numberOfMpi.get()
@@ -914,6 +907,11 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     def _getTrainingScratchFilename(self):
         return self._getTmpPath('scratch.bin')
+    
+    def _getDeviceList(self):
+        gpus = self.getGpuList()
+        return list(map('cuda:'.__add__, gpus))
+        
     
     def _quaternionAverage(self, quaternions: np.ndarray) -> np.ndarray:
         s = np.matmul(quaternions.T, quaternions)
