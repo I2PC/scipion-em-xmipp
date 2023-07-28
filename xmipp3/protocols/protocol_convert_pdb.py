@@ -70,7 +70,7 @@ class XmippProtConvertPdb(ProtInitialVolume):
         coordsCondition = 'setSize and not vol'
 
         # Defining parallel arguments
-        form.addParallelSection(threads=4)
+        form.addParallelSection(threads=4, mpi=1)
 
         # Generating form
         form.addSection(label='Input')
