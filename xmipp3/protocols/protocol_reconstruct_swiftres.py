@@ -910,8 +910,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     def _getDeviceList(self):
         gpus = self.getGpuList()
-        return list(map('cuda:'.__add__, gpus))
-        
+        return list(map('cuda:{:d}'.format, gpus))
     
     def _quaternionAverage(self, quaternions: np.ndarray) -> np.ndarray:
         s = np.matmul(quaternions.T, quaternions)
