@@ -713,24 +713,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     def createOutputStep(self):
         lastIteration = self._getIterationCount() - 1
-
-        # Link last iteration
-        if os.path.exists(self._getInputParticleStackFilename()):
-            # Use original images
-            alignmentMd = emlib.MetaData(self._getAlignmentMdFilename(lastIteration))
-            alignmentMd.copyColumn(emlib.MDL_IMAGE, emlib.MDL_IMAGE_ORIGINAL)
-            alignmentMd.write(self._getOutputParticlesMdFilename())
-
-        else:
-            # Link
-            createLink(
-                self._getAlignmentMdFilename(lastIteration),
-                self._getOutputParticlesMdFilename()
-            )
         
-        # Create output particles
-        self._createOutputClasses3D(volumes)
-        
+        # Create output volumes if necessary
         if self.reconstructLast:
             for cls in range(self._getClassCount()):
                 for i in range(1, 3):
@@ -751,7 +735,27 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             # Create output objects
             volumes = self._createOutputVolumes()
             self._createOutputFscs()
+        else:
+            volumes = self.inputVolumes
     
+        # Link last iteration
+        if os.path.exists(self._getInputParticleStackFilename()):
+            # Use original images
+            alignmentMd = emlib.MetaData(self._getAlignmentMdFilename(lastIteration))
+            alignmentMd.copyColumn(emlib.MDL_IMAGE, emlib.MDL_IMAGE_ORIGINAL)
+            alignmentMd.write(self._getOutputParticlesMdFilename())
+
+        else:
+            # Link
+            createLink(
+                self._getAlignmentMdFilename(lastIteration),
+                self._getOutputParticlesMdFilename()
+            )
+        
+        # Create output particles
+        self._createOutputClasses3D(volumes)
+        
+
     #--------------------------- UTILS functions --------------------------------------------        
     def _getIterationCount(self) -> int:
         return int(self.numberOfIterations)
