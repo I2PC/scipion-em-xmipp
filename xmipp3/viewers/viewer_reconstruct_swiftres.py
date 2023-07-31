@@ -66,7 +66,6 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         form.addParam('showWeights', LabelParam, label='Display radial weight profile')
         
         form.addSection(label='Classification')
-        form.addParam('showClassMigration', LabelParam, label='Display class migration diagram')
         form.addParam('showClassSizes', LabelParam, label='Display class sizes')
         
         form.addSection(label='Angular difference from previous iteration')
@@ -93,7 +92,6 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
             'showNoiseModel': self._showNoiseModel,
             'showWeights': self._showWeights,
             
-            'showClassMigration': self._showClassMigration,
             'showClassSizes': self._showClassSizes,
 
             'showAngleDiffMetadata': self._showAngleDiffMetadata,
@@ -389,19 +387,6 @@ class XmippReconstructSwiftresViewer(ProtocolViewer):
         
         return [fig]
 
-    def _showClassMigration(self, e):
-        fig, ax = plt.subplots()
-        
-        lines, points = self._computeClassMigrationElements()
-        
-        ax.add_collection(lines)
-        sc = ax.scatter(points[:,0], points[:,1], c=points[:,2])
-        ax.set_xlabel('Iteration')
-        ax.set_ylabel('Class')
-        fig.colorbar(sc, ax=ax)
-        
-        return [fig]
-        
     def _showClassSizes(self, e):
         fig, ax = plt.subplots()
         
