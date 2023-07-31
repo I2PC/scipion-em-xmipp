@@ -95,6 +95,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                       help='Consider the CTF of the particles')
 
         form.addSection(label='Global refinement')
+        form.addParam('reconstructLast', BooleanParam, label='Reconstruct last volume', default=True)
         form.addParam('numberOfIterations', IntParam, label='Number of iterations', default=3)
         form.addParam('numberOfLocalIterations', IntParam, label='Number of local iterations', default=1)
         form.addParam('numberOfAlignmentRepetitions', IntParam, label='Number of repetitions', default=2)
@@ -181,10 +182,11 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         compareAnglesStepId = self._insertFunctionStep('compareAnglesStep', iteration, prerequisites=alignIds)
 
         ids = []
-        for cls in range(self._getClassCount()):
-            reconstructIds = self._insertReconstructSteps(iteration, cls, prerequisites=alignIds)
-            postProcessIds = self._insertPostProcessSteps(iteration, cls, prerequisites=reconstructIds)
-            ids += postProcessIds
+        if self.reconstructLast or iteration < (self._getIterationCount() - 1):        
+            for cls in range(self._getClassCount()):
+                reconstructIds = self._insertReconstructSteps(iteration, cls, prerequisites=alignIds)
+                postProcessIds = self._insertPostProcessSteps(iteration, cls, prerequisites=reconstructIds)
+                ids += postProcessIds
         
         return ids + [compareAnglesStepId]
         
@@ -726,27 +728,29 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                 self._getOutputParticlesMdFilename()
             )
         
-        for cls in range(self._getClassCount()):
-            for i in range(1, 3):
-                createLink(
-                    self._getHalfVolumeFilename(lastIteration, cls, i), 
-                    self._getOutputHalfVolumeFilename(cls, i)
-                )
-                
-            createLink(
-                self._getFilteredVolumeFilename(lastIteration, cls),
-                self._getOutputVolumeFilename(cls)
-            )
-            createLink(
-                self._getFscFilename(lastIteration, cls), 
-                self._getOutputFscFilename(cls)
-            )
-        
-        # Create output objects
-        volumes = self._createOutputVolumes()
+        # Create output particles
         self._createOutputClasses3D(volumes)
-        self._createOutputFscs()
         
+        if self.reconstructLast:
+            for cls in range(self._getClassCount()):
+                for i in range(1, 3):
+                    createLink(
+                        self._getHalfVolumeFilename(lastIteration, cls, i), 
+                        self._getOutputHalfVolumeFilename(cls, i)
+                    )
+                    
+                createLink(
+                    self._getFilteredVolumeFilename(lastIteration, cls),
+                    self._getOutputVolumeFilename(cls)
+                )
+                createLink(
+                    self._getFscFilename(lastIteration, cls), 
+                    self._getOutputFscFilename(cls)
+                )
+            
+            # Create output objects
+            volumes = self._createOutputVolumes()
+            self._createOutputFscs()
     
     #--------------------------- UTILS functions --------------------------------------------        
     def _getIterationCount(self) -> int:
