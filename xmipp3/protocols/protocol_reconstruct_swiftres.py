@@ -22,7 +22,8 @@
 
 from pwem.protocols import ProtRefine3D
 from pwem.objects import (Volume, FSC, SetOfVolumes, Class3D, 
-                          SetOfParticles, SetOfClasses3D, Particle)
+                          SetOfParticles, SetOfClasses3D, Particle,
+                          Pointer )
 from pwem.convert import transformations
 from pwem import emlib
 
@@ -737,7 +738,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             self._createOutputFscs()
         else:
             # Create a dict mimicking the base-1 ids of SetOfVolumes
-            volumes = dict(enumerate(self.inputVolumes, start=1))
+            volumes = dict(enumerate(map(Pointer.get, self.inputVolumes), start=1))
     
         # Link last iteration
         if os.path.exists(self._getInputParticleStackFilename()):
