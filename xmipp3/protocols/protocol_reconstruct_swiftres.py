@@ -736,7 +736,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             volumes = self._createOutputVolumes()
             self._createOutputFscs()
         else:
-            volumes = self.inputVolumes
+            # Create a dict mimicking the base-1 ids of SetOfVolumes
+            volumes = dict(enumerate(self.inputVolumes, start=1))
     
         # Link last iteration
         if os.path.exists(self._getInputParticleStackFilename()):
