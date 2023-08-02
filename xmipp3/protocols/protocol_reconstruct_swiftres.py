@@ -161,7 +161,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _insertAllSteps(self):
         convertInputStepId = self._insertFunctionStep('convertInputStep', prerequisites=[])
         
-        if self.considerInputCtf:
+        if self.considerInputCtf and self.reconstructLast:
             correctCtfStepId = self._insertFunctionStep('correctCtfStep', prerequisites=[convertInputStepId])
             lastIds = [correctCtfStepId]
         else:
