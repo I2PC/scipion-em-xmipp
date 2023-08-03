@@ -131,6 +131,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                       help='When enabled, FAISS will be prompted to use half precision floating point '
                       'numbers. This may improve performance and/or memory footprint at some '
                       'accuracy cost. Only supported for GPUs')
+        form.addParam('usePrecomputed', BooleanParam, label='Precompute centroid distances', default=False, 
+                      help='When using PQ encoding precompute pairwise distances between centroids')
         form.addParam('databaseTrainingSetSize', IntParam, label='Database training set size', 
                       default=int(2e6),
                       help='Number of data-augmented particles to used when training the database')
@@ -454,6 +456,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             args += ['--device'] + self._getDeviceList()
         if self.useFloat16:
             args += ['--fp16']
+        if self.usePrecomputed:
+            args += ['--use_precomputed']
         if self.considerInputCtf:
             args += ['--ctf', self._getCtfGroupInfoMdFilename(iteration)]
             
@@ -502,6 +506,8 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             args += ['--device'] + self._getDeviceList()
         if local > 0:
             args += ['--local']
+        if self.usePrecomputed:
+            args += ['--use_precomputed']
         if self.considerInputCtf:
             args += ['--ctf', self._getCtfGroupInfoMdFilename(iteration)]
         
