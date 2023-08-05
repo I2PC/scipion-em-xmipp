@@ -1101,6 +1101,10 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             itemDataIterator=itertools.chain(emlib.metadata.iterRows(particlesMd), itertools.repeat(None))
         )
         
+        # Set the alignment for the output particle set
+        outputParticles: SetOfParticles = classes3d.getImages()
+        outputParticles.setAlignmentProj()
+        
         # Define the output
         self._defineOutputs(**{self.OUTPUT_CLASSES_NAME: classes3d})
         self._defineSourceRelation(self.inputParticles, classes3d)
