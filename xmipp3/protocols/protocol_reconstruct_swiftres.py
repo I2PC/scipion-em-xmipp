@@ -1092,18 +1092,15 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             clsId = cls.getObjId()
             representative = volumes[clsId]
             cls.setRepresentative(representative)
+            cls.setAlignmentProj()
             
         particlesMd = emlib.MetaData(self._getOutputParticlesMdFilename())
-        classes3d = self._createSetOfClasses3D(self.inputParticles)
+        classes3d: SetOfClasses3D = self._createSetOfClasses3D(self.inputParticles)
         classes3d.classifyItems(
             updateItemCallback=updateItem,
             updateClassCallback=updateClass,
             itemDataIterator=itertools.chain(emlib.metadata.iterRows(particlesMd), itertools.repeat(None))
         )
-        
-        # Set the alignment for the output particle set
-        outputParticles: SetOfParticles = classes3d.getImages()
-        outputParticles.setAlignmentProj()
         
         # Define the output
         self._defineOutputs(**{self.OUTPUT_CLASSES_NAME: classes3d})
