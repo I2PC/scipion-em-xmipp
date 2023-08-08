@@ -23,7 +23,7 @@
 from pwem.protocols import ProtRefine3D
 from pwem.objects import (Volume, FSC, SetOfVolumes, Class3D, 
                           SetOfParticles, SetOfClasses3D, Particle,
-                          Pointer )
+                          Pointer, SetOfFSCs )
 from pwem.convert import transformations
 from pwem import emlib
 
@@ -36,7 +36,7 @@ from pyworkflow.utils.path import (cleanPath, makePath, copyFile, moveFile,
                                    createLink, cleanPattern)
 
 import xmipp3
-from xmipp3.convert import writeSetOfParticles, rowToParticle
+from xmipp3.convert import readSetOfParticles, writeSetOfParticles, rowToParticle
 
 from typing import Iterable, Sequence, Optional
 import math
@@ -48,13 +48,21 @@ import os
 
 class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     OUTPUT_CLASSES_NAME = 'classes'
+    OUTPUT_PARTICLES_NAME = 'particles'
     OUTPUT_VOLUMES_NAME = 'volumes'
+    OUTPUT_VOLUME_NAME = 'volume'
+    OUTPUT_FSCS_NAME = 'fscs'
+    OUTPUT_FSC_NAME = 'fsc'
     
     _label = 'swiftres'
     _conda_env = 'xmipp_swiftalign'
     _possibleOutputs = {
         OUTPUT_CLASSES_NAME: SetOfClasses3D,
-        OUTPUT_VOLUMES_NAME: SetOfVolumes
+        OUTPUT_PARTICLES_NAME: SetOfParticles,
+        OUTPUT_VOLUMES_NAME: SetOfVolumes,
+        OUTPUT_VOLUME_NAME: Volume,
+        OUTPUT_FSCS_NAME: SetOfFSCs,
+        OUTPUT_FSC_NAME: FSC
     }
         
     def __init__(self, **kwargs):
@@ -172,7 +180,10 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         for i in range(self._getIterationCount()):
             lastIds = self._insertIterationSteps(i, prerequisites=lastIds)
         
-        self._insertFunctionStep('createOutputStep', prerequisites=lastIds)
+        if len(self.inputVolumes) == 1:
+            self._insertFunctionStep('createOutputOneStep', prerequisites=lastIds)
+        else:
+            self._insertFunctionStep('createOutputMultipleStep', prerequisites=lastIds)
  
     def _insertIterationSteps(self, iteration: int, prerequisites):
         setupIterationStepId = self._insertFunctionStep('setupIterationStep', iteration, prerequisites=prerequisites)
@@ -718,7 +729,49 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             self._getAlignmentMdFilename(iteration)
         )
     
-    def createOutputStep(self):
+    def createOutputOneStep(self):
+        lastIteration = self._getIterationCount() - 1
+        
+        # Create output volumes if necessary
+        if self.reconstructLast:
+            cls = 0
+            for i in range(1, 3):
+                createLink(
+                    self._getHalfVolumeFilename(lastIteration, cls, i), 
+                    self._getOutputHalfVolumeFilename(cls, i)
+                )
+                
+            createLink(
+                self._getFilteredVolumeFilename(lastIteration, cls),
+                self._getOutputVolumeFilename(cls)
+            )
+            createLink(
+                self._getFscFilename(lastIteration, cls), 
+                self._getOutputFscFilename(cls)
+            )
+            
+            # Create output objects
+            self._createOutputVolume(cls)
+            self._createOutputFsc(cls)
+    
+        # Link last iteration
+        if os.path.exists(self._getInputParticleStackFilename()):
+            # Use original images
+            alignmentMd = emlib.MetaData(self._getAlignmentMdFilename(lastIteration))
+            alignmentMd.copyColumn(emlib.MDL_IMAGE, emlib.MDL_IMAGE_ORIGINAL)
+            alignmentMd.write(self._getOutputParticlesMdFilename())
+
+        else:
+            # Link
+            createLink(
+                self._getAlignmentMdFilename(lastIteration),
+                self._getOutputParticlesMdFilename()
+            )
+        
+        # Create output particles
+        self._createOutputSetOfParticles()
+        
+    def createOutputMultipleStep(self):
         lastIteration = self._getIterationCount() - 1
         
         # Create output volumes if necessary
@@ -1109,6 +1162,17 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         
         return classes3d
     
+    def _createOutputSetOfParticles(self):
+        particles = self._createSetOfParticles()
+        readSetOfParticles(self._getOutputParticlesMdFilename(), particles)
+        
+        # Define the output
+        self._defineOutputs(**{self.OUTPUT_PARTICLES_NAME: particles})
+        self._defineSourceRelation(self.inputParticles, particles)
+        self._defineSourceRelation(self.inputVolumes, particles)
+        
+        return particles
+        
     def _createOutputVolumes(self):
         volumes = self._createSetOfVolumes()
         volumes.setSamplingRate(self._getSamplingRate())
@@ -1126,11 +1190,29 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             volumes.append(volume)
         
         # Define the output
-        self._defineOutputs(outputVolumes=volumes)
+        self._defineOutputs(**{self.OUTPUT_VOLUMES_NAME: volumes})
         self._defineSourceRelation(self.inputParticles, volumes)
         self._defineSourceRelation(self.inputVolumes, volumes)
         
         return volumes
+    
+    def _createOutputVolume(self, cls: int = 0):
+        volume=Volume(objId=cls+1)
+        
+        # Fill
+        volume.setFileName(self._getOutputVolumeFilename(cls))
+        volume.setHalfMaps([
+            self._getOutputHalfVolumeFilename(cls, 1),
+            self._getOutputHalfVolumeFilename(cls, 2),
+        ])
+        volume.setSamplingRate(self._getSamplingRate())
+
+        # Define the output
+        self._defineOutputs(**{self.OUTPUT_VOLUME_NAME: volume})
+        self._defineSourceRelation(self.inputParticles, volume)
+        self._defineSourceRelation(self.inputVolumes, volume)
+
+        return volume
     
     def _createOutputFscs(self):
         fscs = self._createSetOfFSCs()
@@ -1148,11 +1230,28 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
             fscs.append(fsc)
         
         # Define the output
-        self._defineOutputs(outputFSC=fscs)
+        self._defineOutputs(**{self.OUTPUT_FSCS_NAME: fscs})
         self._defineSourceRelation(self.inputParticles, fscs)
         self._defineSourceRelation(self.inputVolumes, fscs)
         
         return fscs
+    
+    def _createOutputFsc(self, cls: int = 0):
+        fsc = FSC(objId=cls+1)
+        
+        # Load from metadata
+        fsc.loadFromMd(
+            self._getOutputFscFilename(cls),
+            emlib.MDL_RESOLUTION_FREQ,
+            emlib.MDL_RESOLUTION_FRC
+        )
+        
+        # Define the output
+        self._defineOutputs(**{self.OUTPUT_FSC_NAME: fsc})
+        self._defineSourceRelation(self.inputParticles, fsc)
+        self._defineSourceRelation(self.inputVolumes, fsc)
+        
+        return fsc
     
     def _mergeMetadata(self, src: Iterable[str], dst: str):
         it = iter(src)
