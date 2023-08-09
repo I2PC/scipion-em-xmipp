@@ -1164,7 +1164,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     
     def _createOutputSetOfParticles(self):
         particles: SetOfParticles = self._createSetOfParticles()
-        particles.copyInfo(self.inputParticles)
+        particles.copyInfo(self.inputParticles.get())
         readSetOfParticles(self._getOutputParticlesMdFilename(), particles)
         
         # Define the output
