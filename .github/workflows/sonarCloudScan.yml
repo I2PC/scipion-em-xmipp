@@ -1,4 +1,4 @@
-# This workflow automates SonarCloud Scan over every Pull Request or push to master and devel
+# This workflow automates SonarCloud Scan
 # Workflow name
 name: SonarCloud Scan
 # Specify when the Action should be triggered:
@@ -14,9 +14,12 @@ jobs:
     name: SonarCloud
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      # Check out the repository in the pull request
+      - name: Checkout repository
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+      # Run SonarCloud Scan
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
