@@ -404,10 +404,8 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         images_matrix = np.zeros((batch, self.size, self.size))
         row = 1
         while (row < batch+1):
-            # M.getValue(xmippLib.MDL_IMAGE,row)
             images_matrix[row-1] = xmippLib.Image(M.getValue(xmippLib.MDL_IMAGE,row)).getData()
             row +=1
-        # print(images_matrix)
         np.save(self._getTmpPath("matrix.npy"), images_matrix)
 
         
