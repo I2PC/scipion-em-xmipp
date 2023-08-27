@@ -51,7 +51,7 @@ class XmippProtDeepGlobalAssignmentPredict(ProtAlign2D, xmipp3.XmippProtocol):
     """Predict the center particles using deep learning."""
     _label = 'deep global assignment predict'
     _lastUpdateVersion = VERSION_3_0
-    _conda_env = 'xmipp_DLTK_v1.0'
+    _conda_env = 'xmipp_DLTK_v0.3'
 
     def __init__(self, **args):
         ProtAlign2D.__init__(self, **args)
@@ -119,9 +119,9 @@ class XmippProtDeepGlobalAssignmentPredict(ProtAlign2D, xmipp3.XmippProtocol):
 
     def predict(self, gpuId):
         self.modelAng = self.inputModel.get()
-        args = "%s %s %s %s %s %d %d %d" % (
+        args = "%s %s %s %s %s" % (
             self._getExtraPath("trainingResized.xmd"), gpuId, self._getPath(), self.predictImgsFn,
-            self.modelAng._getExtraPath(), self.numAngModels.get(), self.tolerance.get(), self.maxModels.get())
+            self.modelAng._getExtraPath("modelAngular.h5"))
 
         self.runJob("xmipp_deep_global_assignment_predict", args, numberOfMpi=1, env=self.getCondaEnv())
 

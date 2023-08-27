@@ -51,7 +51,7 @@ class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
        to a volume, and they must have 3D alignment information. """
     _label = 'deep center'
     _lastUpdateVersion = VERSION_3_0
-    _conda_env = 'xmipp_DLTK_v1.0'
+    _conda_env = 'xmipp_DLTK_v0.3'
     _cond_modelPretrainTrue = 'modelPretrain==True'
     _cond_modelPretrainFalse = 'modelPretrain==False'
 
@@ -151,7 +151,7 @@ class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
         if self.modelPretrain:
             self.model = self.pretrainedModels.get()
             self.pretrained = 'yes'
-            self.pathToModel = self.model._getExtraPath("modelCenter0.h5")
+            self.pathToModel = self.model._getExtraPath("modelCenter")
 
         args = "%s %s %f %d %d %s %d %f %d %s %s" % (
             self._getExtraPath("trainingResized.xmd"), self._getExtraPath("modelCenter"), sig,

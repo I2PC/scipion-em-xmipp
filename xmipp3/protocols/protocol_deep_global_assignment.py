@@ -53,7 +53,7 @@ class XmippProtDeepGlobalAssignment(ProtAlign2D, xmipp3.XmippProtocol):
        to a volume, and they must have 3D alignment information. """
     _label = 'deep global assignment'
     _lastUpdateVersion = VERSION_3_0
-    _conda_env = 'xmipp_DLTK_v1.0'
+    _conda_env = 'xmipp_DLTK_v0.3'
     _cond_modelPretrainTrue = 'modelPretrain==True'
     _cond_modelPretrainFalse = 'modelPretrain==False'
 
@@ -157,12 +157,11 @@ class XmippProtDeepGlobalAssignment(ProtAlign2D, xmipp3.XmippProtocol):
         if self.modelPretrain:
             self.model = self.pretrainedModels.get()
             self.pretrained = 'yes'
-            self.pathToModel = self.model._getExtraPath("modelAngular0.h5")
+            self.pathToModel = self.model._getExtraPath("modelAngular.h5")
 
-        args = "%s %s %f %d %d %s %d %f %d %s %s %s" % (
-            self._getExtraPath("trainingResized.xmd"), self._getExtraPath(), sig,
-            self.numEpochs_ang, self.batchSize.get(), gpuId, self.numAngModels.get(), self.learningRate.get(),
-            self.patience.get(), self.pretrained, self.pathToModel, self.symmetryGroup.get())
+        args = "%s %s %f %d %d %s" % (
+            self._getExtraPath("trainingResized.xmd"), self._getExtraPath("modelAngular.h5"), sig,
+            self.numEpochs_ang, self.batchSize.get(), gpuId)
         print(args)
         self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
