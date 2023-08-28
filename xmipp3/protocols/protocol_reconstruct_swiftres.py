@@ -54,6 +54,15 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     OUTPUT_FSCS_NAME = 'fscs'
     OUTPUT_FSC_NAME = 'fsc'
     
+    OUTPUT_EXTRA_LABELS = [
+        #emlib.MDL_COST,
+        #emlib.MDL_WEIGHT,
+        #emlib.MDL_CORRELATION_IDX,
+        #emlib.MDL_CORRELATION_MASK,
+        #emlib.MDL_CORRELATION_WEIGHT,
+        #emlib.MDL_IMED
+    ]
+    
     _label = 'swiftres'
     _conda_env = 'xmipp_swiftalign'
     _possibleOutputs = {
@@ -1125,18 +1134,9 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         return float(self.initialMaxShift)
     
     def _createOutputClasses3D(self, volumes: SetOfVolumes):
-        EXTRA_LABELS = [
-            #emlib.MDL_COST,
-            #emlib.MDL_WEIGHT,
-            #emlib.MDL_CORRELATION_IDX,
-            #emlib.MDL_CORRELATION_MASK,
-            #emlib.MDL_CORRELATION_WEIGHT,
-            #emlib.MDL_IMED
-        ]
-        
         def updateItem(item: Particle, row: emlib.metadata.Row):
             if row is not None:
-                particle: Particle = rowToParticle(row, extraLabels=EXTRA_LABELS)
+                particle: Particle = rowToParticle(row, extraLabels=self.EXTRA_LABELS)
                 item.copy(particle)
             else:
                 item._appendItem = False
@@ -1165,7 +1165,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _createOutputSetOfParticles(self):
         particles: SetOfParticles = self._createSetOfParticles()
         particles.copyInfo(self.inputParticles.get())
-        readSetOfParticles(self._getOutputParticlesMdFilename(), particles)
+        readSetOfParticles(self._getOutputParticlesMdFilename(), particles, extraLabels=self.EXTRA_LABELS)
         
         # Define the output
         self._defineOutputs(**{self.OUTPUT_PARTICLES_NAME: particles})
