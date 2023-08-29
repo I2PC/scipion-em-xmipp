@@ -1136,7 +1136,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _createOutputClasses3D(self, volumes: SetOfVolumes):
         def updateItem(item: Particle, row: emlib.metadata.Row):
             if row is not None:
-                particle: Particle = rowToParticle(row, extraLabels=self.EXTRA_LABELS)
+                particle: Particle = rowToParticle(row, extraLabels=self.OUTPUT_EXTRA_LABELS)
                 item.copy(particle)
             else:
                 item._appendItem = False
@@ -1165,7 +1165,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
     def _createOutputSetOfParticles(self):
         particles: SetOfParticles = self._createSetOfParticles()
         particles.copyInfo(self.inputParticles.get())
-        readSetOfParticles(self._getOutputParticlesMdFilename(), particles, extraLabels=self.EXTRA_LABELS)
+        readSetOfParticles(self._getOutputParticlesMdFilename(), particles, extraLabels=self.OUTPUT_EXTRA_LABELS)
         
         # Define the output
         self._defineOutputs(**{self.OUTPUT_PARTICLES_NAME: particles})
