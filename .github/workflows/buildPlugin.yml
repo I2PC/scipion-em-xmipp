@@ -10,72 +10,56 @@ on:
 jobs:
   build:
     # Specify the machine to run the job on
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
 
     # Define the steps to be taken in the job
-    steps:
-    # Getting current test time
-    - name: Get current time
-      uses: josStorer/get-current-time@v2
-      id: current-time
-      with:
-        format: YYYYMMDD-HH
-        utcOffset: "+02:00"
+    steps:    
+    # Installing dependencies
+    - name: Install dependencies 
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libfftw3-dev libopenmpi-dev openmpi-bin libhdf5-dev python3-numpy python3-dev libtiff5-dev unzip libsqlite3-dev default-jdk git cmake libopencv-dev libopenmpi-dev make cmake
     
-    # Using current time to view test time (for debugging purposes)
-    - name: Use current time
-      env:
-        R_TIME: "${{ steps.current-time.outputs.readableTime }}"
-      run: echo $R_TIME
-    
-    #Installing CUDA
+    # Installing CUDA
     - name: Install CUDA
       uses: Jimver/cuda-toolkit@v0.2.10
       id: cuda-toolkit
       with:
         cuda: '11.7.0'
         linux-local-args: '[ "--toolkit" ]'
-    
-    # Echo CUDA Version
-    - name: Echo CUDA Version
-      run: echo "Installed cuda version is:${{steps.cuda-toolkit.outputs.cuda}}"
 
     # Installing Miniconda
     - name: Install Miniconda
       working-directory: ${{ github.workspace }}/../
       run: |
-        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
-        bash Miniconda3-latest-Linux-x86_64.sh -b -p ${{ github.workspace }}/../miniconda/ && \
+        wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+        bash Miniconda3-latest-Linux-x86_64.sh -b -p ${{ github.workspace }}/../miniconda/
         source ./miniconda/etc/profile.d/conda.sh
-    
-    #Updating libraries
-    - name: Update 
-      run: sudo apt-get update
+        conda update -n base -c defaults conda -y
         
-    #Installing Xmipp dependencies
-    - name: Install python dependencies
-      run:  python -m pip install --upgrade pip
-        pip install scons numpy
-    - name: Install dependencies
-      run: sudo apt-get install -y libfftw3-dev libopenmpi-dev openmpi-bin libhdf5-dev python3-numpy python3-dev libtiff5-dev unzip libsqlite3-dev default-jdk git cmake libopencv-dev
-
     # Installing Scipion
     - name: Install Scipion with dependencies
       working-directory: ${{ github.workspace }}/../
       run: |
-        sudo apt-get install -y gcc-10 g++-10 libopenmpi-dev make && \
-        eval "$(${{ github.workspace }}/../miniconda/bin/conda shell.bash hook)" && \
-        pip3 install --user scipion-installer && \
-        python3 -m scipioninstaller -conda -noXmipp -noAsk ${{ github.workspace }}/../scipion
+        eval "$(${{ github.workspace }}/../miniconda/bin/conda shell.bash hook)"
+        pip3 install --user scipion-installer
+        python3 -m scipioninstaller -conda -noXmipp -noAsk scipion
+    
+    # Installing Xmipp's Python dependencies in scipion conda enviroment
+    - name: Install scons in scipion enviroment
+      run: |
+        eval "$(${{ github.workspace }}/../miniconda/bin/conda shell.bash hook)"
+        conda activate scipion3
+        pip install scons
         
-    #Cloning Xmipp 
+    # Cloning Xmipp 
     - name: Cloning Xmipp
       working-directory: ${{ github.workspace }}/../
-      run: git clone https://github.com/I2PC/xmipp.git xmipp-bundle
+      run: git clone https://github.com/I2PC/xmipp.git
     
     # Checkout Xmipp to Pull Request branch if exists, by default stays in devel
     - name: Conditionally checkout Xmipp to ${{ github.head_ref }}
-      working-directory: ${{ github.workspace }}/../xmipp-bundle
+      working-directory: ${{ github.workspace }}/../xmipp
       env:
         BRANCH_NAME: ${{ github.head_ref }}
       run: |
@@ -83,12 +67,14 @@ jobs:
           git checkout $BRANCH_NAME
         fi
       
-    #Installing Xmipp
-    - name: Compile Xmipp
-      working-directory: ${{ github.workspace }}/../xmipp-bundle
+    # Installing Xmipp
+    - name: Compile Xmipp and show log
+      working-directory: ${{ github.workspace }}/../xmipp
       env:
         BUILD_TESTS: True
-      run: ${{ github.workspace }}/../scipion/scipion3 run ./xmipp noAsk
+      run: |
+        ../scipion/scipion3 run ./xmipp
+        cat compileLOG.txt
     
     # Check out the repository in the pull request
     - name: Checkout repository
@@ -99,4 +85,4 @@ jobs:
     # Install plugin from the pull request using the Scipion3 installp command
     - name: Install plugin from pull request
       working-directory: ${{ github.workspace }}
-      run: ../scipion/scipion3 installp -p . --devel
+      run: ../scipion/scipion3 installp -p . --devel --noBin

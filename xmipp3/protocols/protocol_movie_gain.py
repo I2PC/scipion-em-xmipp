@@ -41,6 +41,7 @@ import pyworkflow.protocol.constants as cons
 
 from pwem.objects import SetOfMovies, Movie, SetOfImages, Image
 from pwem.protocols import EMProtocol, ProtProcessMovies
+from pyworkflow import BETA, UPDATED, NEW, PROD
 
 from pwem import emlib
 import xmipp3.utils as xmutils
@@ -59,6 +60,7 @@ class XmippProtMovieGain(ProtProcessMovies):
     The same criteria is used for assigning the gain to the output movies (external corrected > external > estimated)
     """
     _label = 'movie gain'
+    _devStatus = UPDATED
     _lastUpdateVersion = VERSION_1_1
     _stepsCheckSecs = 60
     estimatedDatabase = 'estGains.sqlite'
@@ -407,7 +409,6 @@ class XmippProtMovieGain(ProtProcessMovies):
                     best_cor = minVal
                     best_transf = (angle,imir)
                     best_R = R
-                    # T = np.asarray([[1, 0, np.asscalar(corLoc[1])], [0, 1, np.asscalar(corLoc[0])], [0, 0, 1]])
                     T = np.asarray([[1, 0, corLoc[1].item()],
                                     [0, 1, corLoc[0].item()],
                                     [0, 0, 1]])
@@ -416,7 +417,6 @@ class XmippProtMovieGain(ProtProcessMovies):
                     best_cor = maxVal
                     best_transf = (angle, imir)
                     best_R = R
-                    # T = np.asarray([[1, 0, np.asscalar(corLoc[1])], [0, 1, np.asscalar(corLoc[0])], [0, 0, 1]])
                     T = np.asarray([[1, 0, corLoc[1].item()], 
                                     [0, 1, corLoc[0].item()],
                                     [0, 0, 1]])
