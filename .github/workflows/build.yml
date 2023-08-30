@@ -26,7 +26,6 @@ jobs:
       id: cuda-toolkit
       with:
         cuda: '11.8.0'
-        use-github-cache: false
         method: network
         sub-packages: '["nvcc", "toolkit"]'
 
