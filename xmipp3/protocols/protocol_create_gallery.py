@@ -51,7 +51,7 @@ class XmippProtCreateGallery(ProtAnalysis3D):
         form.addParam('symmetryGroup', StringParam, default="c1",
                       label='Symmetry group', 
                       help='See'
-                           'http://xmipp.cnb.uam.es/twiki/bin/view/Xmipp/Symmetry '
+                           'https://github.com/I2PC/xmipp-portal/wiki/Symmetry '
                            'for a description of the symmetry groups format. '
                            'If no symmetry is present, give c1')
 

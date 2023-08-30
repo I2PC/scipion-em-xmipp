@@ -40,7 +40,7 @@ from pwem.convert.atom_struct import toPdb, toCIF, AtomicStructHandler, addScipi
 import xmipp3
 
 
-VALIDATE_METHOD_URL = 'http://github.com/I2PC/scipion-em-xmipp/wiki/XmippProtValFit'
+VALIDATE_METHOD_URL = 'https://github.com/I2PC/scipion-em-xmipp/wiki/XmippProtValFit'
 OUTPUT_PDBVOL_FILE = 'pdbVol'
 OUTPUT_PDBMRC_FILE = 'pdb_volume.map'
 BLOCRES_AVG_FILE = 'blocresAvg'
