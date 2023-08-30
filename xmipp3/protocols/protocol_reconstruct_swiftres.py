@@ -30,7 +30,8 @@ from pwem import emlib
 from pyworkflow.protocol.params import (Form, PointerParam, 
                                         FloatParam, IntParam,
                                         StringParam, BooleanParam,
-                                        MultiPointerParam,
+                                        MultiPointerParam, EnumParam,
+                                        GT, GE, Range,
                                         LEVEL_ADVANCED, USE_GPU, GPU_LIST )
 from pyworkflow.utils.path import (cleanPath, makePath, copyFile, moveFile,
                                    createLink, cleanPattern)
@@ -61,6 +62,11 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         #emlib.MDL_CORRELATION_MASK,
         #emlib.MDL_CORRELATION_WEIGHT,
         #emlib.MDL_IMED
+    ]
+    
+    GRADIENT_DESCENT_OPTIONS = [
+        'None',
+        'RMSProp'
     ]
     
     _label = 'swiftres'
@@ -102,7 +108,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         form.addParam('symmetryGroup', StringParam, default='c1',
                       label='Symmetry group',
                       help='If no symmetry is present, give c1')
-        form.addParam('initialResolution', FloatParam, label="Initial resolution (A)", default=10.0,
+        form.addParam('initialResolution', FloatParam, label="Initial resolution (A)", default=10.0, validators=[GT(0)],
                       help='Image comparison resolution limit at the first iteration of the refinement')
         form.addParam('mask', PointerParam, label="Mask", pointerClass='VolumeMask', allowsNull=True,
                       help='The mask values must be between 0 (remove these pixels) and 1 (let them pass). Smooth masks are recommended.')
@@ -112,31 +118,43 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
                       default=True,
                       help='Consider the CTF of the particles')
 
-        form.addSection(label='Global refinement')
+        form.addSection(label='Refinement')
         form.addParam('reconstructLast', BooleanParam, label='Reconstruct last volume', default=True)
-        form.addParam('numberOfIterations', IntParam, label='Number of iterations', default=3)
-        form.addParam('numberOfLocalIterations', IntParam, label='Number of local iterations', default=1)
-        form.addParam('numberOfAlignmentRepetitions', IntParam, label='Number of repetitions', default=2)
-        form.addParam('maximumResolution', FloatParam, label="Maximum alignment resolution (A)", default=8.0,
+        form.addParam('numberOfIterations', IntParam, label='Number of iterations', default=3, validators=[GT(0)])
+        form.addParam('numberOfLocalIterations', IntParam, label='Number of local iterations', default=1, validators=[GT(0)])
+        form.addParam('numberOfAlignmentRepetitions', IntParam, label='Number of repetitions', default=2, validators=[GT(0)])
+        form.addParam('maximumResolution', FloatParam, label="Maximum alignment resolution (A)", default=8.0, validators=[GT(0)],
                       help='Image comparison resolution limit of the refinement')
-        form.addParam('nextResolutionCriterion', FloatParam, label="FSC criterion", default=0.5, 
+        form.addParam('nextResolutionCriterion', FloatParam, label="FSC criterion", default=0.5, validators=[Range(0, 1)], 
                       expertLevel=LEVEL_ADVANCED,
                       help='The resolution of the reconstruction is defined as the inverse of the frequency at which '\
                       'the FSC drops below this value. Typical values are 0.143 and 0.5' )
-        form.addParam('initialMaxPsi', FloatParam, label='Maximum psi (deg)', default=180.0,
+        form.addParam('initialMaxPsi', FloatParam, label='Maximum psi (deg)', default=180.0, validators=[Range(0, 180)],
                       expertLevel=LEVEL_ADVANCED,
                       help='Maximum psi parameter of the particles')
-        form.addParam('initialMaxShift', FloatParam, label='Maximum shift (px)', default=16.0,
+        form.addParam('initialMaxShift', FloatParam, label='Maximum shift (px)', default=16.0, validators=[GT(0)],
                       help='Maximum shift of the particle in pixels')
         form.addParam('useAutomaticStep', BooleanParam, label='Use automatic step', default=True,
                       expertLevel=LEVEL_ADVANCED,
                       help='Automatically determine the step used when exploring the projection landscape')
         stepGroup = form.addGroup('Steps', condition='not useAutomaticStep', expertLevel=LEVEL_ADVANCED)
-        stepGroup.addParam('angleStep', FloatParam, label='Angle step (deg)', default=5.0)
-        stepGroup.addParam('shiftStep', FloatParam, label='Shift step (px)', default=2.0)
-        form.addParam('reconstructPercentage', FloatParam, label='Reconstruct percentage (%)', default=50,
+        stepGroup.addParam('angleStep', FloatParam, label='Angle step (deg)', default=5.0, validators=[GT(0)])
+        stepGroup.addParam('shiftStep', FloatParam, label='Shift step (px)', default=2.0, validators=[GT(0)])
+        
+        form.addParam('gradientDescent', EnumParam, label='Gradient descent', choices=self.GRADIENT_DESCENT_OPTIONS,
+                      default=0, 
+                      help='If selected, each iteration will be subdivided in multiple iterations of a gradient descent')
+        form.addParam('minibatchSize', IntParam, label='Mini-batch size', default=16384,
+                       condition='gradientDescent > 0', validators=[GT(0)],
+                      help='Size of the minibatch when performing a gradient descent')
+        rmspropGroup = form.addGroup('RMSProp', condition='gradientDescent == 1', expertLevel=LEVEL_ADVANCED)
+        rmspropGroup.addParam('rmspropGamma', FloatParam, label='Gradient learning rate', default=0.9, validators=[Range(0,1)])
+        rmspropGroup.addParam('rmspropNu', FloatParam, label='Learning rate', default=0.001, validators=[GE(0)])
+        rmspropGroup.addParam('rmspropEps', FloatParam, label='Stability factor', default=1e-8, validators=[GE(0)])
+
+        form.addParam('reconstructPercentage', FloatParam, label='Reconstruct percentage (%)', default=50, validators=[Range(0,100)],
                       help='Percentage of best particles used for reconstruction')
-        form.addParam('numberOfMatches', IntParam, label='Number of matches', default=1,
+        form.addParam('numberOfMatches', IntParam, label='Number of matches', default=1, validators=[GE(0)],
                       help='Number of reference matches for each particle')
 
         form.addSection(label='Compute')
