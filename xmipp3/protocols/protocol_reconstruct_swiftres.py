@@ -717,6 +717,19 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         # Run
         self.runJob(reconstructProgram, args, numberOfMpi=numberOfMpi)
         
+    def rmspropGradientDescentStep(self, iteration: int, cls: int, half: int):
+        args = []
+        args += ['--map', self._getHalfVolumeFilename(iteration, cls, half)]
+        args += ['--rec', self._getReconstructionHalfVolumeFilename(iteration, cls, half)]
+        args += ['--sigma2', self._getHalfGradientFilename(iteration, cls, half)]
+        args += ['--gamma', self.rmspropGamma]
+        args += ['--nu', self.rmspropNu]
+        args += ['--eps', self.rmspropEps]
+        args += ['--omap', self._getHalfVolumeFilename(iteration, cls, half)]
+        args += ['--osigma2', self._getHalfGradientFilename(iteration, cls, half)]
+        
+        self.runJob('xmipp_rms_prop_reconstruction', args, numberOfMpi=1)
+        
     def computeFscStep(self, iteration: int, cls: int):
         args = []
         args += ['--ref', self._getHalfVolumeFilename(iteration, cls, 1)]
@@ -975,7 +988,13 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         return self._getClassPath(iteration, cls, 'well_aligned.xmd')
     
     def _getReconstructionHalfMdFilename(self, iteration: int, cls: int, half: int):
-        return self._getClassPath(iteration, cls, 'aligned%06d.xmd' % half)
+        return self._getClassPath(iteration, cls, 'aligned_half%01d.xmd' % half)
+
+    def _getReconstructionHalfVolumeFilename(self, iteration: int, cls: int, half: int):
+        return self._getClassPath(iteration, cls, 'reconstruction_half%01d.mrc' % half)
+
+    def _getHalfGradientFilename(self, iteration: int, cls: int, half: int):
+        return self._getClassPath(iteration, cls, 'gradient_half%01d.mrc' % half)
 
     def _getHalfVolumeFilename(self, iteration: int, cls: int, half: int):
         return self._getClassPath(iteration, cls, 'volume_half%01d.mrc' % half)
