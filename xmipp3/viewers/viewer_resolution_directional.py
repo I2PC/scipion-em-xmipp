@@ -164,7 +164,7 @@ class XmippMonoDirViewer(ProtocolViewer):
                       condition = binaryCondition,
                       label='Customized Color map',
                       help='Name of a color map to apply to be applied. Valid names can be found at '
-                            'http://matplotlib.org/1.3.0/examples/color/colormaps_reference.html')
+                            'https://matplotlib.org/1.3.0/examples/color/colormaps_reference.html')
         group.addParam('sliceAxis', EnumParam, default=AX_Z,
                        choices=['x', 'y', 'z'],
                        display=EnumParam.DISPLAY_HLIST,
