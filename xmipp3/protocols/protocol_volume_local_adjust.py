@@ -33,8 +33,9 @@ from pwem.objects import Volume, Transform
 from pwem.protocols import EMProtocol
 
 class XmippProtLocalVolAdj(EMProtocol):
-    """ Protocol to adjust locally volume intensity to a reference volume."""
+    """Protocol to adjust locally volume intensity to a reference volume."""
     _label = 'volume local adjustment'
+    _possibleOutputs = Volume
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
@@ -44,10 +45,10 @@ class XmippProtLocalVolAdj(EMProtocol):
         form.addParam('vol2', PointerParam, pointerClass='Volume', label="Input volume",
                       help='Specify a volume which will be adjusted to the reference volume.')
         form.addParam('mask', PointerParam, pointerClass='VolumeMask', label="Mask for reference volume",
-                      help='Specify a mask to define region of interest (which is signal in white (1s) and noise in '
+                      help='Specify a mask to define region of interest (which is signal in white (1s) and background in '
                            'black (0s))')
         form.addParam('neighborhood', IntParam, label="Neighborhood (A)", default=5,
-                      help='side length (in Angstroms) of a square which will define the region of adjustment')
+                      help='Side length (in Angstroms) of a square which will define the region of adjustment')
         form.addParam('subtract', BooleanParam, label="Perform subtraction?", default=False,
                       help='Perform subtraction of reference volume minus input volume in real space')
     # --------------------------- INSERT steps functions --------------------------------------------
@@ -92,7 +93,7 @@ class XmippProtLocalVolAdj(EMProtocol):
     def _summary(self):
         neighborhood = self.neighborhood.get()
         vol1 = self.vol1.get()
-        summary = ["Volume 1: %s\nVolume 2: %s\nInput mask 1: %s\n\nNeighborhood: %d A (%d px)" %
+        summary = ["Volume 1: %s\nVolume 2: %s\nInput mask 1: %s\n\nNeighborhood: %d Å (%d px)" %
                    (vol1.getFileName(), self.vol2.get().getFileName(), self.mask.get().getFileName(),
                     neighborhood, round(neighborhood/vol1.getSamplingRate()))]
         if self.subtract.get():
