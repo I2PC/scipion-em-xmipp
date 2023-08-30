@@ -158,7 +158,7 @@ class XmippMonoDirViewer(ProtocolViewer):
                       default=COLOR_JET,
                       label='Color map',
                       help='Select the color map to be applied '
-                            'http://matplotlib.org/1.3.0/examples/color/colormaps_reference.html.')
+                            'https://matplotlib.org/1.3.0/examples/color/colormaps_reference.html.')
         
         group.addParam('otherColorMap', StringParam, default='jet',
                       condition = binaryCondition,
