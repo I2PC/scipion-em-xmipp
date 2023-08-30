@@ -25,7 +25,7 @@ jobs:
       uses: Jimver/cuda-toolkit@v0.2.11
       id: cuda-toolkit
       with:
-        cuda: '11.7.0'
+        cuda: '11.9.0'
         linux-local-args: '[ "--toolkit" ]'
 
     # Installing Miniconda
