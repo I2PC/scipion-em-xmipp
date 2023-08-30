@@ -241,7 +241,7 @@ def installDeepLearningToolkit(plugin, env):
     cmdsInstall = list(CondaEnvManager.yieldInstallAllCmds(useGpu=useGpu))
 
     now = datetime.now()
-    installDLvars = {'modelsUrl': "http://scipion.cnb.csic.es/downloads/scipion/software/em",
+    installDLvars = {'modelsUrl': "https://scipion.cnb.csic.es/downloads/scipion/software/em",
                      'syncBin': plugin.getHome('bin/xmipp_sync_data'),
                      'modelsDir': plugin.getHome('models'),
                      'modelsPrefix': "models_UPDATED_on",
