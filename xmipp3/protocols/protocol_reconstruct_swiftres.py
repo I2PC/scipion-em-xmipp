@@ -728,7 +728,7 @@ class XmippProtReconstructSwiftres(ProtRefine3D, xmipp3.XmippProtocol):
         args += ['--omap', self._getHalfVolumeFilename(iteration, cls, half)]
         args += ['--osigma2', self._getHalfGradientFilename(iteration, cls, half)]
         
-        self.runJob('xmipp_rms_prop_reconstruction', args, numberOfMpi=1)
+        self.runJob('xmipp_rmsprop_reconstruction', args, numberOfMpi=1)
         
     def computeFscStep(self, iteration: int, cls: int):
         args = []
