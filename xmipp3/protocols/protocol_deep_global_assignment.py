@@ -47,6 +47,7 @@ from os.path import exists, join
 import xmipp3
 
 
+
 class XmippProtDeepGlobalAssignment(ProtAlign2D, xmipp3.XmippProtocol):
     """Learns a model to assign angles to particles using deep learning. Particles must be previously centered with respect
        to a volume, and they must have 3D alignment information. """
@@ -158,10 +159,10 @@ class XmippProtDeepGlobalAssignment(ProtAlign2D, xmipp3.XmippProtocol):
             self.pretrained = 'yes'
             self.pathToModel = self.model._getExtraPath("modelAngular0.h5")
 
-        args = "%s %s %f %d %d %s %d %f %d %s %s" % (
-            self._getExtraPath("trainingResized.xmd"), self._getExtraPath("modelAngular"), sig,
+        args = "%s %s %f %d %d %s %d %f %d %s %s %s" % (
+            self._getExtraPath("trainingResized.xmd"), self._getExtraPath('modelAngular'), sig,
             self.numEpochs_ang, self.batchSize.get(), gpuId, self.numAngModels.get(), self.learningRate.get(),
-            self.patience.get(), self.pretrained, self.pathToModel)
+            self.patience.get(), self.pretrained, self.pathToModel, self.symmetryGroup.get())
         print(args)
         self.runJob("xmipp_deep_global_assignment", args, numberOfMpi=1, env=self.getCondaEnv())
 
