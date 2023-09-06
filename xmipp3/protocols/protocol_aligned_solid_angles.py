@@ -190,7 +190,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D):
         return self.angularDistance.get()
     
     def _getInputVolumeFilename(self):
-        return self.inputVolume.get().getFilename()
+        return self.inputVolume.get().getFileName()
     
     def _getInputParticleMdFilename(self):
         return self._getPath('input_particles.xmd')
@@ -205,7 +205,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D):
         return self._getExtraPath('particles_wiener.mrcs')
 
     def _getGalleryMdFilename(self):
-        return self._getExtraPath('gallery.xmd')
+        return self._getExtraPath('gallery.doc')
 
     def _getGalleryStackFilename(self):
         return self._getExtraPath('gallery.mrcs')
