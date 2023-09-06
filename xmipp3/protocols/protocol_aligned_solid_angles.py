@@ -39,9 +39,10 @@ from pyworkflow.protocol.params import (Form, PointerParam,
                                         GT, GE, Range,
                                         LEVEL_ADVANCED, USE_GPU, GPU_LIST )
 
+import xmipp3
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles, rowToParticle
 
-class XmippProtAlignedSolidAngles(ProtAnalysis3D):
+class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     _label = 'aligned solid angles'
     _conda_env = 'xmipp_swiftalign'
     _devStatus = BETA
@@ -177,6 +178,10 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D):
         self.runJob("xmipp_angular_neighbourhood", args, numberOfMpi=1)
 
     # --------------------------- UTILS functions -------------------------------
+    def _getDeviceList(self):
+        gpus = self.getGpuList()
+        return list(map('cuda:{:d}'.format, gpus))
+    
     def _getSamplingRate(self):
         return float(self.inputParticles.get().getSamplingRate())
     
