@@ -124,10 +124,11 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
 
     def predict(self, gpuId):
         self.modelAng = self.inputModel.get()
-        args = "%s %s %s %s %s %d %d %d" % (
+        print('path to models', self.getModel('deep_center'))
+        args = "%s %s %s %s %s %d %d %d %s" % (
             self._getExtraPath("trainingResized.xmd"), gpuId, self._getPath(), self.predictImgsFn,
             self.modelAng._getExtraPath("modelCenter"), self.numModels.get(), self.tolerance.get(),
-            self.maxModels.get())
+            self.maxModels.get(), self.getModel('deep_center'))
 
         self.runJob("xmipp_deep_center_predict", args, numberOfMpi=1, env=self.getCondaEnv())
 
