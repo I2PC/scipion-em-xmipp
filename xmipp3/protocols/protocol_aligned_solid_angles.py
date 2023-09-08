@@ -106,6 +106,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
 
         self._insertFunctionStep('projectGalleryStep')
         self._insertFunctionStep('angularNeighborhoodStep')
+        self._insertFunctionStep('classifyStep')
 
     # --------------------------- STEPS functions -------------------------------
     def convertInputStep(self):
