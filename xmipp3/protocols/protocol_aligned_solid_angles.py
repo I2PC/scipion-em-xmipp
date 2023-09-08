@@ -182,17 +182,19 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         
     def classifyStep(self):
         directionMd = emlib.MetaData(self._getGalleryAnglesMdFilename())
-        row = emlib.metadata.Row()
+        directionalClassesMd = emlib.MetaData()
         particles = emlib.MetaData()
+        directionRow = emlib.metadata.Row()
+        directionalClassRow = emlib.metadata.Row()
         
         for block in emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename()):
             directionId = int(block.split("_")[1])
             
             # Read information from the metadata
-            row.readFromMd(directionMd, directionId)
-            rot = row.getValue(emlib.ANGLE_ROT)
-            tilt = row.getValue(emlib.ANGLE_TILT)
-            psi = row.getValue(emlib.ANGLE_PSI)
+            directionRow.readFromMd(directionMd, directionId)
+            rot = directionRow.getValue(emlib.MDL_ANGLE_ROT)
+            tilt = directionRow.getValue(emlib.MDL_ANGLE_TILT)
+            psi = directionRow.getValue(emlib.MDL_ANGLE_PSI)
             
             # Create the working directory for the direction            
             makePath(self._getDirectionPath(directionId))
@@ -212,7 +214,17 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
 
             env = self.getCondaEnv()
             env['LD_LIBRARY_PATH'] = '' # Torch does not like it
-            self.runJob('xmipp_aligned_2d_claassification', args, numberOfMpi=1, env=env)
+            self.runJob('xmipp_swiftalign_aligned_2d_classification', args, numberOfMpi=1, env=env)
+            
+            # Write class information
+            directionalClassRow.copyFromRow(directionRow)
+            for classId in range(2):
+                directionalClassRow.setValue(emlib.MDL_REF2, classId)
+                directionalClassRow.setValue(emlib.MDL_IMAGE, '{:06d}@{}'.format(classId, self._getDirectionalClassesStackFilename(directionId)))
+                directionalClassRow.addToMd(directionalClassesMd)
+                
+        directionalClassesMd.write(self._getDirectionalClassesMdFilename())
+            
             
 
     # --------------------------- UTILS functions -------------------------------
@@ -267,3 +279,6 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
 
     def _getDirectionalClassesStackFilename(self, direction_id: int):
         return self._getDirectionPath(direction_id, 'classes.mrcs')
+    
+    def _getDirectionalClassesMdFilename(self):
+        return self._getExtraPath('directional_classes.xmd')
