@@ -86,6 +86,9 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         form.addParam('angularDistance', FloatParam, label='Angular distance',
                       default=10.0, validators=[Range(0,180)],
                       help='Maximum angular distance in degrees')
+        form.addParam('pcaQuantile', FloatParam, label='PCA Quantile',
+                      default=0.1, validators=[Range(0,0.5)],
+                      help='PCA Quantile used for obtaining class averages')
         
         form.addParallelSection(threads=0, mpi=8)
 
@@ -209,6 +212,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             args += ['-o', self._getDirectionalClassesStackFilename(directionId)]
             args += ['--align_to', rot, tilt, psi]
             args += ['--batch', self.batchSize]
+            args += ['-q', self.pcaQuantile]
             if self.useGpu:
                 args += ['--device'] + self._getDeviceList()
 
