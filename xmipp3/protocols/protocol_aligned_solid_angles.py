@@ -26,12 +26,14 @@
 
 import os.path
 
+from pwem import emlib
 from pwem.protocols import ProtAnalysis3D
 from pwem.objects import (Volume, FSC, SetOfVolumes, Class3D, 
                           SetOfParticles, SetOfClasses3D, Particle,
                           Pointer, SetOfFSCs )
 
 from pyworkflow import BETA
+from pyworkflow.utils import makePath
 from pyworkflow.protocol.params import (Form, PointerParam, 
                                         FloatParam, IntParam,
                                         StringParam, BooleanParam,
@@ -176,6 +178,41 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         # Compute several groups of the experimental images into
         # different angular neighbourhoods
         self.runJob("xmipp_angular_neighbourhood", args, numberOfMpi=1)
+        
+    def classifyStep(self):
+        directionMd = emlib.MetaData(self._getGalleryAnglesMdFilename())
+        row = emlib.metadata.Row()
+        particles = emlib.MetaData()
+        
+        for block in emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename()):
+            directionId = int(block.split("_")[1])
+            
+            # Read information from the metadata
+            row.readFromMd(directionMd, directionId)
+            rot = row.getValue(emlib.ANGLE_ROT)
+            tilt = row.getValue(emlib.ANGLE_TILT)
+            psi = row.getValue(emlib.ANGLE_PSI)
+            
+            # Create the working directory for the direction            
+            makePath(self._getDirectionPath(directionId))
+            
+            # Copy the particles
+            particles.readBlock(self._getNeighborsMdFilename(), block)
+            particles.write(self._getDirectionParticlesMdFilename(directionId))
+            
+            # Perform the classification
+            args = []
+            args += ['-i', self._getDirectionParticlesMdFilename(directionId)]
+            args += ['-o', self._getDirectionalClassesStackFilename(directionId)]
+            args += ['--align_to', rot, tilt, psi]
+            args += ['--batch', self.batchSize]
+            if self.useGpu:
+                args += ['--device'] + self._getDeviceList()
+
+            env = self.getCondaEnv()
+            env['LD_LIBRARY_PATH'] = '' # Torch does not like it
+            self.runJob('xmipp_aligned_2d_claassification', args, numberOfMpi=1, env=env)
+            
 
     # --------------------------- UTILS functions -------------------------------
     def _getDeviceList(self):
@@ -212,8 +249,20 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     def _getGalleryMdFilename(self):
         return self._getExtraPath('gallery.doc')
 
+    def _getGalleryAnglesMdFilename(self):
+        return self._getExtraPath('gallery_angles.doc')
+
     def _getGalleryStackFilename(self):
         return self._getExtraPath('gallery.mrcs')
 
     def _getNeighborsMdFilename(self):
         return self._getExtraPath('neighbors.xmd')
+    
+    def _getDirectionPath(self, direction_id: int, *paths):
+        return self._getExtraPath('direction_%06d' % direction_id, *paths)
+    
+    def _getDirectionParticlesMdFilename(self, direction_id: int):
+        return self._getDirectionPath(direction_id, 'particles.xmd')
+
+    def _getDirectionalClassesStackFilename(self, direction_id: int):
+        return self._getDirectionPath(direction_id, 'classes.mrcs')
