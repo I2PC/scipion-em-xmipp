@@ -224,7 +224,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             directionalClassRow.copyFromRow(directionRow)
             for classId in range(2):
                 directionalClassRow.setValue(emlib.MDL_REF2, classId)
-                directionalClassRow.setValue(emlib.MDL_IMAGE, '{:06d}@{}'.format(classId, self._getDirectionalClassesStackFilename(directionId)))
+                directionalClassRow.setValue(emlib.MDL_IMAGE, '{:06d}@{}'.format(classId+1, self._getDirectionalClassesStackFilename(directionId)))
                 directionalClassRow.addToMd(directionalClassesMd)
                 
         directionalClassesMd.write(self._getDirectionalClassesMdFilename())
