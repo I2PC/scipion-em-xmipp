@@ -72,7 +72,8 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
                       pointerClass=Volume,
                       help='Input volume')
         form.addParam('symmetryGroup', StringParam, label='Symmetry group', default='c1')
-
+        form.addParam('resize', IntParam, label='Resize', default=0,
+                      validators=[GT(0)])
 
         form.addSection(label='CTF')
         form.addParam('considerInputCtf', BooleanParam, label='Consider CTF',
@@ -123,15 +124,19 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             return ext == '.mrc' or ext == '.mrcs'
         
         # Convert to MRC if necessary
-        if self.copyParticles or not all(map(is_mrc, particles.getFiles())):
+        if self.copyParticles or self.resize or not all(map(is_mrc, particles.getFiles())):
             args = []
             args += ['-i', self._getInputParticleMdFilename()]
             args += ['-o', self._getInputParticleStackFilename()]
             args += ['--save_metadata_stack', self._getInputParticleMdFilename()]
             args += ['--keep_input_columns']
             args += ['--track_origin']
-
-            self.runJob('xmipp_image_convert', args, numberOfMpi=1)
+            
+            if self.resize:
+                args += ['--fourier', self.resize]
+                self.runJob('xmipp_image_resize', args)
+            else:
+                self.runJob('xmipp_image_convert', args, numberOfMpi=1)
     
     def correctCtfStep(self):
         particles: SetOfParticles = self.inputParticles.get()
