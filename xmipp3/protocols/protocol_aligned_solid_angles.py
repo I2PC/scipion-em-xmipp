@@ -209,7 +209,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             # Perform the classification
             args = []
             args += ['-i', self._getDirectionParticlesMdFilename(directionId)]
-            args += ['-o', self._getDirectionalClassesStackFilename(directionId)]
+            args += ['-o', self._getDirectionPath(directionId, '')]
             args += ['--align_to', rot, tilt, psi]
             args += ['--batch', self.batchSize]
             args += ['-q', self.pcaQuantile]
