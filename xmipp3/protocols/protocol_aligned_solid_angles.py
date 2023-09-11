@@ -191,6 +191,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     def classifyStep(self):
         directionMd = emlib.MetaData(self._getGalleryAnglesMdFilename())
         directionalClassesMd = emlib.MetaData()
+        eigenImagesMd = emlib.MetaData()
         particles = emlib.MetaData()
         directionRow = emlib.metadata.Row()
         directionalClassRow = emlib.metadata.Row()
@@ -227,11 +228,14 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             
             # Write class information
             directionalClassRow.copyFromRow(directionRow)
+            directionalClassRow.setValue(emlib.MDL_IMAGE, self._getDirectionalEigenImageFilename(directionId))
+            directionalClassRow.addToMd(eigenImagesMd)
+
             for classId in range(2):
                 directionalClassRow.setValue(emlib.MDL_REF2, classId)
-                directionalClassRow.setValue(emlib.MDL_IMAGE, '{:06d}@{}'.format(classId+1, self._getDirectionalClassesStackFilename(directionId)))
                 directionalClassRow.addToMd(directionalClassesMd)
                 
+        eigenImagesMd.write(self._getDirectionalEigenImagesMdFilename())
         directionalClassesMd.write(self._getDirectionalClassesMdFilename())
             
             
@@ -288,6 +292,12 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
 
     def _getDirectionalClassesStackFilename(self, direction_id: int):
         return self._getDirectionPath(direction_id, 'classes.mrcs')
+    
+    def _getDirectionalEigenImageFilename(self, direction_id: int):
+        return self._getDirectionPath(direction_id, 'eigen_image.mrc')
+    
+    def _getDirectionalEigenImagesMdFilename(self):
+        return self._getExtraPath('eigen_images.xmd')
     
     def _getDirectionalClassesMdFilename(self):
         return self._getExtraPath('directional_classes.xmd')
