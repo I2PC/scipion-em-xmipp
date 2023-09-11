@@ -39,6 +39,7 @@ from .protocol_apply_transformation_matrix import XmippProtApplyTransformationMa
 from .protocol_break_symmetry import XmippProtAngBreakSymmetry
 from .protocol_cl2d_align import XmippProtCL2DAlign
 from .protocol_cl2d import XmippProtCL2D
+from .protocol_classify_pca import XmippProtClassifyPca
 #from .protocol_classify_kmeans2d import XmippProtKmeansClassif2D
 from .protocol_classification_gpuCorr import XmippProtGpuCrrCL2D
 from .protocol_classification_gpuCorr_semi import XmippProtStrGpuCrrSimple
