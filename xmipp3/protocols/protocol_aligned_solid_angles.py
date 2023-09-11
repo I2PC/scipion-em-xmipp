@@ -194,6 +194,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         eigenImagesMd = emlib.MetaData()
         particles = emlib.MetaData()
         directionRow = emlib.metadata.Row()
+        eigenImageRow = emlib.metadata.Row()
         directionalClassRow = emlib.metadata.Row()
         
         for block in emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename()):
@@ -227,10 +228,11 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             self.runJob('xmipp_swiftalign_aligned_2d_classification', args, numberOfMpi=1, env=env)
             
             # Write class information
-            directionalClassRow.copyFromRow(directionRow)
-            directionalClassRow.setValue(emlib.MDL_IMAGE, self._getDirectionalEigenImageFilename(directionId))
-            directionalClassRow.addToMd(eigenImagesMd)
+            eigenImageRow.copyFromRow(directionRow)
+            eigenImageRow.setValue(emlib.MDL_IMAGE, self._getDirectionalEigenImageFilename(directionId))
+            eigenImageRow.addToMd(eigenImagesMd)
 
+            directionalClassRow.copyFromRow(directionRow)
             for classId in range(2):
                 directionalClassRow.setValue(emlib.MDL_REF2, classId)
                 directionalClassRow.addToMd(directionalClassesMd)
