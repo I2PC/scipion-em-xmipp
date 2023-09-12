@@ -93,7 +93,7 @@ class XmippProtSNRViewer(LocalResolutionViewer):
         title = 'Histogram of SNR'
         xlabel = 'SNR'
         mdLabelX = emlib.MDL_IDX
-        mdLabelY = emlib.MDL_RESOLUTION_SSNR
+        mdLabelY = emlib.MDL_RESOLUTION_FRC
         md = xmippLib.MetaData(fnmd)
         xx = md.getColumnValues(mdLabelX)
         yy = md.getColumnValues(mdLabelY)
