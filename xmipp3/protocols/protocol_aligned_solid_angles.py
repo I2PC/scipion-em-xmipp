@@ -49,6 +49,7 @@ import itertools
 import numpy as np
 
 import scipy.sparse
+import networkx as nx
 
 class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     _label = 'aligned solid angles'
@@ -93,6 +94,8 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         form.addParam('angularDistance', FloatParam, label='Angular distance',
                       default=10.0, validators=[Range(0,180)],
                       help='Maximum angular distance in degrees')
+        form.addParam('checkMirrors', BooleanParam, label='Check mirrors',
+                      default=False)
         form.addParam('pcaQuantile', FloatParam, label='PCA Quantile',
                       default=0.1, validators=[Range(0,0.5)],
                       help='PCA Quantile used for obtaining class averages')
@@ -118,6 +121,8 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('angularNeighborhoodStep')
         self._insertFunctionStep('classifyStep')
         self._insertFunctionStep('buildGraphStep')
+        self._insertFunctionStep('isingModelOptimizationStep')
+        self._insertFunctionStep('classificationStep')
 
     # --------------------------- STEPS functions -------------------------------
     def convertInputStep(self):
@@ -177,8 +182,9 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         #args += ['--method', 'fourier', 1, 1, 'bspline'] 
         args += ['--method', 'real_space'] 
         args += ['--compute_neighbors']
-        args += ['--max_tilt_angle', 90]
         args += ['--experimental_images', self._getInputParticleMdFilename()]
+        if self.checkMirrors:
+            args += ['--max_tilt_angle', 90]
 
         # Create a gallery of projections of the input volume
         # with the given angular sampling
@@ -197,6 +203,8 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         args += ['-o', self._getNeighborsMdFilename()]
         args += ['--dist', self._getAngularDistance()]
         args += ['--sym', self._getSymmetryGroup()]
+        if self.checkMirrors:
+            args += ['--check_mirrors']
 
         # Compute several groups of the experimental images into
         # different angular neighbourhoods
@@ -313,8 +321,72 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         graph = scipy.sparse.csr_matrix(adjacency)
         scipy.sparse.save_npz(self._getGraphFilename(), graph)
         
-    def optimizeRelationsStep(self):
-        pass
+    def isingModelOptimizationStep(self):
+        graph = nx.from_scipy_sparse_array(-scipy.sparse.load_npz(self._getGraphFilename()))
+        _, (v0, v1) = nx.approximation.one_exchange(
+            graph, 
+            weight='weight'
+        )
+        
+        # Invert the least amount of directions
+        invert_list = min(v0, v1, key=len)
+        print(invert_list)
+        
+        blocks = emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename())
+        classificationMd = emlib.MetaData()
+        for i in invert_list:
+            # Get the direction id
+            block = blocks[i]
+            directionId = int(block.split("_")[1])
+            
+            # Read the classificationMetaData
+            classificationMdFilename = self._getDirectionalClassificationMdFilename(directionId)
+            classificationMd.read(classificationMdFilename)
+            
+            # Invert the PCA projection values
+            classificationMd.operate('scoreByPcaResidual=-scoreByPcaResidual')
+            
+            # Overwrite
+            classificationMd.write(classificationMdFilename)
+    
+    def classificationStep(self):
+        result = emlib.MetaData(self._getInputParticleMdFilename())
+        
+        directionalClassificationMd = emlib.MetaData()
+        result.addLabel(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
+        blocks = emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename())
+        for block in blocks:
+            # Get the direction id
+            directionId = int(block.split("_")[1])
+            
+            # Read the directional classfication
+            directionalClassificationMd.read(self._getDirectionalClassificationMdFilename(directionId))
+            for objId in directionalClassificationMd:
+                itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId)
+                projection = directionalClassificationMd.getValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, objId)
+                
+                if result.getValue(emlib.MDL_ITEM_ID, itemId) != itemId:
+                    raise NotImplementedError('Non contiguous itemId-s are not supported yet')
+                
+                # Increment the projection value
+                projection += result.getValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, itemId)
+
+                # Overwrite
+                result.setValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, projection, itemId)
+        
+        
+        # Classify items according to their projection ign
+        result.addLabel(emlib.MDL_REF3D)
+        result.operate('ref3d=(scoreByPcaResidual>0)+1')
+        
+        # Replace with the original image label
+        if result.containsLabel(emlib.MDL_IMAGE_ORIGINAL):
+            result.removeLabel(emlib.MDL_IMAGE)
+            result.renameColumn(emlib.MDL_IMAGE_ORIGINAL, emlib.MDL_IMAGE)
+        
+        # Store
+        result.write(self._getOutputMetadataFilename())
+        
         
     # --------------------------- UTILS functions -------------------------------
     def _getDeviceList(self):
@@ -383,3 +455,6 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     
     def _getGraphFilename(self):
         return self._getExtraPath('graph.npz')
+    
+    def _getOutputMetadataFilename(self):
+        return self._getPath('output_particles.xmd')
