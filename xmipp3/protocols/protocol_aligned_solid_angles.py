@@ -24,11 +24,10 @@
 # *
 # **************************************************************************
 
-import os.path
 
 from pwem import emlib
 from pwem.protocols import ProtAnalysis3D
-from pwem.objects import (Volume, FSC, SetOfVolumes, Class3D, 
+from pwem.objects import (VolumeMask, Class3D, 
                           SetOfParticles, SetOfClasses3D, Particle,
                           Pointer, SetOfFSCs )
 
@@ -43,6 +42,13 @@ from pyworkflow.protocol.params import (Form, PointerParam,
 
 import xmipp3
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles, rowToParticle
+
+import os.path
+import math
+import itertools
+import numpy as np
+
+import scipy.sparse
 
 class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     _label = 'aligned solid angles'
@@ -68,9 +74,9 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         form.addParam('inputParticles', PointerParam, label='Particles', important=True,
                       pointerClass=SetOfParticles,
                       help='Input particle set')
-        form.addParam('inputVolume', PointerParam, label='Volume', important=True,
-                      pointerClass=Volume,
-                      help='Input volume')
+        form.addParam('inputMask', PointerParam, label='Mask', important=True,
+                      pointerClass=VolumeMask,
+                      help='Volume mask used for focussing the classification')
         form.addParam('symmetryGroup', StringParam, label='Symmetry group', default='c1')
         form.addParam('resize', IntParam, label='Resize', default=0,
                       validators=[GT(0)])
@@ -108,9 +114,10 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         if self.considerInputCtf:
             self._insertFunctionStep('correctCtfStep')
 
-        self._insertFunctionStep('projectGalleryStep')
+        self._insertFunctionStep('projectMaskStep')
         self._insertFunctionStep('angularNeighborhoodStep')
         self._insertFunctionStep('classifyStep')
+        self._insertFunctionStep('buildGraphStep')
 
     # --------------------------- STEPS functions -------------------------------
     def convertInputStep(self):
@@ -160,14 +167,15 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         env['LD_LIBRARY_PATH'] = '' # Torch does not like it
         self.runJob('xmipp_swiftalign_wiener_2d', args, numberOfMpi=1, env=env)
 
-    def projectGalleryStep(self):
+    def projectMaskStep(self):
         args = []
-        args += ['-i', self._getInputVolumeFilename()]
-        args += ['-o', self._getGalleryStackFilename()]
+        args += ['-i', self._getInputMaskFilename()]
+        args += ['-o', self._getMaskGalleryStackFilename()]
         args += ['--sampling_rate', self._getAngularSampling()]
         args += ['--angular_distance', self._getAngularDistance()]
         args += ['--sym', self._getSymmetryGroup()]
-        args += ['--method', 'fourier', 1, 0.25, 'bspline'] 
+        #args += ['--method', 'fourier', 1, 1, 'bspline'] 
+        args += ['--method', 'real_space'] 
         args += ['--compute_neighbors']
         args += ['--max_tilt_angle', 90]
         args += ['--experimental_images', self._getInputParticleMdFilename()]
@@ -176,10 +184,16 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         # with the given angular sampling
         self.runJob("xmipp_angular_project_library", args)
         
+        # Binarize the mask
+        args = []
+        args += ['-i', self._getMaskGalleryMdFilename()]
+        args += ['--ge', 1]
+        self.runJob("xmipp_image_operate", args)
+        
     def angularNeighborhoodStep(self):
         args = []
         args += ['--i1', self._getInputParticleMdFilename()]
-        args += ['--i2', self._getGalleryMdFilename()]
+        args += ['--i2', self._getMaskGalleryMdFilename()]
         args += ['-o', self._getNeighborsMdFilename()]
         args += ['--dist', self._getAngularDistance()]
         args += ['--sym', self._getSymmetryGroup()]
@@ -189,11 +203,11 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         self.runJob("xmipp_angular_neighbourhood", args, numberOfMpi=1)
         
     def classifyStep(self):
-        directionMd = emlib.MetaData(self._getGalleryAnglesMdFilename())
+        maskGalleryMd = emlib.MetaData(self._getMaskGalleryMdFilename())
         directionalClassesMd = emlib.MetaData()
         eigenImagesMd = emlib.MetaData()
         particles = emlib.MetaData()
-        directionRow = emlib.metadata.Row()
+        maskRow = emlib.metadata.Row()
         eigenImageRow = emlib.metadata.Row()
         directionalClassRow = emlib.metadata.Row()
         
@@ -201,11 +215,12 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             directionId = int(block.split("_")[1])
             
             # Read information from the metadata
-            directionRow.readFromMd(directionMd, directionId)
-            rot = directionRow.getValue(emlib.MDL_ANGLE_ROT)
-            tilt = directionRow.getValue(emlib.MDL_ANGLE_TILT)
-            psi = directionRow.getValue(emlib.MDL_ANGLE_PSI)
-            
+            maskRow.readFromMd(maskGalleryMd, directionId)
+            maskFilename = maskRow.getValue(emlib.MDL_IMAGE)
+            rot = maskRow.getValue(emlib.MDL_ANGLE_ROT)
+            tilt = maskRow.getValue(emlib.MDL_ANGLE_TILT)
+            psi = maskRow.getValue(emlib.MDL_ANGLE_PSI)
+                
             # Create the working directory for the direction            
             makePath(self._getDirectionPath(directionId))
             
@@ -217,6 +232,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             args = []
             args += ['-i', self._getDirectionParticlesMdFilename(directionId)]
             args += ['-o', self._getDirectionPath(directionId, '')]
+            args += ['--mask', maskFilename]
             args += ['--align_to', rot, tilt, psi]
             args += ['--batch', self.batchSize]
             args += ['-q', self.pcaQuantile]
@@ -228,11 +244,11 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             self.runJob('xmipp_swiftalign_aligned_2d_classification', args, numberOfMpi=1, env=env)
             
             # Write class information
-            eigenImageRow.copyFromRow(directionRow)
+            eigenImageRow.copyFromRow(maskRow)
             eigenImageRow.setValue(emlib.MDL_IMAGE, self._getDirectionalEigenImageFilename(directionId))
             eigenImageRow.addToMd(eigenImagesMd)
 
-            directionalClassRow.copyFromRow(directionRow)
+            directionalClassRow.copyFromRow(maskRow)
             for classId in range(2):
                 directionalClassRow.setValue(emlib.MDL_REF2, classId)
                 directionalClassRow.addToMd(directionalClassesMd)
@@ -240,8 +256,66 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         eigenImagesMd.write(self._getDirectionalEigenImagesMdFilename())
         directionalClassesMd.write(self._getDirectionalClassesMdFilename())
             
+    def buildGraphStep(self):
+        blocks = emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename())
+        directionIds = list(map(lambda block : int(block.split("_")[1]), blocks ))
+        
+        directionMd = emlib.MetaData(self._getMaskGalleryAnglesMdFilename())
+        md0 = emlib.MetaData()
+        md1 = emlib.MetaData()
+        
+        minimumDirectionDot = math.cos(math.radians(2*float(self.angularDistance)))
+        
+        adjacency = np.zeros((len(blocks), )*2)
+        for idx0, idx1 in itertools.combinations(range(len(blocks)), r=2):
+            # Get de direction ids of the indices
+            directionId0 = directionIds[idx0]
+            directionId1 = directionIds[idx1]
             
-
+            # Get the direction vectors
+            direction0 = [
+                directionMd.getValue(emlib.MDL_X, directionId0),
+                directionMd.getValue(emlib.MDL_Y, directionId0),
+                directionMd.getValue(emlib.MDL_Z, directionId0)
+            ]
+            direction1 = [
+                directionMd.getValue(emlib.MDL_X, directionId1),
+                directionMd.getValue(emlib.MDL_Y, directionId1),
+                directionMd.getValue(emlib.MDL_Z, directionId1)
+            ]
+            
+            # Compute the dot product of the angle difference for this pair
+            directionDot = np.dot(direction0, direction1)
+            
+            # Only consider if nearby angles
+            if directionDot > minimumDirectionDot:
+                # Obtain the intersection of the particles belonging to
+                # both directions
+                md0.read(self._getDirectionalClassificationMdFilename(directionId0))
+                md1.read(self._getDirectionalClassificationMdFilename(directionId1))
+                md0.intersection(md1, emlib.MDL_ITEM_ID)
+                md1.intersection(md0, emlib.MDL_ITEM_ID)
+                
+                # Get their PCA projection values
+                projection0 = md0.getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
+                projection1 = md1.getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
+                
+                # Compute the similarity as the dot product of their
+                # PCA projections
+                similarity = np.dot(projection0, projection1)
+                
+                # Write the similarity in symmetric positions of the adjacency
+                # matrix
+                adjacency[idx0, idx1] = similarity
+                adjacency[idx1, idx0] = similarity
+        
+        # Save the graph
+        graph = scipy.sparse.csr_matrix(adjacency)
+        scipy.sparse.save_npz(self._getGraphFilename(), graph)
+        
+    def optimizeRelationsStep(self):
+        pass
+        
     # --------------------------- UTILS functions -------------------------------
     def _getDeviceList(self):
         gpus = self.getGpuList()
@@ -259,8 +333,8 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     def _getAngularDistance(self):
         return self.angularDistance.get()
     
-    def _getInputVolumeFilename(self):
-        return self.inputVolume.get().getFileName()
+    def _getInputMaskFilename(self):
+        return self.inputMask.get().getFileName()
     
     def _getInputParticleMdFilename(self):
         return self._getPath('input_particles.xmd')
@@ -274,14 +348,14 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     def _getWienerParticleStackFilename(self):
         return self._getExtraPath('particles_wiener.mrcs')
 
-    def _getGalleryMdFilename(self):
-        return self._getExtraPath('gallery.doc')
+    def _getMaskGalleryMdFilename(self):
+        return self._getExtraPath('mask_gallery.doc')
 
-    def _getGalleryAnglesMdFilename(self):
-        return self._getExtraPath('gallery_angles.doc')
+    def _getMaskGalleryAnglesMdFilename(self):
+        return self._getExtraPath('mask_gallery_angles.doc')
 
-    def _getGalleryStackFilename(self):
-        return self._getExtraPath('gallery.mrcs')
+    def _getMaskGalleryStackFilename(self):
+        return self._getExtraPath('mask_gallery.mrcs')
 
     def _getNeighborsMdFilename(self):
         return self._getExtraPath('neighbors.xmd')
@@ -298,8 +372,14 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     def _getDirectionalEigenImageFilename(self, direction_id: int):
         return self._getDirectionPath(direction_id, 'eigen_image.mrc')
     
+    def _getDirectionalClassificationMdFilename(self, direction_id: int):
+        return self._getDirectionPath(direction_id, 'classification.xmd')
+    
     def _getDirectionalEigenImagesMdFilename(self):
         return self._getExtraPath('eigen_images.xmd')
     
     def _getDirectionalClassesMdFilename(self):
         return self._getExtraPath('directional_classes.xmd')
+    
+    def _getGraphFilename(self):
+        return self._getExtraPath('graph.npz')
