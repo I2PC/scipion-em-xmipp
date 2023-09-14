@@ -326,13 +326,13 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         args = []
         args += ['-i', self._getGraphFilename()]
         args += ['-o', self._getGraphCutFilename()]
-        args += ['--sdp']
+        #args += ['--sdp']
         #env = self.getCondaEnv(_conda_env='scipion3')
         env = self.getCondaEnv() # TODO
         self.runJob('xmipp_graph_max_cut', args, env=env, numberOfMpi=1)
         
         # Load the cut
-        with open(self._getGraphCutFilename()) as f:
+        with open(self._getGraphCutFilename(), 'rb') as f:
             _, (v0, v1) = pickle.load(f)
         
         # Invert the least amount of directions
@@ -491,3 +491,4 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     
     def _getOutputMetadataFilename(self):
         return self._getPath('output_particles.xmd')
+    
