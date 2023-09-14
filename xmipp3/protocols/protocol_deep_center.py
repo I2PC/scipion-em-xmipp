@@ -45,13 +45,15 @@ from shutil import copy
 from os import remove
 from os.path import exists, join
 import xmipp3
+from xmipp_base import XmippScript
+
 
 class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
     """Learns a model to center particles using deep learning. Particles must be previously centered with respect
        to a volume, and they must have 3D alignment information. """
     _label = 'deep center'
     _lastUpdateVersion = VERSION_3_0
-    _conda_env = 'xmipp_DLTK_v0.3'
+    _conda_env = 'xmipp_DLTK_v1.0'
     _cond_modelPretrainTrue = 'modelPretrain==True'
     _cond_modelPretrainFalse = 'modelPretrain==False'
 
@@ -72,24 +74,18 @@ class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
                       pointerCondition='hasAlignment2D or hasAlignmentProj',
                       help='The set of particles previously aligned to be used as training set')
 
-        form.addParam('Xdim', IntParam, label="Size of the images for training", default=128)
-
         form.addParam('modelPretrain', BooleanParam, default=False,
                       label='Choose if you want to use a pretrained model',
                       help='Set "yes" if you want to use a previously trained model. '
                            'If you choose "no" new models will be trained.')
 
-        form.addParam('pretrainedModels', PointerParam,
-                      pointerClass='XmippProtDeepCenter',
-                      condition=self._cond_modelPretrainTrue,
-                      label='Pretrained model',
-                      help='Select the pretrained model. ')
-
-        form.addSection(label='Training parameters')
         form.addParam('numCenModels', IntParam,
                       label="Number of models for particle centering", default=5,
                       help="Choose number of models you want to train. More than 1 is recommended only if next step "
                            "is inference.")
+
+        form.addSection(label='Training parameters')
+
 
         form.addParam('numEpochs_cen', IntParam,
                       label="Number of epochs",
@@ -134,6 +130,8 @@ class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self):
+
+        self.Xdim = 128
         writeSetOfParticles(self.inputTrainSet.get(), self.trainImgsFn)
         self.runJob("xmipp_image_resize",
                     "-i %s -o %s --save_metadata_stack %s --fourier %d" %
@@ -149,9 +147,8 @@ class XmippProtDeepCenter(ProtAlign2D, xmipp3.XmippProtocol):
         self.pretrained = 'no'
         self.pathToModel = 'none'
         if self.modelPretrain:
-            self.model = self.pretrainedModels.get()
             self.pretrained = 'yes'
-            self.pathToModel = self.model._getExtraPath("modelCenter")
+            self.pathToModel = XmippScript.getModel("deep_center")
 
         args = "%s %s %f %d %d %s %d %f %d %s %s" % (
             self._getExtraPath("trainingResized.xmd"), self._getExtraPath("modelCenter"), sig,

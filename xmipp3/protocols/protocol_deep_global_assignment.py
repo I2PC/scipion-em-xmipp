@@ -45,6 +45,7 @@ from shutil import copy
 from os import remove
 from os.path import exists, join
 import xmipp3
+from xmipp_base import XmippScript
 
 
 class XmippProtDeepGlobalAssignment(ProtAlign2D, xmipp3.XmippProtocol):
@@ -84,11 +85,11 @@ class XmippProtDeepGlobalAssignment(ProtAlign2D, xmipp3.XmippProtocol):
                       help='Set "yes" if you want to use a previously trained model. '
                            'If you choose "no" new models will be trained.')
 
-        form.addParam('pretrainedModels', PointerParam,
-                      pointerClass='XmippProtDeepGlobalAssignment',
-                      condition=self._cond_modelPretrainTrue,
-                      label='Pretrained model',
-                      help='Select the pretrained model. ')
+
+        form.addParam('symmetryOrder', IntParam,
+                      label="Number of models for angular assignment", default=1,
+                      help="Choose number of models you want to train. More than 1 is recommended only if next step "
+                           "is inference.")
 
         form.addSection(label='Training parameters')
         form.addParam('numAngModels', IntParam,
@@ -148,15 +149,12 @@ class XmippProtDeepGlobalAssignment(ProtAlign2D, xmipp3.XmippProtocol):
                      self.Xdim), numberOfMpi=self.numberOfThreads.get() * self.numberOfMpi.get())
 
     def train(self, gpuId):
-
         sig = self.sigma.get()
-
         self.pretrained = 'no'
         self.pathToModel = 'none'
         if self.modelPretrain:
-            self.model = self.pretrainedModels.get()
             self.pretrained = 'yes'
-            self.pathToModel = self.model._getExtraPath("modelAngular0.h5")
+            self.pathToModel = XmippScript.getModel("deep_center")
 
         args = "%s %s %f %d %d %s %d %f %d %s %s" % (
             self._getExtraPath("trainingResized.xmd"), self._getExtraPath("modelAngular"), sig,

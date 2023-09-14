@@ -45,17 +45,13 @@ from shutil import copy
 from os import remove
 from os.path import exists, join
 import xmipp3
+from xmipp_base import XmippScript
 
-class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
-    """Predict the center particles using deep learning.""" 
-    _label = 'deep center predict'
+class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol):
+    """Predict the center particles using deep learning."""
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_DLTK_v1.0'
-    _cond_predictAnglesTrue = 'predictAngles==True'
-    _cond_predictAnglesFalse = 'predictAngles==False'
-    _cond_trainedModelTrue = 'trainedModel==True'
-    _cond_trainedModelFalse = 'trainedModel==False'
-    _cond_needModel = '(trainedModel==True) or (predictAngles==True)'
+
 
     def __init__(self, **args):
         ProtAlign2D.__init__(self, **args)
@@ -76,16 +72,11 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
                       pointerClass='SetOfParticles',
                       help='The set of particles to predict shift')
 
-        form.addParam('Xdim', IntParam, label="Size of the images for training", default=128)
-
-        form.addParam('inputModel', PointerParam, label="Model trained",
-                      pointerClass='XmippProtDeepCenter',
-                      help='The model to predict angles')
+        form.addParam('numModels', IntParam,
+                      label="Number of models trained", default=5,
+                      help="The maximum number of model available in xmipp is 5.")
 
         form.addSection(label='Consensus')
-
-        form.addParam('numModels', IntParam,
-                      label="Number of models trained", default=5)
 
         form.addParam('tolerance', IntParam,
                       label="Tolerance in pixels", default=3,
@@ -97,52 +88,54 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
 
         form.addParallelSection(threads=1, mpi=1)
 
+        form.addParallelSection(threads=1, mpi=1)
+
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
         self.predictImgsFn = self._getExtraPath('predict_input_imgs.xmd')
-
         if self.useQueueForSteps() or self.useQueue():
             myStr = os.environ["CUDA_VISIBLE_DEVICES"]
         else:
             myStr = self.gpuList.get()
             os.environ["CUDA_VISIBLE_DEVICES"] = self.gpuList.get()
         numGPU = myStr.split(',')
-
         self._insertFunctionStep("convertStep")
-        self._insertFunctionStep("predict", numGPU[0])
+        self._insertFunctionStep("predict", numGPU[0], self.predictImgsFn)
         self._insertFunctionStep('createOutputStep')
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def convertStep(self):
+        self.Xdim = 128
         writeSetOfParticles(self.inputImageSet.get(), self.predictImgsFn)
         self.runJob("xmipp_image_resize",
                     "-i %s -o %s --save_metadata_stack %s --fourier %d" %
                     (self.predictImgsFn,
-                        self._getExtraPath('trainingResized.stk'),
-                        self._getExtraPath('trainingResized.xmd'),
-                        self.Xdim), numberOfMpi=self.numberOfThreads.get()*self.numberOfMpi.get())
+                     self._getExtraPath('trainingResized.stk'),
+                     self._getExtraPath('trainingResized.xmd'),
+                     self.Xdim), numberOfMpi=self.numberOfThreads.get() * self.numberOfMpi.get())
 
-    def predict(self, gpuId):
-        self.modelAng = self.inputModel.get()
-        print('path to models', self.getModel('deep_center'))
-        args = "%s %s %s %s %s %d %d %d %s" % (
-            self._getExtraPath("trainingResized.xmd"), gpuId, self._getPath(), self.predictImgsFn,
-            self.modelAng._getExtraPath("modelCenter"), self.numModels.get(), self.tolerance.get(),
-            self.maxModels.get(), self.getModel('deep_center'))
-
-        self.runJob("xmipp_deep_center_predict", args, numberOfMpi=1, env=self.getCondaEnv())
-
+    def predict(self, predictImgsFn, gpuId, mode="", inputModel="", trainedModel=True):
+        if mode != "center" or trainedModel:
+            self.model = inputModel
+            args = "%s %s %s %s %s %d %d %d" % (
+                self._getExtraPath("trainingResized.xmd"), gpuId, self._getPath(), predictImgsFn,
+                self.model._getExtraPath(), self.numModels.get(), self.tolerance.get(),
+                self.maxModels.get())
+        else:
+            args = "%s %s %s %s %s %d %d %d" % (
+                self._getExtraPath("trainingResized.xmd"), gpuId, self._getPath(), predictImgsFn,
+                XmippScript.getModel("deep_center"), self.numModels.get(), self.tolerance.get(),
+                self.maxModels.get())
+        self.runJob(f"xmipp_deep_{mode}_predict", args, numberOfMpi=1, env=self.getCondaEnv())
         remove(self._getExtraPath("trainingResized.xmd"))
         remove(self._getExtraPath("trainingResized.stk"))
 
     def createOutputStep(self):
         imgFname = self._getPath('predict_results.xmd')
         outputSet = self._createSetOfParticles()
-
         readSetOfParticles(imgFname, outputSet)
         outputSet.copyInfo(self.inputImageSet.get())
         outputSet.setAlignmentProj()
-
         self._defineOutputs(outputParticles=outputSet)
         self._store(outputSet)
         self._defineSourceRelation(self.inputImageSet.get(), outputSet)
@@ -152,5 +145,47 @@ class XmippProtDeepCenterPredict(ProtAlign2D, xmipp3.XmippProtocol):
         methods = []
         if hasattr(self, 'outputParticles'):
             methods.append("We learned a model to center particles from %i input images (%s)." \
-                % (self.inputSet.get().getSize(), self.getObjectTag('inputSet')))
+                           % (self.inputSet.get().getSize(), self.getObjectTag('inputSet')))
         return methods
+
+
+
+class XmippProtDeepCenterPredict(XmippProtDeepCenterAssignmentPredictBase):
+    """Predict the center particles using deep learning.""" 
+    _label = 'deep center predict'
+    _cond_trainedModelTrue = 'trainedModel==True'
+    _cond_trainedModelFalse = 'trainedModel==False'
+
+    # --------------------------- DEFINE param functions --------------------------------------------
+    def _defineParams(self, form):
+        XmippProtDeepCenterAssignmentPredictBase()._defineParams(form)
+        form.addParam('trainedModel', BooleanParam, label="Use a trained model from a protocol?",
+                      help="If selected, you must choose a trained model, if not, a pretrained model from xmipp is used.")
+
+        form.addParam('inputModel', PointerParam, label="Model trained",
+                      default=False,
+                      pointerClass='XmippProtDeepCenter',
+                      help='The model to predict angles',
+                      condition=self._cond_trainedModelTrue)
+
+    # --------------------------- STEPS functions ---------------------------------------------------
+    def predict(self, predictImgsFn, gpuId, mode="center", inputModel="", trainedModel=True):
+        XmippProtDeepCenterAssignmentPredictBase().predict(gpuId, predictImgsFn, mode=mode,
+                                                           inputModel=self.inputModel.get(),
+                                                           trainedModel=self.trainedModel.get())
+
+class XmippProtDeepGlobalAssignmentPredict(XmippProtDeepCenterAssignmentPredictBase):
+    """Predict the center particles using deep learning."""
+    _label = 'deep global assignment predict'
+
+    # --------------------------- DEFINE param functions --------------------------------------------
+    def _defineParams(self, form):
+        XmippProtDeepCenterAssignmentPredictBase()._defineParams(form)
+        form.addParam('inputModel', PointerParam, label="Model trained",
+                      pointerClass='XmippProtDeepGlobalAssignment',
+                      help='The model to predict angles')
+
+    # --------------------------- STEPS functions ---------------------------------------------------
+    def predict(self, predictImgsFn, gpuId, mode="global_assignment", inputModel="", trainedModel=True):
+        XmippProtDeepCenterAssignmentPredictBase().predict(gpuId, predictImgsFn, mode=mode,
+                                                           inputModel=self.inputModel.get())
