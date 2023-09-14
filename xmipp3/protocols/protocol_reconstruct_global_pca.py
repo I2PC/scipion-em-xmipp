@@ -155,10 +155,12 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         self.imgsOrigXmd = self._getExtraPath('images_original.xmd')
         self.imgsFnXmd = self._getTmpPath('images.xmd')
         self.imgsFn = self._getTmpPath('images.mrcs')
+        # self.imgsFn = self._getTmpPath('images.mrc')
         self.refsFn = self._getTmpPath('references.mrcs')
         self.refsFnXmd = self._getTmpPath('references.xmd')
         self.sampling = self.inputParticles.get().getSamplingRate()
         self.size = self.inputParticles.get().getDimensions()[0]
+        self.acquisition = self.inputParticles.get().getAcquisition()
   
         self.MaxShift = self.MaxShift.get()
         refVol = self.inputVolume.get().getFileName()
@@ -228,21 +230,23 @@ class XmippProtReconstructGlobalPca(ProtRefine3D, xmipp3.XmippProtocol):
         writeSetOfParticles(input, outputOrig)
         
         self._create_batch_for_scale(5000, outputOrig)
-
-        
-        # args = ' -i  %s -o %s --save_metadata_stack '%(outputOrig, outputConvert)
-        # self.runJob("xmipp_image_convert",args, numberOfMpi=1) 
         
         if self.correctCtf: 
             args = ' -i  %s -o %s --sampling_rate %s '%(outputOrig, outputConvert, self.sampling)
             self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get()) 
+        
+            #  #implementing Oier'wiener    
+            # args = ' -i %s  -o %s --pixel_size %s --spherical_aberration %s --voltage %s --batch 1024 --device cuda:0'% \
+            # (outputOrig, self.imgsFnXmd, self.sampling, self.acquisition.getSphericalAberration(), self.acquisition.getVoltage())
+            #
+            # env = self.getCondaEnv()
+            # env['LD_LIBRARY_PATH'] = ''
+            # self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
+        
         else:
             args = ' -i  %s -o %s --save_metadata_stack '%(outputOrig, outputConvert)
             self.runJob("xmipp_image_convert",args, numberOfMpi=1) 
-        
-    # def correctCTF(self, input, output, sampling):  
-    #     args = ' -i  %s -o %s --sampling_rate %s '%(input, output, sampling)
-    #     self.runJob("xmipp_ctf_correct_wiener2d", args, numberOfMpi=self.numberOfMpi.get())        
+                
     
     def createGallery(self, angle, refVol):
         args = ' -i  %s --sym %s --sampling_rate %s  -o %s -v 0'% \
