@@ -44,12 +44,11 @@ import xmipp3
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles, rowToParticle
 
 import os.path
-import math
+import pickle
 import itertools
 import numpy as np
 
 import scipy.sparse
-import networkx as nx
 
 class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     _label = 'aligned solid angles'
@@ -298,11 +297,15 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         scipy.sparse.save_npz(self._getGraphFilename(), graph)
         
     def isingModelOptimizationStep(self):
-        graph = nx.from_scipy_sparse_array(scipy.sparse.load_npz(self._getGraphFilename()))
-        _, (v0, v1) = nx.approximation.one_exchange(
-            graph, 
-            weight='weight'
-        )
+        # Perform a max cut of the graph
+        args = []
+        args += ['-i', self._getGraphFilename()]
+        args += ['-o', self._getGraphCutFilename()]
+        self.runJob('xmipp_graph_max_cut', args)
+        
+        # Load the cut
+        with open(self._getGraphCutFilename()) as f:
+            _, (v0, v1) = pickle.load(f)
         
         # Invert the least amount of directions
         invert_list = min(v0, v1, key=len)
@@ -431,6 +434,9 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     
     def _getGraphFilename(self):
         return self._getExtraPath('graph.npz')
+    
+    def _getGraphCutFilename(self):
+        return self._getExtraPath('graph_cut.pkl')
     
     def _getOutputMetadataFilename(self):
         return self._getPath('output_particles.xmd')
