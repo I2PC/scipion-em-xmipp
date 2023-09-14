@@ -338,7 +338,6 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         
         # Invert the least amount of directions
         invert_list = min(v0, v1, key=len)
-        print(invert_list)
         
         blocks = emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename())
         classificationMd = emlib.MetaData()
