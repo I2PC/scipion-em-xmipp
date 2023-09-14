@@ -43,6 +43,8 @@ from pyworkflow.protocol.params import (Form, PointerParam,
 import xmipp3
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles, rowToParticle
 
+import xmippLib
+
 import os.path
 import pickle
 import itertools
@@ -263,6 +265,8 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         blocks = emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename())
         directionIds = list(map(lambda block : int(block.split("_")[1]), blocks ))
         
+        symList = xmippLib.SymList(self._getSymmetryGroup())
+        directionMd = emlib.MetaData(self._getMaskGalleryAnglesMdFilename())
         md0 = emlib.MetaData()
         md1 = emlib.MetaData()
         
@@ -272,26 +276,39 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             directionId0 = directionIds[idx0]
             directionId1 = directionIds[idx1]
             
-            # Obtain the intersection of the particles belonging to
-            # both directions
-            md0.read(self._getDirectionalClassificationMdFilename(directionId0))
-            md1.read(self._getDirectionalClassificationMdFilename(directionId1))
-            md0.intersection(md1, emlib.MDL_ITEM_ID)
-            md1.intersection(md0, emlib.MDL_ITEM_ID)
+            # Obtain the projection angles
+            rot0 = directionMd.getValue(emlib.MDL_ANGLE_ROT, directionId0)
+            rot1 = directionMd.getValue(emlib.MDL_ANGLE_ROT, directionId1)
+            tilt0 = directionMd.getValue(emlib.MDL_ANGLE_TILT, directionId0)
+            tilt1 = directionMd.getValue(emlib.MDL_ANGLE_TILT, directionId1)
             
-            # Get their PCA projection values
-            projection0 = md0.getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
-            projection1 = md1.getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
-            
-            # Compute the similarity as the dot product of their
-            # PCA projections
-            similarity = np.dot(projection0, projection1)
-            
-            if similarity:
-                # Write the negative similarity in symmetric positions of 
-                # the adjacency matrix, as the Ising Model's graph analogy
-                # has weights equal to the negative interaction
-                adjacency[idx0, idx1] = adjacency[idx1, idx0] = -similarity
+            # Only consider direction pairs that are close
+            angularDistance = symList.computeDistanceAngles(
+                rot0, tilt0, 0.0, 
+                rot1, tilt1, 0.0,
+                True, self.checkMirrors.get(), False
+            )
+            if angularDistance < self.angularDistance:
+                # Obtain the intersection of the particles belonging to
+                # both directions
+                md0.read(self._getDirectionalClassificationMdFilename(directionId0))
+                md1.read(self._getDirectionalClassificationMdFilename(directionId1))
+                md0.intersection(md1, emlib.MDL_ITEM_ID)
+                md1.intersection(md0, emlib.MDL_ITEM_ID)
+                
+                # Get their PCA projection values
+                projection0 = md0.getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
+                projection1 = md1.getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
+                
+                # Compute the similarity as the dot product of their
+                # PCA projections
+                similarity = np.dot(projection0, projection1)
+                
+                if similarity:
+                    # Write the negative similarity in symmetric positions of 
+                    # the adjacency matrix, as the Ising Model's graph analogy
+                    # has weights equal to the negative interaction
+                    adjacency[idx0, idx1] = adjacency[idx1, idx0] = -similarity
         
         # Save the graph
         graph = scipy.sparse.csr_matrix(adjacency)
@@ -302,7 +319,8 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         args = []
         args += ['-i', self._getGraphFilename()]
         args += ['-o', self._getGraphCutFilename()]
-        self.runJob('xmipp_graph_max_cut', args)
+        env = self.getCondaEnv(_conda_env='xmipp_graph')
+        self.runJob('xmipp_graph_max_cut', args, env=env, numberOfMpi=1)
         
         # Load the cut
         with open(self._getGraphCutFilename()) as f:
