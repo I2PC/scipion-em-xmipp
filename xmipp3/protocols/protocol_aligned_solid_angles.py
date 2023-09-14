@@ -287,10 +287,11 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             # PCA projections
             similarity = np.dot(projection0, projection1)
             
-            # Write the negative similarity in symmetric positions of 
-            # the adjacency matrix, as the Ising Model's graph analogy
-            # has weights equal to the negative interaction
-            adjacency[idx0, idx1] = adjacency[idx1, idx0] = -similarity
+            if similarity:
+                # Write the negative similarity in symmetric positions of 
+                # the adjacency matrix, as the Ising Model's graph analogy
+                # has weights equal to the negative interaction
+                adjacency[idx0, idx1] = adjacency[idx1, idx0] = -similarity
         
         # Save the graph
         graph = scipy.sparse.csr_matrix(adjacency)
