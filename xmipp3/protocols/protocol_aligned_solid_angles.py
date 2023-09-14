@@ -326,6 +326,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         args = []
         args += ['-i', self._getGraphFilename()]
         args += ['-o', self._getGraphCutFilename()]
+        args += ['--sdp']
         #env = self.getCondaEnv(_conda_env='scipion3')
         env = self.getCondaEnv() # TODO
         self.runJob('xmipp_graph_max_cut', args, env=env, numberOfMpi=1)
