@@ -319,6 +319,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         
         # Save the graph
         graph = scipy.sparse.csr_matrix(adjacency)
+        graph /= abs(graph).max() # Normalize to avoid numerical inestability
         scipy.sparse.save_npz(self._getGraphFilename(), graph)
         
     def isingModelOptimizationStep(self):
@@ -326,7 +327,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         args = []
         args += ['-i', self._getGraphFilename()]
         args += ['-o', self._getGraphCutFilename()]
-        #args += ['--sdp']
+        args += ['--sdp']
         #env = self.getCondaEnv(_conda_env='scipion3')
         env = self.getCondaEnv() # TODO
         self.runJob('xmipp_graph_max_cut', args, env=env, numberOfMpi=1)
