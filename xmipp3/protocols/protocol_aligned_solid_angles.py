@@ -42,20 +42,26 @@ from pyworkflow.protocol.params import (Form, PointerParam,
 
 import xmipp3
 from xmipp3.convert import readSetOfParticles, writeSetOfParticles, rowToParticle
-
 import xmippLib
 
 import os.path
 import pickle
 import itertools
 import numpy as np
-
 import scipy.sparse
 
 class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
+    OUTPUT_CLASSES_NAME = 'classes'
+    OUTPUT_EXTRA_LABELS = [
+        emlib.MDL_SCORE_BY_PCA_RESIDUAL,
+    ]
+    
     _label = 'aligned solid angles'
     _conda_env = 'xmipp_swiftalign'
     _devStatus = BETA
+    _possibleOutputs = {
+        OUTPUT_CLASSES_NAME: SetOfClasses3D
+    }
 
     def __init__(self, *args, **kwargs):
         ProtAnalysis3D.__init__(self, *args, **kwargs)
@@ -121,6 +127,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('buildGraphStep')
         self._insertFunctionStep('isingModelOptimizationStep')
         self._insertFunctionStep('classificationStep')
+        self._insertFunctionStep('createOutputStep')
 
     # --------------------------- STEPS functions -------------------------------
     def convertInputStep(self):
@@ -384,7 +391,29 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         
         # Store
         result.write(self._getOutputMetadataFilename())
+    
+    def createOutputStep(self):
+        classificationMd = emlib.MetaData(self._getOutputMetadataFilename())
+
+        def updateItem(item: Particle, row: emlib.metadata.Row):
+            particle: Particle = rowToParticle(row, extraLabels=self.OUTPUT_EXTRA_LABELS)
+            item.copy(particle)
+                
+        def updateClass(cls: Class3D):
+            cls.setAlignmentProj()
+            
+        classes3d: SetOfClasses3D = self._createSetOfClasses3D(self.inputParticles)
+        classes3d.classifyItems(
+            updateItemCallback=updateItem,
+            updateClassCallback=updateClass,
+            itemDataIterator=emlib.metadata.iterRows(classificationMd)
+        )
         
+        # Define the output
+        self._defineOutputs(**{self.OUTPUT_CLASSES_NAME: classes3d})
+        self._defineSourceRelation(self.inputParticles, classes3d)
+
+
         
     # --------------------------- UTILS functions -------------------------------
     def _getDeviceList(self):
