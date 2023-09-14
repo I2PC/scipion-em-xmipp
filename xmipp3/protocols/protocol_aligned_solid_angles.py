@@ -41,7 +41,7 @@ from pyworkflow.protocol.params import (Form, PointerParam,
                                         LEVEL_ADVANCED, USE_GPU, GPU_LIST )
 
 import xmipp3
-from xmipp3.convert import readSetOfParticles, writeSetOfParticles, rowToParticle
+from xmipp3.convert import writeSetOfParticles, rowToParticle
 import xmippLib
 
 import os.path
