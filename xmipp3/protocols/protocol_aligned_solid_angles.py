@@ -96,9 +96,6 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
                       help='Maximum angular distance in degrees')
         form.addParam('checkMirrors', BooleanParam, label='Check mirrors',
                       default=False)
-        form.addParam('pcaQuantile', FloatParam, label='PCA Quantile',
-                      default=0.1, validators=[Range(0,0.5)],
-                      help='PCA Quantile used for obtaining class averages')
         
         form.addParallelSection(threads=0, mpi=8)
 
@@ -243,7 +240,6 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             args += ['--mask', maskFilename]
             args += ['--align_to', rot, tilt, psi]
             args += ['--batch', self.batchSize]
-            args += ['-q', self.pcaQuantile]
             if self.useGpu:
                 args += ['--device'] + self._getDeviceList()
 
@@ -268,11 +264,8 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         blocks = emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename())
         directionIds = list(map(lambda block : int(block.split("_")[1]), blocks ))
         
-        directionMd = emlib.MetaData(self._getMaskGalleryAnglesMdFilename())
         md0 = emlib.MetaData()
         md1 = emlib.MetaData()
-        
-        minimumDirectionDot = math.cos(math.radians(2*float(self.angularDistance)))
         
         adjacency = np.zeros((len(blocks), )*2)
         for idx0, idx1 in itertools.combinations(range(len(blocks)), r=2):
@@ -280,49 +273,32 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             directionId0 = directionIds[idx0]
             directionId1 = directionIds[idx1]
             
-            # Get the direction vectors
-            direction0 = [
-                directionMd.getValue(emlib.MDL_X, directionId0),
-                directionMd.getValue(emlib.MDL_Y, directionId0),
-                directionMd.getValue(emlib.MDL_Z, directionId0)
-            ]
-            direction1 = [
-                directionMd.getValue(emlib.MDL_X, directionId1),
-                directionMd.getValue(emlib.MDL_Y, directionId1),
-                directionMd.getValue(emlib.MDL_Z, directionId1)
-            ]
+            # Obtain the intersection of the particles belonging to
+            # both directions
+            md0.read(self._getDirectionalClassificationMdFilename(directionId0))
+            md1.read(self._getDirectionalClassificationMdFilename(directionId1))
+            md0.intersection(md1, emlib.MDL_ITEM_ID)
+            md1.intersection(md0, emlib.MDL_ITEM_ID)
             
-            # Compute the dot product of the angle difference for this pair
-            directionDot = np.dot(direction0, direction1)
+            # Get their PCA projection values
+            projection0 = md0.getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
+            projection1 = md1.getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
             
-            # Only consider if nearby angles
-            if directionDot > minimumDirectionDot:
-                # Obtain the intersection of the particles belonging to
-                # both directions
-                md0.read(self._getDirectionalClassificationMdFilename(directionId0))
-                md1.read(self._getDirectionalClassificationMdFilename(directionId1))
-                md0.intersection(md1, emlib.MDL_ITEM_ID)
-                md1.intersection(md0, emlib.MDL_ITEM_ID)
-                
-                # Get their PCA projection values
-                projection0 = md0.getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
-                projection1 = md1.getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
-                
-                # Compute the similarity as the dot product of their
-                # PCA projections
-                similarity = np.dot(projection0, projection1)
-                
-                # Write the similarity in symmetric positions of the adjacency
-                # matrix
-                adjacency[idx0, idx1] = similarity
-                adjacency[idx1, idx0] = similarity
+            # Compute the similarity as the dot product of their
+            # PCA projections
+            similarity = np.dot(projection0, projection1)
+            
+            # Write the negative similarity in symmetric positions of 
+            # the adjacency matrix, as the Ising Model's graph analogy
+            # has weights equal to the negative interaction
+            adjacency[idx0, idx1] = adjacency[idx1, idx0] = -similarity
         
         # Save the graph
         graph = scipy.sparse.csr_matrix(adjacency)
         scipy.sparse.save_npz(self._getGraphFilename(), graph)
         
     def isingModelOptimizationStep(self):
-        graph = nx.from_scipy_sparse_array(-scipy.sparse.load_npz(self._getGraphFilename()))
+        graph = nx.from_scipy_sparse_array(scipy.sparse.load_npz(self._getGraphFilename()))
         _, (v0, v1) = nx.approximation.one_exchange(
             graph, 
             weight='weight'
