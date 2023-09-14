@@ -386,6 +386,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         
         # Replace with the original image label
         if result.containsLabel(emlib.MDL_IMAGE_ORIGINAL):
+            #FIXME revert shift if scaled
             result.removeLabel(emlib.MDL_IMAGE)
             result.renameColumn(emlib.MDL_IMAGE_ORIGINAL, emlib.MDL_IMAGE)
         
