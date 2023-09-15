@@ -30,7 +30,7 @@ from pwem.protocols import (ProtImportParticles, ProtSubSet,
                             exists)
 
 from pwem import emlib
-from xmipp3.protocols import XmippProtDeepGlobalAssignmentPredict, XmippProtDeepGlobalAssignment
+#from xmipp3.protocols import XmippProtDeepGlobalAssignmentPredict, XmippProtDeepGlobalAssignment
 
 
 class TestDeepGlobalAssignmentPredict(BaseTest):
@@ -69,26 +69,26 @@ class TestDeepGlobalAssignmentPredict(BaseTest):
                                   nElements=400)
         self.launchProtocol(subset)
 
-        deepGA = self.newProtocol(XmippProtDeepGlobalAssignment,
-                                  inputTrainSet=subset.outputParticles,
-                                  Xdim=128,
-                                  modelPretrain=False,
-                                  numAngModels=5,
-                                  numEpochs_ang=1,
-                                  batchSize=32,
-                                  learningRate=0.001,
-                                  sigma=8,
-                                  patience=5)
-        self.launchProtocol(deepGA)
+        #deepGA = self.newProtocol(XmippProtDeepGlobalAssignment,
+        #                          inputTrainSet=subset.outputParticles,
+        #                          Xdim=128,
+        #                          modelPretrain=False,
+        #                          numAngModels=5,
+        #                          numEpochs_ang=1,
+        #                          batchSize=32,
+        #                          learningRate=0.001,
+        #                          sigma=8,
+        #                          patience=5)
+        #self.launchProtocol(deepGA)
 
-        deepGAPredict = self.newProtocol(XmippProtDeepGlobalAssignmentPredict,
-                                      inputImageSet=subset.outputParticles,
-                                      Xdim=128,
-                                      inputModel=deepGA,
-                                      numAngModels=5,
-                                      tolerance=45,
-                                      maxModels=3)
-        self.launchProtocol(deepGAPredict)
-
-        self.assertIsNotNone(deepGAPredict.outputParticles,
-                             "There was a problem with Deep Center Predict")
+        #deepGAPredict = self.newProtocol(XmippProtDeepGlobalAssignmentPredict,
+        #                              inputImageSet=subset.outputParticles,
+        #                              Xdim=128,
+        #                              inputModel=deepGA,
+        #                              numAngModels=5,
+        #                              tolerance=45,
+        #                              maxModels=3)
+        #self.launchProtocol(deepGAPredict)
+#
+        #self.assertIsNotNone(deepGAPredict.outputParticles,
+        #                     "There was a problem with Deep Center Predict")

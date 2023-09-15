@@ -30,6 +30,7 @@ from pyworkflow.protocol.params import (PointerParam, StringParam, FloatParam,
                                         IntParam, BooleanParam, GPU_LIST, EnumParam)
 from pyworkflow.protocol.constants import LEVEL_ADVANCED
 from pyworkflow.utils.path import moveFile, cleanPattern
+from pyworkflow.utils import Message
 from pwem.protocols import ProtAlign2D
 from pwem.emlib.metadata import iterRows, getFirstRow
 import pwem.emlib.metadata as md
@@ -52,12 +53,12 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
     _lastUpdateVersion = VERSION_3_0
     _conda_env = 'xmipp_DLTK_v1.0'
 
-
     def __init__(self, **args):
         ProtAlign2D.__init__(self, **args)
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
+        form.addParallelSection(threads=1, mpi=1)
 
         form.addHidden(GPU_LIST, StringParam, default='0',
                        expertLevel=LEVEL_ADVANCED,
@@ -66,7 +67,7 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
                             " if you do not know what we are talking about."
                             " First core index is 0, second 1 and so on.")
 
-        form.addSection(label='Input')
+        form.addSection(label=Message.LABEL_INPUT)
 
         form.addParam('inputImageSet', PointerParam, label="Input Image set",
                       pointerClass='SetOfParticles',
@@ -85,10 +86,6 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
         form.addParam('maxModels', IntParam,
                       label="Maximum number of models dropped per particle", default=0,
                       help="If more models are dropped, the particle is discarded.")
-
-        form.addParallelSection(threads=1, mpi=1)
-
-        form.addParallelSection(threads=1, mpi=1)
 
     # --------------------------- INSERT steps functions --------------------------------------------
     def _insertAllSteps(self):
@@ -148,31 +145,30 @@ class XmippProtDeepCenterAssignmentPredictBase(ProtAlign2D, xmipp3.XmippProtocol
                            % (self.inputSet.get().getSize(), self.getObjectTag('inputSet')))
         return methods
 
-
-
 class XmippProtDeepCenterPredict(XmippProtDeepCenterAssignmentPredictBase):
     """Predict the center particles using deep learning.""" 
     _label = 'deep center predict'
-    _cond_trainedModelTrue = 'trainedModel==True'
-    _cond_trainedModelFalse = 'trainedModel==False'
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
-        XmippProtDeepCenterAssignmentPredictBase()._defineParams(form)
-        form.addParam('trainedModel', BooleanParam, label="Use a trained model from a protocol?",
+        # Calling specific parent form
+        XmippProtDeepCenterAssignmentPredictBase._defineParams(self, form)
+
+        # Adding extra params to Input section
+        inputSection = form.getSection(Message.LABEL_INPUT)
+        inputSection.addParam('trainedModel', BooleanParam, label="Use a trained model from a protocol?",
                       help="If selected, you must choose a trained model, if not, a pretrained model from xmipp is used.")
 
-        form.addParam('inputModel', PointerParam, label="Model trained",
-                      default=False,
+        inputSection.addParam('inputModel', PointerParam, label="Model trained",
                       pointerClass='XmippProtDeepCenter',
                       help='The model to predict angles',
-                      condition=self._cond_trainedModelTrue)
+                      condition='trainedModel==True')
 
     # --------------------------- STEPS functions ---------------------------------------------------
-    def predict(self, predictImgsFn, gpuId, mode="center", inputModel="", trainedModel=True):
-        XmippProtDeepCenterAssignmentPredictBase().predict(gpuId, predictImgsFn, mode=mode,
-                                                           inputModel=self.inputModel.get(),
-                                                           trainedModel=self.trainedModel.get())
+    def predict(self, predictImgsFn, gpuId, mode="center", inputModel="", trainedModel=False):
+        XmippProtDeepCenterAssignmentPredictBase.predict(self, predictImgsFn, gpuId, mode=mode,
+                                                         inputModel=self.inputModel.get(),
+                                                         trainedModel=self.trainedModel.get())
 
 class XmippProtDeepGlobalAssignmentPredict(XmippProtDeepCenterAssignmentPredictBase):
     """Predict the center particles using deep learning."""
@@ -180,12 +176,16 @@ class XmippProtDeepGlobalAssignmentPredict(XmippProtDeepCenterAssignmentPredictB
 
     # --------------------------- DEFINE param functions --------------------------------------------
     def _defineParams(self, form):
-        XmippProtDeepCenterAssignmentPredictBase()._defineParams(form)
-        form.addParam('inputModel', PointerParam, label="Model trained",
+        # Calling specific parent form
+        XmippProtDeepCenterAssignmentPredictBase._defineParams(self, form)
+
+        # Adding extra params to Input section
+        inputSection = form.getSection(Message.LABEL_INPUT)
+        inputSection.addParam('inputModel', PointerParam, label="Model trained",
                       pointerClass='XmippProtDeepGlobalAssignment',
                       help='The model to predict angles')
 
     # --------------------------- STEPS functions ---------------------------------------------------
     def predict(self, predictImgsFn, gpuId, mode="global_assignment", inputModel="", trainedModel=True):
-        XmippProtDeepCenterAssignmentPredictBase().predict(gpuId, predictImgsFn, mode=mode,
+        XmippProtDeepCenterAssignmentPredictBase.predict(self, predictImgsFn, gpuId, mode=mode,
                                                            inputModel=self.inputModel.get())
