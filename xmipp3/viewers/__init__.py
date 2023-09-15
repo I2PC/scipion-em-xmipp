@@ -27,6 +27,7 @@
 from .viewer import XmippViewer
 from .plotter import XmippPlotter
 
+from .viewer_aligned_solid_angles import XmippViewerAlignedSolidAngles
 from .viewer_angular_resolution_alignment import XmippProtAngResAlignViewer
 from .viewer_cl2d import XmippCL2DViewer
 from .viewer_ctf_consensus import XmippCTFConsensusViewer
