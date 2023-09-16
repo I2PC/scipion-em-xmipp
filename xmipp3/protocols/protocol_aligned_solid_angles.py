@@ -80,7 +80,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
 
         form.addSection(label='Input')
         form.addParam('inputParticles', PointerParam, label='Particles', important=True,
-                      pointerClass=SetOfParticles,
+                      pointerClass=SetOfParticles, pointerCondition='hasAlignmentProj',
                       help='Input particle set')
         form.addParam('inputMask', PointerParam, label='Mask', important=True,
                       pointerClass=VolumeMask,
