@@ -1,6 +1,6 @@
 # **************************************************************************
 # *
-# * Authors:     C.O.S. Sorzano (coss@cnb.csic.es)
+# * Authors:     Oier Lauzirika Zarrabeitia (oierlauzi@bizkaia.eu)
 # *
 # * Unidad de  Bioinformatica of Centro Nacional de Biotecnologia , CSIC
 # *
@@ -217,12 +217,10 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         
     def classifyStep(self):
         maskGalleryMd = emlib.MetaData(self._getMaskGalleryMdFilename())
-        directionalClassesMd = emlib.MetaData()
-        eigenImagesMd = emlib.MetaData()
         particles = emlib.MetaData()
+        directionalMd = emlib.MetaData()
         maskRow = emlib.metadata.Row()
-        eigenImageRow = emlib.metadata.Row()
-        directionalClassRow = emlib.metadata.Row()
+        directionRow = emlib.metadata.Row()
         
         for block in emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename()):
             directionId = int(block.split("_")[1])
@@ -255,18 +253,14 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             env['LD_LIBRARY_PATH'] = '' # Torch does not like it
             self.runJob('xmipp_swiftalign_aligned_2d_classification', args, numberOfMpi=1, env=env)
             
-            # Write class information
-            eigenImageRow.copyFromRow(maskRow)
-            eigenImageRow.setValue(emlib.MDL_IMAGE, self._getDirectionalEigenImageFilename(directionId))
-            eigenImageRow.addToMd(eigenImagesMd)
+            # Write eigen image row
+            directionRow.copyFromRow(maskRow)
+            directionRow.setValue(emlib.MDL_MASK, maskRow.getValue(emlib.MDL_IMAGE))
+            directionRow.setValue(emlib.MDL_IMAGE, self._getDirectionalAverageImageFilename(directionId))
+            directionRow.setValue(emlib.MDL_IMAGE_RESIDUAL, self._getDirectionalEigenImageFilename(directionId))
+            directionRow.addToMd(directionalMd)
 
-            directionalClassRow.copyFromRow(maskRow)
-            for classId in range(2):
-                directionalClassRow.setValue(emlib.MDL_REF2, classId)
-                directionalClassRow.addToMd(directionalClassesMd)
-                
-        eigenImagesMd.write(self._getDirectionalEigenImagesMdFilename())
-        directionalClassesMd.write(self._getDirectionalClassesMdFilename())
+        directionalMd.write(self._getDirectionalMdFilename())
             
     def buildGraphStep(self):
         blocks = emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename())
@@ -474,15 +468,15 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     def _getDirectionalEigenImageFilename(self, direction_id: int):
         return self._getDirectionPath(direction_id, 'eigen_image.mrc')
     
+    def _getDirectionalAverageImageFilename(self, direction_id: int):
+        return self._getDirectionPath(direction_id, 'average.mrc')
+
     def _getDirectionalClassificationMdFilename(self, direction_id: int):
         return self._getDirectionPath(direction_id, 'classification.xmd')
     
-    def _getDirectionalEigenImagesMdFilename(self):
-        return self._getExtraPath('eigen_images.xmd')
-    
-    def _getDirectionalClassesMdFilename(self):
-        return self._getExtraPath('directional_classes.xmd')
-    
+    def _getDirectionalMdFilename(self):
+        return self._getExtraPath('directional.xmd')
+
     def _getGraphFilename(self):
         return self._getExtraPath('graph.npz')
     
