@@ -356,25 +356,30 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         directionalClassificationMd = emlib.MetaData()
         result.addLabel(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
         blocks = emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename())
+        query = emlib.MetaData()
         for block in blocks:
             # Get the direction id
             directionId = int(block.split("_")[1])
             
             # Read the directional classfication
             directionalClassificationMd.read(self._getDirectionalClassificationMdFilename(directionId))
-            for objId in directionalClassificationMd:
-                itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId)
-                projection = directionalClassificationMd.getValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, objId)
+            
+            # Increment the result PCA projection value
+            # FIXME this is very inefficient code
+            for objId in result:
+                # Find this object on the current classification
+                itemId = result.getValue(emlib.MDL_ITEM_ID, objId)
+                query.importObjects(directionalClassificationMd, emlib.MDValueEQ(emlib.MDL_ITEM_ID, itemId))
                 
-                if result.getValue(emlib.MDL_ITEM_ID, itemId) != itemId:
-                    raise NotImplementedError('Non contiguous itemId-s are not supported yet')
-                
-                # Increment the projection value
-                projection += result.getValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, itemId)
+                if query.size() > 0:
+                    # Get the current projection value
+                    projection = result.getValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, objId)
+                    
+                    # Increment it by the query result
+                    projection += query.getValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, query.firstObject())
 
-                # Overwrite
-                result.setValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, projection, itemId)
-        
+                    # Overwrite
+                    result.setValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, projection, objId)
         
         # Classify items according to their projection ign
         result.addLabel(emlib.MDL_REF3D)
