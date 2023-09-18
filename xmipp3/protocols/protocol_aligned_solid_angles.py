@@ -256,7 +256,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             
             # Ensemble the output row
             directionRow.copyFromRow(maskRow)
-            directionRow.setValue(emlib.MDL_MASK, maskRow.getValue(emlib.MDL_IMAGE))
+            directionRow.setValue(emlib.MDL_MASK, maskFilename)
             directionRow.setValue(emlib.MDL_IMAGE, self._getDirectionalAverageImageFilename(directionId))
             directionRow.setValue(emlib.MDL_IMAGE_RESIDUAL, self._getDirectionalEigenImageFilename(directionId))
             directionRow.setValue(emlib.MDL_SELFILE, self._getDirectionalClassificationMdFilename(directionId))
