@@ -352,7 +352,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
         for i in invert_list:
-            objId = directionMd.getFirstObject() + i
+            objId = directionMd.firstObject() + i
             directionalClassificationMdFilename = directionMd.getValue(
                 emlib.MDL_SELFILE, objId
             )
