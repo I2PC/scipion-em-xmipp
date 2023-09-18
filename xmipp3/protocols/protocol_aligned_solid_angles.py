@@ -87,7 +87,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
                       help='Volume mask used for focussing the classification')
         form.addParam('symmetryGroup', StringParam, label='Symmetry group', default='c1')
         form.addParam('resize', IntParam, label='Resize', default=0,
-                      validators=[GT(0)])
+                      validators=[GE(0)])
 
         form.addSection(label='CTF')
         form.addParam('considerInputCtf', BooleanParam, label='Consider CTF',
