@@ -313,9 +313,21 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
                     # has weights equal to the negative interaction
                     adjacency[idx0, idx1] = adjacency[idx1, idx0] = -similarity
         
-        # Save the graph
+        # Convert the adjacency matrix to sparse form
         graph = scipy.sparse.csr_matrix(adjacency)
         graph /= abs(graph).max() # Normalize to avoid numerical inestability
+
+        # Check if there is a single component
+        nComponents = scipy.sparse.csgraph.connected_components(
+            graph, 
+            directed=False, 
+            return_labels=False
+        )
+        if nComponents != 1:
+            raise RuntimeError('The ensenbled graph has multiple components. '
+                               'Try incrementing the maximum distance parameter')
+
+        # Store the graph
         scipy.sparse.save_npz(self._getGraphFilename(), graph)
         
     def graphOptimizationStep(self):
