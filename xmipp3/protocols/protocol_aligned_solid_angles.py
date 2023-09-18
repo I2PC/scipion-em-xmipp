@@ -265,19 +265,18 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         directionalMd.write(self._getDirectionalMdFilename())
             
     def buildGraphStep(self):
-        blocks = emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename())
-        directionIds = list(map(lambda block : int(block.split("_")[1]), blocks ))
-        
+        # Build graph intersecting direction pairs and calculate the similarity
+        # between projection values
         symList = xmippLib.SymList(self._getSymmetryGroup())
         directionMd = emlib.MetaData(self._getMaskGalleryAnglesMdFilename())
         md0 = emlib.MetaData()
         md1 = emlib.MetaData()
-        
-        adjacency = np.zeros((len(blocks), )*2)
-        for idx0, idx1 in itertools.combinations(range(len(blocks)), r=2):
+        nDirections = directionMd.size()
+        adjacency = np.zeros((nDirections, )*2)
+        for idx0, idx1 in itertools.combinations(range(nDirections), r=2):
             # Get de direction ids of the indices
-            directionId0 = directionIds[idx0]
-            directionId1 = directionIds[idx1]
+            directionId0 = idx0 + directionMd.size()
+            directionId1 = idx1 + directionMd.size()
             
             # Obtain the projection angles
             rot0 = directionMd.getValue(emlib.MDL_ANGLE_ROT, directionId0)
@@ -294,8 +293,8 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             if angularDistance <= 2*self.angularDistance:
                 # Obtain the intersection of the particles belonging to
                 # both directions
-                md0.read(self._getDirectionalClassificationMdFilename(directionId0))
-                md1.read(self._getDirectionalClassificationMdFilename(directionId1))
+                md0.read(directionMd.getValue(emlib.MDL_SELFILE, directionId0))
+                md1.read(directionMd.getValue(emlib.MDL_SELFILE, directionId1))
                 md0.intersection(md1, emlib.MDL_ITEM_ID)
                 md1.intersection(md0, emlib.MDL_ITEM_ID)
                 
