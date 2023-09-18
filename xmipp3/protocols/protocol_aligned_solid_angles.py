@@ -291,7 +291,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
                 rot1, tilt1, 0.0,
                 True, self.checkMirrors.get(), False
             )
-            if angularDistance <= 2*self.angularDistance:
+            if angularDistance <= 2*self.angularDistance.get():
                 # Obtain the intersection of the particles belonging to
                 # both directions
                 md0.read(directionMd.getValue(emlib.MDL_SELFILE, directionId0))
