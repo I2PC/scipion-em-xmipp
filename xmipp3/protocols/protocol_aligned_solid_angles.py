@@ -253,11 +253,13 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             env['LD_LIBRARY_PATH'] = '' # Torch does not like it
             self.runJob('xmipp_swiftalign_aligned_2d_classification', args, numberOfMpi=1, env=env)
             
-            # Write eigen image row
+            # Ensemble the output row
             directionRow.copyFromRow(maskRow)
             directionRow.setValue(emlib.MDL_MASK, maskRow.getValue(emlib.MDL_IMAGE))
             directionRow.setValue(emlib.MDL_IMAGE, self._getDirectionalAverageImageFilename(directionId))
             directionRow.setValue(emlib.MDL_IMAGE_RESIDUAL, self._getDirectionalEigenImageFilename(directionId))
+            directionRow.setValue(emlib.MDL_SELFILE, self._getDirectionalClassificationMdFilename(directionId))
+            directionRow.setValue(emlib.MDL_CLASS_COUNT, particles.size())
             directionRow.addToMd(directionalMd)
 
         directionalMd.write(self._getDirectionalMdFilename())
