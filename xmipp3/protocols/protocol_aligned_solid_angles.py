@@ -354,19 +354,17 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     
     def classificationStep(self):
         # Accumulate all the projection values for a given particle
+        directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
-        blocks = emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename())
         projections = {}
-        for block in blocks:
-            directionId = int(block.split("_")[1])
-            
-            # Read the directional classfication
-            directionalClassificationMd.read(self._getDirectionalClassificationMdFilename(directionId))
+        for objId in directionMd:
+            # Read the classification of this direction
+            directionalClassificationMd.read(directionMd.getValue(emlib.MDL_SELFILE, objId))
             
             # Increment the result PCA projection value
-            for objId in directionalClassificationMd:
-                itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId)
-                projection = directionalClassificationMd.getValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, objId)
+            for objId2 in directionalClassificationMd:
+                itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId2)
+                projection = directionalClassificationMd.getValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, objId2)
                 
                 if itemId in projections:
                     projections[itemId] += projection
