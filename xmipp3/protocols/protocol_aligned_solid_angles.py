@@ -268,7 +268,8 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     def buildGraphStep(self):
         # Build graph intersecting direction pairs and calculate the similarity
         # between projection values
-        symList = xmippLib.SymList(self._getSymmetryGroup())
+        symList = xmippLib.SymList()
+        symList.readSymmetryFile(self._getSymmetryGroup())
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         md0 = emlib.MetaData()
         md1 = emlib.MetaData()
