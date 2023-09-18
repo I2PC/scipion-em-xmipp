@@ -149,7 +149,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             args += ['--keep_input_columns']
             args += ['--track_origin']
             
-            if self.resize:
+            if self.resize > 0:
                 args += ['--fourier', self.resize]
                 self.runJob('xmipp_image_resize', args)
             else:
