@@ -125,7 +125,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('angularNeighborhoodStep')
         self._insertFunctionStep('classifyStep')
         self._insertFunctionStep('buildGraphStep')
-        self._insertFunctionStep('isingModelOptimizationStep')
+        self._insertFunctionStep('graphOptimizationStep')
         self._insertFunctionStep('classificationStep')
         self._insertFunctionStep('createOutputStep')
 
@@ -318,7 +318,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         graph /= abs(graph).max() # Normalize to avoid numerical inestability
         scipy.sparse.save_npz(self._getGraphFilename(), graph)
         
-    def isingModelOptimizationStep(self):
+    def graphOptimizationStep(self):
         # Perform a max cut of the graph
         args = []
         args += ['-i', self._getGraphFilename()]
