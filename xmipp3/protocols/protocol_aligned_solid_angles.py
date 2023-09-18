@@ -351,37 +351,34 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             classificationMd.write(classificationMdFilename)
     
     def classificationStep(self):
-        result = emlib.MetaData(self._getInputParticleMdFilename())
-        
+        # Accumulate all the projection values for a given particle
         directionalClassificationMd = emlib.MetaData()
-        result.addLabel(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
         blocks = emlib.getBlocksInMetaDataFile(self._getNeighborsMdFilename())
-        query = emlib.MetaData()
+        projections = {}
         for block in blocks:
-            # Get the direction id
             directionId = int(block.split("_")[1])
             
             # Read the directional classfication
             directionalClassificationMd.read(self._getDirectionalClassificationMdFilename(directionId))
             
             # Increment the result PCA projection value
-            # FIXME this is very inefficient code
-            for objId in result:
-                # Find this object on the current classification
-                itemId = result.getValue(emlib.MDL_ITEM_ID, objId)
-                query.importObjects(directionalClassificationMd, emlib.MDValueEQ(emlib.MDL_ITEM_ID, itemId))
+            for objId in directionalClassificationMd:
+                itemId = directionalClassificationMd.getValue(emlib.MDL_ITEM_ID, objId)
+                projection = directionalClassificationMd.getValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, objId)
                 
-                if query.size() > 0:
-                    # Get the current projection value
-                    projection = result.getValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, objId)
-                    
-                    # Increment it by the query result
-                    projection += query.getValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, query.firstObject())
-
-                    # Overwrite
-                    result.setValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, projection, objId)
+                if itemId in projections:
+                    projections[itemId] += projection
+                else:
+                    projections[itemId] = projection
         
-        # Classify items according to their projection ign
+        # Write projections to the output metadata
+        result = emlib.MetaData(self._getInputParticleMdFilename())
+        for objId in result:
+            itemId = result.getValue(emlib.MDL_ITEM_ID, objId)
+            projection = projections.get(itemId, 0.0)
+            result.setValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL, projection, objId)
+        
+        # Classify items according to their projection sign
         result.addLabel(emlib.MDL_REF3D)
         result.operate('ref3d=(scoreByPcaResidual>0)+1')
         
