@@ -30,6 +30,7 @@ from pwem.protocols import ProtAnalysis3D
 from pwem.objects import (VolumeMask, Class3D, 
                           SetOfParticles, SetOfClasses3D, Particle,
                           Pointer, SetOfFSCs )
+from pwem.constants import ALIGN_PROJ
 
 from pyworkflow import BETA
 from pyworkflow.utils import makePath
@@ -275,8 +276,8 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         adjacency = np.zeros((nDirections, )*2)
         for idx0, idx1 in itertools.combinations(range(nDirections), r=2):
             # Get de direction ids of the indices
-            directionId0 = idx0 + directionMd.size()
-            directionId1 = idx1 + directionMd.size()
+            directionId0 = idx0 + directionMd.firstObject()
+            directionId1 = idx1 + directionMd.firstObject()
             
             # Obtain the projection angles
             rot0 = directionMd.getValue(emlib.MDL_ANGLE_ROT, directionId0)
@@ -392,7 +393,11 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         classificationMd = emlib.MetaData(self._getOutputMetadataFilename())
 
         def updateItem(item: Particle, row: emlib.metadata.Row):
-            particle: Particle = rowToParticle(row, extraLabels=self.OUTPUT_EXTRA_LABELS)
+            particle: Particle = rowToParticle(
+                row, 
+                extraLabels=self.OUTPUT_EXTRA_LABELS, 
+                alignType=ALIGN_PROJ
+            )
             item.copy(particle)
                 
         def updateClass(cls: Class3D):
