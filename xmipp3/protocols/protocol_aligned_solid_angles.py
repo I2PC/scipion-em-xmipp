@@ -483,8 +483,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
                 
         def updateClass(cls: Class3D):
             clsId = cls.getObjId()
-            print(clsId)
-            representative = volumes[clsId]
+            representative = volumes[clsId].clone()
             cls.setRepresentative(representative)
             cls.setAlignmentProj()
             
