@@ -29,7 +29,7 @@ from pwem import emlib
 from pwem.protocols import ProtAnalysis3D
 from pwem.objects import (VolumeMask, Class3D, 
                           SetOfParticles, SetOfClasses3D, Particle,
-                          Pointer, SetOfFSCs )
+                          Volume, SetOfVolumes )
 from pwem.constants import ALIGN_PROJ
 
 from pyworkflow import BETA
@@ -53,6 +53,7 @@ import scipy.sparse
 
 class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     OUTPUT_CLASSES_NAME = 'classes'
+    OUTPUT_VOLUMES_NAME = 'volumes'
     OUTPUT_EXTRA_LABELS = [
         emlib.MDL_SCORE_BY_PCA_RESIDUAL,
     ]
@@ -61,7 +62,8 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     _conda_env = 'xmipp_swiftalign'
     _devStatus = BETA
     _possibleOutputs = {
-        OUTPUT_CLASSES_NAME: SetOfClasses3D
+        OUTPUT_CLASSES_NAME: SetOfClasses3D,
+        OUTPUT_VOLUMES_NAME: SetOfVolumes
     }
 
     def __init__(self, *args, **kwargs):
@@ -128,6 +130,10 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         self._insertFunctionStep('buildGraphStep')
         self._insertFunctionStep('graphOptimizationStep')
         self._insertFunctionStep('classificationStep')
+        
+        for i in range(2):
+            self._insertFunctionStep('reconstructStep', i+1)
+        
         self._insertFunctionStep('createOutputStep')
 
     # --------------------------- STEPS functions -------------------------------
@@ -402,9 +408,71 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         # Store
         result.write(self._getOutputMetadataFilename())
     
+    def reconstructStep(self, cls):
+        # Select particles
+        classification = emlib.MetaData(self._getOutputMetadataFilename())
+        classification.removeObjects(emlib.MDValueNE(emlib.MDL_REF3D, cls))
+        classification.write(self._getClassMdFilename(cls))
+        
+        args = []
+        args += ['-i', self._getClassMdFilename(cls)]
+        args += ['-o', self._getClassVolumeFilename(cls)]
+        args += ['--sym', self._getSymmetryGroup()]
+    
+        # Determine the execution parameters
+        numberOfMpi = self.numberOfMpi.get()
+        if self.useGpu.get():
+            reconstructProgram = 'xmipp_cuda_reconstruct_fourier'
+
+            gpuList = self.getGpuList()
+            if self.numberOfMpi.get() > 1:
+                numberOfGpus = len(gpuList)
+                numberOfMpi = numberOfGpus + 1
+                args += ['-gpusPerNode', numberOfGpus]
+                args += ['-threadsPerGPU', max(self.numberOfThreads.get(), 4)]
+            else:
+                args += ['--device', ','.join(gpuList)]
+                
+            """
+            count=0
+            GpuListCuda=''
+            if self.useQueueForSteps() or self.useQueue():
+                GpuList = os.environ["CUDA_VISIBLE_DEVICES"]
+                GpuList = GpuList.split(",")
+                for elem in GpuList:
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    count+=1
+            else:
+                GpuListAux = ''
+                for elem in self.getGpuList():
+                    GpuListCuda = GpuListCuda+str(count)+' '
+                    GpuListAux = GpuListAux+str(elem)+','
+                    count+=1
+                os.environ["CUDA_VISIBLE_DEVICES"] = GpuListAux
+            """
+                
+            args += ['--thr', self.numberOfThreads.get()]
+        
+        else:
+            reconstructProgram = 'xmipp_reconstruct_fourier_accel'
+        
+        # Run
+        self.runJob(reconstructProgram, args, numberOfMpi=numberOfMpi)
+        
+    
     def createOutputStep(self):
         classificationMd = emlib.MetaData(self._getOutputMetadataFilename())
 
+        # Create volumes
+        volumes = self._createSetOfVolumes()
+        volumes.setSamplingRate(self._getSamplingRate())
+        for i in range(2):
+            clsId = i + 1
+            volume = Volume(objId=clsId)
+            volume.setFileName(self._getClassVolumeFilename(clsId))
+            volumes.append(volume)
+        
+        # Classify particles
         def updateItem(item: Particle, row: emlib.metadata.Row):
             particle: Particle = rowToParticle(
                 row, 
@@ -414,6 +482,10 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             item.copy(particle)
                 
         def updateClass(cls: Class3D):
+            clsId = cls.getObjId()
+            print(clsId)
+            representative = volumes[clsId]
+            cls.setRepresentative(representative)
             cls.setAlignmentProj()
             
         classes3d: SetOfClasses3D = self._createSetOfClasses3D(self.inputParticles)
@@ -425,7 +497,9 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         
         # Define the output
         self._defineOutputs(**{self.OUTPUT_CLASSES_NAME: classes3d})
+        self._defineOutputs(**{self.OUTPUT_VOLUMES_NAME: volumes})
         self._defineSourceRelation(self.inputParticles, classes3d)
+        self._defineSourceRelation(self.inputParticles, volumes)
 
 
         
@@ -500,6 +574,12 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     def _getGraphCutFilename(self):
         return self._getExtraPath('graph_cut.pkl')
     
+    def _getClassMdFilename(self, cls: int):
+        return self._getExtraPath('class_%02d.xmd' % cls)
+
+    def _getClassVolumeFilename(self, cls: int):
+        return self._getExtraPath('class_%02d.mrc' % cls)
+
     def _getOutputMetadataFilename(self):
         return self._getPath('output_particles.xmd')
     
