@@ -78,7 +78,7 @@ class XmippViewerAlignedSolidAngles(ProtocolViewer):
         ax = plt.axes(projection='3d')
         
         # Display de direction vectors
-        ax.scatter(points[:,0], points[:,1], points[:,2])
+        ax.scatter(points[:,0], points[:,1], points[:,2], c='b')
         
         # Display the graph edges
         normalize = mpl.colors.Normalize()
