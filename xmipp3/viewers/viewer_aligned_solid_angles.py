@@ -90,7 +90,7 @@ class XmippViewerAlignedSolidAngles(ProtocolViewer):
         fig, (ax1, ax2) = plt.subplots(2)
         
         # Show histogram
-        ax1.hist(projections, picker=True)
+        ax1.hist(projections, bins=64, picker=True)
         line = ax1.axvline(x=0, color='y')
         
         # Show image
