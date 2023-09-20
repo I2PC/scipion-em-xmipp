@@ -99,6 +99,11 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
                       help='This option allows for either global refinement from an initial volume '
                     ' or just alignment of particles. If the reference volume is at a high resolution, '
                     ' it is advisable to only align the particles and reconstruct at the end of the iterative process.') 
+        form.addParam('initialClasses', PointerParam,
+                      label="Initial classes",
+                      condition="mode",
+                      pointerClass='SetOfClasses2D, SetOfAverages',
+                      help='Set of initial classes to start the classification')
         form.addParam('mask', BooleanParam, default=True, expertLevel=LEVEL_ADVANCED,
               label='Use Gaussian Mask?',
               help='If you set to *Yes*, a gaussian mask is applied to the images.')
@@ -113,7 +118,7 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         form.addParam('coef' ,FloatParam, label="% variance", default=0.4, expertLevel=LEVEL_ADVANCED,
                       help='Percentage of coefficients to be considers (between 0-1).'
                       ' The higher the percentage, the higher the accuracy, but the calculation time increases.')
-        form.addParam('training',IntParam, default=50000,
+        form.addParam('training',IntParam, default=40000,
                       label="particles for training",
                       help='Number of particles for PCA training')
     
@@ -130,10 +135,13 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         self.imgsOrigXmd = self._getExtraPath('images_original.xmd')
         self.imgsXmd = self._getTmpPath('images.xmd')
         self.imgsFn = self._getTmpPath('images.mrc')
+        self.refXmd = self._getTmpPath('references.xmd')
+        self.ref = self._getTmpPath('references.mrcs')
         self.sampling = self.inputParticles.get().getSamplingRate()
         self.acquisition = self.inputParticles.get().getAcquisition()
         mask = self.mask.get()
         sigma = self.sigma.get()
+        self.numTrain = min(self.training.get(), self.inputParticles.get().getSize())
 
     
         self._insertFunctionStep('convertInputStep', 
@@ -144,14 +152,24 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         
         self._insertFunctionStep("classification", self.imgsFn, self.numberOfClasses.get(), self.imgsOrigXmd, mask, sigma )
     
-        # self._insertFunctionStep('evaluateClassesStep', subset)
-        # self._insertFunctionStep('sortClassesStep', subset)
         self._insertFunctionStep('createOutputStep')
         
 
     #--------------------------- STEPS functions -------------------------------
     def convertInputStep(self, input, outputOrig, outputMRC):
         writeSetOfParticles(input, outputOrig)
+        
+        if self.mode == self.UPDATE_CLASSES: 
+            
+            if isinstance(self.initialClasses.get(), SetOfClasses2D):
+                writeSetOfClasses2D(self.initialClasses.get(),
+                                    self.refXmd, writeParticles=False)
+            else:
+                writeSetOfParticles(self.initialClasses.get(),
+                                    self.refXmd)
+                       
+            args = ' -i  %s -o %s  '%(self.refXmd, self.ref)
+            self.runJob("xmipp_image_convert", args, numberOfMpi=1)
         
         # args = ' -i %s  -o %s --pixel_size %s --spherical_aberration %s --voltage %s --batch 1024 --device cuda:0'% \
         #         (outputOrig, outputMRC, self.sampling, self.acquisition.getSphericalAberration(), self.acquisition.getVoltage())
@@ -161,7 +179,7 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         # self.runJob("xmipp_swiftalign_wiener_2d", args, numberOfMpi=1, env=env)
         
         args = ' -i  %s -o %s  '%(outputOrig, outputMRC)
-        self.runJob("xmipp_image_convert",args, numberOfMpi=1) 
+        self.runJob("xmipp_image_convert", args, numberOfMpi=1) 
         
         
     def pcaTraining(self, inputIm, resolutionTrain, numTrain):
@@ -179,6 +197,9 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
                  stfile)
         if mask:
             args += ' --mask --sigma %s '%(sigma) 
+            
+        if self.mode == self.UPDATE_CLASSES:
+            args += ' -r %s '%(self.ref)
 
         env = self.getCondaEnv()
         env['LD_LIBRARY_PATH'] = ''
@@ -190,17 +211,25 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
         resulting from the protocol execution.
         """
     
-        inputParticles = self.inputParticles.get()
+        inputParticles = self.inputParticles#.get()
 
         classes2DSet = self._createSetOfClasses2D(inputParticles)
         self._fillClassesFromLevel(classes2DSet)
 
-        # result = {'outputClasses' + subset: classes2DSet}
-        # self._defineOutputs(**result)
         self._defineOutputs(outputClasses=classes2DSet)
         self._defineSourceRelation(self.inputParticles, classes2DSet)
     
     #--------------------------- INFO functions --------------------------------
+    
+    def _validate(self):
+        """ Check if the installation of this protocol is correct.
+        Can't rely on package function since this is a "multi package" package
+        Returning an empty list means that the installation is correct
+        and there are not errors. If some errors are found, a list with
+        the error messages will be returned.
+        """
+        error=self.validateDLtoolkit()
+        return error
     # def _validate(self):
     #     validateMsgs = []
     #     if self.numberOfMpi <= 1:
@@ -269,7 +298,7 @@ class XmippProtClassifyPca(ProtClassify2D, xmipp3.XmippProtocol):
     #     return [strline]
     #
     # #--------------------------- UTILS functions -------------------------------
-    
+        
     def _updateParticle(self, item, row):
         item.setClassId(row.getValue(md.MDL_REF))
         item.setTransform(rowToAlignment(row, ALIGN_2D))
