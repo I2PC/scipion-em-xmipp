@@ -33,7 +33,7 @@ from pwem.objects import (VolumeMask, Class3D,
 from pwem.constants import ALIGN_PROJ
 
 from pyworkflow import BETA
-from pyworkflow.utils import makePath
+from pyworkflow.utils import makePath, createLink
 from pyworkflow.protocol.params import (Form, PointerParam, 
                                         FloatParam, IntParam,
                                         StringParam, BooleanParam,
@@ -86,7 +86,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
                       pointerClass=SetOfParticles, pointerCondition='hasAlignmentProj',
                       help='Input particle set')
         form.addParam('inputMask', PointerParam, label='Mask', important=True,
-                      pointerClass=VolumeMask,
+                      pointerClass=VolumeMask, allowsNull=True,
                       help='Volume mask used for focussing the classification')
         form.addParam('symmetryGroup', StringParam, label='Symmetry group', default='c1')
         form.addParam('resize', IntParam, label='Resize', default=0,
@@ -138,17 +138,18 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
 
     # --------------------------- STEPS functions -------------------------------
     def convertInputStep(self):
-        particles: SetOfParticles = self.inputParticles.get()
+        inputParticles: SetOfParticles = self.inputParticles.get()
+        inputMask: VolumeMask = self.inputMask.get()
         
-        writeSetOfParticles(particles, 
+        writeSetOfParticles(inputParticles, 
                             self._getInputParticleMdFilename())
 
         def is_mrc(path: str) -> bool:
             _, ext = os.path.splitext(path)
             return ext == '.mrc' or ext == '.mrcs'
         
-        # Convert to MRC if necessary
-        if self.copyParticles or self.resize or not all(map(is_mrc, particles.getFiles())):
+        # Convert particles to MRC and resize if necessary
+        if self.copyParticles or self.resize > 0 or not all(map(is_mrc, inputParticles.getFiles())):
             args = []
             args += ['-i', self._getInputParticleMdFilename()]
             args += ['-o', self._getInputParticleStackFilename()]
@@ -161,6 +162,35 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
                 self.runJob('xmipp_image_resize', args)
             else:
                 self.runJob('xmipp_image_convert', args, numberOfMpi=1)
+    
+        # Convert or create mask
+        if inputMask is None:
+            # Create a spherical mask
+            dim: int = self.resize.get() if self.resize > 0 else inputParticles.getXDim()
+            emlib.createEmptyFile(self._getInputMaskFilename(), dim, dim, dim)
+
+            args = []
+            args += ['-i', self._getInputMaskFilename()]
+            args += ['--create_mask', self._getInputMaskFilename()]
+            args += ['--mask', 'circular', -dim/2]
+            self.runJob('xmipp_transform_mask', args, numberOfMpi=1)
+            
+        else:
+            # Convert particles to MRC and resize if necessary
+            if self.resize > 0 or not is_mrc(inputMask.getFileName()):
+                args = []
+                args += ['-i', inputMask.getFileName()]
+                args += ['-o', self._getInputMaskFilename()]
+                
+                if self.resize > 0:
+                    args += ['--fourier', self.resize]
+                    self.runJob('xmipp_image_resize', args, numberOfMpi=1)
+                else:
+                    self.runJob('xmipp_image_convert', args, numberOfMpi=1)
+                    
+            else:
+                createLink(inputMask.getFileName(), self._getInputMaskFilename())
+            
     
     def correctCtfStep(self):
         particles: SetOfParticles = self.inputParticles.get()
@@ -457,6 +487,15 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
     def createOutputStep(self):
         classificationMd = emlib.MetaData(self._getOutputMetadataFilename())
 
+        # Resize volumes to the output size
+        if self.resize > 0:
+            for i in range(2):
+                args = []
+                args += ['--fourier', self.inputParticles.get().getXDim()]
+                args += ['-i', self._getClassVolumeFilename(i+1)]
+                args += ['-o', self._getClassVolumeFilename(i+1)]
+                self.runJob('xmipp_image_resize', args, numberOfMpi=1)
+        
         # Create volumes
         volumes = self._createSetOfVolumes()
         volumes.setSamplingRate(self._getSamplingRate())
@@ -511,7 +550,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         return self.angularDistance.get()
     
     def _getInputMaskFilename(self):
-        return self.inputMask.get().getFileName()
+        return self._getTmpPath('mask.mrc')
     
     def _getInputParticleMdFilename(self):
         return self._getPath('input_particles.xmd')
