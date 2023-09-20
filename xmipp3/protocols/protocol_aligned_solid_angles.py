@@ -388,16 +388,25 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         # directions
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
+        eigenImage = emlib.Image()
         for i in invert_list:
             objId = int(directionMd.firstObject() + i)
             directionalClassificationMdFilename = directionMd.getValue(
                 emlib.MDL_SELFILE, objId
             )
+            directionalClassificationImageFilename = directionMd.getValue(
+                emlib.MDL_IMAGE_RESIDUAL, objId
+            )
             
+            # Invert the projection values
             directionalClassificationMd.read(directionalClassificationMdFilename)
             directionalClassificationMd.operate('scoreByPcaResidual=-scoreByPcaResidual')
             directionalClassificationMd.write(directionalClassificationMdFilename)
-            # TODO invert the eigenimage
+            
+            # Invert the eigenimage
+            eigenImage.read(directionalClassificationImageFilename)
+            eigenImage.inplaceMultiply(-1.0)
+            eigenImage.write(directionalClassificationImageFilename)
     
     def classificationStep(self):
         # Accumulate all the projection values for a given particle
