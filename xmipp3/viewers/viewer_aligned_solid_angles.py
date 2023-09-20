@@ -51,6 +51,13 @@ class XmippViewerAlignedSolidAngles(ProtocolViewer):
 
     # --------------------------- DEFINE param functions ----------------------
     def _defineParams(self, form):
+        form.addSection(label='PCA')
+        form.addParam('displayDirectionalMd', LabelParam, label='Directional metadata',
+                      help='Shows a metadata with the directional averages and eigenimages')
+        form.addParam('displayDirectionClassification', IntParam, label='Directional classification',
+                      default=1,
+                      help='Shows a histogram of the directional classification')
+        
         form.addSection(label='Graph')
         form.addParam('display3dGraph', LabelParam, label='Distance graph',
                       help='Shows a 3D representation of the distance graph')
@@ -62,8 +69,45 @@ class XmippViewerAlignedSolidAngles(ProtocolViewer):
     
     def _getVisualizeDict(self):
         return {
+            'displayDirectionalMd': self._displayDirectionalMd,
+            'displayDirectionClassification': self._displayDirectionClassification,
             'display3dGraph': self._display3dGraph,
         }
+        
+    def _displayDirectionalMd(self, e):
+        dv = DataView(self._getDirectionalMdFilename())
+        return [dv]
+    
+    def _displayDirectionClassification(self, e):
+        # Read data from disk
+        directionId = self.displayDirectionClassification.get()
+        directionRow = self._readDirectionRow(directionId)
+        projections = emlib.MetaData(directionRow.getValue(emlib.MDL_SELFILE)).getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL)
+        average = emlib.Image(directionRow.getValue(emlib.MDL_IMAGE)).getData()
+        basis = emlib.Image(directionRow.getValue(emlib.MDL_IMAGE_RESIDUAL)).getData()
+        
+        # Create the figure
+        fig, (ax1, ax2) = plt.subplots(2)
+        
+        # Show histogram
+        ax1.hist(projections, picker=True)
+        line = ax1.axvline(x=0, color='y')
+        
+        # Show image
+        ax2.imshow(average)
+        
+        # Setup interactive picking
+        def on_pick(event):
+            projection = event.mouseevent.xdata
+            line.set_xdata([projection, ]*2)
+            image = average + basis*projection
+            ax2.clear()
+            ax2.imshow(image)
+            fig.canvas.draw()
+            
+        fig.canvas.mpl_connect('pick_event', on_pick)
+        
+        return [fig]
         
     def _display3dGraph(self, e):
         # Read from disk
@@ -102,6 +146,9 @@ class XmippViewerAlignedSolidAngles(ProtocolViewer):
     def _getGraphFilename(self):
         return self.protocol._getGraphFilename()
     
+    def _getDirectionalMdFilename(self):
+        return self.protocol._getDirectionalMdFilename()
+    
     def _readGraph(self) -> scipy.sparse:
         return scipy.sparse.load_npz(self._getGraphFilename())
         
@@ -111,3 +158,9 @@ class XmippViewerAlignedSolidAngles(ProtocolViewer):
         y = directionMd.getColumnValues(emlib.MDL_Y)
         z = directionMd.getColumnValues(emlib.MDL_Z)
         return np.stack((x, y, z), axis=-1)
+    
+    def _readDirectionRow(self, directionId: int):
+        result = emlib.metadata.Row()
+        md = emlib.MetaData(self._getDirectionalMdFilename())
+        result.readFromMd(md, directionId)
+        return result
