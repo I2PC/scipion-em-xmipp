@@ -42,7 +42,7 @@ from pyworkflow.protocol.params import (Form, PointerParam,
                                         LEVEL_ADVANCED, USE_GPU, GPU_LIST )
 
 import xmipp3
-from xmipp3.convert import writeSetOfParticles, rowToParticle
+from xmipp3.convert import writeSetOfParticles, setXmippAttribute
 import xmippLib
 
 import os.path
@@ -399,12 +399,6 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         result.addLabel(emlib.MDL_REF3D)
         result.operate('ref3d=(scoreByPcaResidual>0)+1')
         
-        # Replace with the original image label
-        if result.containsLabel(emlib.MDL_IMAGE_ORIGINAL):
-            #FIXME revert shift if scaled
-            result.removeLabel(emlib.MDL_IMAGE)
-            result.renameColumn(emlib.MDL_IMAGE_ORIGINAL, emlib.MDL_IMAGE)
-        
         # Store
         result.write(self._getOutputMetadataFilename())
     
@@ -474,13 +468,10 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         
         # Classify particles
         def updateItem(item: Particle, row: emlib.metadata.Row):
-            particle: Particle = rowToParticle(
-                row, 
-                extraLabels=self.OUTPUT_EXTRA_LABELS, 
-                alignType=ALIGN_PROJ
-            )
-            item.copy(particle)
-                
+            assert(item.getObjId() == row.getValue(emlib.MDL_ITEM_ID))
+            item.setClassId(row.getValue(emlib.MDL_REF3D))
+            setXmippAttribute(item, emlib.MDL_SCORE_BY_PCA_RESIDUAL, row.getValue(emlib.MDL_SCORE_BY_PCA_RESIDUAL))
+
         def updateClass(cls: Class3D):
             clsId = cls.getObjId()
             representative = volumes[clsId].clone()
