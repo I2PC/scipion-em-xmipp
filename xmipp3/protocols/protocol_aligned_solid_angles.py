@@ -304,6 +304,7 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
         # Compute the class expectation values for each direction
         directionMd = emlib.MetaData(self._getDirectionalMdFilename())
         directionalClassificationMd = emlib.MetaData()
+        model = sklearn.mixture.GaussianMixture(n_components=2, n_init=16, tol=1e-6, max_iter=1000)
         for directionId in directionMd:
             # Read the classification metadata
             directionalClassificationMdFilename = directionMd.getValue(
@@ -315,32 +316,19 @@ class XmippProtAlignedSolidAngles(ProtAnalysis3D, xmipp3.XmippProtocol):
             projections = np.array(directionalClassificationMd.getColumnValues(emlib.MDL_SCORE_BY_PCA_RESIDUAL))
             projections = projections[:,None]
             
-            # Fit a GMM to the projection values
-            gmm1 = sklearn.mixture.GaussianMixture(n_components=1)
-            gmm2 = sklearn.mixture.GaussianMixture(n_components=2, n_init=16)
-            gmm1.fit(projections)
-            gmm2.fit(projections)
+            # Fit the GMM to the projection values
+            model.fit(projections)
+            weights = model.weights_
+            means = model.means_[:,0]
+            variances = model.covariances_[:,0,0]
             
-            if gmm1.bic(projections) <= gmm2.bic(projections):
-                # Only one gaussian component. Leave weights to one
-                model = gmm1
-                ratio = np.ones(len(projections))
-                print(directionId)
-                
-            else:
-                # 2 gaussian components
-                model = gmm2
-                weights = model.weights_
-                means = model.means_[:,0]
-                variances = model.covariances_[:,0,0]
-                
-                # Compute the ratio of probabilities
-                logLikelihood = scipy.stats.norm.logpdf(projections, means, np.sqrt(variances))
-                probability = logLikelihood + np.log(weights)
-                ratio = probability[:,1] - probability[:,0]
+            # Compute the ratio of probabilities
+            logLikelihood = scipy.stats.norm.logpdf(projections, means, np.sqrt(variances))
+            probability = logLikelihood + np.log(weights)
+            hypothesis = probability[:,1] - probability[:,0]
             
             # Store the log likelihoods
-            directionalClassificationMd.setColumnValues(emlib.MDL_LL, list(ratio))
+            directionalClassificationMd.setColumnValues(emlib.MDL_LL, list(hypothesis))
             directionalClassificationMd.write(directionalClassificationMdFilename)
 
             # Store the gaussian model

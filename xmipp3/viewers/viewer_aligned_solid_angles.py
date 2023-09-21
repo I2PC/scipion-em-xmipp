@@ -103,8 +103,10 @@ class XmippViewerAlignedSolidAngles(ProtocolViewer):
         _, bins, _ = ax1.hist(projections, bins=64, density=True, color='black', picker=True)
         x = (bins[1:] + bins[:-1]) / 2
         ys = weights*scipy.stats.norm.pdf(x[:,None], means, stddevs)
-        for i in range(ys.shape[-1]):
-            ax1.plot(x, ys[:,i], linestyle='dashed')
+        n = ys.shape[-1]
+        if n > 1:
+            for i in range(n):
+                ax1.plot(x, ys[:,i], linestyle='dashed')
         ax1.plot(x, ys.sum(axis=-1))
         
         # Show image
